@@ -1,5 +1,7 @@
 "use client"
 
+import type { Ref } from "react"
+
 import { SalesDeliveryPlan } from "./sales-delivery-plan"
 
 import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
@@ -26,8 +28,10 @@ function giftRateLabel(line: SalesOrderSubmitLineSnapshot): string {
  */
 export function SalesOrderSubmitPaper({
     snapshot,
+    paperRef,
 }: {
     snapshot: SalesOrderSubmitSnapshot
+    paperRef?: Ref<HTMLElement>
 }) {
     const isCard = snapshot.nature === "card_voucher"
     const paymentLabel =
@@ -35,6 +39,7 @@ export function SalesOrderSubmitPaper({
 
     return (
         <PaperDocument<SalesOrderSubmitLineSnapshot>
+            ref={paperRef}
             frame="bare"
             title="销售单"
             subtitle={NATURE_LABEL[snapshot.nature]}

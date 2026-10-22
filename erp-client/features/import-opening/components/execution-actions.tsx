@@ -163,7 +163,7 @@ export function ImportExecutionActions({
             <CardHeader className="border-b border-grid">
                 <CardTitle>导入执行</CardTitle>
                 <CardDescription>
-                    责任确认只形成待应用状态；只有“提交应用”会启动后台任务。取消和失败项重试均保留已形成的业务事实。
+                    历史期初导入执行器尚未接通，暂不能启动或重试应用。试算及责任确认记录继续保留，待业务迁移专项完成后处理；已开始批次仍可取消未应用项。
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pt-4">
@@ -179,7 +179,7 @@ export function ImportExecutionActions({
                             id="operations-import-batch-detail-execution-start-apply"
                             type="button"
                             size="sm"
-                            disabled={isExecuting}
+                            disabled
                             onClick={() => setConfirming("START_APPLY")}
                         >
                             提交应用
@@ -202,7 +202,7 @@ export function ImportExecutionActions({
                             id="operations-import-batch-detail-execution-retry-failed"
                             type="button"
                             size="sm"
-                            disabled={isExecuting}
+                            disabled
                             onClick={() => setConfirming("RETRY_FAILED")}
                         >
                             重新准备失败项

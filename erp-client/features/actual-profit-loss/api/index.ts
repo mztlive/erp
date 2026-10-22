@@ -1,3 +1,4 @@
+import { runDataTransfer, transferText } from "@/lib/data-transfer"
 /**
  * W16 实际经营盈亏 — 真实 HTTP。
  * - 主投影视图：`GET /admin/actual-profit-loss`（E3，含 as_of）— 缺则 ApiError
@@ -7,7 +8,7 @@
  * 禁止前端重算金额/覆盖率；禁止客户端时钟冒充 as_of。
  */
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiGet } from "@/lib/api"
 import { COST_TYPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 
 import type {
@@ -208,8 +209,20 @@ export async function fetchCostEntriesForRow(
 export async function startProfitLossExport(input: {
     query: ProfitLossQuery
 }): Promise<ProfitLossExport> {
-    return apiPost<ProfitLossExport>(
-        "/admin/actual-profit-loss/exports",
+    const result = await runDataTransfer(
+        "profit_loss",
         queryToParams(input.query),
     )
+    return {
+        csvContent: transferText(result),
+        fileName: result.file_name,
+        rowCount:
+            typeof result.metadata?.rowCount === "number"
+                ? result.metadata.rowCount
+                : 0,
+        generatedAt:
+            typeof result.metadata?.generatedAt === "string"
+                ? result.metadata.generatedAt
+                : new Date().toISOString(),
+    }
 }

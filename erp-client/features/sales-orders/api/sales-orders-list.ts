@@ -29,24 +29,6 @@ import {
 export async function fetchSalesOrders(
     query: SalesOrdersListQuery,
 ): Promise<SalesOrderListView> {
-    const businessType =
-        query.nature === "card_voucher"
-            ? "VOUCHER"
-            : query.nature === "physical_service"
-              ? "GOODS_SERVICE"
-              : undefined
-
-    // "待我处理"/"我创建的" 都按创建人过滤；"待我处理"额外限定草稿/驳回回销售，
-    // "异常"限定审核轨被驳回。前两类视图与精细商业/审核状态互斥，避免形成
-    // 同字段冲突条件；其余结构化筛选可继续与固定视图 AND 组合。
-    const createdBy =
-        query.createdBy?.trim() ||
-        (query.summary === "mine" || query.summary === "createdByMe"
-            ? query.currentUserId?.trim() || undefined
-            : undefined)
-    const myTodo = query.summary === "mine"
-    const exceptionOnly = query.summary === "exception"
-
     const page = await apiGet<
         PageView<BackendSalesOrderView> & {
             empty_reason?: string | null
@@ -57,45 +39,7 @@ export async function fetchSalesOrders(
             as_of?: string
             ownership_basis?: string
         }
-    >("/admin/sales-orders", {
-        scope_version: query.scopeVersion,
-        page: query.page,
-        page_size: query.pageSize,
-        q: query.search?.trim() || undefined,
-        customer_id: query.customerId,
-        owner_user_ids: query.ownerUserIds || undefined,
-        org_unit_ids: query.orgUnitIds || undefined,
-        include_descendants:
-            query.orgUnitIds && query.includeDescendants ? true : undefined,
-        contract_id: query.contractId,
-        has_contract: query.hasContract,
-        business_type: businessType,
-        origin_system:
-            query.origin === "erp"
-                ? "ERP"
-                : query.origin === "mall"
-                  ? "MALL"
-                  : undefined,
-        commercial_status:
-            myTodo || exceptionOnly
-                ? undefined
-                : mapCommercialStatusFilterToBackend(query.commercialStatus),
-        review_status:
-            myTodo || exceptionOnly
-                ? undefined
-                : mapReviewStatusFilterToBackend(query.reviewStatus),
-        fulfillment_progress: mapFulfillmentFilterToBackend(query.fulfillment),
-        collection_progress: mapCollectionFilterToBackend(query.collection),
-        invoice_progress: mapInvoiceFilterToBackend(query.invoice),
-        close_status: mapCloseFilterToBackend(query.closeStatus),
-        created_from: query.createdFrom,
-        created_to: query.createdTo,
-        created_by: createdBy,
-        my_todo: myTodo || undefined,
-        exception_only: exceptionOnly || undefined,
-        sort_by: mapSortBy(query.sortBy),
-        sort_dir: query.sortDir,
-    })
+    >("/admin/sales-orders", salesOrderExportQuery(query))
 
     const contractDisplays = await loadContractDisplays(
         page.items
@@ -187,4 +131,64 @@ async function loadContractDisplays(
         }
     }
     return displays
+}
+
+export function salesOrderExportQuery(query: SalesOrdersListQuery) {
+    const businessType =
+        query.nature === "card_voucher"
+            ? "VOUCHER"
+            : query.nature === "physical_service"
+              ? "GOODS_SERVICE"
+              : undefined
+
+    // "待我处理"/"我创建的" 都按创建人过滤；"待我处理"额外限定草稿/驳回回销售，
+    // "异常"限定审核轨被驳回。前两类视图与精细商业/审核状态互斥，避免形成
+    // 同字段冲突条件；其余结构化筛选可继续与固定视图 AND 组合。
+    const createdBy =
+        query.createdBy?.trim() ||
+        (query.summary === "mine" || query.summary === "createdByMe"
+            ? query.currentUserId?.trim() || undefined
+            : undefined)
+    const myTodo = query.summary === "mine"
+    const exceptionOnly = query.summary === "exception"
+
+    return {
+        scope_version: query.scopeVersion,
+        page: query.page,
+        page_size: query.pageSize,
+        q: query.search?.trim() || undefined,
+        customer_id: query.customerId,
+        owner_user_ids: query.ownerUserIds || undefined,
+        org_unit_ids: query.orgUnitIds || undefined,
+        include_descendants:
+            query.orgUnitIds && query.includeDescendants ? true : undefined,
+        contract_id: query.contractId,
+        has_contract: query.hasContract,
+        business_type: businessType,
+        origin_system:
+            query.origin === "erp"
+                ? "ERP"
+                : query.origin === "mall"
+                  ? "MALL"
+                  : undefined,
+        commercial_status:
+            myTodo || exceptionOnly
+                ? undefined
+                : mapCommercialStatusFilterToBackend(query.commercialStatus),
+        review_status:
+            myTodo || exceptionOnly
+                ? undefined
+                : mapReviewStatusFilterToBackend(query.reviewStatus),
+        fulfillment_progress: mapFulfillmentFilterToBackend(query.fulfillment),
+        collection_progress: mapCollectionFilterToBackend(query.collection),
+        invoice_progress: mapInvoiceFilterToBackend(query.invoice),
+        close_status: mapCloseFilterToBackend(query.closeStatus),
+        created_from: query.createdFrom,
+        created_to: query.createdTo,
+        created_by: createdBy,
+        my_todo: myTodo || undefined,
+        exception_only: exceptionOnly || undefined,
+        sort_by: mapSortBy(query.sortBy),
+        sort_dir: query.sortDir,
+    }
 }

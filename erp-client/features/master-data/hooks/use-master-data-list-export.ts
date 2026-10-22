@@ -1,5 +1,8 @@
 "use client"
 
+import { useMutation } from "@tanstack/react-query"
+import { runDataTransfer, downloadTransfer } from "@/lib/data-transfer"
+import { masterTransferQuery } from "../api/transfer-query"
 import * as React from "react"
 
 import { useMasterDataExportMutation } from "@/features/master-data/hooks/queries"
@@ -18,6 +21,11 @@ export type ListExportMeta = {
 /** 按当前筛选重新拉列表并下载 CSV。 */
 export function useMasterDataListExport() {
     const exportMutation = useMasterDataExportMutation()
+    const background = useMutation({
+        mutationFn: (
+            query: NonNullable<ReturnType<typeof masterTransferQuery>>,
+        ) => runDataTransfer("master_data", query),
+    })
     const [exportMeta, setExportMeta] = React.useState<ListExportMeta | null>(
         null,
     )
@@ -28,6 +36,20 @@ export function useMasterDataListExport() {
             filterSnapshotLabel: string,
             fileLabel: string,
         ) => {
+            const task = masterTransferQuery(query)
+            if (task) {
+                const result = await background.mutateAsync(task)
+                downloadTransfer(result)
+                setExportMeta({
+                    jobId: result.jobId,
+                    rowCount:
+                        typeof result.metadata?.row_count === "number"
+                            ? result.metadata.row_count
+                            : 0,
+                    filterSnapshotLabel,
+                })
+                return
+            }
             const refreshed = await exportMutation.mutateAsync(query)
             if (refreshed.rows.length === 0) return
             const csv = buildMasterDataExportCsv(
@@ -45,8 +67,15 @@ export function useMasterDataListExport() {
                 filterSnapshotLabel,
             })
         },
-        [exportMutation],
+        [exportMutation, background],
     )
 
-    return { exportMutation, exportMeta, handleExport }
+    return {
+        exportMutation: {
+            ...exportMutation,
+            isPending: exportMutation.isPending || background.isPending,
+        },
+        exportMeta,
+        handleExport,
+    }
 }

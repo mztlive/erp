@@ -22,6 +22,7 @@ const WorkspaceTaskFooterHostContext =
 
 type WorkspaceTaskPageLayout = {
     compact?: boolean
+    fullWidth?: boolean
     summary?: ReactNode
     aside: ReactNode
     footerLeading?: ReactNode
@@ -166,6 +167,8 @@ export function WorkspaceTaskPane({
                             layout &&
                                 "gap-4 overflow-auto bg-muted/20 p-3 sm:p-5",
                             layout?.compact && "gap-5 sm:p-6",
+                            layout.fullWidth &&
+                                "gap-3 overflow-hidden p-3 sm:p-4",
                         )}
                     >
                         <div
@@ -182,6 +185,7 @@ export function WorkspaceTaskPane({
                                     workspaceTaskSurfacePadClassName,
                                     "flex shrink-0 items-start justify-between gap-3 bg-card py-5",
                                     !layout && "border-b border-grid",
+                                    layout.fullWidth && "py-3",
                                     layout && "rounded-t-xl sm:px-6",
                                     layout?.compact &&
                                         "bg-transparent px-0 py-1 sm:px-0",
@@ -189,7 +193,7 @@ export function WorkspaceTaskPane({
                             >
                                 {header}
                             </header>
-                            {layout && (
+                            {layout && !layout.fullWidth && (
                                 <div
                                     className={cn(
                                         "px-5 pb-5 sm:px-6",
@@ -209,6 +213,8 @@ export function WorkspaceTaskPane({
                                         ? "mx-auto grid w-full max-w-7xl shrink-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
                                         : "grid shrink-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,28%)]"
                                     : "flex flex-1 flex-col",
+                                layout.fullWidth &&
+                                    "flex flex-1 shrink flex-col items-stretch overflow-hidden",
                             )}
                         >
                             <div
@@ -220,6 +226,8 @@ export function WorkspaceTaskPane({
                                         : "min-h-0 flex-1 overflow-auto",
                                     layout?.compact && "shadow-none",
                                     "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto",
+                                    layout.fullWidth &&
+                                        "flex min-h-0 flex-1 flex-col overflow-hidden [&_[data-slot=page-scaffold]]:h-full",
                                 )}
                             >
                                 {children}
@@ -228,7 +236,7 @@ export function WorkspaceTaskPane({
                                     className="px-5 pb-6 empty:hidden sm:px-7"
                                 />
                             </div>
-                            {layout && (
+                            {layout && !layout.fullWidth && (
                                 <aside
                                     aria-label="办理进度与状态"
                                     className={cn(

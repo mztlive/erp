@@ -17,6 +17,7 @@ import type {
     SalesOrderDraftLineInput,
 } from "@/features/sales-orders/types"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
+import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import {
     SalesOrderCreateLineGiftToggle,
     SalesOrderCreateLinePriceEditor,
@@ -67,6 +68,7 @@ export function buildSalesOrderCreateLineItemColumns(
     onPickSku?: (rowIndex: number) => void,
     procurementStatus = { fetching: false, error: false },
     inquiryLocked = false,
+    skuImages: ReadonlyMap<string, string | undefined> = new Map(),
 ): EditableLineItemColumn<SalesOrderDraftLineInput>[] {
     const nature = values.nature
     return [
@@ -77,13 +79,22 @@ export function buildSalesOrderCreateLineItemColumns(
             renderValue: ({ item }) => item.name,
             renderEditor: ({ rowIndex }) =>
                 inquiryLocked ? (
-                    <div className="min-w-36 py-2 text-sm">
-                        <p className="font-medium">
-                            {values.lineItems[rowIndex]?.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                            {values.lineItems[rowIndex]?.specification}
-                        </p>
+                    <div className="flex min-w-60 items-center gap-3 py-2 text-sm">
+                        <SkuThumbnail
+                            assetId={skuImages.get(
+                                values.lineItems[rowIndex]?.sku ?? "",
+                            )}
+                            label={values.lineItems[rowIndex]?.name ?? "商品"}
+                            className="size-10 rounded-md"
+                        />
+                        <div className="min-w-0 whitespace-normal break-words">
+                            <p className="font-medium">
+                                {values.lineItems[rowIndex]?.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                {values.lineItems[rowIndex]?.specification}
+                            </p>
+                        </div>
                     </div>
                 ) : (
                     <SalesOrderCreateLineSkuEditor
@@ -92,6 +103,9 @@ export function buildSalesOrderCreateLineItemColumns(
                         nature={nature}
                         rowIndex={rowIndex}
                         onPickSku={onPickSku}
+                        imageAssetId={skuImages.get(
+                            values.lineItems[rowIndex]?.sku ?? "",
+                        )}
                     />
                 ),
         },

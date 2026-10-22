@@ -1,13 +1,13 @@
 "use client"
 
+import { runDataTransfer, downloadTransfer } from "@/lib/data-transfer"
+
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
-    fetchSupplierQuoteInquiry,
     fetchSupplierQuoteSource,
     type SupplierQuoteRequest,
 } from "../api/supplier-quote-export"
 import {
-    quoteFilePart,
     selectedSupplierQuotes,
     type SupplierQuoteSource,
 } from "../lib/supplier-quote-export"
@@ -63,29 +63,15 @@ export function useDownloadSupplierQuotes(request: SupplierQuoteRequest) {
                 throw new Error(
                     "一次最多生成 200 家供应商的报价表，请减少所选供应商",
                 )
-            const [{ loadSupplierQuoteImages }, { buildSupplierQuoteArchive }] =
-                await Promise.all([
-                    import("../lib/supplier-quote-images"),
-                    import("../lib/supplier-quote-workbook"),
-                ])
-            const images = await loadSupplierQuoteImages(groups)
-            const archive = await buildSupplierQuoteArchive(
-                fresh,
-                groups,
-                images,
-            )
-            await fetchSupplierQuoteInquiry(request)
-            const url = URL.createObjectURL(archive)
-            const anchor = document.createElement("a")
-            anchor.href = url
-            anchor.download = `${quoteFilePart(fresh.inquiryNo)}-供应商报价表.zip`
-            document.body.appendChild(anchor)
-            try {
-                anchor.click()
-            } finally {
-                anchor.remove()
-                window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-            }
+            const result = await runDataTransfer("supplier_quote_archive", {
+                inquiry_id: request.inquiryId,
+                task_id: request.taskId,
+                expected_version: request.version,
+                task_version: request.taskVersion,
+                line_ids: lineIds,
+                supplier_ids: supplierIds,
+            })
+            downloadTransfer(result)
             return groups.length
         },
         meta: { suppressErrorToast: true },

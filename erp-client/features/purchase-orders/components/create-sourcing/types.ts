@@ -9,7 +9,7 @@ export type SourcingEditorProps = {
     onRemoveSplit: (rowKey: string) => void
 }
 
-/** 列表批量操作选择独立于表单中的「本次分配」。 */
+/** 商品勾选直接表示参与本次分配，批量操作复用同一范围。 */
 export type SourcingBatchSelectionProps = {
     selectedProductIds: ReadonlySet<string>
     onToggleProducts: (ids: string[], selected: boolean) => void

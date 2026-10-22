@@ -18,7 +18,7 @@ import type {
     ScopedReceivableAccountWire,
 } from "./scoped"
 
-function toQuery(query: ReceivableScopeQuery): Record<string, unknown> {
+export function toQuery(query: ReceivableScopeQuery): Record<string, unknown> {
     return {
         page: query.page,
         page_size: query.pageSize,

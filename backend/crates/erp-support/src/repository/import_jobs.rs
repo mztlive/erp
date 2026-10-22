@@ -28,6 +28,20 @@ pub trait BackgroundJobRepositoryImportExt {
         limit: i64,
         executor: &mut dyn Executor,
     ) -> Result<Vec<BackgroundJob>>;
+    /// 读取可认领的等待任务及心跳过期任务。
+    /// # 参数
+    /// 领域类型、过期时间、最大数量和执行器。
+    /// # 返回
+    /// 排除活动任务的候选列表。
+    /// # 错误
+    /// 数据库读取失败时返回错误。
+    async fn claimable_jobs(
+        &self,
+        domain: &str,
+        expired_before: i64,
+        limit: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>>;
 }
 
 impl BackgroundJobRepositoryImportExt for persistence_core::Repository<'_, BackgroundJob> {
@@ -51,6 +65,26 @@ impl BackgroundJobRepositoryImportExt for persistence_core::Repository<'_, Backg
         };
         let options = FindOptions::builder().sort(doc! { "created_at": 1, "id": 1 }).limit(limit).build();
         mongo_ops::find_many(&self.collection(), filter, options, executor).await
+    }
+    async fn claimable_jobs(
+        &self,
+        domain: &str,
+        expired_before: i64,
+        limit: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>> {
+        let filter = doc! { "domain_job_type":domain,"finished_at":mongodb::bson::Bson::Null,"deleted_at":NOT_DELETED_TIMESTAMP_BSON,"$or":[
+            {"status":JobStatus::Pending.as_str()},
+            {"status":{"$in":[JobStatus::Running.as_str(),JobStatus::PartiallySucceeded.as_str()]},"last_progress_at":{"$lte":expired_before}},
+            {"status":{"$in":[JobStatus::Running.as_str(),JobStatus::PartiallySucceeded.as_str()]},"last_progress_at":mongodb::bson::Bson::Null}
+        ]};
+        mongo_ops::find_many(
+            &self.collection(),
+            filter,
+            FindOptions::builder().sort(doc! {"created_at":1,"id":1}).limit(limit.clamp(1, 32)).build(),
+            executor,
+        )
+        .await
     }
 }
 

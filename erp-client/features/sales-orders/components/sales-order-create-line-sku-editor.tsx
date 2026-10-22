@@ -9,6 +9,7 @@ import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sal
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
 import { VoucherCategorySearchCombobox } from "@/features/sales-orders/components/voucher-category-search-combobox"
+import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type SalesOrderCreateLineSkuEditorProps = {
@@ -17,6 +18,7 @@ export type SalesOrderCreateLineSkuEditorProps = {
     nature: SalesOrderNature
     rowIndex: number
     onPickSku?: (rowIndex: number) => void
+    imageAssetId?: string
 }
 
 /** 明细行"销售项目"列：卡券选类目，实物/服务选公司商品池 SKU。 */
@@ -26,6 +28,7 @@ export function SalesOrderCreateLineSkuEditor({
     nature,
     rowIndex,
     onPickSku,
+    imageAssetId,
 }: SalesOrderCreateLineSkuEditorProps) {
     const nameFieldName = `lineItems[${rowIndex}].name` as const
     const lineKey = values.lineItems[rowIndex]?.rowKey
@@ -118,10 +121,18 @@ export function SalesOrderCreateLineSkuEditor({
                                 }
                                 onClick={() => onPickSku?.(rowIndex)}
                             >
-                                <PackageSearchIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
+                                {line?.sku ? (
+                                    <SkuThumbnail
+                                        assetId={imageAssetId}
+                                        label={selectedLabel}
+                                        className="size-10 rounded-md"
+                                    />
+                                ) : (
+                                    <PackageSearchIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                )}
                                 <span className="min-w-0 whitespace-normal break-words">
                                     {selectedLabel || "选择商品"}
                                     {line?.specification ? (

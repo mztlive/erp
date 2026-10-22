@@ -143,7 +143,11 @@ function buildDraftPayload(
                 procurement_supply_price_gross:
                     line.procurementSupplyPrice?.trim() || null,
                 welfare_scenario: mapWelfareScenarioCode(input.welfareScene),
-                fulfillment_due_at: dateToUnixSecs(line.dueDate),
+                fulfillment_due_at:
+                    line.fulfillmentDueAt != null &&
+                    formatEpochDate(line.fulfillmentDueAt) === line.dueDate
+                        ? line.fulfillmentDueAt
+                        : dateToUnixSecs(line.dueDate),
                 quantity: line.quantity || "0",
                 base_unit_code: line.unit.trim() || "EA",
                 unit_price_gross: line.unitPriceGross || "0.0000",
@@ -383,6 +387,7 @@ function mapDraftLines(
                   }
                 : undefined,
             dueDate: formatEpochDate(line.fulfillment_due_at),
+            fulfillmentDueAt: line.fulfillment_due_at ?? undefined,
             faceValue: line.face_value ?? "",
             giftRate: "",
             cardForm: isVoucher ? mapCardFormFromBackend(line.card_form) : "",

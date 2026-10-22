@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import type { BackgroundJobView } from "../api"
 import type { useBackgroundJobItemsQuery } from "../queries"
 import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
+import { TransferResult } from "./transfer-result"
 import { SupplierImportFailures } from "./supplier-import-failures"
 
 type BackgroundJobItemResultsProps = {
@@ -27,6 +28,13 @@ export function BackgroundJobItemResults({
     return (
         <section className="space-y-3">
             <h3 className="font-medium">逐项结果</h3>
+            {previewJob.domain_job_type === "DATA_TRANSFER" &&
+                Boolean(
+                    previewJob.finished_at && previewJob.result_file_asset_id,
+                ) &&
+                previewJob.requested_by === currentUserId && (
+                    <TransferResult jobId={previewJob.id} />
+                )}
             {(itemsQuery.data?.total ?? 0) > 100 && (
                 <div className="mt-3 flex items-center justify-end gap-3">
                     <Button

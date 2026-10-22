@@ -1,12 +1,11 @@
 import { isDataScopeChanged } from "@/features/data-scope/cache"
-import { collectExportPages } from "@/lib/list-export"
+import { runDataTransfer } from "@/lib/data-transfer"
 import { apiGet } from "@/lib/api"
 import { isApiError } from "@/lib/api/errors"
 import type {
     PurchaseChangeOrderSummary,
     PurchaseCreationBasis,
     PurchaseOrderCenterView,
-    PurchaseOrderListItem,
 } from "@/features/purchase-orders/types"
 import {
     mapBasis,
@@ -33,33 +32,6 @@ const PURCHASE_ORDER_MAX_PAGE_SIZE = 100
 export async function fetchPurchaseOrders(
     query: PurchaseOrderListQuery = {},
 ): Promise<PurchaseOrderListResult> {
-    const pageSize = Math.min(
-        Math.max(1, query.pageSize ?? PURCHASE_ORDER_DEFAULT_PAGE_SIZE),
-        PURCHASE_ORDER_MAX_PAGE_SIZE,
-    )
-    const page = Math.max(1, Math.floor(query.page ?? 1))
-
-    // metric 与 status 叠加：metric 优先映射为 status
-    const statusFromMetric = metricStatusParam(query.metric)
-    const status = statusFromMetric ?? toBackendStatus(query.status)
-
-    // 后端排序白名单仅 created_at / purchase_no；前端 document/amount 等映射
-    let sortBy: string | undefined
-    if (query.sortBy === "document") sortBy = "purchase_no"
-    else if (
-        query.sortBy === "owner" ||
-        query.sortBy === "amount" ||
-        query.sortBy === "source"
-    ) {
-        // 缺口：不支持的排序列，回落 created_at
-        sortBy = "created_at"
-    } else if (
-        query.sortBy === "created_at" ||
-        query.sortBy === "purchase_no"
-    ) {
-        sortBy = query.sortBy
-    }
-
     const pageData = await apiGet<
         BackendPage<BackendListItem> & {
             empty_reason?: string | null
@@ -70,18 +42,7 @@ export async function fetchPurchaseOrders(
             as_of?: string
             ownership_basis?: string
         }
-    >("/admin/purchase-orders", {
-        scope_version: query.scopeVersion,
-        q: query.q,
-        sales_order_id: query.salesOrderId,
-        owner_user_ids: query.ownerUserIds || undefined,
-        purchase_type: query.purchaseType,
-        status,
-        page,
-        page_size: pageSize,
-        sort_by: sortBy,
-        sort_dir: query.sortDir,
-    })
+    >("/admin/purchase-orders", purchaseExportQuery(query))
 
     const rows = (pageData.items ?? []).map(mapListItem)
 
@@ -95,8 +56,8 @@ export async function fetchPurchaseOrders(
         asOf: pageData.as_of,
         ownershipBasis: pageData.ownership_basis,
         total: pageData.total ?? rows.length,
-        page: pageData.page ?? page,
-        pageSize: pageData.page_size ?? pageSize,
+        page: pageData.page ?? query.page ?? 1,
+        pageSize: pageData.page_size ?? query.pageSize ?? 20,
         metrics: [],
         freshness: {
             updatedAt: pageData.as_of ?? new Date().toISOString(),
@@ -105,31 +66,10 @@ export async function fetchPurchaseOrders(
     }
 }
 
-export async function fetchPurchaseOrderExportData(
+export function fetchPurchaseOrderExportData(
     query: PurchaseOrderListQuery = {},
-): Promise<PurchaseOrderListItem[]> {
-    let scopeVersion: string | undefined
-    const items = await collectExportPages(
-        async (page, pageSize) => {
-            const result = await fetchPurchaseOrders({
-                ...query,
-                page,
-                pageSize,
-                scopeVersion,
-            })
-            scopeVersion = result.scopeVersion
-            return { items: result.rows, total: result.total }
-        },
-        (row) => row.purchaseOrderId,
-    )
-    // 最后一页之后、生成文件前再次验证，撤权或业务变化时不下载旧文件。
-    await fetchPurchaseOrders({
-        ...query,
-        page: 1,
-        pageSize: 1,
-        scopeVersion,
-    })
-    return items
+) {
+    return runDataTransfer("purchase_orders", purchaseExportQuery(query))
 }
 
 /**
@@ -324,5 +264,47 @@ export async function acquireDraftEditToken(purchaseOrderId: string): Promise<{
     return {
         draftEditToken: `det:${purchaseOrderId}:${center.version}`,
         lockVersion: center.version,
+    }
+}
+
+export function purchaseExportQuery(query: PurchaseOrderListQuery) {
+    const pageSize = Math.min(
+        Math.max(1, query.pageSize ?? PURCHASE_ORDER_DEFAULT_PAGE_SIZE),
+        PURCHASE_ORDER_MAX_PAGE_SIZE,
+    )
+    const page = Math.max(1, Math.floor(query.page ?? 1))
+
+    // metric 与 status 叠加：metric 优先映射为 status
+    const statusFromMetric = metricStatusParam(query.metric)
+    const status = statusFromMetric ?? toBackendStatus(query.status)
+
+    // 后端排序白名单仅 created_at / purchase_no；前端 document/amount 等映射
+    let sortBy: string | undefined
+    if (query.sortBy === "document") sortBy = "purchase_no"
+    else if (
+        query.sortBy === "owner" ||
+        query.sortBy === "amount" ||
+        query.sortBy === "source"
+    ) {
+        // 缺口：不支持的排序列，回落 created_at
+        sortBy = "created_at"
+    } else if (
+        query.sortBy === "created_at" ||
+        query.sortBy === "purchase_no"
+    ) {
+        sortBy = query.sortBy
+    }
+
+    return {
+        scope_version: query.scopeVersion,
+        q: query.q,
+        sales_order_id: query.salesOrderId,
+        owner_user_ids: query.ownerUserIds || undefined,
+        purchase_type: query.purchaseType,
+        status,
+        page,
+        page_size: pageSize,
+        sort_by: sortBy,
+        sort_dir: query.sortDir,
     }
 }

@@ -133,18 +133,18 @@ export function WorkspaceTabBar({
     return (
         <div
             data-slot="workspace-tab-bar"
-            className="flex h-topbar shrink-0 items-center gap-2 border-b border-border/40 bg-card px-workspace-inline md:px-page-inline min-[75rem]:px-page-inline-lg"
+            className="flex h-topbar shrink-0 items-center gap-2 border-b border-border bg-card px-workspace-inline md:px-page-inline min-[75rem]:px-page-inline-lg"
         >
             <div
                 ref={strip}
                 onScroll={measure}
-                className="-ml-2 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 <div
                     ref={track}
                     role="tablist"
                     aria-label="已打开的工作页"
-                    className="flex h-full w-max min-w-full items-center gap-2"
+                    className="flex h-full w-max min-w-full items-center gap-1.5"
                 >
                     {tabs.map((tab, index) => {
                         const selected = tab.id === active
@@ -153,10 +153,10 @@ export function WorkspaceTabBar({
                             <div
                                 key={tab.id}
                                 className={cn(
-                                    "group/workspace-tab relative flex h-full max-w-72 shrink-0 items-center gap-0.5 motion-safe:transition-colors",
+                                    "group/workspace-tab relative flex h-8 max-w-72 shrink-0 items-center rounded-md motion-safe:transition-colors",
                                     selected
-                                        ? "text-foreground"
-                                        : "text-muted-foreground hover:text-foreground",
+                                        ? "bg-muted text-foreground"
+                                        : "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
                                 )}
                             >
                                 <button
@@ -168,9 +168,8 @@ export function WorkspaceTabBar({
                                     tabIndex={selected ? 0 : -1}
                                     title={`${tab.title}${tab.dirty ? "（输入已修改）" : ""}`}
                                     className={cn(
-                                        "relative flex h-full min-w-0 items-center gap-2 px-2 text-body-compact outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset motion-safe:transition-colors",
-                                        selected &&
-                                            "bg-muted/50 font-medium after:pointer-events-none after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-foreground/80",
+                                        "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1 pl-2.5 text-body-compact outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+                                        selected && "font-medium",
                                     )}
                                     onClick={() => onSelect(tab)}
                                     onKeyDown={(event) =>
@@ -189,34 +188,40 @@ export function WorkspaceTabBar({
                                     <span className="truncate">
                                         {tab.title}
                                     </span>
+                                </button>
+                                <span className="relative mr-1 flex size-control-xs shrink-0 items-center justify-center">
                                     {tab.dirty ? (
                                         <span
-                                            className="size-1.5 shrink-0 rounded-full bg-warning"
+                                            className="pointer-events-none size-1.5 rounded-full bg-warning motion-safe:transition-opacity group-hover/workspace-tab:opacity-0 group-focus-within/workspace-tab:opacity-0 [@media(hover:none)]:hidden"
                                             aria-label="输入已修改"
                                         />
                                     ) : null}
-                                </button>
-                                <button
-                                    id={`workspace-tab-close-${tab.id}`}
-                                    type="button"
-                                    aria-label={`关闭${tab.title}`}
-                                    title={`关闭${tab.title}${selected ? `（${WORKSPACE_CLOSE_SHORTCUT}）` : ""}`}
-                                    aria-keyshortcuts={
-                                        selected
-                                            ? WORKSPACE_CLOSE_SHORTCUT
-                                            : undefined
-                                    }
-                                    className={cn(
-                                        "flex size-control-xs shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-foreground/8 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/workspace-tab:opacity-100 group-focus-within/workspace-tab:opacity-100 motion-safe:transition-opacity [@media(hover:none)]:opacity-100",
-                                        selected ? "opacity-40" : "opacity-0",
-                                    )}
-                                    onClick={() => onClose([tab.id])}
-                                >
-                                    <XIcon
-                                        className="size-3.5"
-                                        aria-hidden="true"
-                                    />
-                                </button>
+                                    <button
+                                        id={`workspace-tab-close-${tab.id}`}
+                                        type="button"
+                                        aria-label={`关闭${tab.title}`}
+                                        title={`关闭${tab.title}${selected ? `（${WORKSPACE_CLOSE_SHORTCUT}）` : ""}`}
+                                        aria-keyshortcuts={
+                                            selected
+                                                ? WORKSPACE_CLOSE_SHORTCUT
+                                                : undefined
+                                        }
+                                        className={cn(
+                                            "absolute inset-0 flex items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-foreground/8 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:transition-opacity",
+                                            tab.dirty
+                                                ? "pointer-events-none opacity-0 group-hover/workspace-tab:pointer-events-auto group-hover/workspace-tab:opacity-70 group-focus-within/workspace-tab:pointer-events-auto group-focus-within/workspace-tab:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-70"
+                                                : selected
+                                                  ? "opacity-70"
+                                                  : "opacity-0 group-hover/workspace-tab:opacity-70 group-focus-within/workspace-tab:opacity-70 [@media(hover:none)]:opacity-70",
+                                        )}
+                                        onClick={() => onClose([tab.id])}
+                                    >
+                                        <XIcon
+                                            className="size-3.5"
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                </span>
                             </div>
                         )
                     })}

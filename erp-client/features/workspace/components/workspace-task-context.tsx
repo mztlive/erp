@@ -99,8 +99,10 @@ export function workspaceTaskHasInlineContextHelp(
  */
 export function WorkspaceTaskContextHelp({
     item,
+    label,
 }: {
     item: WorkspaceWorkItem
+    label?: string
 }) {
     const blocked = isBlockedWorkItem(item)
     const overdue = item.dueBucket === "overdue"
@@ -115,13 +117,14 @@ export function WorkspaceTaskContextHelp({
                         id={`workspace-task-context-help-trigger-${toAutomationIdSegment(item.workItemId)}`}
                         type="button"
                         variant="ghost"
-                        size="icon-sm"
-                        aria-label="任务说明"
+                        size={label ? "sm" : "icon-sm"}
+                        aria-label={label || "任务说明"}
                         data-testid={`work-item-task-context-${item.workItemId}`}
                     />
                 }
             >
                 <CircleHelpIcon aria-hidden="true" />
+                {label}
             </PopoverTrigger>
             <PopoverContent
                 align="end"
@@ -208,10 +211,12 @@ export function WorkspaceTaskContextHelp({
  */
 export function WorkspaceTaskHeaderActions({
     item,
+    contextLabel,
     children,
 }: {
     item: WorkspaceWorkItem
     children?: ReactNode
+    contextLabel?: string
 }) {
     const fullPage = useWorkspaceTaskPage()
     return (
@@ -231,7 +236,7 @@ export function WorkspaceTaskHeaderActions({
                     }}
                 />
             )}
-            <WorkspaceTaskContextHelp item={item} />
+            <WorkspaceTaskContextHelp item={item} label={contextLabel} />
             <WorkspacePaneActions />
         </div>
     )

@@ -39,3 +39,5 @@ pub mod supplier_portal;
 pub mod supplier_settlement;
 pub mod warehouse;
 pub mod work_item;
+
+pub mod data_transfer;

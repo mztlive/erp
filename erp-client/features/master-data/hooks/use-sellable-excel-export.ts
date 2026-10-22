@@ -1,81 +1,62 @@
 "use client"
-
-import * as React from "react"
-
+import { useMutation } from "@tanstack/react-query"
+import { useState } from "react"
 import { toast } from "@/components/ui/toast"
-import { useMasterDataExportMutation } from "@/features/master-data/hooks/queries"
-import type { ListExportMeta } from "@/features/master-data/hooks/use-master-data-list-export"
-import { selectSellableRows } from "@/features/master-data/lib/sellable-excel-rows"
-import { getErrorPresentation } from "@/lib/api/errors"
-
+import { runDataTransfer, downloadTransfer } from "@/lib/data-transfer"
+import { getErrorMessage } from "@/lib/api/errors"
+import { sellableListParams } from "../api/lists/sellable"
+import type { MasterDataListQuery } from "../types"
+import type { ListExportMeta } from "./use-master-data-list-export"
 export function useSellableExcelExport() {
-    const exportMutation = useMasterDataExportMutation()
-    const [exportMeta, setExportMeta] = React.useState<ListExportMeta | null>(
-        null,
-    )
-    const [pending, setPending] = React.useState(false)
-
-    const handleExcelExport = React.useCallback(
-        async (input: {
-            query: Parameters<typeof exportMutation.mutateAsync>[0]
+    const [exportMeta, setExportMeta] = useState<ListExportMeta | null>(null)
+    const mutation = useMutation({
+        mutationFn: async (input: {
+            query: MasterDataListQuery
             selectedIds?: ReadonlySet<string>
             filterSnapshotLabel: string
             fileLabel: string
         }) => {
             if (input.selectedIds?.size === 0) return false
-            setPending(true)
+            const file = await runDataTransfer("product_pool_excel", {
+                query: {
+                    ...sellableListParams(input.query),
+                    max_supplier_count:
+                        input.query.sellableSupplyPreset === "single-supplier"
+                            ? 1
+                            : undefined,
+                },
+                selected_ids: input.selectedIds
+                    ? [...input.selectedIds]
+                    : undefined,
+            })
+            downloadTransfer(file)
+            setExportMeta({
+                jobId: file.jobId,
+                rowCount:
+                    typeof file.metadata?.row_count === "number"
+                        ? file.metadata.row_count
+                        : (input.selectedIds?.size ?? 0),
+                filterSnapshotLabel: input.filterSnapshotLabel,
+            })
+            return true
+        },
+    })
+    return {
+        exportMeta,
+        pending: mutation.isPending,
+        handleExcelExport: async (
+            input: Parameters<typeof mutation.mutateAsync>[0],
+        ) => {
             try {
-                const refreshed = await exportMutation.mutateAsync(input.query)
-                const rows = input.selectedIds
-                    ? selectSellableRows(refreshed.rows, input.selectedIds)
-                    : [...refreshed.rows]
-                if (input.selectedIds && rows.length !== input.selectedIds.size)
-                    throw new Error(
-                        "部分勾选商品已不可导出，请刷新商品池后重新选择",
-                    )
-                if (rows.length === 0) {
-                    toast.add({
-                        title: "没有可导出的商品",
-                        description:
-                            "勾选的商品已不在当前结果中，请重新勾选后再导出。",
-                        type: "warning",
-                    })
-                    return false
-                }
-                const { buildSellableItemsExcelFile } =
-                    await import("@/features/master-data/lib/export-sellable-excel")
-                await buildSellableItemsExcelFile({
-                    rows,
-                    filterSnapshotLabel: input.filterSnapshotLabel,
-                    fileLabel: input.fileLabel,
-                })
-                const datePart = new Date()
-                    .toISOString()
-                    .slice(0, 10)
-                    .replaceAll("-", "")
-                setExportMeta({
-                    jobId: `导出-${datePart}-${String(Date.now() % 100000).padStart(5, "0")}`,
-                    rowCount: rows.length,
-                    filterSnapshotLabel: input.filterSnapshotLabel,
-                })
-                return true
+                return await mutation.mutateAsync(input)
             } catch (error) {
-                const presentation = getErrorPresentation(
-                    error,
-                    "导出未完成，请稍后重试。",
-                )
                 toast.add({
-                    title: presentation.title,
-                    description: presentation.description,
+                    title: "导出失败",
+                    description: getErrorMessage(error, "请查看原任务后重试"),
                     type: "error",
                 })
                 return false
-            } finally {
-                setPending(false)
             }
         },
-        [exportMutation],
-    )
-
-    return { exportMeta, pending, handleExcelExport }
+    }
 }

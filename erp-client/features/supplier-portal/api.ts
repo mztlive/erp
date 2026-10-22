@@ -1,3 +1,4 @@
+import { transferJson } from "@/lib/data-transfer"
 import {
     apiGet,
     apiGetBlob,
@@ -231,18 +232,24 @@ export const portalBatch = (
     validateOnly: boolean,
     recoveryOnly = false,
     phase?: PortalBatchPhase,
-) =>
-    apiPost<PortalBatchResult>(
-        "/supplier-portal/batch",
-        {
-            mode,
-            rows,
-            validate_only: validateOnly,
-            recovery_only: recoveryOnly,
-            ...(mode === "new_product" ? { phase: phase ?? "prepare" } : {}),
-        },
-        options,
-    )
+) => {
+    const input = {
+        mode,
+        rows,
+        validate_only: validateOnly,
+        recovery_only: recoveryOnly,
+        ...(mode === "new_product" ? { phase: phase ?? "prepare" } : {}),
+    }
+    return validateOnly
+        ? apiPost<PortalBatchResult>("/supplier-portal/batch", input, options)
+        : transferJson<PortalBatchResult>(
+              "portal_batch",
+              input,
+              undefined,
+              true,
+          )
+}
+
 export const portalUpload = (
     applicationId: string,
     file: File,

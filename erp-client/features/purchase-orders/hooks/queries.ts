@@ -129,11 +129,10 @@ export function usePurchaseDeliveryOptionsQuery(
 }
 
 export function usePurchaseOrderExportDataQuery(query: PurchaseOrderListQuery) {
-    return useQuery({
-        queryKey: purchaseOrderKeys.exportData(query),
-        queryFn: () => fetchPurchaseOrderExportData(query),
-        enabled: false,
+    const mutation = useMutation({
+        mutationFn: () => fetchPurchaseOrderExportData(query),
     })
+    return { ...mutation, isFetching: mutation.isPending }
 }
 
 /**

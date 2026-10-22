@@ -37,6 +37,11 @@ export function WorkspaceProcessingLayout({
     return (
         <WorkspaceTaskPageProvider
             compact={paymentArrangement}
+            fullWidth={
+                item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
+                item.businessObjectType === "sales_order" &&
+                item.allowedActions.includes("PROCESS")
+            }
             summary={
                 <>
                     {payment || paymentArrangement ? undefined : (

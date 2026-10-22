@@ -140,6 +140,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 
     let outbox_worker = state.start_approval_outbox_worker();
     spawn_background_runner(state.clone());
+    web_api::core::data_transfer::spawn(state.clone());
     let result = run_app(app_port, state).await;
     outbox_worker.stop().await;
     result

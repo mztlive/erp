@@ -1,4 +1,5 @@
-import { apiGet, apiPostForm } from "@/lib/api"
+import { transferJson, transferFileInput } from "@/lib/data-transfer"
+import { apiGet } from "@/lib/api"
 import type { InquiryImportPreview } from "./components/inquiry-import-dialog"
 import type {
     InquiryList,
@@ -14,14 +15,11 @@ export function inquiryPath(procurement = false, inquiryId?: string): string {
     return inquiryId ? `${root}/${encodeURIComponent(inquiryId)}` : root
 }
 
-export function previewInquiryCreation(file: File, customerId: string) {
-    const data = new FormData()
-    data.append("file", file)
-    data.append("customer_id", customerId)
-    return apiPostForm<InquiryImportPreview>(
-        `${inquiryPath()}/imports/preview`,
-        data,
-    )
+export async function previewInquiryCreation(file: File, customerId: string) {
+    return transferJson<InquiryImportPreview>("inquiry_creation_preview", {
+        ...(await transferFileInput(file)),
+        customer_id: customerId,
+    })
 }
 
 export function fetchInquiries(query: InquiryListQuery, procurement = false) {

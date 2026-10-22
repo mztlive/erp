@@ -138,6 +138,14 @@ export function WorkspaceSidebarAccount() {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
+                            id="workspace-sidebar-my-transfers"
+                            onClick={() =>
+                                router.push("/account/data-transfers")
+                            }
+                        >
+                            我的文件任务
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                             id="workspace-sidebar-account-logout"
                             variant="destructive"
                             onClick={() =>

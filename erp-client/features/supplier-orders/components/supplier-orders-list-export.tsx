@@ -22,7 +22,7 @@ export function SupplierOrdersListExportResult({
         <div className="space-y-2">
             <FormalActionResult
                 status="succeeded"
-                title="导出任务已创建"
+                title="导出已完成"
                 description={result.maskDisclaimer}
                 facts={[
                     {

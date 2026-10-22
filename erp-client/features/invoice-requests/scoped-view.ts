@@ -17,22 +17,7 @@ export async function fetchInvoiceRequestScopeList(
 ): Promise<InvoiceRequestScopeListView> {
     const page = await apiGet<
         Page<ScopedInvoiceRequestWire> & FundsScopedInvoiceRequestPageWire
-    >("/admin/sales-invoice-requests", {
-        page: query.page,
-        page_size: query.pageSize,
-        scope_version: query.scopeVersion,
-        sales_owner_user_ids: query.salesOwnerUserIds || undefined,
-        applicant_user_ids: query.applicantUserIds || undefined,
-        handler_user_ids: query.handlerUserIds || undefined,
-        org_unit_ids: query.orgUnitIds || undefined,
-        include_descendants:
-            query.orgUnitIds && query.includeDescendants ? true : undefined,
-        q: query.q?.trim() || undefined,
-        status: query.status,
-        sales_order_id: query.salesOrderId,
-        customer_id: query.customerId,
-        receivable_account_id: query.receivableAccountId,
-    })
+    >("/admin/sales-invoice-requests", toQuery(query))
     return {
         requests: page.items ?? [],
         total: page.total ?? 0,
@@ -70,5 +55,24 @@ export async function fetchInvoiceRequestScopeDetail(
         )
             return null
         throw error
+    }
+}
+
+export function toQuery(query: InvoiceRequestScopeQuery) {
+    return {
+        page: query.page,
+        page_size: query.pageSize,
+        scope_version: query.scopeVersion,
+        sales_owner_user_ids: query.salesOwnerUserIds || undefined,
+        applicant_user_ids: query.applicantUserIds || undefined,
+        handler_user_ids: query.handlerUserIds || undefined,
+        org_unit_ids: query.orgUnitIds || undefined,
+        include_descendants:
+            query.orgUnitIds && query.includeDescendants ? true : undefined,
+        q: query.q?.trim() || undefined,
+        status: query.status,
+        sales_order_id: query.salesOrderId,
+        customer_id: query.customerId,
+        receivable_account_id: query.receivableAccountId,
     }
 }

@@ -412,6 +412,7 @@ impl BackgroundJob {
     /// # 错误
     /// 当任务处于终态时返回错误。
     pub fn cancel(&mut self, at: Instant) -> Result<()> {
+        self.ensure_transfer_cancellable()?;
         ensure_transition(self.status, JobStatus::Cancelled)?;
         self.status = JobStatus::Cancelled;
         self.finished_at = Some(at);

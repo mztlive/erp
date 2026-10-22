@@ -16,21 +16,29 @@ import type {
 import { SourcingDeliveryRequirementSection } from "./sourcing-delivery-plan"
 import { SourcingAllocationEditor } from "./sourcing-allocation-editor"
 
-/** 参与开关可由外层标题区承载；地址要求仅在没有来源需要供应商送达时只读展示。 */
+/** 分配复选框可由外层标题区承载；地址要求仅在没有来源需要供应商送达时只读展示。 */
 export function SourcingProductEditor({
     row,
     onSetParticipation,
     showParticipation = true,
+    condensed = false,
+    activeRowKey,
     ...props
 }: SourcingEditorProps &
     SourcingParticipationProps & {
         row: SourcingEditorRow
         showParticipation?: boolean
+        condensed?: boolean
+        /** 分栏编辑时只挂载当前来源，字段仍绑定整单共享草稿。 */
+        activeRowKey?: string
     }) {
     const { form, order } = props
     const included = row.selected || row.partiallySelected
-    const selectedLines = row.allocations
-        .filter(({ line }) => line.selected)
+    const visibleAllocations = activeRowKey
+        ? row.allocations.filter(({ line }) => line.rowKey === activeRowKey)
+        : row.allocations
+    const selectedLines = visibleAllocations
+        .filter(({ line }) => Boolean(activeRowKey) || line.selected)
         .map(({ line }) => line)
     const showRequirements =
         row.product.deliveryAllocations.length === 0 ||
@@ -40,7 +48,7 @@ export function SourcingProductEditor({
     const routed = selectedLines.some((line) =>
         findSourcingOption(row.product, line.basisId),
     )
-    const warehouseSources = row.allocations.filter(({ line }) => {
+    const warehouseSources = visibleAllocations.filter(({ line }) => {
         const option = findSourcingOption(row.product, line.basisId)
         return (
             line.selected &&
@@ -91,28 +99,39 @@ export function SourcingProductEditor({
                 <p className="px-4 pt-4 text-xs text-muted-foreground">
                     暂不分配：本次不提交，方案已保留。
                 </p>
+            ) : activeRowKey && !visibleAllocations[0]?.line.selected ? (
+                <p className="px-4 pt-4 text-xs text-muted-foreground">
+                    此来源暂不参与分配，修改仅保留在草稿中。
+                </p>
             ) : null}
             <fieldset
                 disabled={!included}
                 className="min-w-0 disabled:opacity-60"
             >
                 <div className="divide-y divide-border/60">
-                    {row.allocations.map(({ line, index }) => (
+                    {visibleAllocations.map(({ line, index }) => (
                         <SourcingAllocationEditor
                             compact
-                            showParticipation={row.allocations.length > 1}
+                            condensed={condensed}
+                            expandDeliverySummary={Boolean(activeRowKey)}
+                            showParticipation={
+                                !activeRowKey && row.allocations.length > 1
+                            }
                             participationLabel="本次使用此来源"
                             key={line.rowKey}
                             {...props}
                             product={row.product}
                             line={line}
                             index={index}
-                            canRemove={row.allocations.length > 1}
+                            canRemove={
+                                !activeRowKey && row.allocations.length > 1
+                            }
                         />
                     ))}
                 </div>
                 <div className="space-y-3 px-4 pb-4 empty:hidden">
-                    {canSplitSourcingProduct(
+                    {!condensed &&
+                    canSplitSourcingProduct(
                         row.product,
                         row.allocations.length,
                     ) ? (
@@ -177,6 +196,7 @@ export function SourcingProductEditor({
                 {showRequirements ? (
                     <SourcingDeliveryRequirementSection
                         product={row.product}
+                        condensed={condensed}
                         note={routed ? "客户地址由仓库发货时安排。" : undefined}
                     />
                 ) : null}

@@ -24,6 +24,7 @@ import {
 import type { SourcingEditorProps } from "./create-sourcing/types"
 import { SourcingDeliveryEditor } from "./sourcing-delivery-plan"
 import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
+import { SourcingCompactFacts } from "./sourcing-compact-facts"
 import {
     deliverySummary,
     deliveryTermLabel,
@@ -41,6 +42,8 @@ export function SourcingAllocationEditor({
     canRemove,
     onRemoveSplit,
     compact = false,
+    condensed = false,
+    expandDeliverySummary = false,
     showParticipation = true,
     participationLabel = "本次分配",
 }: Pick<SourcingEditorProps, "form" | "order" | "onRemoveSplit"> & {
@@ -49,6 +52,8 @@ export function SourcingAllocationEditor({
     index: number
     canRemove: boolean
     compact?: boolean
+    condensed?: boolean
+    expandDeliverySummary?: boolean
     showParticipation?: boolean
     participationLabel?: string
 }) {
@@ -126,7 +131,9 @@ export function SourcingAllocationEditor({
                     product={product}
                     showDeliverySummary={false}
                 />
-                <SourcingOptionFacts option={option} product={product} />
+                {!condensed ? (
+                    <SourcingOptionFacts option={option} product={product} />
+                ) : null}
                 {option?.sourceType === "PURCHASE" &&
                     !option.inquirySource &&
                     (option.inquiryReselectionRequired ||
@@ -211,16 +218,27 @@ export function SourcingAllocationEditor({
                             rowKey={line.rowKey}
                             order={order}
                             salesOrderLineId={line.salesOrderLineId}
+                            showDeadlineHint={!condensed}
                         />
                     </div>
                 ) : null}
             </div>
+            {condensed ? (
+                <SourcingCompactFacts
+                    key={line.basisId}
+                    idPrefix={id}
+                    option={option}
+                    product={product}
+                />
+            ) : null}
             <SourcingDeliveryEditor
                 form={form}
                 product={product}
                 line={line}
                 index={index}
                 showNotApplicable={false}
+                condensed={condensed}
+                expandSummary={expandDeliverySummary}
             />
         </div>
     )

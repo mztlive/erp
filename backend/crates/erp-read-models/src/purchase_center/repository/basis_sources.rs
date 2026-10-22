@@ -7,18 +7,15 @@ use erp_procurement::entity::purchase_order::{
     BasisGroup, CreationBasisFacts, SalesProcurementCoverage, StockBasisGroup,
 };
 use erp_procurement::service::purchase_order::creation_basis::{
-    basis_groups_from_facts, inquiry_basis_groups, physical_stock_lines, stock_groups_from_facts,
-    zero_quantity,
+    physical_stock_lines, stock_groups_from_facts, zero_quantity,
 };
 use erp_sales::entity::sales_order::{CommercialStatus, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_warehouse::WarehouseExt;
 use persistence_core::Executor;
 
-use super::inquiry_quotes::inquiry_candidates;
 use super::mapping::{sales_order_basis_fact, stock_balance_fact};
-use super::{load_creation_basis_facts, load_sales_procurement_coverage};
+use super::{InquiryBasis, load_creation_basis_facts, load_sales_procurement_coverage};
 use crate::{Error, Result};
 /// 加载可作为采购来源的已生效销售单。
 ///
@@ -116,21 +113,9 @@ async fn basis_groups_and_facts_from_coverage(
     executor: &mut dyn Executor,
 ) -> Result<(Vec<BasisGroup>, CreationBasisFacts)> {
     let mut facts = creation_basis_facts_for_order(db, coverage, responsibility_scope_ids, executor).await?;
-    facts.source_inquiry_id = inquiry_sources(db)
-        .find_by_id(&order.base.id, executor)
-        .await?
-        .filter(|source| !source.released)
-        .map(|source| source.inquiry_id);
-    let mut groups =
-        basis_groups_from_facts(&sales_order_basis_fact(order), coverage, responsibility_scope_ids, &facts)?;
-    let candidates = inquiry_candidates(db, order, executor).await?;
-    groups.extend(inquiry_basis_groups(
-        &sales_order_basis_fact(order),
-        coverage,
-        responsibility_scope_ids,
-        &facts,
-        &candidates,
-    )?);
+    let inquiry = InquiryBasis::load(db, order, executor).await?;
+    let groups =
+        inquiry.groups(&sales_order_basis_fact(order), coverage, responsibility_scope_ids, &mut facts)?;
     Ok((groups, facts))
 }
 

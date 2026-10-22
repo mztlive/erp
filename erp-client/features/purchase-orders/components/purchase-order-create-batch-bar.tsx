@@ -12,7 +12,6 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import {
     Dialog,
     DialogContent,
@@ -28,32 +27,28 @@ import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 export type PurchaseOrderCreateBatchBarProps = {
     compact?: boolean
     selectedCount: number
-    participatingCount?: number
     options: readonly SourcingSupplierOption[]
     disabled?: boolean
     matchDisabled?: boolean
     getApplicableCount: (basisId: string) => number
     onApply: (basisId: string) => void
-    onSetParticipation?: (included: boolean) => void
     onMatchBest: () => void
-    onReuseInquiry?: () => void
-    inquiryDisabled?: boolean
+    onReuseInquiry: () => void
+    inquiryUnavailableReason?: string
 }
 
 /** 批量设置只在确认后应用，取消不会修改分配草稿。 */
 export function PurchaseOrderCreateBatchBar({
     compact = false,
     selectedCount,
-    participatingCount = 0,
     options,
     disabled,
     matchDisabled,
     getApplicableCount,
     onApply,
     onMatchBest,
-    onSetParticipation,
     onReuseInquiry,
-    inquiryDisabled,
+    inquiryUnavailableReason,
 }: PurchaseOrderCreateBatchBarProps) {
     const onRefresh = React.useContext(SourcingOptionsRefreshContext)
     const [open, setOpen] = React.useState(false)
@@ -62,63 +57,37 @@ export function PurchaseOrderCreateBatchBar({
         if (!basisId) setBasisId(options[0]?.basisId ?? null)
     }, [basisId, options])
     const applicableCount = basisId ? getApplicableCount(basisId) : 0
-    const allParticipating =
-        selectedCount > 0 && participatingCount === selectedCount
-    const partiallyParticipating = participatingCount > 0 && !allParticipating
     return (
         <div
             className={cn(
-                "flex flex-wrap items-center gap-2",
-                !compact && "rounded-md bg-muted/40 px-3 py-2",
+                "flex items-center gap-2",
+                compact
+                    ? "flex-nowrap"
+                    : "flex-wrap rounded-md bg-muted/40 px-3 py-2",
             )}
         >
-            {onReuseInquiry && (
-                <Button
-                    id="procurement-orders-create-reuse-inquiry"
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={disabled || inquiryDisabled}
-                    onClick={onReuseInquiry}
+            <Tooltip>
+                <TooltipTrigger
+                    render={
+                        <Button
+                            id="procurement-orders-create-reuse-inquiry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
+                            disabled={disabled || !!inquiryUnavailableReason}
+                            focusableWhenDisabled
+                            onClick={onReuseInquiry}
+                        />
+                    }
                 >
                     沿用询价结果
-                </Button>
-            )}
-            {onSetParticipation && selectedCount > 0 ? (
-                <label
-                    htmlFor="procurement-orders-create-batch-participation"
-                    className="mr-1 inline-flex min-h-8 cursor-pointer items-center gap-3 text-xs font-medium"
-                >
-                    <Tooltip>
-                        <TooltipTrigger
-                            render={
-                                <Switch
-                                    id="procurement-orders-create-batch-participation"
-                                    checked={allParticipating}
-                                    disabled={disabled}
-                                    onCheckedChange={onSetParticipation}
-                                    aria-label={`批量本次分配（已选 ${selectedCount} 项）`}
-                                    aria-describedby="procurement-orders-create-batch-participation-state"
-                                />
-                            }
-                        />
-                        <TooltipContent>
-                            已选 {selectedCount} 项，{participatingCount}{" "}
-                            项参与本次分配。
-                            {allParticipating
-                                ? "关闭后，已选商品全部暂不分配，保留原方案。"
-                                : "开启后，已选商品全部参与本次分配。"}
-                        </TooltipContent>
-                    </Tooltip>
-                    <span id="procurement-orders-create-batch-participation-state">
-                        {partiallyParticipating
-                            ? "部分参与"
-                            : allParticipating
-                              ? "本次分配"
-                              : "暂不分配"}
-                    </span>
-                </label>
-            ) : null}
+                </TooltipTrigger>
+                <TooltipContent>
+                    {inquiryUnavailableReason ||
+                        "将询价报价应用到本次分配的商品。"}
+                </TooltipContent>
+            </Tooltip>
             <Dialog open={open} onOpenChange={setOpen}>
                 <Tooltip>
                     <TooltipTrigger

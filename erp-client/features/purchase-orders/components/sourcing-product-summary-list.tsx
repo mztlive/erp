@@ -18,7 +18,6 @@ import type {
     SourcingBatchSelectionProps,
     SourcingParticipationProps,
 } from "./create-sourcing/types"
-import { SourcingParticipationControl } from "./sourcing-participation-control"
 import { SourcingProductAdjustDialog } from "./sourcing-product-adjust-dialog"
 import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 
@@ -53,7 +52,7 @@ export function SourcingProductSummaryList({
                     >
                         <NativeCheckbox
                             id="sourcing-summary-select-all"
-                            aria-label="选择当前显示的全部商品"
+                            aria-label="将当前显示的全部商品纳入本次分配"
                             checked={
                                 rows.length > 0 &&
                                 visibleSelectedCount === rows.length
@@ -74,7 +73,7 @@ export function SourcingProductSummaryList({
                         />
                         全选当前 {rows.length} 行
                     </label>
-                    <span>批量已选 {selectedProductIds.size} 行</span>
+                    <span>本次分配 {selectedProductIds.size} 行</span>
                 </div>
             </TableToolbar>
             <div
@@ -92,7 +91,7 @@ export function SourcingProductSummaryList({
                             <div className="shrink-0 pt-5 pl-4">
                                 <NativeCheckbox
                                     id={`${id}-select`}
-                                    aria-label={`批量选择 ${row.product.itemName}`}
+                                    aria-label={`本次分配 ${row.product.itemName}`}
                                     checked={selectedProductIds.has(key)}
                                     onCheckedChange={(checked) =>
                                         onToggleProducts([key], checked)
@@ -116,17 +115,6 @@ export function SourcingProductSummaryList({
                                             </span>
                                         ) : null}
                                     </span>
-                                    <SourcingParticipationControl
-                                        idPrefix={id}
-                                        itemName={row.product.itemName}
-                                        included={
-                                            row.selected ||
-                                            row.partiallySelected
-                                        }
-                                        onChange={(included) =>
-                                            onSetParticipation([key], included)
-                                        }
-                                    />
                                 </div>
                                 <button
                                     id={`${id}-adjust`}

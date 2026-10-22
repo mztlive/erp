@@ -23,6 +23,7 @@ const navigation = [
     ["new-products", "新品提报"],
     ["applications", "我的申请"],
     ["cooperation", "合作资料"],
+    ["tasks", "我的文件任务"],
     ["account", "账号设置"],
 ] as const
 /** 门户会话与后台会话分别存取，失效后立即停止渲染业务子树。 */

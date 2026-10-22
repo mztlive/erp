@@ -87,6 +87,7 @@ export async function fetchInquirySalesBasis(
             pricingMode: "MANUAL",
             procurementSupplyPrice: price.unit_price_gross,
             dueDate: formatEpochDate(requirement.delivery_due_at),
+            fulfillmentDueAt: requirement.delivery_due_at,
             deliveryAllocations: selection.allocations.map((allocation) => {
                 const original = requirement.allocations.find(
                     (row) => row.allocation_id === allocation.allocation_id,

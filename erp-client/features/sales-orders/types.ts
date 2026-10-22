@@ -58,6 +58,8 @@ export type SalesOrderDraftLineInput = {
     /** 编辑时按锁定 SKU 修订取价，不作为客户端可修改的销售单请求事实。 */
     referencePrices?: SalesSkuReferencePrices
     dueDate: string
+    /** 来源交期的完整时间戳；日期未改时原样提交，避免丢失时分秒。 */
+    fulfillmentDueAt?: number
     faceValue: string
     giftRate: string
     cardForm: string

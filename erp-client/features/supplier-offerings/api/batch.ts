@@ -1,3 +1,4 @@
+import { transferJson } from "@/lib/data-transfer"
 import { apiGet, apiPost } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 import type {
@@ -16,6 +17,12 @@ export function submitSupplyBatch(
     rows: { row_id: string; input: BatchInput }[],
     validateOnly: boolean,
 ) {
+    if (!validateOnly)
+        return transferJson<BatchResult>("supply_batch", {
+            mode,
+            rows,
+            validate_only: false,
+        })
     return apiPost<BatchResult>(`/admin/supplier-offerings/batch/${mode}`, {
         rows,
         validate_only: validateOnly,

@@ -139,3 +139,27 @@ export async function fetchSupplierScopeDetail(
         throw error
     }
 }
+
+export function toQuery(query: SupplierScopeQuery): Record<string, unknown> {
+    if (query.view === "payable")
+        return {
+            ...baseQuery(query),
+            source_document_id: query.purchaseOrderId,
+            supplier_id: query.supplierId,
+            sort_by: "created_at",
+            sort_dir: "desc",
+        }
+    if (query.view === "payment")
+        return {
+            ...baseQuery(query),
+            supplier_id: query.supplierId,
+            sort_by: "paid_at",
+            sort_dir: "desc",
+        }
+    return {
+        ...baseQuery(query),
+        payable_account_id: query.payableAccountId,
+        sort_by: "created_at",
+        sort_dir: "desc",
+    }
+}

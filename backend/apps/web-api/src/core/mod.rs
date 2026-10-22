@@ -11,3 +11,5 @@ pub mod tracing;
 pub(crate) mod upload;
 
 pub use rate_limit::Error as RateLimitError;
+
+pub mod data_transfer;

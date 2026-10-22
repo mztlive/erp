@@ -1,4 +1,6 @@
 "use client"
+import { transferJson, transferFileInput } from "@/lib/data-transfer"
+import type { ImportedQuote } from "../lib/supplier-quote-import"
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 import { UploadIcon } from "lucide-react"
@@ -55,15 +57,17 @@ export function SupplierQuoteImportButton({
             if (freshQuotes.error) throw freshQuotes.error
             if (freshOfferings.error) throw freshOfferings.error
             if (details.error) throw details.error
-            const { parseSupplierQuoteFiles } =
-                await import("../lib/supplier-quote-import")
-            const result = await parseSupplierQuoteFiles(
-                files,
-                inquiry,
-                freshOfferings.data ?? [],
-                freshQuotes.data ?? [],
-                details.units,
-            )
+            const result = await transferJson<{
+                rows: ImportedQuote[]
+                issues: string[]
+                skipped: number
+            }>("supplier_quote_preview", {
+                inquiry_id: inquiry.id,
+                task_id: task.id,
+                expected_version: inquiry.version,
+                task_version: task.version,
+                files: await Promise.all(files.map(transferFileInput)),
+            })
             return {
                 ...result,
                 requirement: inquiry.requirement_version,

@@ -4,9 +4,7 @@ use std::collections::HashMap;
 use erp_core::money::Quantity;
 use erp_procurement::entity::purchase_order::{PurchaseInquiryAddress, PurchaseInquiryQuoteSource};
 use erp_procurement::service::purchase_order::creation_basis::InquiryBasisCandidate;
-use erp_sales::entity::sales_order::SalesOrder;
-use erp_sales::entity::sales_order::inquiry_source::InquirySalesLineBinding;
-use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
+use erp_sales::entity::sales_order::inquiry_source::{InquirySalesLineBinding, SalesOrderInquirySource};
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use erp_supply::inquiry::{
     InquiryQuote, InquiryQuoteBalance, InquiryQuoteBalanceRepositoryExt, InquiryQuoteRepositoryExt,
@@ -20,19 +18,16 @@ use crate::Result;
 
 /// 读取准确已接受结果关联的内部报价版本，不读取采购未发布工作。
 /// # 参数
-/// `db`、`order` 为已授权正式销售及数据库；`executor` 为当前读取或写事务。
+/// `db`、`source` 为已授权销售的询价来源及数据库；`executor` 为当前读取或写事务。
 /// # 返回
 /// 返回仅可用于该销售稳定行的报价候选，余额跨销售和报价修订核算。
 /// # 错误
 /// 来源损坏、读取失败或报价数量溢出时拒绝。
 pub(super) async fn inquiry_candidates(
     db: &Database,
-    order: &SalesOrder,
+    source: &SalesOrderInquirySource,
     executor: &mut dyn Executor,
 ) -> Result<Vec<InquiryBasisCandidate>> {
-    let Some(source) = inquiry_sources(db).find_by_id(&order.base.id, executor).await? else {
-        return Ok(vec![]);
-    };
     if source.released || !source.consumed {
         return Ok(vec![]);
     }

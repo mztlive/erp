@@ -35,7 +35,7 @@ pub(super) const DELIVERY_HEADERS: [&str; 10] =
     ["SKU编码", "收件人", "联系电话", "省", "市", "区县", "详细地址", "配送数量", "要求交付日期", "交付条件"];
 
 #[derive(Clone, Default)]
-pub(super) struct Cell {
+pub(crate) struct Cell {
     pub value: String,
     pub text: bool,
     pub formula: bool,
@@ -43,12 +43,12 @@ pub(super) struct Cell {
 }
 
 #[derive(Clone)]
-pub(super) struct Row {
+pub(crate) struct Row {
     pub number: u32,
     pub cells: Vec<Cell>,
 }
 
-pub(super) struct Workbook {
+pub(crate) struct Workbook {
     pub product_sheet: &'static str,
     pub automatic_delivery: bool,
     pub products: Vec<Row>,
@@ -56,19 +56,52 @@ pub(super) struct Workbook {
     pub errors: Vec<InquiryImportIssue>,
 }
 
-pub(super) fn parse(bytes: &[u8]) -> Result<Workbook> {
+pub(crate) fn parse(bytes: &[u8]) -> Result<Workbook> {
     if bytes.is_empty() || bytes.len() > INQUIRY_IMPORT_MAX_BYTES {
         return Err(invalid("工作簿不能为空且不得超过 5 MiB"));
     }
     let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| invalid("请上传有效 .xlsx 工作簿"))?;
     check_archive(&mut archive)?;
     let shared = shared_strings(&mut archive)?;
-    let paths = sheet_paths(&mut archive)?;
+    let paths = sheet_paths(&mut archive, false)?;
     let mut sheets = HashMap::new();
     for (name, path) in paths {
         sheets.insert(name, rows(&read_text(&mut archive, &path)?, &shared)?);
     }
     parse_sheets(sheets)
+}
+
+/// 有界读取供应商报价工作簿，复用 XML 和 ZIP 安全边界。
+/// # 参数
+/// 不超过 20 MiB 的工作簿原文。
+/// # 返回
+/// 固定报价工作表的行列值。
+/// # 错误
+/// 宏、外部链接、公式、重复路径及超限展开内容均拒绝。
+pub(crate) fn quote_sheets(bytes: &[u8]) -> Result<HashMap<String, Vec<Row>>> {
+    if bytes.is_empty() || bytes.len() > 20 * 1024 * 1024 {
+        return Err(invalid("报价表须为 1 至 20 MiB 的 XLSX 文件"));
+    }
+    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| invalid("无效 XLSX 文件"))?;
+    check_archive(&mut archive)?;
+    let workbook = read_text(&mut archive, "xl/workbook.xml")?;
+    if workbook.contains("date1904=\"1\"") || workbook.contains("date1904=\"true\"") {
+        return Err(invalid("报价表不支持 1904 日期系统，请使用原模板"));
+    }
+    let shared = shared_strings(&mut archive)?;
+    let mut sheets = HashMap::new();
+    for (name, path) in sheet_paths(&mut archive, true)? {
+        let xml = read_text(&mut archive, &path)?;
+        if xml.contains("<hyperlink") {
+            return Err(invalid("报价表不能包含超链接"));
+        }
+        let rows = rows(&xml, &shared)?;
+        if rows.iter().flat_map(|r| &r.cells).any(|c| c.formula) {
+            return Err(invalid("报价表不能包含公式，请先转换为值"));
+        }
+        sheets.insert(name, rows);
+    }
+    Ok(sheets)
 }
 
 fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
@@ -129,7 +162,7 @@ fn check_archive(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<()> {
     Ok(())
 }
 
-fn sheet_paths(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<(String, String)>> {
+fn sheet_paths(archive: &mut ZipArchive<Cursor<&[u8]>>, quote: bool) -> Result<Vec<(String, String)>> {
     let workbook = read_text(archive, "xl/workbook.xml")?;
     let relationships = read_text(archive, "xl/_rels/workbook.xml.rels")?;
     let mut paths = HashMap::new();
@@ -153,16 +186,22 @@ fn sheet_paths(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<(String, S
     for tag in tags(&workbook, "sheet") {
         let name = attribute(tag, "name").ok_or_else(|| invalid("工作表名称无效"))?;
         let id = attribute(tag, "r:id").ok_or_else(|| invalid("工作表引用无效"))?;
-        if ![PRODUCT_SHEET, POOL_SHEET, DELIVERY_SHEET, INSTRUCTIONS].contains(&name.as_str())
+        if !(if quote {
+            &["报价表", "回导信息", "配送需求"][..]
+        } else {
+            &[PRODUCT_SHEET, POOL_SHEET, DELIVERY_SHEET, INSTRUCTIONS][..]
+        })
+        .contains(&name.as_str())
             || result.iter().any(|(existing, _)| existing == &name)
         {
             return Err(invalid("只接受选品（或商品清单）、配送需求、填写说明三个工作表"));
         }
         result.push((name, paths.get(&id).cloned().ok_or_else(|| invalid("工作表路径缺失"))?));
     }
-    if result.len() != 3
-        || !result.iter().any(|(name, _)| name == DELIVERY_SHEET)
-        || !result.iter().any(|(name, _)| name == INSTRUCTIONS)
+    if !quote
+        && (result.len() != 3
+            || !result.iter().any(|(name, _)| name == DELIVERY_SHEET)
+            || !result.iter().any(|(name, _)| name == INSTRUCTIONS))
     {
         return Err(invalid("须包含选品（或商品清单）、配送需求及填写说明三个工作表"));
     }
@@ -548,7 +587,7 @@ mod tests {
         let mut archive = ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
         let shared = shared_strings(&mut archive).unwrap();
         let mut sheets = HashMap::new();
-        for (name, path) in sheet_paths(&mut archive).unwrap() {
+        for (name, path) in sheet_paths(&mut archive, false).unwrap() {
             sheets.insert(name, rows(&read_text(&mut archive, &path).unwrap(), &shared).unwrap());
         }
         let deliveries = sheets.get_mut(DELIVERY_SHEET).unwrap();

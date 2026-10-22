@@ -67,7 +67,7 @@ impl SalesInquiryImportProcess {
         SalesInquiryAccess::new(self.db.clone(), self.rbac.clone())
     }
 
-    pub(super) async fn require_import(
+    pub(crate) async fn require_import(
         &self,
         actor: &AuditActor,
         id: &str,

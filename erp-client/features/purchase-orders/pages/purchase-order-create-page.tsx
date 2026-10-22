@@ -121,10 +121,6 @@ export function PurchaseOrderCreatePage({
     const submissionUnknown =
         sourcingCommand.pending !== null && !createMutation.isPending
     const [previewOpen, setPreviewOpen] = React.useState(false)
-    const [batchSelection, setBatchSelection] = React.useState<{
-        orderId: string
-        ids: string[]
-    }>({ orderId: "", ids: [] })
     const [linesResetToken, setLinesResetToken] = React.useState(0)
     const [sourcePaper, setSourcePaper] = React.useState<{
         id: string
@@ -443,30 +439,11 @@ export function PurchaseOrderCreatePage({
     const selectedProductIds = React.useMemo(
         () =>
             new Set(
-                batchSelection.orderId === selectedSalesOrderId
-                    ? batchSelection.ids.filter((id) =>
-                          selectedOrder?.lines.some(
-                              (product) => product.salesOrderLineId === id,
-                          ),
-                      )
-                    : [],
+                editorRows
+                    .filter((row) => row.selected || row.partiallySelected)
+                    .map((row) => row.product.salesOrderLineId),
             ),
-        [batchSelection, selectedSalesOrderId, selectedOrder],
-    )
-    const onToggleProducts = React.useCallback(
-        (ids: string[], selected: boolean) => {
-            setBatchSelection((current) => {
-                const next = new Set(
-                    current.orderId === selectedSalesOrderId ? current.ids : [],
-                )
-                for (const id of ids) {
-                    if (selected) next.add(id)
-                    else next.delete(id)
-                }
-                return { orderId: selectedSalesOrderId, ids: [...next] }
-            })
-        },
-        [selectedSalesOrderId],
+        [editorRows],
     )
     const batchLines = React.useMemo(
         () =>
@@ -908,37 +885,28 @@ export function PurchaseOrderCreatePage({
         <PurchaseOrderCreateBatchBar
             compact={embedded}
             selectedCount={selectedCount}
-            participatingCount={
-                editorRows.filter(
-                    (row) =>
-                        selectedProductIds.has(row.product.salesOrderLineId) &&
-                        (row.selected || row.partiallySelected),
-                ).length
-            }
             getApplicableCount={getApplicableCount}
             options={commonSourcingOptions}
             onApply={applyBatchSupplier}
             matchDisabled={!canMatchBest}
             onMatchBest={applyBestSourcingOptions}
-            onReuseInquiry={
-                selectedOrder?.lines.some((line) =>
-                    line.options.some(
-                        (option) =>
-                            option.inquirySource ||
-                            option.inquiryReselectionRequired,
-                    ),
-                )
-                    ? applyInquirySourcing
-                    : undefined
-            }
-            inquiryDisabled={
-                !selectedOrder || !lines.some((line) => line.selected)
-            }
-            onSetParticipation={
-                embedded
-                    ? (included) =>
-                          onSetParticipation([...selectedProductIds], included)
-                    : undefined
+            onReuseInquiry={applyInquirySourcing}
+            inquiryUnavailableReason={
+                !selectedOrder
+                    ? "请先选择需要分配供给的销售单。"
+                    : !selectedOrder.lines.some((line) =>
+                            line.options.some((option) => option.inquirySource),
+                        )
+                      ? selectedOrder.lines.some((line) =>
+                            line.options.some(
+                                (option) => option.inquiryReselectionRequired,
+                            ),
+                        )
+                          ? "销售单已关联询价，但当前没有可沿用的有效采购报价。请核对来源反馈轮次的内部报价、数量、有效期和供给状态。"
+                          : "当前可选供给没有关联询价报价，请核对销售单是否从询价单带入；已有库存分配可继续保留。"
+                      : !lines.some((line) => line.selected)
+                        ? "请先勾选需要分配的商品，再沿用询价结果。"
+                        : undefined
             }
         />
     )
@@ -962,7 +930,12 @@ export function PurchaseOrderCreatePage({
         {
             id: "gross",
             label: "采购含税合计",
-            value: <MoneyValue value={previewTotals.gross} />,
+            value: (
+                <MoneyValue
+                    value={previewTotals.gross}
+                    display={embedded ? "exact" : "full"}
+                />
+            ),
         },
     ]
 
@@ -1111,7 +1084,7 @@ export function PurchaseOrderCreatePage({
                                         onRemoveSplit={removeSplitLine}
                                         toolbar={batchBar}
                                         selectedProductIds={selectedProductIds}
-                                        onToggleProducts={onToggleProducts}
+                                        onToggleProducts={onSetParticipation}
                                         onSetParticipation={onSetParticipation}
                                     />
                                 ) : (

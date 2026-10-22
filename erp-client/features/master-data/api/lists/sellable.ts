@@ -10,7 +10,7 @@ import type {
 } from "@/features/master-data/types"
 import { fetchAllPages } from "./fetch-all"
 
-function sellableListParams(
+export function sellableListParams(
     query: MasterDataListQuery & { maxSupplierCount?: number },
 ) {
     return {

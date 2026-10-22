@@ -106,5 +106,9 @@ export type DataTableProps<TData> = {
     onRowOpen?: (row: TData) => void
     /** 刚产生的业务行，用于归档/创建后把视线落到新事实。 */
     highlightedRowId?: string
+    /** 展开内容由业务控制；未展开时返回 null。 */
+    renderExpandedRow?: (row: TData) => React.ReactNode
+    /** 表体占满剩余高度独立滚动，表头与分页保持可见。 */
+    scrollable?: boolean
     className?: string
 }

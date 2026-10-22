@@ -10,7 +10,8 @@ import {
 } from "@/features/purchase-orders/hooks/queries"
 import { usePurchaseOrdersListFilters } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
 import { usePurchaseOrdersListKeyboard } from "@/features/purchase-orders/hooks/use-purchase-orders-list-keyboard"
-import { buildPurchaseOrdersCsv } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
+import { downloadTransfer } from "@/lib/data-transfer"
+import { getErrorMessage } from "@/lib/api/errors"
 
 export type PurchaseOrdersActionResult = {
     status: "succeeded" | "failed" | "unknown"
@@ -84,32 +85,22 @@ export function usePurchaseOrdersListController() {
     )
 
     const exportCsv = React.useCallback(async () => {
-        const result = await exportQuery.refetch()
-        if (result.isError) {
+        try {
+            const result = await exportQuery.mutateAsync()
+            downloadTransfer(result)
+            setActionResult({
+                status: "succeeded",
+                title: "导出已生成",
+                description: "已下载当前筛选结果，可在后台任务页再次下载。",
+                reference: result.jobId,
+            })
+        } catch (error) {
             setActionResult({
                 status: "failed",
                 title: "导出失败",
-                description: "请重新查询后重试",
+                description: getErrorMessage(error, "请查看原任务后重试"),
             })
-            return
         }
-        const rows = result.data ?? []
-        if (rows.length === 0) return
-        const csv = buildPurchaseOrdersCsv(rows)
-        const objectUrl = URL.createObjectURL(
-            new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }),
-        )
-        const anchor = document.createElement("a")
-        anchor.href = objectUrl
-        anchor.download = "采购单列表.csv"
-        anchor.click()
-        URL.revokeObjectURL(objectUrl)
-        setActionResult({
-            status: "succeeded",
-            title: "导出已生成",
-            description: `已下载当前筛选 ${rows.length} 条。`,
-            reference: `EXPORT-${rows.length}`,
-        })
     }, [exportQuery])
 
     const openCreatePage = React.useCallback(() => {

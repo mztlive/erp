@@ -1,6 +1,6 @@
 "use client"
 
-import type * as React from "react"
+import { Fragment, type ReactNode, type RefObject } from "react"
 import {
     flexRender,
     type ColumnSizingState,
@@ -64,6 +64,7 @@ export function DataTableBody<TData>({
     emptyAction,
     onRowPreview,
     onRowOpen,
+    renderExpandedRow,
     selectOnRowClick,
     enableRowSelection,
     highlightedRowId,
@@ -72,21 +73,22 @@ export function DataTableBody<TData>({
     idPrefix,
 }: {
     table: TanStackTable<TData>
-    rowRefs: React.RefObject<Map<string, HTMLTableRowElement>>
+    rowRefs: RefObject<Map<string, HTMLTableRowElement>>
     rowLabel?: (row: TData) => string
     dataLength: number
     loading: boolean
     showErrorState: boolean
-    errorState?: React.ReactNode
-    errorTitle?: React.ReactNode
-    errorSummary?: React.ReactNode
+    errorState?: ReactNode
+    errorTitle?: ReactNode
+    errorSummary?: ReactNode
     onRetry?: () => void
-    emptyState?: React.ReactNode
-    emptyTitle?: React.ReactNode
-    emptyDescription?: React.ReactNode
-    emptyAction?: React.ReactNode
+    emptyState?: ReactNode
+    emptyTitle?: ReactNode
+    emptyDescription?: ReactNode
+    emptyAction?: ReactNode
     onRowPreview?: (row: TData) => void
     onRowOpen?: (row: TData) => void
+    renderExpandedRow?: (row: TData) => ReactNode
     selectOnRowClick: boolean
     enableRowSelection: boolean | ((row: never) => boolean)
     highlightedRowId?: string
@@ -134,114 +136,141 @@ export function DataTableBody<TData>({
                     </TableRow>
                 ))
             ) : (
-                rows.map((row, rowIndex) => (
-                    <TableRow
-                        key={row.id}
-                        id={
-                            idPrefix
-                                ? `${idPrefix}-row-${toAutomationIdSegment(row.id)}`
-                                : undefined
-                        }
-                        data-row-id={row.id}
-                        ref={(node) => {
-                            if (node) rowRefs.current.set(row.id, node)
-                            else rowRefs.current.delete(row.id)
-                        }}
-                        data-state={
-                            row.getIsSelected() ? "selected" : undefined
-                        }
-                        data-highlighted={
-                            highlightedRowId === row.id ? "true" : undefined
-                        }
-                        tabIndex={interactive ? 0 : undefined}
-                        className={cn(
-                            interactive && "cursor-pointer",
-                            highlightedRowId === row.id && "bg-muted",
-                        )}
-                        onClick={(event) => {
-                            if (isInteractiveRowTarget(event.target)) return
-                            if (selectOnRowClick) {
-                                if (row.getCanSelect()) row.toggleSelected()
-                                return
-                            }
-                            ;(onRowPreview ?? onRowOpen)?.(row.original)
-                        }}
-                        onKeyDown={(event) => {
-                            if (isInteractiveRowTarget(event.target)) return
-                            if (event.key === "ArrowDown") {
-                                event.preventDefault()
-                                focusRelativeRow(rowIndex, 1)
-                            } else if (event.key === "ArrowUp") {
-                                event.preventDefault()
-                                focusRelativeRow(rowIndex, -1)
-                            } else if (
-                                event.key === "Enter" &&
-                                (selectOnRowClick || onRowOpen || onRowPreview)
-                            ) {
-                                event.preventDefault()
-                                if (selectOnRowClick) {
-                                    if (row.getCanSelect()) row.toggleSelected()
-                                    return
+                rows.map((row, rowIndex) => {
+                    const expanded = renderExpandedRow?.(row.original)
+                    return (
+                        <Fragment key={row.id}>
+                            <TableRow
+                                id={
+                                    idPrefix
+                                        ? `${idPrefix}-row-${toAutomationIdSegment(row.id)}`
+                                        : undefined
                                 }
-                                ;(onRowOpen ?? onRowPreview)?.(row.original)
-                            } else if (
-                                event.key === " " &&
-                                row.getCanSelect()
-                            ) {
-                                event.preventDefault()
-                                row.toggleSelected()
-                            }
-                        }}
-                        aria-label={
-                            rowLabel?.(row.original) ?? `第 ${rowIndex + 1} 行`
-                        }
-                    >
-                        {row.getVisibleCells().map((cell) => {
-                            const meta = cell.column.columnDef.meta
-                            const runtimeWidth = columnSizing[cell.column.id]
-                            return (
-                                <TableCell
-                                    key={cell.id}
-                                    data-column-id={cell.column.id}
-                                    data-column-pinned={
-                                        cell.column.getIsPinned() || undefined
+                                data-row-id={row.id}
+                                ref={(node) => {
+                                    if (node) rowRefs.current.set(row.id, node)
+                                    else rowRefs.current.delete(row.id)
+                                }}
+                                data-state={
+                                    row.getIsSelected() ? "selected" : undefined
+                                }
+                                data-highlighted={
+                                    highlightedRowId === row.id
+                                        ? "true"
+                                        : undefined
+                                }
+                                tabIndex={interactive ? 0 : undefined}
+                                className={cn(
+                                    interactive && "cursor-pointer",
+                                    highlightedRowId === row.id && "bg-muted",
+                                )}
+                                onClick={(event) => {
+                                    if (isInteractiveRowTarget(event.target))
+                                        return
+                                    if (selectOnRowClick) {
+                                        if (row.getCanSelect())
+                                            row.toggleSelected()
+                                        return
                                     }
-                                    data-align={
-                                        meta?.align === "end"
-                                            ? "end"
-                                            : undefined
+                                    ;(onRowPreview ?? onRowOpen)?.(row.original)
+                                }}
+                                onKeyDown={(event) => {
+                                    if (isInteractiveRowTarget(event.target))
+                                        return
+                                    if (event.key === "ArrowDown") {
+                                        event.preventDefault()
+                                        focusRelativeRow(rowIndex, 1)
+                                    } else if (event.key === "ArrowUp") {
+                                        event.preventDefault()
+                                        focusRelativeRow(rowIndex, -1)
+                                    } else if (
+                                        event.key === "Enter" &&
+                                        (selectOnRowClick ||
+                                            onRowOpen ||
+                                            onRowPreview)
+                                    ) {
+                                        event.preventDefault()
+                                        if (selectOnRowClick) {
+                                            if (row.getCanSelect())
+                                                row.toggleSelected()
+                                            return
+                                        }
+                                        ;(onRowOpen ?? onRowPreview)?.(
+                                            row.original,
+                                        )
+                                    } else if (
+                                        event.key === " " &&
+                                        row.getCanSelect()
+                                    ) {
+                                        event.preventDefault()
+                                        row.toggleSelected()
                                     }
-                                    className={cn(
-                                        alignmentClass(meta?.align),
-                                        meta?.numeric &&
-                                            meta?.align !== "end" &&
-                                            "num",
-                                        columnWidthClass(
-                                            meta?.width,
-                                            meta?.role,
-                                        ),
-                                        pinningClass(
-                                            cell.column.getIsPinned(),
-                                            "cell",
-                                        ),
-                                    )}
-                                    style={{
-                                        width: columnRuntimeWidth(
-                                            enableColumnResizing,
-                                            meta?.role,
-                                            runtimeWidth,
-                                        ),
-                                    }}
-                                >
-                                    {flexRender(
-                                        cell.column.columnDef.cell,
-                                        cell.getContext(),
-                                    )}
-                                </TableCell>
-                            )
-                        })}
-                    </TableRow>
-                ))
+                                }}
+                                aria-label={
+                                    rowLabel?.(row.original) ??
+                                    `第 ${rowIndex + 1} 行`
+                                }
+                            >
+                                {row.getVisibleCells().map((cell) => {
+                                    const meta = cell.column.columnDef.meta
+                                    const runtimeWidth =
+                                        columnSizing[cell.column.id]
+                                    return (
+                                        <TableCell
+                                            key={cell.id}
+                                            data-column-id={cell.column.id}
+                                            data-column-pinned={
+                                                cell.column.getIsPinned() ||
+                                                undefined
+                                            }
+                                            data-align={
+                                                meta?.align === "end"
+                                                    ? "end"
+                                                    : undefined
+                                            }
+                                            className={cn(
+                                                alignmentClass(meta?.align),
+                                                meta?.numeric &&
+                                                    meta?.align !== "end" &&
+                                                    "num",
+                                                columnWidthClass(
+                                                    meta?.width,
+                                                    meta?.role,
+                                                ),
+                                                pinningClass(
+                                                    cell.column.getIsPinned(),
+                                                    "cell",
+                                                ),
+                                            )}
+                                            style={{
+                                                width: columnRuntimeWidth(
+                                                    enableColumnResizing,
+                                                    meta?.role,
+                                                    runtimeWidth,
+                                                ),
+                                            }}
+                                        >
+                                            {flexRender(
+                                                cell.column.columnDef.cell,
+                                                cell.getContext(),
+                                            )}
+                                        </TableCell>
+                                    )
+                                })}
+                            </TableRow>
+                            {expanded != null && expanded !== false ? (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={visibleColumnCount}
+                                        className="h-auto whitespace-normal p-0"
+                                    >
+                                        {expanded}
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
+                        </Fragment>
+                    )
+                })
             )}
 
             {!showErrorState && !loading && rows.length === 0 ? (

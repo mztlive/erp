@@ -133,6 +133,8 @@ function DataTable<TData>({
     pageSizeOptions = [20, 50, 100],
     onRowPreview,
     onRowOpen,
+    renderExpandedRow,
+    scrollable = false,
     highlightedRowId,
     className,
 }: DataTableProps<TData>) {
@@ -409,6 +411,7 @@ function DataTable<TData>({
                 // 会把 gap 收成 0，让分页贴成卡内页脚。
                 layout === "inset" && "flex flex-col gap-3 p-table-frame-inset",
                 layout === "flush" && "flex flex-col gap-3",
+                scrollable && "min-h-0 flex-1",
                 className,
             )}
             aria-busy={loading}
@@ -429,7 +432,11 @@ function DataTable<TData>({
             <div
                 ref={tableSurfaceRef}
                 data-slot="data-table-surface"
-                className="overflow-hidden border-y border-border bg-card [container-type:inline-size]"
+                className={cn(
+                    "overflow-hidden border-y border-border bg-card [container-type:inline-size]",
+                    scrollable &&
+                        "min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto [&>[data-slot=table-container]>table>thead]:sticky [&>[data-slot=table-container]>table>thead]:top-0 [&>[data-slot=table-container]>table>thead]:z-40",
+                )}
             >
                 {loading && data.length > 0 && showRefreshingBanner ? (
                     <div
@@ -478,6 +485,7 @@ function DataTable<TData>({
                         onRowPreview={onRowPreview}
                         selectOnRowClick={selectOnRowClick}
                         onRowOpen={onRowOpen}
+                        renderExpandedRow={renderExpandedRow}
                         enableRowSelection={enableRowSelection}
                         highlightedRowId={highlightedRowId}
                         enableColumnResizing={enableColumnResizing}

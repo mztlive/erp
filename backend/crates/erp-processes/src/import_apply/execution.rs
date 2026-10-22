@@ -25,6 +25,13 @@ use super::{IMPORT_EXECUTION_COMMAND_PREFIX, ImportApplyService};
 use crate::audit::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use crate::{Error, Result};
 
+fn ensure_executor_available(action: ImportExecutionAction) -> Result<()> {
+    if matches!(action, ImportExecutionAction::StartApply | ImportExecutionAction::RetryFailed) {
+        return Err(Error::BusinessLogicError("LEGACY_IMPORT_EXECUTOR_UNAVAILABLE：历史期初导入执行器尚未接通，当前不能启动或重试应用。请保留试算及责任确认，待业务迁移专项完成后处理。".into()));
+    }
+    Ok(())
+}
+
 impl ImportApplyService {
     /// 执行 W18 应用阶段命令，行、批次、后台任务、独立回执及事件原子提交。
     /// # 参数
@@ -42,6 +49,7 @@ impl ImportApplyService {
         actor: &AuditActor,
     ) -> Result<ImportExecutionResult> {
         command.validate()?;
+        ensure_executor_available(command.action)?;
         let prepared = PreparedImportExecution::try_from(command)?;
         if prepared.batch_id.as_ref() != batch_id {
             return Err(Error::ValidationError("路径批次与执行命令批次不一致".into()));
@@ -502,6 +510,13 @@ fn import_job_status(status: JobStatus) -> erp_import::ImportJobStatus {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn unavailable_executor_rejects_start_and_retry_but_allows_pending_cancellation() {
+        assert!(super::ensure_executor_available(erp_import::ImportExecutionAction::StartApply).is_err());
+        assert!(super::ensure_executor_available(erp_import::ImportExecutionAction::RetryFailed).is_err());
+        assert!(super::ensure_executor_available(erp_import::ImportExecutionAction::CancelPending).is_ok());
+    }
+
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{ExternalIdentityMapId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId};
     use erp_import::{LegacyImportBatchData, LegacyImportRowData, ParseStatus};

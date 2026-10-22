@@ -2,11 +2,16 @@
 
 import { useSelector } from "@tanstack/react-form"
 
-import { EditableLineItemTable, ValidationSummary } from "@/components/business"
+import {
+    BusinessFailureState,
+    EditableLineItemTable,
+    ValidationSummary,
+} from "@/components/business"
 import { toFieldErrors } from "@/components/form"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 import { buildSalesOrderCreateLineItemColumns } from "@/features/sales-orders/components/sales-order-create-line-item-columns"
+import { useSalesLineImagesQuery } from "@/features/sales-orders/hooks/use-sales-line-images-query"
 
 export type SalesOrderCreateLineItemTableProps = {
     inquiryLocked?: boolean
@@ -25,6 +30,11 @@ export function SalesOrderCreateLineItemTable({
     procurementFetching = false,
     procurementError = false,
 }: SalesOrderCreateLineItemTableProps) {
+    const nature = useSelector(form.store, (state) => state.values.nature)
+    const lines = useSelector(form.store, (state) => state.values.lineItems)
+    const skuImages = useSalesLineImagesQuery(
+        nature === "physical_service" ? lines.map((line) => line.sku) : [],
+    )
     /** 明细表根路径校验错误（如卡券仅一条）在明细区汇总展示。 */
     const lineItemIssues = useSelector(form.store, (state) => {
         return toFieldErrors(state.fieldMeta.lineItems?.errors ?? [])
@@ -39,6 +49,14 @@ export function SalesOrderCreateLineItemTable({
 
     return (
         <>
+            {skuImages.error ? (
+                <BusinessFailureState
+                    id="sales-orders-create-line-images"
+                    title="商品图片资料读取失败"
+                    error={skuImages.error}
+                    onRetry={() => void skuImages.refetch()}
+                />
+            ) : null}
             <form.AppField name="lineItems" mode="array">
                 {() => null}
             </form.AppField>
@@ -54,6 +72,7 @@ export function SalesOrderCreateLineItemTable({
                             error: procurementError,
                         },
                         inquiryLocked,
+                        skuImages.images,
                     )
                     return (
                         <>

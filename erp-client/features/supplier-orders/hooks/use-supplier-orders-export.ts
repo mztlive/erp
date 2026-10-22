@@ -5,6 +5,7 @@ import * as React from "react"
 import { useSupplierOrderExportMutation } from "@/features/supplier-orders/hooks/queries"
 import type {
     ExportCommand,
+    SupplierOrderListQuery,
     ExportJobResult,
 } from "@/features/supplier-orders/types"
 
@@ -42,10 +43,14 @@ export function useSupplierOrdersExport() {
     )
 
     const confirmExport = React.useCallback(
-        async (input: { total: number; filterSummary: string }) => {
+        async (input: {
+            total: number
+            filterSummary: string
+            query: SupplierOrderListQuery
+        }) => {
             const requestId = `req-w26-export-${Date.now()}`
             const command: ExportCommand = {
-                selectionSnapshotId: `snap-${requestId}`,
+                query: structuredClone(input.query),
                 fieldSetId: "w26-list-default-masked",
                 requestId,
                 rowCount: input.total,

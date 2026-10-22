@@ -23,6 +23,7 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
 /** 业务类型（后端 `domain_job_type`）中文映射。 */
 export const JOB_DOMAIN_LABELS: Record<string, string> = {
     PRODUCT_IMPORT: "商品导入",
+    DATA_TRANSFER: "导入导出",
     SUPPLIER_IMPORT: "供应商导入",
     SALES_ORDER_EXPORT: "销售单导出",
     INVENTORY_LEDGER_EXPORT: "库存台账导出",

@@ -30,26 +30,7 @@ export async function fetchSupplierOrders(
     const now = new Date().toISOString()
     const pageRes = await apiGet<ListEnvelope>(
         "/admin/supplier-fulfillment-orders",
-        {
-            page: query.page,
-            page_size: query.pageSize,
-            supplier_id: query.supplierId,
-            fulfillment_status: query.fulfillmentStatuses?.[0],
-            cancel_status: query.cancelStatuses?.[0],
-            refund_status: query.refundStatuses?.[0],
-            q: query.q?.trim() || undefined,
-            view: query.view,
-            aftersale_pending: query.aftersalePending || undefined,
-            owner_user_ids: query.ownerUserIds || undefined,
-            handler_user_ids: query.handlerUserIds || undefined,
-            org_unit_ids: query.orgUnitIds || undefined,
-            include_descendants:
-                query.orgUnitIds && query.includeDescendants ? true : undefined,
-            scope_version: query.scopeVersion,
-            sort_by:
-                query.sortBy === "lastBusinessAt" ? "created_at" : "created_at",
-            sort_dir: query.sortDir ?? "desc",
-        },
+        supplierOrderExportQuery(query),
     )
 
     // 跟进人、处理人筛选仍用本列表页内候选。资格不是 role-procurement / role-sales，未接人员目录。
@@ -72,5 +53,28 @@ export async function fetchSupplierOrders(
         emptyReason: pageRes.empty_reason,
         scopeVersion: pageRes.scope_version,
         ownershipBasis: pageRes.ownership_basis,
+    }
+}
+
+export function supplierOrderExportQuery(query: SupplierOrderListQuery) {
+    return {
+        page: query.page,
+        page_size: query.pageSize,
+        supplier_id: query.supplierId,
+        fulfillment_status: query.fulfillmentStatuses?.[0],
+        cancel_status: query.cancelStatuses?.[0],
+        refund_status: query.refundStatuses?.[0],
+        q: query.q?.trim() || undefined,
+        view: query.view,
+        aftersale_pending: query.aftersalePending || undefined,
+        owner_user_ids: query.ownerUserIds || undefined,
+        handler_user_ids: query.handlerUserIds || undefined,
+        org_unit_ids: query.orgUnitIds || undefined,
+        include_descendants:
+            query.orgUnitIds && query.includeDescendants ? true : undefined,
+        scope_version: query.scopeVersion,
+        sort_by:
+            query.sortBy === "lastBusinessAt" ? "created_at" : "created_at",
+        sort_dir: query.sortDir ?? "desc",
     }
 }

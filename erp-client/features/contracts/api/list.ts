@@ -91,7 +91,25 @@ export async function fetchContracts(
             as_of: string
             ownership_basis: string
         }
-    >("/admin/contracts", {
+    >("/admin/contracts", contractExportQuery(query))
+    return {
+        items: page.items.map(mapListRow),
+        total: page.total,
+        metrics: page.metrics,
+        emptyReason: page.empty_reason,
+        scopeVersion: page.scope_version,
+        policyVersion: page.policy_version,
+        organizationVersion: page.organization_version,
+        scopeSummary: page.scope_summary,
+        asOf: page.as_of,
+        ownershipBasis: page.ownership_basis,
+    }
+}
+
+export function contractExportQuery(
+    query: import("../lib/contracts-url-state").ContractsUrlState,
+) {
+    return {
         q: query.q?.trim() || undefined,
         metric: query.metric,
         customer_id: query.customerId,
@@ -108,17 +126,5 @@ export async function fetchContracts(
                 ? "contract_no"
                 : query.sort || "expiry_priority",
         sort_dir: query.dir || "asc",
-    })
-    return {
-        items: page.items.map(mapListRow),
-        total: page.total,
-        metrics: page.metrics,
-        emptyReason: page.empty_reason,
-        scopeVersion: page.scope_version,
-        policyVersion: page.policy_version,
-        organizationVersion: page.organization_version,
-        scopeSummary: page.scope_summary,
-        asOf: page.as_of,
-        ownershipBasis: page.ownership_basis,
     }
 }

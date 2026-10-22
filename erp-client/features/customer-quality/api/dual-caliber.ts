@@ -1,3 +1,4 @@
+import { runDataTransfer, transferText } from "@/lib/data-transfer"
 /**
  * S3-05 M10 双口径真实 HTTP。
  * 当前口径：`GET /admin/customer-quality/current`；
@@ -5,7 +6,7 @@
  * 导出各走本口径 exports，请求体与列表同筛选并携带范围版本。
  */
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiGet } from "@/lib/api"
 
 import type {
     CurrentQualityQuery,
@@ -77,19 +78,43 @@ export async function fetchHistoryQuality(
 export async function exportCurrentQuality(
     query: CurrentQualityQuery,
 ): Promise<QualityExport> {
-    return apiPost<QualityExport>(
-        "/admin/customer-quality/current/exports",
+    const result = await runDataTransfer(
+        "customer_quality_current",
         currentToParams(query),
     )
+    return {
+        csvContent: transferText(result),
+        fileName: result.file_name,
+        rowCount:
+            typeof result.metadata?.rowCount === "number"
+                ? result.metadata.rowCount
+                : 0,
+        generatedAt:
+            typeof result.metadata?.generatedAt === "string"
+                ? result.metadata.generatedAt
+                : new Date().toISOString(),
+    }
 }
 
 export async function exportHistoryQuality(
     query: HistoryQualityQuery,
 ): Promise<QualityExport> {
-    return apiPost<QualityExport>(
-        "/admin/customer-quality/history/exports",
+    const result = await runDataTransfer(
+        "customer_quality_history",
         historyToParams(query),
     )
+    return {
+        csvContent: transferText(result),
+        fileName: result.file_name,
+        rowCount:
+            typeof result.metadata?.rowCount === "number"
+                ? result.metadata.rowCount
+                : 0,
+        generatedAt:
+            typeof result.metadata?.generatedAt === "string"
+                ? result.metadata.generatedAt
+                : new Date().toISOString(),
+    }
 }
 
 /** 服务端 CSV 下载：文件名与内容均来自服务端，客户端不改写。 */

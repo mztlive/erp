@@ -6,6 +6,7 @@ use axum::{Extension, Router, middleware};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
+use crate::core::handler::data_transfer as transfers;
 use crate::core::handler::supplier_portal::{self, assets, auth, read, write};
 use crate::core::middleware::supplier_portal::authenticate_portal;
 use crate::core::middleware::with_permission;
@@ -27,6 +28,14 @@ pub fn routes(state: AppState) -> Router<AppState> {
     let authenticated = read_routes()
         .merge(write_routes())
         .merge(asset_routes())
+        .route(
+            "/data-transfers",
+            get(transfers::portal_list)
+                .post(transfers::portal_submit)
+                .layer(DefaultBodyLimit::max(76 * 1024 * 1024)),
+        )
+        .route("/data-transfers/{id}", get(transfers::portal_status))
+        .route("/data-transfers/{id}/result", get(transfers::portal_result))
         .route("/password", post(auth::password))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate_portal));
     Router::new().merge(login).merge(authenticated).with_state(state)

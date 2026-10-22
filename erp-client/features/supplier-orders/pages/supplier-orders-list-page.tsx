@@ -161,6 +161,7 @@ export function SupplierOrdersListPage() {
             void retryExport()
         } else {
             void confirmExport({
+                query: listQueryInput,
                 total,
                 filterSummary: listQuery.data?.filterSummary ?? "",
             })

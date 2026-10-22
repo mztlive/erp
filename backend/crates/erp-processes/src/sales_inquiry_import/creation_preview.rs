@@ -62,7 +62,7 @@ impl SalesInquiryImportProcess {
             .await
     }
 
-    pub(super) async fn creation_header(
+    pub(crate) async fn creation_header(
         &self,
         actor: &AuditActor,
         customer: &str,

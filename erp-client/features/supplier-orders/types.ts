@@ -281,7 +281,7 @@ export type SupplierOrderListResult = {
 }
 
 export type ExportCommand = {
-    selectionSnapshotId: string
+    query: SupplierOrderListQuery
     fieldSetId: string
     requestId: string
     rowCount: number

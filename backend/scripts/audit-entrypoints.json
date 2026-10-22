@@ -6867,6 +6867,34 @@
         "persist_log": 1
       },
       "location_count": 1
+    },
+    {
+      "path": "crates/erp-processes/src/data_transfer/submit.rs",
+      "function": "persist_submission",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "后台文件任务登记将输入文件资产、任务、任务项与安全审计同事务保存；幂等重放返回原任务，不重复生成成功事件。业务参数和文件内容不进入审计。"
+    },
+    {
+      "path": "crates/erp-processes/src/data_transfer/submit.rs",
+      "function": "submission_log",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "复用已登记的 background_job.create 安全动作生成任务审计；参数正文和文件内容不进入事件。"
     }
   ]
 }

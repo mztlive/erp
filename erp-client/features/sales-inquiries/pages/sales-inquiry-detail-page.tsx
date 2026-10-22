@@ -1,8 +1,10 @@
 "use client"
 
+import { transferJson, transferFileInput } from "@/lib/data-transfer"
+
 import * as React from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 import { useIsMutating, useMutation } from "@tanstack/react-query"
 import { UploadIcon } from "lucide-react"
 import {
@@ -14,7 +16,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { apiPost, apiPostForm } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 import { inquiryPath } from "../api"
 import { useInquiry } from "../hooks/queries"
@@ -391,15 +393,12 @@ function InquiryDetailContent({
             ),
     })
     const preview = useMutation({
-        mutationFn: (file: File) => {
-            const data = new FormData()
-            data.append("file", file)
-            data.append("expected_version", String(inquiry.version))
-            return apiPostForm<InquiryImportPreview>(
-                `${inquiryPath(false, inquiry.id)}/imports/preview`,
-                data,
-            )
-        },
+        mutationFn: async (file: File) =>
+            transferJson<InquiryImportPreview>("inquiry_preview", {
+                ...(await transferFileInput(file)),
+                inquiry_id: inquiry.id,
+                expected_version: inquiry.version,
+            }),
         meta: { suppressErrorToast: true },
     })
     const productActions = (

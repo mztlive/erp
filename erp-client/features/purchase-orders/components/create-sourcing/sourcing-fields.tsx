@@ -106,12 +106,14 @@ export function SourcingExpectedDeliveryField({
     rowKey,
     order,
     salesOrderLineId,
+    showDeadlineHint = true,
 }: {
     form: PurchaseOrderCreateFormApi
     index: number
     rowKey: string
     order: SourcingSalesOrder
     salesOrderLineId: string
+    showDeadlineHint?: boolean
 }) {
     return (
         <form.Subscribe
@@ -141,7 +143,7 @@ export function SourcingExpectedDeliveryField({
                                 id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-delivery-date`}
                                 label="预计交付日"
                                 description={
-                                    validDeadline
+                                    showDeadlineHint && validDeadline
                                         ? `不晚于销售承诺期限 ${deadline}`
                                         : undefined
                                 }

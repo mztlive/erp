@@ -77,6 +77,10 @@ fn background_job_indexes() -> Vec<IndexModel> {
         unique_index("uk_background_jobs_no", doc! { "job_no": 1 }),
         unique_index("uk_background_jobs_request_id", doc! { "request_id": 1 }),
         named_index("idx_background_jobs_status_created", doc! { "status": 1, "created_at": -1 }),
+        named_index(
+            "idx_background_jobs_execution",
+            doc! { "domain_job_type": 1, "finished_at": 1, "status": 1, "last_progress_at": 1, "created_at": 1 },
+        ),
         named_index("idx_background_jobs_domain", doc! { "domain_job_type": 1, "domain_job_id": 1 }),
         named_index("idx_background_jobs_requested_created", doc! { "requested_by": 1, "created_at": -1 }),
     ]

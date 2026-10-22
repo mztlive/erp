@@ -1,9 +1,15 @@
 "use client"
 
+import { ChevronDownIcon } from "lucide-react"
 import { QuantityValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { PurchaseOrderCreateFormApi } from "../lib/purchase-order-create-form-types"
@@ -113,9 +119,11 @@ export function SalesDeliveryRequirements({
 export function SourcingDeliveryRequirementSection({
     product,
     note,
+    condensed = false,
 }: {
     product: SourcingProductLine
     note?: string
+    condensed?: boolean
 }) {
     const rows = deliveryRequirementRows(product)
     return (
@@ -133,31 +141,39 @@ export function SourcingDeliveryRequirementSection({
                     {note ? (
                         <p className="text-xs text-muted-foreground">{note}</p>
                     ) : null}
-                    <ul className="max-h-48 space-y-2 overflow-y-auto">
-                        {rows.map((row, index) => (
-                            <li
-                                key={index}
-                                className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
-                            >
-                                <DeliveryAddress row={row} />
-                                <span className="text-right text-xs leading-5">
-                                    <QuantityValue
-                                        value={row.quantity}
-                                        unit={product.unit}
-                                    />
-                                    {row.remaining !== row.quantity ? (
-                                        <span className="block text-muted-foreground">
-                                            剩余{" "}
-                                            <QuantityValue
-                                                value={row.remaining}
-                                                unit={product.unit}
-                                            />
-                                        </span>
-                                    ) : null}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
+                    {condensed ? (
+                        <CompactDeliverySummary
+                            idPrefix={`sourcing-requirement-${toAutomationIdSegment(product.salesOrderLineId)}`}
+                            rows={rows}
+                            product={product}
+                        />
+                    ) : (
+                        <ul className="max-h-48 space-y-2 overflow-y-auto">
+                            {rows.map((row, index) => (
+                                <li
+                                    key={index}
+                                    className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
+                                >
+                                    <DeliveryAddress row={row} />
+                                    <span className="text-right text-xs leading-5">
+                                        <QuantityValue
+                                            value={row.quantity}
+                                            unit={product.unit}
+                                        />
+                                        {row.remaining !== row.quantity ? (
+                                            <span className="block text-muted-foreground">
+                                                剩余{" "}
+                                                <QuantityValue
+                                                    value={row.remaining}
+                                                    unit={product.unit}
+                                                />
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </>
             )}
         </section>
@@ -174,12 +190,16 @@ export function SourcingDeliveryEditor({
     line,
     index,
     showNotApplicable = true,
+    condensed = false,
+    expandSummary = false,
 }: {
     form: PurchaseOrderCreateFormApi
     product: SourcingProductLine
     line: SourcingLineInput
     index: number
     showNotApplicable?: boolean
+    condensed?: boolean
+    expandSummary?: boolean
 }) {
     if (!supplierDeliveryRequired(product, line))
         return showNotApplicable ? (
@@ -221,16 +241,29 @@ export function SourcingDeliveryEditor({
                         aria-label="交付地址"
                     >
                         <div className="flex min-h-8 items-center justify-between gap-2">
-                            <h4 className="text-sm font-medium">交付地址</h4>
+                            <h4 className="text-sm font-medium">
+                                交付地址
+                                {condensed && !expanded ? (
+                                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                        按销售要求送达 ·{" "}
+                                        {
+                                            rows.filter((row) =>
+                                                positive(row.quantity),
+                                            ).length
+                                        }{" "}
+                                        个地址
+                                    </span>
+                                ) : null}
+                            </h4>
                             {!expanded ? (
                                 <Button
                                     id={`${id}-customize`}
                                     type="button"
                                     size="sm"
-                                    variant="secondary"
+                                    variant={condensed ? "ghost" : "secondary"}
                                     onClick={() => field.handleChange(rows)}
                                 >
-                                    调整各地址数量
+                                    {condensed ? "分配数量" : "调整各地址数量"}
                                 </Button>
                             ) : customized && coversAll ? (
                                 <Button
@@ -349,6 +382,17 @@ export function SourcingDeliveryEditor({
                                     />
                                 </p>
                             </>
+                        ) : condensed ? (
+                            <CompactDeliverySummary
+                                key={line.basisId}
+                                defaultOpen={expandSummary}
+                                idPrefix={id}
+                                rows={rows.filter((row) =>
+                                    positive(row.quantity),
+                                )}
+                                product={product}
+                                option={option}
+                            />
                         ) : (
                             <>
                                 <p className="text-xs text-muted-foreground">
@@ -394,5 +438,76 @@ export function SourcingDeliveryEditor({
                 )
             }}
         </form.AppField>
+    )
+}
+
+/** 默认显示收件人与地址摘要，展开后核对电话、完整地址和逐地址数量。 */
+function CompactDeliverySummary({
+    idPrefix,
+    rows,
+    product,
+    option,
+    defaultOpen = false,
+}: {
+    idPrefix: string
+    rows: (PurchaseDeliveryAllocation & { remaining?: string })[]
+    product: SourcingProductLine
+    option?: SourcingSupplierOption
+    defaultOpen?: boolean
+}) {
+    const first = rows[0]
+    if (!first) return null
+    return (
+        <Collapsible defaultOpen={defaultOpen}>
+            <CollapsibleTrigger
+                id={`${idPrefix}-summary-toggle`}
+                render={
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        className="group h-auto w-full min-w-0 justify-between gap-2 px-0 py-1 text-left text-xs font-normal text-muted-foreground"
+                    />
+                }
+            >
+                <span className="min-w-0 truncate">
+                    {first.recipient} · {fullDeliveryAddress(first)}
+                    {rows.length > 1 ? ` 等 ${rows.length} 个地址` : ""}
+                </span>
+                <ChevronDownIcon className="size-3.5 shrink-0 group-data-[panel-open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+                <ul className="mt-2 space-y-3 rounded-md bg-muted/40 p-3">
+                    {rows.map((row) => (
+                        <li
+                            key={JSON.stringify([
+                                row.recipient,
+                                row.phone,
+                                row.region_code,
+                                row.address,
+                            ])}
+                            className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
+                        >
+                            <DeliveryAddress row={row} option={option} />
+                            <span className="text-right text-xs leading-5">
+                                <QuantityValue
+                                    value={row.quantity}
+                                    unit={product.unit}
+                                />
+                                {row.remaining !== undefined &&
+                                row.remaining !== row.quantity ? (
+                                    <span className="block text-muted-foreground">
+                                        剩余{" "}
+                                        <QuantityValue
+                                            value={row.remaining}
+                                            unit={product.unit}
+                                        />
+                                    </span>
+                                ) : null}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            </CollapsibleContent>
+        </Collapsible>
     )
 }

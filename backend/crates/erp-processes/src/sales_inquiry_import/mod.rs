@@ -4,7 +4,7 @@ mod confirm;
 mod creation;
 mod creation_preview;
 mod facts;
-mod parse;
+pub(crate) mod parse;
 mod pool;
 mod pool_delivery;
 mod pool_delivery_checks;
