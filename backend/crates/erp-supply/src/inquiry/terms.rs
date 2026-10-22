@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SkuId, SupplierAccountId};
-use erp_core::money::{Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +22,12 @@ pub struct QuoteAddressLimit {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct QuoteTerms {
+    /// 无法供货的回复只留存，不得采用。
+    #[serde(default)]
+    pub unavailable: bool,
+    /// 本行总运费；None 表示未确认，零表示已含运费。
+    #[serde(default)]
+    pub freight_gross: Option<Amount>,
     pub unit_cost_gross: UnitPrice,
     pub input_tax_rate: Rate,
     pub available_quantity: Quantity,
@@ -56,8 +62,13 @@ impl QuoteTerms {
     /// # 错误
     /// 非正价格/数量、非法税率、重复地址或地址额度不足时拒绝。
     pub fn validated(self) -> Result<Self> {
-        if self.unit_cost_gross.to_decimal() <= Decimal::ZERO
-            || self.available_quantity.to_decimal() <= Decimal::ZERO
+        if (!self.unavailable
+            && (self.unit_cost_gross.to_decimal() <= Decimal::ZERO
+                || self.available_quantity.to_decimal() <= Decimal::ZERO))
+            || (self.unavailable
+                && (self.available_quantity.to_decimal() != Decimal::ZERO
+                    || self.unit_cost_gross.to_decimal() != Decimal::ZERO))
+            || self.freight_gross.is_some_and(|value| value.to_decimal() < Decimal::ZERO)
             || self.input_tax_rate.to_decimal() < Decimal::ZERO
             || self.input_tax_rate.to_decimal() > Decimal::ONE
         {
@@ -76,6 +87,9 @@ impl QuoteTerms {
     /// 过期、地址变化、可供量或交期不满足时拒绝。
     pub fn ensure_applicable(&self, usage: &InquiryQuoteUse) -> Result<()> {
         self.clone().validated()?;
+        if self.unavailable {
+            return Err(Error::BusinessLogicError("供应商已回复无法供货，请重新确认".into()));
+        }
         if self.valid_to.is_some_and(|date| usage.on_date >= date) {
             return Err(Error::BusinessLogicError("专项报价已过期，请重新确认".into()));
         }

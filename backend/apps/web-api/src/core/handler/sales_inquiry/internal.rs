@@ -5,6 +5,7 @@ use axum::extract::{Path, State};
 use axum::response::Response;
 use erp_processes::sales_inquiry::dto::InquiryMutationView;
 use erp_processes::sales_inquiry::internal_quote::{SaveInquiryFeeBasisCommand, SaveInquiryQuoteCommand};
+use erp_processes::sales_inquiry::quote_import::ImportInquiryQuotesCommand;
 use erp_processes::sales_inquiry::read::{InquiryFeeBasisParams, InquiryReadService};
 use erp_supply::inquiry::InquiryFeeBasis;
 
@@ -13,6 +14,31 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::core::response::ApiResponse;
+
+#[permission_macros::permission(
+    group = "采购询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "导入供应商回填报价",
+    resource = "procurement_inquiry",
+    action = "internal_quote"
+)]
+/// 原子导入核对后的供应商回填报价。
+/// # 参数
+/// 当前应用、采购身份、询价与包含任务版本的批量报价。
+/// # 返回
+/// 返回可按原命令恢复的安全回执。
+/// # 错误
+/// 任一行数据、任务、供应资格或需求版本不符时整批拒绝。
+pub async fn import_quotes(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<ImportInquiryQuotesCommand>,
+) -> Result<InquiryMutationView> {
+    Ok(ApiResponse::ok_with_data(
+        state.sales_inquiry_process().import_internal_quotes(&actor, &id, request).await?,
+    ))
+}
 
 #[permission_macros::permission(
     group = "采购询价",
@@ -170,5 +196,33 @@ mod tests {
         let mut value = payload();
         value["quote"]["terms"]["unit_cost_gross"] = json!(1.23);
         assert!(!extract(value).await);
+    }
+    #[tokio::test]
+    async fn quote_import_extracts_batch_and_rejects_injected_scope_and_numeric_money() {
+        let mut value = payload();
+        let quote = value.as_object_mut().unwrap().remove("quote").unwrap();
+        value["requirement_version"] = json!(1);
+        value["feedback_round"] = json!(1);
+        value["rows"] = json!([{"source":"报价.xlsx 第5行", "sku_id":"sku", "quote":quote}]);
+        for invalid in [false, true] {
+            let mut body = value.clone();
+            if invalid {
+                body["rows"][0]["quote"]["terms"]["freight_gross"] = json!(10);
+            }
+            let request = Request::builder()
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            assert_eq!(
+                Json::<ImportInquiryQuotesCommand>::from_request(request, &()).await.is_ok(),
+                !invalid
+            );
+        }
+        value["rows"][0]["quote"]["terms"]["address_limits"] = json!([]);
+        let request = Request::builder()
+            .header("content-type", "application/json")
+            .body(Body::from(value.to_string()))
+            .unwrap();
+        assert!(Json::<ImportInquiryQuotesCommand>::from_request(request, &()).await.is_err());
     }
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
 import { useAppForm } from "@/components/form"
 import {
     BusinessFailureState,
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/dialog"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/hooks/queries"
-import { apiGet } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { multiplyFixed } from "@/lib/fixed-decimal"
@@ -40,26 +38,14 @@ import {
 import type { InquiryLine, ProcurementInquiry } from "../types"
 import type { InquiryTask } from "./inquiry-feedback-editor"
 
-type QuoteTerms = {
-    unit_cost_gross: string
-    input_tax_rate: string
-    available_quantity: string
-    expected_delivery_date: string
-    valid_to: string | null
-}
-type InternalQuote = {
-    id: string
-    quote_id: string
-    revision_no: number
-    line_id: string
-    supplier_id: string
-    supplier_offering_id: string
-    terms: QuoteTerms
-    internal_note: string
-}
-type QuoteInput = Omit<InternalQuote, "id" | "terms"> & {
-    terms: Omit<QuoteTerms, "valid_to"> & { valid_to: string }
-}
+import { useInternalQuotes } from "../hooks/use-internal-quotes"
+import {
+    latestSupplierQuotes,
+    quoteExclusion,
+    type QuoteInput,
+    type InternalQuote,
+} from "../lib/internal-quotes"
+
 function blankQuote(): QuoteInput {
     return {
         quote_id: crypto.randomUUID(),
@@ -69,6 +55,8 @@ function blankQuote(): QuoteInput {
         supplier_offering_id: "",
         internal_note: "",
         terms: {
+            unavailable: false,
+            freight_gross: "",
             unit_cost_gross: "",
             input_tax_rate: "",
             available_quantity: "",
@@ -87,6 +75,8 @@ function normalizedQuote(value: QuoteInput): QuoteInput {
         supplier_offering_id: value.supplier_offering_id,
         internal_note: value.internal_note,
         terms: {
+            unavailable: value.terms.unavailable ?? false,
+            freight_gross: value.terms.freight_gross ?? "",
             unit_cost_gross: value.terms.unit_cost_gross,
             input_tax_rate: value.terms.input_tax_rate,
             available_quantity: value.terms.available_quantity,
@@ -111,29 +101,25 @@ export function InquiryInternalQuotes({
     permissions,
     onSaved,
     lineId,
+    onAdopt,
 }: {
     inquiry: ProcurementInquiry
     lineId?: string
+    onAdopt?: (quote: InternalQuote) => boolean
     task: InquiryTask
     userId: string
     permissions: readonly string[]
     onSaved: () => void
 }) {
     const [open, setOpen] = React.useState(false)
+    const [showHistory, setShowHistory] = React.useState(false)
     const [initial, setInitial] = React.useState<QuoteInput | null>(null)
     const canRead = hasPermission(
         permissions,
         "procurement_inquiry:internal_quote",
     )
-    const quotes = useQuery({
-        queryKey: ["sales-inquiries", "internal-quotes", inquiry.id, task.id],
-        queryFn: () =>
-            apiGet<InternalQuote[]>(
-                `${inquiryPath(true, inquiry.id)}/internal-quotes`,
-                { task_id: task.id },
-            ),
-        enabled: canRead,
-    })
+    const quotes = useInternalQuotes(inquiry.id, task.id, canRead)
+    const [adoptMessage, setAdoptMessage] = React.useState("")
     const skuDetails = useInquirySkuDetailsQuery(
         canRead ? inquiry.draft.lines.map((line) => line.sku_id) : [],
     )
@@ -148,15 +134,17 @@ export function InquiryInternalQuotes({
         userId,
         `${inquiry.id}:${task.id}:internal-quote`,
     )
-    const visibleQuotes =
-        quotes.data?.filter((quote) => !lineId || quote.line_id === lineId) ??
-        []
+    const allQuotes = (quotes.data ?? []).filter(
+        (quote) => !lineId || quote.line_id === lineId,
+    )
+    const currentQuotes = latestSupplierQuotes(allQuotes)
+    const visibleQuotes = showHistory ? allQuotes : currentQuotes
     if (!canRead) return null
     return (
         <section className="space-y-4" aria-label="采购内部报价">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-medium">内部供应商报价</h2>
+                    <h2 className="text-lg font-medium">供应商报价</h2>
                     <p className="mt-1 text-xs text-muted-foreground">
                         仅当前责任采购可见。每次保存新增报价版本，不修改已发布的对销售结果。
                     </p>
@@ -212,6 +200,24 @@ export function InquiryInternalQuotes({
                     登记供应商报价
                 </Button>
             </div>
+            {allQuotes.length > currentQuotes.length && (
+                <Button
+                    id="procurement-inquiry-quote-history"
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowHistory((value) => !value)}
+                >
+                    {showHistory
+                        ? "收起历史报价"
+                        : `查看历史报价（${allQuotes.length - currentQuotes.length}）`}
+                </Button>
+            )}
+            {adoptMessage && (
+                <Alert>
+                    <AlertDescription>{adoptMessage}</AlertDescription>
+                </Alert>
+            )}
             {quotes.isError ? (
                 <BusinessFailureState
                     id="procurement-inquiry-quotes-retry"
@@ -235,88 +241,175 @@ export function InquiryInternalQuotes({
                             (item) => item.line_id === quote.line_id,
                         )
                         const prefix = `procurement-inquiry-quote-${toAutomationIdSegment(quote.id)}`
+                        const isCurrent = currentQuotes.some(
+                            (item) => item.id === quote.id,
+                        )
+                        const excluded = offerings.isError
+                            ? "供给资料读取失败"
+                            : !offering || offering.status !== "ACTIVE"
+                              ? "供给关系当前不可用"
+                              : line
+                                ? quoteExclusion(
+                                      quote,
+                                      line,
+                                      inquiry.feedback_round + 1,
+                                  )
+                                : "商品需求缺失"
                         return (
                             <article
                                 key={quote.id}
                                 className="space-y-3 rounded-lg border p-4"
                             >
-                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="space-y-3">
                                     <div>
-                                        <h3 className="font-medium">
-                                            {line?.product_name ?? "商品报价"} ·{" "}
+                                        <h3 className="wrap-anywhere font-medium">
+                                            {!lineId &&
+                                                `${line?.product_name ?? "商品报价"} · `}
                                             {offering?.supplier_name ??
                                                 "已登记供应商"}
                                         </h3>
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                            第 {quote.revision_no} 版 ·{" "}
+                                            {isCurrent
+                                                ? "当前回复"
+                                                : "历史回复"}{" "}
+                                            · 第 {quote.revision_no} 版 ·{" "}
                                             {quote.terms.valid_to
                                                 ? `${quote.terms.valid_to} 前有效`
                                                 : "未限定失效日期"}
                                         </p>
                                     </div>
-                                    <Button
-                                        id={`${prefix}-revise`}
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                            setInitial({
-                                                ...quote,
-                                                terms: {
-                                                    ...quote.terms,
-                                                    valid_to:
-                                                        quote.terms.valid_to ??
-                                                        "",
-                                                },
-                                                revision_no:
-                                                    quote.revision_no + 1,
-                                            })
-                                            setOpen(true)
-                                        }}
-                                    >
-                                        登记新版本
-                                    </Button>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {onAdopt && isCurrent && (
+                                            <Button
+                                                id={`${prefix}-adopt`}
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={
+                                                    Boolean(excluded) ||
+                                                    quotes.isFetching
+                                                }
+                                                title={excluded ?? undefined}
+                                                onClick={() => {
+                                                    setAdoptMessage(
+                                                        onAdopt(quote)
+                                                            ? "已带入供给价、税率与有效期，请核对后保存反馈。"
+                                                            : "反馈当前不可编辑，请关闭侧栏检查页面提示。",
+                                                    )
+                                                }}
+                                            >
+                                                采用此报价
+                                            </Button>
+                                        )}
+                                        <Button
+                                            id={`${prefix}-revise`}
+                                            disabled={!isCurrent}
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                                setInitial({
+                                                    ...quote,
+                                                    terms: {
+                                                        ...quote.terms,
+                                                        unavailable: false,
+                                                        freight_gross:
+                                                            quote.terms
+                                                                .freight_gross ??
+                                                            "",
+                                                        available_quantity:
+                                                            quote.terms
+                                                                .unavailable
+                                                                ? (line?.quantity ??
+                                                                  "")
+                                                                : quote.terms
+                                                                      .available_quantity,
+                                                        unit_cost_gross: quote
+                                                            .terms.unavailable
+                                                            ? ""
+                                                            : quote.terms
+                                                                  .unit_cost_gross,
+                                                        valid_to:
+                                                            quote.terms
+                                                                .valid_to ?? "",
+                                                    },
+                                                    revision_no:
+                                                        quote.revision_no + 1,
+                                                })
+                                                setOpen(true)
+                                            }}
+                                        >
+                                            登记新版本
+                                        </Button>
+                                    </div>
                                 </div>
-                                <p className="flex flex-wrap gap-4 text-sm">
-                                    <span>
-                                        含税报价{" "}
-                                        <MoneyValue
-                                            value={quote.terms.unit_cost_gross}
-                                        />
-                                    </span>
-                                    <span>
-                                        税率{" "}
-                                        <RateValue
-                                            value={multiplyFixed(
-                                                quote.terms.input_tax_rate,
-                                                "100",
-                                                {
-                                                    leftMaxScale: 6,
-                                                    rightMaxScale: 0,
-                                                    outputScale: 2,
-                                                },
+                                {excluded && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {excluded}
+                                    </p>
+                                )}
+                                {!quote.terms.unavailable && (
+                                    <p className="grid gap-2 text-sm">
+                                        <span>
+                                            运费{" "}
+                                            {quote.terms.freight_gross ==
+                                            null ? (
+                                                "未确认"
+                                            ) : (
+                                                <MoneyValue
+                                                    value={
+                                                        quote.terms
+                                                            .freight_gross
+                                                    }
+                                                />
                                             )}
-                                            precision={2}
-                                        />
-                                    </span>
-                                    <span>
-                                        可供{" "}
-                                        <QuantityValue
-                                            value={
-                                                quote.terms.available_quantity
-                                            }
-                                            unit={
-                                                line
-                                                    ? (skuDetails.units.get(
-                                                          line.unit_code,
-                                                      ) ?? "单位未匹配")
-                                                    : undefined
-                                            }
-                                        />
-                                    </span>
-                                </p>
+                                        </span>
+                                        <span>
+                                            承诺交付{" "}
+                                            {quote.terms.expected_delivery_date}
+                                        </span>
+                                        <span>
+                                            含税报价{" "}
+                                            <MoneyValue
+                                                value={
+                                                    quote.terms.unit_cost_gross
+                                                }
+                                            />
+                                        </span>
+                                        <span>
+                                            税率{" "}
+                                            <RateValue
+                                                value={multiplyFixed(
+                                                    quote.terms.input_tax_rate,
+                                                    "100",
+                                                    {
+                                                        leftMaxScale: 6,
+                                                        rightMaxScale: 0,
+                                                        outputScale: 2,
+                                                    },
+                                                )}
+                                                precision={2}
+                                            />
+                                        </span>
+                                        <span>
+                                            可供{" "}
+                                            <QuantityValue
+                                                value={
+                                                    quote.terms
+                                                        .available_quantity
+                                                }
+                                                unit={
+                                                    line
+                                                        ? (skuDetails.units.get(
+                                                              line.unit_code,
+                                                          ) ?? "单位未匹配")
+                                                        : undefined
+                                                }
+                                            />
+                                        </span>
+                                    </p>
+                                )}
                                 {quote.internal_note && (
-                                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                                    <p className="wrap-anywhere whitespace-pre-wrap text-sm text-muted-foreground">
                                         {quote.internal_note}
                                     </p>
                                 )}
@@ -419,8 +512,9 @@ function QuoteEditor({
                     supplier_id: value.supplier_id,
                     supplier_offering_id: value.supplier_offering_id,
                     terms: {
-                        ...value.terms,
+                        ...normalizedQuote(value).terms,
                         valid_to: value.terms.valid_to || null,
+                        freight_gross: value.terms.freight_gross || null,
                     },
                     internal_note: value.internal_note,
                 }
@@ -500,6 +594,17 @@ function QuoteEditor({
                                 </AlertDescription>
                             </Alert>
                         )}
+                        <form.AppField
+                            name="terms.freight_gross"
+                            children={(field) => (
+                                <field.TextField
+                                    id="procurement-inquiry-quote-freight"
+                                    label="本行总运费（元）"
+                                    placeholder="已含运费填写 0，留空表示未确认"
+                                    inputMode="decimal"
+                                />
+                            )}
+                        />
                         <form.Subscribe
                             selector={(state) => state.values.line_id}
                             children={(lineId) => {

@@ -11,62 +11,34 @@ export function InquiryRequirementDetail({
     unit,
     procurement,
     image,
+    compact = false,
 }: {
     line: InquiryLine
     unit: string
     procurement: boolean
     image: ReactNode
+    compact?: boolean
 }) {
     const progress = deliveryProgress({ ...line, unit_code: unit })
     const attention = deliveryAttention({ ...line, unit_code: unit })
+    const showDemandQuantity =
+        !compact ||
+        line.fulfillment_kind !== "physical" ||
+        line.allocations.length !== 1 ||
+        progress.invalidQuantity ||
+        progress.overAllocated ||
+        progress.remaining !== "0"
     return (
         <>
             {image}
-            <dl className="space-y-5 border-b py-5">
-                <div className="space-y-1">
-                    <dt className="text-xs text-muted-foreground">需求数量</dt>
-                    <dd>
-                        <QuantityValue
-                            value={line.quantity}
-                            unit={unit}
-                            className="text-xl font-semibold"
-                        />
-                    </dd>
-                </div>
-                <div className="space-y-1">
-                    <dt className="text-xs text-muted-foreground">要求交付</dt>
-                    <dd className="num text-lg font-semibold">
-                        {inquiryDate(line.delivery_due_at)}
-                    </dd>
-                </div>
-                {line.delivery_terms && (
-                    <div className="space-y-1">
-                        <dt className="text-xs text-muted-foreground">
-                            交付要求
-                        </dt>
-                        <dd className="whitespace-pre-wrap text-sm wrap-anywhere">
-                            {line.delivery_terms}
-                        </dd>
-                    </div>
-                )}
-                {!procurement && line.sales_reference_price_gross && (
-                    <div className="space-y-1">
-                        <dt className="text-xs text-muted-foreground">
-                            销售参考价
-                        </dt>
-                        <dd>
-                            <MoneyValue
-                                value={line.sales_reference_price_gross}
-                            />
-                        </dd>
-                    </div>
-                )}
-            </dl>
-            <section className="space-y-3 py-5" aria-label="收货安排">
+            <section
+                className={compact ? "space-y-3" : "space-y-3 py-5"}
+                aria-label="收货安排"
+            >
                 <div className="flex flex-wrap items-center gap-3">
                     <h3 className="font-medium">
                         {line.fulfillment_kind === "physical"
-                            ? "收货安排"
+                            ? "配送地址"
                             : "交付安排"}
                     </h3>
                     {line.allocations.length > 0 && (
@@ -121,6 +93,60 @@ export function InquiryRequirementDetail({
                     ))
                 )}
             </section>
+            <dl className={compact ? "space-y-4" : "space-y-5 border-b py-5"}>
+                {showDemandQuantity && (
+                    <div className="space-y-1">
+                        <dt className="text-xs text-muted-foreground">
+                            需求数量
+                        </dt>
+                        <dd>
+                            <QuantityValue
+                                value={line.quantity}
+                                unit={unit}
+                                className={
+                                    compact
+                                        ? "text-sm font-medium"
+                                        : "text-xl font-semibold"
+                                }
+                            />
+                        </dd>
+                    </div>
+                )}
+                <div className="space-y-1">
+                    <dt className="text-xs text-muted-foreground">要求交付</dt>
+                    <dd
+                        className={
+                            compact
+                                ? "num text-sm font-medium"
+                                : "num text-lg font-semibold"
+                        }
+                    >
+                        {inquiryDate(line.delivery_due_at)}
+                    </dd>
+                </div>
+                {line.delivery_terms && (
+                    <div className="space-y-1">
+                        <dt className="text-xs text-muted-foreground">
+                            交付要求
+                        </dt>
+                        <dd className="whitespace-pre-wrap text-sm wrap-anywhere">
+                            {line.delivery_terms}
+                        </dd>
+                    </div>
+                )}
+                {!procurement && line.sales_reference_price_gross && (
+                    <div className="space-y-1">
+                        <dt className="text-xs text-muted-foreground">
+                            销售参考价
+                        </dt>
+                        <dd>
+                            <MoneyValue
+                                value={line.sales_reference_price_gross}
+                            />
+                        </dd>
+                    </div>
+                )}
+            </dl>
         </>
     )
 }

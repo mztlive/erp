@@ -6,7 +6,7 @@ use erp_core::common::time::Instant;
 use erp_core::money::Quantity;
 use serde::Serialize;
 
-use super::{InquiryFeeStatus, InquirySalesFeeProgress, fee_statuses};
+use super::{InquiryFeeStatus, InquiryProcurementReinquiry, InquirySalesFeeProgress, fee_statuses};
 use crate::entity::sales_inquiry::*;
 
 #[derive(Debug, Clone, Serialize)]
@@ -52,6 +52,7 @@ pub struct InquiryProcurementView {
     pub status: InquiryStatus,
     pub requirement_version: u32,
     pub feedback_round: u32,
+    pub reinquiry: Option<InquiryProcurementReinquiry>,
     pub shared_fee_owner_user_id: Option<String>,
     pub draft: InquiryProcurementRequirement,
     pub requirements: Vec<InquiryProcurementSnapshot>,
@@ -90,6 +91,14 @@ impl InquiryProcurementView {
             status: inquiry.status,
             requirement_version,
             feedback_round: feedback.round,
+            reinquiry: InquiryProcurementReinquiry::from_round(
+                inquiry,
+                requirement_version,
+                feedback.round.saturating_sub(1),
+                started_at,
+                line_ids,
+                &feedback.data.fees.iter().map(|fee| fee.fee_id.clone()).collect(),
+            ),
             shared_fee_owner_user_id: None,
             draft: draft.clone(),
             requirements: vec![InquiryProcurementSnapshot {
@@ -156,15 +165,7 @@ impl InquiryProcurementView {
         actor: &str,
         now: Instant,
     ) -> Self {
-        let full = !line_ids.is_empty()
-            && inquiry
-                .current_requirement()
-                .map(|snapshot| snapshot.data.lines.iter().all(|line| line_ids.contains(&line.line_id)))
-                .unwrap_or(false);
-        let full = full
-            || (!line_ids.is_empty()
-                && !actor.is_empty()
-                && inquiry.shared_fee_owner_user_id.as_deref() == Some(actor));
+        let full = includes_shared_fees(inquiry, line_ids, actor);
         let fee_ids = scoped_fee_ids(inquiry, line_ids, full);
         Self {
             base: inquiry.base.clone(),
@@ -175,6 +176,14 @@ impl InquiryProcurementView {
             status: inquiry.status,
             requirement_version: inquiry.requirement_version,
             feedback_round: inquiry.feedback_round,
+            reinquiry: InquiryProcurementReinquiry::from_round(
+                inquiry,
+                inquiry.requirement_version,
+                inquiry.feedback_round,
+                now,
+                line_ids,
+                &fee_ids,
+            ),
             shared_fee_owner_user_id: inquiry.shared_fee_owner_user_id.clone(),
             draft: requirement_view(&inquiry.draft, line_ids),
             requirements: inquiry
@@ -203,6 +212,15 @@ impl InquiryProcurementView {
                 .collect(),
         }
     }
+}
+
+fn includes_shared_fees(inquiry: &SalesInquiry, line_ids: &[String], actor: &str) -> bool {
+    !line_ids.is_empty()
+        && (inquiry
+            .current_requirement()
+            .map(|snapshot| snapshot.data.lines.iter().all(|line| line_ids.contains(&line.line_id)))
+            .unwrap_or(false)
+            || (!actor.is_empty() && inquiry.shared_fee_owner_user_id.as_deref() == Some(actor)))
 }
 
 fn completed_feedback(

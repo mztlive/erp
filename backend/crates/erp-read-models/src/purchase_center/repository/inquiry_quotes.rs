@@ -56,6 +56,9 @@ fn candidates_for_bindings(
 ) -> Result<Vec<InquiryBasisCandidate>> {
     let mut candidates = Vec::new();
     for quote in quotes {
+        if quote.data.terms.unavailable {
+            continue;
+        }
         let Some(balance) = balances.get(&quote.data.quote_id) else { continue };
         for binding in bindings.iter().filter(|line| {
             line.inquiry_line_id == quote.data.scope.line_id && line.sku_id == quote.data.sku_id
@@ -182,6 +185,8 @@ mod tests {
                 supplier_offering_id: "offering".to_string().into(),
                 sku_id: "sku".to_string().into(),
                 terms: QuoteTerms {
+                    unavailable: false,
+                    freight_gross: None,
                     unit_cost_gross: "10".parse().unwrap(),
                     input_tax_rate: "0.13".parse().unwrap(),
                     available_quantity: "10".parse().unwrap(),
@@ -229,6 +234,16 @@ mod tests {
             vec!["sales-line-1", "sales-line-2"]
         );
         assert!(candidates.iter().all(|row| row.remaining_quote_quantity == "7".parse().unwrap()));
-        assert!(candidates_for_bindings(&bindings, &[quote], &HashMap::new()).unwrap().is_empty());
+        assert!(
+            candidates_for_bindings(&bindings, std::slice::from_ref(&quote), &HashMap::new())
+                .unwrap()
+                .is_empty()
+        );
+        let mut unavailable = quote;
+        unavailable.data.terms.unavailable = true;
+        unavailable.data.terms.unit_cost_gross = "0".parse().unwrap();
+        unavailable.data.terms.available_quantity = "0".parse().unwrap();
+        unavailable.data.internal_note = "停产".into();
+        assert!(candidates_for_bindings(&bindings, &[unavailable], &balances).unwrap().is_empty());
     }
 }

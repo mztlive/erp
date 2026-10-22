@@ -3051,6 +3051,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/internal-quotes/import",
+                description: "导入供应商回填报价",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "internal_quote",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/procurement-inquiries/{id}/internal-quotes",
                 description: "读取当前责任行内部报价",

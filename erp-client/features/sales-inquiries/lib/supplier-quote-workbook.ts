@@ -8,7 +8,7 @@ import {
 } from "./supplier-quote-export"
 import type { SupplierQuoteImage } from "./supplier-quote-images"
 
-const HEADERS = [
+export const SUPPLIER_QUOTE_HEADERS = [
     "主图",
     "商品名称",
     "规格",
@@ -24,7 +24,7 @@ const HEADERS = [
     "可供数量",
     "承诺交付日",
     "运费（元）",
-    "报价有效期至",
+    "报价失效日",
     "报价备注",
 ]
 const WIDTHS = [
@@ -135,7 +135,7 @@ export async function buildSupplierQuoteWorkbook(
 ): Promise<Uint8Array> {
     const workbook = new ExcelJS.Workbook()
     workbook.creator = "采购询价"
-    workbook.subject = "supplier-inquiry-quote-v1"
+    workbook.subject = "supplier-inquiry-quote-v2"
     const title = `${group.supplierName}报价表`
     const meta = `询价单号：${source.inquiryNo}　需求版本：${source.requirementVersion}　报价截止：${inquiryDate(source.deadlineAt)}`
     const sheet = workbook.addWorksheet("报价表")
@@ -143,9 +143,9 @@ export async function buildSupplierQuoteWorkbook(
         sheet,
         title,
         meta,
-        HEADERS,
+        [...SUPPLIER_QUOTE_HEADERS, "回导标识（请勿修改）"],
         WIDTHS,
-        "请填写黄色区域：价格按本行单位报价，税率填写百分数（如 13）；运费填写本行总额，已含运费填写 0；无法供货时可供数量填写 0 并说明原因。",
+        "请填写黄色区域：价格按本行单位报价，税率填写百分数（如 13）；运费填写本行总额，已含运费填写 0；无法供货时可供数量填写 0 并说明原因；报价失效日当天起不可采用，整行排序须包含隐藏列。",
     )
     const imageIds = new Map<string, number>()
     for (const [index, line] of group.lines.entries()) {
@@ -177,6 +177,7 @@ export async function buildSupplierQuoteWorkbook(
                         : "按交付要求"
                 }`,
                 ...Array.from({ length: 7 }, () => null),
+                JSON.stringify({ lineId: line.lineId, skuId: line.skuId }),
             ],
             66,
             11,
@@ -197,6 +198,14 @@ export async function buildSupplierQuoteWorkbook(
             })
         }
     }
+    sheet.getColumn(18).hidden = true
+    const identity = workbook.addWorksheet("回导信息", { state: "veryHidden" })
+    identity.getCell("A1").value = "supplier-inquiry-quote-v2"
+    identity.getCell("A2").value = source.inquiryId
+    identity.getCell("A3").value = source.requirementVersion
+    identity.getCell("A4").value = source.feedbackRound
+    identity.getCell("A5").value = group.supplierId
+    identity.getCell("A6").value = group.supplierName
     appendDeliverySheet(workbook, group, meta)
     return new Uint8Array(await workbook.xlsx.writeBuffer())
 }

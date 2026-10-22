@@ -32,6 +32,7 @@ export type SupplierQuoteSource = {
     deadlineAt: number
     taskId: string
     taskVersion: number
+    feedbackRound: number
     lines: SupplierQuoteLine[]
     groups: SupplierQuoteGroup[]
 }

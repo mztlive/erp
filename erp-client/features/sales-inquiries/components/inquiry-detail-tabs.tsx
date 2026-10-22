@@ -18,6 +18,7 @@ export function InquiryDetailTabs({
     procurement,
     salesProducts,
     feedback,
+    feedbackActions,
     publishedFeedback,
     fees,
     feeCount,
@@ -28,6 +29,7 @@ export function InquiryDetailTabs({
     procurement: boolean
     salesProducts?: React.ReactNode
     feedback: React.ReactNode
+    feedbackActions?: React.ReactNode
     publishedFeedback?: React.ReactNode
     fees: React.ReactNode
     feeCount: number
@@ -155,6 +157,17 @@ export function InquiryDetailTabs({
                         )}
                     </TabsTrigger>
                 </TabsList>
+                {procurement && feedbackActions && (
+                    <div
+                        className={
+                            activeTab === "feedback"
+                                ? "ml-auto flex flex-wrap items-center justify-end gap-2 pb-2"
+                                : "hidden"
+                        }
+                    >
+                        {feedbackActions}
+                    </div>
+                )}
             </div>
             {actionsContainer &&
                 createPortal(

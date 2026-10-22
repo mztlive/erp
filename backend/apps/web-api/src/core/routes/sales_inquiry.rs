@@ -291,6 +291,15 @@ fn procurement_feedback(rbac: &SharedRbacService) -> Router<AppState> {
 fn procurement_quotes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/procurement-inquiries/{id}/internal-quotes/import",
+            with_permission(
+                post(sales_inquiry::internal::import_quotes),
+                rbac,
+                sales_inquiry::internal::import_quotes_permission_key(),
+            )
+            .layer(DefaultBodyLimit::max(20 * 1024 * 1024)),
+        )
+        .route(
             "/procurement-inquiries/{id}/internal-quotes",
             with_permission(
                 get(sales_inquiry::query::procurement_internal_quotes),

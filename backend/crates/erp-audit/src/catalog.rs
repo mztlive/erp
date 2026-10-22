@@ -278,6 +278,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("sales_inquiry.convert_expenses", "sales_inquiry", "询价费用转采购"),
     action("sales_inquiry.allocate_fees", "sales_inquiry", "分配询价费用归属"),
     action("sales_inquiry.internal_quote", "sales_inquiry", "维护询价内部报价"),
+    action("sales_inquiry.import_quotes", "sales_inquiry", "导入供应商回填报价"),
     action("sales_inquiry.fee_basis", "sales_inquiry", "维护询价费用内部依据"),
     action("sales_order.bind_contract", "sales_order", "绑定销售合同"),
     action("sales_order.cancel_approval", "sales_order", "撤回审批销售单"),
@@ -456,6 +457,7 @@ mod tests {
             "sales_inquiry.publish",
             "sales_inquiry.accept",
             "sales_inquiry.internal_quote",
+            "sales_inquiry.import_quotes",
             "sales_inquiry.convert_sales",
             "sales_inquiry.convert_expenses",
         ] {

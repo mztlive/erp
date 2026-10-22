@@ -5,7 +5,7 @@ use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     BusinessDocumentId, DocumentAttachmentId, FileAssetId, SkuId, SupplierAccountId, SupplierOfferingId,
 };
-use erp_core::money::{Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_procurement::entity::purchase_order::PurchaseInquiryAddress;
 use erp_sales::entity::sales_inquiry::{InquiryRequirementLine, SalesInquiry};
 use erp_supply::inquiry::{
@@ -43,6 +43,10 @@ pub struct InquiryQuoteInput {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InquiryQuoteTermsInput {
+    #[serde(default)]
+    pub unavailable: bool,
+    #[serde(default)]
+    pub freight_gross: Option<Amount>,
     pub unit_cost_gross: UnitPrice,
     pub input_tax_rate: Rate,
     pub available_quantity: Quantity,
@@ -51,10 +55,14 @@ pub struct InquiryQuoteTermsInput {
 }
 
 impl InquiryQuoteTermsInput {
-    fn for_requirement(&self, line: &InquiryRequirementLine) -> Result<QuoteTerms> {
+    pub(super) fn for_requirement(&self, line: &InquiryRequirementLine) -> Result<QuoteTerms> {
         let allocation_ids = line.allocations.iter().map(|row| row.allocation_id.clone()).collect::<Vec<_>>();
-        line.validate_quote_scope(self.available_quantity, &allocation_ids)?;
+        if !self.unavailable {
+            line.validate_quote_scope(self.available_quantity, &allocation_ids)?;
+        }
         let terms = QuoteTerms {
+            unavailable: self.unavailable,
+            freight_gross: self.freight_gross,
             unit_cost_gross: self.unit_cost_gross,
             input_tax_rate: self.input_tax_rate,
             available_quantity: self.available_quantity,
@@ -308,6 +316,8 @@ mod tests {
 
     fn terms() -> InquiryQuoteTermsInput {
         InquiryQuoteTermsInput {
+            unavailable: false,
+            freight_gross: None,
             unit_cost_gross: "1.2".parse().unwrap(),
             input_tax_rate: "0.13".parse().unwrap(),
             available_quantity: "10".parse().unwrap(),
@@ -344,5 +354,17 @@ mod tests {
             input.available_quantity = quantity.parse().unwrap();
             assert!(input.for_requirement(&line).is_err());
         }
+    }
+    #[test]
+    fn unavailable_reply_does_not_require_adoptable_delivery_scope() {
+        let mut line = line();
+        line.allocations.clear();
+        let mut input = terms();
+        input.unavailable = true;
+        input.unit_cost_gross = "0".parse().unwrap();
+        input.available_quantity = "0".parse().unwrap();
+        assert!(input.for_requirement(&line).unwrap().unavailable);
+        input.available_quantity = "1".parse().unwrap();
+        assert!(input.for_requirement(&line).is_err());
     }
 }

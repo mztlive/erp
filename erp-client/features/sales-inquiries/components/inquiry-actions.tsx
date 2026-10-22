@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { FilePenLineIcon, UserRoundCogIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { FormalActionConfirmDialog } from "@/components/business"
 import { useAppForm } from "@/components/form"
@@ -277,6 +278,12 @@ export function InquiryActions({
                 setError(null)
             }}
         >
+            {item === "supplement" && (
+                <FilePenLineIcon aria-hidden="true" data-icon="inline-start" />
+            )}
+            {item === "reassign" && (
+                <UserRoundCogIcon aria-hidden="true" data-icon="inline-start" />
+            )}
             {ACTION_LABEL[item]}
         </Button>
     )

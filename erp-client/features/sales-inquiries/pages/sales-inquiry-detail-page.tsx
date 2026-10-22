@@ -9,15 +9,9 @@ import {
     BusinessFailureState,
     DetailPageHeader,
     PageScaffold,
+    QuickPreviewSheet,
 } from "@/components/business"
 import { Button, buttonVariants } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-} from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { apiPost, apiPostForm } from "@/lib/api"
@@ -40,6 +34,7 @@ import {
 import { SalesInquiryProducts } from "../components/sales-inquiry-products"
 import { salesInquiryFeedback } from "../lib/feedback-view"
 import { InquiryDetailTabs } from "../components/inquiry-detail-tabs"
+import { InquiryReinquiryNotice } from "../components/inquiry-reinquiry-notice"
 import { InquiryFeedbackResults } from "../components/inquiry-feedback-results"
 import { InquiryDemandEditor } from "../components/inquiry-demand-editor"
 import {
@@ -51,6 +46,7 @@ import { InquiryInternalQuotes } from "../components/inquiry-internal-quotes"
 import { SalesInquiryFees } from "../components/sales-inquiry-fees"
 import { InquiryFeesPanel } from "../components/inquiry-fees-panel"
 import { InquiryRequirementTable } from "../components/inquiry-requirement-table"
+import { SupplierQuoteImportButton } from "../components/supplier-quote-import-dialog"
 import { SupplierQuoteExportButton } from "../components/supplier-quote-export-dialog"
 import {
     InquiryImportDialog,
@@ -581,27 +577,6 @@ function InquiryDetailContent({
                                         className="flex items-center"
                                     />
                                     {assignmentActions}
-                                    {canProcess &&
-                                        task &&
-                                        hasPermission(
-                                            permissions,
-                                            "supplier_offering:list",
-                                        ) &&
-                                        hasPermission(
-                                            permissions,
-                                            "sellable_sku:list",
-                                        ) && (
-                                            <SupplierQuoteExportButton
-                                                request={{
-                                                    inquiryId: inquiry.id,
-                                                    taskId: task.id,
-                                                    version: inquiry.version,
-                                                    taskVersion: task.version,
-                                                }}
-                                                userId={userId}
-                                                onRefresh={onSaved}
-                                            />
-                                        )}
                                     {canEdit && (
                                         <div ref={setDemandActionsContainer} />
                                     )}
@@ -713,6 +688,53 @@ function InquiryDetailContent({
                         {canEdit && feeOwner}
                     </div>
                     <InquiryDetailTabs
+                        feedbackActions={
+                            <>
+                                {canProcess &&
+                                    task &&
+                                    hasPermission(
+                                        permissions,
+                                        "supplier_offering:list",
+                                    ) &&
+                                    hasPermission(
+                                        permissions,
+                                        "sellable_sku:list",
+                                    ) && (
+                                        <SupplierQuoteExportButton
+                                            request={{
+                                                inquiryId: inquiry.id,
+                                                taskId: task.id,
+                                                version: inquiry.version,
+                                                taskVersion: task.version,
+                                            }}
+                                            userId={userId}
+                                            onRefresh={onSaved}
+                                        />
+                                    )}
+                                {canProcess &&
+                                    task &&
+                                    "work_items" in inquiry &&
+                                    hasPermission(
+                                        permissions,
+                                        "procurement_inquiry:internal_quote",
+                                    ) &&
+                                    hasPermission(
+                                        permissions,
+                                        "supplier_offering:list",
+                                    ) &&
+                                    hasPermission(
+                                        permissions,
+                                        "sellable_sku:list",
+                                    ) && (
+                                        <SupplierQuoteImportButton
+                                            inquiry={inquiry}
+                                            task={task}
+                                            userId={userId}
+                                            onSaved={onSaved}
+                                        />
+                                    )}
+                            </>
+                        }
                         onFeedbackVisibilityChange={setFeedbackVisible}
                         inquiry={inquiry}
                         procurement={procurement}
@@ -750,6 +772,9 @@ function InquiryDetailContent({
                         }
                         feedback={
                             <div className="space-y-6">
+                                {"work_items" in inquiry && (
+                                    <InquiryReinquiryNotice inquiry={inquiry} />
+                                )}
                                 {canProcess && "work_items" in inquiry && (
                                     <>
                                         <InquiryFeedbackEditor
@@ -773,47 +798,39 @@ function InquiryDetailContent({
                                                     : undefined
                                             }
                                         />
-                                        <Dialog
+                                        <QuickPreviewSheet
+                                            idPrefix="procurement-feedback-internal"
+                                            size="preview"
                                             open={quoteLineId !== null}
                                             onOpenChange={(open) => {
                                                 if (!open) setQuoteLineId(null)
                                             }}
+                                            title={
+                                                inquiry.draft.lines.find(
+                                                    (line) =>
+                                                        line.line_id ===
+                                                        quoteLineId,
+                                                )?.product_name ?? "供应商报价"
+                                            }
+                                            description="仅采购可见。采用报价带入供给价，不代表已选定采购供应商。"
                                         >
-                                            <DialogContent
-                                                id="procurement-feedback-internal-dialog"
-                                                closeButtonId="procurement-feedback-internal-close"
-                                                className="max-h-[85vh] overflow-y-auto sm:max-w-4xl"
-                                            >
-                                                <DialogHeader>
-                                                    <DialogTitle>
-                                                        {
-                                                            inquiry.draft.lines.find(
-                                                                (line) =>
-                                                                    line.line_id ===
-                                                                    quoteLineId,
-                                                            )?.product_name
-                                                        }{" "}
-                                                        · 内部采购信息
-                                                    </DialogTitle>
-                                                    <DialogDescription>
-                                                        仅采购可见；供应商报价独立保存，不随销售反馈公开。
-                                                    </DialogDescription>
-                                                </DialogHeader>
-                                                {quoteLineId && (
-                                                    <InquiryInternalQuotes
-                                                        key={quoteLineId}
-                                                        inquiry={inquiry}
-                                                        task={task}
-                                                        userId={userId}
-                                                        permissions={
-                                                            permissions
-                                                        }
-                                                        onSaved={onSaved}
-                                                        lineId={quoteLineId}
-                                                    />
-                                                )}
-                                            </DialogContent>
-                                        </Dialog>
+                                            {quoteLineId && (
+                                                <InquiryInternalQuotes
+                                                    key={quoteLineId}
+                                                    inquiry={inquiry}
+                                                    task={task}
+                                                    userId={userId}
+                                                    permissions={permissions}
+                                                    onSaved={onSaved}
+                                                    lineId={quoteLineId}
+                                                    onAdopt={(quote) =>
+                                                        feedbackEditor.current?.adoptQuote(
+                                                            quote,
+                                                        ) ?? false
+                                                    }
+                                                />
+                                            )}
+                                        </QuickPreviewSheet>
                                     </>
                                 )}
 

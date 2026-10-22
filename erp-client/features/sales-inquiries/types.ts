@@ -178,6 +178,15 @@ export type ProcurementInquiry = Omit<
     | "fee_allocations"
 > & {
     draft: InquiryRequirement
+    reinquiry: {
+        at: number
+        previous_feedback_round: number
+        reason: string
+        concerns: string
+        all_items: boolean
+        line_ids: string[]
+        fee_ids: string[]
+    } | null
     requirements: SalesInquiry["requirements"]
     fee_allocations: InquiryFeeAllocation[]
     fee_ledger: InquiryFeeReservation[]

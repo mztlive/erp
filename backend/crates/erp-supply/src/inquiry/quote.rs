@@ -72,11 +72,39 @@ impl InquiryQuote {
         }
         data.recorded_by =
             normalize_required_text(data.recorded_by, "报价登记人不能为空", 128, "报价登记人过长")?;
+        if data.terms.unavailable && data.internal_note.trim().is_empty() {
+            return Err(Error::ValidationError("无法供货须填写原因".into()));
+        }
         if data.internal_note.chars().count() > 4000 {
             return Err(Error::ValidationError("询价报价备注过长".into()));
         }
         data.terms = data.terms.validated()?;
         Ok(Self { base: BaseModel::new(id), data })
+    }
+
+    /// 判断是否已登记完全相同的供应商回复，不依赖导入文件名或客户端报价ID。
+    /// # 参数
+    /// `scope`、`round` 指定需求和轮次，其余参数为已校验的供应身份与商业条件。
+    /// # 返回
+    /// 原记录未删除且回复身份、条款和备注完全一致时为真。
+    /// # 错误
+    /// 无。
+    pub fn matches_reply(
+        &self,
+        scope: &InquiryQuoteScope,
+        round: u32,
+        supplier: &SupplierAccountId,
+        offering: &SupplierOfferingId,
+        terms: &QuoteTerms,
+        note: &str,
+    ) -> bool {
+        !self.base.is_deleted()
+            && self.data.scope == *scope
+            && self.data.feedback_round == round
+            && self.data.supplier_id == *supplier
+            && self.data.supplier_offering_id == *offering
+            && self.data.terms == *terms
+            && self.data.internal_note == note
     }
 
     pub(super) fn ensure_next_revision(&self, prior: Option<&InquiryQuote>) -> Result<()> {

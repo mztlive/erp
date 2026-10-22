@@ -6,6 +6,8 @@ use super::*;
 
 fn terms() -> QuoteTerms {
     QuoteTerms {
+        unavailable: false,
+        freight_gross: None,
         unit_cost_gross: "9.90".parse().unwrap(),
         input_tax_rate: "0.13".parse().unwrap(),
         available_quantity: "20".parse().unwrap(),
@@ -339,5 +341,67 @@ fn saved_quote_documents_can_be_read_with_mongo_metadata() {
         assert_eq!(serde_json::to_value(&restored).unwrap(), serde_json::to_value(&original).unwrap());
         document.get_document_mut("terms").unwrap().insert("input_tax_rate", "invalid");
         assert!(deserialize_from_document::<InquiryQuote>(document).is_err());
+    }
+}
+
+#[test]
+fn freight_and_unavailable_reply_preserve_cost_semantics() {
+    let mut value = terms();
+    value.freight_gross = Some("-0.01".parse().unwrap());
+    assert!(value.clone().validated().is_err());
+    value.freight_gross = Some("0".parse().unwrap());
+    value.clone().validated().unwrap();
+    value.unavailable = true;
+    assert!(value.clone().validated().is_err());
+    value.available_quantity = "0".parse().unwrap();
+    value.unit_cost_gross = "0".parse().unwrap();
+    value.clone().validated().unwrap();
+    assert!(value.ensure_applicable(&usage("1")).is_err());
+    let mut data = quote().data;
+    data.terms = value;
+    data.internal_note.clear();
+    assert!(InquiryQuote::new("reply".into(), data.clone()).is_err());
+    data.internal_note = "停产".into();
+    InquiryQuote::new("reply".into(), data).unwrap();
+}
+
+#[test]
+fn old_quotes_keep_unknown_freight_instead_of_assuming_free_shipping() {
+    let mut value = serde_json::to_value(terms()).unwrap();
+    value.as_object_mut().unwrap().remove("freight_gross");
+    value.as_object_mut().unwrap().remove("unavailable");
+    let old: QuoteTerms = serde_json::from_value(value).unwrap();
+    assert_eq!(old.freight_gross, None);
+    assert!(!old.unavailable);
+}
+
+#[test]
+fn duplicate_reply_requires_same_round_scope_supplier_terms_and_note() {
+    let quote = quote();
+    let data = &quote.data;
+    let matches = |candidate: &InquiryQuoteData| {
+        quote.matches_reply(
+            &candidate.scope,
+            candidate.feedback_round,
+            &candidate.supplier_id,
+            &candidate.supplier_offering_id,
+            &candidate.terms,
+            &candidate.internal_note,
+        )
+    };
+    assert!(matches(data));
+    for field in 0..8 {
+        let mut changed = data.clone();
+        match field {
+            0 => changed.scope.requirement_version += 1,
+            1 => changed.feedback_round += 1,
+            2 => changed.supplier_id = "other".to_string().into(),
+            3 => changed.supplier_offering_id = "other".to_string().into(),
+            4 => changed.terms.freight_gross = Some("1".parse().unwrap()),
+            5 => changed.terms.unit_cost_gross = "11".parse().unwrap(),
+            6 => changed.internal_note = "另议".into(),
+            _ => changed.scope.line_id = "other".into(),
+        }
+        assert!(!matches(&changed));
     }
 }

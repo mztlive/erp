@@ -451,6 +451,101 @@ fn independent_sales_and_procurement_projections_enforce_field_whitelists() {
 }
 
 #[test]
+fn procurement_reinquiry_exposes_reason_without_full_sales_requirement() {
+    let (mut inquiry, _) = two_line_accepted_inquiry();
+    let mut requirement = inquiry.draft.clone();
+    requirement.note = "补充交付安排".into();
+    inquiry
+        .reinquire(
+            1,
+            "sales",
+            InquiryReinquiryData {
+                reason: "请重新核实价格".into(),
+                concerns: "优先确认交期".into(),
+                line_ids: vec!["line".into(), "line-b".into()],
+                fee_ids: vec!["fee".into(), "fee-b".into()],
+                requirement: Some(requirement),
+            },
+            now(),
+        )
+        .unwrap();
+    let view = InquiryProcurementView::from_scoped_at(&inquiry, &["line".into()], now());
+    let request = view.reinquiry.as_ref().unwrap();
+    assert_eq!(request.reason, "请重新核实价格");
+    assert_eq!(request.concerns, "优先确认交期");
+    assert_eq!(request.previous_feedback_round, 1);
+    assert_eq!(request.line_ids, ["line"]);
+    assert_eq!(request.fee_ids, ["fee"]);
+    assert!(!request.all_items);
+    let json = serde_json::to_value(view).unwrap();
+    assert!(json["reinquiry"].get("requirement").is_none());
+    assert!(json["reinquiry"].get("data").is_none());
+    assert!(json["draft"]["lines"][0].get("sales_reference_price_gross").is_none());
+    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &[], now()).reinquiry.is_none());
+}
+
+#[test]
+fn procurement_reinquiry_filters_fee_only_and_unrelated_tasks() {
+    let (mut inquiry, _) = two_line_accepted_inquiry();
+    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &["line".into()], now()).reinquiry.is_none());
+    inquiry
+        .reinquire(
+            1,
+            "sales",
+            InquiryReinquiryData {
+                reason: "运费偏高".into(),
+                concerns: String::new(),
+                line_ids: vec![],
+                fee_ids: vec!["fee-b".into()],
+                requirement: None,
+            },
+            now(),
+        )
+        .unwrap();
+    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &["line".into()], now()).reinquiry.is_none());
+    let request =
+        InquiryProcurementView::from_scoped_at(&inquiry, &["line-b".into()], now()).reinquiry.unwrap();
+    assert_eq!(request.reason, "运费偏高");
+    assert!(request.line_ids.is_empty());
+    assert_eq!(request.fee_ids, ["fee-b"]);
+    assert!(!request.all_items);
+    inquiry.feedbacks[0].data.fees[1].line_ids.clear();
+    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &["line-b".into()], now()).reinquiry.is_none());
+    inquiry.shared_fee_owner_user_id = Some("buyer".into());
+    let owner = InquiryProcurementView::from_responsibility(&inquiry, &["line-b".into()], "buyer", now());
+    assert_eq!(owner.reinquiry.unwrap().fee_ids, ["fee-b"]);
+}
+
+#[test]
+fn procurement_reinquiry_keeps_completed_round_and_rejects_later_reasons() {
+    let mut inquiry = accepted();
+    let request = InquiryReinquiryData {
+        reason: "第一次重询原因".into(),
+        concerns: String::new(),
+        line_ids: vec![],
+        fee_ids: vec![],
+        requirement: None,
+    };
+    inquiry.reinquire(1, "sales", request.clone(), now()).unwrap();
+    let lines = vec!["line".into()];
+    let current = InquiryProcurementView::from_scoped_at(&inquiry, &lines, now()).reinquiry.unwrap();
+    assert!(current.all_items);
+    inquiry.publish(1, "buyer", feedback("10", InquirySupplyConclusion::Available), now()).unwrap();
+    inquiry
+        .reinquire(1, "sales", InquiryReinquiryData { reason: "下一轮原因".into(), ..request }, later())
+        .unwrap();
+    let current = InquiryProcurementView::from_scoped_at(&inquiry, &lines, later()).reinquiry.unwrap();
+    assert_eq!(current.reason, "下一轮原因");
+    let completed =
+        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
+    assert_eq!(completed.feedback_round, 2);
+    assert_eq!(completed.reinquiry.unwrap().reason, "第一次重询原因");
+    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &lines, now()).reinquiry.is_none());
+    inquiry.requirement_version += 1;
+    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &lines, later()).reinquiry.is_none());
+}
+
+#[test]
 fn stale_version_and_invalid_command_replay_fail_without_changes() {
     let mut inquiry = inquiry();
     let before = inquiry.clone();

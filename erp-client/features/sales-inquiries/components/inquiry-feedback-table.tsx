@@ -1,6 +1,14 @@
 "use client"
 
 import * as React from "react"
+import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/hooks/queries"
+import {
+    latestSupplierQuotes,
+    type InternalQuote,
+} from "../lib/internal-quotes"
+import { InquiryQuoteHint } from "./inquiry-quote-hint"
+import { InquiryIconAction } from "./inquiry-icon-action"
+import { useInternalQuotes } from "../hooks/use-internal-quotes"
 import { ReceiptTextIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
 import {
@@ -51,7 +59,13 @@ export function InquiryFeedbackTable({
     onInternalQuote,
     disabled,
     selectionActions,
+    inquiryId,
+    taskId,
+    feedbackRound,
 }: {
+    inquiryId: string
+    taskId: string
+    feedbackRound: number
     lines: InquiryFeedbackLine[]
     demand: InquiryLine[]
     onChange: (lines: InquiryFeedbackLine[]) => void
@@ -60,6 +74,30 @@ export function InquiryFeedbackTable({
     disabled: boolean
     selectionActions?: React.ReactNode
 }) {
+    const quoteQuery = useInternalQuotes(
+        inquiryId,
+        taskId,
+        Boolean(onInternalQuote),
+    )
+    const offerings = useSupplierOfferingsForSkusQuery(
+        onInternalQuote ? demand.map((line) => line.sku_id) : [],
+    )
+    const quotesByLine = React.useMemo(() => {
+        const active = new Set(
+            offerings.data
+                ?.filter((item) => item.status === "ACTIVE")
+                .map((item) => item.id),
+        )
+        const grouped = new Map<string, InternalQuote[]>()
+        for (const quote of latestSupplierQuotes(quoteQuery.data ?? [])) {
+            if (active.has(quote.supplier_offering_id))
+                grouped.set(quote.line_id, [
+                    ...(grouped.get(quote.line_id) ?? []),
+                    quote,
+                ])
+        }
+        return grouped
+    }, [quoteQuery.data, offerings.data])
     const common = feedbackCommonTerms(lines)
     const defaultTerms = {
         tax_rate:
@@ -127,6 +165,22 @@ export function InquiryFeedbackTable({
     return (
         <TableToolbarScope>
             <section className="min-w-0 space-y-3" aria-label="采购商品反馈">
+                {onInternalQuote && quoteQuery.isError && (
+                    <BusinessFailureState
+                        id="procurement-feedback-quotes-retry"
+                        title="供应商报价参考读取失败"
+                        error={quoteQuery.error}
+                        onRetry={() => void quoteQuery.refetch()}
+                    />
+                )}
+                {onInternalQuote && offerings.isError && (
+                    <BusinessFailureState
+                        id="procurement-feedback-offerings-retry"
+                        title="供给资料读取失败，暂不能比较报价"
+                        error={offerings.error}
+                        onRetry={() => void offerings.refetch()}
+                    />
+                )}
                 {sku.error && (
                     <BusinessFailureState
                         id="procurement-feedback-sku-retry"
@@ -187,7 +241,10 @@ export function InquiryFeedbackTable({
                     </p>
                 )}
                 <div className="overflow-hidden rounded-lg border">
-                    <Table className="min-w-[1232px] table-fixed">
+                    <Table
+                        data-density="comfortable"
+                        className="min-w-[1264px] table-fixed"
+                    >
                         <TableHeader className="sticky top-0 z-10 bg-muted">
                             <TableRow>
                                 <TableHead className="w-12">
@@ -219,7 +276,7 @@ export function InquiryFeedbackTable({
                                 <TableHead className="w-64">
                                     商品 / 规格
                                 </TableHead>
-                                <TableHead className="w-24 text-right">
+                                <TableHead className="w-40 text-right">
                                     需求数量
                                 </TableHead>
                                 <TableHead className="w-36">供给结论</TableHead>
@@ -227,10 +284,10 @@ export function InquiryFeedbackTable({
                                     含税供给单价
                                 </TableHead>
                                 <TableHead className="w-28">税率</TableHead>
-                                <TableHead className="w-44">
+                                <TableHead className="w-48">
                                     报价有效至
                                 </TableHead>
-                                <TableHead className="w-40 text-right">
+                                <TableHead className="w-16 text-right">
                                     操作
                                 </TableHead>
                             </TableRow>
@@ -273,6 +330,7 @@ export function InquiryFeedbackTable({
                                 return (
                                     <React.Fragment key={line.line_id}>
                                         <TableRow
+                                            className="[&>td]:align-top"
                                             data-state={
                                                 selected.has(line.line_id)
                                                     ? "selected"
@@ -280,34 +338,36 @@ export function InquiryFeedbackTable({
                                             }
                                         >
                                             <TableCell>
-                                                <Checkbox
-                                                    id={`${prefix}-selected`}
-                                                    aria-label={`选择${line.product_name}`}
-                                                    checked={selected.has(
-                                                        line.line_id,
-                                                    )}
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        setSelected(
-                                                            (current) => {
-                                                                const next =
-                                                                    new Set(
-                                                                        current,
-                                                                    )
-                                                                if (checked)
-                                                                    next.add(
-                                                                        line.line_id,
-                                                                    )
-                                                                else
-                                                                    next.delete(
-                                                                        line.line_id,
-                                                                    )
-                                                                return next
-                                                            },
-                                                        )
-                                                    }
-                                                />
+                                                <div className="flex h-control items-center">
+                                                    <Checkbox
+                                                        id={`${prefix}-selected`}
+                                                        aria-label={`选择${line.product_name}`}
+                                                        checked={selected.has(
+                                                            line.line_id,
+                                                        )}
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            setSelected(
+                                                                (current) => {
+                                                                    const next =
+                                                                        new Set(
+                                                                            current,
+                                                                        )
+                                                                    if (checked)
+                                                                        next.add(
+                                                                            line.line_id,
+                                                                        )
+                                                                    else
+                                                                        next.delete(
+                                                                            line.line_id,
+                                                                        )
+                                                                    return next
+                                                                },
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
@@ -349,10 +409,18 @@ export function InquiryFeedbackTable({
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums">
-                                                {line.quantity}{" "}
-                                                <span className="text-xs text-muted-foreground">
-                                                    {unit}
-                                                </span>
+                                                <div className="flex h-control items-center justify-end gap-1">
+                                                    {line.quantity}
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {unit}
+                                                    </span>
+                                                </div>
+                                                <InquiryFeedbackDemand
+                                                    line={line}
+                                                    unit={unit}
+                                                    idPrefix={prefix}
+                                                    appearance="badge"
+                                                />
                                             </TableCell>
                                             <TableCell>
                                                 <OptionCombobox
@@ -411,7 +479,9 @@ export function InquiryFeedbackTable({
                                             </TableCell>
                                             <TableCell>
                                                 {unavailable ? (
-                                                    "—"
+                                                    <span className="flex h-control items-center">
+                                                        —
+                                                    </span>
                                                 ) : (
                                                     <Input
                                                         id={`${prefix}-gross-price`}
@@ -433,10 +503,40 @@ export function InquiryFeedbackTable({
                                                         }
                                                     />
                                                 )}
+                                                {!unavailable &&
+                                                    onInternalQuote && (
+                                                        <InquiryQuoteHint
+                                                            quotes={
+                                                                quotesByLine.get(
+                                                                    line.line_id,
+                                                                ) ?? []
+                                                            }
+                                                            line={line}
+                                                            round={
+                                                                feedbackRound
+                                                            }
+                                                            price={
+                                                                price?.unit_price_gross
+                                                            }
+                                                            tax={
+                                                                price?.tax_rate
+                                                            }
+                                                            pending={
+                                                                quoteQuery.isPending ||
+                                                                offerings.isPending
+                                                            }
+                                                            failed={
+                                                                quoteQuery.isError ||
+                                                                offerings.isError
+                                                            }
+                                                        />
+                                                    )}
                                             </TableCell>
                                             <TableCell>
                                                 {unavailable ? (
-                                                    "—"
+                                                    <span className="flex h-control items-center">
+                                                        —
+                                                    </span>
                                                 ) : (
                                                     <InquiryTaxRateInput
                                                         id={`${prefix}-tax-rate`}
@@ -459,10 +559,13 @@ export function InquiryFeedbackTable({
                                             </TableCell>
                                             <TableCell>
                                                 {unavailable ? (
-                                                    "—"
+                                                    <span className="flex h-control items-center">
+                                                        —
+                                                    </span>
                                                 ) : (
                                                     <DatePicker
                                                         id={`${prefix}-valid-until`}
+                                                        size="default"
                                                         aria-label={`${line.product_name}报价有效至`}
                                                         value={
                                                             inquiryDateInput(
@@ -483,18 +586,11 @@ export function InquiryFeedbackTable({
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <div className="flex flex-wrap items-center justify-end gap-1">
-                                                    <InquiryFeedbackDemand
-                                                        line={line}
-                                                        unit={unit}
-                                                        idPrefix={prefix}
-                                                    />
+                                                <div className="flex h-control flex-nowrap items-center justify-end gap-1">
                                                     {onInternalQuote && (
-                                                        <Button
+                                                        <InquiryIconAction
                                                             id={`${prefix}-internal-quotes`}
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
+                                                            label="供应商报价 · 仅采购可见"
                                                             disabled={disabled}
                                                             onClick={() =>
                                                                 onInternalQuote(
@@ -502,12 +598,8 @@ export function InquiryFeedbackTable({
                                                                 )
                                                             }
                                                         >
-                                                            <ReceiptTextIcon
-                                                                data-icon="inline-start"
-                                                                aria-hidden="true"
-                                                            />
-                                                            供应商报价
-                                                        </Button>
+                                                            <ReceiptTextIcon aria-hidden="true" />
+                                                        </InquiryIconAction>
                                                     )}
                                                 </div>
                                             </TableCell>

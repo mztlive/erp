@@ -11,6 +11,7 @@ use super::SalesInquiryProcess;
 use super::dto::*;
 use super::fee_allocation::AllocateInquiryFeesCommand;
 use super::internal_quote::{SaveInquiryFeeBasisCommand, SaveInquiryQuoteCommand};
+use super::quote_import::ImportInquiryQuotesCommand;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -32,6 +33,7 @@ pub(super) enum InquiryCommand {
     Reassign(ReassignInquiryCommand),
     AllocateFees(AllocateInquiryFeesCommand),
     InternalQuote(Box<SaveInquiryQuoteCommand>),
+    ImportQuotes(Box<ImportInquiryQuotesCommand>),
     FeeBasis(SaveInquiryFeeBasisCommand),
 }
 
@@ -50,6 +52,7 @@ impl InquiryCommand {
             Self::Reassign(_) => "reassign",
             Self::AllocateFees(_) => "allocate_fees",
             Self::InternalQuote(_) => "internal_quote",
+            Self::ImportQuotes(_) => "import_quotes",
             Self::FeeBasis(_) => "fee_basis",
         }
     }
@@ -67,6 +70,7 @@ impl InquiryCommand {
             Self::Reassign(r) => &r.command_key,
             Self::AllocateFees(r) => &r.command_key,
             Self::InternalQuote(r) => &r.command_key,
+            Self::ImportQuotes(r) => &r.command_key,
             Self::FeeBasis(r) => &r.command_key,
         }
     }
@@ -77,6 +81,7 @@ impl InquiryCommand {
             Self::SaveFeedback(r) => Some((&r.task_id, r.task_version)),
             Self::Reassign(r) => Some((&r.task_id, r.task_version)),
             Self::InternalQuote(r) => Some((&r.task_id, r.task_version)),
+            Self::ImportQuotes(r) => Some((&r.task_id, r.task_version)),
             Self::FeeBasis(r) => Some((&r.task_id, r.task_version)),
             _ => None,
         }
@@ -85,7 +90,11 @@ impl InquiryCommand {
         if matches!(self, Self::Save(_) | Self::AllocateFees(_)) { "update" } else { self.action() }
     }
     fn procurement_action(&self) -> &'static str {
-        if matches!(self, Self::FeeBasis(_)) { "internal_quote" } else { self.action() }
+        if matches!(self, Self::FeeBasis(_) | Self::ImportQuotes(_)) {
+            "internal_quote"
+        } else {
+            self.action()
+        }
     }
 }
 

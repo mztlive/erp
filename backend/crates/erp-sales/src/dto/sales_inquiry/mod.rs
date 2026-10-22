@@ -1,11 +1,13 @@
 //! 销售及任务采购独立响应结构，敏感字段从序列化类型上隔离。
 mod procurement;
 mod progress;
+mod reinquiry;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 pub use procurement::*;
 pub use progress::*;
+pub use reinquiry::InquiryProcurementReinquiry;
 use serde::Serialize;
 
 use crate::entity::sales_inquiry::*;

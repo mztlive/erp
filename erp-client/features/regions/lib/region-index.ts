@@ -56,3 +56,19 @@ export function regionFullName(index: RegionIndex, code: string): string {
 export function isLeafRegion(index: RegionIndex, code: string): boolean {
     return index.byCode.has(code) && !index.children.has(code)
 }
+
+/** 配送城市去重身份；直辖市合并各区，省直辖县级地区分别统计，缺失地区返回 null。 */
+export function regionCityCode(
+    index: RegionIndex,
+    code: string,
+): string | null {
+    const path = regionPath(index, code)
+    const province = path[0]
+    if (!province) return null
+    if (["110000", "120000", "310000", "500000"].includes(province.code))
+        return province.code
+    const city = path[1]
+    if (!city) return isLeafRegion(index, code) ? province.code : null
+    if (PLACEHOLDER_CITY_NAMES.has(city.name)) return path[2]?.code ?? null
+    return city.code
+}

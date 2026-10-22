@@ -110,6 +110,7 @@ export async function fetchSupplierQuoteSource(
     return {
         inquiryId: inquiry.id,
         inquiryNo: inquiry.inquiry_no,
+        feedbackRound: inquiry.feedback_round + 1,
         version: inquiry.version,
         requirementVersion: inquiry.requirement_version,
         deadlineAt: inquiry.deadline_at,

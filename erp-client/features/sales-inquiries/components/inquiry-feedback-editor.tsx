@@ -7,6 +7,8 @@ import { useStore } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 import { InquiryFeeSummary } from "./inquiry-fee-summary"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
+import { quoteExclusion, type InternalQuote } from "../lib/internal-quotes"
+import { newFeedbackPrice } from "../lib/feedback-editing"
 import { feedbackIssues, feedbackRequestData } from "../lib/feedback-editing"
 import {
     feedbackFeeIssues,
@@ -56,6 +58,7 @@ export type InquiryPublishContext = {
 }
 export type InquiryFeedbackEditorHandle = {
     saveForPublish: () => Promise<InquiryPublishContext | null>
+    adoptQuote: (quote: InternalQuote) => boolean
 }
 function newFee(): InquiryFee {
     return {
@@ -453,6 +456,50 @@ function FeedbackEditorContent({
         !command.ready ||
         command.unresolved
     React.useImperativeHandle(ref, () => ({
+        adoptQuote(quote) {
+            if (disabled || publishSave.current) return false
+            const demand = inquiry.draft.lines.find(
+                (line) => line.line_id === quote.line_id,
+            )
+            if (
+                !demand ||
+                quote.requirement_version !== inquiry.requirement_version ||
+                quoteExclusion(quote, demand, inquiry.feedback_round + 1)
+            )
+                return false
+            const row = form.state.values.lines.find(
+                (line) => line.line_id === quote.line_id,
+            )
+            if (!row || row.conclusion === "unavailable") return false
+            const price = row.prices[0] ?? newFeedbackPrice()
+            const expiry = quote.terms.valid_to
+                ? Math.floor(
+                      new Date(
+                          `${quote.terms.valid_to}T00:00:00+08:00`,
+                      ).getTime() / 1000,
+                  ) - 1
+                : price.valid_until
+            form.setFieldValue(
+                "lines",
+                form.state.values.lines.map((line) =>
+                    line.line_id === quote.line_id
+                        ? {
+                              ...line,
+                              prices: [
+                                  {
+                                      ...price,
+                                      unit_price_gross:
+                                          quote.terms.unit_cost_gross,
+                                      tax_rate: quote.terms.input_tax_rate,
+                                      valid_until: expiry,
+                                  },
+                              ],
+                          }
+                        : line,
+                ),
+            )
+            return true
+        },
         async saveForPublish() {
             if (disabled || publishSave.current) return null
             const first = form.state.values.lines.find((line) => {
@@ -691,6 +738,9 @@ function FeedbackEditorContent({
                     mode="array"
                     children={(field) => (
                         <InquiryFeedbackTable
+                            inquiryId={inquiry.id}
+                            taskId={task.id}
+                            feedbackRound={inquiry.feedback_round + 1}
                             lines={field.state.value}
                             demand={inquiry.draft.lines}
                             onChange={field.handleChange}

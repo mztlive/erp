@@ -100,6 +100,13 @@ fn recovery_result(
 fn is_procurement_action(action: &str) -> bool {
     matches!(
         action,
-        "claim" | "supplement" | "save_feedback" | "publish" | "reassign" | "internal_quote" | "fee_basis"
+        "claim"
+            | "supplement"
+            | "save_feedback"
+            | "publish"
+            | "reassign"
+            | "internal_quote"
+            | "import_quotes"
+            | "fee_basis"
     )
 }

@@ -9,6 +9,7 @@ mod execution;
 pub mod expense_read;
 pub mod fee_allocation;
 pub mod internal_quote;
+pub mod quote_import;
 pub mod read;
 mod recovery;
 mod tasks;

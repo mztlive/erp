@@ -140,6 +140,9 @@ impl SalesInquiryProcess {
             InquiryCommand::InternalQuote(req) => {
                 self.append_internal_quote(actor, inquiry, task, req, executor).await?
             },
+            InquiryCommand::ImportQuotes(req) => {
+                self.append_imported_quotes(actor, inquiry, task, req, executor).await?
+            },
             InquiryCommand::FeeBasis(req) => {
                 self.append_fee_basis(actor, inquiry, task, req, executor).await?
             },
