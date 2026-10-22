@@ -17,24 +17,22 @@ export function InquiryRequirementSummary({
     showNote?: boolean
 }) {
     return (
-        <section className="space-y-4" aria-label="需求内容">
-            <h2 className="text-lg font-medium">需求内容</h2>
+        <section className="divide-y" aria-label="需求内容">
             {showNote && requirement.note && (
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                <p className="pb-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
                     {requirement.note}
                 </p>
             )}
             {requirement.lines.map((line) => (
-                <article
-                    key={line.line_id}
-                    className="space-y-3 rounded-lg border p-4"
-                >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
+                <article key={line.line_id} className="space-y-2 py-3 text-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 break-words">
                             <h3 className="font-medium">{line.product_name}</h3>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                SKU {line.sku_code} ·{" "}
-                                {line.specification || "未标注规格"}
+                                SKU {line.sku_code}
+                                {line.specification
+                                    ? ` · ${line.specification}`
+                                    : ""}
                             </p>
                         </div>
                         <QuantityValue
@@ -55,11 +53,11 @@ export function InquiryRequirementSummary({
                         </p>
                     )}
                     {line.allocations.length > 0 && (
-                        <div className="divide-y rounded-md bg-muted/40 px-3">
+                        <div className="space-y-2 border-l-2 border-muted pl-3">
                             {line.allocations.map((allocation) => (
                                 <div
                                     key={allocation.allocation_id}
-                                    className="flex flex-wrap justify-between gap-2 py-3 text-sm"
+                                    className="space-y-1 text-xs"
                                 >
                                     <div>
                                         <p>
@@ -110,69 +108,68 @@ export function InquiryHistory({
     const reinquiries = "reinquiries" in inquiry ? inquiry.reinquiries : []
     const events = "events" in inquiry ? inquiry.events : []
     return (
-        <section className="space-y-5" aria-label="询价操作记录">
+        <section className="space-y-6" aria-label="询价操作记录">
             {events.length === 0 && reinquiries.length === 0 && (
-                <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                    暂无处理记录。
-                </p>
+                <p className="text-sm text-muted-foreground">暂无处理记录。</p>
             )}
             {events.length > 0 && (
-                <details open className="rounded-lg border">
-                    <summary
-                        id={`${idPrefix}-event-history`}
-                        className="cursor-pointer p-4 text-sm font-medium"
-                    >
-                        处理记录
-                    </summary>
-                    <ol className="space-y-3 border-t p-4">
+                <section aria-label="处理记录">
+                    <h3 className="text-sm font-medium">处理记录</h3>
+                    <ol className="mt-2 divide-y">
                         {[...events]
                             .sort((left, right) => right.at - left.at)
                             .map((event, index) => (
                                 <li
                                     key={`${toAutomationIdSegment(event.kind)}-${event.at}-${index}`}
-                                    className="text-sm"
+                                    className="space-y-1 py-3 text-sm"
                                 >
                                     <p>
-                                        {EVENT_LABEL[event.kind] ?? "询价处理"}{" "}
-                                        · {inquiryDate(event.at)}
+                                        {EVENT_LABEL[event.kind] ?? "询价处理"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {inquiryDate(event.at)}
                                     </p>
                                     {event.reason && (
-                                        <p className="mt-1 text-muted-foreground">
+                                        <p className="whitespace-pre-wrap break-words text-muted-foreground">
                                             {event.reason}
                                         </p>
                                     )}
                                 </li>
                             ))}
                     </ol>
-                </details>
+                </section>
             )}
             {inquiry.requirements.length > 0 && (
-                <details className="rounded-lg border">
-                    <summary
-                        id={`${idPrefix}-requirement-history`}
-                        className="cursor-pointer p-4 text-sm font-medium"
-                    >
+                <section aria-label="需求版本">
+                    <h3 className="text-sm font-medium">
                         需求版本（{inquiry.requirements.length}）
-                    </summary>
-                    <div className="space-y-3 border-t p-4">
+                    </h3>
+                    <div className="mt-2 divide-y">
                         {[...inquiry.requirements]
                             .reverse()
                             .map((requirement) => (
                                 <details
                                     key={requirement.version}
-                                    className="rounded-md border"
+                                    className="group"
                                 >
                                     <summary
                                         id={`${idPrefix}-requirement-${requirement.version}`}
-                                        className="cursor-pointer p-3 text-sm"
+                                        className="cursor-pointer rounded-sm py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     >
-                                        第 {requirement.version} 版 ·{" "}
-                                        {inquiryDate(requirement.submitted_at)}
-                                        {requirement.change_reason
-                                            ? ` · ${requirement.change_reason}`
-                                            : ""}
+                                        第 {requirement.version} 版
+                                        <span className="ml-2 text-xs text-muted-foreground">
+                                            {inquiryDate(
+                                                requirement.submitted_at,
+                                            )}
+                                        </span>
                                     </summary>
-                                    <div className="border-t p-3">
+                                    <div className="pb-3">
+                                        {requirement.change_reason && (
+                                            <p className="mb-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                                                变更说明：
+                                                {requirement.change_reason}
+                                            </p>
+                                        )}
                                         <InquiryRequirementSummary
                                             requirement={requirement.data}
                                             procurement={
@@ -186,17 +183,17 @@ export function InquiryHistory({
                                 </details>
                             ))}
                     </div>
-                </details>
+                </section>
             )}
             {reinquiries.length > 0 && (
-                <div className="space-y-2">
-                    <h3 className="text-sm font-medium">重询记录</h3>
+                <div className="divide-y">
+                    <h3 className="pb-2 text-sm font-medium">重询记录</h3>
                     {[...reinquiries]
                         .sort((left, right) => right.at - left.at)
                         .map((item, index) => (
                             <div
                                 key={`${item.at}-${index}`}
-                                className="rounded-lg border p-3 text-sm"
+                                className="py-3 text-sm"
                             >
                                 <p>
                                     {inquiryDate(item.at)} · 第{" "}

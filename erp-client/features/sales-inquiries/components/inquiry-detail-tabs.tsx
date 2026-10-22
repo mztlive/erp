@@ -178,7 +178,7 @@ export function InquiryDetailTabs({
                 open={historyOpen}
                 onOpenChange={setHistoryOpen}
                 finalFocus={historyTrigger}
-                size="detail"
+                size="preview"
                 title="操作记录"
                 identity={`询价单号：${inquiry.inquiry_no}`}
                 description={inquiry.customer_name}
@@ -193,9 +193,7 @@ export function InquiryDetailTabs({
                     </Button>
                 }
             >
-                <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
-                    <InquiryHistory inquiry={inquiry} />
-                </div>
+                <InquiryHistory inquiry={inquiry} />
             </QuickPreviewSheet>
         </Tabs>
     )

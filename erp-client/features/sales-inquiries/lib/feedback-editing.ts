@@ -166,7 +166,7 @@ export function feedbackIssues(
                 compareDecimal(price.tax_rate ?? "", "0", 6) < 0 ||
                 compareDecimal(price.tax_rate ?? "", "1", 6) > 0
             )
-                add("税率须在 0 至 1 之间", `${field}-tax-rate`)
+                add("税率须在 0% 至 100% 之间", `${field}-tax-rate`)
         } catch {
             add("请填写有效税率", `${field}-tax-rate`)
         }

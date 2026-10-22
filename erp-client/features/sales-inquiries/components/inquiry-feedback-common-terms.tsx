@@ -1,7 +1,7 @@
 "use client"
 
 import { DatePicker } from "@/components/ui/date-picker"
-import { Input } from "@/components/ui/input"
+import { InquiryTaxRateInput } from "./inquiry-tax-rate-input"
 import { Label } from "@/components/ui/label"
 import {
     feedbackCommonTerms,
@@ -30,7 +30,7 @@ export function InquiryFeedbackCommonTerms({
             className="flex max-w-full flex-wrap items-center gap-x-4 gap-y-2"
         >
             <span id="procurement-feedback-common-hint" className="sr-only">
-                修改后应用到全部可供及待确认商品；个别差异在行内“调整”。
+                修改后应用到全部可供及待确认商品；个别差异可直接在商品行修改。
             </span>
             <div className="flex items-center gap-2">
                 <Label
@@ -40,26 +40,26 @@ export function InquiryFeedbackCommonTerms({
                 >
                     统一税率
                 </Label>
-                <Input
+                <InquiryTaxRateInput
                     id="procurement-feedback-common-tax"
                     className="h-8 w-28 text-sm"
                     disabled={inactive}
                     inputMode="decimal"
                     aria-describedby="procurement-feedback-common-tax-hint procurement-feedback-common-hint"
-                    title="填写小数，例如 0.13 表示 13%"
+                    title="填写百分数，例如 13 表示 13%"
                     value={common.tax_rate ?? ""}
                     placeholder={
-                        common.tax_rate === null ? "各商品不同" : "如 0.13"
+                        common.tax_rate === null ? "各商品不同" : "如 13"
                     }
-                    onChange={(event) =>
-                        onChange({ tax_rate: event.target.value || null })
+                    onValueChange={(rate) =>
+                        onChange({ tax_rate: rate || null })
                     }
                 />
                 <span
                     id="procurement-feedback-common-tax-hint"
                     className="sr-only"
                 >
-                    0.13 表示 13%
+                    输入 13 表示 13%，最多 4 位小数
                 </span>
             </div>
             <div className="flex items-center gap-2">

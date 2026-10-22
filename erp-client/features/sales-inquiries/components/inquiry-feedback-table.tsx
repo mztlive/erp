@@ -39,6 +39,7 @@ import {
 } from "../types"
 import { InquiryProductImage } from "./inquiry-product-image"
 import { InquiryFeedbackLineIssues } from "./inquiry-feedback-line-issues"
+import { InquiryTaxRateInput } from "./inquiry-tax-rate-input"
 import { InquiryFeedbackCommonTerms } from "./inquiry-feedback-common-terms"
 
 export function InquiryFeedbackTable({
@@ -437,21 +438,19 @@ export function InquiryFeedbackTable({
                                                 {unavailable ? (
                                                     "—"
                                                 ) : (
-                                                    <Input
+                                                    <InquiryTaxRateInput
                                                         id={`${prefix}-tax-rate`}
-                                                        aria-label={`${line.product_name}税率`}
-                                                        inputMode="decimal"
-                                                        placeholder="0.13"
-                                                        title="0.13 表示 13%"
+                                                        aria-label={`${line.product_name}税率（%）`}
+                                                        placeholder="如 13"
+                                                        title="输入 13 表示 13%，最多 4 位小数"
                                                         value={
                                                             price?.tax_rate ??
                                                             ""
                                                         }
-                                                        onChange={(event) =>
+                                                        onValueChange={(rate) =>
                                                             updatePrice({
                                                                 tax_rate:
-                                                                    event.target
-                                                                        .value ||
+                                                                    rate ||
                                                                     null,
                                                             })
                                                         }

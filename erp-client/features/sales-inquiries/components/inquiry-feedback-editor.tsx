@@ -2,8 +2,9 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { PlusIcon, ReceiptTextIcon, Trash2Icon } from "lucide-react"
+import { CheckIcon, PlusIcon, ReceiptTextIcon, Trash2Icon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
+import { InquiryFeeSummary } from "./inquiry-fee-summary"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import { feedbackIssues, feedbackRequestData } from "../lib/feedback-editing"
 import {
@@ -187,6 +188,7 @@ function FeedbackEditorContent({
     const [error, setError] = React.useState<string | null>(null)
     const [saved, setSaved] = React.useState(false)
     const [feesOpen, setFeesOpen] = React.useState(false)
+    const [editingFeeId, setEditingFeeId] = React.useState<string | null>(null)
     const feesTrigger = React.useRef<HTMLButtonElement>(null)
     const feeFocus = React.useRef<string | null>(null)
     const [feeValidationRequest, setFeeValidationRequest] = React.useState(0)
@@ -219,6 +221,7 @@ function FeedbackEditorContent({
                         isTouched: true,
                     }),
                 )
+            setEditingFeeId(value.fees[first.index].fee_id)
             const suffix = {
                 name: "name",
                 amount_gross: "gross",
@@ -268,6 +271,7 @@ function FeedbackEditorContent({
                 localStorage.removeItem(storageKey)
                 setSaved(true)
                 setFeesOpen(false)
+                setEditingFeeId(null)
                 onDirtyChange(false)
                 onSaved()
             } catch (failure) {
@@ -280,6 +284,42 @@ function FeedbackEditorContent({
             }
         },
     })
+    function editFee(fee: InquiryFee, field = "name") {
+        setEditingFeeId(fee.fee_id)
+        feeFocus.current = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-${field}`
+        setFeeValidationRequest((request) => request + 1)
+    }
+    function finishFee(index: number) {
+        const fee = form.state.values.fees[index]
+        const issues = feedbackFeeIssues([fee])
+        if (issues.length) {
+            for (const issue of issues) {
+                form.setFieldMeta(`fees[${index}].${issue.field}`, (meta) => ({
+                    ...meta,
+                    isTouched: true,
+                }))
+            }
+            void form.validate("change")
+            setError(issues[0].message)
+            editFee(
+                fee,
+                { name: "name", amount_gross: "gross", tax_rate: "tax" }[
+                    issues[0].field
+                ],
+            )
+            return
+        }
+        setError(null)
+        setEditingFeeId(null)
+        feeFocus.current = null
+        requestAnimationFrame(() =>
+            document
+                .getElementById(
+                    `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-edit`,
+                )
+                ?.focus(),
+        )
+    }
     React.useEffect(() => {
         if (!feesOpen || !feeFocus.current) return
         const frame = requestAnimationFrame(() => {
@@ -590,7 +630,11 @@ function FeedbackEditorContent({
                                     disabled={
                                         command.isPending || !command.ready
                                     }
-                                    onClick={() => setFeesOpen(true)}
+                                    onClick={() => {
+                                        setEditingFeeId(null)
+                                        feeFocus.current = null
+                                        setFeesOpen(true)
+                                    }}
                                 >
                                     <ReceiptTextIcon aria-hidden="true" />
                                     额外成本（{values.fees.length}）
@@ -641,7 +685,7 @@ function FeedbackEditorContent({
                             >
                                 <div className="flex items-center justify-between">
                                     <p className="text-sm text-muted-foreground">
-                                        已登记 {values.fees.length} 项费用
+                                        共 {values.fees.length} 项费用
                                     </p>
                                     <Button
                                         id="procurement-inquiry-add-fee"
@@ -651,10 +695,7 @@ function FeedbackEditorContent({
                                         onClick={() => {
                                             const fee = newFee()
                                             form.pushFieldValue("fees", fee)
-                                            feeFocus.current = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-name`
-                                            setFeeValidationRequest(
-                                                (request) => request + 1,
-                                            )
+                                            editFee(fee)
                                         }}
                                     >
                                         <PlusIcon aria-hidden="true" />
@@ -674,6 +715,30 @@ function FeedbackEditorContent({
                                             {feesField.state.value.map(
                                                 (fee, index) => {
                                                     const prefix = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}`
+                                                    if (
+                                                        editingFeeId !==
+                                                        fee.fee_id
+                                                    )
+                                                        return (
+                                                            <InquiryFeeSummary
+                                                                key={fee.fee_id}
+                                                                fee={fee}
+                                                                idPrefix={
+                                                                    prefix
+                                                                }
+                                                                disabled={
+                                                                    disabled
+                                                                }
+                                                                onEdit={() =>
+                                                                    editFee(fee)
+                                                                }
+                                                                onRemove={() =>
+                                                                    feesField.removeValue(
+                                                                        index,
+                                                                    )
+                                                                }
+                                                            />
+                                                        )
                                                     return (
                                                         <div
                                                             key={fee.fee_id}
@@ -757,6 +822,25 @@ function FeedbackEditorContent({
                                                                     />
                                                                 )}
                                                             />
+                                                            <div className="flex justify-end">
+                                                                <Button
+                                                                    id={`${prefix}-done`}
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() =>
+                                                                        finishFee(
+                                                                            index,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <CheckIcon
+                                                                        data-icon="inline-start"
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                    完成编辑
+                                                                </Button>
+                                                            </div>
                                                         </div>
                                                     )
                                                 },
