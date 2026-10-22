@@ -62,7 +62,6 @@ export function useWorkspaceHome() {
         setSearchDraft(urlState.query ?? "")
     }, [urlState.query])
     const [autoNext, setAutoNext] = React.useState(false)
-    const enteredFrom = React.useRef<string | null>(null)
     const [completionAnnouncement, setCompletionAnnouncement] = React.useState({
         sequence: 0,
         text: "",
@@ -118,9 +117,8 @@ export function useWorkspaceHome() {
     const returnState = { ...urlState, currentWorkItemId: undefined }
     const returnHref = `${pathname}${buildWorkspaceSearchParams(returnState)}`
     const backFromDetail = React.useCallback(() => {
-        if (enteredFrom.current === returnHref) router.back()
-        else router.replace(returnHref, { scroll: false })
-        enteredFrom.current = null
+        // 返回当前页签的队列；全局历史后退可能切换到其他工作页签。
+        router.replace(returnHref, { scroll: false })
     }, [returnHref, router])
 
     const onSelectTask = React.useCallback(
@@ -128,10 +126,7 @@ export function useWorkspaceHome() {
             const href = `${pathname}${buildWorkspaceSearchParams({ ...urlState, currentWorkItemId: item.workItemId })}`
             if (urlState.currentWorkItemId)
                 router.replace(href, { scroll: false })
-            else {
-                enteredFrom.current = `${pathname}${buildWorkspaceSearchParams(urlState)}`
-                router.push(href, { scroll: false })
-            }
+            else router.push(href, { scroll: false })
         },
         [pathname, router, urlState],
     )

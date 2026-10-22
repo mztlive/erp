@@ -1,5 +1,6 @@
 "use client"
 
+import { captureNavDeliveryOrigin } from "@/lib/nav-delivery"
 import { runDataTransfer, downloadTransfer } from "@/lib/data-transfer"
 
 import { useMutation, useQuery } from "@tanstack/react-query"
@@ -42,6 +43,7 @@ export function useDownloadSupplierQuotes(request: SupplierQuoteRequest) {
             lineIds: string[]
             supplierIds: string[]
         }) => {
+            const origin = captureNavDeliveryOrigin()
             const fresh = await fetchSupplierQuoteSource(request)
             if (JSON.stringify(fresh) !== JSON.stringify(source))
                 throw new Error(
@@ -63,14 +65,20 @@ export function useDownloadSupplierQuotes(request: SupplierQuoteRequest) {
                 throw new Error(
                     "一次最多生成 200 家供应商的报价表，请减少所选供应商",
                 )
-            const result = await runDataTransfer("supplier_quote_archive", {
-                inquiry_id: request.inquiryId,
-                task_id: request.taskId,
-                expected_version: request.version,
-                task_version: request.taskVersion,
-                line_ids: lineIds,
-                supplier_ids: supplierIds,
-            })
+            const result = await runDataTransfer(
+                "supplier_quote_archive",
+                {
+                    inquiry_id: request.inquiryId,
+                    task_id: request.taskId,
+                    expected_version: request.version,
+                    task_version: request.taskVersion,
+                    line_ids: lineIds,
+                    supplier_ids: supplierIds,
+                },
+                undefined,
+                false,
+                origin,
+            )
             downloadTransfer(result)
             return groups.length
         },

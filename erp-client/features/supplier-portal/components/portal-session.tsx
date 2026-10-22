@@ -9,6 +9,7 @@ import {
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
+import { NavDeliveryOverlay } from "@/components/layout/nav-delivery-overlay"
 import { Button } from "@/components/ui/button"
 import { clearToken, isAuthenticated, onUnauthorized } from "@/lib/api/session"
 import { portalKeys, usePortalSession } from "../hooks/queries"
@@ -115,6 +116,11 @@ export function PortalSession({ children }: { children: ReactNode }) {
                         {navigation.map(([path, label]) => (
                             <Link
                                 id={`supplier-portal-nav-${path}`}
+                                data-workspace-nav={
+                                    path === "tasks"
+                                        ? "supplier-portal-tasks"
+                                        : undefined
+                                }
                                 key={path}
                                 href={`/supplier-portal/${path}`}
                                 className={`rounded-md px-3 py-2 text-sm ${pathname.startsWith(`/supplier-portal/${path}`) ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
@@ -130,6 +136,7 @@ export function PortalSession({ children }: { children: ReactNode }) {
                     </p>
                 )}
                 <main>{children}</main>
+                <NavDeliveryOverlay />
             </div>
         </PortalContext.Provider>
     )

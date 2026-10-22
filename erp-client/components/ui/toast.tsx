@@ -4,6 +4,7 @@ import * as React from "react"
 import { Toast as ToastPrimitive } from "@base-ui/react/toast"
 
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
 import {
     XIcon,
@@ -69,7 +70,7 @@ function ToastContent({ className, ...props }: ToastPrimitive.Content.Props) {
         <ToastPrimitive.Content
             data-slot="toast-content"
             className={cn(
-                "flex h-full items-center gap-3 overflow-hidden p-4 transition-opacity duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-behind:opacity-0 data-expanded:opacity-100",
+                "flex h-full items-start gap-3 overflow-hidden p-4 transition-opacity duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-behind:opacity-0 data-expanded:opacity-100",
                 className,
             )}
             {...props}
@@ -81,7 +82,10 @@ function ToastTitle({ className, ...props }: ToastPrimitive.Title.Props) {
     return (
         <ToastPrimitive.Title
             data-slot="toast-title"
-            className={cn("text-sm font-medium", className)}
+            className={cn(
+                "text-sm leading-5 font-medium wrap-anywhere",
+                className,
+            )}
             {...props}
         />
     )
@@ -94,7 +98,10 @@ function ToastDescription({
     return (
         <ToastPrimitive.Description
             data-slot="toast-description"
-            className={cn("text-sm text-muted-foreground", className)}
+            className={cn(
+                "text-sm leading-5 wrap-anywhere text-muted-foreground",
+                className,
+            )}
             {...props}
         />
     )
@@ -167,7 +174,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
     return (
         <span
             data-slot="toast-icon"
-            className="shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
+            className="mt-0.5 shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
         >
             {icon}
         </span>
@@ -184,9 +191,15 @@ function ToastList() {
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <ToastTitle />
                     <ToastDescription />
+                    <ToastAction
+                        id={`toast-${toAutomationIdSegment(toastItem.id)}-action`}
+                        className="mt-2 max-w-full self-start whitespace-normal"
+                    />
                 </div>
-                <ToastAction />
-                <ToastClose />
+                <ToastClose
+                    id={`toast-${toAutomationIdSegment(toastItem.id)}-close`}
+                    className="-mt-1 -mr-1"
+                />
             </ToastContent>
         </Toast>
     ))

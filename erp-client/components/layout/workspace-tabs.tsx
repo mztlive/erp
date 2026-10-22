@@ -29,11 +29,9 @@ export type WorkspaceTab = WorkspaceFrameState & {
     key: string
     src: string
     ready: boolean
-    instance: number
+    instance: string
     openerId?: string
 }
-
-let nextInstance = 0
 
 function newTab(url: URL): WorkspaceTab {
     const key = workspaceTabKey(url)
@@ -50,7 +48,8 @@ function newTab(url: URL): WorkspaceTab {
         dirty: false,
         busy: false,
         ready: false,
-        instance: nextInstance++,
+        // Fast Refresh retains tabs but resets module-level counters.
+        instance: crypto.randomUUID(),
     }
 }
 
@@ -153,11 +152,14 @@ export function WorkspaceTabs({
             navigate,
             deliver: (source, request) => {
                 const tab = sourceTab(source)
-                if (!tab || tab.id !== snapshot.current.active) return
+                if (!tab) return
+                const active = tab.id === snapshot.current.active
+                if (!active && !request.task) return
                 const rect = frames.current.get(tab.id)?.getBoundingClientRect()
                 if (rect)
                     dispatchNavDelivery({
                         ...request,
+                        animate: active && request.animate !== false,
                         origin: {
                             x: rect.left + request.origin.x,
                             y: rect.top + request.origin.y,

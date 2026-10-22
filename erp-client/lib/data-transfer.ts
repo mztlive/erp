@@ -2,6 +2,11 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query"
 import { apiGet, apiPost } from "@/lib/api"
 import { getToken } from "@/lib/api/session"
 import { toast } from "@/components/ui/toast"
+import {
+    captureNavDeliveryOrigin,
+    dispatchNavDelivery,
+    type NavDeliveryPoint,
+} from "@/lib/nav-delivery"
 
 export type TransferKind =
     | "product_pool_excel"
@@ -54,6 +59,7 @@ export async function runDataTransfer(
     input: unknown,
     requestId: string | undefined = undefined,
     portal = false,
+    origin: NavDeliveryPoint = captureNavDeliveryOrigin(),
 ) {
     const identity = await transferIdentity(kind, input, portal, requestId)
     const job = await apiPost<TransferJob>(
@@ -61,16 +67,24 @@ export async function runDataTransfer(
         { kind, input, request_id: identity.id },
         { ...options(portal), timeoutMs: 120_000 },
     )
-    toast.add({
-        title: "已提交后台处理",
-        description: `任务 ${job.job_no}，关闭当前页面后仍会继续处理，可在“我的文件任务”中查看。`,
-        type: "info",
+    const delivered = dispatchNavDelivery({
+        kind: portal ? "portal-task" : "file-task",
+        origin,
+        task: { id: job.id, jobNo: job.job_no },
     })
+    if (!delivered) {
+        toast.add({
+            title: "已提交后台处理",
+            description: `任务 ${job.job_no}，可离开当前页面，稍后到“我的文件任务”查看结果。`,
+            type: "info",
+        })
+    }
     const completed = await waitForTransfer(job, portal)
     identity.clear()
     if (!completed.result_file_asset_id)
         throw new Error(
-            completed.error_summary || "后台任务未生成结果，请查看我的文件任务",
+            completed.error_summary ||
+                "后台任务未生成结果，请到任务入口查看详情",
         )
     const file = await readTransferResult(job.id, portal)
     return { ...file, jobId: job.id }
@@ -94,7 +108,7 @@ function waitForTransfer(
     })
     return new Promise((resolve, reject) => {
         const timer = setTimeout(
-            () => finish(new Error("任务仍在后台处理，请到后台任务页查看结果")),
+            () => finish(new Error("任务仍在后台处理，请到任务入口查看结果")),
             30 * 60 * 1000,
         )
         let unsubscribe = () => {}

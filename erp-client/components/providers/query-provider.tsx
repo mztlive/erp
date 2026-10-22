@@ -7,6 +7,7 @@ import { toast } from "@/components/ui/toast"
 import { fieldErrorMessages } from "@/lib/api/field-errors"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { subscribeScopeCache } from "@/features/data-scope/cache"
+import { trackNavDeliveryOrigin } from "@/lib/nav-delivery"
 import { makeQueryClient } from "@/lib/query-client"
 
 /** 将 Mutation 接口失败统一展示为短时提示。 */
@@ -36,6 +37,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(() => makeQueryClient(notifyMutationError))
 
     useEffect(() => subscribeScopeCache(queryClient), [queryClient])
+    useEffect(trackNavDeliveryOrigin, [])
 
     return (
         <QueryClientProvider client={queryClient}>

@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { useQueryClient } from "@tanstack/react-query"
-import { ChevronsUpDownIcon, LogOutIcon } from "lucide-react"
+import { ChevronsUpDownIcon, ListChecksIcon, LogOutIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -86,12 +86,30 @@ export function WorkspaceSidebarAccount() {
     const queryClient = useQueryClient()
     const profileQuery = useAccountProfileQuery()
 
+    const canViewBackgroundJobs = hasPermission(
+        profileQuery.data?.permissions,
+        "background_job:list",
+    )
+
     const displayName =
         profileQuery.data?.name || profileQuery.data?.account || "已登录"
     const accountLabel = profileQuery.data?.account || "后台账号"
 
     return (
         <SidebarMenu>
+            {!profileQuery.isPending && !canViewBackgroundJobs && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton
+                        id="workspace-sidebar-file-tasks"
+                        data-workspace-nav="account-data-transfers"
+                        render={<Link href="/account/data-transfers" />}
+                        tooltip="我的文件任务"
+                    >
+                        <ListChecksIcon aria-hidden="true" />
+                        <span>我的文件任务</span>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            )}
             <SidebarMenuItem>
                 <DropdownMenu>
                     <DropdownMenuTrigger
