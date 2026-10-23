@@ -2,18 +2,25 @@
 
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 
-import { KeyRoundIcon } from "lucide-react"
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Field, FieldLabel } from "@/components/ui/field"
 import type { RoleOption } from "../../hooks/use-role-filter"
+import { RoleOptionsPanel } from "./role-options-panel"
 import { Button } from "@/components/ui/button"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { BusinessDiffPanel } from "@/components/business"
+import { BusinessDiffPanel, BusinessFailureState } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useAdminMutations } from "../../hooks/queries"
 import {
     usePreviewOrganizationChangeMutation,
@@ -47,20 +54,22 @@ export function AccountProfileEditor({
     snapshot,
     currentVersion,
     canName,
-    onPasswordChange,
     assignableRoles,
     roleLabels,
     rolesReady,
+    roleOptionsError,
+    onRetryRoleOptions,
     canOrganization,
     onDone,
 }: {
     snapshot: AccountProfileSnapshot
     currentVersion: number | undefined
-    onPasswordChange: () => void
     canName: boolean
     assignableRoles: readonly RoleOption[]
     roleLabels: readonly RoleOption[]
     rolesReady: boolean
+    roleOptionsError?: unknown
+    onRetryRoleOptions?: () => void
     canOrganization: boolean
     onDone: (saved: boolean) => void
 }) {
@@ -187,6 +196,23 @@ export function AccountProfileEditor({
         values.unitId !== (person?.own_org_unit_id ?? "")
     const confirmed =
         receipt && view && previewed === JSON.stringify(build(values))
+    const confirmRef = React.useRef<HTMLDivElement>(null)
+    React.useEffect(() => {
+        if (!confirmed) return
+        confirmRef.current?.scrollIntoView({
+            block: "nearest",
+            behavior: "smooth",
+        })
+    }, [confirmed])
+    const close = () => {
+        if (pending) return
+        if (
+            !changed ||
+            completed ||
+            window.confirm("确定放弃未保存的账号资料？")
+        )
+            onDone(false)
+    }
     React.useEffect(() => {
         if (!changed || completed) return
         const unload = (event: BeforeUnloadEvent) => {
@@ -225,255 +251,285 @@ export function AccountProfileEditor({
         (directory.data?.units ?? view?.units)
             ?.filter((unit) => unit.enabled)
             .map((unit) => ({ value: unit.id, label: unit.name })) ?? []
+    const roleOptions = React.useMemo(
+        () => [
+            ...assignableRoles,
+            ...account.role_ids
+                .filter((id) => !assignableRoles.some((role) => role.id === id))
+                .map((id) => {
+                    const label = roleLabels.find((role) => role.id === id)
+                    return {
+                        id,
+                        name: label?.name ?? "角色信息待确认",
+                        permissions: label?.permissions,
+                    }
+                }),
+        ],
+        [account.role_ids, assignableRoles, roleLabels],
+    )
     return (
-        <form
-            className="space-y-4 text-sm"
-            onSubmit={(event) => {
-                event.preventDefault()
-                void form.handleSubmit()
+        <Dialog
+            open
+            onOpenChange={(open) => {
+                if (!open) close()
             }}
         >
-            <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold">账号资料 · 编辑中</h2>
-                <span className="text-xs text-muted-foreground">
-                    修改在统一保存后生效
-                </span>
-            </div>
-            <fieldset disabled={pending} className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    <form.AppField name="name">
-                        {(field) => (
-                            <field.TextField
-                                id="account-profile-name"
-                                label="姓名"
-                                disabled={!canName}
-                                required
-                            />
-                        )}
-                    </form.AppField>
-                    <div>
-                        <p className="mb-2 text-xs text-muted-foreground">
-                            登录账号
-                        </p>
-                        <p className="py-2">
-                            {account.account}{" "}
-                            <span className="ml-2 text-xs text-muted-foreground">
-                                不可修改
+            <DialogContent
+                closeButtonId="account-profile-close"
+                className="flex max-h-[90dvh] flex-col gap-5 overflow-hidden sm:max-w-3xl"
+            >
+                <DialogHeader className="shrink-0 pr-8">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <DialogTitle>编辑账号资料</DialogTitle>
+                        {changed && !completed ? (
+                            <span className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-soft-foreground">
+                                有未保存的修改
                             </span>
-                        </p>
+                        ) : null}
                     </div>
-                    <form.AppField name="unitId">
-                        {(field) => (
-                            <field.SelectField
-                                id="account-profile-department"
-                                label="所属部门"
-                                options={unitOptions}
-                                onRefresh={() =>
-                                    directory.refetch({ throwOnError: true })
-                                }
-                                disabled={!canOrganization}
-                                allowClear={false}
-                                placeholder={
-                                    person?.own_org_unit_id
-                                        ? unitLabel(
-                                              view?.units ?? [],
-                                              person.own_org_unit_id,
-                                          )
-                                        : "未分配部门"
-                                }
-                            />
-                        )}
-                    </form.AppField>
-                    {canName && (
-                        <div>
-                            <p className="mb-2 text-xs text-muted-foreground">
-                                登录密码
-                            </p>
-                            <Button
-                                id="account-profile-password"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={onPasswordChange}
-                            >
-                                <KeyRoundIcon data-icon="inline-start" />
-                                修改密码
-                            </Button>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                密码单独保存。
-                            </p>
+                    <DialogDescription>
+                        姓名、所属部门和角色统一保存后生效；修改密码请在“账号安全”中单独操作。
+                    </DialogDescription>
+                </DialogHeader>
+                <form
+                    className="flex min-h-0 flex-col gap-4"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
+                    <fieldset
+                        disabled={pending}
+                        className="min-h-0 space-y-5 overflow-y-auto pr-1"
+                    >
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <form.AppField name="name">
+                                {(field) => (
+                                    <field.TextField
+                                        id="account-profile-name"
+                                        label="姓名"
+                                        disabled={!canName}
+                                        required
+                                    />
+                                )}
+                            </form.AppField>
+                            <Field>
+                                <FieldLabel>登录账号</FieldLabel>
+                                <div className="flex h-control items-center gap-2 rounded-lg border border-input bg-muted/35 px-3 text-sm">
+                                    <span className="min-w-0 truncate text-muted-foreground">
+                                        {account.account}
+                                    </span>
+                                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                                        不可修改
+                                    </span>
+                                </div>
+                            </Field>
+                            <form.AppField name="unitId">
+                                {(field) => (
+                                    <field.SelectField
+                                        id="account-profile-department"
+                                        label="所属部门"
+                                        className="sm:col-span-2"
+                                        options={unitOptions}
+                                        onRefresh={() =>
+                                            directory.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
+                                        disabled={!canOrganization}
+                                        allowClear={false}
+                                        placeholder={
+                                            person?.own_org_unit_id
+                                                ? unitLabel(
+                                                      view?.units ?? [],
+                                                      person.own_org_unit_id,
+                                                  )
+                                                : "未分配部门"
+                                        }
+                                    />
+                                )}
+                            </form.AppField>
                         </div>
-                    )}
-                    <form.AppField name="roleIds" mode="array">
-                        {(field) => (
-                            <section className="space-y-2 sm:col-span-2 xl:col-span-3">
-                                <h3 className="text-xs text-muted-foreground">
+                        <div className="space-y-3 border-t border-border/70 pt-4">
+                            <div className="space-y-1">
+                                <h3
+                                    id="account-profile-roles-label"
+                                    className="text-xs font-medium text-muted-foreground"
+                                >
                                     角色
                                 </h3>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-xs leading-5 text-muted-foreground">
                                     角色决定可以执行哪些操作；可处理哪些数据在“数据范围”中设置。
                                 </p>
-                                {!rolesReady && canName && (
-                                    <p
-                                        role="status"
-                                        className="text-muted-foreground"
-                                    >
-                                        角色选项尚未就绪，暂不能调整角色。
-                                    </p>
-                                )}
-                                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                    {[
-                                        ...assignableRoles,
-                                        ...account.role_ids
-                                            .filter(
-                                                (id) =>
-                                                    !assignableRoles.some(
-                                                        (role) =>
-                                                            role.id === id,
-                                                    ),
-                                            )
-                                            .map((id) => ({
-                                                id,
-                                                name:
-                                                    roleLabels.find(
-                                                        (role) =>
-                                                            role.id === id,
-                                                    )?.name ?? "角色信息待确认",
-                                            })),
-                                    ].map((role) => (
-                                        <label
-                                            key={role.id}
-                                            id={`account-profile-role-label-${toAutomationIdSegment(role.id)}`}
-                                            htmlFor={`account-profile-role-option-${toAutomationIdSegment(role.id)}`}
-                                            className="flex items-center gap-2 rounded-md border px-3 py-2"
-                                        >
-                                            <Checkbox
-                                                id={`account-profile-role-option-${toAutomationIdSegment(role.id)}`}
+                            </div>
+                            <form.AppField name="roleIds" mode="array">
+                                {(field) => (
+                                    <div className="grid gap-3 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
+                                        <div className="space-y-2">
+                                            <RoleOptionsPanel
+                                                id="account-profile-roles"
+                                                options={roleOptions}
+                                                selected={field.state.value}
                                                 disabled={
                                                     !canName || !rolesReady
                                                 }
-                                                checked={field.state.value.includes(
-                                                    role.id,
-                                                )}
-                                                onCheckedChange={(checked) =>
+                                                invalid={
+                                                    field.state.meta
+                                                        .isTouched &&
+                                                    !field.state.value.length
+                                                }
+                                                onToggle={(roleId, checked) => {
                                                     field.handleChange(
                                                         checked
                                                             ? [
                                                                   ...field.state
                                                                       .value,
-                                                                  role.id,
+                                                                  roleId,
                                                               ]
                                                             : field.state.value.filter(
                                                                   (id) =>
                                                                       id !==
-                                                                      role.id,
+                                                                      roleId,
                                                               ),
                                                     )
-                                                }
+                                                    field.handleBlur()
+                                                }}
                                             />
-                                            <span>{role.name}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                                {!field.state.value.length && (
-                                    <p
-                                        role="alert"
-                                        className="text-destructive"
-                                    >
-                                        至少选择一个角色。
+                                            {roleOptionsError !== undefined ? (
+                                                <BusinessFailureState
+                                                    id="account-profile-role-options-retry"
+                                                    error={roleOptionsError}
+                                                    onRetry={onRetryRoleOptions}
+                                                />
+                                            ) : !rolesReady && canName ? (
+                                                <p
+                                                    role="status"
+                                                    className="text-xs text-muted-foreground"
+                                                >
+                                                    角色选项尚未就绪，暂不能调整角色。
+                                                </p>
+                                            ) : null}
+                                            {!field.state.value.length ? (
+                                                <p
+                                                    role="alert"
+                                                    className="text-xs text-destructive"
+                                                >
+                                                    至少选择一个角色。
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                        
+                                    </div>
+                                )}
+                            </form.AppField>
+                        </div>
+                        {canOrganization ? (
+                            <div className="border-t border-border/70 pt-4">
+                                <form.AppField name="reason">
+                                    {(field) => (
+                                        <field.TextareaField
+                                            id="account-profile-reason"
+                                            label="变更原因"
+                                            description="组织类变更需要记录原因，保存前会展示影响预览。"
+                                            required
+                                            rows={2}
+                                        />
+                                    )}
+                                </form.AppField>
+                            </div>
+                        ) : null}
+                        {confirmed ? (
+                            <div
+                                ref={confirmRef}
+                                className="space-y-2 rounded-xl border border-border/70 bg-muted/30 p-4"
+                            >
+                                <p className="font-medium">请确认本次修改</p>
+                                {!sameRoles(
+                                    values.roleIds,
+                                    account.role_ids,
+                                ) && (
+                                    <p>
+                                        角色：
+                                        {account.role_ids
+                                            .map(
+                                                (id) =>
+                                                    roleLabels.find(
+                                                        (role) =>
+                                                            role.id === id,
+                                                    )?.name ?? "角色信息待确认",
+                                            )
+                                            .join("、") || "未分配"}{" "}
+                                        →{" "}
+                                        {values.roleIds
+                                            .map(
+                                                (id) =>
+                                                    [
+                                                        ...assignableRoles,
+                                                        ...roleLabels,
+                                                    ].find(
+                                                        (role) =>
+                                                            role.id === id,
+                                                    )?.name ?? "角色信息待确认",
+                                            )
+                                            .join("、")}
                                     </p>
                                 )}
-                            </section>
-                        )}
-                    </form.AppField>
-                </div>
-                {canOrganization && (
-                    <form.AppField name="reason">
-                        {(field) => (
-                            <field.TextareaField
-                                id="account-profile-reason"
-                                label="变更原因"
-                                required
-                                rows={2}
-                            />
-                        )}
-                    </form.AppField>
-                )}
-            </fieldset>
-            {confirmed && (
-                <div className="space-y-2 rounded-md border p-3">
-                    <p className="font-medium">请确认本次修改</p>
-                    {!sameRoles(values.roleIds, account.role_ids) && (
-                        <p>
-                            角色：
-                            {account.role_ids
-                                .map(
-                                    (id) =>
-                                        roleLabels.find(
-                                            (role) => role.id === id,
-                                        )?.name ?? "角色信息待确认",
-                                )
-                                .join("、") || "未分配"}{" "}
-                            →{" "}
-                            {values.roleIds
-                                .map(
-                                    (id) =>
-                                        [
-                                            ...assignableRoles,
-                                            ...roleLabels,
-                                        ].find((role) => role.id === id)
-                                            ?.name ?? "角色信息待确认",
-                                )
-                                .join("、")}
-                        </p>
-                    )}
-                    {values.name.trim() !== account.name && (
-                        <p>
-                            姓名：{account.name} → {values.name.trim()}
-                        </p>
-                    )}
-                    {view &&
-                        values.unitId !== (person?.own_org_unit_id ?? "") && (
-                            <BusinessDiffPanel
-                                title="所属部门变更"
-                                changes={impactChanges(receipt, view)}
-                            />
-                        )}
-                    <p className="text-xs text-muted-foreground">
-                        所属部门变更会影响“本人所属部门”范围；不会改派单据。姓名、角色与所属部门将一起保存。
-                    </p>
-                </div>
-            )}
-            {error && (
-                <p role="alert" className="text-sm text-destructive">
-                    {error}
-                </p>
-            )}
-            <div className="flex justify-end gap-2 border-t pt-3">
-                <Button
-                    id="account-profile-cancel"
-                    type="button"
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() => {
-                        if (
-                            !changed ||
-                            window.confirm("确定放弃未保存的账号资料？")
-                        )
-                            onDone(false)
-                    }}
-                >
-                    取消
-                </Button>
-                <LoadingButton
-                    loading={pending}
-                    id="account-profile-save"
-                    type="submit"
-                    disabled={!changed || pending}
-                >
-                    {pending ? "处理中…" : confirmed ? "确认保存" : "保存"}
-                </LoadingButton>
-            </div>
-        </form>
+                                {values.name.trim() !== account.name && (
+                                    <p>
+                                        姓名：{account.name} →{" "}
+                                        {values.name.trim()}
+                                    </p>
+                                )}
+                                {view &&
+                                    values.unitId !==
+                                        (person?.own_org_unit_id ?? "") && (
+                                        <BusinessDiffPanel
+                                            title="所属部门变更"
+                                            changes={impactChanges(
+                                                receipt,
+                                                view,
+                                            )}
+                                        />
+                                    )}
+                                <p className="text-xs text-muted-foreground">
+                                    所属部门变更会影响“本人所属部门”范围；不会改派单据。姓名、角色与所属部门将一起保存。
+                                </p>
+                            </div>
+                        ) : null}
+                        {error ? (
+                            <p
+                                role="alert"
+                                className="text-sm text-destructive"
+                            >
+                                {error}
+                            </p>
+                        ) : null}
+                    </fieldset>
+                    <DialogFooter className="shrink-0 border-t border-border pt-4">
+                        <Button
+                            id="account-profile-cancel"
+                            type="button"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={close}
+                        >
+                            取消
+                        </Button>
+                        <LoadingButton
+                            loading={pending}
+                            id="account-profile-save"
+                            type="submit"
+                            disabled={!changed || pending}
+                        >
+                            {pending
+                                ? "处理中…"
+                                : confirmed
+                                  ? "确认保存"
+                                  : "保存"}
+                        </LoadingButton>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     )
 }

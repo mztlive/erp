@@ -5,14 +5,13 @@ import {
     BanIcon,
     CircleCheckIcon,
     EllipsisIcon,
-    KeyRoundIcon,
-    PencilIcon,
     Trash2Icon,
 } from "lucide-react"
 import {
     AccountProfileEditor,
     type AccountProfileSnapshot,
 } from "../components/accounts/account-profile-editor"
+import { AccountProfileOverview } from "../components/accounts/account-profile-overview"
 import Link from "next/link"
 import { useRouter } from "@/lib/navigation"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -24,7 +23,7 @@ import {
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
-import { formatDateTime } from "@/lib/datetime"
+import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -34,7 +33,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     useAdminsQuery,
     useRolesQuery,
@@ -227,9 +225,10 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 }
             />
             {notice && (
-                <p role="status" className="rounded-md bg-muted p-3 text-sm">
-                    {notice}
-                </p>
+                <Alert variant="success">
+                    <CircleCheckIcon aria-hidden="true" />
+                    <AlertTitle>{notice}</AlertTitle>
+                </Alert>
             )}
             <div className={surfacePanelClassName}>
                 <Tabs
@@ -267,195 +266,37 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                         keepMounted
                         className="space-y-4 p-4 data-[hidden]:hidden"
                     >
-                        {profileSnapshot ? (
-                            <>
-                                <AccountProfileEditor
-                                    key={accountId}
-                                    snapshot={profileSnapshot}
-                                    currentVersion={
-                                        org.data?.organizationVersion
-                                    }
-                                    canName={can("admin:update")}
-                                    onPasswordChange={() =>
-                                        setEditing("password")
-                                    }
-                                    assignableRoles={options.data ?? []}
-                                    roleLabels={roles.data ?? []}
-                                    rolesReady={options.isSuccess}
-                                    canOrganization={
-                                        can("org_unit:manage") &&
-                                        Boolean(
-                                            profileSnapshot.view?.people.some(
-                                                (person) =>
-                                                    person.id === accountId,
-                                            ),
-                                        )
-                                    }
-                                    onDone={(saved) => {
-                                        setProfileSnapshot(null)
-                                        if (saved)
-                                            setNotice("账号资料已统一保存。")
-                                    }}
-                                />
-                                {options.isError && (
-                                    <BusinessFailureState
-                                        id="account-profile-role-options-retry"
-                                        error={options.error}
-                                        onRetry={() => void options.refetch()}
-                                    />
-                                )}
-                            </>
-                        ) : (
-                            <section className="space-y-4 text-sm">
-                                <div className="flex items-center gap-1">
-                                    <h2 className="font-semibold">账号资料</h2>
-                                    {(can("admin:update") ||
-                                        (can("org_unit:manage") && person)) && (
-                                        <Button
-                                            id="account-profile-edit"
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            aria-label="编辑账号资料"
-                                            title="编辑账号资料"
-                                            disabled={
-                                                can("org_unit:list") &&
-                                                can("org_unit:manage") &&
-                                                (org.isPending ||
-                                                    org.isFetching)
-                                            }
-                                            onClick={() =>
-                                                setProfileSnapshot({
-                                                    account,
-                                                    view: org.data,
-                                                })
-                                            }
-                                        >
-                                            <PencilIcon className="size-3.5" />
-                                        </Button>
-                                    )}
-                                </div>
-                                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            姓名
-                                        </dt>
-                                        <dd className="mt-1">{account.name}</dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            登录账号
-                                        </dt>
-                                        <dd className="mt-1">
-                                            {account.account}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            所属部门
-                                        </dt>
-                                        <dd className="mt-1">
-                                            {departmentLabel}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            创建时间
-                                        </dt>
-                                        <dd className="num mt-1">
-                                            {formatDateTime(
-                                                new Date(
-                                                    account.created_at * 1000,
-                                                ).toISOString(),
-                                                "full",
-                                            )}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            角色
-                                        </dt>
-                                        <dd className="mt-1">
-                                            {roles.isError ? (
-                                                <BusinessFailureState
-                                                    error={roles.error}
-                                                    onRetry={() =>
-                                                        void roles.refetch()
-                                                    }
-                                                    id="account-detail-roles-retry"
-                                                />
-                                            ) : !account.role_ids.length ? (
-                                                <p className="text-muted-foreground">
-                                                    尚未分配角色，请点击账号资料旁的铅笔进行设置。
-                                                </p>
-                                            ) : (
-                                                <ul className="flex flex-wrap gap-2">
-                                                    {account.role_ids.map(
-                                                        (roleId) => {
-                                                            const role =
-                                                                roles.data?.find(
-                                                                    (row) =>
-                                                                        row.id ===
-                                                                        roleId,
-                                                                )
-                                                            return (
-                                                                <li
-                                                                    key={roleId}
-                                                                    className="inline-flex items-center gap-2"
-                                                                >
-                                                                    <span className="font-medium">
-                                                                        {role?.name ??
-                                                                            "角色信息待确认"}
-                                                                    </span>
-                                                                    {can(
-                                                                        "role:list",
-                                                                    ) && (
-                                                                        <Link
-                                                                            id={`account-detail-role-${toAutomationIdSegment(roleId)}`}
-                                                                            href={`/system/roles/${encodeURIComponent(roleId)}/edit?returnTo=${encodeURIComponent(`/system/accounts/${accountId}`)}`}
-                                                                            className="text-xs text-muted-foreground hover:underline"
-                                                                        >
-                                                                            查看权限
-                                                                        </Link>
-                                                                    )}
-                                                                </li>
-                                                            )
-                                                        },
-                                                    )}
-                                                </ul>
-                                            )}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            登录密码
-                                        </dt>
-                                        <dd className="mt-1">
-                                            {can("admin:update") ? (
-                                                <Button
-                                                    id="account-detail-password"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        setEditing("password")
-                                                    }
-                                                >
-                                                    <KeyRoundIcon data-icon="inline-start" />
-                                                    修改密码
-                                                </Button>
-                                            ) : (
-                                                "无修改权限"
-                                            )}
-                                        </dd>
-                                    </div>
-                                </dl>
-                                {org.isError && (
-                                    <BusinessFailureState
-                                        id="account-profile-org-retry"
-                                        error={org.error}
-                                        onRetry={() => void org.refetch()}
-                                    />
-                                )}
-                            </section>
+                        <AccountProfileOverview
+                            account={account}
+                            roles={roles}
+                            departmentLabel={departmentLabel}
+                            canEdit={
+                                can("admin:update") ||
+                                (can("org_unit:manage") && Boolean(person))
+                            }
+                            editDisabledReason={
+                                can("org_unit:list") &&
+                                can("org_unit:manage") &&
+                                (org.isPending || org.isFetching)
+                                    ? "正在读取组织信息，请稍后编辑"
+                                    : undefined
+                            }
+                            canChangePassword={can("admin:update")}
+                            canReadRoles={can("role:list")}
+                            onEdit={() =>
+                                setProfileSnapshot({
+                                    account,
+                                    view: org.data,
+                                })
+                            }
+                            onPasswordChange={() => setEditing("password")}
+                        />
+                        {org.isError && (
+                            <BusinessFailureState
+                                id="account-profile-org-retry"
+                                error={org.error}
+                                onRetry={() => void org.refetch()}
+                            />
                         )}
                         <AccountOperationPermissions
                             key={accountId}
@@ -502,6 +343,33 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     )}
                 </Tabs>
             </div>
+            {profileSnapshot && (
+                <AccountProfileEditor
+                    key={accountId}
+                    snapshot={profileSnapshot}
+                    currentVersion={org.data?.organizationVersion}
+                    canName={can("admin:update")}
+                    assignableRoles={options.data ?? []}
+                    roleLabels={roles.data ?? []}
+                    rolesReady={options.isSuccess}
+                    roleOptionsError={
+                        options.isError ? options.error : undefined
+                    }
+                    onRetryRoleOptions={() => void options.refetch()}
+                    canOrganization={
+                        can("org_unit:manage") &&
+                        Boolean(
+                            profileSnapshot.view?.people.some(
+                                (person) => person.id === accountId,
+                            ),
+                        )
+                    }
+                    onDone={(saved) => {
+                        setProfileSnapshot(null)
+                        if (saved) setNotice("账号资料已统一保存。")
+                    }}
+                />
+            )}
             {editing && (
                 <AccountFormDialog
                     mode="edit"
