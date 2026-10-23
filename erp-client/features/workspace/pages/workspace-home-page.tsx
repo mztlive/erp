@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { ApprovalCopiesPage } from "@/features/approval-copies/page"
-import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon } from "lucide-react"
+import { RefreshCwIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
@@ -19,8 +19,6 @@ import {
 } from "../components/workspace-filter-bar"
 import { workspaceCategoryLabel } from "../lib/category-label"
 import { WorkspaceHomeSkeleton } from "../components/workspace-home-skeleton"
-import { WorkspaceTaskDetail } from "../components/workspace-task-detail"
-import { WorkspaceProcessingLayout } from "../components/workspace-processing-layout"
 import { WorkspaceQueueTypeNav } from "../components/workspace-queue-type-nav"
 import { WorkspaceQueueFilters } from "../components/workspace-queue-filters"
 import { WorkspaceTaskList } from "../components/workspace-task-list"
@@ -43,7 +41,7 @@ function WorkspaceTaskHome() {
     return <WorkspaceHomeView home={useWorkspaceHome()} />
 }
 
-/** 队列与办理页互斥挂载；详情不会自动选中队列第一条。 */
+/** 工作台只承载队列；任务与审批由独立详情路由承载。 */
 export function WorkspaceHomeView({
     home,
 }: {
@@ -59,24 +57,16 @@ export function WorkspaceHomeView({
         hasActiveFilter,
         searchDraft,
         setSearchDraft,
-        completionAnnouncement,
-        selected,
         onMetricClick,
         clearFilters,
         onSelectTask,
-        applyDecisionAfter,
         onQueueFiltersChange,
         onSortChange,
         applySearch,
         onPageChange,
         clearSearch,
         refresh,
-        autoNext,
-        setAutoNext,
-        backFromDetail,
-        detailQuery,
     } = home
-    const isDetail = Boolean(urlState.currentWorkItemId)
     if (accountProfileQuery.isError || (dashboardQuery.isError && !view))
         return (
             <PageScaffold>
@@ -90,7 +80,7 @@ export function WorkspaceHomeView({
                 />
             </PageScaffold>
         )
-    if (!view) return <WorkspaceHomeSkeleton detail={isDetail} />
+    if (!view) return <WorkspaceHomeSkeleton />
     if (view.access !== "allowed")
         return (
             <PageScaffold>
@@ -106,108 +96,7 @@ export function WorkspaceHomeView({
             </PageScaffold>
         )
     const started = urlState.view === "started"
-    const backLabel = started ? "返回审批队列" : "返回任务队列"
-    const index = view.items.findIndex(
-        (item) => item.workItemId === selected?.workItemId,
-    )
-    const next = index >= 0 ? view.items[index + 1] : undefined
     const freshness = deriveWorkItemsFreshness(view.freshness, { refreshing })
-    const announcement = (
-        <p
-            key={completionAnnouncement.sequence}
-            className="sr-only"
-            role="status"
-            aria-live="polite"
-        >
-            {completionAnnouncement.text}
-        </p>
-    )
-    if (isDetail)
-        return (
-            <PageScaffold density="compact" className="min-h-0 gap-0">
-                {announcement}
-                <nav
-                    aria-label="办理页导航"
-                    className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border/60 py-3"
-                >
-                    <Button
-                        id="workspace-processing-back"
-                        variant="ghost"
-                        size="sm"
-                        onClick={backFromDetail}
-                    >
-                        <ArrowLeftIcon />
-                        {backLabel}
-                    </Button>
-                    <span className="hidden border-l pl-4 text-xs text-muted-foreground sm:block">
-                        工作台 / {started ? "我发起的审批" : "任务办理"} /{" "}
-                        {selected?.workItemTypeLabel ?? "详情"}
-                    </span>
-                    <div className="ml-auto flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground">
-                            {index >= 0
-                                ? `本页第 ${index + 1} / ${view.items.length} 项`
-                                : "当前任务"}
-                        </span>
-                        <Button
-                            id="workspace-processing-next"
-                            variant="outline"
-                            size="sm"
-                            disabled={!next}
-                            onClick={() => next && onSelectTask(next)}
-                        >
-                            下一项
-                            <ArrowRightIcon />
-                        </Button>
-                    </div>
-                </nav>
-                {selected ? (
-                    <WorkspaceProcessingLayout
-                        item={selected}
-                        autoNext={autoNext}
-                        onAutoNextChange={setAutoNext}
-                        onBack={backFromDetail}
-                        backLabel={backLabel}
-                    >
-                        <WorkspaceTaskDetail
-                            key={selected.workItemId}
-                            item={selected}
-                            grantedPermissions={
-                                accountProfileQuery.data?.permissions ?? []
-                            }
-                            onDecisionApplied={(result, id) =>
-                                applyDecisionAfter(
-                                    id,
-                                    result.nextOpenTask?.workItemId,
-                                )
-                            }
-                            onTaskCompleted={applyDecisionAfter}
-                        />
-                    </WorkspaceProcessingLayout>
-                ) : detailQuery.isFetching ? (
-                    <p
-                        role="status"
-                        className="p-8 text-sm text-muted-foreground"
-                    >
-                        正在读取任务…
-                    </p>
-                ) : (
-                    <BusinessFailureState
-                        error={detailQuery.error ?? undefined}
-                        title="当前任务不可用"
-                        description="任务可能已完成或不在当前可见范围内，请返回列表刷新。"
-                        action={
-                            <Button
-                                id="workspace-processing-unavailable-back"
-                                onClick={backFromDetail}
-                            >
-                                {backLabel}
-                            </Button>
-                        }
-                    />
-                )}
-            </PageScaffold>
-        )
     const filterText = [
         urlState.workItemType &&
             workspaceCategoryLabel(urlState.workItemType, started),
@@ -223,7 +112,6 @@ export function WorkspaceHomeView({
         .join(" · ")
     return (
         <PageScaffold density="compact" className="min-h-0 gap-4">
-            {announcement}
             <PageHeader
                 title={
                     started

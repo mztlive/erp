@@ -1,5 +1,6 @@
 "use client"
 
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import * as React from "react"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 
@@ -36,7 +37,7 @@ export function useSalesOrderDetailUrlState({
     const workItemReturnTo =
         returnTo?.trim() ||
         (focusedWorkItemId
-            ? `/workspace?currentWorkItemId=${encodeURIComponent(focusedWorkItemId)}`
+            ? buildWorkspaceDetailHref("tasks", focusedWorkItemId)
             : "/workspace")
 
     const selectSection = React.useCallback(

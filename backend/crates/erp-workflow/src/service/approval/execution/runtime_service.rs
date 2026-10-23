@@ -410,7 +410,9 @@ mod tests {
         terminal_task_subject_matches,
     };
     use super::notifications::{blocked_cancel_notification_recipients, notification_recipients};
-    use super::query::{cursor_from_summary, item_from_runtime_read_row, item_from_summary};
+    use super::query::{
+        RuntimeInstanceListItem, cursor_from_summary, item_from_runtime_read_row, item_from_summary,
+    };
     use super::read_auth::{
         RuntimeReadAuthorizationFacts, RuntimeReadSubject, ensure_mine_page_integrity, mine_execution_ids,
         mine_instance_ids, mine_runtime_chain_matches, task_proves_current_responsibility, unique_by_id,
@@ -555,6 +557,49 @@ mod tests {
             },
             task,
         )
+    }
+
+    #[test]
+    fn instance_detail_retains_frozen_identity_and_current_assignee() {
+        let (subject, _) = runtime_responsibility_fixture();
+        let item = RuntimeInstanceListItem::from_read_subject(&subject).expect("独立详情");
+        assert_eq!(item.instance_id, "inst-1");
+        assert_eq!(item.document_type.as_deref(), Some("stock_adjustment"));
+        assert_eq!(item.document_id.as_deref(), Some("adj-1"));
+        assert_eq!(item.document_label.as_deref(), Some("ADJ-0001"));
+        assert_eq!(item.subject_version, Some(1));
+        assert_eq!(item.process_version, Some(2));
+        assert_eq!(item.started_at, Some(10));
+        assert_eq!(item.current_node_name.as_deref(), Some("仓储复核"));
+        assert_eq!(item.current_assignee_name.as_deref(), Some("仓库1"));
+    }
+
+    #[test]
+    fn instance_detail_rejects_mismatched_snapshot_and_execution() {
+        let (mut subject, _) = runtime_responsibility_fixture();
+        subject.snapshot.subject_version = 2;
+        assert!(RuntimeInstanceListItem::from_read_subject(&subject).is_err());
+        subject.snapshot = snapshot();
+        subject.snapshot.approval_process_instance_id = ApprovalProcessInstanceId::new("other");
+        assert!(RuntimeInstanceListItem::from_read_subject(&subject).is_err());
+        subject.snapshot = snapshot();
+        subject.current_execution = Some(active_execution("other", "inst-1"));
+        assert!(RuntimeInstanceListItem::from_read_subject(&subject).is_err());
+        subject.current_execution = None;
+        assert!(RuntimeInstanceListItem::from_read_subject(&subject).is_err());
+    }
+
+    #[test]
+    fn instance_detail_without_current_execution_keeps_document_identity() {
+        let (mut subject, _) = runtime_responsibility_fixture();
+        subject.instance.current_node_execution_id = None;
+        subject.instance.status = ApprovalProcessInstanceStatus::Approved;
+        subject.current_execution = None;
+        let item = RuntimeInstanceListItem::from_read_subject(&subject).expect("已结束详情");
+        assert_eq!(item.status, "APPROVED");
+        assert_eq!(item.current_node_name, None);
+        assert_eq!(item.current_assignee_name, None);
+        assert_eq!(item.document_label.as_deref(), Some("ADJ-0001"));
     }
 
     #[test]

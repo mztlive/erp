@@ -3,13 +3,13 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     useWorkspaceDashboardQuery,
-    useWorkspaceSelectedTaskQuery,
     workspaceHomeKeys,
 } from "@/features/workspace/hooks/queries"
 import {
@@ -28,7 +28,7 @@ import type {
 
 const VIEWER_TIMEZONE = "Asia/Shanghai"
 /**
- * W01 页面状态：URL 筛选、指标切换、当前项与连续处理后选中下一条。
+ * W01 队列状态：URL 筛选、指标切换与独立详情导航。
  */
 export function useWorkspaceHome() {
     const router = useRouter()
@@ -61,12 +61,6 @@ export function useWorkspaceHome() {
     React.useEffect(() => {
         setSearchDraft(urlState.query ?? "")
     }, [urlState.query])
-    const [autoNext, setAutoNext] = React.useState(false)
-    const [completionAnnouncement, setCompletionAnnouncement] = React.useState({
-        sequence: 0,
-        text: "",
-    })
-
     const activeMetric = metricKeyFromUrlState(urlState)
     const hasActiveFilter = Boolean(
         urlState.due ||
@@ -109,72 +103,25 @@ export function useWorkspaceHome() {
 
     const onPageChange = React.useCallback(
         (page: number) => {
-            replaceUrl({ ...urlState, page, currentWorkItemId: undefined })
+            replaceUrl({ ...urlState, page })
         },
         [replaceUrl, urlState],
     )
 
-    const returnState = { ...urlState, currentWorkItemId: undefined }
-    const returnHref = `${pathname}${buildWorkspaceSearchParams(returnState)}`
-    const backFromDetail = React.useCallback(() => {
-        // 返回当前页签的队列；全局历史后退可能切换到其他工作页签。
-        router.replace(returnHref, { scroll: false })
-    }, [returnHref, router])
-
     const onSelectTask = React.useCallback(
         (item: WorkspaceWorkItem) => {
-            const href = `${pathname}${buildWorkspaceSearchParams({ ...urlState, currentWorkItemId: item.workItemId })}`
-            if (urlState.currentWorkItemId)
-                router.replace(href, { scroll: false })
-            else router.push(href, { scroll: false })
+            const returnTo = `${pathname}${buildWorkspaceSearchParams(urlState)}`
+            router.push(
+                buildWorkspaceDetailHref(
+                    item.workItemType === "APPROVAL_INSTANCE"
+                        ? "approvals"
+                        : "tasks",
+                    item.workItemId,
+                    { returnTo },
+                ),
+            )
         },
         [pathname, router, urlState],
-    )
-
-    const selectNextAfter = React.useCallback(
-        (completedWorkItemId: string, preferredWorkItemId?: string) => {
-            const items = view?.items ?? []
-            const index = items.findIndex(
-                (item) => item.workItemId === completedWorkItemId,
-            )
-            const next = preferredWorkItemId
-                ? items.find((item) => item.workItemId === preferredWorkItemId)
-                : (items[index + 1] ?? items[index - 1])
-            const target =
-                next ??
-                items.find((item) => item.workItemId !== completedWorkItemId)
-            if (autoNext && target)
-                replaceUrl({
-                    ...urlState,
-                    currentWorkItemId: target.workItemId,
-                })
-            else backFromDetail()
-            return autoNext ? target : undefined
-        },
-        [replaceUrl, urlState, view?.items, autoNext, backFromDetail],
-    )
-
-    /**
-     * 决策应用后的收尾：切换到下一条并失效工作台列表查询。
-     * 选中项只写 URL，不进入列表查询，避免把当前条提到队首。
-     */
-    const applyDecisionAfter = React.useCallback(
-        (completedWorkItemId: string, preferredWorkItemId?: string) => {
-            const next = selectNextAfter(
-                completedWorkItemId,
-                preferredWorkItemId,
-            )
-            setCompletionAnnouncement((current) => ({
-                sequence: current.sequence + 1,
-                text: next
-                    ? `任务已完成，已切换到${next.objectTitle}`
-                    : "任务已完成，已返回原列表",
-            }))
-            void queryClient.invalidateQueries({
-                queryKey: workspaceHomeKeys.all,
-            })
-        },
-        [queryClient, selectNextAfter],
     )
 
     const onQueueFiltersChange = React.useCallback(
@@ -186,7 +133,6 @@ export function useWorkspaceHome() {
                 ...patch,
                 queue: true,
                 page: 1,
-                currentWorkItemId: undefined,
             })
         },
         [replaceUrl, urlState],
@@ -198,7 +144,6 @@ export function useWorkspaceHome() {
                 ...urlState,
                 sort,
                 page: 1,
-                currentWorkItemId: undefined,
             })
         },
         [replaceUrl, urlState],
@@ -209,7 +154,6 @@ export function useWorkspaceHome() {
             ...urlState,
             query: searchDraft.trim() || undefined,
             page: 1,
-            currentWorkItemId: undefined,
         })
     }, [replaceUrl, searchDraft, urlState])
 
@@ -219,7 +163,6 @@ export function useWorkspaceHome() {
             ...urlState,
             query: undefined,
             page: 1,
-            currentWorkItemId: undefined,
         })
     }, [replaceUrl, urlState])
 
@@ -237,20 +180,6 @@ export function useWorkspaceHome() {
         })
     }, [accountProfileQuery, queryClient])
 
-    const listedSelection = view?.items.find(
-        (item) => item.workItemId === urlState.currentWorkItemId,
-    )
-    const detailQuery = useWorkspaceSelectedTaskQuery(
-        accountProfileQuery.isSuccess &&
-            view?.access === "allowed" &&
-            urlState.view !== "started" &&
-            !listedSelection
-            ? urlState.currentWorkItemId
-            : undefined,
-        accountProfileQuery.data,
-    )
-    const selected = listedSelection ?? detailQuery.data
-
     return {
         urlState,
         view,
@@ -261,18 +190,10 @@ export function useWorkspaceHome() {
         hasActiveFilter,
         searchDraft,
         setSearchDraft,
-        autoNext,
-        setAutoNext,
-        backFromDetail,
-        detailQuery,
-        completionAnnouncement,
-        selected,
         onMetricClick,
         clearFilters,
         onPageChange,
         onSelectTask,
-        selectNextAfter,
-        applyDecisionAfter,
         onQueueFiltersChange,
         onSortChange,
         applySearch,

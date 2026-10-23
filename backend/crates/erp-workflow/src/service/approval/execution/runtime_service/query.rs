@@ -1,5 +1,6 @@
 //! 运行实例列表、详情、历史与恢复选项查询。
 
+mod detail;
 mod query_list;
 
 use std::collections::BTreeMap;
@@ -159,7 +160,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// * `instance_id` - 实例 ID
     ///
     /// # 返回
-    /// 返回实例状态与当前执行投影。
+    /// 返回实例状态、当前审批人及该实例冻结的单据身份、金额与版本。
     ///
     /// # 错误
     /// 不存在或无权时不泄露存在性；仓储失败时返回对应错误。
@@ -171,25 +172,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         self.ensure_active_instance_reader(actor).await?;
         let subject = self.load_runtime_read_subject(instance_id).await?;
         self.ensure_ordinary_runtime_read(actor, &subject).await?;
-        let instance = subject.instance;
-        let (node_key, node_name, assignee_id) = subject
-            .current_execution
-            .map(|execution| {
-                (
-                    Some(execution.node_key),
-                    Some(execution.node_name),
-                    Some(execution.assignee_participant_id.as_str().to_string()),
-                )
-            })
-            .unwrap_or_default();
-        Ok(item_from_instance_id(
-            instance_id,
-            instance.status.as_str(),
-            instance.current_round_no,
-            node_key,
-            node_name,
-            assignee_id,
-        ))
+        RuntimeInstanceListItem::from_read_subject(&subject)
     }
 
     /// 读取实例执行历史。
@@ -703,34 +686,6 @@ pub(super) fn item_from_runtime_read_row(
         return Err(hidden_not_found());
     }
     item_from_summary(row.instance, row.snapshot.as_ref())
-}
-
-/// 由实例字段构造列表行。
-fn item_from_instance_id(
-    instance_id: &str,
-    status: &str,
-    current_round_no: u32,
-    current_node_key: Option<String>,
-    current_node_name: Option<String>,
-    current_assignee_participant_id: Option<String>,
-) -> RuntimeInstanceListItem {
-    RuntimeInstanceListItem {
-        instance_id: instance_id.to_string(),
-        status: status.to_string(),
-        current_round_no,
-        current_node_key,
-        current_node_name,
-        current_assignee_participant_id,
-        current_assignee_name: None,
-        document_type: None,
-        document_id: None,
-        document_label: None,
-        subject_version: None,
-        total_amount: None,
-        process_version: None,
-        started_at: None,
-        latest_rejection_summary: None,
-    }
 }
 
 /// 由决定后的写入构造实例列表投影。

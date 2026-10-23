@@ -12,6 +12,7 @@ import {
 } from "@/features/workspace/api/dashboard"
 import type { TodayWorkspaceQuery } from "@/features/workspace/types"
 import { queryKeyRoots } from "@/lib/query-key-roots"
+import { fetchWorkspaceApprovalDetail } from "../api/approval-detail"
 
 const workspaceHomeKeys = {
     all: queryKeyRoots.workspaceHome,
@@ -32,6 +33,7 @@ const workspaceHomeKeys = {
 export function useWorkspaceDashboardQuery(
     query: TodayWorkspaceQuery,
     profile?: AccountProfile,
+    enabled = true,
 ) {
     return useQuery({
         queryKey: workspaceHomeKeys.dashboard(query, profile),
@@ -39,20 +41,43 @@ export function useWorkspaceDashboardQuery(
             if (!profile) throw new Error("账号信息加载中，请稍后重试")
             return fetchWorkspaceDashboard(query, profile)
         },
-        enabled: Boolean(profile),
+        enabled: enabled && Boolean(profile),
         refetchInterval: 60_000,
     })
 }
 
-/** 深链接或翻页后的选中任务单独读取，缓存按当前账号与权限隔离。 */
-export function useWorkspaceSelectedTaskQuery(
+/** 审批详情不依赖队列页、筛选条件或列表缓存。 */
+export function useWorkspaceApprovalDetailQuery(
+    instanceId: string | undefined,
+    profile?: AccountProfile,
+) {
+    return useQuery({
+        queryKey: [
+            ...workspaceHomeKeys.all,
+            "approval-detail",
+            instanceId,
+            profile?.userid,
+            profile?.permissions,
+            profile?.role_ids,
+        ],
+        queryFn: () => {
+            if (!instanceId) throw new Error("审批信息暂不可用")
+            return fetchWorkspaceApprovalDetail(instanceId)
+        },
+        enabled: Boolean(instanceId && profile),
+        retry: false,
+    })
+}
+
+/** 按路由 ID 读取任务详情，缓存按当前账号与权限隔离。 */
+export function useWorkspaceTaskDetailQuery(
     workItemId: string | undefined,
     profile?: AccountProfile,
 ) {
     return useQuery({
         queryKey: [
             ...workspaceHomeKeys.all,
-            "selected",
+            "task-detail",
             workItemId,
             profile?.userid,
             profile ? [...profile.permissions].sort() : [],

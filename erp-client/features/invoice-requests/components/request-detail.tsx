@@ -1,4 +1,5 @@
 "use client"
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import Link from "next/link"
 import { useEffect, useState, useRef } from "react"
 import { z } from "zod"
@@ -277,7 +278,10 @@ function InvoiceRequestDetailBody({
                         variant="outline"
                         render={
                             <Link
-                                href={`/workspace?currentWorkItemId=${encodeURIComponent(request.work_item_id)}`}
+                                href={buildWorkspaceDetailHref(
+                                    "tasks",
+                                    request.work_item_id,
+                                )}
                             />
                         }
                     >

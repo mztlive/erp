@@ -6,6 +6,7 @@ import {
     TableToolbar,
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -23,7 +24,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import {
     purchaseComparison,
-    purchaseSelectedClass,
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
 import { PurchaseComparisonRow } from "./workspace-purchase-comparison-row"
@@ -100,45 +100,34 @@ export function WorkspacePurchaseComparisonTable({
                     className="flex flex-wrap items-center justify-between gap-3"
                     aria-label="商品对照筛选"
                 >
-                    <div
-                        className="inline-flex rounded-lg border border-border/70 bg-muted/30 p-0.5"
-                        role="group"
-                        aria-label="核对范围"
+                    <Button
+                        id={`${prefix}-filter-attention`}
+                        variant="ghost"
+                        size="sm"
+                        aria-pressed={attentionOnly}
+                        title={
+                            attentionOnly ? "取消需关注筛选" : "仅显示需关注项"
+                        }
+                        className={cn(
+                            "gap-2 px-0 hover:bg-transparent",
+                            attentionOnly &&
+                                "text-primary underline underline-offset-4 hover:text-primary",
+                        )}
+                        onClick={() => {
+                            setAttentionOnly((value) => !value)
+                            changePage(1)
+                        }}
                     >
-                        <Button
-                            id={`${prefix}-filter-all`}
-                            variant="ghost"
-                            size="sm"
-                            aria-pressed={!attentionOnly}
-                            className={cn(
-                                !attentionOnly && purchaseSelectedClass,
-                            )}
-                            onClick={() => {
-                                setAttentionOnly(false)
-                                changePage(1)
-                            }}
+                        需关注
+                        <Badge
+                            variant={
+                                attentionCount > 0 ? "warning" : "secondary"
+                            }
+                            className="rounded-full tabular-nums"
                         >
-                            全部 {lines.length}
-                        </Button>
-                        <Button
-                            id={`${prefix}-filter-attention`}
-                            variant="ghost"
-                            size="sm"
-                            aria-pressed={attentionOnly}
-                            className={cn(
-                                attentionOnly && purchaseSelectedClass,
-                            )}
-                            onClick={() => {
-                                setAttentionOnly(true)
-                                changePage(1)
-                            }}
-                        >
-                            需关注{" "}
-                            <span className="ml-1 rounded-full bg-warning-border/60 px-1.5 text-xs text-warning-soft-foreground">
-                                {attentionCount}
-                            </span>
-                        </Button>
-                    </div>
+                            {attentionCount}
+                        </Badge>
+                    </Button>
                     <div className="relative w-full sm:w-64">
                         <SearchIcon
                             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"

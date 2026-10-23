@@ -10,11 +10,15 @@ export function WorkspaceHomeSkeleton({
 }) {
     return (
         <PageScaffold className="min-h-0 gap-2" density="compact">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <Skeleton className="h-8 w-40" />
-                <Skeleton className="h-7 w-64" />
-            </div>
-            <Skeleton className="h-8 w-72" />
+            {!detail && (
+                <>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <Skeleton className="h-8 w-40" />
+                        <Skeleton className="h-7 w-64" />
+                    </div>
+                    <Skeleton className="h-8 w-72" />
+                </>
+            )}
             {detail ? (
                 <div className="flex min-h-0 flex-1 flex-col gap-4">
                     <Skeleton className="h-44 w-full" />

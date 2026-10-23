@@ -21,7 +21,6 @@ export type WorkspaceUrlState = {
     salesOrderIds?: string
     purchaseOrderIds?: string
     sort: WorkspaceSort
-    currentWorkItemId?: string
     queue?: boolean
     page?: number
 }
@@ -61,7 +60,6 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
         values: SORT_VALUES,
         defaultValue: "priority_due",
     },
-    { key: "currentWorkItemId", type: "string", trim: true },
     { key: "queue", type: "boolean", defaultValue: false },
     { key: "page", type: "number", defaultValue: 1, min: 1 },
 ])
@@ -162,7 +160,6 @@ export function urlStateFromMetricKey(
                 view: "inbox",
                 due: "overdue",
                 blocked: false,
-                currentWorkItemId: undefined,
             }
         case "blocked":
             return {
@@ -170,7 +167,6 @@ export function urlStateFromMetricKey(
                 view: "inbox",
                 due: undefined,
                 blocked: true,
-                currentWorkItemId: undefined,
             }
         case "started":
             return {
@@ -178,7 +174,6 @@ export function urlStateFromMetricKey(
                 view: "started",
                 due: undefined,
                 blocked: false,
-                currentWorkItemId: undefined,
             }
         case "managed":
             return {
@@ -186,7 +181,6 @@ export function urlStateFromMetricKey(
                 view: "managed",
                 due: undefined,
                 blocked: false,
-                currentWorkItemId: undefined,
             }
         case "inbox":
         default:
@@ -195,14 +189,13 @@ export function urlStateFromMetricKey(
                 view: "inbox",
                 due: undefined,
                 blocked: false,
-                currentWorkItemId: undefined,
             }
     }
 }
 
 /**
  * URL 状态转列表查询。timezone 必须来自当前工作角色所属组织。
- * 当前选中项只留在 URL，不进入列表查询，否则服务端会把该条提到队首。
+ * 详情身份由独立路由承载，不进入队列查询。
  */
 export function toTodayWorkspaceQuery(
     state: WorkspaceUrlState,

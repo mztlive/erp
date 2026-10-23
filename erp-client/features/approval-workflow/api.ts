@@ -13,6 +13,7 @@ import {
     type ApprovalHistoryPageDto,
     type ApprovalInstanceListPage,
     type ApprovalInstanceListPageDto,
+    type ApprovalInstanceListItemDto,
     type ApprovalInstanceListView,
     type CancelBlockedRequest,
     type RecoveryOptions,
@@ -107,6 +108,14 @@ export const listApprovalInstances = async (
         total: page.total ?? undefined,
     }
 }
+
+/** 按实例 ID 独立读取审批状态，授权由实例接口校验。 */
+export const getApprovalInstance = async (instanceId: string) =>
+    mapInstanceListItemDto(
+        await apiGet<ApprovalInstanceListItemDto>(
+            `/admin/approval-instances/${encodeURIComponent(instanceId)}`,
+        ),
+    )
 
 /**
  * 按轮次与执行序号读取完整历史。

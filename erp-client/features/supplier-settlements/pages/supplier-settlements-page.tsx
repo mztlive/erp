@@ -1,5 +1,6 @@
 "use client"
 
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
@@ -59,7 +60,7 @@ export function SupplierSettlementsPage() {
 
     if (urlState.statementId) {
         const taskReturnTo = urlState.workItemId
-            ? `/workspace?currentWorkItemId=${encodeURIComponent(urlState.workItemId)}`
+            ? buildWorkspaceDetailHref("tasks", urlState.workItemId)
             : undefined
         return (
             <SettlementCenter

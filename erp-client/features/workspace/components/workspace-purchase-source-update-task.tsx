@@ -32,7 +32,6 @@ export function WorkspacePurchaseSourceUpdateTask({
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const returnParams = new URLSearchParams(searchParams.toString())
-    returnParams.set("currentWorkItemId", item.workItemId)
     const returnTo = `${pathname}?${returnParams}`
     const purchaseHref = `/procurement/orders/${encodeURIComponent(item.businessObjectId)}?${new URLSearchParams({ from: "workspace", returnTo })}`
     const taskQuery = useWorkItemDetailQuery(item.workItemId)

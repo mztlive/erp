@@ -1,5 +1,6 @@
 "use client"
 
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import * as React from "react"
 import Link from "next/link"
 import { ClipboardCheckIcon, ShieldAlertIcon } from "lucide-react"
@@ -103,7 +104,7 @@ export function SupplyExceptionTaskPanel({
         validators: { onChange: completionSchema },
         onSubmit: async () => setConfirmOpen(true),
     })
-    const returnHref = `/workspace?currentWorkItemId=${encodeURIComponent(workItemId)}`
+    const returnHref = buildWorkspaceDetailHref("tasks", workItemId)
     const canProcess = Boolean(
         task?.allowedActions.includes("PROCESS") && !task.processingBlocker,
     )

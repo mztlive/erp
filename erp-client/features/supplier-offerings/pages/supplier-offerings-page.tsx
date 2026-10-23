@@ -1,5 +1,6 @@
 "use client"
 
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -187,14 +188,14 @@ export const SupplierOfferingsPage = () => {
                             variant="outline"
                             render={
                                 <Link
-                                    href={`/workspace?${new URLSearchParams({
-                                        currentWorkItemId:
-                                            state.urlState.workItemId ?? "",
-                                    }).toString()}`}
+                                    href={buildWorkspaceDetailHref(
+                                        "tasks",
+                                        state.urlState.workItemId ?? "",
+                                    )}
                                 />
                             }
                         >
-                            返回待办队列
+                            返回任务详情
                         </Button>
                     ) : state.urlState.returnTo ? (
                         <Button

@@ -1,5 +1,6 @@
 "use client"
 
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
@@ -96,10 +97,16 @@ export function PortalOfferingImpacts({
                                 <Link
                                     key={task.id}
                                     id={`${prefix}-task-${toAutomationIdSegment(task.id)}`}
-                                    href={`/workspace?view=managed&purchaseOrderIds=${encodeURIComponent(row.original.purchase_order_id)}&currentWorkItemId=${encodeURIComponent(task.id)}`}
+                                    href={buildWorkspaceDetailHref(
+                                        "tasks",
+                                        task.id,
+                                        {
+                                            returnTo: `/workspace?view=managed&purchaseOrderIds=${encodeURIComponent(row.original.purchase_order_id)}`,
+                                        },
+                                    )}
                                     className="rounded-sm text-primary underline underline-offset-4"
                                 >
-                                    在工作台核对相关任务（{index + 1}）
+                                    核对相关任务（{index + 1}）
                                 </Link>
                             ))}
                         </div>

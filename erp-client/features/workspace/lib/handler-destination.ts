@@ -1,3 +1,5 @@
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
+
 type HandlerFamily =
     | "approval"
     | "procurement"
@@ -372,13 +374,7 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
     }
 
     if (item.handlerKey === "fulfillment_operation") {
-        return withParams(
-            registration.baseHref,
-            new URLSearchParams({
-                type: "FULFILLMENT_OPERATION",
-                currentWorkItemId: workItemId,
-            }),
-        )
+        return buildWorkspaceDetailHref("tasks", workItemId)
     }
 
     if (item.handlerKey === "customer_acceptance_registration") {
@@ -387,7 +383,7 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
             mode: "register",
             from: "W01",
             workItemId,
-            returnTo: `/workspace?currentWorkItemId=${encodeURIComponent(workItemId)}`,
+            returnTo: buildWorkspaceDetailHref("tasks", workItemId),
         })
         const queueContextId = requiredValue(item.queueContextId)
         if (queueContextId) params.set("queueContextId", queueContextId)
@@ -401,7 +397,7 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
         item.handlerKey === "purchase_return_refund" ||
         item.handlerKey === "purchase_return_invoice"
     )
-        return `/workspace?currentWorkItemId=${encodeURIComponent(workItemId)}`
+        return buildWorkspaceDetailHref("tasks", workItemId)
 
     const queueContextId = requiredValue(item.queueContextId)
     if (!queueContextId) return null

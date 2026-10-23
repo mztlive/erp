@@ -562,7 +562,7 @@ export async function fetchWorkspaceInboxCount(): Promise<{ mine: number }> {
     return { mine: stats.inbox ?? stats.assigned }
 }
 
-function startedInstanceToWorkItem(
+export function startedInstanceToWorkItem(
     item: ApprovalInstanceListItem,
     timezone: string,
 ): WorkspaceWorkItem {
