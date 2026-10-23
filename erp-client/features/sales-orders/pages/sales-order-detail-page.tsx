@@ -18,11 +18,13 @@ import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/compone
 import { SalesOrderDetailSecondaryActions } from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
 import { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-panels"
+import { SalesOrderCurrentTask } from "../components/sales-order-current-task"
+import { SalesOrderProcurementAlert } from "../components/sales-order-procurement-alert"
 import { SalesOrderDetailSidebar } from "@/features/sales-orders/components/sales-order-detail-sidebar"
 import { SalesOrderDetailTabs } from "@/features/sales-orders/components/sales-order-detail-tabs"
 import {
     salesOrderKeys,
-    useSalesOrderAcceptanceEligibilityQuery,
+    useSalesOrderDeliveryProgressQuery,
     useSalesOrderDetailQuery,
     useSalesChangeOrderDetailQuery,
 } from "@/features/sales-orders/hooks/queries"
@@ -56,14 +58,28 @@ export function SalesOrderDetailPage({
         account.data?.permissions,
         "cost_entry:list",
     )
-    const eligibilityQuery = useSalesOrderAcceptanceEligibilityQuery(
+    const canReadDelivery =
+        !account.isError &&
+        hasPermission(account.data?.permissions, "customer_acceptance:list")
+    const deliveryQuery = useSalesOrderDeliveryProgressQuery(
         salesOrderId,
         Boolean(
-            query.data &&
-            query.data.nature === "physical_service" &&
-            query.data.allowedActions.includes("REGISTER_ACCEPTANCE"),
+            query.data?.nature === "physical_service" &&
+            query.data.currentRevisionNo != null &&
+            canReadDelivery,
         ),
     )
+    const canOperateAcceptance =
+        !account.isError &&
+        Boolean(
+            account.data?.userid &&
+            account.data.userid === query.data?.ownerUserId,
+        ) &&
+        hasPermission(
+            account.data?.permissions,
+            "customer_acceptance:create",
+        ) &&
+        hasPermission(account.data?.permissions, "customer_acceptance:post")
     const {
         returnTo,
         fromWorkspace,
@@ -193,7 +209,10 @@ export function SalesOrderDetailPage({
         fromWorkspace,
         returnTo,
         hasEligibleAcceptance:
-            !eligibilityQuery.isError && eligibilityQuery.data === true,
+            canReadDelivery &&
+            canOperateAcceptance &&
+            !deliveryQuery.isError &&
+            (deliveryQuery.data?.pendingFactCount ?? 0) > 0,
         canViewExtraCost,
         canSupplementContract: canSupplementSalesOrderContract(
             order,
@@ -215,14 +234,6 @@ export function SalesOrderDetailPage({
 
     return (
         <PageScaffold density="compact" className="min-h-0 overflow-hidden">
-            {eligibilityQuery.isError ? (
-                <BusinessFailureState
-                    id="sales-orders-acceptance-eligibility-failure"
-                    title="验收条件读取失败"
-                    error={eligibilityQuery.error}
-                    onRetry={() => void eligibilityQuery.refetch()}
-                />
-            ) : null}
             {order.loadWarnings?.map((warning) => (
                 <BusinessFailureState
                     key={warning}
@@ -247,7 +258,6 @@ export function SalesOrderDetailPage({
                             : undefined
                     }
                     order={order}
-                    identityOnly
                     secondaryActions={
                         <SalesOrderDetailSecondaryActions
                             order={order}
@@ -279,6 +289,24 @@ export function SalesOrderDetailPage({
                 />
             </div>
 
+            <div className="shrink-0 space-y-3 empty:hidden">
+                {order.nature === "physical_service" &&
+                order.currentRevisionNo != null &&
+                order.primaryStatus.code !== "voided" ? (
+                    <SalesOrderProcurementAlert
+                        progress={order.related.procurementProgress}
+                        onOpenPurchase={() => selectSection("fulfillment")}
+                    />
+                ) : null}
+                <SalesOrderCurrentTask
+                    order={order}
+                    canAccept={derived.canAccept}
+                    progress={
+                        deliveryQuery.isError ? undefined : deliveryQuery.data
+                    }
+                    onSelectSection={selectSection}
+                />
+            </div>
             <SalesOrderDetailTabs
                 beforeContent={
                     <div className="space-y-4 empty:hidden [&:not(:empty)]:mb-6">
@@ -345,37 +373,15 @@ export function SalesOrderDetailPage({
                 navSection={derived.navSection}
                 visibleNav={derived.visibleNav}
                 canAccept={derived.canAccept}
+                canOperateAcceptance={canOperateAcceptance}
+                canReadDelivery={canReadDelivery}
+                deliveryQuery={deliveryQuery}
                 onSelectSection={selectSection}
                 onApprovalResult={handleActionResult}
                 sidebar={
                     <SalesOrderDetailSidebar
-                        compact={derived.navSection === "invoice"}
-                        hideFinanceSummary={[
-                            "receivable",
-                            "receipt",
-                            "invoice",
-                        ].includes(derived.navSection)}
                         order={order}
-                        focusTask={derived.focusTask}
-                        action={
-                            derived.focusTask &&
-                            derived.focusTask.id !== derived.navSection ? (
-                                <Button
-                                    id={`sales-orders-detail-banner-${derived.focusTask.id}`}
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() =>
-                                        selectSection(derived.focusTask!.id)
-                                    }
-                                >
-                                    {derived.focusTask.id === "approval"
-                                        ? "查看审批"
-                                        : derived.focusTask.id === "acceptance"
-                                          ? "查看验收"
-                                          : "查看版本"}
-                                </Button>
-                            ) : null
-                        }
+                        onSelectSection={selectSection}
                     />
                 }
             />

@@ -29,6 +29,7 @@ export type NavSectionId =
     | "documents"
     | "collaboration"
     | "versions"
+    | "returns"
 
 export type WorkSectionId = "approval" | "change-review"
 
@@ -113,7 +114,7 @@ export function resolveNavSection(
         case "acceptance":
             return isCard ? "fulfillment" : "acceptance"
         case "change-review":
-            return "overview"
+            return "versions"
         case "receivable":
         case "receipt":
         case "invoice":
@@ -124,6 +125,8 @@ export function resolveNavSection(
             return "documents"
         case "versions":
             return "versions"
+        case "returns":
+            return isCard ? "versions" : "returns"
         case "approval":
             return "approval"
         case "overview":
@@ -403,6 +406,12 @@ export function navItemsFor(
             label: "版本",
             hint: "改单与历史版本",
             show: true,
+        },
+        {
+            id: "returns",
+            label: "售后记录",
+            hint: "本单退货与调整记录",
+            show: order.nature === "physical_service",
         },
     ]
 }

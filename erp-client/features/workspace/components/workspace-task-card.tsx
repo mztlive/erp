@@ -126,6 +126,27 @@ export function WorkspaceTaskCard({
                             {number}
                         </span>
                     </span>
+                    {(sourceSales || item.ownerUserLabel) && (
+                        <span className="text-xs text-muted-foreground">
+                            {[
+                                sourceSales &&
+                                    `来源销售单：${sourceSales.orderNo}`,
+                                item.ownerUserLabel &&
+                                    `处理人：${item.ownerUserLabel}`,
+                            ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                        </span>
+                    )}
+                    {item.searchMatches?.map((match) => (
+                        <span
+                            key={match}
+                            className="line-clamp-1 text-xs text-primary"
+                            title={match}
+                        >
+                            命中 · {match}
+                        </span>
+                    ))}
                     <WorkspaceFulfillmentBadges item={item} />
                     {summary && (
                         <span

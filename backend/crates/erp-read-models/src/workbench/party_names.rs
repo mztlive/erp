@@ -300,6 +300,7 @@ mod tests {
             AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType,
         };
         WorkItemView {
+            search_matches: Vec::new(),
             fulfillment_status: None,
             delivery_lines: Vec::new(),
             id: "wi".to_string(),

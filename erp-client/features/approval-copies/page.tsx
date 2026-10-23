@@ -9,16 +9,10 @@ import {
     PageHeader,
     PageScaffold,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import {
-    FileTextIcon,
-    LayersIcon,
-    MailIcon,
-    RefreshCwIcon,
-    SearchIcon,
-    XIcon,
-} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { MailIcon, RefreshCwIcon, SearchIcon, XIcon } from "lucide-react"
+import { FilterSelect } from "@/components/business/filter-select"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import {
     WorkspaceViewNav,
@@ -56,12 +50,13 @@ const STATUS: Record<string, string> = {
 export function CopyNavLink({ active = false }: { active?: boolean }) {
     const profile = useAccountProfileQuery().data
     const query = useCopies()
+    const params = useSearchParams()
     if (profile?.account_kind !== "admin") return null
     return (
         <WorkspaceViewNavItem
             id="workspace-queue-scope-copied"
             active={active}
-            href="/workspace?view=copied"
+            href={`/workspace?${new URLSearchParams({ view: "copied", ...(params.get("q") ? { q: params.get("q")! } : {}) })}`}
         >
             <span>抄送给我</span>
             {query.data && (
@@ -88,6 +83,8 @@ export function ApprovalCopiesPage() {
         document_type: params.get("documentType") || undefined,
         query: params.get("q") || undefined,
     }
+    const scopeHref = (view: string) =>
+        `/workspace?${new URLSearchParams({ view, ...(filters.query ? { q: filters.query } : {}) })}`
     const list = useCopies(filters)
     const [search, setSearch] = useState(filters.query ?? "")
     const [selected, setSelected] = useState<string[]>([])
@@ -178,7 +175,10 @@ export function ApprovalCopiesPage() {
             />
             <WorkspaceViewNav>
                 {hasPermission(profile.data.permissions, "work_item:list") && (
-                    <WorkspaceViewNavItem id="copy-nav-inbox" href="/workspace">
+                    <WorkspaceViewNavItem
+                        id="copy-nav-inbox"
+                        href={scopeHref("inbox")}
+                    >
                         待我处理
                     </WorkspaceViewNavItem>
                 )}
@@ -189,7 +189,7 @@ export function ApprovalCopiesPage() {
                     ) && (
                         <WorkspaceViewNavItem
                             id="copy-nav-managed"
-                            href="/workspace?view=managed"
+                            href={scopeHref("managed")}
                         >
                             范围内待办
                         </WorkspaceViewNavItem>
@@ -201,11 +201,19 @@ export function ApprovalCopiesPage() {
                     ) && (
                         <WorkspaceViewNavItem
                             id="copy-nav-started"
-                            href="/workspace?view=started"
+                            href={scopeHref("started")}
                         >
                             我发起的审批
                         </WorkspaceViewNavItem>
                     )}
+                {hasPermission(profile.data.permissions, "work_item:list") && (
+                    <WorkspaceViewNavItem
+                        id="copy-nav-history"
+                        href={scopeHref("history")}
+                    >
+                        处理记录
+                    </WorkspaceViewNavItem>
+                )}
                 <CopyNavLink active />
             </WorkspaceViewNav>
             <section
@@ -305,56 +313,26 @@ export function ApprovalCopiesPage() {
                         )}
                     </div>
                 </form>
-                <div
-                    role="group"
-                    aria-label="审批类型"
-                    className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3"
-                >
-                    <span className="mr-1 text-xs text-muted-foreground">
-                        审批类型
-                    </span>
-                    {[undefined, ...types].map((kind) => {
-                        const active = filters.document_type === kind
-                        const Icon = kind ? FileTextIcon : LayersIcon
-                        const count =
-                            kind && list.data
-                                ? (list.data.document_type_counts[kind] ?? 0)
-                                : undefined
-                        return (
-                            <Button
-                                key={kind ?? "all"}
-                                id={`copy-type-${kind ? toAutomationIdSegment(kind) : "all"}`}
-                                type="button"
-                                size="sm"
-                                variant={active ? "secondary" : "outline"}
-                                className="h-auto min-h-8 max-w-full rounded-full px-3 py-1.5 whitespace-normal"
-                                aria-pressed={active}
-                                onClick={() =>
-                                    update({
-                                        documentType: kind,
-                                        page: undefined,
-                                    })
-                                }
-                            >
-                                <Icon
-                                    aria-hidden="true"
-                                    className="size-4 shrink-0"
-                                />
-                                {kind ? documentTypeLabel(kind) : "全部"}
-                                {count !== undefined && (
-                                    <Badge
-                                        variant={
-                                            active ? "default" : "secondary"
-                                        }
-                                        className="num min-w-5 rounded-full shadow-none"
-                                    >
-                                        {count}
-                                    </Badge>
-                                )}
-                            </Button>
-                        )
-                    })}
-                </div>
+                <FilterSelect
+                    id="copy-document-type"
+                    label="审批类型"
+                    className="w-60"
+                    value={filters.document_type ?? "all"}
+                    onValueChange={(value) =>
+                        update({
+                            documentType:
+                                value && value !== "all" ? value : undefined,
+                            page: undefined,
+                        })
+                    }
+                    options={[
+                        { value: "all", label: "全部" },
+                        ...types.map((kind) => ({
+                            value: kind,
+                            label: `${documentTypeLabel(kind)}（${list.data?.document_type_counts[kind] ?? 0}）`,
+                        })),
+                    ]}
+                />
                 {hasActiveFilter && (
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span>

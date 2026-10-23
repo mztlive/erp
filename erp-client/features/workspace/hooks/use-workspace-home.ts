@@ -5,6 +5,10 @@ import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import { approvalKeys } from "@/features/approval-workflow/queries"
+import {
+    hasWorkspaceFilters,
+    type WorkspaceFilters,
+} from "@/lib/workspace-search"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -57,12 +61,9 @@ export function useWorkspaceHome() {
         !dashboardQuery.isPending &&
         !!view
 
-    const [searchDraft, setSearchDraft] = React.useState(urlState.query ?? "")
-    React.useEffect(() => {
-        setSearchDraft(urlState.query ?? "")
-    }, [urlState.query])
     const activeMetric = metricKeyFromUrlState(urlState)
     const hasActiveFilter = Boolean(
+        hasWorkspaceFilters(urlState.filters) ||
         urlState.due ||
         urlState.blocked ||
         urlState.workItemType ||
@@ -80,16 +81,46 @@ export function useWorkspaceHome() {
         [pathname, router],
     )
 
+    const viewStates = React.useRef<Partial<Record<string, WorkspaceUrlState>>>(
+        {},
+    )
     const onMetricClick = React.useCallback(
         (key: WorkspaceMetricKey) => {
-            const base = { view: urlState.view, sort: "priority_due" as const }
-            router.push(
-                `${pathname}${buildWorkspaceSearchParams({ ...urlStateFromMetricKey(key, base), queue: true })}`,
-                { scroll: false },
-            )
-            setSearchDraft("")
+            viewStates.current[urlState.view] = urlState
+            const target = urlStateFromMetricKey(key, {
+                view: urlState.view,
+                sort: "priority_due",
+            })
+            const saved = viewStates.current[target.view]
+            const next = {
+                ...target,
+                ...saved,
+                query: urlState.query,
+                page: 1,
+                scopeVersion: undefined,
+                queue: true,
+            }
+            if (key === "overdue" || key === "blocked")
+                Object.assign(next, target)
+            router.push(`${pathname}${buildWorkspaceSearchParams(next)}`, {
+                scroll: false,
+            })
         },
         [pathname, router, urlState],
+    )
+
+    const applyFilters = React.useCallback(
+        (query: string, filters: WorkspaceFilters) => {
+            replaceUrl({
+                view: urlState.view,
+                sort: urlState.sort,
+                query: query.trim() || undefined,
+                filters,
+                page: 1,
+                queue: true,
+            })
+        },
+        [replaceUrl, urlState.view, urlState.sort],
     )
 
     const clearFilters = React.useCallback(() => {
@@ -98,14 +129,17 @@ export function useWorkspaceHome() {
             sort: "priority_due",
             queue: true,
         })
-        setSearchDraft("")
     }, [replaceUrl, urlState.view])
 
     const onPageChange = React.useCallback(
         (page: number) => {
-            replaceUrl({ ...urlState, page })
+            replaceUrl({
+                ...urlState,
+                page,
+                scopeVersion: page > 1 ? view?.scopeVersion : undefined,
+            })
         },
-        [replaceUrl, urlState],
+        [replaceUrl, urlState, view?.scopeVersion],
     )
 
     const onSelectTask = React.useCallback(
@@ -124,53 +158,26 @@ export function useWorkspaceHome() {
         [pathname, router, urlState],
     )
 
-    const onQueueFiltersChange = React.useCallback(
-        (
-            patch: Pick<WorkspaceUrlState, "workItemType" | "due" | "blocked">,
-        ) => {
-            replaceUrl({
-                ...urlState,
-                ...patch,
-                queue: true,
-                page: 1,
-            })
-        },
-        [replaceUrl, urlState],
-    )
-
     const onSortChange = React.useCallback(
         (sort: WorkspaceSort) => {
             replaceUrl({
                 ...urlState,
                 sort,
                 page: 1,
+                scopeVersion: undefined,
             })
         },
         [replaceUrl, urlState],
     )
 
-    const applySearch = React.useCallback(() => {
-        replaceUrl({
-            ...urlState,
-            query: searchDraft.trim() || undefined,
-            page: 1,
-        })
-    }, [replaceUrl, searchDraft, urlState])
-
-    const clearSearch = React.useCallback(() => {
-        setSearchDraft("")
-        replaceUrl({
-            ...urlState,
-            query: undefined,
-            page: 1,
-        })
-    }, [replaceUrl, urlState])
-
     const refresh = React.useCallback(() => {
+        if ((urlState.page ?? 1) > 1)
+            replaceUrl({ ...urlState, page: 1, scopeVersion: undefined })
         void accountProfileQuery.refetch().then((profileResult) => {
             if (!profileResult.isSuccess) return
             for (const queryKey of [
                 workspaceHomeKeys.all,
+                ["workspace-filter-options"],
                 approvalKeys.all,
                 queryKeyRoots.fulfillmentOperations,
                 queryKeyRoots.supplierPayables,
@@ -178,7 +185,7 @@ export function useWorkspaceHome() {
                 void queryClient.invalidateQueries({ queryKey })
             }
         })
-    }, [accountProfileQuery, queryClient])
+    }, [accountProfileQuery, queryClient, urlState, replaceUrl])
 
     return {
         urlState,
@@ -188,16 +195,12 @@ export function useWorkspaceHome() {
         refreshing,
         activeMetric,
         hasActiveFilter,
-        searchDraft,
-        setSearchDraft,
         onMetricClick,
         clearFilters,
         onPageChange,
         onSelectTask,
-        onQueueFiltersChange,
         onSortChange,
-        applySearch,
-        clearSearch,
+        applyFilters,
         refresh,
     }
 }

@@ -36,11 +36,29 @@ export function VersionsPanel({
 }
 
 export function CollaborationPanel({ order }: { order: SalesOrderDetailView }) {
-    void order
-    // TODO(商城重做): 执行投影恢复后替换此占位面板。
     return (
-        <p className="text-sm text-muted-foreground">
-            商城对接已移除，执行投影待未来重做时恢复。
-        </p>
+        <section aria-label="卡券履约" className="space-y-4">
+            <h2 className="text-lg font-semibold">卡券履约</h2>
+            <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                <div>
+                    <dt className="text-muted-foreground">履约期限</dt>
+                    <dd className="mt-1">
+                        {order.fulfillmentDeadline || "未设置"}
+                    </dd>
+                </div>
+                <div>
+                    <dt className="text-muted-foreground">履约状态</dt>
+                    <dd className="mt-1">{order.fulfillment.label}</dd>
+                </div>
+            </dl>
+            <p className="text-sm text-muted-foreground">
+                卡券按履约期限判定交付完成，无需登记客户验收；回款和开票在票款分区跟进。
+            </p>
+            {order.originSystem === "mall" ? (
+                <p className="text-sm text-muted-foreground">
+                    本单由商城开立，商业变更由商城处理。
+                </p>
+            ) : null}
+        </section>
     )
 }

@@ -1,3 +1,7 @@
+import {
+    parseWorkspaceFilters,
+    type WorkspaceFilters,
+} from "@/lib/workspace-search"
 import type {
     TodayWorkspaceQuery,
     WorkspaceDueFilter,
@@ -8,10 +12,12 @@ import type {
 import { createUrlStateCodec } from "@/lib/url-state"
 
 const DUE_VALUES = ["today", "overdue"] as const
-const VIEW_VALUES = ["inbox", "started", "managed"] as const
+const VIEW_VALUES = ["inbox", "started", "managed", "history"] as const
 const SORT_VALUES = ["priority_due", "due_asc", "created_desc"] as const
 
 export type WorkspaceUrlState = {
+    filters?: WorkspaceFilters
+    scopeVersion?: string
     view: WorkspaceViewFilter
     due?: WorkspaceDueFilter
     blocked?: boolean
@@ -26,6 +32,13 @@ export type WorkspaceUrlState = {
 }
 
 const codec = createUrlStateCodec<WorkspaceUrlState>([
+    {
+        key: "filters",
+        type: "custom",
+        parse: (get) => parseWorkspaceFilters(get("filters")),
+        build: (value) => (value ? JSON.stringify(value) : undefined),
+    },
+    { key: "scopeVersion", type: "string" },
     {
         key: "view",
         type: "enum",
@@ -64,7 +77,31 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
     { key: "page", type: "number", defaultValue: 1, min: 1 },
 ])
 
-export const parseWorkspaceSearchParams = codec.parse
+export const parseWorkspaceSearchParams: typeof codec.parse = (params) => {
+    const state = codec.parse(params)
+    const filters: WorkspaceFilters = { ...state.filters }
+    if (state.workItemType)
+        filters.item_types = [
+            `${state.view === "started" ? "approval" : "task"}:${state.workItemType}`,
+        ]
+    if (state.handlerUserIds) filters.handlers = state.handlerUserIds.split(",")
+    if (state.salesOrderIds)
+        filters.sales_orders = state.salesOrderIds.split(",")
+    if (state.purchaseOrderIds)
+        filters.purchase_orders = state.purchaseOrderIds.split(",")
+    if (state.blocked) filters.blocked = true
+    if (state.due) filters.due = state.due
+    return {
+        ...state,
+        filters,
+        workItemType: undefined,
+        handlerUserIds: undefined,
+        salesOrderIds: undefined,
+        purchaseOrderIds: undefined,
+        blocked: undefined,
+        due: undefined,
+    }
+}
 export const buildWorkspaceSearchParams = codec.build
 
 /**
@@ -104,7 +141,7 @@ export const pickLegalWorkspaceQuery = (
               }
     const next = new URLSearchParams()
     const viewRaw = get("view")
-    if (viewRaw === "started" || viewRaw === "managed")
+    if (viewRaw === "started" || viewRaw === "managed" || viewRaw === "history")
         next.set("view", viewRaw)
     if (viewRaw === "approval-blockers") next.set("blocked", "1")
     const due = get("due")
@@ -127,6 +164,8 @@ export const pickLegalWorkspaceQuery = (
     const sort = get("sort")
     if (sort && SORT_VALUES.includes(sort as WorkspaceSort))
         next.set("sort", sort)
+    const filters = parseWorkspaceFilters(get("filters"))
+    if (filters) next.set("filters", JSON.stringify(filters))
     const current = get("currentWorkItemId")
     if (current) next.set("currentWorkItemId", current)
     const qs = next.toString()
@@ -139,6 +178,7 @@ export const pickLegalWorkspaceQuery = (
 export function metricKeyFromUrlState(
     state: Pick<WorkspaceUrlState, "view" | "due" | "blocked">,
 ): WorkspaceMetricKey {
+    if (state.view === "history") return "history"
     if (state.view === "started") return "started"
     if (state.view === "managed") return "managed"
     if (state.blocked) return "blocked"
@@ -167,6 +207,13 @@ export function urlStateFromMetricKey(
                 view: "inbox",
                 due: undefined,
                 blocked: true,
+            }
+        case "history":
+            return {
+                ...current,
+                view: "history",
+                due: undefined,
+                blocked: false,
             }
         case "started":
             return {
@@ -203,6 +250,8 @@ export function toTodayWorkspaceQuery(
 ): TodayWorkspaceQuery {
     return {
         view: state.view,
+        filters: state.filters,
+        scopeVersion: state.scopeVersion,
         due: state.due,
         blocked: state.blocked || undefined,
         workItemType: state.workItemType,
@@ -225,6 +274,8 @@ export function filterSummaryFor(key: WorkspaceMetricKey): string {
             return "已超期"
         case "blocked":
             return "受阻"
+        case "history":
+            return "处理记录"
         case "started":
             return "我发起的审批"
         case "managed":

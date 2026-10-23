@@ -24,17 +24,23 @@ export function SalesTimeline({
     idPrefix,
     compact = false,
     onOpenFull,
+    fixedCategory,
 }: {
     salesOrderId: string
     idPrefix: string
     compact?: boolean
     onOpenFull?: () => void
+    fixedCategory?: TimelineCategory
 }) {
     const [category, setCategory] = useState<TimelineCategory | undefined>()
     const [includeDetails, setIncludeDetails] = useState(false)
     const query = useTimelineQuery(
         { kind: "sales", id: salesOrderId },
-        { category, includeDetails, pageSize: compact ? 5 : 30 },
+        {
+            category: fixedCategory ?? category,
+            includeDetails,
+            pageSize: compact ? 5 : 30,
+        },
     )
     const events = query.data?.pages.flatMap((page) => page.items) ?? []
     return (
@@ -44,7 +50,11 @@ export function SalesTimeline({
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-sm font-medium">
-                    {compact ? "最近动态" : "全流程时间线"}
+                    {compact
+                        ? "最近动态"
+                        : fixedCategory === "returns"
+                          ? "售后与调整记录"
+                          : "全流程时间线"}
                 </h3>
                 <Button
                     id={`${idPrefix}-refresh`}
@@ -56,7 +66,7 @@ export function SalesTimeline({
                     刷新
                 </Button>
             </div>
-            {!compact && (
+            {!compact && !fixedCategory && (
                 <div className="flex flex-wrap items-center gap-3">
                     <label htmlFor={`${idPrefix}-category`} className="text-sm">
                         业务环节

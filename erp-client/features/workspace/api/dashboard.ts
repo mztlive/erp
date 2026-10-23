@@ -5,10 +5,7 @@
 
 import type { AccountProfile } from "@/features/auth/api"
 import { listApprovalInstances } from "@/features/approval-workflow/api"
-import type {
-    ApprovalInstanceListItem,
-    ApprovalInstanceListPage,
-} from "@/features/approval-workflow/types"
+import type { ApprovalInstanceListItem } from "@/features/approval-workflow/types"
 import {
     getWorkItemStats,
     listWorkItems,
@@ -24,7 +21,6 @@ import type {
     TodayWorkspaceQuery,
     TodayWorkspaceView,
     WorkspaceActionCode,
-    WorkspaceFamilyCounts,
     WorkspaceFamilyFilter,
     WorkspaceMetric,
     WorkspaceWorkItem,
@@ -177,6 +173,7 @@ export function mapWorkspaceWorkItem(
     )
 
     return {
+        searchMatches: dto.search_matches,
         workItemId: task.workItemId,
         taskVersion: task.taskVersion,
         workItemType: task.workItemType,
@@ -301,21 +298,6 @@ function buildMetrics(
     ]
 }
 
-/** 映射服务端任务族统计；旧服务缺少字段时保持不可见，不能回退当前页求和。 */
-function buildFamilyCounts(
-    stats: WorkItemStats,
-): WorkspaceFamilyCounts | undefined {
-    const counts = stats.family_counts
-    if (!counts) return undefined
-    return {
-        approval: counts.approval,
-        procurement: counts.procurement,
-        fulfillment: counts.fulfillment,
-        finance: counts.finance,
-        exception: counts.exception,
-    }
-}
-
 function isForbiddenError(error: unknown): boolean {
     return (
         typeof error === "object" &&
@@ -372,25 +354,6 @@ async function listManagedWorkItems(
     }
 }
 
-function listMineWorkItems(query: TodayWorkspaceQuery) {
-    return listWorkItems({
-        scope: "mine",
-        family: query.family,
-        workItemType: query.workItemType,
-        due: query.due,
-        blocked: query.blocked,
-        query: query.query,
-        handlerUserIds: query.handlerUserIds,
-        salesOrderIds: query.salesOrderIds,
-        purchaseOrderIds: query.purchaseOrderIds,
-        sort: query.sort,
-        cursor: query.cursor,
-        timezone: query.timezone,
-        page: query.page ?? 1,
-        pageSize: 50,
-    })
-}
-
 /**
  * 拉取工作台视图：任务列表与指标分别请求，口径一致。
  */
@@ -403,127 +366,87 @@ export async function fetchWorkspaceDashboard(
         profile.permissions,
         "approval_instance:read",
     )
-    let view =
-        (query.view === "managed" && !canManage) ||
-        (query.view === "started" && !canReadStarted)
-            ? "inbox"
-            : query.view
-
-    const startedMetricPromise: Promise<ApprovalInstanceListPage> =
+    const filters = { ...query.filters, include_options: true }
+    const [stats, startedMetric, managedMetric] = await Promise.all([
+        getWorkItemStats({ scope: "mine", timezone: query.timezone }),
         canReadStarted
-            ? listApprovalInstances({
-                  view: "started",
-                  cursor:
-                      view === "started" && !query.query && !query.workItemType
-                          ? query.cursor
-                          : undefined,
-                  limit:
-                      view === "started" && !query.query && !query.workItemType
-                          ? 20
-                          : 1,
-              })
-            : Promise.resolve({ items: [], total: 0 })
-    const startedListPromise: Promise<ApprovalInstanceListPage> =
-        canReadStarted &&
-        view === "started" &&
-        (query.query || query.workItemType)
-            ? listApprovalInstances({
-                  view: "started",
-                  cursor: query.cursor,
-                  limit: 20,
-                  query: query.query,
-                  documentType: query.workItemType,
-              })
-            : startedMetricPromise
-
-    const [page, stats, startedPage, managedCount] = await Promise.all([
-        view === "started"
-            ? startedListPromise.then((result) => ({
-                  items: [] as WorkItemDto[],
-                  startedItems: result.items,
-                  total: result.total ?? result.items.length,
-                  nextCursor: result.nextCursor,
-                  managedAvailable: false,
-              }))
-            : view === "managed"
-              ? listManagedWorkItems(query, 50).then(async (managed) => {
-                    if (managed.available) {
-                        return {
-                            items: managed.items,
-                            startedItems: [] as ApprovalInstanceListItem[],
-                            total: managed.total,
-                            nextCursor: undefined as string | undefined,
-                            managedAvailable: true,
-                        }
-                    }
-                    view = "inbox"
-                    const mine = await listMineWorkItems(query)
-                    return {
-                        items: mine.items,
-                        startedItems: [] as ApprovalInstanceListItem[],
-                        total: mine.total,
-                        nextCursor: undefined as string | undefined,
-                        managedAvailable: false,
-                    }
-                })
-              : listMineWorkItems(query).then((result) => ({
-                    items: result.items,
-                    startedItems: [] as ApprovalInstanceListItem[],
-                    total: result.total,
-                    nextCursor: undefined as string | undefined,
-                    managedAvailable: false,
-                })),
-        getWorkItemStats({
-            scope: "mine",
-            timezone: query.timezone,
-        }),
-        startedMetricPromise,
-        canManage && query.view !== "managed"
+            ? listApprovalInstances({ view: "started", limit: 1 })
+            : Promise.resolve({ items: [], total: 0 }),
+        canManage
             ? listManagedWorkItems(
                   { timezone: query.timezone, sort: query.sort },
                   1,
               )
-            : Promise.resolve({
-                  items: [] as WorkItemDto[],
-                  total: 0,
-                  available: canManage,
-              }),
+            : Promise.resolve({ items: [], total: 0, available: false }),
     ])
-
-    const canReadManaged =
-        query.view === "managed"
-            ? page.managedAvailable
-            : canManage && managedCount.available
-    const managedMetricCount =
-        query.view === "managed" && page.managedAvailable
-            ? page.total
-            : managedCount.total
-
-    const items =
-        view === "started"
-            ? page.startedItems.map((item) =>
-                  startedInstanceToWorkItem(item, query.timezone),
-              )
-            : page.items.map((dto) => mapWorkspaceWorkItem(dto, query.timezone))
-
-    const updatedAt = unixToIso(stats.as_of)
     const metrics = buildMetrics(
         stats,
-        startedPage.total ?? startedPage.items.length,
+        startedMetric.total ?? 0,
         canReadStarted,
-        managedMetricCount,
-        canReadManaged,
+        managedMetric.total,
+        managedMetric.available,
     )
-
+    metrics.push({
+        key: "history",
+        label: "处理记录",
+        count: 0,
+        visible: true,
+        tone: "neutral",
+    })
+    const started = query.view === "started"
+    const approvalPage = started
+        ? await listApprovalInstances({
+              view: "started",
+              query: query.query,
+              page: query.page ?? 1,
+              limit: 50,
+              documentType: query.workItemType,
+              filters,
+          })
+        : undefined
+    const taskPage = !started
+        ? await listWorkItems({
+              scope:
+                  query.view === "managed"
+                      ? "managed"
+                      : query.view === "history"
+                        ? "history"
+                        : "mine",
+              family: query.family,
+              workItemType: query.workItemType,
+              due: query.due,
+              filters: {
+                  ...filters,
+                  blocked: query.blocked || filters.blocked,
+              },
+              query: query.query,
+              handlerUserIds: query.handlerUserIds,
+              salesOrderIds: query.salesOrderIds,
+              purchaseOrderIds: query.purchaseOrderIds,
+              sort: query.sort,
+              timezone: query.timezone,
+              page: query.page ?? 1,
+              scopeVersion: query.scopeVersion,
+              pageSize: 50,
+          })
+        : undefined
+    const items = approvalPage
+        ? approvalPage.items.map((item) => ({
+              ...startedInstanceToWorkItem(item, query.timezone),
+              searchMatches: item.searchMatches,
+          }))
+        : (taskPage?.items ?? []).map((item) =>
+              mapWorkspaceWorkItem(item, query.timezone),
+          )
+    const updatedAt = unixToIso(stats.as_of)
     return {
         access: "allowed",
+        metrics,
+        items,
         viewer: {
             userId: profile.userid,
             displayName: profile.name || profile.account,
-            activeRoleLabel:
-                profile.role_ids.length > 0
-                    ? profile.role_ids.join("、")
-                    : "已登录",
+            activeRoleLabel: profile.role_ids.join("、"),
             timezone: query.timezone,
         },
         freshness: {
@@ -533,18 +456,10 @@ export async function fetchWorkspaceDashboard(
             projectionUpdatedAt: updatedAt,
             projectionState: updatedAt ? "fresh" : "stale",
         },
-        metrics,
-        familyCounts: view === "inbox" ? buildFamilyCounts(stats) : undefined,
-        workItemTypeCounts:
-            view === "inbox"
-                ? stats.work_item_type_counts
-                : view === "started"
-                  ? startedPage.documentTypeCounts
-                  : undefined,
+        filterOptions: approvalPage?.filterOptions ?? taskPage?.filter_options,
+        scopeVersion: taskPage?.scope_version,
+        total: approvalPage?.total ?? taskPage?.total ?? 0,
         dueTodayCount: stats.due_today,
-        items,
-        nextCursor: page.nextCursor,
-        total: page.total,
         warnings: [],
         recent: [],
     }

@@ -35,7 +35,9 @@ mod presentation;
 mod purchase_review_brief;
 mod query;
 mod sales_order_brief;
+mod search;
 mod stats;
+pub use search::{SearchOption, SearchOptions, WorkItemSearchParams, WorkspaceFilters};
 mod supplier_portal_brief;
 mod supply_warnings;
 #[cfg(test)]

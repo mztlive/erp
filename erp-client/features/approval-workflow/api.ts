@@ -1,3 +1,4 @@
+import type { WorkspaceFilters } from "@/lib/workspace-search"
 import { apiGet, apiPost, getErrorMessage } from "@/lib/api"
 import { isApiError } from "@/lib/api/errors"
 
@@ -26,6 +27,8 @@ import {
 } from "./types"
 
 export type ApprovalInstanceListParams = Readonly<{
+    filters?: WorkspaceFilters
+    page?: number
     view: ApprovalInstanceListView
     documentType?: string
     status?: "RUNNING" | "APPROVED" | "CANCELLED" | "BLOCKED"
@@ -94,6 +97,10 @@ export const listApprovalInstances = async (
         "/admin/approval-instances",
         {
             view: params.view,
+            page: params.page,
+            filters: params.filters
+                ? JSON.stringify(params.filters)
+                : undefined,
             document_type: params.documentType,
             status: params.status,
             q: params.query,
@@ -103,6 +110,7 @@ export const listApprovalInstances = async (
     )
     return {
         items: page.items.map(mapInstanceListItemDto),
+        filterOptions: page.filter_options,
         documentTypeCounts: page.document_type_counts ?? undefined,
         nextCursor: page.next_cursor ?? undefined,
         total: page.total ?? undefined,

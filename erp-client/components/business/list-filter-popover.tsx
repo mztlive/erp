@@ -83,12 +83,15 @@ export function ListFilterPopover({
                 />
             </PopoverTrigger>
             <PopoverContent
+                keepMounted
                 id={panelId}
                 aria-label={label}
                 align="end"
                 sideOffset={8}
                 className={cn(
-                    "max-h-[min(44rem,var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0",
+                    // 工作区 iframe 隐藏会中断动画；关闭立即隐藏，不依赖退场动画卸载。
+                    // 保持字段挂载，取消或切换 Tab 后仍保留未应用的筛选草稿。
+                    "max-h-[min(44rem,var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0 data-open:animate-none data-closed:hidden data-closed:animate-none",
                     size === "compact" ? "w-80" : "w-[36rem]",
                 )}
             >

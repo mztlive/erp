@@ -44,10 +44,13 @@ export function useSalesOrderDetailUrlState({
         (
             next: NavSectionId | WorkSectionId | "versions",
             isCustomerAcceptanceTask = false,
-            _extras?: { mode?: "register" },
+            extras?: { mode?: "register" },
         ) => {
             const params = new URLSearchParams()
             params.set("section", next)
+            if (next === "acceptance" && extras?.mode === "register") {
+                params.set("mode", "register")
+            }
             if (returnTo) params.set("returnTo", returnTo)
             if (fromWorkspace) params.set("from", fromWorkspace)
             if (next === "change-review" && focusedChangeOrderId) {

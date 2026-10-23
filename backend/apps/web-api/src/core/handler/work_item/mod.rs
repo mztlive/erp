@@ -11,6 +11,7 @@ use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use erp_processes::Error as ProcessError;
 use erp_processes::adapters::workflow::{work_item_service, workflow_auth};
+use erp_read_models::workbench::{SearchOptions, WorkItemSearchParams};
 use erp_read_models::{
     Error as ReadModelError, FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams,
     WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
@@ -21,7 +22,7 @@ use erp_workflow::service::work_item::{
     WorkItemReassignCandidateView,
 };
 use erp_workflow::{Error as WorkflowError, ErrorCode};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -31,6 +32,12 @@ use crate::core::handler::approval_instance::error::{ApprovalHttpError, correlat
 use crate::core::response::ApiResponse;
 
 pub mod finance_responsibility;
+
+/// 扩展查询独立解码，保留数值页码由 URL 提取器直接校验。
+#[derive(Debug, Deserialize)]
+pub struct WorkItemSearchQuery {
+    pub filters: Option<String>,
+}
 
 /// 线协议责任类型。
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -55,6 +62,7 @@ pub struct WorkItemHttpView {
 /// 带责任类型的分页投影。
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkItemHttpPageView {
+    pub filter_options: SearchOptions,
     /// 当前页任务。
     pub items: Vec<WorkItemHttpView>,
     /// 授权范围内总数。
@@ -215,6 +223,7 @@ impl From<WorkItemView> for WorkItemHttpView {
 /// 返回带责任类型的分页。
 fn wrap_page(page: WorkItemPageView) -> WorkItemHttpPageView {
     WorkItemHttpPageView {
+        filter_options: page.filter_options,
         items: page.items.into_iter().map(WorkItemHttpView::from).collect(),
         total: page.total,
         page: page.page,
@@ -310,9 +319,10 @@ pub async fn work_item_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<WorkItemListParams>,
+    Query(search): Query<WorkItemSearchQuery>,
 ) -> Result<WorkItemHttpPageView> {
     let page = WorkbenchReadService::new(state.db(), workflow_auth(state.db(), state.rbac()))
-        .work_item_list(params, actor)
+        .work_item_search(WorkItemSearchParams { base: params, filters: search.filters }, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(wrap_page(page)))
 }
@@ -520,6 +530,7 @@ mod tests {
 
     fn task_view(work_item_type: WorkItemType) -> WorkItemView {
         WorkItemView {
+            search_matches: Vec::new(),
             fulfillment_status: None,
             id: "task-id".to_string(),
             work_item_type,
@@ -595,10 +606,27 @@ mod tests {
     }
 
     #[test]
+    fn workspace_query_decodes_numeric_pagination_with_structured_filters() {
+        let uri = "/?scope=mine&page=2&page_size=50&filters=%7B%22handlers%22%3A%5B%22u-1%22%5D%7D"
+            .parse()
+            .unwrap();
+        let axum::extract::Query(base) =
+            axum::extract::Query::<super::WorkItemListParams>::try_from_uri(&uri).unwrap();
+        let axum::extract::Query(search) =
+            axum::extract::Query::<super::WorkItemSearchQuery>::try_from_uri(&uri).unwrap();
+        assert_eq!(base.page, Some(2));
+        assert_eq!(base.page_size, Some(50));
+        assert_eq!(search.filters.as_deref(), Some(r#"{"handlers":["u-1"]}"#));
+        let invalid = "/?scope=mine&page=not-a-number".parse().unwrap();
+        assert!(axum::extract::Query::<super::WorkItemListParams>::try_from_uri(&invalid).is_err());
+    }
+
+    #[test]
     fn typed_task_page_keeps_pagination_and_empty_page_contract() {
         for items in [Vec::new(), vec![task_view(WorkItemType::BusinessException)]] {
             let expected_items = items.iter().cloned().map(WorkItemHttpView::from).collect::<Vec<_>>();
             let page = WorkItemPageView {
+                filter_options: Default::default(),
                 items,
                 total: 42,
                 page: 3,
@@ -610,6 +638,7 @@ mod tests {
             assert_eq!(
                 to_value(wrap_page(page)).expect("page serializes"),
                 json!({
+                    "filter_options": {},
                     "items": expected_items,
                     "total": 42,
                     "page": 3,

@@ -1,3 +1,7 @@
+import type {
+    WorkspaceFilters,
+    WorkspaceSearchOptions,
+} from "@/lib/workspace-search"
 import { apiGet, apiPost, type Page } from "@/lib/api"
 import { isApiError } from "@/lib/api/errors"
 
@@ -13,6 +17,7 @@ import type {
 
 export type WorkItemListParams = Readonly<{
     scope: WorkItemScope
+    filters?: WorkspaceFilters
     family?: string
     workItemType?: string
     status?: "COMPLETED" | "CLOSED"
@@ -37,6 +42,7 @@ export type WorkItemListParams = Readonly<{
 }>
 
 export type WorkItemPage = Page<WorkItemDto> & {
+    filter_options?: WorkspaceSearchOptions
     queue_context_id?: string | null
     scope_version: string
 }
@@ -119,6 +125,7 @@ export function listWorkItems(
 ): Promise<WorkItemPage> {
     return apiGet<WorkItemPage>("/admin/work-items", {
         scope: params.scope,
+        filters: params.filters ? JSON.stringify(params.filters) : undefined,
         family: params.family,
         work_item_type: params.workItemType,
         status: params.status,

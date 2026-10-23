@@ -17,7 +17,7 @@ use super::facts::object_policy;
 use super::stats::apply_due_filter;
 use super::{
     ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
-    WorkItemPageView, WorkItemScope, WorkItemView, dto,
+    WorkItemPageView, WorkItemScope, WorkItemSearchParams, WorkItemView, WorkspaceFilters, dto,
 };
 use crate::errors::{Error, Result};
 
@@ -25,6 +25,7 @@ pub(super) const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).e
 
 struct FocusedQueueContext<'a> {
     page_size: u32,
+    actor: &'a AuditActor,
     access: &'a ActorAccess,
 }
 
@@ -119,8 +120,29 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         params: WorkItemListParams,
         actor: AuditActor,
     ) -> Result<WorkItemPageView> {
-        params.validate()?;
-        let query = params.normalized()?;
+        self.work_item_search(WorkItemSearchParams { base: params, filters: None }, actor).await
+    }
+
+    /// 查询带结构化条件的授权任务队列。
+    /// # 参数
+    /// `params` 为责任范围与筛选，`actor` 为当前账号。
+    /// # 返回
+    /// 返回服务端筛选计数、分页及候选项。
+    /// # 错误
+    /// 非法条件、授权或查询失败时返回错误。
+    pub async fn work_item_search(
+        &self,
+        params: WorkItemSearchParams,
+        actor: AuditActor,
+    ) -> Result<WorkItemPageView> {
+        params.base.validate()?;
+        let mut query = params.base.normalized()?;
+        query.filters = WorkspaceFilters::parse(params.filters.as_deref())?;
+        query.due = match query.filters.due.as_deref() {
+            Some("today") => Some(WorkItemDueFilter::Today),
+            Some("overdue") => Some(WorkItemDueFilter::Overdue),
+            _ => query.due,
+        };
         let this = self.clone();
         self.db
             .client()
@@ -144,8 +166,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let mut filter = self.scope_filter(&query, &actor, &access)?;
         apply_due_filter(&mut filter, query.due)?;
         filter.narrow_current_handlers(&query.handler_user_ids);
-        let (authorized_page, result_version) =
-            self.authorized_page_fields(&filter, &query, &access, executor).await?;
+        let (authorized_page, result_version, filter_options) =
+            self.authorized_page_fields(&filter, &query, &actor, &access, executor).await?;
         let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
         let mut fields = self
@@ -154,11 +176,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 query.current_work_item_id.as_deref(),
                 &filter,
                 &query,
-                FocusedQueueContext { page_size: query.page_size, access: &access },
+                FocusedQueueContext { page_size: query.page_size, actor: &actor, access: &access },
                 executor,
             )
             .await?;
-        if query.query.is_none() {
+        if query.query.is_none() && query.filters == Default::default() {
             self.page_display_fields(&mut fields, executor).await?;
         }
         let items =
@@ -166,6 +188,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let current_version = self.auth.queue_scope_version(&actor, executor).await?;
         ensure_scope_version(1, Some(&identity_version), &current_version)?;
         Ok(WorkItemPageView {
+            filter_options,
             items,
             total: authorized_page.total,
             page: query.page,
@@ -204,9 +227,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .find_visible_by_id(current_id, &candidates, executor)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
-        let current = self.authorized_fields_for_items(vec![current], context.access, executor).await?;
+        let mut current = self.authorized_fields_for_items(vec![current], context.access, executor).await?;
+        self.search_documents(&mut current, executor).await?;
+        if query.filters.blocked {
+            self.search_blockers(&mut current, query.scope, context.actor, context.access, executor).await?;
+        }
         let Some(current) = current.into_iter().find(|fields| {
-            matches_keyword(fields, filter.query.as_deref())
+            fields.search.matches(filter.query.as_deref()).is_some()
+                && query.filters.matches(&fields.search)
                 && matches_handler(fields, &query.handler_user_ids)
         }) else {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
@@ -219,48 +247,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         fields.insert(0, current);
         fields.truncate(context.page_size as usize);
         Ok(fields)
-    }
-
-    /// 扫描全部仓储候选，逐批授权后仅保留请求页。
-    async fn authorized_page_fields(
-        &self,
-        filter: &WorkItemFilter,
-        query: &dto::WorkItemListQuery,
-        access: &ActorAccess,
-        executor: &mut dyn Executor,
-    ) -> Result<(AuthorizedPage<dto::WorkItemFields>, String)> {
-        let mut candidates = filter.clone();
-        candidates.query = None;
-        let mut collector = AuthorizedPageCollector::new(query.page, query.page_size)?;
-        let mut result_version = String::new();
-        let mut scan = self.candidate_scan(&candidates, executor).await?;
-        loop {
-            let rows = scan.next_batch(AUTHORIZED_SCAN_BATCH_SIZE, executor).await?;
-            let candidate_count = rows.len();
-            if candidate_count == 0 {
-                break;
-            }
-            let mut facts = self.candidate_object_facts(&rows, filter.query.is_some(), executor).await?;
-            let fields = self.authorize_queue_rows(rows, access, &mut facts, executor).await?;
-            for fields in fields.into_iter().filter(|fields| {
-                matches_keyword(fields, filter.query.as_deref())
-                    && matches_handler(fields, &query.handler_user_ids)
-                    && matches_order_sources(
-                        fields,
-                        &facts,
-                        &query.sales_order_ids,
-                        &query.purchase_order_ids,
-                    )
-            }) {
-                result_version =
-                    queue_scope_version(&result_version, &fields.id, &fields.task_version.to_string());
-                collector.extend([fields]);
-            }
-            if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
-                break;
-            }
-        }
-        Ok((collector.finish(), result_version))
     }
 
     /// 打开一次候选游标，排序和完整授权计数仍沿用队列合同。
@@ -518,6 +504,7 @@ fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &Act
                 query.priorities.iter().map(|value| value.as_str().to_string()),
             ),
             QueueContextField::optional("query", query.query.as_deref()),
+            QueueContextField::scalar("filters", serde_json::to_string(&query.filters).unwrap_or_default()),
             QueueContextField::set("handlers", query.handler_user_ids.iter().cloned()),
             QueueContextField::set("sales_orders", query.sales_order_ids.iter().cloned()),
             QueueContextField::set("purchase_orders", query.purchase_order_ids.iter().cloned()),
@@ -684,33 +671,9 @@ impl<T> AuthorizedPageCollector<T> {
     }
 }
 
-/// 对已授权并装配业务显示事实的任务执行字面量 OR 搜索；必须先于总数和分页。
-///
-/// # 参数
-/// * `fields` - 已授权任务字段
-/// * `q` - 检索词
-///
-/// # 返回
-/// 检索词规范化后为空时返回 `true`。否则对象标签、往来名称、对象 ID、对象类型、原因码或影响摘要任一字段包含该词时返回 `true`。比较忽略大小写。
-///
-/// # 错误
-/// 不返回错误。
+#[cfg(test)]
 pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> bool {
-    let Some(q) = application_core::normalized_text(q) else {
-        return true;
-    };
-    let needle = q.to_lowercase();
-    [
-        Some(fields.business_object_label.as_str()),
-        fields.counterparty_label.as_deref(),
-        Some(fields.business_object_id.as_str()),
-        Some(fields.business_object_type.as_str()),
-        fields.reason_code.as_deref(),
-        fields.impact_summary.as_deref(),
-    ]
-    .into_iter()
-    .flatten()
-    .any(|text| text.to_lowercase().contains(&needle))
+    super::search::task_document(fields, &HashMap::new()).matches(q).is_some()
 }
 
 /// 当前处理人筛选只收窄授权结果；空集表示不过滤。
@@ -977,6 +940,7 @@ mod tests {
             purchase: &[&str],
         ) -> super::super::dto::WorkItemListQuery {
             super::super::dto::WorkItemListQuery {
+                filters: Default::default(),
                 scope: super::super::dto::WorkItemScope::Mine,
                 work_item_types: Vec::new(),
                 statuses: Vec::new(),

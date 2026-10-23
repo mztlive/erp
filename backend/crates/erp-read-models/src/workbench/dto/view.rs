@@ -97,6 +97,8 @@ pub struct WorkItemRouteContext {
 /// 人工任务队列安全投影。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkItemView {
+    /// 服务端返回的关键词命中位置。
+    pub search_matches: Vec<String>,
     pub id: String,
     pub work_item_type: WorkItemType,
     pub handler_key: String,
@@ -222,6 +224,7 @@ impl WorkItemView {
         });
         let brief = brief_source.as_ref().map(|source| assemble_brief(source, inner.reason_code.as_deref()));
         Ok(Self {
+            search_matches: fields.search_matches,
             delivery_lines,
             fulfillment_status: None,
             id: inner.id,
@@ -312,6 +315,9 @@ impl WorkItemView {
 /// Identity and status fields are [`erp_workflow::dto::work_item::WorkItemFields`].
 #[derive(Debug, Clone)]
 pub(crate) struct WorkItemFields {
+    pub(in crate::workbench) search: super::super::search::SearchDocument,
+    pub search_matches: Vec<String>,
+    pub search_lines: Vec<String>,
     inner: erp_workflow::dto::work_item::WorkItemFields,
     pub brief_source: Option<super::super::brief::ObjectBriefSource>,
     pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
@@ -336,7 +342,15 @@ impl DerefMut for WorkItemFields {
 impl From<WorkItem> for WorkItemFields {
     fn from(item: WorkItem) -> Self {
         let procurement_scope_ids = item.responsibility_scope_ids().to_vec();
-        Self { inner: item.into(), brief_source: None, delivery_lines: Vec::new(), procurement_scope_ids }
+        Self {
+            inner: item.into(),
+            brief_source: None,
+            delivery_lines: Vec::new(),
+            procurement_scope_ids,
+            search: Default::default(),
+            search_matches: Vec::new(),
+            search_lines: Vec::new(),
+        }
     }
 }
 
@@ -344,6 +358,9 @@ impl From<erp_workflow::WorkItemRow> for WorkItemFields {
     fn from(item: erp_workflow::WorkItemRow) -> Self {
         Self {
             inner: item.into(),
+            search: Default::default(),
+            search_matches: Vec::new(),
+            search_lines: Vec::new(),
             brief_source: None,
             delivery_lines: Vec::new(),
             procurement_scope_ids: Vec::new(),

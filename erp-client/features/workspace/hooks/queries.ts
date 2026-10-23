@@ -73,6 +73,7 @@ export function useWorkspaceApprovalDetailQuery(
 export function useWorkspaceTaskDetailQuery(
     workItemId: string | undefined,
     profile?: AccountProfile,
+    enabled = true,
 ) {
     return useQuery({
         queryKey: [
@@ -90,7 +91,7 @@ export function useWorkspaceTaskDetailQuery(
                 "Asia/Shanghai",
             )
         },
-        enabled: Boolean(workItemId && profile),
+        enabled: enabled && Boolean(workItemId && profile),
         retry: false,
     })
 }

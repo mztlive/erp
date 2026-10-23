@@ -1,3 +1,4 @@
+import type { WorkspaceSearchOptions } from "@/lib/workspace-search"
 /**
  * 通用审批区的前端稳定合同。
  *
@@ -296,6 +297,7 @@ function mapApprovalDocumentSummary(
 }
 
 export type ApprovalInstanceListItemDto = Readonly<{
+    search_matches?: string[]
     subject_version?: number | null
     document_summary?: ApprovalDocumentSummaryDto | null
     instance_id: string
@@ -318,6 +320,7 @@ export type ApprovalInstanceListItemDto = Readonly<{
 
 /** 实例列表页。 */
 export type ApprovalInstanceListPageDto = Readonly<{
+    filter_options?: WorkspaceSearchOptions
     document_type_counts?: Readonly<Record<string, number>> | null
     items: readonly ApprovalInstanceListItemDto[]
     next_cursor?: string | null
@@ -417,6 +420,7 @@ export type DocumentApprovalView = Readonly<{
 }>
 
 export type ApprovalInstanceListItem = Readonly<{
+    searchMatches?: string[]
     subjectVersion?: string
     documentSummary?: ApprovalDocumentSummary
     documentSummaryResolved?: boolean
@@ -439,6 +443,7 @@ export type ApprovalInstanceListItem = Readonly<{
 }>
 
 export type ApprovalInstanceListPage = Readonly<{
+    filterOptions?: WorkspaceSearchOptions
     documentTypeCounts?: Readonly<Record<string, number>>
     items: readonly ApprovalInstanceListItem[]
     nextCursor?: string
@@ -663,6 +668,7 @@ function isCanonicalPositiveU64(value: unknown): value is string {
 export const mapInstanceListItemDto = (
     dto: ApprovalInstanceListItemDto,
 ): ApprovalInstanceListItem => ({
+    searchMatches: dto.search_matches,
     documentSummaryResolved: dto.document_summary !== undefined,
     subjectVersion: optionalVersion(dto.subject_version),
     documentSummary: dto.document_summary

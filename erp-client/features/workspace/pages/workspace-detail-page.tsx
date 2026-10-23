@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import {
@@ -19,6 +19,7 @@ import {
     useWorkspaceTaskDetailQuery,
     workspaceHomeKeys,
 } from "../hooks/queries"
+import { useWorkspaceDetailDocumentTitle } from "../hooks/use-workspace-detail-title"
 import {
     parseWorkspaceSearchParams,
     toTodayWorkspaceQuery,
@@ -32,6 +33,22 @@ export function WorkspaceDetailPage({
     id: string
     approval?: boolean
 }) {
+    return (
+        <WorkspaceDetailContent
+            key={`${approval ? "approval" : "task"}:${id}`}
+            id={id}
+            approval={approval}
+        />
+    )
+}
+
+function WorkspaceDetailContent({
+    id,
+    approval,
+}: {
+    id: string
+    approval: boolean
+}) {
     const router = useRouter()
     const params = useSearchParams()
     const queryClient = useQueryClient()
@@ -41,15 +58,21 @@ export function WorkspaceDetailPage({
         approval ? "/workspace?view=started" : "/workspace",
     )
     const [autoNext, setAutoNext] = useState(params.get("autoNext") === "1")
+    const [completion, setCompletion] = useState<{
+        completedId: string
+        preferredId?: string
+    } | null>(null)
     const taskQuery = useWorkspaceTaskDetailQuery(
         approval ? undefined : id,
         profile.data,
+        !completion,
     )
     const approvalQuery = useWorkspaceApprovalDetailQuery(
         approval ? id : undefined,
         profile.data,
     )
     const detail = approval ? approvalQuery : taskQuery
+    useWorkspaceDetailDocumentTitle(detail.data)
     const queueState = parseWorkspaceSearchParams(
         new URLSearchParams(returnTo.split("?")[1]),
     )
@@ -60,8 +83,16 @@ export function WorkspaceDetailPage({
     )
     const backLabel = approval ? "返回审批队列" : "返回任务队列"
     const back = () => router.replace(returnTo, { scroll: false })
-    const complete = (completedId: string, preferredId?: string) => {
-        const items = queue.data?.items ?? []
+    // 完成通知可能早于队列请求结束；只有成功取得队列才能判断是否还有下一项。
+    useEffect(() => {
+        if (!completion) return
+        if (!autoNext || approval) {
+            router.replace(returnTo, { scroll: false })
+            return
+        }
+        if (!queue.isSuccess) return
+        const { completedId, preferredId } = completion
+        const items = queue.data.items
         const index = items.findIndex((item) => item.workItemId === completedId)
         const next =
             items.find(
@@ -73,19 +104,57 @@ export function WorkspaceDetailPage({
                 .slice(index + 1)
                 .find((item) => item.workItemId !== completedId) ??
             items.find((item) => item.workItemId !== completedId)
-        void queryClient.invalidateQueries({
-            queryKey: workspaceHomeKeys.all,
-            refetchType: "none",
-        })
-        if (autoNext && next && !queue.isError)
+        if (next)
             router.replace(
                 buildWorkspaceDetailHref("tasks", next.workItemId, {
                     returnTo,
                     autoNext: true,
                 }),
             )
-        else back()
+        else router.replace(returnTo, { scroll: false })
+    }, [
+        completion,
+        autoNext,
+        approval,
+        queue.isSuccess,
+        queue.data,
+        router,
+        returnTo,
+    ])
+    const complete = (completedId: string, preferredId?: string) => {
+        setCompletion({ completedId, preferredId })
+        void queryClient.invalidateQueries({
+            queryKey: workspaceHomeKeys.all,
+            refetchType: "none",
+        })
     }
+    if (completion)
+        return (
+            <PageScaffold>
+                {autoNext && queue.isError ? (
+                    <BusinessFailureState
+                        title="当前任务已处理，后续任务读取失败"
+                        description="无需重复审批或提交，请重试读取下一项，或返回任务队列。"
+                        error={queue.error}
+                        onRetry={() => void queue.refetch()}
+                        action={
+                            <Button
+                                id="workspace-completed-back"
+                                onClick={back}
+                            >
+                                {backLabel}
+                            </Button>
+                        }
+                    />
+                ) : (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        {autoNext && !approval
+                            ? "当前任务已处理，正在打开下一项…"
+                            : "当前任务已处理，正在返回队列…"}
+                    </p>
+                )}
+            </PageScaffold>
+        )
     if (profile.isError || detail.isError)
         return (
             <PageScaffold>
@@ -115,7 +184,7 @@ export function WorkspaceDetailPage({
             {autoNext && queue.isError && (
                 <BusinessFailureState
                     title="后续任务读取失败"
-                    description="当前任务可继续办理，完成后将返回队列。"
+                    description="当前任务可继续办理；完成后可重试读取下一项，或返回队列。"
                     error={queue.error}
                     onRetry={() => void queue.refetch()}
                 />

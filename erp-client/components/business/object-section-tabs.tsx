@@ -29,6 +29,8 @@ export type ObjectSectionTabsProps = Omit<
     sidebar?: React.ReactNode
     /** 固定高度详情页中，正文与侧栏独立滚动，分区导航保持可见。 */
     scrollMode?: "page" | "panels"
+    /** 同一主分区内切换子页时，重置正文滚动而不重新挂载整个导航。 */
+    scrollResetKey?: string
     /** 操作结果或专项处理区，与分区正文一起滚动。 */
     beforeContent?: React.ReactNode
     /** 分区导航列表额外 class；默认已含吸顶与底边。 */
@@ -50,6 +52,7 @@ function ObjectSectionTabs({
     children,
     sidebar,
     scrollMode = "page",
+    scrollResetKey,
     beforeContent,
     className,
     listClassName,
@@ -66,7 +69,7 @@ function ObjectSectionTabs({
         if (!panelScroll) return
         bodyRef.current?.scrollTo({ top: 0 })
         contentRef.current?.scrollTo({ top: 0 })
-    }, [value, panelScroll])
+    }, [value, panelScroll, scrollResetKey])
     return (
         <Tabs
             id={baseId}

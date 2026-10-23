@@ -9,10 +9,10 @@ use erp_workflow::service::approval::execution::runtime_service::{
 use persistence_core::Executor;
 use serde::Serialize;
 
-use super::WorkbenchReadService;
 use super::brief::assemble_brief;
 use super::dto::{WorkItemBriefLine, WorkItemSummarySection};
 use super::facts::{WorkbenchObjectFact, object_policy};
+use super::{SearchOptions, WorkbenchReadService};
 use crate::errors::Result;
 
 /// 实例授权后的单据摘要；与责任队列使用同一组字段与明细格式。
@@ -30,12 +30,14 @@ pub struct ApprovalDocumentSummary {
 /// 保留实例列表协议，仅追加单据摘要。
 #[derive(Debug, Serialize)]
 pub struct ApprovalListItem {
+    pub search_matches: Vec<String>,
     #[serde(flatten)]
     pub instance: RuntimeInstanceListItem,
     pub document_summary: Option<ApprovalDocumentSummary>,
 }
 /// 已完成运行权限校验和业务摘要装配的分页结果。
 pub struct ApprovalListPage {
+    pub filter_options: SearchOptions,
     pub items: Vec<ApprovalListItem>,
     pub total: u64,
     pub next_cursor: Option<RuntimeInstanceListCursor>,
@@ -64,8 +66,28 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<ApprovalListPage> {
         let page = runtime.instance_list(actor, query).await?;
-        let keys = page
-            .items
+        let items = self.approval_list_summaries(page.items, executor).await?;
+        Ok(ApprovalListPage {
+            filter_options: Default::default(),
+            items,
+            total: page.total,
+            next_cursor: page.next_cursor,
+            document_type_counts: page.document_type_counts,
+        })
+    }
+    /// 为已授权实例补齐精确版本摘要。
+    /// # 参数
+    /// `instances` 已经运行服务授权，`executor` 沿用查询快照。
+    /// # 返回
+    /// 返回可显示摘要，不替换缺失历史。
+    /// # 错误
+    /// 单据或姓名读取失败时传播错误。
+    pub(super) async fn approval_list_summaries(
+        &self,
+        instances: Vec<RuntimeInstanceListItem>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalListItem>> {
+        let keys = instances
             .iter()
             .filter_map(|item| {
                 let policy = object_policy(WorkItemType::DocumentApproval, item.document_type.as_deref()?)?;
@@ -73,8 +95,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             })
             .collect::<HashSet<_>>();
         let facts = self.load_object_facts(&keys, executor).await?;
-        let mut items = page
-            .items
+        let mut items = instances
             .into_iter()
             .map(|instance| {
                 let document_summary = instance
@@ -83,16 +104,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     .and_then(|kind| object_policy(WorkItemType::DocumentApproval, kind))
                     .and_then(|policy| facts.get(&(policy.object_kind, instance.document_id.clone()?)))
                     .and_then(|fact| document_summary(fact, instance.subject_version));
-                ApprovalListItem { instance, document_summary }
+                ApprovalListItem { instance, document_summary, search_matches: Vec::new() }
             })
             .collect::<Vec<_>>();
         self.apply_approval_party_names(&mut items, executor).await?;
-        Ok(ApprovalListPage {
-            items,
-            total: page.total,
-            next_cursor: page.next_cursor,
-            document_type_counts: page.document_type_counts,
-        })
+        Ok(items)
     }
 }
 /// 有提交级摘要时必须精确匹配版本，不得用当前提交覆盖历史审批。

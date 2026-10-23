@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use persistence_core::Executor;
 
-use super::super::brief::{ObjectBriefSource, join_list_summary, push_section};
+use super::super::brief::{ObjectBriefSource, join_list_summary, push_document_section, push_section};
 use super::super::presentation::format_yuan;
 use super::super::{ObjectKind, WorkbenchObjectFactMap as ObjectFactMap, WorkbenchReadService, object_ids};
 use super::mapping::{invoice_tax_profile_label, payable_account_fact, receivable_fact_display};
@@ -71,7 +71,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             );
             let mut sections = Vec::new();
             push_section(&mut sections, "往来主体", counterparty.as_deref(), false);
-            push_section(&mut sections, "销售单", sales_no.as_deref(), false);
+            push_document_section(
+                &mut sections,
+                "销售单",
+                sales_no.as_deref(),
+                Some(account.sales_order_id.as_ref()),
+            );
             push_section(
                 &mut sections,
                 "开票类型",

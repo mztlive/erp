@@ -41,12 +41,15 @@ export const approvalKeys = {
         [...approvalKeys.all, "recovery-options", instanceId] as const,
 }
 
-/** 详情和附件材料共享申请与任务身份；完成后不再自动读取该任务。 */
-const isCompletedPaymentTask = (query: Query, workItemId?: string) =>
+/** 已完成任务的工作台详情和付款材料不再自动读取，避免旧任务权限变化打断跳转。 */
+const isCompletedApprovalTask = (query: Query, workItemId?: string) =>
     Boolean(workItemId) &&
-    query.queryKey[0] === "purchase-payment-requests" &&
-    query.queryKey[1] === "detail" &&
-    query.queryKey[3] === workItemId
+    ((query.queryKey[0] === "purchase-payment-requests" &&
+        query.queryKey[1] === "detail" &&
+        query.queryKey[3] === workItemId) ||
+        (query.queryKey[0] === queryKeyRoots.workspaceHome[0] &&
+            query.queryKey[1] === "task-detail" &&
+            query.queryKey[2] === workItemId))
 
 /**
  * 命令成功后精确失效任务、实例和对应业务单据。
@@ -68,6 +71,8 @@ const invalidateApprovalCaches = async (
         }),
         queryClient.invalidateQueries({
             queryKey: queryKeyRoots.workspaceHome,
+            predicate: (query) =>
+                !isCompletedApprovalTask(query, input?.completedWorkItemId),
         }),
         ...[
             "sales-orders",
@@ -82,7 +87,7 @@ const invalidateApprovalCaches = async (
             queryClient.invalidateQueries({
                 queryKey: [root],
                 predicate: (query) =>
-                    !isCompletedPaymentTask(query, input?.completedWorkItemId),
+                    !isCompletedApprovalTask(query, input?.completedWorkItemId),
             }),
         ),
         input?.instanceId
@@ -145,7 +150,7 @@ export const useSubmitDecisionMutation = (
         onSuccess: async (view, command) => {
             const completedTask = {
                 predicate: (query: Query) =>
-                    isCompletedPaymentTask(query, command.work_item_id),
+                    isCompletedApprovalTask(query, command.work_item_id),
             }
             // 取消在途材料读取，并仅标记过期；不能再用已完成任务触发重查。
             await queryClient.cancelQueries(completedTask)

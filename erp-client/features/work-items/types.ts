@@ -78,6 +78,7 @@ export type DeliveryTaskLine = Readonly<{
 }>
 
 export type WorkItemDto = Readonly<{
+    search_matches?: string[]
     id: string
     work_item_type: string
     handler_key: string

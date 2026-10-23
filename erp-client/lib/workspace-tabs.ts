@@ -13,6 +13,7 @@ export type WorkspaceHost = {
     navigate: (source: Window | null, href: string, replace?: boolean) => void
     report: (source: Window, state: WorkspaceFrameState) => void
     changed: (source: Window) => void
+    refreshed: (source: Window, revision: number) => void
     deliver: (source: Window, request: NavDeliveryRequest) => void
 }
 
@@ -58,7 +59,7 @@ declare global {
     interface Window {
         erpWorkspaceHost?: WorkspaceHost
         erpWorkspaceActivate?: (active: boolean) => void
-        erpWorkspaceInvalidate?: () => void
+        erpWorkspaceInvalidate?: (revision: number) => void
         erpWorkspaceGo?: (href: string) => void
     }
 }

@@ -9,6 +9,12 @@ import { getErrorPresentation } from "@/lib/api/errors"
 import { subscribeScopeCache } from "@/features/data-scope/cache"
 import { trackNavDeliveryOrigin } from "@/lib/nav-delivery"
 import { makeQueryClient } from "@/lib/query-client"
+import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
+
+/** 父页面先记录变更，后续业务回调关闭来源页签也不影响交付。 */
+const notifyMutationSuccess = () => {
+    if (isWorkspaceFrame()) workspaceHost()?.changed(window)
+}
 
 /** 将 Mutation 接口失败统一展示为短时提示。 */
 const notifyMutationError = (error: unknown) => {
@@ -34,7 +40,9 @@ const notifyMutationError = (error: unknown) => {
  */
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     // 客户端单例：避免每次 render 新建 QueryClient 导致缓存丢失
-    const [queryClient] = useState(() => makeQueryClient(notifyMutationError))
+    const [queryClient] = useState(() =>
+        makeQueryClient(notifyMutationError, notifyMutationSuccess),
+    )
 
     useEffect(() => subscribeScopeCache(queryClient), [queryClient])
     useEffect(trackNavDeliveryOrigin, [])

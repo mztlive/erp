@@ -111,6 +111,14 @@ fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: ApprovalSubjectS
                 format!("客户：{}", customers.into_iter().collect::<Vec<_>>().join("、"));
         }
     }
+    for source in &display.source_sales {
+        super::brief::push_document_section(
+            &mut display.source.extra_sections,
+            "来源销售单",
+            Some(&source.document_no),
+            Some(&source.document_id),
+        );
+    }
     fact.display.subject_briefs.insert(
         snapshot.subject_version.to_string(),
         WorkbenchSubjectDisplay {

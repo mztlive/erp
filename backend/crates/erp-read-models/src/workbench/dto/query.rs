@@ -62,6 +62,7 @@ pub struct WorkItemListParams {
 /// Service 使用的规范化队列查询。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkItemListQuery {
+    pub filters: super::super::WorkspaceFilters,
     pub scope: WorkItemScope,
     pub work_item_types: Vec<WorkItemType>,
     pub statuses: Vec<WorkItemStatus>,
@@ -99,6 +100,7 @@ impl WorkItemListParams {
         ensure_supported_query(self)?;
         let (sort_by, sort_ascending) = normalize_sort(self.sort);
         Ok(WorkItemListQuery {
+            filters: Default::default(),
             scope: self.scope,
             work_item_types,
             statuses,
@@ -122,6 +124,8 @@ impl WorkItemListParams {
 /// 分页责任队列响应。
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkItemPageView {
+    /// 完整授权候选的可搜索筛选项，不受分页影响。
+    pub filter_options: super::super::SearchOptions,
     /// 当前页任务。
     pub items: Vec<WorkItemView>,
     /// 授权范围内总数。

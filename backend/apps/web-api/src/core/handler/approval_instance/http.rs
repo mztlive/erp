@@ -4,6 +4,7 @@
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use erp_read_models::workbench::WorkspaceFilters;
 use erp_workflow::service::approval::execution::{
     RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
 };
@@ -23,6 +24,9 @@ pub const DETAIL_HISTORY_LIMIT: u32 = 20;
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceListQuery {
+    /// 工作台页码；设置后使用完整内容检索。
+    pub page: Option<u64>,
+    pub filters: Option<String>,
     /// 固定 view。
     pub view: RuntimeInstanceListView,
     /// 可选单据类型。
@@ -43,6 +47,8 @@ pub struct InstanceListQuery {
 /// 绕过审批 API 的稳定错误合同。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedInstanceListQuery {
+    pub page: Option<u64>,
+    pub filters: WorkspaceFilters,
     /// 响应游标必须沿用的固定视图。
     pub view: RuntimeInstanceListView,
     /// 已由 Service DTO 完成规范化和完整输入校验的查询。
@@ -72,6 +78,21 @@ impl PreparedInstanceListQuery {
     fn prepare(query: InstanceListQuery, headers: &axum::http::HeaderMap) -> Result<Self, ApprovalHttpError> {
         let cursor =
             query.decode_cursor().map_err(|message| ApprovalHttpError::unprocessable(message, headers))?;
+        let page = query.page;
+        if page == Some(0) {
+            return Err(ApprovalHttpError::unprocessable("页码必须大于0", headers));
+        }
+        let filters = WorkspaceFilters::parse(query.filters.as_deref())
+            .map_err(|_| ApprovalHttpError::unprocessable("工作台筛选条件不正确", headers))?;
+        if page.is_none() && query.filters.is_some() {
+            return Err(ApprovalHttpError::unprocessable("结构化筛选必须同时提供page", headers));
+        }
+        if page.is_some() && (query.view != RuntimeInstanceListView::Started || query.cursor.is_some()) {
+            return Err(ApprovalHttpError::unprocessable(
+                "页码查询仅支持started视图，且不能同时提供cursor",
+                headers,
+            ));
+        }
         let view = query.view;
         let query = RuntimeInstanceListQuery::prepare(
             view,
@@ -87,7 +108,7 @@ impl PreparedInstanceListQuery {
             },
             error => ApprovalHttpError::from_service(error, headers),
         })?;
-        Ok(Self { view, query })
+        Ok(Self { view, query, page, filters })
     }
 }
 
@@ -443,6 +464,25 @@ mod tests {
     }
 
     #[test]
+    fn workspace_page_rejects_mixed_cursor_and_invalid_filter_contracts() {
+        let headers = axum::http::HeaderMap::new();
+        for value in [
+            json!({"view":"started","page":0}),
+            json!({"view":"mine","page":1}),
+            json!({"view":"started","page":1,"cursor":"started|1|inst-1"}),
+            json!({"view":"started","filters":"{}"}),
+            json!({"view":"started","page":1,"filters":"{\"date_from\":\"2026-02-30\"}"}),
+        ] {
+            let query = serde_json::from_value(value).unwrap();
+            assert!(super::PreparedInstanceListQuery::prepare(query, &headers).is_err());
+        }
+        let query = serde_json::from_value(json!({"view":"started","page":2,"limit":50,"filters":"{\"item_types\":[\"approval:sales_order\"]}"})).unwrap();
+        let prepared = super::PreparedInstanceListQuery::prepare(query, &headers).unwrap();
+        assert_eq!(prepared.page, Some(2));
+        assert_eq!(prepared.filters.item_types, ["approval:sales_order"]);
+    }
+
+    #[test]
     fn list_cursor_only_encodes_and_decodes_protocol_shape() {
         let cross = InstanceListCursor::decode("mine|1|wi-1", RuntimeInstanceListView::Started);
         assert!(cross.unwrap_err().contains("跨 view"));
@@ -469,6 +509,8 @@ mod tests {
         }
 
         let first_page = InstanceListQuery {
+            page: None,
+            filters: None,
             view: RuntimeInstanceListView::Mine,
             document_type: None,
             status: None,

@@ -1,7 +1,13 @@
 "use client"
 
-import { FilePenLineIcon } from "lucide-react"
+import { ChevronDownIcon, FilePenLineIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCancelApprovalButton } from "@/features/sales-orders/components/sales-order-cancel-approval-button"
 import { SalesOrderHandoverButton } from "@/features/sales-orders/components/sales-order-handover-button"
@@ -37,14 +43,6 @@ export function SalesOrderDetailSecondaryActions({
 
     return (
         <div className="flex flex-wrap items-center gap-2">
-            <SalesOrderCancelApprovalButton
-                order={order}
-                onResult={onApprovalResult}
-            />
-            <SalesOrderHandoverButton
-                order={order}
-                onResult={onApprovalResult}
-            />
             <Button
                 id="sales-orders-detail-start-change"
                 type="button"
@@ -63,6 +61,31 @@ export function SalesOrderDetailSecondaryActions({
                       ? "继续改单"
                       : "发起改单"}
             </Button>
+            <Popover>
+                <PopoverTrigger
+                    id="sales-orders-detail-more-actions"
+                    render={<Button size="sm" variant="outline" />}
+                >
+                    更多
+                    <ChevronDownIcon
+                        aria-hidden="true"
+                        data-icon="inline-end"
+                    />
+                </PopoverTrigger>
+                <PopoverContent align="end" keepMounted className="w-56 gap-3">
+                    <PopoverTitle className="text-sm">销售单操作</PopoverTitle>
+                    <div className="flex flex-col gap-2">
+                        <SalesOrderCancelApprovalButton
+                            order={order}
+                            onResult={onApprovalResult}
+                        />
+                        <SalesOrderHandoverButton
+                            order={order}
+                            onResult={onApprovalResult}
+                        />
+                    </div>
+                </PopoverContent>
+            </Popover>
         </div>
     )
 }

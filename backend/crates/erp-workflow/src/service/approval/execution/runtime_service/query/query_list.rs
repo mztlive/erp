@@ -208,6 +208,40 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .collect()
     }
 
+    /// 在调用方快照中读取本人发起审批的一批授权候选。
+    /// # 参数
+    /// `actor` 为当前账号，`query` 仅允许 started，`executor` 为调用方事务。
+    /// # 返回
+    /// 返回完整授权后的候选页，用于跨域内容检索。
+    /// # 错误
+    /// 非 started、无效账号、权限或仓储失败时拒绝。
+    pub async fn started_instance_page_with(
+        &self,
+        actor: &AuditActor,
+        query: &RuntimeInstanceListQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<RuntimeInstanceListItem>, Option<RuntimeInstanceListCursor>)> {
+        query.validate()?;
+        if query.view != RuntimeInstanceListView::Started {
+            return Err(Error::ValidationError("工作台审批查询只允许本人发起范围".into()));
+        }
+        self.ensure_active_instance_reader(actor).await?;
+        let type_scopes = self.runtime_read_type_scopes(actor, query, executor).await?;
+        let filter = instance_list_filter(actor, query)?;
+        let scope = ApprovalRuntimeReadScope::Started {
+            process_kinds: type_scopes.iter().map(|scope| scope.process_kind).collect(),
+            submitted_by: actor.id().to_owned(),
+        };
+        let (rows, last) =
+            ApprovalRuntimeReadRepository::new(&self.db).scan(&filter, &scope, executor).await?;
+        let next = last.map(|row| cursor_from_summary(filter.view, &row));
+        let items = rows
+            .into_iter()
+            .map(|row| item_from_runtime_read_row(row, actor, query.view, &type_scopes))
+            .collect::<Result<Vec<_>>>()?;
+        Ok((items, next))
+    }
+
     /// 查询本人发起或管理范围内的审批实例。
     ///
     /// # 参数

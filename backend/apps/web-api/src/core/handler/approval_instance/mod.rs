@@ -82,21 +82,34 @@ pub async fn instance_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
-    PreparedInstanceListQuery { view, query }: PreparedInstanceListQuery,
+    PreparedInstanceListQuery { view, query, page, filters }: PreparedInstanceListQuery,
 ) -> ApprovalResult<serde_json::Value> {
     let mut executor = persistence_core::NoTransaction;
-    let page = erp_read_models::workbench::WorkbenchReadService::new(
+    let reader = erp_read_models::workbench::WorkbenchReadService::new(
         state.db(),
         erp_processes::adapters::workflow::workflow_auth(state.db(), state.rbac()),
-    )
-    .approval_instance_list(&runtime_service(&state), &actor, query, &mut executor)
-    .await
+    );
+    let page = match page {
+        Some(page) => {
+            reader
+                .approval_workspace_list(
+                    runtime_service(&state).as_ref().clone(),
+                    actor,
+                    query,
+                    filters,
+                    page,
+                )
+                .await
+        },
+        None => reader.approval_instance_list(&runtime_service(&state), &actor, query, &mut executor).await,
+    }
     .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let next_cursor = page.next_cursor.map(|cursor| InstanceListCursor::from_runtime(view, cursor).encode());
     ok_json(serde_json::json!({
         "items": page.items,
         "total": page.total,
         "document_type_counts": page.document_type_counts,
+        "filter_options": page.filter_options,
         "next_cursor": next_cursor,
     }))
 }

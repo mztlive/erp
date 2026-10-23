@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { focusManager, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import {
     handleWorkspaceCloseShortcut,
     interceptWorkspaceLink,
@@ -12,6 +12,7 @@ import {
 import { workspaceFormState } from "@/lib/workspace-form-guard"
 import { subscribeNavDelivery } from "@/lib/nav-delivery"
 import { WorkspaceTabContext } from "./workspace-tab-context"
+import { WorkspaceRefreshNotice } from "./workspace-refresh-notice"
 
 /** Each retained document owns its router, portals, focus, scroll and form instances. */
 export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
@@ -64,44 +65,9 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
         window.addEventListener("erp-workspace-form-state", report)
         window.addEventListener("hashchange", report)
 
-        const activate = (active: boolean) => {
-            focusManager.setFocused(
-                active && document.visibilityState === "visible",
-            )
-            if (
-                active &&
-                !workspaceFormState().dirty &&
-                !workspaceFormState().busy &&
-                queryClient.isMutating() === 0
-            ) {
-                void queryClient.refetchQueries({ type: "active", stale: true })
-            }
-        }
-        const visibility = () =>
-            activate(
-                window.frameElement?.getAttribute("data-workspace-active") ===
-                    "true",
-            )
-        window.erpWorkspaceActivate = activate
         window.erpWorkspaceGo = (href) =>
             router.replace(href, { scroll: false })
-        window.erpWorkspaceInvalidate = () => {
-            void queryClient.invalidateQueries({ refetchType: "none" })
-            visibility()
-        }
-        document.addEventListener("visibilitychange", visibility)
-        visibility()
-        const unsubscribe = queryClient
-            .getMutationCache()
-            .subscribe((event) => {
-                report()
-                if (
-                    event.type === "updated" &&
-                    event.action.type === "success"
-                ) {
-                    workspaceHost()?.changed(window)
-                }
-            })
+        const unsubscribe = queryClient.getMutationCache().subscribe(report)
         const unsubscribeDelivery = subscribeNavDelivery((request) =>
             workspaceHost()?.deliver(window, request),
         )
@@ -117,13 +83,9 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
                 handleWorkspaceCloseShortcut,
                 true,
             )
-            document.removeEventListener("visibilitychange", visibility)
             window.removeEventListener("erp-workspace-form-state", report)
             window.removeEventListener("hashchange", report)
-            delete window.erpWorkspaceActivate
             delete window.erpWorkspaceGo
-            delete window.erpWorkspaceInvalidate
-            focusManager.setFocused(undefined)
         }
     }, [queryClient, report, router])
 
@@ -134,6 +96,7 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
                 aria-label="主工作区"
                 className="flex h-svh min-w-0 flex-col overflow-auto"
             >
+                <WorkspaceRefreshNotice />
                 {children}
             </main>
         </WorkspaceTabContext.Provider>

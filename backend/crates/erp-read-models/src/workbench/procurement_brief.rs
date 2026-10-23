@@ -117,6 +117,12 @@ pub(super) fn apply_procurement_brief(fields: &mut WorkItemFields, fact: &Workbe
     fields.counterparty_label = None;
     if let Some(source) = &fact.display.procurement_brief {
         fields.counterparty_label = Some(source.customer.clone());
+        fields.search_lines = source
+            .lines
+            .iter()
+            .filter(|(id, _)| fields.procurement_scope_ids.contains(id))
+            .map(|(_, line)| line.title.clone())
+            .collect();
         fields.brief_source =
             Some(scoped_brief(source, &fields.procurement_scope_ids, fields.impact_summary.as_deref()));
     }

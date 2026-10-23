@@ -65,10 +65,21 @@ export function WorkspaceTabs({
     const [pendingClose, setPendingClose] = React.useState<string[]>([])
     const [closeBusy, setCloseBusy] = React.useState(false)
     const frames = React.useRef(new Map<string, HTMLIFrameElement>())
+    const changeRevision = React.useRef(0)
+    const pendingRefresh = React.useRef(new Map<string, number>())
     const snapshot = React.useRef({ tabs, active, pendingClose })
     snapshot.current = { tabs, active, pendingClose }
     const closeRequest = React.useRef<(ids: string[]) => void>(() => {})
     const queryClient = useQueryClient()
+
+    // 保留到目标页签确认刷新成功；未加载或暂不能刷新的页签可重复接收同一版本。
+    const deliverRefresh = React.useCallback((id: string) => {
+        const revision = pendingRefresh.current.get(id)
+        if (revision !== undefined)
+            frames.current
+                .get(id)
+                ?.contentWindow?.erpWorkspaceInvalidate?.(revision)
+    }, [])
 
     const select = React.useCallback((tab: WorkspaceTab, replace = false) => {
         setActive(tab.id)
@@ -110,8 +121,10 @@ export function WorkspaceTabs({
             let next = existing ? current.tabs : [...current.tabs, target]
             if (replace && source) {
                 const previous = sourceTab(source)
-                if (previous?.id !== target.id)
+                if (previous && previous.id !== target.id) {
                     next = next.filter((tab) => tab.id !== previous?.id)
+                    pendingRefresh.current.delete(previous.id)
+                }
             }
             snapshot.current.tabs = next
             setTabs(next)
@@ -169,6 +182,7 @@ export function WorkspaceTabs({
             report: (source, state) => {
                 const previous = sourceTab(source)
                 if (!previous) return
+                deliverRefresh(previous.id)
                 const url = workspaceUrl(state.href, window.location.href)
                 if (!url) return
                 const redirectedKey = workspaceTabKey(url)
@@ -213,12 +227,22 @@ export function WorkspaceTabs({
                 }
             },
             changed: (source) => {
-                if (!sourceTab(source)) return
+                const origin = sourceTab(source)
+                if (!origin) return
+                const revision = ++changeRevision.current
+                // 先持久保留在宿主内，再尝试通知；不依赖来源页签后续仍存活。
+                const targets = snapshot.current.tabs.filter(
+                    (tab) => tab.id !== origin.id,
+                )
+                for (const tab of targets)
+                    pendingRefresh.current.set(tab.id, revision)
                 void queryClient.invalidateQueries()
-                for (const iframe of frames.current.values()) {
-                    if (iframe.contentWindow !== source)
-                        iframe.contentWindow?.erpWorkspaceInvalidate?.()
-                }
+                for (const tab of targets) deliverRefresh(tab.id)
+            },
+            refreshed: (source, revision) => {
+                const tab = sourceTab(source)
+                if (tab && pendingRefresh.current.get(tab.id) === revision)
+                    pendingRefresh.current.delete(tab.id)
             },
         }
         const pop = () => navigate(null, window.location.href, false, true)
@@ -249,12 +273,14 @@ export function WorkspaceTabs({
             window.removeEventListener("storage", sessionChanged)
             window.removeEventListener("beforeunload", unload)
         }
-    }, [queryClient, select])
+    }, [queryClient, select, deliverRefresh])
 
     React.useEffect(() => {
-        for (const [id, iframe] of frames.current)
+        for (const [id, iframe] of frames.current) {
+            deliverRefresh(id)
             iframe.contentWindow?.erpWorkspaceActivate?.(id === active)
-    }, [active])
+        }
+    }, [active, deliverRefresh])
 
     const activeTitle = tabs.find((tab) => tab.id === active)?.title
     React.useEffect(() => {
@@ -267,7 +293,10 @@ export function WorkspaceTabs({
         if (next.length === 0)
             next = [newTab(new URL("/workspace", window.location.origin))]
         // A closed last tab must not reuse its iframe and retain the closed document.
-        for (const id of ids) frames.current.delete(id)
+        for (const id of ids) {
+            frames.current.delete(id)
+            pendingRefresh.current.delete(id)
+        }
         snapshot.current.tabs = next
         setTabs(next)
         if (ids.includes(current.active)) {
@@ -367,6 +396,7 @@ export function WorkspaceTabs({
                                                 : item,
                                         ),
                                     )
+                                    deliverRefresh(tab.id)
                                     frames.current
                                         .get(tab.id)
                                         ?.contentWindow?.erpWorkspaceActivate?.(

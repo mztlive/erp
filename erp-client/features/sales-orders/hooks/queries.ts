@@ -10,6 +10,7 @@ import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { fetchHasEligibleAcceptance } from "@/features/sales-orders/api/acceptance"
+import { fetchSalesOrderDeliveryProgress } from "../api/sales-order-delivery-progress"
 import {
     fetchSalesExtraCosts,
     reduceSalesExtraCost,
@@ -141,6 +142,18 @@ export function useSalesOrderAcceptanceEligibilityQuery(
         queryKey: salesOrderKeys.acceptanceEligibility(salesOrderId),
         queryFn: () => fetchHasEligibleAcceptance(salesOrderId),
         enabled: enabled && Boolean(salesOrderId),
+    })
+}
+
+/** 概览与验收入口共享交付进度，登记或冲正后随验收缓存一起刷新。 */
+export function useSalesOrderDeliveryProgressQuery(
+    id: string,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: [...salesOrderKeys.acceptanceRoot(id), "delivery-progress"],
+        queryFn: () => fetchSalesOrderDeliveryProgress(id),
+        enabled: Boolean(id) && enabled,
     })
 }
 

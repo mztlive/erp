@@ -11,7 +11,7 @@ use erp_sales::entity::sales_order::{SalesOrderRevisionLine, SalesOrderVoucherLi
 use super::super::WorkbenchObjectFact;
 use super::super::brief::{
     BRIEF_LINE_LIMIT, BriefLine, ObjectBriefSource, format_instant_date, join_list_summary, line_title,
-    non_empty, push_section,
+    non_empty, push_document_section, push_section,
 };
 use super::super::presentation::format_yuan;
 use super::{FundsOriginBrief, FundsOrigins};
@@ -68,7 +68,12 @@ pub(super) fn payable_brief_source(
 ) -> ObjectBriefSource {
     let mut sections = Vec::new();
     push_section(&mut sections, "供应商", supplier.as_deref(), false);
-    push_section(&mut sections, "采购单", purchase_no.as_deref(), false);
+    push_document_section(
+        &mut sections,
+        "采购单",
+        purchase_no.as_deref(),
+        Some(account.source_document_id.as_ref()),
+    );
     push_section(&mut sections, "未付金额", Some(format_yuan(&account.open_total)).as_deref(), true);
     push_section(&mut sections, "已付金额", Some(format_yuan(&account.settled_total)).as_deref(), true);
     push_section(&mut sections, "计划付款日", due_date.as_deref(), false);

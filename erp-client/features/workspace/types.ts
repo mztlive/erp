@@ -1,3 +1,7 @@
+import type {
+    WorkspaceFilters,
+    WorkspaceSearchOptions,
+} from "@/lib/workspace-search"
 /**
  * W01 我的工作台 — 队列与独立任务、审批详情。
  *
@@ -20,10 +24,11 @@ export type WorkspaceFamilyFilter =
     | "finance"
     | "fulfillment"
     | "exception"
-export type WorkspaceViewFilter = "inbox" | "started" | "managed"
+export type WorkspaceViewFilter = "inbox" | "started" | "managed" | "history"
 export type WorkspaceSort = "priority_due" | "due_asc" | "created_desc"
 
 export type WorkspaceMetricKey =
+    | "history"
     | "inbox"
     | "managed"
     | "overdue"
@@ -41,6 +46,7 @@ export type WorkspaceActionCode =
     | "CANCEL_BLOCKED_APPROVAL"
 
 export type WorkspaceWorkItem = Readonly<{
+    searchMatches?: readonly string[]
     workItemId: string
     taskVersion: string
     workItemType: string
@@ -150,6 +156,8 @@ export type WorkspaceRecentItem = Readonly<{
 }>
 
 export type TodayWorkspaceQuery = Readonly<{
+    filters?: WorkspaceFilters
+    scopeVersion?: string
     view: WorkspaceViewFilter
     due?: WorkspaceDueFilter
     blocked?: boolean
@@ -169,6 +177,8 @@ export type TodayWorkspaceQuery = Readonly<{
 }>
 
 export type TodayWorkspaceView = Readonly<{
+    filterOptions?: WorkspaceSearchOptions
+    scopeVersion?: string
     access: "allowed" | "forbidden" | "no_data_scope"
     viewer: {
         userId: string
