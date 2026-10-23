@@ -77,7 +77,7 @@ pub fn collect_rule_list_ids(
     rules: &[ProcurementResponsibilityRule],
 ) -> (Vec<String>, Vec<SkuId>, Vec<ProductCategoryId>) {
     let owner_ids: Vec<String> = erp_procurement::entity::procurement_responsibility::dedup_sorted_ids(
-        rules.iter().map(|rule| rule.owner_user_id.clone()),
+        rules.iter().flat_map(|rule| rule.owner_user_ids.iter().cloned()),
     );
     let sku_ids: Vec<SkuId> = erp_procurement::entity::procurement_responsibility::dedup_sorted_ids(
         rules.iter().filter_map(|rule| rule.sku_id.clone()),
@@ -112,7 +112,8 @@ mod tests {
                 sku_id: sku_id.map(SkuId::new),
                 category_id: category_id.map(ProductCategoryId::new),
                 product_kind: None,
-                owner_user_id: owner.to_string(),
+                owner_user_ids: vec![owner.to_string()],
+                strategy: Default::default(),
                 status: EnableStatus::Active,
             },
             "admin-1",

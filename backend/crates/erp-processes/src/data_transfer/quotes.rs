@@ -17,7 +17,7 @@ use super::{BusinessTransfers, TransferKind, TransferResult};
 use crate::sales_inquiry::read::InquiryReadService;
 use crate::{Error, Result};
 
-pub(super) const HEADERS: [&str; 16] = [
+pub(super) const HEADERS: [&str; 15] = [
     "主图",
     "商品名称",
     "规格",
@@ -32,7 +32,6 @@ pub(super) const HEADERS: [&str; 16] = [
     "税率（%）",
     "可供数量",
     "运费（元）",
-    "报价失效日",
     "报价备注",
 ];
 impl BusinessTransfers {
@@ -157,26 +156,26 @@ fn quote_book(
     sheet
         .set_freeze_panes(4, 2)
         .map_err(xlsx)?
-        .set_column_range_width(0, 16, 22)
+        .set_column_range_width(0, 15, 22)
         .map_err(xlsx)?
-        .set_column_hidden(16)
+        .set_column_hidden(15)
         .map_err(xlsx)?;
     for (i, notice) in [
         format!("{name}报价表"),
         format!("询价：{}；请按原需求填写", text(inquiry, "inquiry_no")),
-        "填写含税单价、税率、可供数量、运费（已含填 0）、失效日及备注；不能供货填数量 0 并说明原因。".into(),
+        "填写含税单价、税率、可供数量、运费（已含填 0）及备注；不能供货填数量 0 并说明原因。".into(),
     ]
     .iter()
     .enumerate()
     {
-        sheet.merge_range(i as u32, 0, i as u32, 15, notice, &Format::new().set_text_wrap()).map_err(xlsx)?;
+        sheet.merge_range(i as u32, 0, i as u32, 14, notice, &Format::new().set_text_wrap()).map_err(xlsx)?;
     }
     write_row(sheet, 3, &HEADERS.map(str::to_owned)).map_err(xlsx)?;
     quote_rows(sheet, rows, images)?;
     let meta = book.add_worksheet();
     meta.set_name("回导信息").map_err(xlsx)?.set_very_hidden(true);
     for (i, value) in [
-        "supplier-inquiry-quote-v3".into(),
+        "supplier-inquiry-quote-v4".into(),
         text(inquiry, "id"),
         inquiry["requirement_version"].to_string(),
         (inquiry["feedback_round"].as_u64().unwrap_or_default() + 1).to_string(),
@@ -260,7 +259,7 @@ fn quote_rows(sheet: &mut Worksheet, rows: &[Value], images: &HashMap<String, Ve
             text(l, "delivery_terms"),
             format!("第 {} 项，详见配送需求", i + 1),
         ];
-        values.extend(std::iter::repeat_n(String::new(), 6));
+        values.extend(std::iter::repeat_n(String::new(), HEADERS.len() - 10));
         values.push(json!({"lineId":l["line_id"],"skuId":l["sku_id"]}).to_string());
         let n = u32::try_from(i + 4).map_err(|_| Error::ValidationError("商品数量超限".into()))?;
         write_row(sheet, n, &values).map_err(xlsx)?;

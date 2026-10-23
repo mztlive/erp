@@ -74,14 +74,23 @@ export function InquiryQuoteHint({
                 <>
                     <p
                         className="flex min-w-0 items-baseline justify-end gap-1 whitespace-nowrap"
-                        title={`含运费参考单价 ${priceRange}，${comparable.length} 家供应商`}
-                        aria-label={`含运费参考单价 ${priceRange}，${comparable.length} 家供应商`}
+                        title={`参考单价 ${priceRange}，${new Set(comparable.map((item) => item.supplier_id)).size} 家供应商`}
+                        aria-label={`参考单价 ${priceRange}，${new Set(comparable.map((item) => item.supplier_id)).size} 家供应商`}
                     >
                         <span className="min-w-0 truncate font-medium tabular-nums">
                             {priceRange}
                         </span>
                         <span className="shrink-0">
-                            · {comparable.length} 家 · 含运费
+                            ·{" "}
+                            {
+                                new Set(
+                                    comparable.map((item) => item.supplier_id),
+                                ).size
+                            }{" "}
+                            家 ·{" "}
+                            {comparable.some((item) => item.system_price_kind)
+                                ? "运费待核"
+                                : "含运费"}
                         </span>
                     </p>
                     {hint.message && (

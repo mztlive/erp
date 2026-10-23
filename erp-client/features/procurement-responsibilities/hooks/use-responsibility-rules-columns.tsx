@@ -13,6 +13,8 @@ import {
 /** 规则命中范围的可读文案，供列表主列展示。 */
 export function ruleScope(rule: ProcurementResponsibilityRule): string {
     switch (rule.ruleType) {
+        case "INQUIRY":
+            return "所有询价整单优先分派，优先于商品规则"
         case "SKU":
             return rule.skuLabel ?? "SKU 待补充"
         case "CATEGORY":
@@ -59,12 +61,21 @@ export function useResponsibilityRulesColumns() {
             },
             {
                 id: "owner",
-                accessorFn: (row) => row.ownerName,
-                header: "采购负责人",
-                meta: { label: "采购负责人", width: "default" },
+                accessorFn: (row) => row.ownerNames.join("、"),
+                header: "负责人池",
+                meta: { label: "负责人池", width: "default" },
                 cell: ({ row }) => (
-                    <span className="text-sm">{row.original.ownerName}</span>
+                    <span className="text-sm">
+                        {row.original.ownerNames.join("、")}
+                    </span>
                 ),
+            },
+            {
+                id: "strategy",
+                accessorFn: () => "轮询",
+                header: "分配方式",
+                meta: { label: "分配方式", width: "status" },
+                cell: () => <span className="text-sm">轮询</span>,
             },
             {
                 id: "status",

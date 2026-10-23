@@ -148,9 +148,7 @@ function FeedbackFees({ feedback }: { feedback: InquiryFeedback }) {
                                 <span className="font-medium">{fee.name}</span>
                                 <MoneyValue value={fee.amount_gross} />
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                有效至 {inquiryDate(fee.valid_until)}
-                            </p>
+
                             {fee.public_note && (
                                 <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                                     {fee.public_note}

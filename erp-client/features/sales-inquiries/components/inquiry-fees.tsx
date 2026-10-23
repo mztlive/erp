@@ -187,7 +187,6 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                         <TableHead>费用名称</TableHead>
                         <TableHead className="text-right">含税金额</TableHead>
                         <TableHead className="text-right">税率</TableHead>
-                        <TableHead>有效期</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -213,9 +212,6 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                                     })}
                                     precision={2}
                                 />
-                            </TableCell>
-                            <TableCell>
-                                {inquiryDate(fee.valid_until)}
                             </TableCell>
                         </TableRow>
                     ))}

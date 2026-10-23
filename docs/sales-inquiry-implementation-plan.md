@@ -116,7 +116,7 @@
 - [ ] 在采购创建事务内重验责任、销售来源、专项条款、资格、可供量及最新覆盖。
 - [ ] 保持现有库存预占、仓发、商品采购拆单和审批的原子编排。
 - [ ] 保存需求来源链和实际报价采用链；采购详情及追溯按权限展示，销售详情不反向透出供应商。
-- [ ] 添加专项范围越权、条件过期、改选、直发/入仓分配、幂等和拆单规则库单测。
+- [ ] 添加专项范围越权、条件变化、改选、直发/入仓分配、幂等和拆单规则库单测。
 
 出口：三种选源方式均可完成正式采购；实际采购成本与销售可见供给价区分；库存足额允许无商品采购。覆盖 IQ06、IQ12–IQ14、IQ21–IQ23 的选源部分。
 
@@ -234,7 +234,7 @@
 | IQ09 | `sales_inquiry/access.rs`、`tasks.rs`；任务规则；内部附件当前任务守卫 | 任务规则 `inquiry_grant_expires_with_owner_version_state_or_scope`；领域用例 `current_task_work_is_required_and_reassignment_does_not_revive_old_work` | 改派、补充、发布、关闭后的旧任务 URL、命令及附件立即失效 |
 | IQ10 | `ledger/quantities.rs`；`order_to_cash/inquiry.rs`；`service/sales_order/inquiry.rs`；`dto/sales_order/inquiry_basis.rs` | 领域用例 `quantity_ledger_survives_requery_and_rejects_new_version_reset`、`acceptance_rechecks_ledger_changed_after_feedback_publication`；开单依据 `partial_reinquiry_basis_keeps_unaffected_old_acceptance_until_new_round_is_accepted`、`requirement_revision_blocks_every_old_basis_even_for_unchanged_lines` | 多次部分转单与跨轮次、跨版本累计；真实数据库并发未验 |
 | IQ11 | `sales_inquiry/execution.rs`；导入确认永久回执；既有销售创建命令及来源 CAS | 领域用例 `stale_version_and_invalid_command_replay_fail_without_changes`；导入规则 `permanent_receipt_recovers_original_result_and_rejects_other_payload_or_scope` | 同键回放、异键并发防超量、未知提交恢复的真实事务行为 |
-| IQ12 | 销售来源；`erp-supply/inquiry/terms.rs`；采购专项 | 销售来源 `exact_price_scope_rejects_expiry_quantity_tiers_and_uncovered_address`；专项规则 `expired_quote_changed_address_and_early_delivery_are_rejected`、`quote_without_expiry_allows_partial_adoption_but_rejects_overbooking` | 报价过期、对销售数量档位、内部报价剩余额度与当前修订在实际转单及重提路径一致 |
+| IQ12 | 销售来源；`erp-supply/inquiry/terms.rs`；采购专项 | 销售来源 `exact_price_scope_rejects_expiry_quantity_tiers_and_uncovered_address`；专项规则 `legacy_expiry_is_ignored_but_changed_address_and_early_delivery_are_rejected`、`quote_without_expiry_allows_partial_adoption_but_rejects_overbooking` | 历史报价日期不再拦截、对销售数量条件、内部报价剩余额度与当前修订在实际转单及重提路径一致 |
 | IQ13 | `erp-read-models/purchase_center/creation_basis`；`procure_to_pay/inquiry_supply.rs`；采购选源界面 | 采购专项 `special_cost_tax_and_source_are_frozen_separately_from_general_offering`、`special_quote_revision_is_an_exact_split_and_basis_identity_dimension` | 沿用、改选、推荐三入口的最终校验；无原因改选及两条来源链显示；未获证据不得判完成 |
 | IQ14 | 既有 sourcing 库存及仓库路径；`procure_to_pay/inquiry_supply.rs` 的仓库来源地址转换 | 复用既有采购地址/库存规则；本次专项仓发完整回归证据待登记 | 库存足额无商品采购；实际入仓采购行不携带客户收件人或地址 |
 | IQ15 | `feedback.rs` 费用含价标记；`ledger/fees.rs`；`sales_inquiry_expense.rs` | 领域用例 `estimated_or_included_fee_is_reference_only` | 已含运费与另计运费的界面、分配及采购应付结果 |

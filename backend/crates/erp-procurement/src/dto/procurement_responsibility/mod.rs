@@ -6,11 +6,13 @@ use validator::Validate;
 
 use crate::entity::facts::ProductKind;
 use crate::entity::procurement_responsibility::{
-    EnableStatus, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
+    AssignmentStrategy, EnableStatus, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
+    ResolutionPurpose,
 };
 
 /// 创建采购责任规则请求。
 #[derive(Debug, Clone, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateProcurementResponsibilityRuleRequest {
     /// 规则类型。
     pub rule_type: ProcurementResponsibilityRuleType,
@@ -20,9 +22,11 @@ pub struct CreateProcurementResponsibilityRuleRequest {
     pub category_id: Option<ProductCategoryId>,
     /// 商品类型选择器。
     pub product_kind: Option<ProductKind>,
-    /// 具体负责人账号 ID。
-    #[validate(length(min = 1, max = 128, message = "采购负责人长度必须在1-128之间"))]
-    pub owner_user_id: String,
+    /// 按轮询顺序排列的负责人池。
+    #[validate(length(min = 1, max = 100, message = "负责人池人数必须在1-100之间"))]
+    pub owner_user_ids: Vec<String>,
+    /// 当前支持 ROUND_ROBIN。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
 }
@@ -44,7 +48,8 @@ impl CreateProcurementResponsibilityRuleRequest {
             sku_id: self.sku_id,
             category_id: self.category_id,
             product_kind: self.product_kind,
-            owner_user_id: self.owner_user_id,
+            owner_user_ids: self.owner_user_ids,
+            strategy: self.strategy,
             status: self.status,
         }
     }
@@ -52,6 +57,7 @@ impl CreateProcurementResponsibilityRuleRequest {
 
 /// 整项更新采购责任规则请求。
 #[derive(Debug, Clone, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateProcurementResponsibilityRuleRequest {
     /// 期望乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于0"))]
@@ -64,9 +70,11 @@ pub struct UpdateProcurementResponsibilityRuleRequest {
     pub category_id: Option<ProductCategoryId>,
     /// 商品类型选择器。
     pub product_kind: Option<ProductKind>,
-    /// 具体负责人账号 ID。
-    #[validate(length(min = 1, max = 128, message = "采购负责人长度必须在1-128之间"))]
-    pub owner_user_id: String,
+    /// 按轮询顺序排列的负责人池。
+    #[validate(length(min = 1, max = 100, message = "负责人池人数必须在1-100之间"))]
+    pub owner_user_ids: Vec<String>,
+    /// 当前支持 ROUND_ROBIN。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
 }
@@ -89,7 +97,8 @@ impl UpdateProcurementResponsibilityRuleRequest {
             sku_id: self.sku_id,
             category_id: self.category_id,
             product_kind: self.product_kind,
-            owner_user_id: self.owner_user_id,
+            owner_user_ids: self.owner_user_ids,
+            strategy: self.strategy,
             status: self.status,
         };
         (version, data)
@@ -109,6 +118,9 @@ pub struct ProcurementResponsibilityResolveLineRequest {
 /// 逐行责任预览请求。
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct ProcurementResponsibilityResolveRequest {
+    /// 询价预览传 inquiry；旧调用默认采购场景。
+    #[serde(default)]
+    pub purpose: ResolutionPurpose,
     /// 待解析行，限制 1 至 200 行。
     #[validate(length(min = 1, max = 200, message = "解析行数必须在1-200之间"))]
     #[validate(nested)]
@@ -193,4 +205,34 @@ impl ProcurementResponsibilityResolveLineView {
 pub struct ProcurementResponsibilityResolveView {
     /// 与请求行顺序一致的结果。
     pub lines: Vec<ProcurementResponsibilityResolveLineView>,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn rule_request_accepts_pool_and_rejects_legacy_owner_or_unknown_strategy() {
+        let valid = json!({"rule_type":"INQUIRY", "owner_user_ids":["buyer-a", "buyer-b"], "strategy":"ROUND_ROBIN", "status":"active"});
+        let request: CreateProcurementResponsibilityRuleRequest =
+            serde_json::from_value(valid.clone()).unwrap();
+        request.validate().unwrap();
+        assert_eq!(request.into_data().owner_user_ids, ["buyer-a", "buyer-b"]);
+        let mut legacy = valid.clone();
+        legacy["owner_user_id"] = json!("buyer-a");
+        assert!(serde_json::from_value::<CreateProcurementResponsibilityRuleRequest>(legacy).is_err());
+        let mut unsupported = valid.clone();
+        unsupported["strategy"] = json!("LOAD_BALANCE");
+        assert!(serde_json::from_value::<CreateProcurementResponsibilityRuleRequest>(unsupported).is_err());
+        let mut empty = valid;
+        empty["owner_user_ids"] = json!([]);
+        assert!(
+            serde_json::from_value::<CreateProcurementResponsibilityRuleRequest>(empty)
+                .unwrap()
+                .validate()
+                .is_err()
+        );
+    }
 }

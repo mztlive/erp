@@ -2,7 +2,7 @@
 use erp_core::ids::{ProductCategoryId, SkuId};
 use erp_procurement::entity::facts::ProductKind;
 use erp_procurement::entity::procurement_responsibility::{
-    EnableStatus, ProcurementResponsibilityRule, ProcurementResponsibilityRuleType,
+    AssignmentStrategy, EnableStatus, ProcurementResponsibilityRule, ProcurementResponsibilityRuleType,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -47,9 +47,11 @@ pub struct ProcurementResponsibilityRuleView {
     /// 商品类型选择器。
     pub product_kind: Option<ProductKind>,
     /// 具体负责人账号 ID。
-    pub owner_user_id: String,
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
     /// 具体负责人展示姓名。
-    pub owner_name: Option<String>,
+    pub owner_names: Vec<Option<String>>,
     /// 启停状态。
     pub status: EnableStatus,
     /// 乐观锁版本。
@@ -92,8 +94,9 @@ impl From<ProcurementResponsibilityRule> for ProcurementResponsibilityRuleView {
             category_id: rule.category_id,
             category_name: None,
             product_kind: rule.product_kind,
-            owner_user_id: rule.owner_user_id,
-            owner_name: None,
+            owner_names: vec![None; rule.owner_user_ids.len()],
+            owner_user_ids: rule.owner_user_ids,
+            strategy: rule.strategy,
             status: rule.status,
             version: rule.base.version,
             created_at: rule.base.created_at,

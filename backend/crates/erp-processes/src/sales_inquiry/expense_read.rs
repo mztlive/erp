@@ -28,6 +28,7 @@ pub struct InquiryExpenseCandidate {
     pub name: String,
     pub tax_rate: Rate,
     pub available_amount: Amount,
+    #[serde(skip_serializing)]
     pub valid_until: Instant,
     pub public_note: String,
     pub unavailable_reason: Option<String>,
@@ -220,6 +221,7 @@ pub struct FinancialInquiryExpenseCandidate {
     pub name: String,
     pub tax_rate: Rate,
     pub available_amount: Amount,
+    #[serde(skip_serializing)]
     pub valid_until: Instant,
     pub public_note: String,
     pub unavailable_reason: Option<String>,

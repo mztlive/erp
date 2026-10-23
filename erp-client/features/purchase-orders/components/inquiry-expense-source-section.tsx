@@ -39,7 +39,6 @@ import {
 } from "@/lib/business-options"
 import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 import { classifyFormalCommandError } from "@/lib/formal-command"
-import { formatDateTime } from "@/lib/datetime"
 import { hasPermission } from "@/lib/permissions"
 import type { InquiryExpenseCandidate } from "../api/expense-sources"
 import type { CreateExpensePurchaseInput } from "../api/purchase-expenses"
@@ -209,15 +208,6 @@ export function InquiryExpenseSourceSection({
                                             {reason ??
                                                 (candidate.public_note ||
                                                     "按本轮已确认费用条件办理")}
-                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                有效至{" "}
-                                                {formatDateTime(
-                                                    new Date(
-                                                        candidate.valid_until *
-                                                            1000,
-                                                    ).toISOString(),
-                                                )}
-                                            </p>
                                         </TableCell>
                                         <TableCell>
                                             <Button

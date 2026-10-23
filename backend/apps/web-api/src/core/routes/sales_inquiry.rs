@@ -271,6 +271,14 @@ fn procurement_work(rbac: &SharedRbacService) -> Router<AppState> {
 fn procurement_feedback(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/procurement-inquiries/{id}/renew",
+            with_permission(
+                post(sales_inquiry::commands::procurement_renew),
+                rbac,
+                sales_inquiry::commands::procurement_renew_permission_key(),
+            ),
+        )
+        .route(
             "/procurement-inquiries/{id}/feedback",
             with_permission(
                 put(sales_inquiry::commands::procurement_save_feedback),

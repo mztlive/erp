@@ -50,9 +50,6 @@ impl InquirySalesBasis {
                 .find(|line| line.line_id == result.line_id)
                 .ok_or_else(|| Error::BusinessLogicError("询价反馈需求行不存在".into()))?;
             for price in &result.prices {
-                if price.valid_until <= now {
-                    continue;
-                }
                 let mut selection = available_selection(inquiry, demand, price, result.available_quantity)?;
                 selection.line_no = u32::try_from(lines.len() + 1)
                     .map_err(|_| Error::ValidationError("销售行数超出范围".into()))?;
@@ -68,7 +65,7 @@ impl InquirySalesBasis {
         }
         if lines.is_empty() {
             return Err(Error::BusinessLogicError(
-                "当前已接受结果没有可转数量，或报价已过期，请重新询价".into(),
+                "当前已接受结果没有可转数量，请核对已开单数量或重新询价".into(),
             ));
         }
         Ok(Self {
@@ -210,7 +207,7 @@ mod tests {
                 price_id: price_id.into(),
                 unit_price_gross: Some("8".parse().unwrap()),
                 tax_rate: Some("0.13".parse().unwrap()),
-                valid_until: Instant::from_unix_secs(900),
+                valid_until: Instant::from_unix_secs(0),
             }],
             public_note: "其余数量待确认".into(),
         }

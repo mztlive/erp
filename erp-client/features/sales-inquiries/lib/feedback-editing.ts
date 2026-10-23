@@ -13,7 +13,6 @@ export function newFeedbackPrice(terms?: Partial<FeedbackTerms>): InquiryPrice {
         price_id: crypto.randomUUID(),
         unit_price_gross: null,
         tax_rate: terms?.tax_rate === undefined ? "0.13" : terms.tax_rate,
-        valid_until: terms?.valid_until ?? 0,
     }
 }
 
@@ -38,7 +37,7 @@ export function changeFeedbackConclusion(
 
 export type FeedbackIssue = { message: string; field: string }
 
-export type FeedbackTerms = Pick<InquiryPrice, "tax_rate" | "valid_until">
+export type FeedbackTerms = Pick<InquiryPrice, "tax_rate">
 
 /** 从已保存的逐商品条件汇总统一项；不同值保持混合状态，不覆盖商品例外。 */
 export function feedbackCommonTerms(lines: InquiryFeedbackLine[]) {
@@ -51,11 +50,6 @@ export function feedbackCommonTerms(lines: InquiryFeedbackLine[]) {
             ? first
                 ? (first.tax_rate ?? "")
                 : "0.13"
-            : null,
-        valid_until: prices.every(
-            (price) => price.valid_until === first?.valid_until,
-        )
-            ? (first?.valid_until ?? 0)
             : null,
     }
 }
@@ -75,7 +69,6 @@ export function applyFeedbackTerms(
             : [
                   newFeedbackPrice({
                       tax_rate: common.tax_rate ?? undefined,
-                      valid_until: common.valid_until ?? undefined,
                   }),
               ]
         return {
@@ -159,8 +152,6 @@ export function feedbackIssues(
         } catch {
             add("请填写有效的含税供给单价", `${field}-gross-price`)
         }
-        if (!price.valid_until || price.valid_until <= Date.now() / 1000)
-            add("请填写尚未到期的报价有效期", `${field}-valid-until`)
         try {
             if (
                 compareDecimal(price.tax_rate ?? "", "0", 6) < 0 ||
@@ -183,7 +174,6 @@ export function feedbackRequestData(
         fees: value.fees.map((fee) => ({
             fee_id: fee.fee_id,
             line_ids: fee.line_ids,
-            valid_until: fee.valid_until,
             public_note: fee.public_note,
             name: fee.name.trim(),
             amount_gross: fee.amount_gross.trim(),
@@ -193,7 +183,6 @@ export function feedbackRequestData(
             ...line,
             prices: line.prices.map((price) => ({
                 price_id: price.price_id,
-                valid_until: price.valid_until,
                 unit_price_gross: price.unit_price_gross?.trim() || null,
                 tax_rate: price.tax_rate?.trim() || null,
             })),

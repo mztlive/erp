@@ -8,7 +8,7 @@ import {
 } from "./supplier-quote-export"
 import type { SupplierQuoteImage } from "./supplier-quote-images"
 
-export const SUPPLIER_QUOTE_VERSION = "supplier-inquiry-quote-v3"
+export const SUPPLIER_QUOTE_VERSION = "supplier-inquiry-quote-v4"
 export const SUPPLIER_QUOTE_HEADERS = [
     "主图",
     "商品名称",
@@ -24,10 +24,9 @@ export const SUPPLIER_QUOTE_HEADERS = [
     "税率（%）",
     "可供数量",
     "运费（元）",
-    "报价失效日",
     "报价备注",
 ]
-const WIDTHS = [14, 28, 24, 19, 22, 10, 15, 16, 30, 24, 18, 13, 15, 16, 18, 30]
+const WIDTHS = [14, 28, 24, 19, 22, 10, 15, 16, 30, 24, 18, 13, 15, 16, 30]
 const ARCHIVE_MAX_BYTES = 50 * 1024 * 1024
 
 function configureSheet(
@@ -143,7 +142,7 @@ export async function buildSupplierQuoteWorkbook(
         meta,
         [...SUPPLIER_QUOTE_HEADERS, "回导标识（请勿修改）"],
         WIDTHS,
-        "请填写黄色区域：价格按本行单位报价，税率填写百分数（如 13）；报价即确认按要求交付日交付，无法按期交付请联系采购；运费填写本行总额，已含运费填写 0；无法供货时可供数量填写 0 并说明原因；报价失效日当天起不可采用，整行排序须包含隐藏列。",
+        "请填写黄色区域：价格按本行单位报价，税率填写百分数（如 13）；报价即确认按要求交付日交付，无法按期交付请联系采购；运费填写本行总额，已含运费填写 0；无法供货时可供数量填写 0 并说明原因；整行排序须包含隐藏列。",
     )
     const imageIds = new Map<string, number>()
     for (const [index, line] of group.lines.entries()) {

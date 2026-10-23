@@ -7,6 +7,7 @@ use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
 use crate::repository::extensions::ProcurementResponsibilityExt;
+use crate::repository::procurement_responsibility::migration::migrate_pools;
 
 /// 创建采购责任规则索引。
 ///
@@ -19,6 +20,7 @@ use crate::repository::extensions::ProcurementResponsibilityExt;
 /// # 错误
 /// 已有启用规则违反选择器唯一性或 MongoDB 创建失败时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
+    migrate_pools(db).await?;
     db.collection::<Document>(<Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES)
         .create_indexes(indexes())
         .await?;
@@ -50,8 +52,8 @@ fn indexes() -> Vec<IndexModel> {
             doc! { "deleted_at": 1, "status": 1, "rule_type": 1, "created_at": 1 },
         ),
         named_index(
-            "idx_procurement_responsibility_owner",
-            doc! { "deleted_at": 1, "owner_user_id": 1, "status": 1 },
+            "idx_procurement_responsibility_pool_owner",
+            doc! { "deleted_at": 1, "owner_user_ids": 1, "status": 1 },
         ),
     ]
 }

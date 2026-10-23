@@ -21,7 +21,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::ProcurementResponsibilityProcess;
 use super::adapter::ResponsibilityFactsAdapter;
-use super::resolver::{ResolutionInput, load_owner_account};
+use super::resolver::ResolutionInput;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -44,7 +44,7 @@ impl ProcurementResponsibilityProcess {
     ) -> Result<ProcurementResponsibilityRuleView> {
         let data = request.into_data();
         self.validate_selector_reference(&data, &mut NoTransaction).await?;
-        let policy_revision = self.authorize_owner_eligibility(data.owner_user_id.as_str()).await?;
+        let policy_revision = self.authorize_pool(&data).await?;
         let id = ProcurementResponsibilityRuleId::new(id_generator::next_id());
         let rule = ProcurementResponsibilityRule::new(id, data.clone(), actor.id()).map_err(Error::Logic)?;
         let audit = actor.clone().resource_log(
@@ -81,7 +81,7 @@ impl ProcurementResponsibilityProcess {
     ) -> Result<ProcurementResponsibilityRuleView> {
         let (version, data) = request.into_parts();
         self.validate_selector_reference(&data, &mut NoTransaction).await?;
-        let policy_revision = self.authorize_owner_eligibility(data.owner_user_id.as_str()).await?;
+        let policy_revision = self.authorize_pool(&data).await?;
         let audit = actor.clone().resource_log(
             "procurement_responsibility_rule.update",
             "procurement_responsibility_rule",
@@ -122,7 +122,7 @@ impl ProcurementResponsibilityProcess {
         rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
                 validation.validate_selector_reference(&data, executor).await?;
-                load_owner_account(&db, data.owner_user_id.as_str(), executor).await?;
+                validation.validate_pool(&data, executor).await?;
                 ProcurementResponsibilityService::new(db.clone()).create_rule(&rule, executor).await?;
                 persist_log(&db, &audit, executor).await?;
                 Ok(rule)
@@ -163,7 +163,7 @@ impl ProcurementResponsibilityProcess {
         rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
                 validation.validate_selector_reference(&data, executor).await?;
-                load_owner_account(&db, data.owner_user_id.as_str(), executor).await?;
+                validation.validate_pool(&data, executor).await?;
                 let rule = ProcurementResponsibilityService::new(db.clone())
                     .update_rule(&id, version, data, &updated_by, executor)
                     .await?;
@@ -195,14 +195,20 @@ impl ProcurementResponsibilityProcess {
             .collect::<erp_core::Result<Vec<_>>>()
             .map_err(Error::Logic)?;
         ProcurementResponsibilityResolutionBatch::new(&inputs).map_err(Error::Logic)?;
+        // 正常预览整批读取一次轮转位置，保证同单默认行展示同一人；失败时保留逐行诊断。
+        if let Ok(views) = self.preview_batch(&inputs, request.purpose).await {
+            return Ok(ProcurementResponsibilityResolveView {
+                lines: views.into_iter().map(success_preview).collect(),
+            });
+        }
 
         let mut lines = Vec::with_capacity(inputs.len());
         for input in inputs {
             let line_key = input.line_key.clone();
-            let result = self.resolve_strict(std::slice::from_ref(&input)).await;
+            let result = self.preview_batch(std::slice::from_ref(&input), request.purpose).await;
             lines.push(match result {
-                Ok(plan) => {
-                    let resolution = plan.views().into_iter().next().expect("单行解析必须返回单行");
+                Ok(views) => {
+                    let resolution = views.into_iter().next().expect("单行解析必须返回单行");
                     success_preview(resolution)
                 },
                 Err(error) => failed_preview(line_key, error),

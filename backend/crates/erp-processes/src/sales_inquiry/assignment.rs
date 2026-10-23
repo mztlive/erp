@@ -2,7 +2,9 @@
 
 use erp_core::Result as CoreResult;
 use erp_core::ids::SkuId;
-use erp_procurement::service::procurement_responsibility::CandidateResolution;
+use erp_procurement::service::procurement_responsibility::{
+    CandidateResolution, ProcurementResponsibilityService,
+};
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_workflow::entity::work_item::{InquiryTaskAssignment, InquiryTaskAssignments};
 use persistence_core::Executor;
@@ -24,13 +26,42 @@ impl SalesInquiryProcess {
         inquiry: &SalesInquiry,
         executor: &mut dyn Executor,
     ) -> Result<Vec<(InquiryTaskAssignment, String)>> {
-        let lines = &inquiry.current_requirement()?.data.lines;
-        let inputs = lines
+        let candidates = self.assignment_candidates(inquiry, executor).await?;
+        self.authorize_assignments(inquiry, candidates, executor).await
+    }
+
+    /// 为实际新建的一轮询价任务分派责任，并在原事务中占用一次默认轮次。
+    /// # 参数
+    /// `inquiry` 为冻结需求；`executor` 为创建任务的事务。
+    /// # 返回
+    /// 返回已核验人员和组织的整单分组。
+    /// # 错误
+    /// 规则、权限、组织或轮次变化时回滚整个分派。
+    pub(super) async fn allocate_assignments(
+        &self,
+        inquiry: &SalesInquiry,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<(InquiryTaskAssignment, String)>> {
+        let candidates = self.assignment_candidates(inquiry, executor).await?;
+        ProcurementResponsibilityService::new(self.db.clone()).claim_pools(&candidates, executor).await?;
+        self.authorize_assignments(inquiry, candidates, executor).await
+    }
+
+    /// 按整单冻结需求读取候选，不占用默认调度轮次。
+    pub(super) async fn assignment_candidates(
+        &self,
+        inquiry: &SalesInquiry,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CandidateResolution>> {
+        let inputs = inquiry
+            .current_requirement()?
+            .data
+            .lines
             .iter()
             .map(|line| ResolutionInput::new(line.line_id.clone(), SkuId::new(line.sku_id.clone())))
             .collect::<CoreResult<Vec<_>>>()?;
-        let candidates = ProcurementResponsibilityProcess::new(self.db.clone(), self.rbac.clone())
-            .resolve_candidates(&inputs, executor)
+        ProcurementResponsibilityProcess::new(self.db.clone(), self.rbac.clone())
+            .resolve_inquiry_candidates(&inputs, executor)
             .await
             .map_err(|error| match error {
                 Error::Logic(reason) => {
@@ -40,8 +71,23 @@ impl SalesInquiryProcess {
                     Error::ValidationError("采购责任配置中的人员不存在或已停用，请维护配置后重新提交".into())
                 },
                 other => other,
-            })?;
-        let line_ids = lines.iter().map(|line| line.line_id.clone()).collect::<Vec<_>>();
+            })
+    }
+
+    /// 采购任务权限与主属组织均在调用方事务中核验。
+    async fn authorize_assignments(
+        &self,
+        inquiry: &SalesInquiry,
+        candidates: Vec<CandidateResolution>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<(InquiryTaskAssignment, String)>> {
+        let line_ids = inquiry
+            .current_requirement()?
+            .data
+            .lines
+            .iter()
+            .map(|line| line.line_id.clone())
+            .collect::<Vec<_>>();
         let assignments = group_assignments(candidates, &line_ids)?;
         let mut authorized = Vec::with_capacity(assignments.len());
         for assignment in assignments {

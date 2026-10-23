@@ -25,12 +25,13 @@ impl ProcurementResponsibilityService {
     /// # 错误
     /// 仓储创建失败时返回对应错误。能识别到索引
     /// `uk_procurement_responsibility_active_selector` 时，冲突文案为
-    /// 「同一采购责任选择器只能有一条启用规则」；识别不到索引名时使用通用冲突文案。
+    /// 「同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员」；识别不到索引名时使用通用冲突文案。
     pub async fn create_rule(
         &self,
         rule: &ProcurementResponsibilityRule,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.guard_rotation(&rule.base.id, executor).await?;
         self.db.procurement_responsibility_rules().create(rule, executor).await?;
         Ok(())
     }
@@ -58,6 +59,7 @@ impl ProcurementResponsibilityService {
         updated_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<ProcurementResponsibilityRule> {
+        self.guard_rotation(id, executor).await?;
         let mut rule = self
             .db
             .procurement_responsibility_rules()

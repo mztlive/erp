@@ -1,13 +1,11 @@
 "use client"
 
-import { DatePicker } from "@/components/ui/date-picker"
 import { InquiryTaxRateInput } from "./inquiry-tax-rate-input"
 import { Label } from "@/components/ui/label"
 import {
     feedbackCommonTerms,
     type FeedbackTerms,
 } from "../lib/feedback-editing"
-import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
 import type { InquiryFeedbackLine } from "../types"
 
 export function InquiryFeedbackCommonTerms({
@@ -61,36 +59,6 @@ export function InquiryFeedbackCommonTerms({
                 >
                     输入 13 表示 13%，最多 4 位小数
                 </span>
-            </div>
-            <div className="flex items-center gap-2">
-                <Label
-                    htmlFor="procurement-feedback-common-valid"
-                    className="shrink-0 text-xs text-muted-foreground"
-                    title="修改后统一应用到全部可供及待确认商品"
-                >
-                    报价有效至
-                </Label>
-                <div className="w-44">
-                    <DatePicker
-                        id="procurement-feedback-common-valid"
-                        disabled={inactive}
-                        size="sm"
-                        value={
-                            inquiryDateInput(common.valid_until ?? 0) ||
-                            undefined
-                        }
-                        placeholder={
-                            common.valid_until === null
-                                ? "各商品不同"
-                                : "选择日期"
-                        }
-                        onValueChange={(date) =>
-                            onChange({
-                                valid_until: inquiryDateSeconds(date ?? ""),
-                            })
-                        }
-                    />
-                </div>
             </div>
         </div>
     )

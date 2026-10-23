@@ -55,7 +55,7 @@ impl SalesInquiryProcess {
         inquiry: &mut SalesInquiry,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let assignments = self.resolve_assignments(inquiry, executor).await?;
+        let assignments = self.allocate_assignments(inquiry, executor).await?;
         let owners =
             assignments.iter().map(|(assignment, _)| assignment.owner_user_id.clone()).collect::<Vec<_>>();
         inquiry.assign_shared_fee_owner(None, &owners)?;

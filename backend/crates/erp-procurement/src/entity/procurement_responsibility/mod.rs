@@ -5,7 +5,9 @@
 
 mod catalog;
 mod resolution;
+mod rotation;
 mod rule;
+pub use rotation::{AssignmentStrategy, ResolutionPurpose};
 mod status;
 
 pub use catalog::{

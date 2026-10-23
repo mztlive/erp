@@ -39,8 +39,6 @@ export function inquiryCandidateBlocker(
     if (!row.acceptances.length) return "尚未接受采购反馈"
     if (row.sales_progress.transfer_status === "complete")
         return "可转数量已用完（含销售草稿占用）"
-    if (row.sales_progress.quote_validity === "expired")
-        return "报价已过期，请重新询价"
     if (!row.sales_progress.can_create_sales)
         return "暂无可转结果，请在询价详情核对重询、报价及剩余数量"
     return null

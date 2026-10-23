@@ -18,7 +18,7 @@ pub enum InquirySupplyConclusion {
     Pending,
 }
 
-/// 商品供给单价、税率及有效期；数量与配送要求由所属反馈行和需求确定。
+/// 商品供给单价及税率；数量与配送要求由所属反馈行和需求确定。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InquirySupplyPrice {
@@ -27,6 +27,8 @@ pub struct InquirySupplyPrice {
     pub unit_price_gross: Option<UnitPrice>,
     /// 草稿允许尚未确认税率；发布前必须填写。
     pub tax_rate: Option<Rate>,
+    /// 仅兼容历史存储；不输出、不参与报价资格判断。
+    #[serde(default = "legacy_quote_date", skip_serializing)]
     pub valid_until: Instant,
 }
 
@@ -51,6 +53,8 @@ pub struct InquiryFee {
     pub tax_rate: Rate,
     #[serde(default)]
     pub line_ids: Vec<String>,
+    /// 仅兼容历史存储；不输出、不参与报价资格判断。
+    #[serde(default = "legacy_quote_date", skip_serializing)]
     pub valid_until: Instant,
     #[serde(default)]
     pub public_note: String,
@@ -85,33 +89,13 @@ pub struct InquiryFeedbackWork {
 }
 
 impl InquiryFeedbackData {
-    /// 按费用商品归属刷新有效期；整单费用采用全部商品报价中最早的到期时间。
-    /// # 参数
-    /// 无，使用当前反馈中的商品报价。
-    /// # 返回
-    /// 更新费用有效期；未报价时保留零值，等待发布校验。
-    /// # 错误
-    /// 不返回错误，不改变费用金额及身份。
-    pub(super) fn refresh_fee_validity(&mut self) {
-        for fee in &mut self.fees {
-            fee.valid_until = self
-                .lines
-                .iter()
-                .filter(|line| fee.line_ids.is_empty() || fee.line_ids.contains(&line.line_id))
-                .flat_map(|line| &line.prices)
-                .map(|price| price.valid_until)
-                .min()
-                .unwrap_or(Instant::from_unix_secs(0));
-        }
-    }
-
     /// 校验完整反馈，逐需求行和地址保留明确最终供给结论。
     /// # 参数
     /// `requirement` 为当前冻结需求；`now` 为发布时刻。
     /// # 返回
     /// 所有行与费用合法且反馈完整时通过。
     /// # 错误
-    /// 缺行、待确认、供给数量、地址、价格或有效期非法时拒绝。
+    /// 缺行、待确认、供给数量、地址、价格非法时拒绝。
     pub fn validate(&self, requirement: &InquiryRequirementData, now: Instant) -> Result<()> {
         if self.lines.len() != requirement.lines.len() || self.fees.len() > 100 {
             return Err(Error::ValidationError("反馈必须覆盖全部需求行且费用不得超过 100 行".into()));
@@ -184,7 +168,7 @@ impl InquiryFeedbackLine {
 }
 
 impl InquirySupplyPrice {
-    fn validate(&self, now: Instant) -> Result<()> {
+    fn validate(&self, _now: Instant) -> Result<()> {
         validate_text(&self.price_id, "供给价格身份", 128)?;
         let unit_price = self
             .unit_price_gross
@@ -195,20 +179,17 @@ impl InquirySupplyPrice {
             return Err(Error::ValidationError("含税供给单价不得为负数".into()));
         }
         validate_rate(tax_rate)?;
-        if self.valid_until <= now {
-            return Err(Error::ValidationError("供给报价已过期".into()));
-        }
         Ok(())
     }
 }
 
 impl InquiryFee {
-    fn validate(&self, requirement: &InquiryRequirementData, now: Instant) -> Result<()> {
+    fn validate(&self, requirement: &InquiryRequirementData, _now: Instant) -> Result<()> {
         validate_text(&self.fee_id, "费用身份", 128)?;
         validate_text(&self.name, "费用名称", 256)?;
         validate_rate(self.tax_rate)?;
-        if self.amount_gross.to_decimal() < Decimal::ZERO || self.valid_until <= now {
-            return Err(Error::ValidationError("费用金额非法或已失效".into()));
+        if self.amount_gross.to_decimal() < Decimal::ZERO {
+            return Err(Error::ValidationError("费用金额不得为负数".into()));
         }
         let mut ids = HashSet::new();
         for id in &self.line_ids {
@@ -228,4 +209,8 @@ fn validate_rate(rate: Rate) -> Result<()> {
         return Err(Error::ValidationError("税率必须在 0 至 1 之间".into()));
     }
     Ok(())
+}
+
+fn legacy_quote_date() -> Instant {
+    Instant::from_unix_secs(0)
 }

@@ -89,9 +89,7 @@ export function InquiryProductsTable({
                             <TableHead className="w-[12%]">
                                 要求交付日
                             </TableHead>
-                            <TableHead className="w-[12%]">
-                                报价有效至
-                            </TableHead>
+
                             <TableHead className="w-32 text-right">
                                 操作
                             </TableHead>
@@ -395,21 +393,7 @@ function ProductRow({
                     <TableCell className="py-2.5">
                         <CompactDate value={line.delivery_due_at} />
                     </TableCell>
-                    <TableCell className="py-2.5">
-                        {price ? (
-                            <>
-                                <CompactDate value={price.valid_until} />
-                                {price.valid_until > 0 &&
-                                    price.valid_until * 1000 <= Date.now() && (
-                                        <span className="text-xs text-warning-soft-foreground">
-                                            已过期
-                                        </span>
-                                    )}
-                            </>
-                        ) : (
-                            "—"
-                        )}
-                    </TableCell>
+
                     {price === prices[0] && (
                         <TableCell
                             rowSpan={prices.length}

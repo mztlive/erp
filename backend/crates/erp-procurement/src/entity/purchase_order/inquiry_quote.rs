@@ -81,6 +81,7 @@ pub struct PurchaseInquiryQuoteSource {
     pub available_quantity: Quantity,
     pub address_limits: Vec<PurchaseInquiryAddress>,
     pub expected_delivery_date: BusinessDate,
+    #[serde(default, skip_serializing)]
     pub valid_to: Option<BusinessDate>,
 }
 impl PurchaseInquiryQuoteSource {

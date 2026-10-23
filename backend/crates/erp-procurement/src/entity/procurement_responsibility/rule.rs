@@ -7,23 +7,25 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::rotation::{AssignmentStrategy, normalize_pool};
 use super::status::EnableStatus;
 use crate::entity::facts::ProductKind;
 
 const ACTOR_MAX_LEN: usize = 128;
-const OWNER_MAX_LEN: usize = 128;
 
 /// 采购责任规则类型，枚举顺序不表示优先级。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ProcurementResponsibilityRuleType {
+    /// 询价任务整单优先匹配。
+    Inquiry,
     /// 精确 SKU。
     Sku,
     /// 分类；解析时允许沿父分类逐级回退。
     Category,
     /// 商品业务类型。
     ProductKind,
-    /// 唯一具体默认调度人。
+    /// 通用兜底负责人池。
     DefaultDispatcher,
 }
 
@@ -40,6 +42,7 @@ impl ProcurementResponsibilityRuleType {
     /// 无。
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Inquiry => "INQUIRY",
             Self::Sku => "SKU",
             Self::Category => "CATEGORY",
             Self::ProductKind => "PRODUCT_KIND",
@@ -53,12 +56,13 @@ impl ProcurementResponsibilityRuleType {
     /// 无。
     ///
     /// # 返回
-    /// 返回 1 至 4，数值越小优先级越高。
+    /// 返回 0 至 4；询价规则仅在询价场景以最高优先级匹配。
     ///
     /// # 错误
     /// 无。
     pub fn priority(self) -> u8 {
         match self {
+            Self::Inquiry => 0,
             Self::Sku => 1,
             Self::Category => 2,
             Self::ProductKind => 3,
@@ -78,8 +82,10 @@ pub struct ProcurementResponsibilityRuleData {
     pub category_id: Option<ProductCategoryId>,
     /// 商品业务类型；仅 ProductKind 规则填写。
     pub product_kind: Option<ProductKind>,
-    /// 具体采购负责人账号 ID。
-    pub owner_user_id: String,
+    /// 按轮询顺序排列的采购负责人账号。
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
 }
@@ -121,9 +127,8 @@ impl ProcurementResponsibilityRuleData {
                 )
             },
             ProcurementResponsibilityRuleType::ProductKind
-            | ProcurementResponsibilityRuleType::DefaultDispatcher => {
-                ProcurementResponsibilitySelectorReference::None
-            },
+            | ProcurementResponsibilityRuleType::DefaultDispatcher
+            | ProcurementResponsibilityRuleType::Inquiry => ProcurementResponsibilitySelectorReference::None,
         })
     }
 }
@@ -141,8 +146,10 @@ pub struct ProcurementResponsibilityRule {
     pub category_id: Option<ProductCategoryId>,
     /// 商品业务类型选择器。
     pub product_kind: Option<ProductKind>,
-    /// 具体采购负责人账号 ID。
-    pub owner_user_id: String,
+    /// 按轮询顺序排列的采购负责人账号。
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
     /// 由选择器确定性形成的唯一键。
@@ -179,7 +186,8 @@ impl ProcurementResponsibilityRule {
             sku_id: normalized.sku_id,
             category_id: normalized.category_id,
             product_kind: normalized.product_kind,
-            owner_user_id: normalized.owner_user_id,
+            owner_user_ids: normalized.owner_user_ids,
+            strategy: normalized.strategy,
             status: normalized.status,
             selector_key: normalized.selector_key,
             updated_by: created_by.clone(),
@@ -209,7 +217,8 @@ impl ProcurementResponsibilityRule {
         self.sku_id = normalized.sku_id;
         self.category_id = normalized.category_id;
         self.product_kind = normalized.product_kind;
-        self.owner_user_id = normalized.owner_user_id;
+        self.owner_user_ids = normalized.owner_user_ids;
+        self.strategy = normalized.strategy;
         self.status = normalized.status;
         self.selector_key = normalized.selector_key;
         self.updated_by = updated_by;
@@ -237,7 +246,8 @@ struct NormalizedRuleData {
     sku_id: Option<SkuId>,
     category_id: Option<ProductCategoryId>,
     product_kind: Option<ProductKind>,
-    owner_user_id: String,
+    owner_user_ids: Vec<String>,
+    strategy: AssignmentStrategy,
     status: EnableStatus,
     selector_key: String,
 }
@@ -258,18 +268,14 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
     fn try_from(data: ProcurementResponsibilityRuleData) -> Result<Self> {
         ensure_selector_shape(&data)?;
         let selector_key = selector_key(&data);
-        let owner_user_id = normalize_required_text(
-            data.owner_user_id,
-            "采购负责人不能为空",
-            OWNER_MAX_LEN,
-            "采购负责人过长",
-        )?;
+        let owner_user_ids = normalize_pool(data.owner_user_ids)?;
         Ok(Self {
             rule_type: data.rule_type,
             sku_id: data.sku_id,
             category_id: data.category_id,
             product_kind: data.product_kind,
-            owner_user_id,
+            owner_user_ids,
+            strategy: data.strategy,
             status: data.status,
             selector_key,
         })
@@ -297,7 +303,7 @@ fn ensure_selector_shape(data: &ProcurementResponsibilityRuleData) -> Result<()>
         ProcurementResponsibilityRuleType::ProductKind => {
             data.sku_id.is_none() && data.category_id.is_none() && data.product_kind.is_some()
         },
-        ProcurementResponsibilityRuleType::DefaultDispatcher => {
+        ProcurementResponsibilityRuleType::DefaultDispatcher | ProcurementResponsibilityRuleType::Inquiry => {
             data.sku_id.is_none() && data.category_id.is_none() && data.product_kind.is_none()
         },
     };
@@ -313,7 +319,7 @@ fn ensure_selector_shape(data: &ProcurementResponsibilityRuleData) -> Result<()>
 /// * `data` - 已通过形状校验的规则数据
 ///
 /// # 返回
-/// 返回不包含负责人且唯一表示规则层与选择器的字符串。
+/// 每个匹配条件唯一对应一个负责人池，人员不参与选择器键。
 ///
 /// # 错误
 /// 不返回错误。仅允许在选择器形状校验通过后调用。
@@ -331,7 +337,8 @@ fn selector_key(data: &ProcurementResponsibilityRuleData) -> String {
         ProcurementResponsibilityRuleType::ProductKind => {
             format!("product_kind:{}", data.product_kind.expect("形状已校验").as_str())
         },
-        ProcurementResponsibilityRuleType::DefaultDispatcher => "default_dispatcher".to_string(),
+        ProcurementResponsibilityRuleType::DefaultDispatcher => "default_dispatcher".into(),
+        ProcurementResponsibilityRuleType::Inquiry => "inquiry".into(),
     }
 }
 
@@ -363,14 +370,15 @@ mod tests {
                 sku_id: None,
                 category_id: Some(ProductCategoryId::new("cat-1")),
                 product_kind: None,
-                owner_user_id: " buyer-1 ".to_string(),
+                owner_user_ids: vec![" buyer-1 ".to_string()],
+                strategy: Default::default(),
                 status: EnableStatus::Active,
             },
             " admin-1 ",
         )
         .unwrap();
         assert_eq!(category.selector_key, "category:cat-1");
-        assert_eq!(category.owner_user_id, "buyer-1");
+        assert_eq!(category.owner_user_ids, ["buyer-1"]);
         assert_eq!(category.created_by, "admin-1");
 
         let invalid = ProcurementResponsibilityRuleData {
@@ -378,7 +386,8 @@ mod tests {
             sku_id: Some(SkuId::new("sku-1")),
             category_id: Some(ProductCategoryId::new("cat-1")),
             product_kind: None,
-            owner_user_id: "buyer-1".to_string(),
+            owner_user_ids: vec!["buyer-1".to_string()],
+            strategy: Default::default(),
             status: EnableStatus::Active,
         };
         assert!(
@@ -398,7 +407,8 @@ mod tests {
             sku_id: Some(SkuId::new("sku-1")),
             category_id: None,
             product_kind: None,
-            owner_user_id: "buyer-1".to_string(),
+            owner_user_ids: vec!["buyer-1".to_string()],
+            strategy: Default::default(),
             status: EnableStatus::Active,
         };
         assert!(matches!(
@@ -409,5 +419,38 @@ mod tests {
         let invalid =
             ProcurementResponsibilityRuleData { category_id: Some(ProductCategoryId::new("cat-1")), ..sku };
         assert!(invalid.selector_reference().is_err());
+    }
+    #[test]
+    fn default_selector_identifies_pool_not_member() {
+        let data = |owner: &str| ProcurementResponsibilityRuleData {
+            rule_type: ProcurementResponsibilityRuleType::DefaultDispatcher,
+            sku_id: None,
+            category_id: None,
+            product_kind: None,
+            owner_user_ids: vec![owner.into()],
+            strategy: Default::default(),
+            status: EnableStatus::Active,
+        };
+        let first = ProcurementResponsibilityRule::new(
+            ProcurementResponsibilityRuleId::new("a"),
+            data(" buyer-1 "),
+            "admin",
+        )
+        .unwrap();
+        let second = ProcurementResponsibilityRule::new(
+            ProcurementResponsibilityRuleId::new("b"),
+            data("buyer-2"),
+            "admin",
+        )
+        .unwrap();
+        let same = ProcurementResponsibilityRule::new(
+            ProcurementResponsibilityRuleId::new("c"),
+            data("buyer-1"),
+            "admin",
+        )
+        .unwrap();
+        assert_eq!(first.selector_key, second.selector_key);
+        assert_eq!(first.selector_key, same.selector_key);
+        assert_eq!(first.owner_user_ids, ["buyer-1"]);
     }
 }

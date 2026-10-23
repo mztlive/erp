@@ -27,6 +27,7 @@ pub(super) enum InquiryCommand {
     Supplement(InquiryTaskReasonCommand),
     SaveFeedback(SaveInquiryFeedbackCommand),
     Publish(PublishInquiryCommand),
+    Renew(InquiryTaskReasonCommand),
     Accept(AcceptInquiryCommand),
     Reinquire(ReinquireInquiryCommand),
     Close(InquiryReasonCommand),
@@ -46,6 +47,7 @@ impl InquiryCommand {
             Self::Supplement(_) => "supplement",
             Self::SaveFeedback(_) => "save_feedback",
             Self::Publish(_) => "publish",
+            Self::Renew(_) => "renew",
             Self::Accept(_) => "accept",
             Self::Reinquire(_) => "reinquire",
             Self::Close(_) => "close",
@@ -62,6 +64,7 @@ impl InquiryCommand {
             Self::Save(r) => &r.command_key,
             Self::Submit(r) => &r.command_key,
             Self::Publish(r) => &r.command_key,
+            Self::Renew(r) => &r.command_key,
             Self::Supplement(r) => &r.command_key,
             Self::SaveFeedback(r) => &r.command_key,
             Self::Accept(r) => &r.command_key,
@@ -77,6 +80,7 @@ impl InquiryCommand {
     fn task(&self) -> Option<(&str, u64)> {
         match self {
             Self::Publish(r) => Some((&r.task_id, r.task_version)),
+            Self::Renew(r) => Some((&r.task_id, r.task_version)),
             Self::Supplement(r) => Some((&r.task_id, r.task_version)),
             Self::SaveFeedback(r) => Some((&r.task_id, r.task_version)),
             Self::Reassign(r) => Some((&r.task_id, r.task_version)),
@@ -90,7 +94,9 @@ impl InquiryCommand {
         if matches!(self, Self::Save(_) | Self::AllocateFees(_)) { "update" } else { self.action() }
     }
     fn procurement_action(&self) -> &'static str {
-        if matches!(self, Self::FeeBasis(_) | Self::ImportQuotes(_)) {
+        if matches!(self, Self::Renew(_)) {
+            "publish"
+        } else if matches!(self, Self::FeeBasis(_) | Self::ImportQuotes(_)) {
             "internal_quote"
         } else {
             self.action()

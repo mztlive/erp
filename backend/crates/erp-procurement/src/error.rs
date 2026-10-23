@@ -222,7 +222,9 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
         "uk_purchase_orders_creation_basis" => Some("该采购创建依据已生成采购单"),
-        "uk_procurement_responsibility_active_selector" => Some("同一采购责任选择器只能有一条启用规则"),
+        "uk_procurement_responsibility_active_selector" => {
+            Some("同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员")
+        },
         _ => None,
     }
 }
@@ -277,7 +279,7 @@ mod tests {
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_procurement_responsibility_active_selector")),
-            "同一采购责任选择器只能有一条启用规则"
+            "同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员"
         );
     }
 
@@ -324,7 +326,10 @@ mod tests {
     fn known_duplicate_export_keeps_exact_owned_index_matrix() {
         let cases = [
             ("uk_purchase_orders_creation_basis", "该采购创建依据已生成采购单"),
-            ("uk_procurement_responsibility_active_selector", "同一采购责任选择器只能有一条启用规则"),
+            (
+                "uk_procurement_responsibility_active_selector",
+                "同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员",
+            ),
         ];
         for (index, expected) in cases {
             assert_eq!(super::known_duplicate_index_message(index), Some(expected));

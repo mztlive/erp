@@ -19,8 +19,6 @@ pub enum InquiryTransferStatus {
 pub enum InquiryQuoteValidity {
     Unavailable,
     Valid,
-    PartiallyExpired,
-    Expired,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -37,7 +35,7 @@ impl InquirySalesProgress {
     /// # 参数
     /// `inquiry` 为已授权聚合；`now` 为本次服务端读取时刻。
     /// # 返回
-    /// 数量按行比较，不混加不同单位；开单资格包含有效期及重询范围。
+    /// 数量按行比较，不混加不同单位；开单资格包含接受结果及重询范围。
     /// # 错误
     /// 无；缺少有效开单依据时返回不可开单，不扩大权限。
     pub fn from_inquiry(inquiry: &SalesInquiry, now: Instant) -> Self {
@@ -79,22 +77,15 @@ impl InquirySalesProgress {
     }
 }
 
-fn validity(inquiry: &SalesInquiry, now: Instant) -> InquiryQuoteValidity {
+fn validity(inquiry: &SalesInquiry, _now: Instant) -> InquiryQuoteValidity {
     let Some(feedback) =
         inquiry.feedbacks.last().filter(|row| row.requirement_version == inquiry.requirement_version)
     else {
         return InquiryQuoteValidity::Unavailable;
     };
-    let mut valid = false;
-    let mut expired = false;
-    for price in feedback.data.lines.iter().flat_map(|line| &line.prices) {
-        valid |= price.valid_until > now;
-        expired |= price.valid_until <= now;
-    }
-    match (valid, expired) {
-        (true, true) => InquiryQuoteValidity::PartiallyExpired,
-        (true, false) => InquiryQuoteValidity::Valid,
-        (false, true) => InquiryQuoteValidity::Expired,
-        (false, false) => InquiryQuoteValidity::Unavailable,
+    if feedback.data.lines.iter().any(|line| !line.prices.is_empty()) {
+        InquiryQuoteValidity::Valid
+    } else {
+        InquiryQuoteValidity::Unavailable
     }
 }

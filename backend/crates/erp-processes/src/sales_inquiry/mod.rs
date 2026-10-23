@@ -12,6 +12,7 @@ pub mod internal_quote;
 pub mod quote_import;
 pub mod read;
 mod recovery;
+mod renewal;
 mod tasks;
 mod template;
 

@@ -160,8 +160,7 @@ export function SupplierQuoteImportButton({
                         <p className="text-xs text-muted-foreground">
                             最多 20 个文件，合计不超过 50
                             MiB。空白行保留为未报价；可供数量为 0
-                            时须填写原因。日期格式
-                            YYYY-MM-DD，有效期当天起失效。
+                            时须填写原因。日期格式 YYYY-MM-DD。
                         </p>
                         {(preview.error || message) && (
                             <Alert>
@@ -263,10 +262,6 @@ export function SupplierQuoteImportButton({
                                                             row.quote.terms
                                                                 .expected_delivery_date
                                                         }{" "}
-                                                        · 失效日{" "}
-                                                        {row.quote.terms
-                                                            .valid_to ??
-                                                            "未限定"}
                                                     </>
                                                 )}
                                             </p>
@@ -277,7 +272,7 @@ export function SupplierQuoteImportButton({
                                                         {row.previous.terms
                                                             .unavailable
                                                             ? "无法供货"
-                                                            : `单价 ${row.previous.terms.unit_cost_gross}，税率 ${multiplyFixed(row.previous.terms.input_tax_rate, "100", { leftMaxScale: 6, rightMaxScale: 0, outputScale: 4 })}%，可供 ${row.previous.terms.available_quantity}，运费 ${row.previous.terms.freight_gross ?? "未确认"}，交期 ${row.previous.terms.expected_delivery_date}，失效日 ${row.previous.terms.valid_to ?? "未限定"}`}
+                                                            : `单价 ${row.previous.terms.unit_cost_gross}，税率 ${multiplyFixed(row.previous.terms.input_tax_rate, "100", { leftMaxScale: 6, rightMaxScale: 0, outputScale: 4 })}%，可供 ${row.previous.terms.available_quantity}，运费 ${row.previous.terms.freight_gross ?? "未确认"}，交期 ${row.previous.terms.expected_delivery_date}`}
                                                         ；原备注：
                                                         {row.previous
                                                             .internal_note ||

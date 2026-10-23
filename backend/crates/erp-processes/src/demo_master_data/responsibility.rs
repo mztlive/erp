@@ -102,7 +102,9 @@ impl DemoMasterDataService {
                 .await?;
             let batch = found.items.len();
             for rule in found.items.iter().filter(|rule| rule.is_active()) {
-                responsibility.authorize_owner_eligibility(&rule.owner_user_id).await?;
+                for owner in &rule.owner_user_ids {
+                    responsibility.authorize_owner_eligibility(owner).await?;
+                }
             }
             flags.extend(found.items.iter().map(|rule| rule.is_active()));
             let counted = i64::try_from(flags.len())
@@ -144,7 +146,8 @@ impl DemoMasterDataService {
                     sku_id: None,
                     category_id: None,
                     product_kind: None,
-                    owner_user_id: owner_user_id.to_string(),
+                    owner_user_ids: vec![owner_user_id.to_string()],
+                    strategy: Default::default(),
                     status: ProcurementStatus::Active,
                 },
                 actor,

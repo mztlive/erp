@@ -32,7 +32,6 @@ export type InquiryExpenseCandidate = {
     name: string
     tax_rate: string
     available_amount: string
-    valid_until: number
     public_note: string
     unavailable_reason: string | null
     payee_supplier_id: string | null

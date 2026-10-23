@@ -60,6 +60,7 @@ import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 
 const RULE_TYPE_VALUES = [
+    "INQUIRY",
     "SKU",
     "CATEGORY",
     "PRODUCT_KIND",
@@ -72,7 +73,11 @@ const ruleFormSchema = z
         skuId: z.string(),
         categoryId: z.string(),
         productKind: z.string(),
-        ownerUserId: z.string().min(1, "请选择采购负责人"),
+        ownerUserIds: z
+            .array(z.string())
+            .min(1, "请至少选择一名采购负责人")
+            .max(100, "最多选择 100 名采购负责人"),
+        strategy: z.enum(["ROUND_ROBIN"]),
         enabled: z.boolean(),
     })
     .superRefine((value, context) => {
@@ -110,7 +115,8 @@ function defaultValues(rule?: ProcurementResponsibilityRule): RuleFormValue {
         skuId: rule?.skuId ?? "",
         categoryId: rule?.categoryId ?? "",
         productKind: rule?.productKind ?? "",
-        ownerUserId: rule?.ownerUserId ?? "",
+        ownerUserIds: [...(rule?.ownerUserIds ?? [])],
+        strategy: rule?.strategy ?? ("ROUND_ROBIN" as const),
         enabled: rule?.enabled ?? true,
     }
 }
@@ -138,6 +144,20 @@ function RuleDialog({
     ownerOptions: readonly { value: string; label: string }[]
 }) {
     const mutation = useSaveProcurementResponsibilityRuleMutation()
+    const poolOwnerOptions = [
+        ...ownerOptions,
+        ...(target?.ownerUserIds ?? []).flatMap((id, index) =>
+            ownerOptions.some((option) => option.value === id)
+                ? []
+                : [
+                      {
+                          value: id,
+                          label: `${target?.ownerNames[index] ?? "已选负责人"}（当前不可用）`,
+                          disabled: true,
+                      },
+                  ],
+        ),
+    ]
     const form = useAppForm({
         defaultValues: defaultValues(target),
         validators: { onChange: ruleFormSchema },
@@ -151,13 +171,15 @@ function RuleDialog({
                     productKind: value.productKind
                         ? (value.productKind as ProductKind)
                         : undefined,
-                    ownerUserId: value.ownerUserId,
+                    ownerUserIds: value.ownerUserIds,
+                    strategy: value.strategy,
                     enabled: value.enabled,
                     expectedVersion: target?.version,
                 })
                 toast.add({
                     title: target ? "采购责任规则已更新" : "采购责任规则已新增",
-                    description: "后续销售责任预览将按最新启用规则解析。",
+                    description:
+                        "后续采购任务按最新启用规则分派，已有任务负责人保持不变。",
                     type: "success",
                     timeout: 4000,
                 })
@@ -182,7 +204,10 @@ function RuleDialog({
                     <DialogTitle>
                         {target ? "编辑采购责任规则" : "新增采购责任规则"}
                     </DialogTitle>
-                    <DialogDescription>更具体的规则优先。</DialogDescription>
+                    <DialogDescription>
+                        每条规则配置一个负责人池。询价规则整单优先，其余按
+                        SKU、分类、商品类型、默认池依次匹配。
+                    </DialogDescription>
                 </DialogHeader>
                 <form
                     className="flex flex-col gap-5"
@@ -299,16 +324,29 @@ function RuleDialog({
                                 </>
                             )}
                         </form.Subscribe>
-                        <form.AppField name="ownerUserId">
+                        <form.AppField name="ownerUserIds">
+                            {(field) => (
+                                <field.MultiSelectField
+                                    id="procurement-responsibility-rules-dialog-owner"
+                                    label="负责人池"
+                                    required
+                                    options={poolOwnerOptions}
+                                    onRefresh={onRefreshOwners}
+                                    placeholder="选择采购负责人，可多选"
+                                    description="按选择顺序轮流分派；同一单命中本规则的商品交给同一人。"
+                                />
+                            )}
+                        </form.AppField>
+                        <form.AppField name="strategy">
                             {(field) => (
                                 <field.SelectField
-                                    id="procurement-responsibility-rules-dialog-owner"
-                                    label="采购负责人"
+                                    id="procurement-responsibility-rules-dialog-strategy"
+                                    label="分配方式"
                                     required
-                                    options={ownerOptions}
-                                    onRefresh={onRefreshOwners}
-                                    placeholder="选择现有账号"
                                     allowClear={false}
+                                    options={[
+                                        { value: "ROUND_ROBIN", label: "轮询" },
+                                    ]}
                                 />
                             )}
                         </form.AppField>
@@ -483,7 +521,7 @@ export function ProcurementResponsibilityRulesPage() {
                 className="pb-4 md:pb-4"
                 eyebrow="基础资料"
                 title="采购责任规则"
-                description="维护销售实物行到采购负责人的分配规则；越具体的规则优先命中。"
+                description="每条规则维护一个负责人池，各池独立轮询。询价规则启用后，询价整单优先进入该池。"
             >
                 {canManage ? (
                     <Button
@@ -588,7 +626,7 @@ export function ProcurementResponsibilityRulesPage() {
                                             listWorkspaceEmptyStateClassName
                                         }
                                         title="还没有采购责任规则"
-                                        description="请先新增默认调度人，再逐步补充更具体的规则。"
+                                        description="请先配置默认负责人池；需要询价专人处理时，新增询价规则并选择负责人。"
                                         action={
                                             canManage &&
                                             !dependenciesPending &&

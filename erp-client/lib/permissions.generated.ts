@@ -3031,6 +3031,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/renew",
+                description: "发起新一轮询价报价",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "publish",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/procurement-inquiries/{id}/feedback",
                 description: "保存询价反馈草稿",

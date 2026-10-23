@@ -211,15 +211,15 @@ mod tests {
     }
 
     #[test]
-    fn expired_quote_keeps_source_but_cannot_escape_task_scope() {
+    fn legacy_expiry_does_not_remove_quote_or_expand_task_scope() {
         let mut inquiry = inquiry();
         let mut facts = facts();
         let coverage = coverage();
         assert!(inquiry.groups(&order(), &coverage, &["other-line".into()], &mut facts).unwrap().is_empty());
         inquiry.candidates[0].source.valid_to = Some(BusinessDate::today());
         let groups = inquiry.groups(&order(), &coverage, &["sales-line".into()], &mut facts).unwrap();
-        assert_eq!(groups.len(), 1);
-        assert!(groups[0].scope.inquiry_quote_revision_id.is_none());
+        assert_eq!(groups.len(), 2);
+        assert!(groups.iter().any(|group| group.scope.inquiry_quote_revision_id.is_some()));
         assert_eq!(facts.source_inquiry_id.as_deref(), Some("inquiry"));
         inquiry.candidates.clear();
         let groups = inquiry.groups(&order(), &coverage, &["sales-line".into()], &mut facts).unwrap();

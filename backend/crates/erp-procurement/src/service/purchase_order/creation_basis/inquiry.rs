@@ -1,5 +1,4 @@
 //! 专项报价候选沿同一采购依据入口分组，成本与通用条款分离。
-use erp_core::common::time::BusinessDate;
 use erp_core::ids::SupplierOfferingId;
 use erp_core::money::Quantity;
 use rust_decimal::Decimal;
@@ -49,9 +48,7 @@ pub fn inquiry_basis_groups(
         }) else {
             continue;
         };
-        if candidate.source.expected_delivery_date > business_date_of(line.goods_line.fulfillment_due_at)?
-            || candidate.source.valid_to.is_some_and(|date| BusinessDate::today() >= date)
-        {
+        if candidate.source.expected_delivery_date > business_date_of(line.goods_line.fulfillment_due_at)? {
             continue;
         }
         let Some(supply) = special_supply(facts, &candidate.supplier_offering_id) else { continue };

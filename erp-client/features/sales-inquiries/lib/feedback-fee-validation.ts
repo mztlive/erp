@@ -4,7 +4,7 @@ import type { InquiryFeedbackData, InquiryFee } from "../types"
 type FeeField = "name" | "amount_gross" | "tax_rate"
 type FeeIssue = { index: number; field: FeeField; message: string }
 
-/** 保存费用前校验必填资料；商品未完成报价及费用有效期仍允许保留为草稿。 */
+/** 保存费用前校验必填资料；商品未完成报价仍允许保留为草稿。 */
 export function feedbackFeeIssues(fees: InquiryFee[]): FeeIssue[] {
     const issues: FeeIssue[] = []
     fees.forEach((fee, index) => {

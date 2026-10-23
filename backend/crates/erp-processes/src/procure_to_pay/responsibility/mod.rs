@@ -31,3 +31,5 @@ impl ProcurementResponsibilityProcess {
         Self { db, rbac }
     }
 }
+
+mod pool;

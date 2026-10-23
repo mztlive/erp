@@ -51,6 +51,7 @@ pub struct InquiryQuoteTermsInput {
     pub input_tax_rate: Rate,
     pub available_quantity: Quantity,
     pub expected_delivery_date: BusinessDate,
+    #[serde(default, skip_serializing)]
     pub valid_to: Option<BusinessDate>,
 }
 
@@ -67,7 +68,7 @@ impl InquiryQuoteTermsInput {
             input_tax_rate: self.input_tax_rate,
             available_quantity: self.available_quantity,
             expected_delivery_date: self.expected_delivery_date,
-            valid_to: self.valid_to,
+            valid_to: None,
             address_limits: line
                 .allocations
                 .iter()

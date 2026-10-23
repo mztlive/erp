@@ -10,8 +10,9 @@ export type BackendProcurementResponsibilityRule = {
     category_id?: string | null
     category_name?: string | null
     product_kind?: ProductKind | null
-    owner_user_id: string
-    owner_name?: string | null
+    owner_user_ids: string[]
+    owner_names: (string | null)[]
+    strategy: "ROUND_ROBIN"
     status: "active" | "disabled"
     version?: number
 }

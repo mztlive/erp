@@ -155,7 +155,7 @@ mod tests {
         assert!(
             draft("MANUAL", "100")
                 .with_inquiry_source(&inquiry(), &source(), Instant::from_unix_secs(3000))
-                .is_err()
+                .is_ok()
         );
         let mut closed = inquiry();
         closed.status = InquiryStatus::Closed;

@@ -8,9 +8,7 @@ export const TRANSFER_LABEL = {
 }
 export const VALIDITY_LABEL = {
     unavailable: "暂无商品报价",
-    valid: "商品报价有效",
-    partially_expired: "部分商品报价已过期",
-    expired: "商品报价已过期",
+    valid: "已有商品报价",
 }
 
 export function InquiryProgress({
@@ -24,7 +22,7 @@ export function InquiryProgress({
         return (
             <p
                 className="text-sm text-muted-foreground"
-                aria-label="转单进度与商品报价有效性"
+                aria-label="转单进度与商品报价状态"
             >
                 已全部转单 {progress.completed_lines} 项（含销售草稿占用）
                 <span className="mx-2" aria-hidden="true">
@@ -36,7 +34,7 @@ export function InquiryProgress({
     return (
         <div
             className="flex flex-wrap items-center gap-3 text-sm"
-            aria-label="转单进度与商品报价有效性"
+            aria-label="转单进度与商品报价状态"
         >
             <StatusBadge
                 label={TRANSFER_LABEL[progress.transfer_status]}
@@ -52,12 +50,7 @@ export function InquiryProgress({
             </span>
             <StatusBadge
                 label={VALIDITY_LABEL[progress.quote_validity]}
-                tone={
-                    progress.quote_validity === "expired" ||
-                    progress.quote_validity === "partially_expired"
-                        ? "warning"
-                        : "neutral"
-                }
+                tone="neutral"
             />
         </div>
     )

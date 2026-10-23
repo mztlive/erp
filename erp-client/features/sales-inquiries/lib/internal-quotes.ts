@@ -15,11 +15,15 @@ export type QuoteTerms = {
     input_tax_rate: string
     available_quantity: string
     expected_delivery_date: string
-    valid_to: string | null
     freight_gross?: string | null
     unavailable?: boolean
 }
 export type InternalQuote = {
+    system_price_kind?: "dropship" | "bulk"
+    supplier_name?: string
+    source_revision_id?: string
+    source_issue?: string
+
     id: string
     quote_id: string
     revision_no: number
@@ -36,8 +40,7 @@ export type QuoteInput = Omit<
     InternalQuote,
     "id" | "terms" | "requirement_version" | "feedback_round" | "created_at"
 > & {
-    terms: Omit<QuoteTerms, "valid_to" | "freight_gross"> & {
-        valid_to: string
+    terms: Omit<QuoteTerms, "freight_gross"> & {
         freight_gross: string
     }
 }
@@ -48,7 +51,18 @@ export function latestSupplierQuotes(
 ): InternalQuote[] {
     const current = new Map<string, InternalQuote>()
     for (const quote of quotes) {
-        const key = `${quote.line_id}:${quote.supplier_id}`
+        const key = `${quote.line_id}:${quote.supplier_id}:${quote.system_price_kind ?? "reply"}`
+        if (
+            quote.system_price_kind &&
+            quotes.some(
+                (item) =>
+                    !item.system_price_kind &&
+                    item.line_id === quote.line_id &&
+                    item.supplier_id === quote.supplier_id &&
+                    item.feedback_round >= quote.feedback_round,
+            )
+        )
+            continue
         const prior = current.get(key)
         if (
             !prior ||
@@ -69,6 +83,7 @@ export function quoteReferencePrice(
     quantity: string,
 ): string {
     const { unit_cost_gross, freight_gross } = quote.terms
+    if (quote.system_price_kind) return unit_cost_gross
     if (freight_gross == null) throw new Error("运费尚未确认")
     parseDecimal(freight_gross, { maxScale: 2 })
     if (compareDecimal(quantity, "0", 6) <= 0)
@@ -98,12 +113,9 @@ export function quoteExclusion(
     tax?: string | null,
 ): string | null {
     const terms = quote.terms
-    const today = new Date(Date.now() + 8 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10)
+    if (quote.source_issue) return quote.source_issue
     if (quote.feedback_round !== round) return "上一轮报价，需重新确认"
     if (terms.unavailable) return "无法供货"
-    if (terms.valid_to && terms.valid_to <= today) return "报价已过期"
     try {
         if (compareDecimal(line.quantity, "0", 6) <= 0)
             return "需求数量须大于零"
@@ -114,7 +126,8 @@ export function quoteExclusion(
             inquiryDateInput(line.delivery_due_at)
         )
             return "交期晚于要求"
-        if (terms.freight_gross == null) return "运费尚未确认"
+        if (!quote.system_price_kind && terms.freight_gross == null)
+            return "运费尚未确认"
         quoteReferencePrice(quote, line.quantity)
         if (tax && compareDecimal(terms.input_tax_rate, tax, 6) !== 0)
             return "税率不同"

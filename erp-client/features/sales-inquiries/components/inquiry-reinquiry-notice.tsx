@@ -22,8 +22,12 @@ export function InquiryReinquiryNotice({
                 .find((fee) => fee.fee_id === id)?.name ?? "已调整费用",
     )
     return (
-        <Alert variant="info" aria-label="销售再次询价要求">
-            <AlertTitle>销售要求再次询价</AlertTitle>
+        <Alert variant="info" aria-label="本轮报价要求">
+            <AlertTitle>
+                {request.initiated_by_procurement
+                    ? "采购主动发起新一轮报价"
+                    : "销售要求再次询价"}
+            </AlertTitle>
             <AlertDescription>
                 <div className="space-y-2">
                     <div className="text-xs">

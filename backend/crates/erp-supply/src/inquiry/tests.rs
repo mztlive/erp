@@ -82,11 +82,11 @@ fn scope_supplier_sku_and_version_cannot_be_reused() {
     }
 }
 #[test]
-fn expired_quote_changed_address_and_early_delivery_are_rejected() {
+fn legacy_expiry_is_ignored_but_changed_address_and_early_delivery_are_rejected() {
     let quote = quote();
     let mut expired = usage("10");
     expired.on_date = "2026-11-01".parse().unwrap();
-    assert!(quote.ensure_applicable(&expired).is_err());
+    quote.ensure_applicable(&expired).unwrap();
     let mut changed = usage("10");
     changed.addresses[0].address_fingerprint = "b".repeat(64);
     assert!(quote.ensure_applicable(&changed).is_err());
@@ -257,7 +257,7 @@ fn invalid_change_is_atomic_in_memory_and_cannot_overbook_shared_supplier_quote(
 }
 
 #[test]
-fn expired_quote_can_restore_only_existing_formal_exposure_without_new_eligibility() {
+fn legacy_expiry_does_not_prevent_restoring_existing_formal_exposure() {
     let mut quote = quote();
     let mut balance = InquiryQuoteBalance::empty(quote.data.quote_id.clone()).unwrap();
     let initial = usage("10");
@@ -274,7 +274,7 @@ fn expired_quote_can_restore_only_existing_formal_exposure_without_new_eligibili
     };
     let held = balance.resized(&quote, &usage("15"), &original, true).unwrap();
     quote.data.terms.valid_to = Some("2026-10-21".parse().unwrap());
-    assert!(quote.ensure_applicable(&initial).is_err());
+    quote.ensure_applicable(&initial).unwrap();
     let restored = balance.restore_existing_usage(&held, initial.quantity, &initial.addresses).unwrap();
     assert_eq!(restored.quantity.to_string(), "10");
     assert_eq!(balance.reserved_quantity.to_string(), "10");

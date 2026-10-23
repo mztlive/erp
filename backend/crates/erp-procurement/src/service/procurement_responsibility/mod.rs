@@ -1,6 +1,7 @@
 //! 采购责任候选解析与本域规则写入；授权策略和审计事务由流程根负责。
 
 mod resolver;
+mod rotation;
 mod rules;
 
 use mongodb::Database;

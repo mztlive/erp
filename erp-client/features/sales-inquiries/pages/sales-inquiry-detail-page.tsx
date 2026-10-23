@@ -516,7 +516,15 @@ function InquiryDetailContent({
         <InquiryActions
             inquiry={inquiry}
             procurement={procurement}
-            task={task}
+            task={
+                task ??
+                ("work_items" in inquiry
+                    ? inquiry.work_items.find(
+                          (item) =>
+                              item.id === taskId && item.status === "COMPLETED",
+                      )
+                    : undefined)
+            }
             userId={userId}
             permissions={permissions}
             onSaved={onSaved}

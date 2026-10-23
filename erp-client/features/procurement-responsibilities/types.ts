@@ -1,6 +1,7 @@
 import type { ProductKind } from "@/features/master-data/types"
 
 export type ProcurementResponsibilityRuleType =
+    | "INQUIRY"
     | "SKU"
     | "CATEGORY"
     | "PRODUCT_KIND"
@@ -14,8 +15,9 @@ export type ProcurementResponsibilityRule = Readonly<{
     categoryId?: string
     categoryLabel?: string
     productKind?: ProductKind
-    ownerUserId: string
-    ownerName: string
+    ownerUserIds: readonly string[]
+    ownerNames: readonly string[]
+    strategy: "ROUND_ROBIN"
     enabled: boolean
     version: number
 }>
@@ -26,7 +28,8 @@ export type SaveProcurementResponsibilityRuleInput = {
     skuId?: string
     categoryId?: string
     productKind?: ProductKind
-    ownerUserId: string
+    ownerUserIds: string[]
+    strategy: "ROUND_ROBIN"
     enabled: boolean
     expectedVersion?: number
 }
@@ -34,8 +37,9 @@ export type SaveProcurementResponsibilityRuleInput = {
 export const PROCUREMENT_RESPONSIBILITY_RULE_TYPE_LABEL: Readonly<
     Record<ProcurementResponsibilityRuleType, string>
 > = {
+    INQUIRY: "询价",
     SKU: "SKU",
     CATEGORY: "分类",
     PRODUCT_KIND: "商品类型",
-    DEFAULT_DISPATCHER: "默认调度人",
+    DEFAULT_DISPATCHER: "默认负责人池",
 }

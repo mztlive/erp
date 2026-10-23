@@ -33,7 +33,6 @@ import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 import { classifyFormalCommandError } from "@/lib/formal-command"
-import { formatDateTime } from "@/lib/datetime"
 import {
     readInquiryFileValue,
     removeInquiryFileValue,
@@ -227,15 +226,6 @@ export function InquiryFeeRegisterSection({
                                         {reason ??
                                             (candidate.public_note ||
                                                 "按本轮确认的 ERP 外费用办理")}
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            有效至{" "}
-                                            {formatDateTime(
-                                                new Date(
-                                                    candidate.valid_until *
-                                                        1000,
-                                                ).toISOString(),
-                                            )}
-                                        </p>
                                     </TableCell>
                                     <TableCell>
                                         <Button

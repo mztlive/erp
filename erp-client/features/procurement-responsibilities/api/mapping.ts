@@ -16,8 +16,11 @@ export function mapProcurementResponsibilityRule(
         categoryId: rule.category_id ?? undefined,
         categoryLabel: rule.category_name ?? undefined,
         productKind: rule.product_kind ?? undefined,
-        ownerUserId: rule.owner_user_id,
-        ownerName: rule.owner_name?.trim() || "负责人待确认",
+        ownerUserIds: rule.owner_user_ids,
+        ownerNames: rule.owner_user_ids.map(
+            (_, index) => rule.owner_names[index]?.trim() || "负责人待确认",
+        ),
+        strategy: rule.strategy,
         enabled: rule.status === "active",
         version: rule.version ?? 1,
     }
@@ -33,7 +36,8 @@ export function mapSaveProcurementResponsibilityRule(
             input.ruleType === "CATEGORY" ? input.categoryId : undefined,
         product_kind:
             input.ruleType === "PRODUCT_KIND" ? input.productKind : undefined,
-        owner_user_id: input.ownerUserId,
+        owner_user_ids: input.ownerUserIds,
+        strategy: input.strategy,
         status: input.enabled ? "active" : "disabled",
         version: input.expectedVersion,
     }

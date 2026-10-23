@@ -55,7 +55,6 @@ import { hasPermission } from "@/lib/permissions"
 import { fetchInquiryFeeSales, inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
 import { inquiryFeeBasisRound } from "../lib/fee-basis"
-import { inquiryDate } from "../lib/format"
 import {
     inquiryStorageKey,
     readInquiryLocalValue,
@@ -138,8 +137,6 @@ function feeUnavailable(
     if (!status) return "费用办理资格尚未核对，请刷新后重试"
     if (status.unavailable_reason)
         return status.unavailable_reason.replace(/^业务逻辑错误[:：]\s*/, "")
-    if (fee.valid_until <= Math.floor(Date.now() / 1000))
-        return "费用结果已过期，请重新询价"
     return undefined
 }
 
@@ -593,10 +590,6 @@ function InquiryFeesContent({
                                                     )}
                                                     precision={2}
                                                 />{" "}
-                                                · 有效至{" "}
-                                                {inquiryDate(
-                                                    summary.fee.valid_until,
-                                                )}
                                             </p>
                                             <p className="mt-1 text-xs text-muted-foreground">
                                                 {summary.reason}{" "}

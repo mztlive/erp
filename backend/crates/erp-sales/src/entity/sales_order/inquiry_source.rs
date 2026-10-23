@@ -404,13 +404,13 @@ impl InquirySalesLineSelection {
 
     fn ensure_price_scope(
         &self,
-        price: &InquirySupplyPrice,
+        _price: &InquirySupplyPrice,
         demand: &InquiryRequirementLine,
         available: Quantity,
-        now: Instant,
+        _now: Instant,
     ) -> Result<()> {
-        if price.valid_until <= now || self.quantity > available {
-            return Err(invalid("询价价格已过期或本次数量超过可供量，请重新询价"));
+        if self.quantity > available {
+            return Err(invalid("本次数量超过询价可供量，请重新询价"));
         }
         if demand.allocations.is_empty() != self.allocations.is_empty() {
             return Err(invalid("询价需求配送范围不匹配"));
@@ -694,7 +694,7 @@ mod tests {
         }
     }
     #[test]
-    fn price_scope_checks_expiry_available_quantity_and_demand_addresses() {
+    fn price_scope_ignores_legacy_expiry_but_checks_quantity_and_demand_addresses() {
         let demand: InquiryRequirementLine = serde_json::from_value(serde_json::json!({
             "line_id": "demand", "sku_id": "sku", "sku_revision_id": "revision",
             "sku_code": "sku", "product_name": "商品", "specification": "盒", "unit_code": "盒",
@@ -718,7 +718,7 @@ mod tests {
         assert!(
             selection
                 .ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(3_000))
-                .is_err()
+                .is_ok()
         );
         selection.quantity = "1".parse().unwrap();
         selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(1)).unwrap();

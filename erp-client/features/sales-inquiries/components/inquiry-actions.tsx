@@ -37,6 +37,7 @@ type InquiryAction =
     | "close"
     | "supplement"
     | "publish"
+    | "renew"
     | "reassign"
 const ACTION_LABEL: Record<InquiryAction, string> = {
     submit: "提交采购",
@@ -45,6 +46,7 @@ const ACTION_LABEL: Record<InquiryAction, string> = {
     close: "关闭询价",
     supplement: "要求补充需求",
     publish: "发布本轮反馈",
+    renew: "发起新一轮报价",
     reassign: "改派责任采购",
 }
 
@@ -88,7 +90,13 @@ export function InquiryActions({
         action === "submit"
             ? inquiry.requirement_version > 0
             : action != null &&
-              ["reinquire", "close", "supplement", "reassign"].includes(action)
+              [
+                  "reinquire",
+                  "close",
+                  "supplement",
+                  "reassign",
+                  "renew",
+              ].includes(action)
     const command = useInquiryCommand(userId, inquiry.id)
     const storageKey = `erp.sales-inquiry-action:${encodeURIComponent(userId)}:${encodeURIComponent(inquiry.id)}`
     const form = useAppForm({
@@ -149,9 +157,17 @@ export function InquiryActions({
                         concerns: value.concerns.trim(),
                         requirement: null,
                     }
-                if (["close", "supplement", "reassign"].includes(action))
+                if (
+                    ["close", "supplement", "reassign", "renew"].includes(
+                        action,
+                    )
+                )
                     data.reason = value.reason.trim()
-                if (["supplement", "publish", "reassign"].includes(action))
+                if (
+                    ["supplement", "publish", "reassign", "renew"].includes(
+                        action,
+                    )
+                )
                     Object.assign(data, taskBody)
                 if (action === "publish") {
                     if (!beforePublish)
@@ -221,12 +237,15 @@ export function InquiryActions({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storageKey])
     const actions: InquiryAction[] = procurement
-        ? task &&
+        ? task?.status === "OPEN" &&
           ["awaiting_procurement", "procurement_processing"].includes(
               inquiry.status,
           )
             ? ["publish", "supplement", "reassign"]
-            : []
+            : task?.status === "COMPLETED" &&
+                ["awaiting_sales", "confirmed"].includes(inquiry.status)
+              ? ["renew"]
+              : []
         : inquiry.status === "draft" ||
             inquiry.status === "awaiting_sales_supplement"
           ? ["submit", "close"]
@@ -261,7 +280,7 @@ export function InquiryActions({
                 (procurement && !task) ||
                 !hasPermission(
                     permissions,
-                    `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item}`,
+                    `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item === "renew" ? "publish" : item}`,
                 )
             }
             title={
@@ -419,13 +438,15 @@ export function InquiryActions({
                                 ? "接受当前完整反馈。商品供给价仅作成本参考，实际成交价在销售开单时明确确认。"
                                 : action === "reinquire"
                                   ? "沿用当前商品、数量、地址及交期，仅要求采购重新报价。需要变更需求时，请返回商品与报价，点击“修改需求”。"
-                                  : action === "submit"
-                                    ? "提交后按采购责任规则自动分派，无需选择采购人员。"
-                                    : action === "publish"
-                                      ? "确认后自动保存当前商品反馈与费用，再统一发布给销售，无需先点保存。内部供应商报价不会公开；其他责任采购尚未完成时，你的内容会保留为已保存进度。"
-                                      : action === "close"
-                                        ? "关闭后不能新增询价或转单，已生成销售与采购继续按各自流程办理。"
-                                        : "核对当前需求和责任范围后执行。"}
+                                  : action === "renew"
+                                    ? "将重新创建整单报价任务，保留原报价和已开单依据；新结果发布后须由销售再次接受。"
+                                    : action === "submit"
+                                      ? "提交后按采购责任规则自动分派，无需选择采购人员。"
+                                      : action === "publish"
+                                        ? "确认后自动保存当前商品反馈与费用，再统一发布给销售，无需先点保存。内部供应商报价不会公开；其他责任采购尚未完成时，你的内容会保留为已保存进度。"
+                                        : action === "close"
+                                          ? "关闭后不能新增询价或转单，已生成销售与采购继续按各自流程办理。"
+                                          : "核对当前需求和责任范围后执行。"}
                         </DialogDescription>
                     </DialogHeader>
                     <form

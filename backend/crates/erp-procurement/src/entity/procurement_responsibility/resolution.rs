@@ -291,6 +291,23 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
             .ok_or_else(|| Error::from("采购责任解析失败：未配置具体默认调度人"))
     }
 
+    /// 询价整单优先选择询价池；未配置时沿用商品规则与通用兜底。
+    /// # 参数
+    /// `context` 为商品上下文。
+    /// # 返回
+    /// 唯一启用询价规则，或常规规则解析结果。
+    /// # 错误
+    /// 询价规则多命中或常规解析失败时拒绝。
+    pub fn resolve_inquiry(
+        &self,
+        context: &ProcurementResponsibilityContext,
+    ) -> Result<&'a ProcurementResponsibilityRule> {
+        if let Some(rule) = self.unique_match(ProcurementResponsibilityRuleType::Inquiry, |_| true)? {
+            return Ok(rule);
+        }
+        self.resolve(context)
+    }
+
     /// 按当前分类到父分类的顺序逐级解析分类规则。
     ///
     /// # 参数
@@ -392,7 +409,8 @@ mod tests {
                 sku_id: sku_id.map(SkuId::new),
                 category_id: category_id.map(ProductCategoryId::new),
                 product_kind,
-                owner_user_id: owner.to_string(),
+                owner_user_ids: vec![owner.to_string()],
+                strategy: Default::default(),
                 status: EnableStatus::Active,
             },
             "admin-1",
@@ -490,18 +508,18 @@ mod tests {
             rule("sku", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, None, "sku-owner"),
         ];
         let set = ProcurementResponsibilityRuleSet::new(&rules);
-        assert_eq!(set.resolve(&context()).unwrap().owner_user_id, "sku-owner");
+        assert_eq!(set.resolve(&context()).unwrap().owner_user_ids[0], "sku-owner");
 
         let without_sku = ProcurementResponsibilityRuleSet::new(&rules[..3]);
-        assert_eq!(without_sku.resolve(&context()).unwrap().owner_user_id, "parent-owner");
+        assert_eq!(without_sku.resolve(&context()).unwrap().owner_user_ids[0], "parent-owner");
 
         let kind_only = vec![rules[0].clone(), rules[1].clone()];
         assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&kind_only).resolve(&context()).unwrap().owner_user_id,
+            ProcurementResponsibilityRuleSet::new(&kind_only).resolve(&context()).unwrap().owner_user_ids[0],
             "kind-owner"
         );
         assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&rules[..1]).resolve(&context()).unwrap().owner_user_id,
+            ProcurementResponsibilityRuleSet::new(&rules[..1]).resolve(&context()).unwrap().owner_user_ids[0],
             "default-owner"
         );
     }

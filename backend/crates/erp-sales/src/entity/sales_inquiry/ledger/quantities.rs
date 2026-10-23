@@ -9,7 +9,7 @@ use super::super::{
 use crate::{Error, Result};
 
 impl SalesInquiry {
-    /// 取得当前已接受的反馈；逐行有效期仍须在选择时校验。
+    /// 取得当前已接受的反馈；逐行数量及当前重询范围须在选择时校验。
     /// # 参数
     /// `round` 为明确引用轮次；`now` 为操作时刻。
     /// # 返回
@@ -38,7 +38,7 @@ impl SalesInquiry {
     /// # 返回
     /// 追加未消耗占用；完全相同重放无新增。
     /// # 错误
-    /// 过期、重询范围、价格条件、不供货、行或地址余额不足时拒绝。
+    /// 重询范围、价格条件、不供货、行或地址余额不足时拒绝。
     pub fn reserve_quantities(
         &mut self,
         reservation_id: &str,
@@ -112,7 +112,7 @@ impl SalesInquiry {
     /// # 返回
     /// Reserved 变为 Handled；重复调用保持不变。
     /// # 错误
-    /// 未找到或已经释放时拒绝；询价关闭、过期或重询不影响既有销售生效。
+    /// 未找到或已经释放时拒绝；询价关闭或重询不影响既有销售生效。
     pub fn consume_quantities(&mut self, reservation_id: &str) -> Result<()> {
         let entry = self
             .quantity_ledger
@@ -201,14 +201,10 @@ impl SalesInquiry {
                 return Err(Error::ValidationError("转单必须明确有效的供给报价".into()));
             }
             self.validate_selection_precision(selection)?;
-            let price = line
-                .prices
+            line.prices
                 .iter()
                 .find(|price| selection.price_id.as_ref().is_none_or(|id| &price.price_id == id))
                 .ok_or_else(|| Error::BusinessLogicError("转单数量没有适用价格或配送范围".into()))?;
-            if price.valid_until <= now {
-                return Err(Error::BusinessLogicError("询价供给价格已过期".into()));
-            }
             self.validate_allocation_selection(selections, selection, exclude)?;
         }
         Ok(())

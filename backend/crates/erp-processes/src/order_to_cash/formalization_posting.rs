@@ -81,7 +81,7 @@ impl PostingSteps for MongoPosting<'_> {
                         write.db.clone(),
                         write.rbac.clone(),
                     )
-                    .revalidate_plan(&plan.inputs, &plan.resolution, executor)
+                    .claim_plan(&plan.inputs, &plan.resolution, executor)
                     .await?;
                 }
             },

@@ -49,7 +49,8 @@ pub fn apply_rule_list_facts(
     facts: &ProcurementRuleListDisplayFacts,
 ) {
     for view in views {
-        view.owner_name = facts.owner_names.get(&view.owner_user_id).cloned();
+        view.owner_names =
+            view.owner_user_ids.iter().map(|owner| facts.owner_names.get(owner).cloned()).collect();
         if let Some(sku_id) = view.sku_id.as_ref() {
             let key = sku_id.as_ref();
             if let Some(sku_no) = facts.sku_nos.get(key) {
@@ -87,7 +88,8 @@ mod tests {
                 sku_id: if category.is_some() { None } else { Some(SkuId::new(sku)) },
                 category_id,
                 product_kind: None,
-                owner_user_id: owner.to_string(),
+                owner_user_ids: vec![owner.to_string()],
+                strategy: Default::default(),
                 status: EnableStatus::Active,
             },
             "admin-1",
@@ -128,7 +130,7 @@ mod tests {
             &facts,
         );
         assert_eq!(views.len(), 2);
-        assert_eq!(views[0].owner_name.as_deref(), Some("张三"));
+        assert_eq!(views[0].owner_names[0].as_deref(), Some("张三"));
         assert_eq!(views[0].sku_no.as_deref(), Some("SKU-001"));
         assert_eq!(views[0].sku_name.as_deref(), Some("红色零件"));
         assert_eq!(views[1].category_name.as_deref(), Some("五金"));
@@ -152,7 +154,7 @@ mod tests {
         let facts = ProcurementRuleListDisplayFacts::default();
         let views = to_rule_list_views(vec![sku_rule("r-9", "sku-gone", None, "owner-gone")], &facts);
         assert_eq!(views.len(), 1);
-        assert!(views[0].owner_name.is_none());
+        assert!(views[0].owner_names[0].is_none());
         assert!(views[0].sku_no.is_none());
         assert!(views[0].sku_name.is_none());
         assert!(views[0].category_name.is_none());

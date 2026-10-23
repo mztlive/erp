@@ -15,7 +15,6 @@ import {
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
-import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -28,7 +27,7 @@ import {
 } from "@/components/ui/table"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
+import { inquiryDateInput } from "../lib/format"
 import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import {
     feedbackIssues,
@@ -120,7 +119,6 @@ export function InquiryFeedbackTable({
     const defaultTerms = {
         tax_rate:
             common.tax_rate === "" ? null : (common.tax_rate ?? undefined),
-        valid_until: common.valid_until ?? undefined,
     }
     const sku = useInquirySkuDetailsQuery(demand.map((line) => line.sku_id))
     const [selected, setSelected] = React.useState<Set<string>>(() => new Set())
@@ -281,7 +279,6 @@ export function InquiryFeedbackTable({
                             <col className="w-34" />
                             <col className="w-42" />
                             <col className="w-32" />
-                            <col className="w-52" />
                         </colgroup>
                         <TableHeader className="sticky top-0 z-10 bg-muted">
                             <TableRow>
@@ -332,14 +329,13 @@ export function InquiryFeedbackTable({
                                 <TableHead className="text-right">
                                     税率
                                 </TableHead>
-                                <TableHead>报价有效至</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {rows.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={7}
+                                        colSpan={6}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         暂无商品需求
@@ -670,43 +666,6 @@ export function InquiryFeedbackTable({
                                                     />
                                                 )}
                                             </TableCell>
-                                            <TableCell>
-                                                {unavailable ? (
-                                                    <span className="flex h-control items-center">
-                                                        —
-                                                    </span>
-                                                ) : (
-                                                    <DatePicker
-                                                        id={`${prefix}-valid-until`}
-                                                        disabled={
-                                                            readOnly || disabled
-                                                        }
-                                                        clearable={!readOnly}
-                                                        placeholder={
-                                                            readOnly
-                                                                ? "未记录"
-                                                                : "选择日期"
-                                                        }
-                                                        size="default"
-                                                        aria-label={`${line.product_name}报价有效至`}
-                                                        value={
-                                                            inquiryDateInput(
-                                                                price?.valid_until ??
-                                                                    0,
-                                                            ) || undefined
-                                                        }
-                                                        onValueChange={(date) =>
-                                                            updatePrice({
-                                                                valid_until:
-                                                                    inquiryDateSeconds(
-                                                                        date ??
-                                                                            "",
-                                                                    ),
-                                                            })
-                                                        }
-                                                    />
-                                                )}
-                                            </TableCell>
                                         </TableRow>
                                         {(!readOnly &&
                                             (needsReason ||
@@ -715,7 +674,7 @@ export function InquiryFeedbackTable({
                                         (readOnly && value.public_note) ? (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={7}
+                                                    colSpan={6}
                                                     className="whitespace-normal bg-muted/20 px-4 py-2"
                                                 >
                                                     {readOnly ? (

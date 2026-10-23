@@ -74,7 +74,7 @@ fn feedback(quantity: &str, conclusion: InquirySupplyConclusion) -> InquiryFeedb
             price_id: "price".into(),
             unit_price_gross: Some("12.34".parse().unwrap()),
             tax_rate: Some("0.13".parse().unwrap()),
-            valid_until: later(),
+            valid_until: Instant::from_unix_secs(0),
         }]
     };
     InquiryFeedbackData {
@@ -91,7 +91,7 @@ fn feedback(quantity: &str, conclusion: InquirySupplyConclusion) -> InquiryFeedb
             amount_gross: amount("100"),
             tax_rate: "0.06".parse().unwrap(),
             line_ids: vec!["line".into()],
-            valid_until: later(),
+            valid_until: Instant::from_unix_secs(0),
             public_note: "物流成本".into(),
         }],
     }
@@ -1025,8 +1025,8 @@ fn transfer_progress_and_quote_validity_are_independent_of_processing_status() {
     inquiry.release_quantities("second").unwrap();
     let expired = InquirySalesProgress::from_inquiry(&inquiry, later());
     assert_eq!(expired.transfer_status, InquiryTransferStatus::Partial);
-    assert_eq!(expired.quote_validity, InquiryQuoteValidity::Expired);
-    assert!(!expired.can_create_sales);
+    assert_eq!(expired.quote_validity, InquiryQuoteValidity::Valid);
+    assert!(expired.can_create_sales);
     inquiry.close(1, "sales", "关闭".into(), now()).unwrap();
     assert!(!InquirySalesProgress::from_inquiry(&inquiry, now()).can_create_sales);
 }
@@ -1110,7 +1110,7 @@ fn feedback_draft_saves_missing_quote_values_and_blocks_publish_until_completed(
 }
 
 #[test]
-fn feedback_draft_keeps_explicit_zero_distinct_from_missing_and_checks_expiry() {
+fn feedback_draft_keeps_explicit_zero_distinct_from_missing_and_ignores_legacy_expiry() {
     let mut data = feedback("10", InquirySupplyConclusion::Available);
     let old_json = serde_json::to_value(&data).unwrap();
     assert_eq!(old_json["lines"][0]["prices"][0]["unit_price_gross"], "12.34");
@@ -1121,9 +1121,8 @@ fn feedback_draft_keeps_explicit_zero_distinct_from_missing_and_checks_expiry() 
     let encoded = serde_json::to_value(&data).unwrap();
     assert_eq!(encoded["lines"][0]["prices"][0]["unit_price_gross"], "0");
     data.lines[0].prices[0].valid_until = now();
-    assert!(
-        matches!(data.validate(&demand(), now()), Err(Error::ValidationError(message)) if message == "供给报价已过期")
-    );
+    data.validate(&demand(), later()).unwrap();
+    assert!(serde_json::to_value(&data).unwrap()["lines"][0]["prices"][0].get("valid_until").is_none());
 }
 
 #[test]
@@ -1178,7 +1177,7 @@ fn feedback_draft_rejects_multiple_prices_without_mutation() {
 }
 
 #[test]
-fn fee_scope_and_expiry_are_derived_and_cannot_be_overridden() {
+fn fee_scope_is_derived_and_legacy_expiry_does_not_restrict_feedback() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
     let mut data = feedback("10", InquirySupplyConclusion::Available);
@@ -1187,12 +1186,11 @@ fn fee_scope_and_expiry_are_derived_and_cannot_be_overridden() {
     inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data.clone(), now()).unwrap();
     let fee = &inquiry.feedback_work.last().unwrap().data.fees[0];
     assert_eq!(fee.line_ids, vec!["line"]);
-    assert_eq!(fee.valid_until, later());
     data.lines[0].prices[0].valid_until = Instant::from_unix_secs(0);
     inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data, now()).unwrap();
     let saved = &inquiry.feedback_work.last().unwrap().data;
-    assert_eq!(saved.fees[0].valid_until, Instant::from_unix_secs(0));
-    assert!(saved.validate(&demand(), now()).is_err());
+    saved.validate(&demand(), later()).unwrap();
+    assert!(serde_json::to_value(saved).unwrap()["fees"][0].get("valid_until").is_none());
 }
 
 #[test]
@@ -1221,19 +1219,6 @@ fn feedback_work_rejects_reusing_another_buyers_fee_and_duplicate_ids() {
     data.fees.push(data.fees[0].clone());
     assert!(inquiry.save_feedback_work(1, "buyer-b", vec!["line-b".into()], data, now()).is_err());
     assert_eq!(inquiry, before);
-}
-
-#[test]
-fn whole_order_fee_uses_earliest_quote_after_combining_buyers() {
-    let (_, mut data) = two_line_accepted_inquiry();
-    data.fees[0].line_ids.clear();
-    data.lines[1].prices[0].valid_until = Instant::from_unix_secs(200);
-    data.refresh_fee_validity();
-    assert_eq!(data.fees[0].valid_until, Instant::from_unix_secs(200));
-    assert_eq!(data.fees[1].valid_until, Instant::from_unix_secs(200));
-    data.fees[0].line_ids = vec!["line".into()];
-    data.refresh_fee_validity();
-    assert_eq!(data.fees[0].valid_until, later());
 }
 
 #[test]
@@ -1297,4 +1282,47 @@ fn completed_procurement_shared_fees_require_own_frozen_work() {
     let later_work =
         InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
     assert!(later_work.feedbacks[0].data.fees.is_empty());
+}
+
+#[test]
+fn procurement_can_renew_multiple_rounds_without_sales_reinquiry_and_keeps_existing_sources() {
+    let mut inquiry = accepted();
+    inquiry.reserve_quantities("held", "sales-existing", 1, selected("4"), now()).unwrap();
+    let first = inquiry.feedbacks[0].clone();
+    let ledger = inquiry.quantity_ledger.clone();
+    for round in 2..=3 {
+        inquiry.renew_quote(1, "buyer", "供应商价格更新".into(), later()).unwrap();
+        assert_eq!(inquiry.requirement_version, 1);
+        assert!(inquiry.reinquiries.last().unwrap().initiated_by_procurement);
+        assert!(inquiry.reserve_quantities("new", "sales-new", round - 1, selected("1"), later()).is_err());
+        let mut next = feedback("10", InquirySupplyConclusion::Available);
+        next.lines[0].prices[0].unit_price_gross = Some("15".parse().unwrap());
+        inquiry.publish(1, "buyer", next, later()).unwrap();
+        assert_eq!(inquiry.feedback_round, round);
+        assert!(inquiry.reserve_quantities("new", "sales-new", round - 1, selected("1"), later()).is_err());
+        inquiry.accept(1, "sales", round, later()).unwrap();
+    }
+    assert_eq!(inquiry.feedbacks[0], first);
+    assert_eq!(inquiry.quantity_ledger, ledger);
+    assert_eq!(inquiry.acceptances.len(), 3);
+    inquiry.reserve_quantities("new", "sales-new", 3, selected("6"), later()).unwrap();
+    assert!(inquiry.reserve_quantities("extra", "sales-extra", 3, selected("1"), later()).is_err());
+}
+
+#[test]
+fn procurement_renew_rejects_conflict_empty_reason_processing_and_closed_without_mutation() {
+    let mut inquiry = accepted();
+    for (version, reason) in [(2, "更新"), (1, " ")] {
+        let before = inquiry.clone();
+        assert!(inquiry.renew_quote(version, "buyer", reason.into(), now()).is_err());
+        assert_eq!(inquiry, before);
+    }
+    inquiry.renew_quote(1, "buyer", "更新".into(), now()).unwrap();
+    let before = inquiry.clone();
+    assert!(inquiry.renew_quote(1, "buyer", "重复发起".into(), now()).is_err());
+    assert_eq!(inquiry, before);
+    inquiry.close(1, "sales", "结束".into(), now()).unwrap();
+    let before = inquiry.clone();
+    assert!(inquiry.renew_quote(1, "buyer", "再报价".into(), now()).is_err());
+    assert_eq!(inquiry, before);
 }

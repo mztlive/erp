@@ -7,11 +7,11 @@ use super::{InquiryFeedbackData, InquiryReassignmentData, InquiryStatus, SalesIn
 use crate::{Error, Result};
 
 impl SalesInquiry {
-    /// 费用范围由责任归属确定，有效期采用关联商品最早到期的报价。
+    /// 费用范围由当前责任归属确定。
     /// # 参数
     /// `actor`、`scope` 为已授权责任人和范围，`data` 为当前反馈草稿。
     /// # 返回
-    /// 覆盖客户端传入的范围及有效期，保留既有费用归属。
+    /// 覆盖客户端传入的范围，保留既有费用归属。
     /// # 错误
     /// 费用过多、身份重复或既有费用超出责任范围时拒绝。
     pub(super) fn prepare_feedback_fees(
@@ -48,7 +48,6 @@ impl SalesInquiry {
                 return Err(Error::Forbidden("费用超出当前采购责任范围".into()));
             }
         }
-        data.refresh_fee_validity();
         Ok(())
     }
 
@@ -110,7 +109,6 @@ impl SalesInquiry {
         {
             return Err(Error::BusinessLogicError("尚有需求未分派当前责任采购".into()));
         }
-        result.refresh_fee_validity();
         Ok(result)
     }
 

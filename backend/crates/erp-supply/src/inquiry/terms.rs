@@ -34,7 +34,8 @@ pub struct QuoteTerms {
     /// 需求地址的适用额度；总和可超过可供量，实际采用另受总余额限制。
     pub address_limits: Vec<QuoteAddressLimit>,
     pub expected_delivery_date: BusinessDate,
-    /// 失效日当天起不可采用。
+    /// 仅兼容历史存储，不输出且不参与采用校验。
+    #[serde(default, skip_serializing)]
     pub valid_to: Option<BusinessDate>,
 }
 
@@ -72,26 +73,23 @@ impl QuoteTerms {
             || self.input_tax_rate.to_decimal() < Decimal::ZERO
             || self.input_tax_rate.to_decimal() > Decimal::ONE
         {
-            return Err(Error::ValidationError("专项报价价格、税率、数量或有效期非法".into()));
+            return Err(Error::ValidationError("专项报价价格、税率或数量非法".into()));
         }
         validate_addresses(&self.address_limits, self.available_quantity, false)?;
         Ok(self)
     }
 
-    /// 核对本次采用的数量、地址、交期及有效期；禁止静默切换价格。
+    /// 核对本次采用的数量、地址、交期；禁止静默切换价格。
     /// # 参数
     /// `usage` 为服务端读取且已核验的本次采购事实。
     /// # 返回
     /// 精确条件适用时成功。
     /// # 错误
-    /// 过期、地址变化、可供量或交期不满足时拒绝。
+    /// 地址变化、可供量或交期不满足时拒绝。
     pub fn ensure_applicable(&self, usage: &InquiryQuoteUse) -> Result<()> {
         self.clone().validated()?;
         if self.unavailable {
             return Err(Error::BusinessLogicError("供应商已回复无法供货，请重新确认".into()));
-        }
-        if self.valid_to.is_some_and(|date| usage.on_date >= date) {
-            return Err(Error::BusinessLogicError("专项报价已过期，请重新确认".into()));
         }
         if usage.quantity.to_decimal() <= Decimal::ZERO
             || usage.consumed_quantity.to_decimal() < Decimal::ZERO

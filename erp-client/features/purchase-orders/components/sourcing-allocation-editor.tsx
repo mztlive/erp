@@ -332,10 +332,7 @@ function SourcingOptionFacts({
             {option.inquirySource && (
                 <p className="mt-2 text-xs text-muted-foreground">
                     沿用询价第 {option.inquirySource.feedback_round} 轮 ·
-                    内部报价第 {option.inquirySource.quote_revision_no} 版 ·
-                    {option.inquirySource.valid_to
-                        ? `失效日期 ${option.inquirySource.valid_to}`
-                        : "未限定失效日期"}
+                    内部报价第 {option.inquirySource.quote_revision_no} 版
                 </p>
             )}
             {option.recommendationReason && (

@@ -280,7 +280,9 @@ pub(crate) fn matches_procurement_owner(
     let Ok(context) = ProcurementResponsibilityContext::new(SkuId::new(sku_id), chain, map_kind(kind)) else {
         return false;
     };
-    rule_set.resolve(&context).is_ok_and(|rule| wanted.contains(rule.owner_user_id.as_str()))
+    rule_set
+        .resolve(&context)
+        .is_ok_and(|rule| rule.owner_user_ids.iter().any(|owner| wanted.contains(owner.as_str())))
 }
 
 /// 穷尽映射商品类型，保留采购责任规则原来的类型选择器。
@@ -319,7 +321,8 @@ mod tests {
                 sku_id: sku.map(SkuId::new),
                 category_id: category.map(ProductCategoryId::new),
                 product_kind: kind,
-                owner_user_id: owner.to_string(),
+                owner_user_ids: vec![owner.to_string()],
+                strategy: Default::default(),
                 status: EnableStatus::Active,
             },
             "admin",
@@ -432,6 +435,31 @@ mod tests {
             ["leaf", "leaf"].map(ProductCategoryId::new).to_vec(),
             &single,
             &wanted
+        ));
+    }
+    #[test]
+    fn owner_filter_matches_all_pool_members_and_ignores_inquiry_pool() {
+        let mut sku = rule("sku", ProcurementResponsibilityRuleType::Sku, Some("sku"), None, None, "buyer-a");
+        sku.owner_user_ids.push("buyer-b".into());
+        let inquiry =
+            rule("inquiry", ProcurementResponsibilityRuleType::Inquiry, None, None, None, "inquiry-buyer");
+        let rules = [sku, inquiry];
+        let set = ProcurementResponsibilityRuleSet::new(&rules);
+        for owner in ["buyer-a", "buyer-b"] {
+            assert!(matches_procurement_owner(
+                ProductKind::Physical,
+                "sku",
+                chain(),
+                &set,
+                &HashSet::from([owner])
+            ));
+        }
+        assert!(!matches_procurement_owner(
+            ProductKind::Physical,
+            "sku",
+            chain(),
+            &set,
+            &HashSet::from(["inquiry-buyer"])
         ));
     }
 }

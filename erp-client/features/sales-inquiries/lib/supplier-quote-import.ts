@@ -20,23 +20,21 @@ import {
 
 function quoteLayout(version: string) {
     if (
-        version !== SUPPLIER_QUOTE_VERSION &&
-        version !== "supplier-inquiry-quote-v2"
+        ![
+            SUPPLIER_QUOTE_VERSION,
+            "supplier-inquiry-quote-v3",
+            "supplier-inquiry-quote-v2",
+        ].includes(version)
     )
-        throw new Error("该文件不支持回导，请重新生成新版报价表后填写")
+        throw new Error("报价表版本不支持，请重新生成报价表")
+    const headers = [...SUPPLIER_QUOTE_HEADERS]
+    if (version !== SUPPLIER_QUOTE_VERSION) headers.splice(14, 0, "报价失效日")
     const legacy = version === "supplier-inquiry-quote-v2"
-    const headers = legacy
-        ? [
-              ...SUPPLIER_QUOTE_HEADERS.slice(0, 13),
-              "承诺交付日",
-              ...SUPPLIER_QUOTE_HEADERS.slice(13),
-          ]
-        : SUPPLIER_QUOTE_HEADERS
+    if (legacy) headers.splice(13, 0, "承诺交付日")
     return {
         headers,
         promisedDelivery: legacy ? 14 : null,
-        freight: headers.length - 2,
-        validTo: headers.length - 1,
+        freight: headers.indexOf("运费（元）") + 1,
         note: headers.length,
         identity: headers.length + 1,
     }
@@ -149,7 +147,6 @@ function termsFor(
             input_tax_rate: "0",
             available_quantity: "0",
             expected_delivery_date: requiredDelivery,
-            valid_to: null,
             freight_gross: null,
         }
     const percent = decimal(cellText(row.getCell(12)), 4, "税率")
@@ -182,11 +179,6 @@ function termsFor(
             2,
             "运费（已含运费填写 0）",
         ),
-        valid_to: date(
-            cellText(row.getCell(layout.validTo)),
-            "报价失效日",
-            true,
-        ),
     }
 }
 function sameTerms(a: QuoteTerms, b: QuoteTerms) {
@@ -204,8 +196,7 @@ function sameTerms(a: QuoteTerms, b: QuoteTerms) {
             : b.freight_gross != null &&
               compareDecimal(a.freight_gross, b.freight_gross, 2) === 0) &&
         Boolean(a.unavailable) === Boolean(b.unavailable) &&
-        a.expected_delivery_date === b.expected_delivery_date &&
-        a.valid_to === b.valid_to
+        a.expected_delivery_date === b.expected_delivery_date
     )
 }
 
@@ -249,7 +240,9 @@ function parseRow(
             item.sku_id === line.sku_id &&
             item.status === "ACTIVE",
     )
-    const previous = latestSupplierQuotes(prior).find(
+    const previous = latestSupplierQuotes(
+        prior.filter((quote) => !quote.system_price_kind),
+    ).find(
         (item) =>
             item.line_id === line.line_id && item.supplier_id === supplierId,
     )

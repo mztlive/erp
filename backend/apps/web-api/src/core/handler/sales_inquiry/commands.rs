@@ -253,6 +253,29 @@ pub async fn procurement_publish(
     Ok(ApiResponse::ok_with_data(result))
 }
 
+#[permission_macros::permission(
+    group = "采购询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "发起新一轮询价报价",
+    resource = "procurement_inquiry",
+    action = "publish"
+)]
+/// 采购主动发起新一轮整体报价。
+/// # 参数
+/// `state`、`actor` 为应用及认证身份，`id`、`request` 为询价和任务版本。
+/// # 返回
+/// 返回新一轮任务的安全回执。
+/// # 错误
+/// 当前责任、历史任务、版本或状态不满足时拒绝。
+pub async fn procurement_renew(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<InquiryTaskReasonCommand>,
+) -> Result<InquiryMutationView> {
+    Ok(ApiResponse::ok_with_data(state.sales_inquiry_process().renew(&actor, &id, request).await?))
+}
+
 #[cfg(test)]
 mod tests {
     use axum::body::{Body, to_bytes};
@@ -439,5 +462,39 @@ mod tests {
                 "{field}"
             );
         }
+    }
+    #[tokio::test]
+    async fn renewal_request_uses_completed_task_versions_and_rejects_client_assignment() {
+        let payload = json!({"command_key":"renew", "expected_version":3,
+            "task_id":"completed-task", "task_version":2, "reason":"供应商新报价"});
+        let Json(request) =
+            Json::<InquiryTaskReasonCommand>::from_request(json_request(payload.clone()), &()).await.unwrap();
+        assert_eq!(request.task_id, "completed-task");
+        assert_eq!(request.expected_version, 3);
+        assert_eq!(request.task_version, 2);
+        for key in ["owner_user_id", "requirement", "feedback_round"] {
+            let mut forged = payload.clone();
+            forged[key] = json!("forged");
+            assert!(Json::<InquiryTaskReasonCommand>::from_request(json_request(forged), &()).await.is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn feedback_without_expiry_is_accepted_and_legacy_dates_are_not_exposed() {
+        let mut payload = feedback_draft_request();
+        payload["data"]["lines"][0]["prices"][0].as_object_mut().unwrap().remove("valid_until");
+        let Json(request) =
+            Json::<SaveInquiryFeedbackCommand>::from_request(json_request(payload.clone()), &())
+                .await
+                .unwrap();
+        assert!(
+            serde_json::to_value(request.data).unwrap()["lines"][0]["prices"][0].get("valid_until").is_none()
+        );
+        payload["data"]["lines"][0]["prices"][0]["valid_until"] = json!(1000);
+        let Json(request) =
+            Json::<SaveInquiryFeedbackCommand>::from_request(json_request(payload), &()).await.unwrap();
+        assert!(
+            serde_json::to_value(request.data).unwrap()["lines"][0]["prices"][0].get("valid_until").is_none()
+        );
     }
 }

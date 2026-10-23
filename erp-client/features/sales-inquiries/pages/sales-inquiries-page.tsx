@@ -3,20 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "@/lib/navigation"
-import { ArrowUpRightIcon } from "lucide-react"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import {
-    InquiryProgress,
-    TRANSFER_LABEL,
-    VALIDITY_LABEL,
-} from "../components/inquiry-progress"
+import { TRANSFER_LABEL, VALIDITY_LABEL } from "../components/inquiry-progress"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
     BusinessFailureState,
     DataTable,
     PageScaffold,
-    QuickPreviewSheet,
 } from "@/components/business"
 import {
     ListWorkSurface,
@@ -48,22 +42,15 @@ export function SalesInquiriesPage({
     const router = useRouter()
     const profile = useAccountProfileQuery()
     const permissions = profile.data?.permissions ?? []
-    const canOpenSalesDetail = hasPermission(
+    const canOpenDetail = hasPermission(
         permissions,
-        "sales_inquiry:detail",
+        procurement ? "procurement_inquiry:detail" : "sales_inquiry:detail",
     )
-    const [previewId, setPreviewId] = React.useState<string | null>(null)
-    const lastFocusedRowId = React.useRef<string | null>(null)
-    const openPreview = (row: SalesInquiry | ProcurementInquiry) => {
-        lastFocusedRowId.current = row.id
-        setPreviewId(row.id)
-    }
     const [query, setQuery] = React.useState<InquiryListQuery>({
         page: 1,
         page_size: 20,
     })
     const list = useInquiries(query, procurement)
-    const preview = list.data?.items.find((row) => row.id === previewId) ?? null
     const root = procurement ? "/procurement/inquiries" : "/sales/inquiries"
     const prefix = procurement ? "procurement-inquiries" : "sales-inquiries"
     const form = useAppForm({
@@ -91,16 +78,7 @@ export function SalesInquiriesPage({
             header: "询价单号",
             meta: { label: "询价单号", width: "reference" },
             cell: ({ row }) =>
-                procurement ? (
-                    <button
-                        type="button"
-                        id={`${prefix}-${toAutomationIdSegment(row.original.id)}-preview`}
-                        className="font-medium underline underline-offset-4"
-                        onClick={() => openPreview(row.original)}
-                    >
-                        {row.original.inquiry_no}
-                    </button>
-                ) : canOpenSalesDetail ? (
+                canOpenDetail ? (
                     <Link
                         id={`${prefix}-${toAutomationIdSegment(row.original.id)}-detail`}
                         className="font-medium underline underline-offset-4"
@@ -215,8 +193,8 @@ export function SalesInquiriesPage({
             },
             {
                 id: "quote_validity",
-                header: "报价有效性",
-                meta: { label: "报价有效性", width: "status" },
+                header: "报价状态",
+                meta: { label: "报价状态", width: "status" },
                 cell: ({ row }) =>
                     "sales_progress" in row.original ? (
                         <StatusBadge
@@ -225,14 +203,7 @@ export function SalesInquiriesPage({
                                     row.original.sales_progress.quote_validity
                                 ]
                             }
-                            tone={
-                                row.original.sales_progress.quote_validity ===
-                                    "expired" ||
-                                row.original.sales_progress.quote_validity ===
-                                    "partially_expired"
-                                    ? "warning"
-                                    : "neutral"
-                            }
+                            tone="neutral"
                         />
                     ) : (
                         "—"
@@ -422,13 +393,11 @@ export function SalesInquiriesPage({
                                 page_size: next.pageSize,
                             }))
                         }
-                        onRowPreview={procurement ? openPreview : undefined}
                         onRowOpen={
-                            !procurement && canOpenSalesDetail
+                            canOpenDetail
                                 ? (row) => router.push(href(row))
                                 : undefined
                         }
-                        highlightedRowId={preview?.id}
                         emptyTitle="当前没有询价"
                         emptyDescription={
                             procurement
@@ -448,84 +417,6 @@ export function SalesInquiriesPage({
                     />
                 }
             />
-            {procurement && (
-                <QuickPreviewSheet
-                    idPrefix={`${prefix}-preview`}
-                    open={preview != null}
-                    onOpenChange={(open) => {
-                        if (!open) setPreviewId(null)
-                    }}
-                    finalFocus={() =>
-                        lastFocusedRowId.current
-                            ? document.querySelector<HTMLElement>(
-                                  `[data-row-id="${CSS.escape(lastFocusedRowId.current)}"]`,
-                              )
-                            : null
-                    }
-                    title={preview?.customer_name ?? "询价"}
-                    identity={
-                        preview ? (
-                            <span className="num">
-                                询价单号：{preview.inquiry_no}
-                            </span>
-                        ) : undefined
-                    }
-                    summary={
-                        preview ? (
-                            <StatusBadge
-                                label={INQUIRY_STATUS_LABEL[preview.status]}
-                                tone="neutral"
-                            />
-                        ) : undefined
-                    }
-                    footer={
-                        preview ? (
-                            <>
-                                <Button
-                                    id={`${prefix}-preview-dismiss`}
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setPreviewId(null)}
-                                >
-                                    关闭
-                                </Button>
-                                {hasPermission(
-                                    permissions,
-                                    procurement
-                                        ? "procurement_inquiry:detail"
-                                        : "sales_inquiry:detail",
-                                ) && (
-                                    <Button
-                                        id={`${prefix}-preview-open-detail`}
-                                        render={<Link href={href(preview)} />}
-                                    >
-                                        打开询价资料
-                                        <ArrowUpRightIcon data-icon="inline-end" />
-                                    </Button>
-                                )}
-                            </>
-                        ) : undefined
-                    }
-                >
-                    {preview && (
-                        <div className="space-y-4">
-                            <p>需求商品 {preview.draft.lines.length} 项</p>
-                            {"sales_progress" in preview && (
-                                <InquiryProgress
-                                    progress={preview.sales_progress}
-                                />
-                            )}
-                            <p className="text-sm text-muted-foreground">
-                                需求第 {preview.requirement_version} 版 · 反馈第{" "}
-                                {preview.feedback_round} 轮
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                                询价截止：{inquiryDate(preview.deadline_at)}
-                            </p>
-                        </div>
-                    )}
-                </QuickPreviewSheet>
-            )}
         </PageScaffold>
     )
 }

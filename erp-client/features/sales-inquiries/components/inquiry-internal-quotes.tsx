@@ -73,7 +73,6 @@ function blankQuote(): QuoteInput {
             input_tax_rate: "",
             available_quantity: "",
             expected_delivery_date: "",
-            valid_to: "",
         },
     }
 }
@@ -93,7 +92,6 @@ function normalizedQuote(value: QuoteInput): QuoteInput {
             input_tax_rate: value.terms.input_tax_rate,
             available_quantity: value.terms.available_quantity,
             expected_delivery_date: value.terms.expected_delivery_date,
-            valid_to: value.terms.valid_to ?? "",
         },
     }
 }
@@ -283,15 +281,15 @@ export function InquiryInternalQuotes({
                                             </h3>
                                             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
                                                 <span>
-                                                    第 {quote.revision_no} 版
+                                                    {quote.system_price_kind
+                                                        ? quote.system_price_kind ===
+                                                          "dropship"
+                                                            ? "系统供给 · 一件代发价"
+                                                            : "系统供给 · 集采价"
+                                                        : `第 ${quote.revision_no} 版`}
                                                 </span>
                                                 <span aria-hidden="true">
                                                     ·
-                                                </span>
-                                                <span>
-                                                    {quote.terms.valid_to
-                                                        ? `${quote.terms.valid_to} 前有效`
-                                                        : "未限定失效日期"}
                                                 </span>
                                             </p>
                                         </div>
@@ -301,9 +299,11 @@ export function InquiryInternalQuotes({
                                             }
                                             className="mt-0.5 shrink-0"
                                         >
-                                            {isCurrent
-                                                ? "当前回复"
-                                                : "历史回复"}
+                                            {quote.system_price_kind
+                                                ? "系统参考"
+                                                : isCurrent
+                                                  ? "当前回复"
+                                                  : "历史回复"}
                                         </Badge>
                                     </div>
                                     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -320,7 +320,7 @@ export function InquiryInternalQuotes({
                                                 onClick={() => {
                                                     setAdoptMessage(
                                                         onAdopt(quote)
-                                                            ? "已带入含运费供给单价、税率与有效期，请勿将同笔运费重复登记为额外成本；未限定失效日期时保留原有效期，请核对后保存反馈。"
+                                                            ? "已带入供给单价和税率，请核对运费是否已包含后保存反馈。"
                                                             : "反馈当前不可编辑，请关闭侧栏检查页面提示。",
                                                     )
                                                 }}
@@ -337,6 +337,10 @@ export function InquiryInternalQuotes({
                                             onClick={() => {
                                                 setInitial({
                                                     ...quote,
+                                                    quote_id:
+                                                        quote.system_price_kind
+                                                            ? crypto.randomUUID()
+                                                            : quote.quote_id,
                                                     terms: {
                                                         ...quote.terms,
                                                         unavailable: false,
@@ -356,12 +360,12 @@ export function InquiryInternalQuotes({
                                                             ? ""
                                                             : quote.terms
                                                                   .unit_cost_gross,
-                                                        valid_to:
-                                                            quote.terms
-                                                                .valid_to ?? "",
                                                     },
                                                     revision_no:
-                                                        quote.revision_no + 1,
+                                                        quote.system_price_kind
+                                                            ? 1
+                                                            : quote.revision_no +
+                                                              1,
                                                 })
                                                 setOpen(true)
                                             }}
@@ -406,7 +410,11 @@ export function InquiryInternalQuotes({
                                                 </QuoteFact>
                                                 <QuoteFact
                                                     icon={CalendarClockIcon}
-                                                    label="承诺交付"
+                                                    label={
+                                                        quote.system_price_kind
+                                                            ? "需求交付日（待核对）"
+                                                            : "承诺交付"
+                                                    }
                                                 >
                                                     {quote.terms
                                                         .expected_delivery_date ? (
@@ -437,7 +445,11 @@ export function InquiryInternalQuotes({
                                                 {!excluded && line && (
                                                     <QuoteFact
                                                         icon={TagIcon}
-                                                        label="含运费参考单价"
+                                                        label={
+                                                            quote.system_price_kind
+                                                                ? "系统参考单价（运费待核）"
+                                                                : "含运费参考单价"
+                                                        }
                                                     >
                                                         <MoneyValue
                                                             display="exact"
@@ -468,7 +480,11 @@ export function InquiryInternalQuotes({
                                                 </QuoteFact>
                                                 <QuoteFact
                                                     icon={PackageIcon}
-                                                    label="可供数量"
+                                                    label={
+                                                        quote.system_price_kind
+                                                            ? "参考可供量（待核对）"
+                                                            : "可供数量"
+                                                    }
                                                 >
                                                     <QuantityValue
                                                         value={
@@ -489,11 +505,17 @@ export function InquiryInternalQuotes({
                                         )}
                                         {!excluded && line && (
                                             <p className="text-xs leading-5 text-muted-foreground">
-                                                按需求 {line.quantity}{" "}
-                                                {skuDetails.units.get(
-                                                    line.unit_code,
-                                                ) ?? "单位未匹配"}
-                                                分摊本行运费。采用后带入含运费参考单价，请勿重复登记同笔运费。
+                                                {quote.system_price_kind ? (
+                                                    "系统供给参考价的运费与交期尚待确认，发布前须核对实际供给条件。"
+                                                ) : (
+                                                    <>
+                                                        按需求 {line.quantity}{" "}
+                                                        {skuDetails.units.get(
+                                                            line.unit_code,
+                                                        ) ?? "单位未匹配"}
+                                                        分摊本行运费。采用后带入含运费参考单价，请勿重复登记同笔运费。
+                                                    </>
+                                                )}
                                             </p>
                                         )}
                                         {quote.internal_note && (
@@ -632,7 +654,6 @@ function QuoteEditor({
                     supplier_offering_id: value.supplier_offering_id,
                     terms: {
                         ...normalizedQuote(value).terms,
-                        valid_to: value.terms.valid_to || null,
                         freight_gross: value.terms.freight_gross || null,
                     },
                     internal_note: value.internal_note,
@@ -923,16 +944,6 @@ function QuoteEditor({
                                                             label="进项税率"
                                                             description="例如 0.13 表示 13%"
                                                             inputMode="decimal"
-                                                        />
-                                                    )}
-                                                />
-                                                <form.AppField
-                                                    name="terms.valid_to"
-                                                    children={(field) => (
-                                                        <field.DateField
-                                                            id="procurement-inquiry-quote-valid-to"
-                                                            label="报价失效日期（选填）"
-                                                            description="失效日期当天起不可采用"
                                                         />
                                                     )}
                                                 />

@@ -9,6 +9,7 @@ use crate::entity::sales_inquiry::SalesInquiry;
 /// 当前采购轮次的销售重询说明；商品和费用身份已按任务范围裁剪。
 #[derive(Debug, Clone, Serialize)]
 pub struct InquiryProcurementReinquiry {
+    pub initiated_by_procurement: bool,
     pub at: Instant,
     pub previous_feedback_round: u32,
     pub reason: String,
@@ -49,6 +50,7 @@ impl InquiryProcurementReinquiry {
             return None;
         }
         Some(Self {
+            initiated_by_procurement: entry.initiated_by_procurement,
             at: entry.at,
             previous_feedback_round: entry.previous_feedback_round,
             reason: entry.data.reason.clone(),

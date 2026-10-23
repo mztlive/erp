@@ -70,6 +70,8 @@ pub struct InquiryReinquiryData {
 /// 已冻结重询事实。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InquiryReinquiry {
+    #[serde(default)]
+    pub initiated_by_procurement: bool,
     pub actor_id: String,
     pub at: Instant,
     pub previous_feedback_round: u32,

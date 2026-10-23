@@ -88,10 +88,7 @@ export function SourcingCompactFacts({
                             <p>
                                 询价第 {option.inquirySource.feedback_round} 轮
                                 · 报价第{" "}
-                                {option.inquirySource.quote_revision_no} 版 ·{" "}
-                                {option.inquirySource.valid_to
-                                    ? `失效日期 ${option.inquirySource.valid_to}`
-                                    : "未限定失效日期"}
+                                {option.inquirySource.quote_revision_no} 版
                             </p>
                         ) : null}
                         {option.recommendationReason ? (

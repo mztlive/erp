@@ -220,6 +220,7 @@ impl SalesInquiry {
             data.requirement = Some(requirement);
         }
         self.reinquiries.push(InquiryReinquiry {
+            initiated_by_procurement: false,
             actor_id: actor.into(),
             at: now,
             previous_feedback_round: self.feedback_round,
@@ -228,6 +229,41 @@ impl SalesInquiry {
         });
         self.freeze_work();
         self.status = InquiryStatus::ProcurementProcessing;
+        Ok(())
+    }
+
+    /// 采购主动开启整单新报价，保留既有需求、接受及来源台账。
+    /// # 参数
+    /// `expected_version` 为聚合版本，`actor`、`reason`、`now` 为本次报价发起事实。
+    /// # 返回
+    /// 冻结旧工作并进入采购处理中；发布时再生成新的反馈轮次。
+    /// # 错误
+    /// 版本冲突、尚在处理中、已关闭或原因缺失时拒绝。
+    pub fn renew_quote(
+        &mut self,
+        expected_version: u64,
+        actor: &str,
+        reason: String,
+        now: Instant,
+    ) -> Result<()> {
+        self.ensure_version(expected_version)?;
+        self.ensure_state(&[InquiryStatus::AwaitingSales, InquiryStatus::Confirmed])?;
+        validate_text(actor, "报价发起人", 128)?;
+        validate_text(&reason, "新一轮报价原因", 2000)?;
+        self.reinquire(
+            expected_version,
+            actor,
+            InquiryReinquiryData {
+                reason: reason.clone(),
+                line_ids: vec![],
+                fee_ids: vec![],
+                concerns: "采购主动更新整单报价".into(),
+                requirement: None,
+            },
+            now,
+        )?;
+        self.reinquiries.last_mut().expect("成功重询已追加本轮记录").initiated_by_procurement = true;
+        self.event(actor, "quote_renewed", reason, now);
         Ok(())
     }
 

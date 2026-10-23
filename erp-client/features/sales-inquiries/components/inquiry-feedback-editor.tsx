@@ -6,6 +6,7 @@ import { CheckIcon, PlusIcon, ReceiptTextIcon, Trash2Icon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 import { InquiryFeeSummary } from "./inquiry-fee-summary"
+import { InquiryRatioPricing } from "./inquiry-ratio-pricing"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import {
     quoteExclusion,
@@ -35,7 +36,6 @@ import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { fetchInquiry, inquiryPath } from "../api"
 import { inquiryKeys } from "../hooks/queries"
-import { inquiryDateInput } from "../lib/format"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
 import {
     inquiryStorageKey,
@@ -50,6 +50,7 @@ import {
 } from "../types"
 
 export type InquiryTask = {
+    status?: string
     id: string
     version: number
     owner_user_id?: string
@@ -71,7 +72,6 @@ function newFee(): InquiryFee {
         amount_gross: "",
         tax_rate: "0",
         line_ids: [],
-        valid_until: 0,
         public_note: "",
     }
 }
@@ -476,13 +476,7 @@ function FeedbackEditorContent({
             )
             if (!row || row.conclusion === "unavailable") return false
             const price = row.prices[0] ?? newFeedbackPrice()
-            const expiry = quote.terms.valid_to
-                ? Math.floor(
-                      new Date(
-                          `${quote.terms.valid_to}T00:00:00+08:00`,
-                      ).getTime() / 1000,
-                  ) - 1
-                : price.valid_until
+
             form.setFieldValue(
                 "lines",
                 form.state.values.lines.map((line) =>
@@ -497,7 +491,6 @@ function FeedbackEditorContent({
                                           demand.quantity,
                                       ),
                                       tax_rate: quote.terms.input_tax_rate,
-                                      valid_until: expiry,
                                   },
                               ],
                           }
@@ -613,10 +606,6 @@ function FeedbackEditorContent({
                                             <MoneyValue
                                                 value={price.unit_price_gross}
                                             />
-                                            ，有效至{" "}
-                                            {inquiryDateInput(
-                                                price.valid_until,
-                                            )}
                                             ；
                                         </span>
                                     ))}
@@ -738,6 +727,17 @@ function FeedbackEditorContent({
                             </Button>
                         </AlertDescription>
                     </Alert>
+                )}
+                {onInternalQuote && (
+                    <InquiryRatioPricing
+                        inquiryId={inquiry.id}
+                        taskId={task.id}
+                        round={inquiry.feedback_round + 1}
+                        demand={inquiry.draft.lines}
+                        lines={values.lines}
+                        disabled={disabled}
+                        onChange={(lines) => form.setFieldValue("lines", lines)}
+                    />
                 )}
                 <form.Field
                     name="lines"

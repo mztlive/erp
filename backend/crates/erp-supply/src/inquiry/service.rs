@@ -111,7 +111,7 @@ impl InquirySupplyService {
     /// # 返回
     /// 返回原始不可变报价，不替换任何价格。
     /// # 错误
-    /// 原报价变化、过期、越界或资格失效时拒绝。
+    /// 原报价变化、越界或资格失效时拒绝。
     pub async fn ensure_quote<P: QualificationPort + ?Sized>(
         &self,
         id: &str,

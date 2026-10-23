@@ -17,7 +17,9 @@ export type SupplierQuoteRequest = {
 }
 
 /** 导出不能因空页、重复页或范围变化而悄悄漏掉供应商。 */
-async function allOfferings(skuId: string): Promise<SupplierOfferingView[]> {
+export async function allOfferings(
+    skuId: string,
+): Promise<SupplierOfferingView[]> {
     const items: SupplierOfferingView[] = []
     const seen = new Set<string>()
     let scopeVersion: string | undefined
@@ -34,13 +36,11 @@ async function allOfferings(skuId: string): Promise<SupplierOfferingView[]> {
             result.total !== expectedTotal ||
             (page > 1 && result.scope_version !== scopeVersion)
         )
-            throw new Error("供给关系已变化，请刷新报价表预览后重试")
+            throw new Error("供给关系已变化，请刷新供给资料后重试")
         scopeVersion = result.scope_version
         for (const item of result.items) {
             if (item.sku_id !== skuId || seen.has(item.id))
-                throw new Error(
-                    "供给关系读取结果不完整，请刷新报价表预览后重试",
-                )
+                throw new Error("供给关系读取结果不完整，请刷新供给资料后重试")
             seen.add(item.id)
             items.push(item)
         }

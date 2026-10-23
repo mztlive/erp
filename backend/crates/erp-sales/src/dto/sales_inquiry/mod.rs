@@ -77,7 +77,7 @@ impl InquirySalesView {
     /// # 返回
     /// 返回独立销售响应，不暴露采购内部信息。
     /// # 错误
-    /// 无；费用受影响或过期时在逐项状态中说明。
+    /// 无；费用受影响时在逐项状态中说明。
     pub fn from_inquiry_at(inquiry: &SalesInquiry, now: Instant) -> Self {
         Self {
             base: inquiry.base.clone(),

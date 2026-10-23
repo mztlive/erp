@@ -43,7 +43,6 @@ export type InquiryPrice = {
     price_id: string
     unit_price_gross: string | null
     tax_rate: string | null
-    valid_until: number
 }
 export type InquiryFeedbackLine = {
     line_id: string
@@ -58,7 +57,6 @@ export type InquiryFee = {
     amount_gross: string
     tax_rate: string
     line_ids: string[]
-    valid_until: number
     public_note: string
 }
 export type InquiryFeedbackData = {
@@ -116,7 +114,7 @@ export type InquirySalesProgress = {
     transfer_status: "not_started" | "partial" | "complete"
     total_lines: number
     completed_lines: number
-    quote_validity: "unavailable" | "valid" | "partially_expired" | "expired"
+    quote_validity: "unavailable" | "valid"
     can_create_sales: boolean
 }
 export type SalesInquiry = {
@@ -147,6 +145,7 @@ export type SalesInquiry = {
         accepted_at: number
     }[]
     reinquiries: {
+        initiated_by_procurement?: boolean
         at: number
         previous_feedback_round: number
         data: {
@@ -179,6 +178,7 @@ export type ProcurementInquiry = Omit<
 > & {
     draft: InquiryRequirement
     reinquiry: {
+        initiated_by_procurement?: boolean
         at: number
         previous_feedback_round: number
         reason: string

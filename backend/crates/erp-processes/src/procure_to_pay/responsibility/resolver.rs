@@ -127,7 +127,7 @@ impl ProcurementResponsibilityProcess {
         self.authorize_candidates(candidates).await
     }
 
-    /// 在销售形式化事务中重新解析并比对既定计划。
+    /// 在销售形式化事务中重验既定计划，并为实际采购任务占用整单默认轮次。
     ///
     /// # 参数
     /// * `inputs` - 原始稳定行事实
@@ -139,14 +139,16 @@ impl ProcurementResponsibilityProcess {
     ///
     /// # 错误
     /// 任一事实或策略版本变化时失败关闭，使销售生效事务回滚。
-    pub async fn revalidate_plan(
+    pub async fn claim_plan(
         &self,
         inputs: &[ResolutionInput],
         expected: &AuthorizedResolutionPlan,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let candidates = self.resolve_candidates(inputs, executor).await?;
-        super::authorization::revalidate_candidates(&self.rbac, &candidates, expected, executor).await
+        super::authorization::revalidate_candidates(&self.rbac, &candidates, expected, executor).await?;
+        ProcurementResponsibilityService::new(self.db.clone()).claim_pools(&candidates, executor).await?;
+        Ok(())
     }
 
     /// 稳定校验指定账号可作为具体采购负责人。
@@ -187,6 +189,23 @@ impl ProcurementResponsibilityProcess {
     ) -> Result<Vec<CandidateResolution>> {
         Ok(ProcurementResponsibilityService::new(self.db.clone())
             .resolve_candidates(inputs, &ResponsibilityFactsAdapter { db: self.db.clone() }, executor)
+            .await?)
+    }
+
+    /// 在询价原事务中按询价池优先匹配候选，不占轮次。
+    /// # 参数
+    /// `inputs` 为整单需求，`executor` 为原事务。
+    /// # 返回
+    /// 返回待询价业务权限核验的候选。
+    /// # 错误
+    /// 目录、规则池或人员失效时拒绝。
+    pub(crate) async fn resolve_inquiry_candidates(
+        &self,
+        inputs: &[ResolutionInput],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CandidateResolution>> {
+        Ok(ProcurementResponsibilityService::new(self.db.clone())
+            .resolve_inquiry_candidates(inputs, &ResponsibilityFactsAdapter { db: self.db.clone() }, executor)
             .await?)
     }
 
@@ -453,7 +472,7 @@ mod tests {
     /// 身份遗漏规则类型时测试失败.
     ///
     /// # 约束
-    /// `revalidate_plan` 直接比较身份向量，身份不等即走 Conflict 回滚；展示姓名差异仍必须相等.
+    /// `claim_plan` 直接比较身份向量，身份不等即走 Conflict 回滚；展示姓名差异仍必须相等.
     #[test]
     fn rule_type_change_changes_identity_and_rejects_revalidation() {
         let sku = test_candidate_with_type(

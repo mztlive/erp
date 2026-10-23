@@ -24,6 +24,9 @@ impl SalesInquiryProcess {
         if let InquiryCommand::Create(req) = command {
             return Ok((self.create_inquiry(actor, req, executor).await?, Vec::new()));
         }
+        if let InquiryCommand::Renew(req) = command {
+            return self.renew_work(actor, id, req, executor).await;
+        }
         if let Some((task_id, version)) = command.task() {
             let (mut inquiry, mut task) = self
                 .access()

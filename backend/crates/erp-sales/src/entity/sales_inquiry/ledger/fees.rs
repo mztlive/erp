@@ -16,7 +16,7 @@ impl SalesInquiry {
     /// # 返回
     /// 追加分摊，完全相同重放不重复登记。
     /// # 错误
-    /// 未接受、过期、范围或金额超出费用总额时拒绝。
+    /// 未接受、范围或金额超出费用总额时拒绝。
     pub fn allocate_fee(
         &mut self,
         allocation_id: &str,
@@ -89,7 +89,7 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 调整未发生费用占用；减少允许在询价关闭或报价过期后执行。
+    /// 调整未发生费用占用；减少允许在询价关闭或重询后执行。
     /// # 参数
     /// `reservation_id` 为原来源；`amount` 为完整新金额；`now` 为操作时刻。
     /// # 返回
@@ -265,7 +265,7 @@ impl SalesInquiry {
     /// # 返回
     /// 当前已接受、有效、金额大于零时通过。
     /// # 错误
-    /// 未接受、过期、重询、关闭、零额时返回公开业务原因。
+    /// 未接受、重询、关闭、零额时返回公开业务原因。
     pub fn ensure_fee_available(&self, round: u32, fee_id: &str, now: Instant) -> Result<()> {
         let fee = self.accepted_fee(round, fee_id, now)?;
         if fee.amount_gross.to_decimal() <= Decimal::ZERO {
@@ -324,9 +324,6 @@ impl SalesInquiry {
             .iter()
             .find(|row| row.fee_id == fee_id)
             .ok_or_else(|| Error::NotFound("已接受费用".into()))?;
-        if fee.valid_until <= now {
-            return Err(Error::BusinessLogicError("费用结果已过期".into()));
-        }
         if self.status != InquiryStatus::Confirmed {
             let (has_active, affected) = self
                 .reinquiries

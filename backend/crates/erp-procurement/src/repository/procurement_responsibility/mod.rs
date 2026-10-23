@@ -56,7 +56,7 @@ impl QueryFilter for ProcurementResponsibilityRuleFilter {
             filter.insert("rule_type", rule_type.as_str());
         }
         if let Some(owner_user_id) = self.owner_user_id.as_deref() {
-            filter.insert("owner_user_id", owner_user_id);
+            filter.insert("owner_user_ids", owner_user_id);
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -84,4 +84,7 @@ impl Pagination for ProcurementResponsibilityRuleFilter {
 }
 
 mod query;
+pub(crate) mod rotation;
 pub use query::ProcurementResponsibilityRuleRepositoryExt;
+
+pub(crate) mod migration;

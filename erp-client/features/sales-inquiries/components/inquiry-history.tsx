@@ -91,6 +91,7 @@ const EVENT_LABEL: Record<string, string> = {
     supplement_requested: "要求补充需求",
     feedback_saved: "保存处理进度",
     published: "发布采购反馈",
+    quote_renewed: "采购发起新一轮报价",
     feedback_published: "发布采购反馈",
     accepted: "销售接受结果",
     reinquired: "销售要求重询",
@@ -197,7 +198,10 @@ export function InquiryHistory({
                             >
                                 <p>
                                     {inquiryDate(item.at)} · 第{" "}
-                                    {item.previous_feedback_round} 轮后重询
+                                    {item.previous_feedback_round} 轮后
+                                    {item.initiated_by_procurement
+                                        ? "采购主动报价"
+                                        : "销售重询"}
                                 </p>
                                 <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
                                     {item.data.reason}

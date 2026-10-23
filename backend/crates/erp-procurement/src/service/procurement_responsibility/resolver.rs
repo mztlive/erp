@@ -10,11 +10,12 @@ use crate::entity::facts::IdentityOwnerFact;
 use crate::entity::procurement_responsibility::{
     EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
     ProcurementResponsibilityResolutionLine, ProcurementResponsibilityRule, ProcurementResponsibilityRuleSet,
-    ProcurementResponsibilityRuleType, build_catalog_facts,
+    ProcurementResponsibilityRuleType, ResolutionPurpose, build_catalog_facts,
 };
 use crate::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use crate::repository::ProcurementResponsibilityExt;
 use crate::repository::prelude::*;
+use crate::repository::procurement_responsibility::rotation::rotation;
 use crate::{Error, Result};
 
 /// 保持调用方稳定行键、SKU 与区域的解析输入。
@@ -59,12 +60,42 @@ impl ProcurementResponsibilityService {
         port: &dyn ProcurementResponsibilityFactsPort,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CandidateResolution>> {
-        resolve_candidates(&DatabaseRuleStore { db: &self.db }, port, inputs, executor).await
+        resolve_candidates(
+            &DatabaseRuleStore { db: &self.db },
+            port,
+            inputs,
+            ResolutionPurpose::Procurement,
+            executor,
+        )
+        .await
+    }
+    /// 按询价场景解析，询价池优先于全部商品规则；不占用轮次。
+    /// # 参数
+    /// `inputs` 为整单需求；`port` 为目录与账号事实；`executor` 为原事务。
+    /// # 返回
+    /// 每个命中规则池为本单选择唯一成员。
+    /// # 错误
+    /// 规则、池或人员不合格时拒绝。
+    pub async fn resolve_inquiry_candidates(
+        &self,
+        inputs: &[ResolutionInput],
+        port: &dyn ProcurementResponsibilityFactsPort,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CandidateResolution>> {
+        resolve_candidates(
+            &DatabaseRuleStore { db: &self.db },
+            port,
+            inputs,
+            ResolutionPurpose::Inquiry,
+            executor,
+        )
+        .await
     }
 }
 
 #[async_trait]
 trait ResponsibilityRuleStore: Send + Sync {
+    async fn last_owner(&self, rule_id: &str, executor: &mut dyn Executor) -> Result<Option<String>>;
     async fn active_rules(&self, executor: &mut dyn Executor) -> Result<Vec<ProcurementResponsibilityRule>>;
 }
 
@@ -74,6 +105,9 @@ struct DatabaseRuleStore<'a> {
 
 #[async_trait]
 impl ResponsibilityRuleStore for DatabaseRuleStore<'_> {
+    async fn last_owner(&self, rule_id: &str, executor: &mut dyn Executor) -> Result<Option<String>> {
+        Ok(rotation(self.db, rule_id, executor).await?.last_owner_user_id)
+    }
     async fn active_rules(&self, executor: &mut dyn Executor) -> Result<Vec<ProcurementResponsibilityRule>> {
         Ok(self
             .db
@@ -87,6 +121,7 @@ async fn resolve_candidates(
     store: &dyn ResponsibilityRuleStore,
     port: &dyn ProcurementResponsibilityFactsPort,
     inputs: &[ResolutionInput],
+    purpose: ResolutionPurpose,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CandidateResolution>> {
     let inputs = ProcurementResponsibilityResolutionBatch::new(inputs).map_err(Error::Logic)?.lines();
@@ -98,6 +133,7 @@ async fn resolve_candidates(
     let rules = store.active_rules(executor).await?;
     let rule_set = ProcurementResponsibilityRuleSet::new(&rules);
     let mut selected = Vec::with_capacity(inputs.len());
+    let mut owners: HashMap<String, String> = HashMap::new();
     for input in inputs {
         let fact = facts
             .get(input.line_key.as_str())
@@ -108,8 +144,24 @@ async fn resolve_candidates(
             fact.product_kind,
         )
         .map_err(Error::Logic)?;
-        let rule = rule_set.resolve(&context).map_err(Error::Logic)?;
-        selected.push((input.line_key.clone(), rule));
+        let rule = match purpose {
+            ResolutionPurpose::Procurement => rule_set.resolve(&context),
+            ResolutionPurpose::Inquiry => rule_set.resolve_inquiry(&context),
+        }
+        .map_err(Error::Logic)?;
+        let owner = if let Some(owner) = owners.get(&rule.base.id) {
+            owner.clone()
+        } else {
+            let last = store.last_owner(&rule.base.id, executor).await?;
+            let owner = rule
+                .strategy
+                .select(&rule.owner_user_ids, last.as_deref())
+                .map_err(Error::Logic)?
+                .to_string();
+            owners.insert(rule.base.id.clone(), owner.clone());
+            owner
+        };
+        selected.push((input.line_key.clone(), rule, owner));
     }
     attach_owner_accounts(port, selected, executor).await
 }
@@ -176,17 +228,17 @@ fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, 
 /// 完整性校验通过后账号仍不在映射中时 panic。
 async fn attach_owner_accounts(
     port: &dyn ProcurementResponsibilityFactsPort,
-    selected: Vec<(String, &ProcurementResponsibilityRule)>,
+    selected: Vec<(String, &ProcurementResponsibilityRule, String)>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CandidateResolution>> {
-    let owner_ids = unique_strings(selected.iter().map(|(_, rule)| rule.owner_user_id.as_str()));
+    let owner_ids = unique_strings(selected.iter().map(|(_, _, owner)| owner.as_str()));
     let accounts = port.load_owners(&owner_ids, executor).await?;
     let account_map = accounts.into_iter().map(|account| (account.id.clone(), account)).collect();
     ensure_all_ids_present("采购负责人账号", &owner_ids, &account_map)?;
     selected
         .into_iter()
-        .map(|(line_key, rule)| {
-            let account = account_map.get(rule.owner_user_id.as_str()).expect("完整性已校验");
+        .map(|(line_key, rule, owner_id)| {
+            let account = account_map.get(owner_id.as_str()).expect("完整性已校验");
             let owner = eligible_owner(account)?;
             Ok(CandidateResolution {
                 line_key,
@@ -237,6 +289,7 @@ mod tests {
         rules: Vec<ProcurementResponsibilityRule>,
         owners: Vec<IdentityOwnerFact>,
         failure: Option<&'static str>,
+        last_owners: HashMap<String, String>,
     }
 
     impl Fixture {
@@ -272,7 +325,8 @@ mod tests {
                             sku_id: Some(SkuId::new("sku-1")),
                             category_id: None,
                             product_kind: None,
-                            owner_user_id: "owner-1".into(),
+                            owner_user_ids: vec!["owner-1".into()],
+                            strategy: Default::default(),
                             status: EnableStatus::Active,
                         },
                         "actor-1",
@@ -283,6 +337,7 @@ mod tests {
                     IdentityOwnerFact::new("owner-1", "张三").with_can_login(true).with_is_admin(true),
                 ],
                 failure: None,
+                last_owners: HashMap::new(),
             }
         }
         fn record(&self, event: &'static str, executor: &mut dyn Executor) -> persistence_core::Result<()> {
@@ -302,6 +357,7 @@ mod tests {
                     ResolutionInput::new("line-2".into(), SkuId::new("sku-1")).unwrap(),
                     ResolutionInput::new("line-1".into(), SkuId::new("sku-1")).unwrap(),
                 ],
+                ResolutionPurpose::Procurement,
                 executor,
             )
             .await
@@ -310,6 +366,9 @@ mod tests {
 
     #[async_trait]
     impl ResponsibilityRuleStore for Fixture {
+        async fn last_owner(&self, rule_id: &str, _: &mut dyn Executor) -> Result<Option<String>> {
+            Ok(self.last_owners.get(rule_id).cloned())
+        }
         async fn active_rules(
             &self,
             executor: &mut dyn Executor,
@@ -334,7 +393,7 @@ mod tests {
             owner_ids: &[String],
             executor: &mut dyn Executor,
         ) -> persistence_core::Result<Vec<IdentityOwnerFact>> {
-            assert_eq!(owner_ids, &["owner-1".to_string()]);
+            assert!(owner_ids.iter().all(|id| id.starts_with("owner-")));
             self.record("owners", executor)?;
             Ok(self.owners.clone())
         }
@@ -424,10 +483,15 @@ mod tests {
     async fn duplicate_input_fails_before_any_port_read() {
         let fixture = Fixture::new();
         let line = ResolutionInput::new("line-1".into(), SkuId::new("sku-1")).unwrap();
-        let error =
-            resolve_candidates(&fixture, &fixture, &[line.clone(), line], &mut RecordingExecutor::default())
-                .await
-                .unwrap_err();
+        let error = resolve_candidates(
+            &fixture,
+            &fixture,
+            &[line.clone(), line],
+            ResolutionPurpose::Procurement,
+            &mut RecordingExecutor::default(),
+        )
+        .await
+        .unwrap_err();
         assert!(
             matches!(error, Error::Logic(error) if error.to_string().contains("采购责任解析行键不能重复"))
         );
@@ -456,5 +520,57 @@ mod tests {
                 matches!(error, Error::ValidationError(message) if message == "采购负责人 owner-1 必须为可登录后台账号")
             );
         }
+    }
+    #[tokio::test]
+    async fn pools_rotate_whole_orders_and_inquiry_overrides_specific_rules() {
+        let mut fixture = Fixture::new();
+        fixture
+            .owners
+            .push(IdentityOwnerFact::new("owner-2", "李四").with_can_login(true).with_is_admin(true));
+        fixture.rules[0].owner_user_ids.push("owner-2".into());
+        fixture.last_owners.insert("rule-1".into(), "owner-1".into());
+        for _ in 0..2 {
+            let candidates = fixture.run(&mut RecordingExecutor::default()).await.unwrap();
+            assert!(candidates.iter().all(|row| row.owner_user_id == "owner-2"));
+            assert_eq!(fixture.last_owners.get("rule-1").map(String::as_str), Some("owner-1"));
+        }
+        let mut inquiry = fixture.rules[0].clone();
+        inquiry.rule_type = ProcurementResponsibilityRuleType::Inquiry;
+        inquiry.sku_id = None;
+        inquiry.base.id = "inquiry-pool".into();
+        inquiry.owner_user_ids = vec!["owner-1".into(), "owner-2".into()];
+        fixture.last_owners.insert("inquiry-pool".into(), "owner-2".into());
+        fixture.rules.push(inquiry);
+        let inputs = [
+            ResolutionInput::new("line-1".into(), SkuId::new("sku-1")).unwrap(),
+            ResolutionInput::new("line-2".into(), SkuId::new("sku-1")).unwrap(),
+        ];
+        let chosen = resolve_candidates(
+            &fixture,
+            &fixture,
+            &inputs,
+            ResolutionPurpose::Inquiry,
+            &mut RecordingExecutor::default(),
+        )
+        .await
+        .unwrap();
+        assert!(chosen.iter().all(|row| row.rule_type == ProcurementResponsibilityRuleType::Inquiry
+            && row.owner_user_id == "owner-1"));
+        let ordinary = fixture.run(&mut RecordingExecutor::default()).await.unwrap();
+        assert!(
+            ordinary.iter().all(|row| row.rule_type == ProcurementResponsibilityRuleType::Sku
+                && row.owner_user_id == "owner-2")
+        );
+        fixture.rules[1].status = EnableStatus::Disabled;
+        let fallback = resolve_candidates(
+            &fixture,
+            &fixture,
+            &inputs,
+            ResolutionPurpose::Inquiry,
+            &mut RecordingExecutor::default(),
+        )
+        .await
+        .unwrap();
+        assert!(fallback.iter().all(|row| row.rule_type == ProcurementResponsibilityRuleType::Sku));
     }
 }
