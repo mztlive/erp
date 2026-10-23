@@ -23,14 +23,14 @@ const HEADERS: [&str; 20] = [
     "基础单位",
     "条码",
     "需求数量",
-    "销售参考价",
+    "销售价",
     "需求备注",
     "询价说明",
     "单位编码",
     "配送关联",
 ];
-const REQUIRED: [&str; 5] = ["SKU 编号", "单位编码", "需求数量", "销售参考价", "需求备注"];
-const MAPPING: [&str; 7] = ["SKU 编号", "商品名称", "规格", "单位编码", "需求数量", "销售参考价", "需求备注"];
+const REQUIRED: [&str; 5] = ["SKU 编号", "单位编码", "需求数量", "销售价", "需求备注"];
+const MAPPING: [&str; 7] = ["SKU 编号", "商品名称", "规格", "单位编码", "需求数量", "销售价", "需求备注"];
 
 /// 解析已版本校验的选品页，只映射客户实际填写的需求。
 /// # 参数
@@ -46,13 +46,20 @@ pub(super) fn pool_rows(rows: Vec<Row>, errors: &mut Vec<InquiryImportIssue>) ->
     let Some(header) = rows.iter().find(|row| row.number == 2) else {
         return Err(Error::ValidationError("选品页第 2 行表头缺失，请使用公司商品池导出文件".into()));
     };
-    let names = header.cells.iter().map(|cell| cell.value.as_str()).collect::<Vec<_>>();
+    let names = header
+        .cells
+        .iter()
+        .map(|cell| match cell.value.as_str() {
+            "销售参考价" => "销售价",
+            name => name,
+        })
+        .collect::<Vec<_>>();
     if header.cells.iter().any(|cell| cell.formula)
         || names.iter().any(|name| !HEADERS.contains(name))
         || REQUIRED.iter().any(|name| !names.contains(name))
         || names.iter().enumerate().any(|(index, name)| names[..index].contains(name))
     {
-        return Err(Error::ValidationError("选品页表头无效；可删除展示列，但须保留 SKU 编号、单位编码、需求数量、销售参考价及需求备注，且不能新增列或重复表头".into()));
+        return Err(Error::ValidationError("选品页表头无效；可删除展示列，但须保留 SKU 编号、单位编码、需求数量、销售价及需求备注，且不能新增列或重复表头".into()));
     }
     let mapping = MAPPING.map(|name| names.iter().position(|header| *header == name));
     let mut products = Vec::new();
@@ -91,10 +98,7 @@ mod tests {
     use crate::sales_inquiry_import::parse::Cell;
 
     fn cells(values: &[&str]) -> Vec<Cell> {
-        values
-            .iter()
-            .map(|value| Cell { value: (*value).into(), text: true, formula: false, formula_text: None })
-            .collect()
+        values.iter().map(|value| Cell { value: (*value).into(), text: true, ..Default::default() }).collect()
     }
 
     #[test]
@@ -130,7 +134,7 @@ mod tests {
     fn sales_can_remove_display_columns_and_reorder_remaining_columns() {
         let rows = vec![
             Row {
-                number: 2, cells: cells(&["单位编码", "SKU 编号", "需求备注", "需求数量", "销售参考价"])
+                number: 2, cells: cells(&["单位编码", "SKU 编号", "需求备注", "需求数量", "销售价"])
             },
             Row { number: 8, cells: cells(&["PCS", "0001", "客户备注", "3", "12.50"]) },
         ];
@@ -142,11 +146,29 @@ mod tests {
     }
 
     #[test]
+    fn current_and_legacy_sales_price_headers_preserve_exact_value() {
+        for price_header in ["销售价", "销售参考价"] {
+            let rows = vec![
+                Row {
+                    number: 2,
+                    cells: cells(&["SKU 编号", "单位编码", "需求数量", price_header, "需求备注"]),
+                },
+                Row { number: 3, cells: cells(&["0001", "PCS", "3", "12.5001", ""]) },
+            ];
+            let mut errors = Vec::new();
+            let products = pool_rows(rows, &mut errors).unwrap();
+            assert!(errors.is_empty());
+            assert_eq!(products[0].cells[5].value, "12.5001");
+        }
+    }
+
+    #[test]
     fn missing_duplicate_and_unknown_headers_are_rejected() {
         for headers in [
             vec!["SKU 编号"],
             [REQUIRED.as_slice(), &["供应商原始报价"]].concat(),
             [REQUIRED.as_slice(), &["需求数量"]].concat(),
+            [REQUIRED.as_slice(), &["销售参考价"]].concat(),
         ] {
             assert!(pool_rows(vec![Row { number: 2, cells: cells(&headers) }], &mut vec![]).is_err());
         }

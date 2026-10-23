@@ -1,6 +1,6 @@
 //! 客户询价工作簿的已校验预览；文件和确认结果均受原询价权限约束。
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::NaiveDate;
 use entity_core::BaseModel;
@@ -140,14 +140,16 @@ impl InquiryImportValidation {
                 result.data.lines.push(line);
             }
         }
-        check_product_totals(&products, &result.data, &mut result.errors);
+        check_product_totals(&products, deliveries, &result.data, &mut result.errors);
         result.data.note = products
             .values()
             .filter(|product| !product.raw.note.is_empty())
             .map(|product| format!("{}：{}", product.raw.sku_code, product.raw.note))
             .collect::<Vec<_>>()
             .join("\n");
-        if let Err(error) = result.data.normalize(true) {
+        if result.errors.is_empty()
+            && let Err(error) = result.data.normalize(true)
+        {
             push_issue(&mut result.errors, "商品清单", 1, "需求", &error.to_string());
         }
         result
@@ -185,7 +187,7 @@ fn validate_products<'a>(
         let price = match reference_price(&row.sales_reference_price) {
             Ok(price) => price,
             Err(message) => {
-                push_issue(errors, "商品清单", row.row_number, "销售参考价", &message);
+                push_issue(errors, "商品清单", row.row_number, "销售价", &message);
                 continue;
             },
         };
@@ -207,14 +209,10 @@ fn group_deliveries<'a>(
         if !row.sku_is_text {
             push_issue(errors, "配送需求", row.row_number, "SKU编码", "SKU 编码必须为文本，保留前导零");
         }
-        if !row.phone_is_text
-            && (!row.phone.is_empty()
-                || products
-                    .get(&row.sku_code)
-                    .is_some_and(|product| product.sku.fulfillment_kind == InquiryFulfillmentKind::Physical))
-        {
-            push_issue(errors, "配送需求", row.row_number, "联系电话", "电话必须为文本，保留前导零");
-        }
+        let physical = products
+            .get(&row.sku_code)
+            .is_some_and(|product| product.sku.fulfillment_kind == InquiryFulfillmentKind::Physical);
+        check_phone(row, physical, errors);
         if !products.contains_key(&row.sku_code) {
             push_issue(
                 errors,
@@ -231,13 +229,29 @@ fn group_deliveries<'a>(
                 "配送需求",
                 row.row_number,
                 "要求交付日期",
-                "日期必须为 YYYY-MM-DD 文本且有效",
+                if row.due_date.is_empty() {
+                    "请填写要求交付日期"
+                } else {
+                    "交付日期无效，请填写 YYYY-MM-DD 文本或不含时间的 Excel 日期"
+                },
             );
             continue;
         }
         groups.entry((row.sku_code.clone(), row.due_date.clone(), row.terms.clone())).or_default().push(row);
     }
     groups
+}
+
+/// 区分必填缺失和无法可靠还原的数字电话；解析层已将明确的数字手机号转为文本。
+fn check_phone(row: &InquiryImportDelivery, physical: bool, errors: &mut Vec<InquiryImportIssue>) {
+    let message = if row.phone.is_empty() && physical {
+        "请填写联系电话"
+    } else if !row.phone.is_empty() && !row.phone_is_text {
+        "数字电话仅支持 11 位大陆手机号；座机、国际号码等请按文本填写并核对前导零"
+    } else {
+        return;
+    };
+    push_issue(errors, "配送需求", row.row_number, "联系电话", message);
 }
 
 fn build_line(
@@ -382,10 +396,24 @@ fn delivery_allocation(
 
 fn check_product_totals(
     products: &BTreeMap<String, ValidatedProduct<'_>>,
+    deliveries: &[InquiryImportDelivery],
     data: &InquiryRequirementData,
     errors: &mut Vec<InquiryImportIssue>,
 ) {
+    let invalid_products: BTreeSet<_> =
+        errors.iter().filter(|error| error.sheet == "商品清单").map(|error| error.row_number).collect();
+    let invalid_deliveries: BTreeSet<_> =
+        errors.iter().filter(|error| error.sheet == "配送需求").map(|error| error.row_number).collect();
+    let incomplete_codes: BTreeSet<_> = deliveries
+        .iter()
+        .filter(|row| invalid_deliveries.contains(&row.row_number))
+        .map(|row| row.sku_code.as_str())
+        .collect();
     for (code, product) in products {
+        // 字段错误会使配送行无法形成完整需求，此时不把部分结果误报为数量不守恒。
+        if invalid_products.contains(&product.raw.row_number) || incomplete_codes.contains(code.as_str()) {
+            continue;
+        }
         match sum_quantities(
             data.lines.iter().filter(|line| line.sku_code == *code).map(|line| line.quantity),
         ) {
@@ -437,9 +465,9 @@ fn reference_price(value: &str) -> std::result::Result<Option<UnitPrice>, String
     if value.is_empty() {
         return Ok(None);
     }
-    let price: UnitPrice = value.parse().map_err(|_| "销售参考价格式无效，最多 4 位小数".to_string())?;
+    let price: UnitPrice = value.parse().map_err(|_| "销售价格式无效，最多 4 位小数".to_string())?;
     if price.to_decimal() < Decimal::ZERO {
-        return Err("销售参考价不得为负数".into());
+        return Err("销售价不得为负数".into());
     }
     Ok(Some(price))
 }
@@ -501,6 +529,13 @@ fn push_issue(
     column: &str,
     message: &str,
 ) {
+    // 同一字段保留最先定位的原因，避免后续地址构建重复报告空电话等错误。
+    if errors
+        .iter()
+        .any(|error| error.sheet == sheet && error.row_number == row_number && error.column == column)
+    {
+        return;
+    }
     errors.push(InquiryImportIssue {
         sheet: sheet.into(),
         row_number,
@@ -738,9 +773,25 @@ mod tests {
                 && error.column == "配送数量")
         );
         assert!(result.errors.iter().any(|error| error.column == "联系电话"));
-        assert!(result.errors.iter().any(|error| error.column == "需求数量"));
+        assert!(!result.errors.iter().any(|error| error.column == "需求数量"));
         assert!(resolve_region("", "", "鼓楼区").is_err());
         assert!(resolve_region("北京市", "北京市", "黄浦区").is_err());
+    }
+
+    #[test]
+    fn invalid_sales_prices_identify_the_exported_price_column() {
+        for (value, message) in [("invalid", "销售价格式无效，最多 4 位小数"), ("-1", "销售价不得为负数")]
+        {
+            let mut row = product();
+            row.sales_reference_price = value.into();
+            let result =
+                validate(&[row], &[delivery(2, "3", "2026-11-01")], &InquiryRequirementData::default());
+            assert!(result.data.lines.is_empty());
+            let issue = result.errors.iter().find(|issue| issue.column == "销售价").unwrap();
+            assert_eq!(issue.sheet, "商品清单");
+            assert_eq!(issue.row_number, 2);
+            assert_eq!(issue.message, message);
+        }
     }
 
     #[test]
@@ -754,6 +805,64 @@ mod tests {
         );
         assert!(result.errors.iter().any(|error| error.message == "商品不存在或不可选用"));
         assert!(result.data.lines.is_empty());
+    }
+
+    #[test]
+    fn missing_phone_and_date_report_root_causes_without_cascading_totals_or_empty_demand() {
+        let mut row = delivery(2, "3", "");
+        row.phone.clear();
+        row.phone_is_text = false;
+        let result = validate(&[product()], &[row], &InquiryRequirementData::default());
+        assert_eq!(result.errors.len(), 2, "{:?}", result.errors);
+        assert_eq!(result.errors[0].message, "请填写联系电话");
+        assert_eq!(result.errors[1].message, "请填写要求交付日期");
+        assert!(result.data.lines.is_empty());
+    }
+
+    #[test]
+    fn missing_phone_or_invalid_address_does_not_duplicate_errors_or_report_partial_totals() {
+        let mut missing_phone = delivery(2, "3", "2026-11-01");
+        missing_phone.phone.clear();
+        let result = validate(&[product()], &[missing_phone], &InquiryRequirementData::default());
+        assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
+        assert_eq!(result.errors[0].message, "请填写联系电话");
+        let mut missing_address = delivery(2, "3", "2026-11-01");
+        missing_address.address.clear();
+        let result = validate(&[product()], &[missing_address], &InquiryRequirementData::default());
+        assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
+        assert_eq!(result.errors[0].column, "详细地址");
+    }
+
+    #[test]
+    fn invalid_dates_do_not_hide_quantity_mismatches_for_other_products() {
+        let mut other_product = product();
+        other_product.row_number = 3;
+        other_product.sku_code = "002".into();
+        let mut other_sku = sku();
+        other_sku.sku_code = "002".into();
+        other_sku.sku_id = "other-sku".into();
+        let mut other_delivery = delivery(3, "2", "2026-11-01");
+        other_delivery.sku_code = "002".into();
+        let result = InquiryImportValidation::build(
+            &[product(), other_product],
+            &[delivery(2, "3", "invalid"), other_delivery],
+            &[sku(), other_sku],
+            &InquiryRequirementData::default(),
+            || "id".into(),
+        );
+        assert_eq!(result.errors.len(), 2, "{:?}", result.errors);
+        assert_eq!(result.errors[0].column, "要求交付日期");
+        assert_eq!(result.errors[1].column, "需求数量");
+        assert_eq!(result.errors[1].row_number, 3);
+    }
+
+    #[test]
+    fn real_quantity_mismatches_and_missing_deliveries_remain_blocking() {
+        for rows in [vec![], vec![delivery(2, "2", "2026-11-01")], vec![delivery(2, "4", "2026-11-01")]] {
+            let result = validate(&[product()], &rows, &InquiryRequirementData::default());
+            assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
+            assert_eq!(result.errors[0].column, "需求数量");
+        }
     }
 
     #[test]

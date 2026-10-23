@@ -232,7 +232,7 @@ export function buildSalesOrderCreateLineItemColumns(
                   },
                   {
                       id: "procurementSupplyPrice",
-                      header: "采购供给价 / 金额",
+                      header: "采购供给单价",
                       required: true,
                       numeric: true,
                       align: "end",

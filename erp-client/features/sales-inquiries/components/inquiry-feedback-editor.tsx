@@ -7,7 +7,11 @@ import { useStore } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 import { InquiryFeeSummary } from "./inquiry-fee-summary"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
-import { quoteExclusion, type InternalQuote } from "../lib/internal-quotes"
+import {
+    quoteExclusion,
+    quoteReferencePrice,
+    type InternalQuote,
+} from "../lib/internal-quotes"
 import { newFeedbackPrice } from "../lib/feedback-editing"
 import { feedbackIssues, feedbackRequestData } from "../lib/feedback-editing"
 import {
@@ -488,8 +492,10 @@ function FeedbackEditorContent({
                               prices: [
                                   {
                                       ...price,
-                                      unit_price_gross:
-                                          quote.terms.unit_cost_gross,
+                                      unit_price_gross: quoteReferencePrice(
+                                          quote,
+                                          demand.quantity,
+                                      ),
                                       tax_rate: quote.terms.input_tax_rate,
                                       valid_until: expiry,
                                   },

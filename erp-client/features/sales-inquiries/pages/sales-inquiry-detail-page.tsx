@@ -803,7 +803,7 @@ function InquiryDetailContent({
                                                         quoteLineId,
                                                 )?.product_name ?? "供应商报价"
                                             }
-                                            description="仅采购可见。采用报价带入供给价，不代表已选定采购供应商。"
+                                            description="仅采购可见。采用报价带入含运费供给单价，不代表已选定采购供应商。"
                                         >
                                             {quoteLineId && (
                                                 <InquiryInternalQuotes

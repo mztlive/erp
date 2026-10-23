@@ -1,6 +1,7 @@
 "use client"
 
 import { MoneyValue } from "@/components/business"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
 import {
@@ -70,6 +71,8 @@ export function SalesProcurementPriceEditor({
     const line = form.getFieldValue("lineItems")[rowIndex]
     if (!line) return null
     const amount = supplyAmount(line.procurementSupplyPrice, line.quantity)
+    const showAmount =
+        amount === null || compareDecimal(line.quantity, "1", 6) !== 0
     const missingReference =
         !inquiryLocked &&
         line.procurementPriceBasis &&
@@ -99,10 +102,12 @@ export function SalesProcurementPriceEditor({
                     )}
                 </form.AppField>
             )}
-            <div className="text-right text-xs text-muted-foreground">
-                供给金额{" "}
-                {amount === null ? "待完善" : <MoneyValue value={amount} />}
-            </div>
+            {showAmount && (
+                <div className="text-right text-xs text-muted-foreground">
+                    供给总额{" "}
+                    {amount === null ? "待完善" : <MoneyValue value={amount} />}
+                </div>
+            )}
             {missingReference ? (
                 <p className="text-xs text-warning-soft-foreground">
                     未配置

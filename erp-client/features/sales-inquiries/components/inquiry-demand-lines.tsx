@@ -224,7 +224,7 @@ export const InquiryDemandLines = withForm({
                                                     </span>
                                                 </TableHead>
                                                 <TableHead className="w-40 text-right">
-                                                    参考单价（选填）
+                                                    销售价（选填）
                                                 </TableHead>
                                                 <TableHead className="w-52">
                                                     要求交付日
@@ -347,7 +347,7 @@ export const InquiryDemandLines = withForm({
                                                                 {(field) => (
                                                                     <Input
                                                                         id={`${prefix}-reference-price`}
-                                                                        aria-label={`${line.product_name}销售参考单价（元）`}
+                                                                        aria-label={`${line.product_name}销售价（元）`}
                                                                         className="text-right tabular-nums"
                                                                         inputMode="decimal"
                                                                         placeholder="¥ 选填"

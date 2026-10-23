@@ -137,7 +137,7 @@ export function InquiryRequirementDetail({
                 {!procurement && line.sales_reference_price_gross && (
                     <div className="space-y-1">
                         <dt className="text-xs text-muted-foreground">
-                            销售参考价
+                            销售价
                         </dt>
                         <dd>
                             <MoneyValue

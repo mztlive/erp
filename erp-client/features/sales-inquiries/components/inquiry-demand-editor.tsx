@@ -694,7 +694,7 @@ function DemandEditorContent({
                     onOpenChange={setPickerOpen}
                     excludeProductKind="VOUCHER"
                     title="选择询价商品"
-                    description="每次选中增加 1 个需求单位。已有唯一需求行的商品累加数量；同一商品有多条需求行时另加一行。销售参考价不作为采购报价。"
+                    description="每次选中增加 1 个需求单位。已有唯一需求行的商品累加数量；同一商品有多条需求行时另加一行。销售价不作为采购报价。"
                     onConfirm={(picks) => {
                         if (revision && busy) return
                         setFailure(null)

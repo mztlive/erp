@@ -51,6 +51,7 @@ type BackendInquirySalesBasis = {
             specification: string
             unit_code: string
             delivery_due_at: number
+            sales_reference_price_gross: string | null
             allocations: Array<
                 SalesDeliveryAllocation & { allocation_id: string }
             >
@@ -84,7 +85,7 @@ export async function fetchInquirySalesBasis(
             specification: requirement.specification,
             unit: requirement.unit_code,
             quantity: selection.quantity,
-            unitPriceGross: "",
+            unitPriceGross: requirement.sales_reference_price_gross ?? "",
             pricingMode: "MANUAL",
             procurementSupplyPrice: price.unit_price_gross,
             dueDate: formatEpochDate(requirement.delivery_due_at),

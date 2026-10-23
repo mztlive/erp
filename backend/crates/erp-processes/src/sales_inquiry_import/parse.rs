@@ -13,6 +13,7 @@ use zip::ZipArchive;
 use super::pool::{POOL_SHEET, POOL_VERSION, pool_rows};
 use super::pool_delivery::{self, AUTO_POOL_VERSION};
 use super::pool_delivery_checks::{CHECKED_POOL_VERSION, SCALAR_POOL_VERSION, strip_checks};
+use super::scalar_cells;
 use crate::{Error, Result};
 
 pub(super) const PRODUCT_SHEET: &str = "商品清单";
@@ -30,7 +31,7 @@ static FORMULA_RE: LazyLock<Regex> =
 static TEXT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?s)<t\b[^>]*>(.*?)</t>").expect("static text regex"));
 pub(super) const PRODUCT_HEADERS: [&str; 7] =
-    ["SKU编码", "商品名称", "规格", "单位", "需求数量", "销售参考价", "需求备注"];
+    ["SKU编码", "商品名称", "规格", "单位", "需求数量", "销售价", "需求备注"];
 pub(super) const DELIVERY_HEADERS: [&str; 10] =
     ["SKU编码", "收件人", "联系电话", "省", "市", "区县", "详细地址", "配送数量", "要求交付日期", "交付条件"];
 
@@ -38,6 +39,7 @@ pub(super) const DELIVERY_HEADERS: [&str; 10] =
 pub(crate) struct Cell {
     pub value: String,
     pub text: bool,
+    pub numeric: bool,
     pub formula: bool,
     pub formula_text: Option<String>,
 }
@@ -68,7 +70,14 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Workbook> {
     for (name, path) in paths {
         sheets.insert(name, rows(&read_text(&mut archive, &path)?, &shared)?);
     }
-    parse_sheets(sheets)
+    let metadata = read_text(&mut archive, "xl/workbook.xml")?;
+    let date1904 = tags(&metadata, "workbookPr")
+        .first()
+        .and_then(|tag| attribute(tag, "date1904"))
+        .is_some_and(|value| value == "1" || value == "true");
+    let mut workbook = parse_sheets(sheets)?;
+    scalar_cells::normalize(&mut workbook.deliveries, date1904);
+    Ok(workbook)
 }
 
 /// 有界读取供应商报价工作簿，复用 XML 和 ZIP 安全边界。
@@ -248,7 +257,11 @@ pub(super) fn data_rows(
         row.number == 1
             && row.cells.len() <= headers.len()
             && headers.iter().enumerate().all(|(index, header)| {
-                row.cells.get(index).is_some_and(|cell| cell.value == *header && !cell.formula)
+                row.cells.get(index).is_some_and(|cell| {
+                    let matches = cell.value == *header
+                        || (sheet == PRODUCT_SHEET && *header == "销售价" && cell.value == "销售参考价");
+                    matches && !cell.formula
+                })
             })
     });
     if !valid {
@@ -308,6 +321,7 @@ fn rows(xml: &str, shared: &[String]) -> Result<Vec<Row>> {
 fn read_cell(attrs: &str, inner: &str, shared: &[String]) -> Result<Cell> {
     let kind = attribute(attrs, "t");
     let text = matches!(kind.as_deref(), Some("s" | "inlineStr" | "str"));
+    let numeric = matches!(kind.as_deref(), None | Some("n"));
     let formula = FORMULA_RE.is_match(inner);
     let value = if kind.as_deref() == Some("inlineStr") {
         text_parts(inner)?
@@ -321,7 +335,7 @@ fn read_cell(attrs: &str, inner: &str, shared: &[String]) -> Result<Cell> {
         }
     };
     let formula_text = element_text(inner, "f")?;
-    Ok(Cell { value: value.trim().to_string(), text, formula, formula_text })
+    Ok(Cell { value: value.trim().to_string(), text, numeric, formula, formula_text })
 }
 
 fn coordinate(address: &str) -> Result<(usize, u32)> {
@@ -431,10 +445,102 @@ fn invalid(message: &str) -> Error {
 mod tests {
     use std::io::Write;
 
+    use erp_sales::entity::sales_inquiry::{InquiryFulfillmentKind, InquiryRequirementData};
+    use erp_sales::entity::sales_inquiry_import::{InquiryImportSku, InquiryImportValidation};
     use zip::ZipWriter;
     use zip::write::SimpleFileOptions;
 
     use super::*;
+    use crate::sales_inquiry_import::preview::{delivery_rows, product_rows};
+
+    #[test]
+    fn customer_sales_price_header_accepts_legacy_name_but_rejects_extra_column() {
+        for price_header in ["销售价", "销售参考价"] {
+            let mut headers = PRODUCT_HEADERS
+                .map(|value| Cell { value: value.into(), text: true, ..Default::default() })
+                .to_vec();
+            headers[5].value = price_header.into();
+            let mut errors = Vec::new();
+            let products = data_rows(
+                vec![
+                    Row { number: 1, cells: headers.clone() },
+                    Row {
+                        number: 2,
+                        cells: ["001", "", "", "PCS", "1", "0", ""]
+                            .map(|value| Cell { value: value.into(), text: true, ..Default::default() })
+                            .to_vec(),
+                    },
+                ],
+                PRODUCT_SHEET,
+                &PRODUCT_HEADERS,
+                &mut errors,
+            );
+            assert!(errors.is_empty());
+            assert_eq!(products[0].cells[5].value, "0");
+            headers.push(Cell { value: "销售价".into(), text: true, ..Default::default() });
+            data_rows(vec![Row { number: 1, cells: headers }], PRODUCT_SHEET, &PRODUCT_HEADERS, &mut errors);
+            assert_eq!(errors.len(), 1);
+            assert_eq!(errors[0].column, "表头");
+        }
+    }
+
+    #[test]
+    fn numeric_phone_and_excel_date_produce_a_valid_requirement() {
+        let products = r#"<c r="A2" t="inlineStr"><is><t>001</t></is></c><c r="D2" t="inlineStr"><is><t>BOX</t></is></c><c r="E2"><v>1</v></c>"#;
+        let delivery = r#"<c r="A2" t="inlineStr"><is><t>001</t></is></c><c r="B2" t="inlineStr"><is><t>收件人</t></is></c><c r="C2"><v>1.3800000000E+10</v></c><c r="D2" t="inlineStr"><is><t>广东省</t></is></c><c r="E2" t="inlineStr"><is><t>广州市</t></is></c><c r="F2" t="inlineStr"><is><t>天河区</t></is></c><c r="G2" t="inlineStr"><is><t>测试地址</t></is></c><c r="H2"><v>1</v></c><c r="I2" s="1"><v>46296</v></c>"#;
+        let parsed = parse(&package(INQUIRY_TEMPLATE_VERSION, products, delivery)).unwrap();
+        assert_valid_delivery(&parsed);
+        // 两种日期系统必须得到同一天，不受 XML 属性引号形式影响。
+        let bytes = package(INQUIRY_TEMPLATE_VERSION, products, &delivery.replace("46296", "44834"));
+        let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).unwrap();
+            let name = entry.name().to_string();
+            let mut xml = String::new();
+            entry.read_to_string(&mut xml).unwrap();
+            if name == "xl/workbook.xml" {
+                xml = xml.replace("<workbook>", "<workbook><workbookPr date1904='true'/>");
+            }
+            writer.start_file(name, SimpleFileOptions::default()).unwrap();
+            writer.write_all(xml.as_bytes()).unwrap();
+        }
+        assert_valid_delivery(&parse(&writer.finish().unwrap().into_inner()).unwrap());
+    }
+
+    fn assert_valid_delivery(parsed: &Workbook) {
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        let products = product_rows(parsed);
+        let deliveries = delivery_rows(parsed);
+        assert_eq!(deliveries[0].phone, "13800000000");
+        assert!(deliveries[0].phone_is_text);
+        assert_eq!(deliveries[0].due_date, "2026-10-01");
+        let sku = InquiryImportSku {
+            sku_id: "sku".into(),
+            sku_revision_id: "revision".into(),
+            sku_code: "001".into(),
+            name: "商品".into(),
+            specification: String::new(),
+            unit_code: "BOX".into(),
+            quantity_scale: 0,
+            fulfillment_kind: InquiryFulfillmentKind::Physical,
+        };
+        let mut identity = 0;
+        let result = InquiryImportValidation::build(
+            &products,
+            &deliveries,
+            &[sku],
+            &InquiryRequirementData::default(),
+            || {
+                identity += 1;
+                identity.to_string()
+            },
+        );
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.data.lines.len(), 1);
+        assert_eq!(result.data.lines[0].quantity.to_string(), "1");
+        assert_eq!(result.data.lines[0].allocations[0].phone, "13800000000");
+    }
 
     fn sheet(headers: &[&str], data: &str) -> String {
         let header = headers

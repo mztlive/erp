@@ -43,14 +43,22 @@ export function useSalesOrderCreateDefaults({
         if (initialInquiryValues)
             return {
                 ...initialInquiryValues,
-                lineItems: initialInquiryValues.lineItems.map((line) => ({
-                    ...line,
-                    procurementPriceBasis: undefined,
-                    procurementSupplyPrice:
-                        initialInquiryBasis?.lineItems.find(
-                            (source) => source.rowKey === line.rowKey,
-                        )?.procurementSupplyPrice ?? "",
-                })),
+                lineItems: initialInquiryValues.lineItems.map((line) => {
+                    const source = initialInquiryBasis?.lineItems.find(
+                        (source) => source.rowKey === line.rowKey,
+                    )
+                    return {
+                        ...line,
+                        unitPriceGross:
+                            line.pricingMode === "GIFT" ||
+                            line.unitPriceGross.trim()
+                                ? line.unitPriceGross
+                                : (source?.unitPriceGross ?? ""),
+                        procurementPriceBasis: undefined,
+                        procurementSupplyPrice:
+                            source?.procurementSupplyPrice ?? "",
+                    }
+                }),
             }
         const nature = initialDraft?.nature ?? initialNature
         const contractId = initialDraft?.contractId || initialContractId

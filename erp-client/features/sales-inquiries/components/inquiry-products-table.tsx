@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChevronRightIcon, TriangleAlertIcon } from "lucide-react"
+import { MapPinIcon, TruckIcon, TriangleAlertIcon } from "lucide-react"
 import {
     BusinessFailureState,
     MoneyValue,
@@ -36,6 +36,7 @@ import {
     type InquiryFeedbackLine,
 } from "../types"
 import { InquiryRequirementDetail } from "./inquiry-requirement-detail"
+import { InquiryProductImage } from "./inquiry-product-image"
 
 export function InquiryProductsTable({
     requirement,
@@ -65,18 +66,17 @@ export function InquiryProductsTable({
             {details.error && (
                 <BusinessFailureState
                     id="sales-inquiry-products-units-retry"
-                    title="商品单位资料读取失败"
+                    title="商品图片与单位资料读取失败"
                     error={details.error}
                     onRetry={() => void details.refetch()}
                 />
             )}
             <div className="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto">
-                <Table className="min-w-[1120px] table-fixed">
+                <Table className="min-w-[1200px] table-fixed">
                     <TableHeader className="sticky top-0 z-10">
                         <TableRow>
-                            <TableHead className="w-[28%]">
-                                商品 / 规格
-                            </TableHead>
+                            <TableHead className="w-20">图片</TableHead>
+                            <TableHead>商品 / 规格</TableHead>
                             <TableHead className="w-[15%] text-right">
                                 需求 / 可供
                             </TableHead>
@@ -92,7 +92,7 @@ export function InquiryProductsTable({
                             <TableHead className="w-[12%]">
                                 报价有效至
                             </TableHead>
-                            <TableHead className="w-[8%] text-right">
+                            <TableHead className="w-32 text-right">
                                 操作
                             </TableHead>
                         </TableRow>
@@ -104,6 +104,23 @@ export function InquiryProductsTable({
                                 line={line}
                                 result={results.get(line.line_id)}
                                 unit={unitLabel(line.unit_code)}
+                                image={
+                                    <InquiryProductImage
+                                        idPrefix={`sales-inquiry-product-${toAutomationIdSegment(line.line_id)}-image`}
+                                        assetId={details.images.get(
+                                            line.sku_id,
+                                        )}
+                                        label={line.product_name}
+                                        pending={
+                                            !details.images.has(line.sku_id) &&
+                                            details.isPending
+                                        }
+                                        lookupFailed={
+                                            !details.images.has(line.sku_id) &&
+                                            Boolean(details.error)
+                                        }
+                                    />
+                                }
                                 waiting={waiting}
                                 hasFeedback={Boolean(feedback)}
                                 active={activeLineId === line.line_id}
@@ -116,7 +133,7 @@ export function InquiryProductsTable({
                         {requirement.lines.length === 0 && (
                             <TableRow>
                                 <TableCell
-                                    colSpan={7}
+                                    colSpan={8}
                                     className="h-24 text-center text-muted-foreground"
                                 >
                                     暂无商品需求
@@ -133,8 +150,8 @@ export function InquiryProductsTable({
                     if (!open) setActiveLineId(null)
                 }}
                 finalFocus={returnFocus}
-                size="detail"
-                title={activeLine?.product_name ?? "需求详情"}
+                size="preview"
+                title={activeLine?.product_name ?? "配送地址"}
                 identity={
                     activeLine ? `SKU 编号：${activeLine.sku_code}` : undefined
                 }
@@ -161,27 +178,23 @@ export function InquiryProductsTable({
                     </Button>
                 }
             >
-                <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
-                    {activeLine && (
-                        <>
-                            {results.get(activeLine.line_id)?.public_note && (
-                                <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-sm">
-                                    采购说明：
-                                    {
-                                        results.get(activeLine.line_id)
-                                            ?.public_note
-                                    }
-                                </p>
-                            )}
-                            <InquiryRequirementDetail
-                                line={activeLine}
-                                unit={unitLabel(activeLine.unit_code)}
-                                procurement={false}
-                                image={null}
-                            />
-                        </>
-                    )}
-                </div>
+                {activeLine && (
+                    <>
+                        {results.get(activeLine.line_id)?.public_note && (
+                            <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-sm">
+                                采购说明：
+                                {results.get(activeLine.line_id)?.public_note}
+                            </p>
+                        )}
+                        <InquiryRequirementDetail
+                            line={activeLine}
+                            unit={unitLabel(activeLine.unit_code)}
+                            procurement
+                            compact
+                            image={null}
+                        />
+                    </>
+                )}
             </QuickPreviewSheet>
         </>
     )
@@ -191,6 +204,7 @@ function ProductRow({
     line,
     result,
     unit,
+    image,
     waiting,
     hasFeedback,
     active,
@@ -199,6 +213,7 @@ function ProductRow({
     line: InquiryLine
     result?: InquiryFeedbackLine
     unit: string
+    image: React.ReactNode
     waiting: boolean
     hasFeedback: boolean
     active: boolean
@@ -228,6 +243,12 @@ function ProductRow({
                 >
                     {price === prices[0] && (
                         <>
+                            <TableCell
+                                rowSpan={prices.length}
+                                className="py-2.5"
+                            >
+                                {image}
+                            </TableCell>
                             <TableCell
                                 rowSpan={prices.length}
                                 className="whitespace-normal py-2.5"
@@ -310,7 +331,7 @@ function ProductRow({
                                         variant="link"
                                         size="sm"
                                         className="mt-1 h-auto max-w-full items-start justify-end gap-1 p-0 text-right text-xs leading-5 whitespace-normal text-warning-soft-foreground"
-                                        aria-label={`${line.product_name}：${attention}，查看需求详情`}
+                                        aria-label={`${line.product_name}：${attention}，查看${line.fulfillment_kind === "physical" ? "配送地址" : "交付要求"}`}
                                         onClick={onDetails}
                                     >
                                         <TriangleAlertIcon
@@ -350,7 +371,7 @@ function ProductRow({
                         </div>
                         {line.sales_reference_price_gross != null && (
                             <div className="mt-1 text-xs text-muted-foreground">
-                                参考{" "}
+                                销售价{" "}
                                 <MoneyValue
                                     value={line.sales_reference_price_gross}
                                 />
@@ -396,13 +417,20 @@ function ProductRow({
                         >
                             <Button
                                 id={`${prefix}-detail`}
+                                aria-haspopup="dialog"
                                 variant="link"
                                 size="sm"
                                 className="px-0"
                                 onClick={onDetails}
                             >
-                                需求详情
-                                <ChevronRightIcon aria-hidden="true" />
+                                {line.fulfillment_kind === "physical" ? (
+                                    <MapPinIcon aria-hidden="true" />
+                                ) : (
+                                    <TruckIcon aria-hidden="true" />
+                                )}
+                                {line.fulfillment_kind === "physical"
+                                    ? "配送地址"
+                                    : "交付要求"}
                             </Button>
                         </TableCell>
                     )}

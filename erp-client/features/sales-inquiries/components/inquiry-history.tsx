@@ -46,7 +46,7 @@ export function InquiryRequirementSummary({
                     </p>
                     {!procurement && line.sales_reference_price_gross && (
                         <p className="text-sm">
-                            销售参考价：
+                            销售价：
                             <MoneyValue
                                 value={line.sales_reference_price_gross}
                             />

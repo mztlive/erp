@@ -1,7 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import {
+    useIsMutating,
+    useMutation,
+    useQueryClient,
+} from "@tanstack/react-query"
 import { apiPost, apiPut } from "@/lib/api"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { queryKeyRoots } from "@/lib/query-key-roots"
@@ -48,6 +52,9 @@ export function useInquiryCommandResolution(
 export function useInquiryCommand(userId: string, scope: string) {
     const client = useQueryClient()
     const key = inquiryStorageKey(userId, `${scope}:command`)
+    const mutationKey = ["sales-inquiries", "command", userId, scope] as const
+    const mutationFilters = { mutationKey, exact: true }
+    const activeCommands = useIsMutating(mutationFilters)
     const [pending, setPending] = React.useState<SavedInquiryCommand | null>(
         null,
     )
@@ -68,6 +75,7 @@ export function useInquiryCommand(userId: string, scope: string) {
         }
     }, [key])
     const mutation = useMutation({
+        mutationKey,
         mutationFn: async (command: SavedInquiryCommand) => {
             writeInquiryLocalValue(key, command)
             setPending(command)
@@ -162,11 +170,14 @@ export function useInquiryCommand(userId: string, scope: string) {
             }
         },
     })
+    // 本地提交记录由同一询价的多个组件共享，进行中状态必须按同一范围判断。
+    const isPending = mutation.isPending || activeCommands > 0
     return {
         ...mutation,
+        isPending,
         ready,
         resolution,
-        unresolved: pending !== null && !mutation.isPending,
+        unresolved: pending !== null && !isPending,
         async run<T>(
             path: string,
             body: Record<string, unknown>,
@@ -174,6 +185,8 @@ export function useInquiryCommand(userId: string, scope: string) {
             keyField: "command_key" | "idempotency_key" = "command_key",
         ): Promise<T> {
             if (!ready) throw new Error("正在恢复上次操作，请稍候。")
+            if (client.isMutating(mutationFilters) > 0)
+                throw new Error("当前操作正在提交，请稍候。")
             if (pending || readInquiryLocalValue(key))
                 throw new Error("请先核对上次提交结果，再继续操作。")
             return (await mutation.mutateAsync({
@@ -183,6 +196,8 @@ export function useInquiryCommand(userId: string, scope: string) {
             })) as T
         },
         async recover<T>(): Promise<T | undefined> {
+            if (client.isMutating(mutationFilters) > 0)
+                throw new Error("当前操作正在提交，请稍候。")
             if (!pending) return undefined
             return (await mutation.mutateAsync({
                 ...pending,

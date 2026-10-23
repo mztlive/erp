@@ -195,7 +195,7 @@ export function SalesInquiryProducts({
             {!editing && (
                 <div className="shrink-0 space-y-2 border-t pt-3">
                     <p className="text-xs text-muted-foreground">
-                        交付日期与配送范围沿用对应需求，可在“需求详情”中核对。
+                        交付日期与配送范围沿用对应需求，可在“配送地址”或“交付要求”中核对。
                     </p>
                     {footer}
                 </div>

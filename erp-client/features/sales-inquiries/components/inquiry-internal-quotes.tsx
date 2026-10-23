@@ -1,6 +1,16 @@
 "use client"
 
 import * as React from "react"
+import {
+    CalendarClockIcon,
+    CircleAlertIcon,
+    PackageIcon,
+    PercentIcon,
+    StickyNoteIcon,
+    TagIcon,
+    TruckIcon,
+    type LucideIcon,
+} from "lucide-react"
 import { useAppForm } from "@/components/form"
 import {
     BusinessFailureState,
@@ -9,6 +19,7 @@ import {
     RateValue,
 } from "@/components/business"
 import { OptionCombobox } from "@/components/business/option-combobox"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -42,6 +53,7 @@ import { useInternalQuotes } from "../hooks/use-internal-quotes"
 import {
     latestSupplierQuotes,
     quoteExclusion,
+    quoteReferencePrice,
     type QuoteInput,
     type InternalQuote,
 } from "../lib/internal-quotes"
@@ -258,27 +270,43 @@ export function InquiryInternalQuotes({
                         return (
                             <article
                                 key={quote.id}
-                                className="space-y-3 rounded-lg border p-4"
+                                className="overflow-hidden rounded-lg border bg-card"
                             >
-                                <div className="space-y-3">
-                                    <div>
-                                        <h3 className="wrap-anywhere font-medium">
-                                            {!lineId &&
-                                                `${line?.product_name ?? "商品报价"} · `}
-                                            {offering?.supplier_name ??
-                                                "已登记供应商"}
-                                        </h3>
-                                        <p className="mt-1 text-xs text-muted-foreground">
+                                <div className="space-y-3 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <h3 className="wrap-anywhere font-medium">
+                                                {!lineId &&
+                                                    `${line?.product_name ?? "商品报价"} · `}
+                                                {offering?.supplier_name ??
+                                                    "已登记供应商"}
+                                            </h3>
+                                            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                                                <span>
+                                                    第 {quote.revision_no} 版
+                                                </span>
+                                                <span aria-hidden="true">
+                                                    ·
+                                                </span>
+                                                <span>
+                                                    {quote.terms.valid_to
+                                                        ? `${quote.terms.valid_to} 前有效`
+                                                        : "未限定失效日期"}
+                                                </span>
+                                            </p>
+                                        </div>
+                                        <Badge
+                                            variant={
+                                                isCurrent ? "info" : "neutral"
+                                            }
+                                            className="mt-0.5 shrink-0"
+                                        >
                                             {isCurrent
                                                 ? "当前回复"
-                                                : "历史回复"}{" "}
-                                            · 第 {quote.revision_no} 版 ·{" "}
-                                            {quote.terms.valid_to
-                                                ? `${quote.terms.valid_to} 前有效`
-                                                : "未限定失效日期"}
-                                        </p>
+                                                : "历史回复"}
+                                        </Badge>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
                                         {onAdopt && isCurrent && (
                                             <Button
                                                 id={`${prefix}-adopt`}
@@ -292,7 +320,7 @@ export function InquiryInternalQuotes({
                                                 onClick={() => {
                                                     setAdoptMessage(
                                                         onAdopt(quote)
-                                                            ? "已带入供给价、税率与有效期，请核对后保存反馈。"
+                                                            ? "已带入含运费供给单价、税率与有效期，请勿将同笔运费重复登记为额外成本；未限定失效日期时保留原有效期，请核对后保存反馈。"
                                                             : "反馈当前不可编辑，请关闭侧栏检查页面提示。",
                                                     )
                                                 }}
@@ -342,76 +370,144 @@ export function InquiryInternalQuotes({
                                         </Button>
                                     </div>
                                 </div>
-                                {excluded && (
-                                    <p className="text-xs text-muted-foreground">
-                                        {excluded}
-                                    </p>
-                                )}
-                                {!quote.terms.unavailable && (
-                                    <p className="grid gap-2 text-sm">
-                                        <span>
-                                            运费{" "}
-                                            {quote.terms.freight_gross ==
-                                            null ? (
-                                                "未确认"
-                                            ) : (
-                                                <MoneyValue
-                                                    value={
-                                                        quote.terms
-                                                            .freight_gross
-                                                    }
+                                {(excluded ||
+                                    !quote.terms.unavailable ||
+                                    quote.internal_note) && (
+                                    <div className="space-y-3 border-t p-4">
+                                        {excluded && (
+                                            <p className="flex items-start gap-2 rounded-md bg-warning-soft/60 px-3 py-2 text-xs leading-5 text-warning-soft-foreground">
+                                                <CircleAlertIcon
+                                                    aria-hidden="true"
+                                                    className="mt-0.5 size-3.5 shrink-0"
                                                 />
-                                            )}
-                                        </span>
-                                        <span>
-                                            承诺交付{" "}
-                                            {quote.terms.expected_delivery_date}
-                                        </span>
-                                        <span>
-                                            含税报价{" "}
-                                            <MoneyValue
-                                                value={
-                                                    quote.terms.unit_cost_gross
-                                                }
-                                            />
-                                        </span>
-                                        <span>
-                                            税率{" "}
-                                            <RateValue
-                                                value={multiplyFixed(
-                                                    quote.terms.input_tax_rate,
-                                                    "100",
-                                                    {
-                                                        leftMaxScale: 6,
-                                                        rightMaxScale: 0,
-                                                        outputScale: 2,
-                                                    },
+                                                <span>{excluded}</span>
+                                            </p>
+                                        )}
+                                        {!quote.terms.unavailable && (
+                                            <dl className="divide-y divide-border/60">
+                                                <QuoteFact
+                                                    icon={TruckIcon}
+                                                    label="本行总运费"
+                                                >
+                                                    {quote.terms
+                                                        .freight_gross ==
+                                                    null ? (
+                                                        <span className="text-muted-foreground">
+                                                            未确认
+                                                        </span>
+                                                    ) : (
+                                                        <MoneyValue
+                                                            value={
+                                                                quote.terms
+                                                                    .freight_gross
+                                                            }
+                                                        />
+                                                    )}
+                                                </QuoteFact>
+                                                <QuoteFact
+                                                    icon={CalendarClockIcon}
+                                                    label="承诺交付"
+                                                >
+                                                    {quote.terms
+                                                        .expected_delivery_date ? (
+                                                        <span className="num">
+                                                            {
+                                                                quote.terms
+                                                                    .expected_delivery_date
+                                                            }
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">
+                                                            未确认
+                                                        </span>
+                                                    )}
+                                                </QuoteFact>
+                                                <QuoteFact
+                                                    icon={TagIcon}
+                                                    label="含税商品单价"
+                                                >
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            quote.terms
+                                                                .unit_cost_gross
+                                                        }
+                                                    />
+                                                </QuoteFact>
+                                                {!excluded && line && (
+                                                    <QuoteFact
+                                                        icon={TagIcon}
+                                                        label="含运费参考单价"
+                                                    >
+                                                        <MoneyValue
+                                                            display="exact"
+                                                            value={quoteReferencePrice(
+                                                                quote,
+                                                                line.quantity,
+                                                            )}
+                                                        />
+                                                    </QuoteFact>
                                                 )}
-                                                precision={2}
-                                            />
-                                        </span>
-                                        <span>
-                                            可供{" "}
-                                            <QuantityValue
-                                                value={
-                                                    quote.terms
-                                                        .available_quantity
-                                                }
-                                                unit={
-                                                    line
-                                                        ? (skuDetails.units.get(
-                                                              line.unit_code,
-                                                          ) ?? "单位未匹配")
-                                                        : undefined
-                                                }
-                                            />
-                                        </span>
-                                    </p>
-                                )}
-                                {quote.internal_note && (
-                                    <p className="wrap-anywhere whitespace-pre-wrap text-sm text-muted-foreground">
-                                        {quote.internal_note}
-                                    </p>
+                                                <QuoteFact
+                                                    icon={PercentIcon}
+                                                    label="税率"
+                                                >
+                                                    <RateValue
+                                                        value={multiplyFixed(
+                                                            quote.terms
+                                                                .input_tax_rate,
+                                                            "100",
+                                                            {
+                                                                leftMaxScale: 6,
+                                                                rightMaxScale: 0,
+                                                                outputScale: 2,
+                                                            },
+                                                        )}
+                                                        precision={2}
+                                                    />
+                                                </QuoteFact>
+                                                <QuoteFact
+                                                    icon={PackageIcon}
+                                                    label="可供数量"
+                                                >
+                                                    <QuantityValue
+                                                        value={
+                                                            quote.terms
+                                                                .available_quantity
+                                                        }
+                                                        unit={
+                                                            line
+                                                                ? (skuDetails.units.get(
+                                                                      line.unit_code,
+                                                                  ) ??
+                                                                  "单位未匹配")
+                                                                : undefined
+                                                        }
+                                                    />
+                                                </QuoteFact>
+                                            </dl>
+                                        )}
+                                        {!excluded && line && (
+                                            <p className="text-xs leading-5 text-muted-foreground">
+                                                按需求 {line.quantity}{" "}
+                                                {skuDetails.units.get(
+                                                    line.unit_code,
+                                                ) ?? "单位未匹配"}
+                                                分摊本行运费。采用后带入含运费参考单价，请勿重复登记同笔运费。
+                                            </p>
+                                        )}
+                                        {quote.internal_note && (
+                                            <p className="flex items-start gap-2 border-t pt-3 text-xs leading-5 text-muted-foreground">
+                                                <StickyNoteIcon
+                                                    aria-hidden="true"
+                                                    className="mt-0.5 size-3.5 shrink-0"
+                                                />
+                                                <span className="wrap-anywhere whitespace-pre-wrap">
+                                                    {quote.internal_note}
+                                                </span>
+                                            </p>
+                                        )}
+                                    </div>
                                 )}
                             </article>
                         )
@@ -456,6 +552,29 @@ export function InquiryInternalQuotes({
                 />
             )}
         </section>
+    )
+}
+
+/** 报价条件行：图标与标签固定左对齐，数值统一右对齐。 */
+function QuoteFact({
+    icon: Icon,
+    label,
+    children,
+}: {
+    icon: LucideIcon
+    label: string
+    children: React.ReactNode
+}) {
+    return (
+        <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+            <dt className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Icon aria-hidden="true" className="size-4 shrink-0" />
+                <span>{label}</span>
+            </dt>
+            <dd className="min-w-0 wrap-anywhere text-right text-sm font-medium tabular-nums">
+                {children}
+            </dd>
+        </div>
     )
 }
 

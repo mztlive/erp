@@ -91,7 +91,7 @@ export function InquiryRequirementTable({
                                 <TableHead className="w-36">需求数量</TableHead>
                                 {!procurement && (
                                     <TableHead className="w-40 text-right">
-                                        参考单价
+                                        销售价
                                     </TableHead>
                                 )}
                                 <TableHead className="w-52">

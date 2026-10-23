@@ -4,6 +4,8 @@ import {
     multiplyFixed,
     subtractFixed,
     compactFixed,
+    sumFixed,
+    parseDecimal,
 } from "@/lib/fixed-decimal"
 import type { InquiryLine } from "../types"
 import { inquiryDateInput } from "./format"
@@ -61,6 +63,34 @@ export function latestSupplierQuotes(
     return [...current.values()]
 }
 
+/** 按需求数量摊入本行总运费，最终单价统一按 4 位小数进行银行家舍入。 */
+export function quoteReferencePrice(
+    quote: InternalQuote,
+    quantity: string,
+): string {
+    const { unit_cost_gross, freight_gross } = quote.terms
+    if (freight_gross == null) throw new Error("运费尚未确认")
+    parseDecimal(freight_gross, { maxScale: 2 })
+    if (compareDecimal(quantity, "0", 6) <= 0)
+        throw new Error("需求数量须大于零")
+    const goodsTotal = multiplyFixed(unit_cost_gross, quantity, {
+        leftMaxScale: 4,
+        rightMaxScale: 6,
+        outputScale: 10,
+    })
+    const total = sumFixed([goodsTotal, freight_gross], {
+        maxScale: 10,
+        outputScale: 10,
+    })
+    return compactFixed(
+        divideFixed(total, quantity, {
+            numeratorMaxScale: 10,
+            denominatorMaxScale: 6,
+            outputScale: 4,
+        }),
+    )
+}
+
 export function quoteExclusion(
     quote: InternalQuote,
     line: InquiryLine,
@@ -74,29 +104,39 @@ export function quoteExclusion(
     if (quote.feedback_round !== round) return "上一轮报价，需重新确认"
     if (terms.unavailable) return "无法供货"
     if (terms.valid_to && terms.valid_to <= today) return "报价已过期"
-    if (compareDecimal(terms.available_quantity, line.quantity, 6) < 0)
-        return "可供数量不足"
-    if (terms.expected_delivery_date > inquiryDateInput(line.delivery_due_at))
-        return "交期晚于要求"
-    if (terms.freight_gross == null) return "运费尚未确认"
-    if (compareDecimal(terms.freight_gross, "0", 2) > 0)
-        return "另计运费，不纳入含运费区间"
-    if (tax && compareDecimal(terms.input_tax_rate, tax, 6) !== 0)
-        return "税率不同"
+    try {
+        if (compareDecimal(line.quantity, "0", 6) <= 0)
+            return "需求数量须大于零"
+        if (compareDecimal(terms.available_quantity, line.quantity, 6) < 0)
+            return "可供数量不足"
+        if (
+            terms.expected_delivery_date >
+            inquiryDateInput(line.delivery_due_at)
+        )
+            return "交期晚于要求"
+        if (terms.freight_gross == null) return "运费尚未确认"
+        quoteReferencePrice(quote, line.quantity)
+        if (tax && compareDecimal(terms.input_tax_rate, tax, 6) !== 0)
+            return "税率不同"
+    } catch {
+        return "报价金额、税率或数量无效，请核对"
+    }
     return null
 }
 
 export function quotePriceHint(
     quotes: InternalQuote[],
     price: string | null | undefined,
+    quantity: string,
 ) {
     if (!quotes.length) return null
-    const sorted = [...quotes].sort((a, b) =>
-        compareDecimal(a.terms.unit_cost_gross, b.terms.unit_cost_gross, 6),
-    )
-    const min = sorted[0].terms.unit_cost_gross
-    const max = sorted.at(-1)!.terms.unit_cost_gross
-    if (!price) return { min, max, message: "", below: false }
+    const sorted = quotes
+        .map((quote) => quoteReferencePrice(quote, quantity))
+        .sort((a, b) => compareDecimal(a, b, 4))
+    const min = sorted[0]
+    const max = sorted.at(-1)!
+    if (!price)
+        return { min, max, message: "", compactMessage: "", below: false }
     try {
         const below = compareDecimal(price, min, 6) < 0
         const above = compareDecimal(price, max, 6) > 0
@@ -116,8 +156,9 @@ export function quotePriceHint(
             max,
             below,
             message: `${below ? "低于最低" : above ? "高于最高" : "高于最低"}报价 ¥${delta}${percent}`,
+            compactMessage: `${below ? "低" : "高"} ¥${delta}${percent}`,
         }
     } catch {
-        return { min, max, below: false, message: "" }
+        return { min, max, below: false, message: "", compactMessage: "" }
     }
 }

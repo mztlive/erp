@@ -1,4 +1,5 @@
 "use client"
+import { cn } from "@/lib/utils"
 import {
     latestSupplierQuotes,
     quoteExclusion,
@@ -43,40 +44,72 @@ export function InquiryQuoteHint({
             </p>
         )
     let comparable: InternalQuote[]
+    const exclusions = new Set<string>()
+    const current = latestSupplierQuotes(quotes).filter(
+        (quote) => quote.line_id === line.line_id,
+    )
     try {
-        comparable = latestSupplierQuotes(quotes).filter(
-            (quote) =>
-                quote.line_id === line.line_id &&
-                !quoteExclusion(quote, line, round, tax),
-        )
+        comparable = current.filter((quote) => {
+            const reason = quoteExclusion(quote, line, round, tax)
+            if (reason) exclusions.add(reason)
+            return !reason
+        })
     } catch {
         return (
             <p className="mt-1 text-xs text-muted-foreground">请核对税率格式</p>
         )
     }
-    const hint = quotePriceHint(comparable, price)
+    const hint = quotePriceHint(comparable, price, line.quantity)
+    const priceRange = hint
+        ? hint.min === hint.max
+            ? `¥${hint.min}`
+            : `¥${hint.min}–${hint.max}`
+        : ""
     return (
         <div
-            className="mt-1 space-y-0.5 whitespace-normal text-xs leading-4 text-muted-foreground"
+            className="mt-1.5 min-w-0 space-y-1 text-xs leading-4 text-muted-foreground"
             aria-live="polite"
         >
             {hint ? (
                 <>
-                    <p>
-                        ¥{hint.min}–{hint.max} · {comparable.length} 家 · 含运费
-                    </p>
                     <p
-                        className={
-                            hint.below
-                                ? "text-warning-soft-foreground"
-                                : undefined
-                        }
+                        className="flex min-w-0 items-baseline justify-end gap-1 whitespace-nowrap"
+                        title={`含运费参考单价 ${priceRange}，${comparable.length} 家供应商`}
+                        aria-label={`含运费参考单价 ${priceRange}，${comparable.length} 家供应商`}
                     >
-                        {hint.message}
+                        <span className="min-w-0 truncate font-medium tabular-nums">
+                            {priceRange}
+                        </span>
+                        <span className="shrink-0">
+                            · {comparable.length} 家 · 含运费
+                        </span>
                     </p>
+                    {hint.message && (
+                        <p
+                            className={cn(
+                                "truncate tabular-nums",
+                                hint.below && "text-warning-soft-foreground",
+                            )}
+                            title={hint.message}
+                            aria-label={hint.message}
+                        >
+                            {hint.compactMessage}
+                        </p>
+                    )}
                 </>
             ) : (
-                <p>暂无可比报价</p>
+                <p
+                    className="truncate"
+                    title={
+                        current.length
+                            ? `已有 ${current.length} 家报价，暂不可比：${[...exclusions].join("；")}`
+                            : "暂无供应商报价"
+                    }
+                >
+                    {current.length
+                        ? `${current.length} 家暂不可比 · ${[...exclusions].join("；")}`
+                        : "暂无供应商报价"}
+                </p>
             )}
         </div>
     )

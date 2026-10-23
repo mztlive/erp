@@ -7,7 +7,6 @@ import {
     type InternalQuote,
 } from "../lib/internal-quotes"
 import { InquiryQuoteHint } from "./inquiry-quote-hint"
-import { InquiryIconAction } from "./inquiry-icon-action"
 import { useInternalQuotes } from "../hooks/use-internal-quotes"
 import { ReceiptTextIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
@@ -273,11 +272,20 @@ export function InquiryFeedbackTable({
                 <div className="overflow-hidden rounded-lg border">
                     <Table
                         data-density="comfortable"
-                        className="min-w-[1264px] table-fixed"
+                        className="min-w-[1232px] table-fixed [--table-cell-inline:0.75rem]"
                     >
+                        <colgroup>
+                            <col className="w-10" />
+                            <col />
+                            <col className="w-56" />
+                            <col className="w-34" />
+                            <col className="w-42" />
+                            <col className="w-32" />
+                            <col className="w-52" />
+                        </colgroup>
                         <TableHeader className="sticky top-0 z-10 bg-muted">
                             <TableRow>
-                                <TableHead className="w-12">
+                                <TableHead className="text-center">
                                     {!readOnly && (
                                         <Checkbox
                                             id="procurement-feedback-select-visible"
@@ -311,30 +319,27 @@ export function InquiryFeedbackTable({
                                         />
                                     )}
                                 </TableHead>
-                                <TableHead className="w-64">
-                                    商品 / 规格
+                                <TableHead>商品 / 规格</TableHead>
+                                <TableHead className="text-right">
+                                    需求 / 配送
                                 </TableHead>
-                                <TableHead className="w-40 text-right">
-                                    需求数量
+                                <TableHead className="border-l border-border/60">
+                                    供给结论
                                 </TableHead>
-                                <TableHead className="w-36">供给结论</TableHead>
-                                <TableHead className="w-40 text-right">
+                                <TableHead className="text-right">
                                     含税供给单价
                                 </TableHead>
-                                <TableHead className="w-28">税率</TableHead>
-                                <TableHead className="w-48">
-                                    报价有效至
+                                <TableHead className="text-right">
+                                    税率
                                 </TableHead>
-                                <TableHead className="w-16 text-right">
-                                    {!readOnly && "操作"}
-                                </TableHead>
+                                <TableHead>报价有效至</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {rows.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={8}
+                                        colSpan={7}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         暂无商品需求
@@ -368,7 +373,7 @@ export function InquiryFeedbackTable({
                                 return (
                                     <React.Fragment key={line.line_id}>
                                         <TableRow
-                                            className="[&>td]:align-top"
+                                            className="[&>td]:py-3 [&>td]:align-top"
                                             data-state={
                                                 selected.has(line.line_id)
                                                     ? "selected"
@@ -376,7 +381,7 @@ export function InquiryFeedbackTable({
                                             }
                                         >
                                             <TableCell>
-                                                <div className="flex h-control items-center">
+                                                <div className="flex h-control items-center justify-center">
                                                     {!readOnly && (
                                                         <Checkbox
                                                             id={`${prefix}-selected`}
@@ -414,7 +419,7 @@ export function InquiryFeedbackTable({
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-start gap-3">
                                                     <InquiryProductImage
                                                         idPrefix={`${prefix}-image`}
                                                         label={
@@ -428,23 +433,35 @@ export function InquiryFeedbackTable({
                                                             sku.error,
                                                         )}
                                                     />
-                                                    <div className="min-w-0">
+                                                    <div className="min-w-0 space-y-1">
                                                         <p
-                                                            className="truncate font-medium"
+                                                            className="line-clamp-2 font-medium whitespace-normal wrap-anywhere"
                                                             title={
                                                                 line.product_name
                                                             }
                                                         >
                                                             {line.product_name}
                                                         </p>
-                                                        <p className="truncate text-xs text-muted-foreground">
+                                                        {line.specification && (
+                                                            <p
+                                                                className="truncate text-xs text-muted-foreground"
+                                                                title={
+                                                                    line.specification
+                                                                }
+                                                            >
+                                                                {
+                                                                    line.specification
+                                                                }
+                                                            </p>
+                                                        )}
+                                                        <p
+                                                            className="truncate text-xs text-muted-foreground"
+                                                            title={`SKU ${line.sku_code}`}
+                                                        >
                                                             SKU {line.sku_code}
-                                                            {line.specification
-                                                                ? ` · ${line.specification}`
-                                                                : ""}
                                                         </p>
-                                                        <p className="mt-1 text-xs text-muted-foreground">
-                                                            要求{" "}
+                                                        <p className="text-xs text-muted-foreground">
+                                                            要求交付{" "}
                                                             {inquiryDateInput(
                                                                 line.delivery_due_at,
                                                             )}
@@ -453,20 +470,50 @@ export function InquiryFeedbackTable({
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums">
-                                                <div className="flex h-control items-center justify-end gap-1">
-                                                    {line.quantity}
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {unit}
+                                                <div className="flex min-h-control items-center justify-end gap-3">
+                                                    <span className="inline-flex shrink-0 items-center gap-1 font-medium">
+                                                        {line.quantity}
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {unit}
+                                                        </span>
                                                     </span>
+                                                    <InquiryFeedbackDemand
+                                                        line={line}
+                                                        unit={unit}
+                                                        idPrefix={prefix}
+                                                        appearance="badge"
+                                                    />
                                                 </div>
-                                                <InquiryFeedbackDemand
-                                                    line={line}
-                                                    unit={unit}
-                                                    idPrefix={prefix}
-                                                    appearance="badge"
-                                                />
+                                                {onInternalQuote && (
+                                                    <div className="flex justify-end">
+                                                        <Button
+                                                            id={`${prefix}-internal-quotes`}
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="xs"
+                                                            className="h-auto min-h-6 max-w-full gap-1 px-1 py-0.5 text-right font-normal whitespace-normal text-muted-foreground hover:text-primary"
+                                                            aria-label={`${line.product_name}供应商报价 · 仅采购可见`}
+                                                            aria-haspopup="dialog"
+                                                            title="供应商报价 · 仅采购可见"
+                                                            disabled={disabled}
+                                                            onClick={() =>
+                                                                onInternalQuote(
+                                                                    line.line_id,
+                                                                )
+                                                            }
+                                                        >
+                                                            <ReceiptTextIcon
+                                                                className="size-3"
+                                                                aria-hidden="true"
+                                                            />
+                                                            <span>
+                                                                供应商报价
+                                                            </span>
+                                                        </Button>
+                                                    </div>
+                                                )}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="border-l border-border/60">
                                                 <OptionCombobox
                                                     id={`${prefix}-conclusion`}
                                                     disabled={
@@ -530,9 +577,9 @@ export function InquiryFeedbackTable({
                                                         </div>
                                                     )}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="text-right">
                                                 {unavailable ? (
-                                                    <span className="flex h-control items-center">
+                                                    <span className="flex h-control items-center justify-end">
                                                         —
                                                     </span>
                                                 ) : (
@@ -591,14 +638,15 @@ export function InquiryFeedbackTable({
                                                         />
                                                     )}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="text-right">
                                                 {unavailable ? (
-                                                    <span className="flex h-control items-center">
+                                                    <span className="flex h-control items-center justify-end">
                                                         —
                                                     </span>
                                                 ) : (
                                                     <InquiryTaxRateInput
                                                         id={`${prefix}-tax-rate`}
+                                                        className="text-right tabular-nums"
                                                         readOnly={readOnly}
                                                         disabled={disabled}
                                                         aria-label={`${line.product_name}税率（%）`}
@@ -659,24 +707,6 @@ export function InquiryFeedbackTable({
                                                     />
                                                 )}
                                             </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex h-control flex-nowrap items-center justify-end gap-1">
-                                                    {onInternalQuote && (
-                                                        <InquiryIconAction
-                                                            id={`${prefix}-internal-quotes`}
-                                                            label="供应商报价 · 仅采购可见"
-                                                            disabled={disabled}
-                                                            onClick={() =>
-                                                                onInternalQuote(
-                                                                    line.line_id,
-                                                                )
-                                                            }
-                                                        >
-                                                            <ReceiptTextIcon aria-hidden="true" />
-                                                        </InquiryIconAction>
-                                                    )}
-                                                </div>
-                                            </TableCell>
                                         </TableRow>
                                         {(!readOnly &&
                                             (needsReason ||
@@ -685,7 +715,7 @@ export function InquiryFeedbackTable({
                                         (readOnly && value.public_note) ? (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={8}
+                                                    colSpan={7}
                                                     className="whitespace-normal bg-muted/20 px-4 py-2"
                                                 >
                                                     {readOnly ? (

@@ -9,6 +9,7 @@ mod pool;
 mod pool_delivery;
 mod pool_delivery_checks;
 mod preview;
+mod scalar_cells;
 mod views;
 
 use erp_identity::SharedRbacService;

@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import type { InquiryLine } from "../types"
 import { InquiryRequirementDetail } from "./inquiry-requirement-detail"
 import { InquiryDeliveryBadge } from "./inquiry-delivery-badge"
-import { Badge } from "@/components/ui/badge"
 
 /** 采购录入及已发布反馈共用需求入口，调用方提供对应版本的需求行。 */
 export function InquiryFeedbackDemand({
@@ -35,22 +34,20 @@ export function InquiryFeedbackDemand({
                         onOpen={() => setOpen(true)}
                     />
                 ) : (
-                    <Badge
+                    <Button
+                        ref={trigger}
                         id={`${idPrefix}-demand-open`}
-                        variant="outline"
-                        className="cursor-pointer hover:bg-muted"
-                        render={
-                            <button
-                                ref={trigger}
-                                type="button"
-                                aria-label={`${line.product_name}交付要求`}
-                            />
-                        }
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className="h-auto min-h-6 gap-1 px-1 py-0.5 font-normal text-muted-foreground hover:text-primary"
+                        aria-label={`${line.product_name}交付要求`}
                         aria-haspopup="dialog"
                         onClick={() => setOpen(true)}
                     >
+                        <TruckIcon className="size-3" aria-hidden="true" />
                         交付要求
-                    </Badge>
+                    </Button>
                 )
             ) : (
                 <InquiryIconAction
