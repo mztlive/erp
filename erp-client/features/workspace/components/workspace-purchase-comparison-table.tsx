@@ -206,7 +206,7 @@ export function WorkspacePurchaseComparisonTable({
                                     核对提示
                                 </TableHead>
                                 <TableHead scope="col" className="w-12">
-                                    <span className="sr-only">展开对照</span>
+                                    <span className="sr-only">补充信息</span>
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
@@ -216,11 +216,15 @@ export function WorkspacePurchaseComparisonTable({
                                     key={line.id}
                                     line={line}
                                     comparison={comparison}
-                                    source={sources.find(
-                                        (source) =>
-                                            source.revision_id ===
-                                            line.source?.revision_id,
-                                    )}
+                                    source={
+                                        sources.length > 1
+                                            ? sources.find(
+                                                  (source) =>
+                                                      source.revision_id ===
+                                                      line.source?.revision_id,
+                                              )
+                                            : undefined
+                                    }
                                     prefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
                                     expanded={expanded === line.id}
                                     onToggle={() =>

@@ -52,6 +52,7 @@ impl SalesOrderEditableDraftRequest {
             goods.quantity = selected.quantity;
             goods.base_unit_code.clone_from(&demand.unit_code);
             goods.fulfillment_due_at = demand.delivery_due_at;
+            goods.procurement_price_basis = None;
             goods.procurement_supply_price_gross = Some(
                 price
                     .unit_price_gross
@@ -111,7 +112,7 @@ mod tests {
         inquiry
     }
     fn draft(mode: &str, amount: &str) -> SalesOrderEditableDraftRequest {
-        serde_json::from_value(json!({"editor_user_id":"sales", "lines":[{"line_no":1,"line_type":"GOODS_SERVICE","sales_tax_rate":"0.13","item_name_snapshot":"输入名称", "goods":{"sku_id":"client-sku","sku_revision_id":"client-revision","procurement_supply_price_gross":"1", "fulfillment_due_at":1111, "quantity":"99", "base_unit_code":"箱", "unit_price_gross":amount, "pricing_mode":mode}}]})).unwrap()
+        serde_json::from_value(json!({"editor_user_id":"sales", "lines":[{"line_no":1,"line_type":"GOODS_SERVICE","sales_tax_rate":"0.13","item_name_snapshot":"输入名称", "goods":{"sku_id":"client-sku","sku_revision_id":"client-revision","procurement_supply_price_gross":"1", "procurement_price_basis":"BULK", "fulfillment_due_at":1111, "quantity":"99", "base_unit_code":"箱", "unit_price_gross":amount, "pricing_mode":mode}}]})).unwrap()
     }
     fn source() -> InquirySalesSourceRequest {
         serde_json::from_value(json!({"inquiry_id":"inquiry","feedback_round":1,"selections":[{"line_no":1,"inquiry_line_id":"line","price_id":"price","quantity":"2"}]})).unwrap()
@@ -131,6 +132,7 @@ mod tests {
         assert_eq!(goods.fulfillment_due_at, Instant::from_unix_secs(2000));
         assert_eq!(goods.unit_price_gross, "100".parse().unwrap());
         assert_eq!(goods.procurement_supply_price_gross, Some("8".parse().unwrap()));
+        assert_eq!(goods.procurement_price_basis, None);
         assert_eq!(line.sales_tax_rate, "0.13".parse().unwrap());
     }
     #[test]

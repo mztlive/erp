@@ -140,6 +140,9 @@ function buildDraftPayload(
             base.goods = {
                 sku_id: skuId,
                 sku_revision_id: skuRevisionId,
+                ...(line.procurementPriceBasis
+                    ? { procurement_price_basis: line.procurementPriceBasis }
+                    : {}),
                 procurement_supply_price_gross:
                     line.procurementSupplyPrice?.trim() || null,
                 welfare_scenario: mapWelfareScenarioCode(input.welfareScene),
@@ -361,6 +364,7 @@ function mapDraftLines(
                 isVoucher ? voucherCategorySkuId : line.sku_id,
                 line.sku_revision_id,
             ),
+            procurementPriceBasis: line.procurement_price_basis ?? undefined,
             procurementSupplyPrice: isVoucher
                 ? ""
                 : (line.procurement_supply_price_gross ?? ""),

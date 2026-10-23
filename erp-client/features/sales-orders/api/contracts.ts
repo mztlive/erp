@@ -202,6 +202,7 @@ export type BackendWorkingCopyLine = {
     sku_id?: string | null
     sku_revision_id?: string | null
     procurement_supply_price_gross?: string | null
+    procurement_price_basis?: "BULK" | "DROPSHIP" | null
     quantity?: string | null
     base_unit_code?: string | null
     unit_price_gross?: string | null

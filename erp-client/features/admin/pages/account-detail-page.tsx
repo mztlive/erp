@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import {
+    BanIcon,
+    CircleCheckIcon,
     EllipsisIcon,
     KeyRoundIcon,
     PencilIcon,
@@ -15,6 +17,7 @@ import Link from "next/link"
 import { useRouter } from "@/lib/navigation"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { DeleteAdminDialog } from "../components/accounts/delete-admin-dialog"
+import { ToggleAdminStatusDialog } from "../components/accounts/toggle-admin-status-dialog"
 import {
     BusinessFailureState,
     DetailPageHeader,
@@ -44,6 +47,7 @@ import { AccessCheckPanel } from "../components/accounts/access-check-panel"
 import { AccountOperationPermissions } from "../components/accounts/account-operation-permissions"
 import { PersonalBusinessPermissions } from "../components/accounts/personal-business-permissions"
 import { usePersonalGrantDraft } from "../hooks/use-personal-grant-draft"
+import { adminAccountStatusBadge } from "../lib/account-status"
 
 export function AccountDetailPage({ accountId }: { accountId: string }) {
     const { draft: businessDraft, setDraft: setBusinessDraft } =
@@ -67,6 +71,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
     const router = useRouter()
     const [editing, setEditing] = React.useState<"password" | null>(null)
     const [deleting, setDeleting] = React.useState(false)
+    const [togglingStatus, setTogglingStatus] = React.useState(false)
     const [tab, setTab] = React.useState("basic")
     const [notice, setNotice] = React.useState<string | null>(null)
     if (accounts.isPending && !account)
@@ -118,6 +123,14 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
         : !roles.isSuccess
           ? "角色尚未读取，暂不能删除"
           : undefined
+    const isActive = account.status === "active"
+    const statusDisabledReason = hasSystemRole
+        ? "系统角色账号不可停用或启用"
+        : !roles.isSuccess
+          ? "角色尚未读取，暂不能变更账号状态"
+          : isActive && profile.data?.userid === account.id
+            ? "不能停用当前登录账号"
+            : undefined
     return (
         <PageScaffold density="compact" className="gap-3">
             <DetailPageHeader
@@ -130,6 +143,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 title={account.name}
                 numberLabel="登录账号"
                 documentNumber={account.account}
+                primaryStatus={adminAccountStatusBadge(account.status)}
                 meta={
                     <>
                         <span>所属部门：{departmentLabel}</span>
@@ -141,7 +155,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     </>
                 }
                 secondaryActions={
-                    can("admin:delete") && (
+                    (can("admin:delete") || can("admin:update")) && (
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 id="account-detail-more"
@@ -154,28 +168,59 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                 更多
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
-                                <DropdownMenuItem
-                                    id="account-detail-delete"
-                                    variant="destructive"
-                                    disabled={Boolean(deleteDisabledReason)}
-                                    aria-describedby={
-                                        deleteDisabledReason
-                                            ? "account-detail-delete-reason"
-                                            : undefined
-                                    }
-                                    onClick={() => setDeleting(true)}
-                                >
-                                    <Trash2Icon aria-hidden />
-                                    删除账号
-                                </DropdownMenuItem>
-                                {deleteDisabledReason && (
-                                    <p
-                                        id="account-detail-delete-reason"
-                                        className="px-2 py-1.5 text-xs text-muted-foreground"
+                                {can("admin:update") && (
+                                    <DropdownMenuItem
+                                        id="account-detail-toggle-status"
+                                        disabled={Boolean(statusDisabledReason)}
+                                        aria-describedby={
+                                            statusDisabledReason
+                                                ? "account-detail-status-reason"
+                                                : undefined
+                                        }
+                                        onClick={() => setTogglingStatus(true)}
                                     >
-                                        {deleteDisabledReason}
-                                    </p>
+                                        {isActive ? (
+                                            <BanIcon aria-hidden />
+                                        ) : (
+                                            <CircleCheckIcon aria-hidden />
+                                        )}
+                                        {isActive ? "停用账号" : "启用账号"}
+                                    </DropdownMenuItem>
                                 )}
+                                {can("admin:update") &&
+                                    statusDisabledReason && (
+                                        <p
+                                            id="account-detail-status-reason"
+                                            className="px-2 py-1.5 text-xs text-muted-foreground"
+                                        >
+                                            {statusDisabledReason}
+                                        </p>
+                                    )}
+                                {can("admin:delete") && (
+                                    <DropdownMenuItem
+                                        id="account-detail-delete"
+                                        variant="destructive"
+                                        disabled={Boolean(deleteDisabledReason)}
+                                        aria-describedby={
+                                            deleteDisabledReason
+                                                ? "account-detail-delete-reason"
+                                                : undefined
+                                        }
+                                        onClick={() => setDeleting(true)}
+                                    >
+                                        <Trash2Icon aria-hidden />
+                                        删除账号
+                                    </DropdownMenuItem>
+                                )}
+                                {can("admin:delete") &&
+                                    deleteDisabledReason && (
+                                        <p
+                                            id="account-detail-delete-reason"
+                                            className="px-2 py-1.5 text-xs text-muted-foreground"
+                                        >
+                                            {deleteDisabledReason}
+                                        </p>
+                                    )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )
@@ -467,6 +512,21 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                         if (!open) setEditing(null)
                     }}
                     onSaved={() => setNotice("密码已修改。")}
+                />
+            )}
+            {togglingStatus && (
+                <ToggleAdminStatusDialog
+                    account={account}
+                    onOpenChange={(open) => {
+                        if (!open) setTogglingStatus(false)
+                    }}
+                    onChanged={(status) =>
+                        setNotice(
+                            status === "suspended"
+                                ? "账号已停用。"
+                                : "账号已启用。",
+                        )
+                    }
                 />
             )}
             {deleting && (

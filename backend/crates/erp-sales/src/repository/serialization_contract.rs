@@ -163,6 +163,7 @@ mod sales_order_submission {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
+            procurement_price_basis: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -266,6 +267,7 @@ mod sales_change_submission {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
+            procurement_price_basis: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -368,5 +370,32 @@ mod sales_order_working_copy_line {
         document.remove("delivery_allocations");
         let historical: SalesOrderWorkingCopyLine = bson::deserialize_from_document(document).unwrap();
         assert!(historical.delivery_allocations.is_empty(), "历史文档缺字段仍读为未指定");
+    }
+}
+
+mod procurement_price_basis {
+    use crate::entity::sales_order::working_copy_test_support::line_data;
+    use crate::entity::sales_order::{
+        SalesOrderSubmissionLineData, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine,
+        SalesProcurementPriceBasis,
+    };
+
+    #[test]
+    fn selection_survives_draft_storage_and_submission_without_changing_amounts() {
+        for basis in [SalesProcurementPriceBasis::Bulk, SalesProcurementPriceBasis::Dropship] {
+            let mut data = line_data(1);
+            data.goods.as_mut().unwrap().procurement_price_basis = Some(basis);
+            let line = SalesOrderWorkingCopyLine::new(
+                "line".to_owned().into(),
+                SalesOrderWorkingCopyId::new("draft"),
+                data,
+            )
+            .unwrap();
+            let stored = bson::serialize_to_document(&line).unwrap();
+            let restored: SalesOrderWorkingCopyLine = bson::deserialize_from_document(stored).unwrap();
+            let submitted = SalesOrderSubmissionLineData::from_working_copy_line(&restored).unwrap();
+            assert_eq!(submitted.goods.unwrap().procurement_price_basis, Some(basis));
+            assert_eq!(restored.gross_amount.to_string(), "29.97");
+        }
     }
 }

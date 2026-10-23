@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useSelector } from "@tanstack/react-form"
 
 import {
@@ -35,6 +36,29 @@ export function SalesOrderCreateLineItemTable({
     const skuImages = useSalesLineImagesQuery(
         nature === "physical_service" ? lines.map((line) => line.sku) : [],
     )
+    // 方案带入的行尚无商品池参考价；仅补齐同一修订，后台刷新不覆盖已编辑单价。
+    useEffect(() => {
+        if (inquiryLocked || nature !== "physical_service") return
+        form.getFieldValue("lineItems").forEach((line, index) => {
+            if (line.referencePrices) return
+            const reference = skuImages.references.get(line.skuRevisionId)
+            if (!reference || reference.skuId !== line.sku) return
+            form.setFieldValue(`lineItems[${index}].referencePrices`, reference)
+            if (
+                !line.procurementPriceBasis &&
+                !line.procurementSupplyPrice?.trim()
+            ) {
+                form.setFieldValue(
+                    `lineItems[${index}].procurementPriceBasis`,
+                    "DROPSHIP",
+                )
+                form.setFieldValue(
+                    `lineItems[${index}].procurementSupplyPrice`,
+                    reference.salesVisiblePriceGross,
+                )
+            }
+        })
+    }, [form, inquiryLocked, nature, skuImages.references])
     /** 明细表根路径校验错误（如卡券仅一条）在明细区汇总展示。 */
     const lineItemIssues = useSelector(form.store, (state) => {
         return toFieldErrors(state.fieldMeta.lineItems?.errors ?? [])

@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use super::amount_validation::sum_line_amounts;
 use super::types::{GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario, build_line_groups};
-use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode};
+use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode, SalesProcurementPriceBasis};
 
 /// 销售项名称快照最大长度。
 const ITEM_NAME_MAX_LEN: usize = 256;
@@ -83,6 +83,9 @@ pub struct SalesOrderWorkingCopyLine {
     /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
+    /// 公司商品池取价方式；历史未选择及询价覆盖时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_price_basis: Option<SalesProcurementPriceBasis>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
@@ -166,6 +169,7 @@ impl SalesOrderWorkingCopyLine {
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
             procurement_supply_price_gross: built.procurement_supply_price_gross(),
+            procurement_price_basis: built.goods.as_ref().and_then(|goods| goods.procurement_price_basis),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
@@ -249,6 +253,7 @@ impl SalesOrderWorkingCopyLine {
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
             welfare_scenario: self.welfare_scenario,
             procurement_supply_price_gross: self.procurement_supply_price_gross,
+            procurement_price_basis: self.procurement_price_basis,
             fulfillment_due_at: self
                 .fulfillment_due_at
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,

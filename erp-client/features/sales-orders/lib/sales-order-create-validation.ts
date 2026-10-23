@@ -76,6 +76,7 @@ const draftLineSchema = z.object({
     pricingMode: z.enum(["AUTO", "MANUAL", "GIFT"]).optional(),
     priceSource: z.literal("selection").optional(),
     referencePrices: salesReferencePriceSchema.optional(),
+    procurementPriceBasis: z.enum(["BULK", "DROPSHIP"]).optional(),
     dueDate: z.string(),
     fulfillmentDueAt: z.number().int().positive().optional(),
     faceValue: z.string(),
@@ -85,6 +86,7 @@ const draftLineSchema = z.object({
 
 /** 草稿保留客户、合同或开单凭证身份；明细允许未完成。 */
 const draftRowSchema = z.object({
+    procurementSupplyPrice: z.string().optional(),
     rowKey: z.string().min(1),
     name: z.string(),
     sku: z.string(),
@@ -97,6 +99,7 @@ const draftRowSchema = z.object({
     pricingMode: z.enum(["AUTO", "MANUAL", "GIFT"]).optional(),
     priceSource: z.literal("selection").optional(),
     referencePrices: salesReferencePriceSchema.optional(),
+    procurementPriceBasis: z.enum(["BULK", "DROPSHIP"]).optional(),
     dueDate: z.string(),
     fulfillmentDueAt: z.number().int().positive().optional(),
     faceValue: z.string(),

@@ -27,7 +27,7 @@ use crate::Result;
 use crate::entity::sales_order::inquiry_source::InquirySalesSourceRequest;
 use crate::entity::sales_order::{
     BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
-    SalesDeliveryAllocation, SalesPricingMode, VoucherLineDraft, WelfareScenario,
+    SalesDeliveryAllocation, SalesPricingMode, SalesProcurementPriceBasis, VoucherLineDraft, WelfareScenario,
 };
 
 /// 销售单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
@@ -625,6 +625,9 @@ pub struct SalesOrderWorkingCopyLineView {
     /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
+    /// 公司商品池取价方式；历史未选择及询价覆盖时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_price_basis: Option<SalesProcurementPriceBasis>,
     /// 销售对客户承诺完成明细交付或服务的最晚时间（秒级时间戳）。
     pub fulfillment_due_at: Option<u64>,
     /// 基础单位数量。

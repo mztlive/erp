@@ -7,6 +7,8 @@ export type SalesOrderOrigin = "erp" | "mall"
 
 export type SalesOrderCreateIntent = "SAVE_DRAFT" | "SUBMIT"
 
+export type SalesProcurementPriceBasis = "BULK" | "DROPSHIP"
+
 export type SalesLinePricingMode = "AUTO" | "MANUAL" | "GIFT"
 
 /** 精确 SKU 修订的含税销售参考价；供应商采购成本另行保存。 */
@@ -47,6 +49,8 @@ export type SalesOrderDraftLineInput = {
     specification?: string
     /** 采购供给价（含税单价），提交必填，用于毛利估算；草稿空串表示未填写。 */
     procurementSupplyPrice?: string
+    /** 公司商品池取价方式；询价来源由整单来源决定。 */
+    procurementPriceBasis?: SalesProcurementPriceBasis
     quantity: string
     unit: string
     deliveryAllocations?: SalesDeliveryAllocation[]
@@ -136,6 +140,8 @@ export type SalesOrderLineItem = {
     cardForm?: string
     /** 销售填写的采购供给价（含税单价）。 */
     procurementSupplyPrice?: string
+    /** 公司商品池取价方式；询价来源由整单来源决定。 */
+    procurementPriceBasis?: SalesProcurementPriceBasis
     /** 对客户承诺的明细最晚交付日（实物/服务）。 */
     dueDate?: string
     /** 赠品明细：成交价为 0，不形成应收。 */

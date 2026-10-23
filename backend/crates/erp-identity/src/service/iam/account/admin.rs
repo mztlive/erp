@@ -219,7 +219,10 @@ impl AdminService {
         params: UpdateAdminParams,
         actor: &AuditActor,
     ) -> Result<AdminUpdateContext> {
-        let UpdateAdminParams { id, name, password, role_ids } = params;
+        let UpdateAdminParams { id, name, password, role_ids, status } = params;
+        if status.as_ref().is_some_and(|status| !status.is_active()) && id == actor.id() {
+            return Err(crate::error::Error::Forbidden("不能停用当前登录账号".to_string()));
+        }
         let mut account = account_of_kind(
             self.db.accounts().find_by_id(&id, &mut NoTransaction).await?,
             AccountKind::Admin,
@@ -233,7 +236,8 @@ impl AdminService {
             .authorize_target_management(actor, AccountKind::Admin, account.base.id.as_str(), role_ids)
             .await?;
         account =
-            apply_account_update(account, AccountCoreUpdate { name, password, ..Default::default() }).await?;
+            apply_account_update(account, AccountCoreUpdate { name, password, status, ..Default::default() })
+                .await?;
         Ok(AdminUpdateContext { account, authorization })
     }
 

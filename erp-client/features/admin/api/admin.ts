@@ -31,7 +31,7 @@ export const fetchAdmins = (): Promise<AdminAccount[]> =>
 export const createAdmin = (payload: CreateAdminPayload): Promise<void> =>
     apiPost<void>("/admin/admins", payload)
 
-/** 更新管理员姓名/密码/角色；密码为空串时不提交密码字段。 */
+/** 更新管理员姓名/密码/角色/启停状态；密码为空串时不提交密码字段。 */
 export const updateAdmin = (
     id: string,
     payload: UpdateAdminPayload,

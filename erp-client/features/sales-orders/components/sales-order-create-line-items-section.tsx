@@ -170,8 +170,11 @@ export function SalesOrderCreateLineItemsSection({
                             {nature === "physical_service" &&
                             lines.length > 0 ? (
                                 <p className="text-xs text-muted-foreground">
-                                    成交单价由销售填写。选择商品、修改数量或从选品册开单均不自动带入价格。勾选“赠品”的商品单价为
-                                    0、不收款；采购供给价必填，用于估算含税毛利。
+                                    成交单价由销售填写，赠品单价为 0、不收款。
+                                    {inquiryLocked
+                                        ? "采购供给价由询价覆盖，不可修改。"
+                                        : "采购供给价按所选集采或一件代发价格带出，可调整。"}
+                                    供给金额按单价乘数量计算，用于估算含税毛利。
                                 </p>
                             ) : null}
                             {nature === "physical_service" &&

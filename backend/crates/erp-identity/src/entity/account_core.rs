@@ -511,4 +511,20 @@ mod tests {
         assert_eq!(account.email.as_deref(), Some("next@example.com"));
         assert_eq!(account.phone.as_deref(), Some("13800000000"));
     }
+
+    #[test]
+    fn update_should_suspend_and_reactivate_login_eligibility() {
+        let mut account = sample_account(AccountKind::Admin, AccountStatus::Active);
+
+        account
+            .update(AccountCoreUpdate { status: Some(AccountStatus::Suspended), ..Default::default() })
+            .unwrap();
+        assert!(!account.can_login());
+        assert!(account.ensure_can_login().is_err());
+
+        account
+            .update(AccountCoreUpdate { status: Some(AccountStatus::Active), ..Default::default() })
+            .unwrap();
+        assert!(account.can_login());
+    }
 }

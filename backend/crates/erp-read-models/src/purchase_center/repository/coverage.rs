@@ -264,6 +264,7 @@ mod isolation_tests {
                 sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),
                 welfare_scenario: None,
                 procurement_supply_price_gross: None,
+                procurement_price_basis: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: Quantity::from_str("10").unwrap(),
                 base_unit_code: "件".to_string(),

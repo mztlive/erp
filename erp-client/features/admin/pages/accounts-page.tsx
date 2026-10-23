@@ -4,13 +4,22 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
-import { PlusIcon, ShieldCheckIcon } from "lucide-react"
+import {
+    BanIcon,
+    CircleCheckIcon,
+    PlusIcon,
+    ShieldCheckIcon,
+    Trash2Icon,
+} from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
+    BusinessStatusBadge,
     DataTable,
     PageScaffold,
+    TableRowActions,
+    type TableRowAction,
 } from "@/components/business"
 import {
     ListSearchField,
@@ -23,12 +32,15 @@ import {
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { AccountFormDialog } from "@/features/admin/components/accounts/account-form-dialog"
+import { DeleteAdminDialog } from "@/features/admin/components/accounts/delete-admin-dialog"
+import { ToggleAdminStatusDialog } from "@/features/admin/components/accounts/toggle-admin-status-dialog"
 import {
     useAdminsQuery,
     useAssignableRolesQuery,
     useRolesQuery,
 } from "@/features/admin/hooks/queries"
 import type { AdminAccount } from "@/features/admin/types"
+import { adminAccountStatusBadge } from "@/features/admin/lib/account-status"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
@@ -37,7 +49,7 @@ import { useOrganizationStateQuery } from "@/features/organization/hooks/queries
 import { unitLabel } from "@/features/organization/lib/tree"
 import { formatDateTime } from "@/lib/datetime"
 
-/** 人员列表只负责查找与创建，所有人员设置统一进入人员资料。 */
+/** 人员列表负责查找、创建与常用账号操作；完整设置进入人员资料。 */
 export function AccountsPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -46,6 +58,15 @@ export function AccountsPage() {
         profileQuery.data?.permissions,
         "org_unit:list",
     )
+    const canUpdateAdmin = hasPermission(
+        profileQuery.data?.permissions,
+        "admin:update",
+    )
+    const canDeleteAdmin = hasPermission(
+        profileQuery.data?.permissions,
+        "admin:delete",
+    )
+    const currentUserId = profileQuery.data?.userid
     const organizationQuery = useOrganizationStateQuery(canReadOrganization)
     const adminsQuery = useAdminsQuery()
     const rolesQuery = useRolesQuery()
@@ -62,12 +83,25 @@ export function AccountsPage() {
         setSearchDraft(next)
     }, [searchParams])
     const [creating, setCreating] = React.useState(false)
-    const [setupMessage, setSetupMessage] = React.useState<string | null>(null)
+    const [togglingAccount, setTogglingAccount] =
+        React.useState<AdminAccount | null>(null)
+    const [deletingAccount, setDeletingAccount] =
+        React.useState<AdminAccount | null>(null)
+    const [notice, setNotice] = React.useState<string | null>(null)
 
     const roleNameById = React.useMemo(
         () =>
             new Map(
                 (rolesQuery.data ?? []).map((role) => [role.id, role.name]),
+            ),
+        [rolesQuery.data],
+    )
+    const systemRoleIds = React.useMemo(
+        () =>
+            new Set(
+                (rolesQuery.data ?? [])
+                    .filter((role) => role.system)
+                    .map((role) => role.id),
             ),
         [rolesQuery.data],
     )
@@ -88,8 +122,70 @@ export function AccountsPage() {
         )
     }, [adminsQuery.data, keyword, roleNameById])
 
-    const columns = React.useMemo<ColumnDef<AdminAccount>[]>(
-        () => [
+    const columns = React.useMemo<ColumnDef<AdminAccount>[]>(() => {
+        const actionsColumn: ColumnDef<AdminAccount> = {
+            id: "actions",
+            size: 168,
+            minSize: 168,
+            header: "操作",
+            meta: { label: "操作", width: "status", align: "end" },
+            enableSorting: false,
+            enableHiding: false,
+            cell: ({ row }) => {
+                const account = row.original
+                const segment = toAutomationIdSegment(account.id)
+                const hasSystemRole = account.role_ids.some((id) =>
+                    systemRoleIds.has(id),
+                )
+                const statusDisabledReason = hasSystemRole
+                    ? "系统角色账号不可停用或启用"
+                    : !rolesQuery.isSuccess
+                      ? "角色尚未读取，暂不能变更账号状态"
+                      : account.status === "active" &&
+                          currentUserId === account.id
+                        ? "不能停用当前登录账号"
+                        : undefined
+                const deleteDisabledReason = hasSystemRole
+                    ? "系统角色账号不可删除"
+                    : !rolesQuery.isSuccess
+                      ? "角色尚未读取，暂不能删除"
+                      : undefined
+                const actions: TableRowAction[] = []
+                if (canUpdateAdmin) {
+                    actions.push({
+                        id: `governance-admin-accounts-row-${segment}-toggle-status`,
+                        label: account.status === "active" ? "停用" : "启用",
+                        icon:
+                            account.status === "active"
+                                ? BanIcon
+                                : CircleCheckIcon,
+                        disabled: Boolean(statusDisabledReason),
+                        disabledReason: statusDisabledReason,
+                        onClick: () => setTogglingAccount(account),
+                    })
+                }
+                if (canDeleteAdmin) {
+                    actions.push({
+                        id: `governance-admin-accounts-row-${segment}-delete`,
+                        label: "删除",
+                        icon: Trash2Icon,
+                        destructive: true,
+                        placement: "inline",
+                        disabled: Boolean(deleteDisabledReason),
+                        disabledReason: deleteDisabledReason,
+                        onClick: () => setDeletingAccount(account),
+                    })
+                }
+                return (
+                    <TableRowActions
+                        moreId={`governance-admin-accounts-row-${segment}-more`}
+                        moreLabel={`${account.name || account.account} 更多操作`}
+                        actions={actions}
+                    />
+                )
+            },
+        }
+        return [
             {
                 id: "identity",
                 enableHiding: false,
@@ -108,6 +204,17 @@ export function AccountsPage() {
                             {row.original.account}
                         </div>
                     </div>
+                ),
+            },
+            {
+                id: "status",
+                size: 100,
+                header: "状态",
+                cell: ({ row }) => (
+                    <BusinessStatusBadge
+                        context="list"
+                        {...adminAccountStatusBadge(row.original.status)}
+                    />
                 ),
             },
             {
@@ -156,14 +263,19 @@ export function AccountsPage() {
                     </span>
                 ),
             },
-        ],
-        [
-            roleNameById,
-            canReadOrganization,
-            organizationQuery.data,
-            organizationQuery.isError,
-        ],
-    )
+            ...(canUpdateAdmin || canDeleteAdmin ? [actionsColumn] : []),
+        ]
+    }, [
+        roleNameById,
+        canReadOrganization,
+        organizationQuery.data,
+        organizationQuery.isError,
+        systemRoleIds,
+        rolesQuery.isSuccess,
+        currentUserId,
+        canUpdateAdmin,
+        canDeleteAdmin,
+    ])
 
     const hasSearch = keyword.trim().length > 0
     const hasPendingChanges = searchDraft.trim() !== keyword.trim()
@@ -192,7 +304,7 @@ export function AccountsPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="组织与人员"
-                description="点击人员行，统一管理资料、角色与数据范围。"
+                description="点击人员行，统一管理资料、角色、账号启停与数据范围。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -227,9 +339,9 @@ export function AccountsPage() {
             </ListWorkspaceHeader>
 
             <PeopleNavigation current="accounts" />
-            {setupMessage ? (
+            {notice ? (
                 <p role="status" className="rounded-lg bg-muted p-3 text-sm">
-                    {setupMessage}
+                    {notice}
                 </p>
             ) : null}
             {canReadOrganization && organizationQuery.isError ? (
@@ -305,6 +417,7 @@ export function AccountsPage() {
                         loading={adminsQuery.isPending}
                         defaultColumnPinning={{
                             left: ["identity"],
+                            right: ["actions"],
                         }}
                         errorState={
                             adminsQuery.isError ? (
@@ -352,9 +465,7 @@ export function AccountsPage() {
             {creating ? (
                 <AccountFormDialog
                     onCreated={(accountName) => {
-                        setSetupMessage(
-                            "账号已创建，正在打开人员资料继续配置。",
-                        )
+                        setNotice("账号已创建，正在打开人员资料继续配置。")
                         void adminsQuery
                             .refetch()
                             .then((result) => {
@@ -366,12 +477,12 @@ export function AccountsPage() {
                                         `/system/accounts/${encodeURIComponent(created.id)}`,
                                     )
                                 else
-                                    setSetupMessage(
+                                    setNotice(
                                         "账号已创建。请刷新列表并点击姓名继续配置，无需重复创建账号。",
                                     )
                             })
                             .catch(() =>
-                                setSetupMessage(
+                                setNotice(
                                     "账号已创建，请刷新列表后点击姓名继续配置。",
                                 ),
                             )
@@ -382,6 +493,30 @@ export function AccountsPage() {
                     onOpenChange={(open) => {
                         if (!open) setCreating(false)
                     }}
+                />
+            ) : null}
+            {togglingAccount ? (
+                <ToggleAdminStatusDialog
+                    account={togglingAccount}
+                    onOpenChange={(open) => {
+                        if (!open) setTogglingAccount(null)
+                    }}
+                    onChanged={(status) =>
+                        setNotice(
+                            status === "suspended"
+                                ? "账号已停用。"
+                                : "账号已启用。",
+                        )
+                    }
+                />
+            ) : null}
+            {deletingAccount ? (
+                <DeleteAdminDialog
+                    account={deletingAccount}
+                    onOpenChange={(open) => {
+                        if (!open) setDeletingAccount(null)
+                    }}
+                    onDeleted={() => setNotice("账号已删除。")}
                 />
             ) : null}
         </PageScaffold>

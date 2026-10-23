@@ -2,7 +2,9 @@
 
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderRevisionLineId};
 use erp_finance::dto::extra_cost::{SalesExtraCostListView, SalesExtraCostView};
-use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrderSubmissionLine, PurchaseType};
+use erp_procurement::entity::purchase_order::{
+    PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderSubmissionLine, PurchaseType,
+};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_sales::entity::sales_order::{LineType, SalesOrderGoodsServiceLineRevision, SalesOrderRevisionLine};
@@ -30,6 +32,9 @@ pub struct ApprovalPurchaseLine {
     pub unit_cost_gross: Option<String>,
     pub gross_amount: String,
     pub expected_delivery_date: Option<String>,
+    /// 本次不可变提交的进项税率与实际承担的收货安排。
+    pub input_tax_rate: Option<String>,
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     pub source: Option<ApprovalPurchaseSourceLine>,
 }
 
@@ -179,6 +184,7 @@ async fn validate_revisions(db: &Database, allowed: &[ApprovalRelatedSalesSnapsh
     Ok(())
 }
 
+/// 从不可变采购行组装主行与补充信息，并校验冻结销售来源。
 fn comparison_line(
     line: &PurchaseOrderSubmissionLine,
     allowed: &[ApprovalRelatedSalesSnapshot],
@@ -199,6 +205,8 @@ fn comparison_line(
         unit_cost_gross: line.unit_cost_gross.as_ref().map(|value| value.to_decimal().to_string()),
         gross_amount: line.gross_amount.to_string(),
         expected_delivery_date: line.expected_delivery_date.map(|date| date.to_string()),
+        input_tax_rate: line.input_tax_rate.map(|rate| rate.to_decimal().to_string()),
+        delivery_allocations: line.delivery_allocations.clone(),
         source: source_line(line, allowed, sources, goods)?,
     })
 }
@@ -249,6 +257,7 @@ mod tests {
         ProcurementConfirmationLineId, PurchaseOrderSubmissionLineId, SalesOrderGoodsServiceLineRevisionId,
         SalesOrderLineId, SalesOrderRevisionId, SkuId, SkuRevisionId,
     };
+    use erp_core::region::RegionCode;
     use erp_procurement::entity::purchase_order::PurchaseOrderSubmissionLineData;
     use erp_sales::entity::sales_order::{
         SalesOrderGoodsServiceLineRevisionData, SalesOrderRevisionLineData,
@@ -319,6 +328,7 @@ mod tests {
                 sku_revision_id: SkuRevisionId::new("sku-revision"),
                 welfare_scenario: None,
                 procurement_supply_price_gross: None,
+                procurement_price_basis: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: "2".parse().unwrap(),
                 base_unit_code: "盒".into(),
@@ -362,6 +372,40 @@ mod tests {
         let view = comparison_line(&purchase_line(), &allowed(), &[sales_line()], &[sales]).unwrap();
         assert_eq!(view.unit_cost_gross.as_deref(), Some("15"));
         assert_eq!(view.source.unwrap().procurement_supply_price_gross.as_deref(), Some("12.5"));
+    }
+
+    #[test]
+    fn supplementary_fields_preserve_frozen_addresses_and_zero_tax() {
+        let mut line = purchase_line();
+        line.delivery_allocations = vec![
+            PurchaseDeliveryAllocation {
+                recipient: "收货人甲".into(),
+                phone: "13800000001".into(),
+                region_code: RegionCode::parse("310115").unwrap(),
+                region_name: "上海市浦东新区".into(),
+                address: "测试路1号".into(),
+                quantity: "0.5".parse().unwrap(),
+            },
+            PurchaseDeliveryAllocation {
+                recipient: "收货人乙".into(),
+                phone: "13800000002".into(),
+                region_code: RegionCode::parse("310115").unwrap(),
+                region_name: "上海市浦东新区".into(),
+                address: "测试路2号".into(),
+                quantity: "1.5".parse().unwrap(),
+            },
+        ];
+        let view = comparison_line(&line, &allowed(), &[sales_line()], &[goods()]).unwrap();
+        assert_eq!(view.input_tax_rate.as_deref(), Some("0"));
+        assert_eq!(view.delivery_allocations, line.delivery_allocations);
+        let json = serde_json::to_value(&view).unwrap();
+        assert_eq!(json["delivery_allocations"][0]["quantity"], "0.5");
+        assert_eq!(json["delivery_allocations"][1]["address"], "测试路2号");
+        line.input_tax_rate = None;
+        line.delivery_allocations.clear();
+        let legacy = comparison_line(&line, &allowed(), &[sales_line()], &[goods()]).unwrap();
+        assert!(legacy.input_tax_rate.is_none());
+        assert!(legacy.delivery_allocations.is_empty());
     }
 
     #[test]

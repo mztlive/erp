@@ -25,6 +25,7 @@ export type InquirySalesSourceSnapshot = {
     feedback_round: number
     customer_id: string
     lines: Array<{
+        price: { unit_price_gross: string | null }
         sales_order_line_id: string
         inquiry_line_id: string
         quantity: string

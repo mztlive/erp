@@ -54,6 +54,8 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
     let delayDays = 0
     let priceDifference: string | null = null
     let pricePercent: string | null = null
+    let priceDifferenceTotal: string | null = null
+    let quantityExcess: string | null = null
     let partial = false
     const source = line.source
     if (!fee) {
@@ -88,6 +90,17 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                             supplyPrice,
                             { maxScale: 6, outputScale: 6 },
                         )
+                        if (line.quantity != null) {
+                            priceDifferenceTotal = multiplyFixed(
+                                priceDifference,
+                                line.quantity,
+                                {
+                                    leftMaxScale: 6,
+                                    rightMaxScale: 6,
+                                    outputScale: 2,
+                                },
+                            )
+                        }
                         if (compareDecimal(supplyPrice, "0", 6) > 0) {
                             pricePercent = divideFixed(
                                 multiplyFixed(priceDifference, "100", {
@@ -112,7 +125,17 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                         6,
                     )
                     partial = quantityOrder < 0
-                    if (quantityOrder > 0) warnings.push("本次数量超过销售需求")
+                    if (quantityOrder > 0) {
+                        warnings.push("本次数量超过销售需求")
+                        quantityExcess = subtractFixed(
+                            line.quantity,
+                            source.quantity,
+                            {
+                                maxScale: 6,
+                                outputScale: 6,
+                            },
+                        )
+                    }
                 }
             } catch {
                 warnings.push("数值格式需核对")
@@ -136,6 +159,8 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
         delayDays,
         priceDifference,
         pricePercent,
+        priceDifferenceTotal,
+        quantityExcess,
         partial,
     }
 }

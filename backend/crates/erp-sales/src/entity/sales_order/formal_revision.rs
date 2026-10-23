@@ -544,6 +544,7 @@ fn build_goods_line(
             sku_revision_id: goods.sku_revision_id,
             welfare_scenario: goods.welfare_scenario,
             procurement_supply_price_gross: goods.procurement_supply_price_gross,
+            procurement_price_basis: goods.procurement_price_basis,
             fulfillment_due_at: goods.fulfillment_due_at,
             quantity: goods.quantity,
             base_unit_code: goods.base_unit_code,
@@ -580,9 +581,9 @@ mod tests {
     use erp_core::money::{Quantity, UnitPrice};
 
     use super::*;
-    use crate::entity::sales_order::SalesPricingMode;
     use crate::entity::sales_order::submission::SalesOrderSubmissionData;
     use crate::entity::sales_order::types::{CardForm, WelfareScenario};
+    use crate::entity::sales_order::{SalesPricingMode, SalesProcurementPriceBasis};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -612,6 +613,7 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
+            procurement_price_basis: None,
             fulfillment_due_at: at(),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -773,6 +775,7 @@ mod tests {
     fn goods_service_multi_line_revision_copies_snapshots_and_hashes() {
         let mut first = goods_line_data(1);
         first.goods.as_mut().unwrap().pricing_mode = SalesPricingMode::Auto;
+        first.goods.as_mut().unwrap().procurement_price_basis = Some(SalesProcurementPriceBasis::Bulk);
         let allocations = serde_json::from_value(serde_json::json!([
             {"recipient":"收货人甲", "phone":"13800000001", "region_code":"310115", "address":"甲路1号", "quantity":"1"},
             {"recipient":"收货人乙", "phone":"13800000002", "region_code":"310115", "address":"乙路2号", "quantity":"2"}
@@ -811,6 +814,7 @@ mod tests {
         assert_eq!(aggregate.goods_lines[0].welfare_scenario, Some(WelfareScenario::AnnualGiftBag));
         assert_eq!(aggregate.goods_lines[0].procurement_supply_price_gross, Some("8.5000".parse().unwrap()));
         assert_eq!(aggregate.goods_lines[0].pricing_mode, SalesPricingMode::Auto);
+        assert_eq!(aggregate.goods_lines[0].procurement_price_basis, Some(SalesProcurementPriceBasis::Bulk));
         assert_eq!(aggregate.goods_lines[1].pricing_mode, SalesPricingMode::Manual);
         assert_eq!(aggregate.goods_lines[0].delivery_allocations.len(), 2);
         assert_eq!(aggregate.goods_lines[0].delivery_allocations[1].recipient, "收货人乙");

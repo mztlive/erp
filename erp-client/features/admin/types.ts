@@ -13,11 +13,15 @@ export type AdminRole = {
     created_at: number
 }
 
+/** 后台账号状态；停用账号不能登录，现有会话的后续请求也会被拒绝。 */
+export type AdminAccountStatus = "active" | "suspended" | "archived"
+
 /** 管理员账号项（GET /admin/admins）。 */
 export type AdminAccount = {
     id: string
     account: string
     name: string
+    status: AdminAccountStatus
     role_ids: string[]
     created_at: number
 }
@@ -35,6 +39,7 @@ export type UpdateAdminPayload = {
     name?: string
     password?: string
     role_ids?: string[]
+    status?: AdminAccountStatus
 }
 
 /** 更新管理员角色请求（PUT /admin/admins/{id}/role）。 */

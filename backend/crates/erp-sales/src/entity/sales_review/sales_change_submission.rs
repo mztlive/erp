@@ -28,7 +28,9 @@ use super::types::{
     build_line_groups, validate_line_list,
 };
 use crate::entity::sales_order::amount_validation::validate_amount_triple;
-use crate::entity::sales_order::{SalesDeliveryAllocation, SalesOrderWorkingCopyLine, SalesPricingMode};
+use crate::entity::sales_order::{
+    SalesDeliveryAllocation, SalesOrderWorkingCopyLine, SalesPricingMode, SalesProcurementPriceBasis,
+};
 
 /// 提交人标识最大长度。
 const SUBMITTER_MAX_LEN: usize = 128;
@@ -621,6 +623,9 @@ pub struct SalesChangeSubmissionLine {
     /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
+    /// 公司商品池取价方式；历史未选择及询价覆盖时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_price_basis: Option<SalesProcurementPriceBasis>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
@@ -704,6 +709,7 @@ impl SalesChangeSubmissionLine {
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
             procurement_supply_price_gross: built.procurement_supply_price_gross(),
+            procurement_price_basis: built.goods.as_ref().and_then(|goods| goods.procurement_price_basis),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
@@ -775,6 +781,7 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
+            procurement_price_basis: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -890,6 +897,7 @@ mod tests {
             sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skurev-1")),
             welfare_scenario: Some(crate::entity::sales_order::WelfareScenario::MealSubsidy),
             procurement_supply_price_gross: None,
+            procurement_price_basis: None,
             fulfillment_due_at: Some(Instant::from_unix_secs(1_800_000_000)),
             quantity: Some(qty("3.000000")),
             base_unit_code: Some("件".to_string()),

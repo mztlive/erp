@@ -353,6 +353,7 @@ mod tests {
                 sku_revision_id: SkuRevisionId::new("sku-rev-1"),
                 welfare_scenario: None,
                 procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
+                procurement_price_basis: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: "3".parse().unwrap(),
                 base_unit_code: "箱".into(),

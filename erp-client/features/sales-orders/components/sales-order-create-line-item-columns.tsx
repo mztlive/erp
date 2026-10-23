@@ -22,6 +22,10 @@ import {
     SalesOrderCreateLineGiftToggle,
     SalesOrderCreateLinePriceEditor,
 } from "@/features/sales-orders/components/sales-order-create-line-price-editor"
+import {
+    SalesProcurementBasisEditor,
+    SalesProcurementPriceEditor,
+} from "./sales-order-procurement-price-editor"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function ProcurementOwnerPreview({
@@ -208,39 +212,39 @@ export function buildSalesOrderCreateLineItemColumns(
                       ),
                   },
                   {
+                      id: "procurementPriceBasis",
+                      header: "供给取价方式",
+                      renderValue: ({ item }) =>
+                          inquiryLocked
+                              ? "询价覆盖"
+                              : item.procurementPriceBasis === "BULK"
+                                ? "集采"
+                                : item.procurementPriceBasis === "DROPSHIP"
+                                  ? "一件代发"
+                                  : "未选择",
+                      renderEditor: ({ rowIndex }) => (
+                          <SalesProcurementBasisEditor
+                              form={form}
+                              rowIndex={rowIndex}
+                              inquiryLocked={inquiryLocked}
+                          />
+                      ),
+                  },
+                  {
                       id: "procurementSupplyPrice",
-                      header: "采购供给价",
+                      header: "采购供给价 / 金额",
                       required: true,
                       numeric: true,
                       align: "end",
                       renderValue: ({ item }) =>
                           item.procurementSupplyPrice || "—",
-                      renderEditor: ({ rowIndex }) => {
-                          const lineKey = values.lineItems[rowIndex]?.rowKey
-                          if (!lineKey) return null
-                          return (
-                              <div className="w-28">
-                                  <form.AppField
-                                      name={`lineItems[${rowIndex}].procurementSupplyPrice`}
-                                  >
-                                      {(field) => (
-                                          <field.TextField
-                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-supply-price`}
-                                              label="采购供给价"
-                                              required
-                                              hideLabel
-                                              type="number"
-                                              step="any"
-                                              placeholder="请填写"
-                                              readOnly={inquiryLocked}
-                                              className="gap-0"
-                                              inputClassName="num text-right"
-                                          />
-                                      )}
-                                  </form.AppField>
-                              </div>
-                          )
-                      },
+                      renderEditor: ({ rowIndex }) => (
+                          <SalesProcurementPriceEditor
+                              form={form}
+                              rowIndex={rowIndex}
+                              inquiryLocked={inquiryLocked}
+                          />
+                      ),
                   },
               ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])
             : []),

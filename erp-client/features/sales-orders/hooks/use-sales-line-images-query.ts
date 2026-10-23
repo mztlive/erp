@@ -2,6 +2,7 @@
 
 import { useQueries } from "@tanstack/react-query"
 
+import { sellableItemToPick } from "../lib/sellable-sku-pick"
 import { listSellableItemsPage } from "@/features/master-data/api"
 
 /** 按明细 SKU 批量读取主图，兼容草稿恢复与询价带入。 */
@@ -25,6 +26,17 @@ export function useSalesLineImagesQuery(skuIds: readonly string[]) {
         })),
     })
     return {
+        references: new Map(
+            queries.flatMap((query) =>
+                (query.data?.rows ?? []).map(
+                    (row) =>
+                        [
+                            row.currentRevisionId,
+                            sellableItemToPick(row),
+                        ] as const,
+                ),
+            ),
+        ),
         images: new Map(
             queries.flatMap((query) =>
                 (query.data?.rows ?? []).map(

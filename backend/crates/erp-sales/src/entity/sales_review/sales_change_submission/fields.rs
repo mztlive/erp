@@ -32,6 +32,7 @@ impl SalesChangeSubmissionLine {
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
             welfare_scenario: self.welfare_scenario,
             procurement_supply_price_gross: self.procurement_supply_price_gross,
+            procurement_price_basis: self.procurement_price_basis,
             fulfillment_due_at: self
                 .fulfillment_due_at
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,

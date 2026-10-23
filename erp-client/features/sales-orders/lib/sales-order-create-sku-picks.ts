@@ -1,3 +1,4 @@
+import { supplyReferencePrice } from "./sales-procurement-price"
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
 import { createEmptyLine } from "@/features/sales-orders/lib/sales-order-create-model"
 import type {
@@ -28,6 +29,11 @@ function lineFromPick(
         pricingMode: "MANUAL",
         priceSource: undefined,
         referencePrices,
+        procurementPriceBasis: base.procurementPriceBasis ?? "DROPSHIP",
+        procurementSupplyPrice: supplyReferencePrice(
+            referencePrices,
+            base.procurementPriceBasis ?? "DROPSHIP",
+        ),
     }
 }
 

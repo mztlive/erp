@@ -124,6 +124,7 @@ impl DemoMasterDataService {
                     name: Some(spec.name.clone()),
                     password: None,
                     role_ids: None,
+                    status: None,
                 },
                 actor.clone(),
             )

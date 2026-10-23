@@ -40,7 +40,18 @@ export function useSalesOrderCreateDefaults({
     initialDraft,
 }: SalesOrderCreateDefaultsInput): CreateSalesOrderFormValues {
     return React.useMemo(() => {
-        if (initialInquiryValues) return initialInquiryValues
+        if (initialInquiryValues)
+            return {
+                ...initialInquiryValues,
+                lineItems: initialInquiryValues.lineItems.map((line) => ({
+                    ...line,
+                    procurementPriceBasis: undefined,
+                    procurementSupplyPrice:
+                        initialInquiryBasis?.lineItems.find(
+                            (source) => source.rowKey === line.rowKey,
+                        )?.procurementSupplyPrice ?? "",
+                })),
+            }
         const nature = initialDraft?.nature ?? initialNature
         const contractId = initialDraft?.contractId || initialContractId
         return {
@@ -89,7 +100,20 @@ export function useSalesOrderCreateDefaults({
             remark: initialDraft?.remark ?? "",
             lineItems:
                 initialDraft && initialDraft.lineItems.length > 0
-                    ? initialDraft.lineItems
+                    ? initialDraft.lineItems.map((line) =>
+                          initialDraft.inquirySource
+                              ? {
+                                    ...line,
+                                    procurementPriceBasis: undefined,
+                                    procurementSupplyPrice:
+                                        initialDraft.inquirySource.lines.find(
+                                            (source) =>
+                                                source.sales_order_line_id ===
+                                                line.rowKey,
+                                        )?.price.unit_price_gross ?? "",
+                                }
+                              : line,
+                      )
                     : initialInquiryBasis
                       ? initialInquiryBasis.lineItems
                       : initialSelectionBasis

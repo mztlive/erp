@@ -922,6 +922,8 @@ export function SalesOrderCreateForm({
                                     </section>
                                 </div>
                                 <SalesOrderCreateLineItemsSection
+                                    inquirySource={inquirySource}
+                                    inquiryLocked={Boolean(inquirySource)}
                                     compact={embeddedDraft}
                                     form={form}
                                     procurementOwners={

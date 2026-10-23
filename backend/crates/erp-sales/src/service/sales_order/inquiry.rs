@@ -27,6 +27,7 @@ pub async fn reconcile(
     let Some(mut source) = inquiry_sources(db).find_by_id(order_id, executor).await? else {
         return Ok(());
     };
+    source.ensure_supply_prices(lines)?;
     let updated = source.reconciled(customer, lines)?;
     if source.consumed || source.released {
         return Err(Error::BusinessLogicError("该销售询价来源已消耗或释放，不能直接编辑".into()));
@@ -121,6 +122,8 @@ fn revision_facts(
                 .find(|line| line.base.id == goods.revision_line_id.as_ref())
                 .ok_or_else(|| Error::BusinessLogicError("销售版本商品缺少稳定需求行".into()))?;
             Ok(InquirySalesLineFact {
+                procurement_supply_price_gross: goods.procurement_supply_price_gross,
+                procurement_price_basis: goods.procurement_price_basis,
                 sales_order_line_id: line.sales_order_line_id.clone(),
                 sku_id: Some(goods.sku_id.clone()),
                 sku_revision_id: Some(goods.sku_revision_id.clone()),

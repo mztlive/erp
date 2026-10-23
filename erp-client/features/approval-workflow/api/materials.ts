@@ -86,6 +86,16 @@ export type ApprovalPurchaseLine = {
     /** 行含税金额；费用行按此核对。 */
     gross_amount?: string
     expected_delivery_date: string | null
+    /** 本次提交保存的税率（小数）与采购行承担的交付安排。 */
+    input_tax_rate?: string | null
+    delivery_allocations?: {
+        recipient: string
+        phone: string
+        region_code: string
+        region_name: string
+        address: string
+        quantity: string
+    }[]
     source: {
         revision_id: string
         title: string

@@ -5,10 +5,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, SalesOrderLineId, SkuId, SkuRevisionId};
-use erp_core::money::Quantity;
+use erp_core::money::{Quantity, UnitPrice};
 use serde::{Deserialize, Serialize};
 
-use super::{SalesDeliveryAllocation, SalesOrderSubmissionLine, SalesOrderWorkingCopyLine};
+use super::{
+    SalesDeliveryAllocation, SalesOrderSubmissionLine, SalesOrderWorkingCopyLine, SalesProcurementPriceBasis,
+};
 use crate::entity::sales_inquiry::{
     InquiryDeliveryAllocation, InquiryFee, InquiryQuantitySelection, InquiryRequirementLine,
     InquirySupplyPrice, SalesInquiry,
@@ -124,6 +126,8 @@ pub struct InquirySalesLineBinding {
 /// 生命周期校验消费的最小销售行事实，不包含成交价或采购资料。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InquirySalesLineFact {
+    pub procurement_supply_price_gross: Option<UnitPrice>,
+    pub procurement_price_basis: Option<SalesProcurementPriceBasis>,
     pub sales_order_line_id: SalesOrderLineId,
     pub sku_id: Option<SkuId>,
     pub sku_revision_id: Option<SkuRevisionId>,
@@ -136,6 +140,8 @@ impl From<&SalesOrderWorkingCopyLine> for InquirySalesLineFact {
     fn from(line: &SalesOrderWorkingCopyLine) -> Self {
         Self {
             sales_order_line_id: line.sales_order_line_id.clone(),
+            procurement_supply_price_gross: line.procurement_supply_price_gross,
+            procurement_price_basis: line.procurement_price_basis,
             sku_id: line.sku_id.clone(),
             sku_revision_id: line.sku_revision_id.clone(),
             fulfillment_due_at: line.fulfillment_due_at,
@@ -148,6 +154,8 @@ impl From<&SalesOrderSubmissionLine> for InquirySalesLineFact {
     fn from(line: &SalesOrderSubmissionLine) -> Self {
         Self {
             sales_order_line_id: line.sales_order_line_id.clone(),
+            procurement_supply_price_gross: line.procurement_supply_price_gross,
+            procurement_price_basis: line.procurement_price_basis,
             sku_id: line.sku_id.clone(),
             sku_revision_id: line.sku_revision_id.clone(),
             fulfillment_due_at: line.fulfillment_due_at,
@@ -287,6 +295,32 @@ impl SalesOrderInquirySource {
                 })
             {
                 return Err(invalid("正式销售增量或调整地址数量须先完成新的询价与来源确认"));
+            }
+        }
+        Ok(())
+    }
+
+    /// 校验询价来源草稿的供给单价与冻结报价一致。
+    /// # 参数
+    /// `lines` 为即将保存或提交的完整销售行。
+    /// # 返回
+    /// 有效来源行的价格与取价方式未被修改时成功。
+    /// # 错误
+    /// 修改来源报价或指定商品池取价方式时拒绝。
+    pub fn ensure_supply_prices(&self, lines: &[InquirySalesLineFact]) -> Result<()> {
+        for line in lines {
+            if line.quantity.is_some_and(|quantity| quantity.to_decimal().is_zero()) {
+                continue;
+            }
+            let Some(binding) =
+                self.lines.iter().find(|binding| binding.sales_order_line_id == line.sales_order_line_id)
+            else {
+                continue;
+            };
+            if line.procurement_supply_price_gross != binding.price.unit_price_gross
+                || line.procurement_price_basis.is_some()
+            {
+                return Err(invalid("询价覆盖的采购供给价和取价方式不可修改，请按询价报价保存"));
             }
         }
         Ok(())
@@ -602,6 +636,8 @@ mod tests {
         let line = &source.lines[0];
         InquirySalesLineFact {
             sales_order_line_id: line.sales_order_line_id.clone(),
+            procurement_supply_price_gross: line.price.unit_price_gross,
+            procurement_price_basis: None,
             sku_id: Some(line.sku_id.clone()),
             sku_revision_id: Some(line.sku_revision_id.clone()),
             fulfillment_due_at: Some(line.fulfillment_due_at),
@@ -609,6 +645,21 @@ mod tests {
             delivery_allocations: line.allocations.iter().map(|row| row.delivery.clone()).collect(),
         }
     }
+    #[test]
+    fn inquiry_supply_price_and_basis_cannot_be_changed_on_draft_save() {
+        let source = source();
+        let line = fact(&source);
+        assert!(source.ensure_supply_prices(std::slice::from_ref(&line)).is_ok());
+        for price in [None, Some("99".parse().unwrap())] {
+            let mut changed = line.clone();
+            changed.procurement_supply_price_gross = price;
+            assert!(source.ensure_supply_prices(&[changed]).unwrap_err().to_string().contains("询价覆盖"));
+        }
+        let mut changed = line;
+        changed.procurement_price_basis = Some(SalesProcurementPriceBasis::Bulk);
+        assert!(source.ensure_supply_prices(&[changed]).is_err());
+    }
+
     #[test]
     fn draft_reduction_and_removed_rows_keep_stable_origin_without_overwriting_snapshot() {
         let source = source();

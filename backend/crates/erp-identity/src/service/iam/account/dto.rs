@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::entity::{AccountCore, LoginAccount};
+use crate::entity::{AccountCore, AccountStatus, LoginAccount};
 use crate::error::{Error, Result};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -136,6 +136,8 @@ pub struct UpdateAdminParams {
     pub password: Option<String>,
     #[validate(length(min = 1, message = "至少选择一个角色"))]
     pub role_ids: Option<Vec<String>>,
+    /// 账号状态；`active` 启用，`suspended` 停用，`archived` 归档。
+    pub status: Option<AccountStatus>,
 }
 
 impl UpdateAdminParams {
@@ -150,7 +152,7 @@ impl UpdateAdminParams {
     /// # 错误
     /// 无。
     pub fn new(id: impl Into<String>) -> Self {
-        Self { id: id.into(), name: None, password: None, role_ids: None }
+        Self { id: id.into(), name: None, password: None, role_ids: None, status: None }
     }
 
     /// 设置管理员名称。
@@ -243,6 +245,8 @@ pub struct AdminItem {
     pub id: String,
     pub account: String,
     pub name: String,
+    /// 当前账号状态；停用账号不能登录，现有会话也会失效。
+    pub status: AccountStatus,
     pub role_ids: Vec<String>,
     pub created_at: u64,
 }
@@ -264,6 +268,7 @@ impl AdminItem {
             id: account.base.id,
             account: account.secret.into_account(),
             name: account.name,
+            status: account.status,
             role_ids,
             created_at: account.base.created_at,
         }
@@ -283,21 +288,26 @@ mod tests {
     };
     use crate::entity::{AccountCore, AccountStatus, LoginAccount, Secret};
 
-    #[test]
-    fn admin_item_preserves_the_exact_json_contract() {
-        let account = AccountCore {
+    fn sample_admin(status: AccountStatus) -> AccountCore {
+        AccountCore {
             base: BaseModel { id: "admin-1".to_string(), created_at: 42, ..Default::default() },
             secret: Secret::new(LoginAccount::new("root").unwrap(), "secret").unwrap(),
             name: "Root Admin".to_string(),
             kind: AccountKind::Admin,
-            status: AccountStatus::Active,
+            status,
             email: None,
             phone: None,
             avatar: None,
-        };
+        }
+    }
 
-        let value =
-            serde_json::to_value(AdminItem::from_account(account, vec!["role-root".to_string()])).unwrap();
+    #[test]
+    fn admin_item_preserves_the_exact_json_contract() {
+        let value = serde_json::to_value(AdminItem::from_account(
+            sample_admin(AccountStatus::Active),
+            vec!["role-root".to_string()],
+        ))
+        .unwrap();
 
         assert_eq!(
             value,
@@ -305,10 +315,28 @@ mod tests {
                 "id": "admin-1",
                 "account": "root",
                 "name": "Root Admin",
+                "status": "active",
                 "role_ids": ["role-root"],
                 "created_at": 42,
             })
         );
+    }
+
+    #[test]
+    fn admin_item_exposes_suspended_status() {
+        let value =
+            serde_json::to_value(AdminItem::from_account(sample_admin(AccountStatus::Suspended), Vec::new()))
+                .unwrap();
+
+        assert_eq!(value["status"], "suspended");
+    }
+
+    #[test]
+    fn update_admin_params_accept_only_known_status_values() {
+        let params: UpdateAdminParams = serde_json::from_value(json!({ "status": "suspended" })).unwrap();
+        assert_eq!(params.status, Some(AccountStatus::Suspended));
+
+        assert!(serde_json::from_value::<UpdateAdminParams>(json!({ "status": "disabled" })).is_err());
     }
 
     #[test]

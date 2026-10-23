@@ -25,7 +25,7 @@ use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
     build_line_groups, validate_line_list,
 };
-use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode};
+use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode, SalesProcurementPriceBasis};
 
 /// 提交人标识最大长度。
 const SUBMITTER_MAX_LEN: usize = 128;
@@ -602,6 +602,9 @@ pub struct SalesOrderSubmissionLine {
     /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
+    /// 公司商品池取价方式；历史未选择及询价覆盖时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_price_basis: Option<SalesProcurementPriceBasis>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
@@ -685,6 +688,7 @@ impl SalesOrderSubmissionLine {
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
             procurement_supply_price_gross: built.procurement_supply_price_gross(),
+            procurement_price_basis: built.goods.as_ref().and_then(|goods| goods.procurement_price_basis),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
@@ -698,87 +702,6 @@ impl SalesOrderSubmissionLine {
             gift_amount: built.voucher.as_ref().map(|v| v.gift_amount),
             gift_rate: built.voucher.as_ref().map(|v| v.gift_rate),
             card_form: built.voucher.as_ref().map(|v| v.card_form),
-        })
-    }
-
-    /// 还原实物及服务字段组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于正式版本行构造的完整实物及服务字段组。
-    ///
-    /// # 错误
-    /// 行类型不是实物及服务，或任一必填字段缺失时返回错误。
-    pub fn goods_fields(&self) -> Result<GoodsLineFields> {
-        if self.line_type != LineType::GoodsService {
-            return Err(Error::from(format!("第 {} 行不是实物及服务行", self.line_no)));
-        }
-        Ok(GoodsLineFields {
-            pricing_mode: self.pricing_mode,
-            delivery_allocations: self.delivery_allocations.clone(),
-            sku_id: self
-                .sku_id
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", self.line_no)))?,
-            sku_revision_id: self
-                .sku_revision_id
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
-            welfare_scenario: self.welfare_scenario,
-            procurement_supply_price_gross: self.procurement_supply_price_gross,
-            fulfillment_due_at: self
-                .fulfillment_due_at
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
-            quantity: self.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
-            base_unit_code: self
-                .base_unit_code
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", self.line_no)))?,
-            unit_price_gross: self
-                .unit_price_gross
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", self.line_no)))?,
-        })
-    }
-
-    /// 还原卡券字段组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于正式版本行构造的完整卡券字段组。
-    ///
-    /// # 错误
-    /// 行类型不是卡券，或任一必填字段缺失时返回错误。
-    pub fn voucher_fields(&self) -> Result<VoucherLineDraft> {
-        if self.line_type != LineType::Voucher {
-            return Err(Error::from(format!("第 {} 行不是卡券行", self.line_no)));
-        }
-        Ok(VoucherLineDraft {
-            face_value: self
-                .face_value
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", self.line_no)))?,
-            card_count: self
-                .card_count
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", self.line_no)))?,
-            unit_price_gross: self
-                .unit_price_gross
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", self.line_no)))?,
-            face_value_total: self
-                .face_value_total
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", self.line_no)))?,
-            transaction_amount: self
-                .transaction_amount
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", self.line_no)))?,
-            gift_amount: self
-                .gift_amount
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", self.line_no)))?,
-            gift_rate: self.gift_rate,
-            card_form: self
-                .card_form
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
         })
     }
 
@@ -856,6 +779,7 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
+            procurement_price_basis: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),

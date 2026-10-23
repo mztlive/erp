@@ -18,7 +18,7 @@ use rust_decimal::Decimal;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode};
+use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode, SalesProcurementPriceBasis};
 
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
@@ -357,6 +357,9 @@ pub struct GoodsLineFields {
     /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
+    /// 公司商品池取价方式；历史未选择及询价覆盖时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_price_basis: Option<SalesProcurementPriceBasis>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Instant,
     /// 基础单位数量。
@@ -936,6 +939,7 @@ mod tests {
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: None,
                 procurement_supply_price_gross: None,
+                procurement_price_basis: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: qty("3.000000"),
                 base_unit_code: " 箱 ".to_string(),
@@ -963,6 +967,7 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
             procurement_supply_price_gross: supply.map(price),
+            procurement_price_basis: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -1006,6 +1011,7 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
             procurement_supply_price_gross: None,
+            procurement_price_basis: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("1.000000"),
             base_unit_code: "箱".to_string(),
