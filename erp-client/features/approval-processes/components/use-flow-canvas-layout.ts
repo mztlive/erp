@@ -6,8 +6,6 @@ import { z } from "zod"
 import type { EditorNode } from "../types"
 import {
     reconcilePositions,
-    arrangeNodes,
-    canvasTopology,
     type CanvasPositions,
     type FlowDirection,
 } from "./flow-canvas-model"
@@ -38,7 +36,7 @@ export function useFlowCanvasLayout(
     definitionId: string,
     nodes: readonly EditorNode[],
 ) {
-    const storageKey = `approval-canvas-layout-v3:${definitionId}`
+    const storageKey = `approval-canvas-layout-v4:${definitionId}`
     const [positions, setPositions] = useState<CanvasPositions>({})
     const [nodeState, setNodeState] = useState<
         Record<string, Pick<FlowNode, "measured" | "dragging" | "selected">>
@@ -52,30 +50,10 @@ export function useFlowCanvasLayout(
     useEffect(() => {
         try {
             const saved = localStorage.getItem(storageKey)
-            const legacy = saved
-                ? null
-                : localStorage.getItem(
-                      `approval-canvas-layout-v2:${definitionId}`,
-                  )
-            const storedLayout = saved ?? legacy
-            if (storedLayout) {
-                const parsed = layoutSchema.safeParse(JSON.parse(storedLayout))
+            if (saved) {
+                const parsed = layoutSchema.safeParse(JSON.parse(saved))
                 if (parsed.success) {
-                    const direction = parsed.data.direction ?? "horizontal"
-                    // 旧坐标为散开的绝对坐标；保留步骤位置，组内按新结构归位。
-                    const positions = { ...parsed.data.positions }
-                    if (legacy) {
-                        const defaults = arrangeNodes(
-                            previousNodes.current,
-                            direction,
-                        )
-                        for (const item of canvasTopology(previousNodes.current)
-                            .items) {
-                            if (item.parentId)
-                                positions[item.id] = defaults[item.id]
-                        }
-                    }
-                    setPositions(positions)
+                    setPositions(parsed.data.positions)
                     setViewport(parsed.data.viewport)
                     setDirection(parsed.data.direction ?? "horizontal")
                 }

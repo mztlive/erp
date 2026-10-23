@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, type ReactNode } from "react"
+import { useEffect } from "react"
 import {
     Handle,
     Position,
@@ -35,10 +35,7 @@ export type CanvasNode = Node<
         personId?: string
         node?: EditorNode
         order?: number
-        editor?: ReactNode
-        copyCount?: number
         onEdit?: () => void
-        onCopies?: () => void
     },
     "approval" | "branch"
 >
@@ -110,8 +107,8 @@ export function FlowCanvasNode({
                 "relative rounded-xl border shadow-sm",
                 node
                     ? "border-info-border bg-info-soft/40"
-                    : "border-border bg-card",
-                selected && "ring-2 ring-info/20",
+                    : "border-border/70 bg-muted/30 text-muted-foreground shadow-none",
+                selected && "ring-2 ring-info/30",
             )}
         >
             {data.kind !== "start" && (
@@ -128,7 +125,7 @@ export function FlowCanvasNode({
                     <div className="nodrag nopan space-y-2 p-4">
                         <p className="text-xs text-muted-foreground">
                             {node.assignee_source === "SPECIFIED"
-                                ? "单人审批"
+                                ? "审批人"
                                 : "负责人审批"}
                         </p>
                         <div className="flex min-w-0 items-center rounded-lg border border-info-border bg-card text-info-soft-foreground shadow-sm">

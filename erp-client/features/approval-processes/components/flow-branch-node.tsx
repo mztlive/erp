@@ -86,55 +86,52 @@ export function FlowBranchNode({
         return (
             <div
                 className={cn(
-                    "rounded-lg border border-info-border bg-card text-info-soft-foreground shadow-sm",
+                    "flex h-12 items-center gap-1 rounded-lg border border-info-border bg-card pl-1.5 pr-1 text-info-soft-foreground shadow-sm",
                     selected && "ring-2 ring-primary/30",
                 )}
             >
                 {input}
-                <div
+                <span
                     id={`${data.domId}-drag`}
-                    className="approval-node-drag flex cursor-grab items-center gap-2 border-b border-info-border px-3 py-2 text-xs"
+                    className="approval-node-drag flex h-full cursor-grab items-center px-1 text-muted-foreground active:cursor-grabbing"
                 >
                     <GripVerticalIcon className="size-3.5" />
-                    <span className="flex-1">审批人</span>
-                    <Button
-                        id={`${data.domId}-remove`}
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        className="nodrag"
-                        disabled={data.disabled}
-                        aria-label={`移除审批人${person.name}`}
-                        onClick={() =>
-                            update(
-                                people.filter(
-                                    (item) => item.user_id !== person.user_id,
-                                ),
-                            )
-                        }
-                    >
-                        <XIcon />
-                    </Button>
-                </div>
-                <div className="nodrag nopan flex p-1">
-                    <PersonPicker
-                        id={`${data.domId}-person`}
-                        documentType={data.documentType}
-                        people={people}
-                        person={person}
-                        disabled={data.disabled}
-                        onChoose={(replacement) =>
-                            update(
-                                people.map((item) =>
-                                    item.user_id === person.user_id
-                                        ? replacement
-                                        : item,
-                                ),
-                                replacement.user_id,
-                            )
-                        }
-                    />
-                </div>
+                </span>
+                <PersonPicker
+                    id={`${data.domId}-person`}
+                    documentType={data.documentType}
+                    people={people}
+                    person={person}
+                    disabled={data.disabled}
+                    onChoose={(replacement) =>
+                        update(
+                            people.map((item) =>
+                                item.user_id === person.user_id
+                                    ? replacement
+                                    : item,
+                            ),
+                            replacement.user_id,
+                        )
+                    }
+                />
+                <Button
+                    id={`${data.domId}-remove`}
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className="nodrag shrink-0"
+                    disabled={data.disabled}
+                    aria-label={`移除审批人${person.name}`}
+                    onClick={() =>
+                        update(
+                            people.filter(
+                                (item) => item.user_id !== person.user_id,
+                            ),
+                        )
+                    }
+                >
+                    <XIcon />
+                </Button>
                 {output}
             </div>
         )

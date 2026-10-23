@@ -270,6 +270,24 @@ export function ApprovalProcessDetailPage({
         !detailQuery.isError &&
         (urlState.view !== "history" || Boolean(historyTarget)) &&
         !(urlState.view === "draft" && !draft)
+    const editingDraft =
+        showEditor &&
+        detailQuery.data?.status === "DRAFT" &&
+        canEdit &&
+        urlState.view !== "history"
+    const publishAction =
+        canPublish && draft ? (
+            <Button
+                id="governance-approval-processes-detail-publish"
+                type="button"
+                size="sm"
+                disabled={editorDirty}
+                title={editorDirty ? "请先保存草稿后再发布" : undefined}
+                onClick={() => setPublishOpen(true)}
+            >
+                发布新版本
+            </Button>
+        ) : null
 
     return (
         <PageScaffold density="compact">
@@ -387,22 +405,9 @@ export function ApprovalProcessDetailPage({
                                 {published ? "调整流程" : "新建流程"}
                             </Button>
                         ) : null}
-                        {canPublish && draft && urlState.view === "draft" ? (
-                            <Button
-                                id="governance-approval-processes-detail-publish"
-                                type="button"
-                                size="sm"
-                                disabled={editorDirty}
-                                title={
-                                    editorDirty
-                                        ? "请先保存草稿后再发布"
-                                        : undefined
-                                }
-                                onClick={() => setPublishOpen(true)}
-                            >
-                                发布新版本
-                            </Button>
-                        ) : null}
+                        {urlState.view === "draft" && !editingDraft
+                            ? publishAction
+                            : null}
                     </>
                 }
             />
@@ -435,7 +440,7 @@ export function ApprovalProcessDetailPage({
                             当前版本
                             {published ? (
                                 <span className="num text-xs text-muted-foreground">
-                                    {versionLabel(published.definition_version)}
+                                    v{published.definition_version}
                                 </span>
                             ) : null}
                         </TabsTrigger>
@@ -447,7 +452,7 @@ export function ApprovalProcessDetailPage({
                             草稿
                             {draft ? (
                                 <span className="num text-xs text-muted-foreground">
-                                    {versionLabel(draft.definition_version)}
+                                    v{draft.definition_version}
                                 </span>
                             ) : null}
                         </TabsTrigger>
@@ -633,12 +638,11 @@ export function ApprovalProcessDetailPage({
                 ) : null}
 
                 {showEditor && detailQuery.data ? (
-                    detailQuery.data.status === "DRAFT" &&
-                    canEdit &&
-                    urlState.view !== "history" ? (
+                    editingDraft ? (
                         <DefinitionEditor
                             key={detailQuery.data.definition_id}
                             onDirtyChange={setEditorDirty}
+                            publishAction={publishAction}
                             id="governance-approval-processes-detail-editor"
                             detail={detailQuery.data}
                             lockVersion={

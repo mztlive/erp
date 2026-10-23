@@ -36,12 +36,12 @@ export const personNodeId = (ownerId: string, personId: string) =>
 export const splitNodeId = (ownerId: string) => `${ownerId}/split`
 export const joinNodeId = (ownerId: string) => `${ownerId}/join`
 
-/** 分组尺寸包含标题栏、人员节点与内部连线的留白。 */
+/** 分组尺寸包含标题栏、紧凑人员行与内部连线的留白。 */
 export function orGroupSize(node: EditorNode, direction: FlowDirection) {
     const count = nodePeople(node).length
     return direction === "horizontal"
-        ? { width: 600, height: Math.max(280, count * 100 + 100) }
-        : { width: Math.max(560, count * 250 + 64), height: 340 }
+        ? { width: 360, height: Math.max(216, 88 + count * 56 + 16) }
+        : { width: Math.max(360, count * 196 + 48), height: 250 }
 }
 
 /** 生成真实画布节点与连线；或签分支仍归属同一个审批步骤。 */
@@ -98,45 +98,90 @@ export function canvasTopology(nodes: readonly EditorNode[]) {
     return { items, links }
 }
 
-/** 横向时分支竖排，纵向时分支横排；为节点和真实分支连线预留空间。 */
+/** 横向时分支竖排，纵向时分支横排；所有步骤共用一条主干中线。 */
 export function arrangeNodes(
     nodes: readonly EditorNode[],
     direction: FlowDirection = "horizontal",
     heights: Record<string, number | undefined> = {},
 ): CanvasPositions {
     const horizontal = direction === "horizontal"
+    const mainY = 200
+    const mainX = 280
     const positions: CanvasPositions = {
-        [FLOW_START]: horizontal ? { x: 0, y: 60 } : { x: 130, y: 0 },
+        [FLOW_START]: horizontal
+            ? { x: 0, y: mainY - 22 }
+            : { x: mainX - 60, y: 0 },
     }
-    let cursor = horizontal ? 260 : 160
+    let cursor = horizontal ? 160 : 140
     for (const node of nodes) {
-        positions[node.client_id] = horizontal
-            ? { x: cursor, y: 0 }
-            : { x: 0, y: cursor }
-        if (isOrSign(node)) {
+        if (horizontal) {
+            if (isOrSign(node)) {
+                const people = nodePeople(node)
+                const { width, height } = orGroupSize(node, direction)
+                const centerY = 70 + (height - 70) / 2
+                // 子节点坐标相对父分组；拖动分组由 React Flow 统一移动。
+                positions[node.client_id] = {
+                    x: cursor,
+                    y: mainY - centerY,
+                }
+                positions[splitNodeId(node.client_id)] = {
+                    x: 24,
+                    y: centerY - 20,
+                }
+                people.forEach((person, index) => {
+                    positions[personNodeId(node.client_id, person.user_id)] = {
+                        x: 108,
+                        y: 92 + index * 56,
+                    }
+                })
+                positions[joinNodeId(node.client_id)] = {
+                    x: width - 12,
+                    y: centerY - 4,
+                }
+                cursor += width + 40
+            } else {
+                const height = heights[node.client_id] ?? 176
+                positions[node.client_id] = {
+                    x: cursor,
+                    y: mainY - height / 2,
+                }
+                cursor += 340
+            }
+        } else if (isOrSign(node)) {
             const people = nodePeople(node)
             const { width, height } = orGroupSize(node, direction)
-            const centerY = 70 + (height - 70) / 2
-            // 子节点坐标相对父分组；拖动分组由 React Flow 统一移动。
-            positions[splitNodeId(node.client_id)] = horizontal
-                ? { x: 24, y: centerY - 20 }
-                : { x: width / 2 - 44, y: 88 }
+            const stackWidth = people.length * 196 - 16
+            const stackLeft = width / 2 - stackWidth / 2
+            positions[node.client_id] = {
+                x: mainX - width / 2,
+                y: cursor,
+            }
+            positions[splitNodeId(node.client_id)] = {
+                x: width / 2 - 44,
+                y: 88,
+            }
             people.forEach((person, index) => {
-                positions[personNodeId(node.client_id, person.user_id)] =
-                    horizontal
-                        ? { x: 200, y: 88 + index * 100 }
-                        : { x: 32 + index * 250, y: 188 }
+                positions[personNodeId(node.client_id, person.user_id)] = {
+                    x: stackLeft + index * 196,
+                    y: 150,
+                }
             })
-            positions[joinNodeId(node.client_id)] = horizontal
-                ? { x: width - 12, y: centerY - 4 }
-                : { x: width / 2 - 4, y: height - 12 }
-            cursor += (horizontal ? width : height) + 140
-        } else
-            cursor += horizontal ? 540 : (heights[node.client_id] ?? 176) + 180
+            positions[joinNodeId(node.client_id)] = {
+                x: width / 2 - 4,
+                y: height - 12,
+            }
+            cursor += height + 140
+        } else {
+            positions[node.client_id] = {
+                x: mainX - 150,
+                y: cursor,
+            }
+            cursor += (heights[node.client_id] ?? 176) + 180
+        }
     }
     positions[FLOW_END] = horizontal
-        ? { x: cursor, y: 60 }
-        : { x: 130, y: cursor }
+        ? { x: cursor, y: mainY - 22 }
+        : { x: mainX - 60, y: cursor }
     return positions
 }
 
@@ -220,6 +265,15 @@ export function reconcilePositions(
             resizedBranch && ["person", "join", "split"].includes(item.kind)
                 ? undefined
                 : current[oldId]
+        if (saved && resizedBranch && item.kind === "or") {
+            // 或签人数变化会改变分组高度/宽度，保留另一轴的自由位置，
+            // 同时在主轴方向重新居中，避免步骤连线错位。
+            next[item.id] =
+                direction === "horizontal"
+                    ? { x: saved.x, y: defaults[item.id].y }
+                    : { x: defaults[item.id].x, y: saved.y }
+            continue
+        }
         if (saved) {
             const before = oldDefaults[oldId]
             const after = defaults[item.id]

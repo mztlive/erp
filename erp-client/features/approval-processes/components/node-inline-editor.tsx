@@ -1,34 +1,49 @@
 "use client"
 
 import {
+    BellIcon,
     ChevronDownIcon,
     ChevronUpIcon,
-    GripVerticalIcon,
     Trash2Icon,
+    XIcon,
 } from "lucide-react"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { AssigneeSource, EditorNode } from "../types"
+import type {
+    AssigneeSource,
+    DocumentType,
+    EditorNode,
+    EligibleAssignee,
+} from "../types"
+import { nodePeople } from "./flow-canvas-model"
+import { PersonPicker } from "./node-assignee-group"
 
-/** 在流程图选中节点内编辑，沿用父级表单的节点状态。 */
+/** 右侧步骤检查器；字段变更仍写入父级草稿表单。 */
 export function NodeInlineEditor({
     nodes,
     readOnly,
+    documentType,
     onChange,
     node,
+    copyCount = 0,
+    onConfigureCopies,
     id = "governance-approval-processes-detail-editor-nodes",
 }: {
     nodes: EditorNode[]
     readOnly: boolean
+    documentType: DocumentType
     onChange: (nodes: EditorNode[]) => void
     node: EditorNode
+    copyCount?: number
+    onConfigureCopies?: () => void
     id?: string
 }) {
     const index = nodes.findIndex((item) => item.client_id === node.client_id)
     const segment = toAutomationIdSegment(node.client_id)
+    const people = nodePeople(node)
     const update = (patch: Partial<EditorNode>) =>
         onChange(
             nodes.map((item) =>
@@ -37,6 +52,22 @@ export function NodeInlineEditor({
                     : item,
             ),
         )
+    const updatePeople = (
+        next: EligibleAssignee[],
+        focusPerson = next[0]?.user_id,
+    ) => {
+        update({
+            assignee_user_id: next[0]?.user_id ?? "",
+            assignee_name: next[0]?.name ?? "",
+            additional_assignees: next.slice(1),
+        })
+        const focusId = focusPerson
+            ? `${id}-node-${segment}-person-${toAutomationIdSegment(focusPerson)}-trigger`
+            : `${id}-node-${segment}-person-add-trigger`
+        requestAnimationFrame(() =>
+            document.getElementById(focusId)?.focus({ preventScroll: true }),
+        )
+    }
     const move = (offset: number) => {
         const next = [...nodes]
         const target = index + offset
@@ -49,19 +80,16 @@ export function NodeInlineEditor({
             role="group"
             aria-label={`第 ${index + 1} 个节点设置`}
             data-testid={`approval-node-${index}`}
+            className="space-y-5"
         >
-            <div
-                id={`${id}-node-${segment}-drag`}
-                className="approval-node-drag flex cursor-grab items-center justify-between gap-2 border-b border-border px-4 py-3 active:cursor-grabbing"
-            >
-                <h3 className="flex items-center gap-3 text-sm font-medium">
-                    <GripVerticalIcon className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="num flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-xs text-primary-foreground">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className="num flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
                         {String(index + 1).padStart(2, "0")}
                     </span>
-                    编辑节点
-                </h3>
-                <div className="nodrag flex items-center gap-1">
+                    <h3 className="truncate text-sm font-medium">步骤设置</h3>
+                </div>
+                <div className="flex items-center gap-0.5">
                     <Button
                         id={`${id}-node-${segment}-move-up`}
                         type="button"
@@ -107,7 +135,7 @@ export function NodeInlineEditor({
                     </Button>
                 </div>
             </div>
-            <div className="nodrag nowheel space-y-5 p-4">
+            <div className="space-y-4">
                 <div className="space-y-2">
                     <Label htmlFor={`${id}-node-${segment}-name`}>
                         节点名称 <span className="text-destructive">*</span>
@@ -161,11 +189,102 @@ export function NodeInlineEditor({
                         }}
                     />
                 </div>
-                {node.assignee_source !== "SPECIFIED" && (
+                {node.assignee_source === "SPECIFIED" ? (
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <Label>审批人</Label>
+                            <span className="text-xs text-muted-foreground">
+                                {people.length > 1 ? "任一人通过" : "单人审批"}
+                            </span>
+                        </div>
+                        <div className="space-y-1.5">
+                            {people.map((person) => (
+                                <div
+                                    key={person.user_id}
+                                    className="flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1"
+                                >
+                                    <PersonPicker
+                                        id={`${id}-node-${segment}-person-${toAutomationIdSegment(person.user_id)}`}
+                                        documentType={documentType}
+                                        people={people}
+                                        person={person}
+                                        disabled={readOnly}
+                                        onChoose={(replacement) =>
+                                            updatePeople(
+                                                people.map((item) =>
+                                                    item.user_id ===
+                                                    person.user_id
+                                                        ? replacement
+                                                        : item,
+                                                ),
+                                                replacement.user_id,
+                                            )
+                                        }
+                                    />
+                                    <Button
+                                        id={`${id}-node-${segment}-person-${toAutomationIdSegment(person.user_id)}-remove`}
+                                        type="button"
+                                        size="icon-xs"
+                                        variant="ghost"
+                                        className="shrink-0"
+                                        aria-label={`移除审批人${person.name}`}
+                                        disabled={readOnly}
+                                        onClick={() =>
+                                            updatePeople(
+                                                people.filter(
+                                                    (item) =>
+                                                        item.user_id !==
+                                                        person.user_id,
+                                                ),
+                                            )
+                                        }
+                                    >
+                                        <XIcon />
+                                    </Button>
+                                </div>
+                            ))}
+                            <div className="flex rounded-lg border border-dashed border-border">
+                                <PersonPicker
+                                    id={`${id}-node-${segment}-person-add`}
+                                    documentType={documentType}
+                                    people={people}
+                                    disabled={readOnly || people.length >= 50}
+                                    onChoose={(person) =>
+                                        updatePeople(
+                                            [...people, person],
+                                            person.user_id,
+                                        )
+                                    }
+                                />
+                            </div>
+                        </div>
+                        {people.length > 1 ? (
+                            <p className="text-xs leading-5 text-muted-foreground">
+                                任一人通过后进入下一步。
+                            </p>
+                        ) : null}
+                    </div>
+                ) : (
                     <p className="text-xs leading-5 text-muted-foreground">
                         提交时按申请人所属组织确定负责人；请先在“组织与人员”中配置负责人。审批开始后人员保持不变。
                     </p>
                 )}
+                {onConfigureCopies ? (
+                    <Button
+                        id={`${id}-node-${segment}-copies`}
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-start"
+                        disabled={readOnly}
+                        onClick={onConfigureCopies}
+                    >
+                        <BellIcon aria-hidden data-icon="inline-start" />
+                        通过后抄送
+                        <span className="ml-auto text-xs font-normal text-muted-foreground">
+                            {copyCount ? `${copyCount} 人` : "未设置"}
+                        </span>
+                    </Button>
+                ) : null}
             </div>
         </div>
     )
