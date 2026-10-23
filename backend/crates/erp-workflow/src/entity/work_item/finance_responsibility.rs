@@ -5,6 +5,7 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::assignment::{AssignmentStrategy, normalize_pool};
 use erp_core::common::state::DocumentState;
 use erp_core::validation::{normalize_optional_text, normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
@@ -86,7 +87,6 @@ impl DocumentState for EnableStatus {
 
 const ID_MAX_LEN: usize = 128;
 const COUNTERPARTY_ID_MAX_LEN: usize = 128;
-const OWNER_ID_MAX_LEN: usize = 128;
 const ACTOR_ID_MAX_LEN: usize = 128;
 
 /// 财务责任规则覆盖的业务操作。
@@ -219,8 +219,10 @@ pub struct FinanceResponsibilityRuleData {
     pub scope: FinanceResponsibilityScope,
     /// 精确规则对应的供应商或客户 ID；默认规则必须为空。
     pub counterparty_id: Option<String>,
-    /// 具体财务负责人账号 ID。
-    pub owner_user_id: String,
+    /// 按分配顺序保存的财务负责人池。
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
 }
@@ -236,8 +238,10 @@ pub struct FinanceResponsibilityRule {
     pub scope: FinanceResponsibilityScope,
     /// 精确规则对应的供应商或客户 ID。
     pub counterparty_id: Option<String>,
-    /// 具体财务负责人账号 ID。
-    pub owner_user_id: String,
+    /// 按分配顺序保存的财务负责人池。
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
     /// 由业务操作和匹配范围确定性形成的唯一键。
@@ -275,7 +279,8 @@ impl FinanceResponsibilityRule {
             operation: normalized.operation,
             scope: normalized.scope,
             counterparty_id: normalized.counterparty_id,
-            owner_user_id: normalized.owner_user_id,
+            owner_user_ids: normalized.owner_user_ids,
+            strategy: normalized.strategy,
             status: normalized.status,
             selector_key: normalized.selector_key,
             updated_by: created_by.clone(),
@@ -304,7 +309,8 @@ impl FinanceResponsibilityRule {
         self.operation = normalized.operation;
         self.scope = normalized.scope;
         self.counterparty_id = normalized.counterparty_id;
-        self.owner_user_id = normalized.owner_user_id;
+        self.owner_user_ids = normalized.owner_user_ids;
+        self.strategy = normalized.strategy;
         self.status = normalized.status;
         self.selector_key = normalized.selector_key;
         self.updated_by = updated_by;
@@ -419,7 +425,8 @@ struct NormalizedRuleData {
     operation: FinanceResponsibilityOperation,
     scope: FinanceResponsibilityScope,
     counterparty_id: Option<String>,
-    owner_user_id: String,
+    owner_user_ids: Vec<String>,
+    strategy: AssignmentStrategy,
     status: EnableStatus,
     selector_key: String,
 }
@@ -453,18 +460,14 @@ impl TryFrom<FinanceResponsibilityRuleData> for NormalizedRuleData {
             },
             _ => {},
         }
-        let owner_user_id = normalize_required_text(
-            data.owner_user_id,
-            "财务负责人不能为空",
-            OWNER_ID_MAX_LEN,
-            "财务负责人过长",
-        )?;
+        let owner_user_ids = normalize_pool(data.owner_user_ids)?;
         let selector_key = selector_key(data.operation, data.scope, counterparty_id.as_deref());
         Ok(Self {
             operation: data.operation,
             scope: data.scope,
             counterparty_id,
-            owner_user_id,
+            owner_user_ids,
+            strategy: data.strategy,
             status: data.status,
             selector_key,
         })
@@ -496,6 +499,8 @@ fn normalize_actor(value: String) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::assignment::AssignmentStrategy;
+
     use super::{
         EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule,
         FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
@@ -514,7 +519,8 @@ mod tests {
                 operation,
                 scope,
                 counterparty_id: counterparty_id.map(str::to_string),
-                owner_user_id: owner.to_string(),
+                owner_user_ids: vec![owner.to_string()],
+                strategy: AssignmentStrategy::RoundRobin,
                 status: EnableStatus::Active,
             },
             "admin-1",
@@ -539,7 +545,8 @@ mod tests {
                     operation: FinanceResponsibilityOperation::SalesInvoice,
                     scope: FinanceResponsibilityScope::Default,
                     counterparty_id: Some("customer-1".to_string()),
-                    owner_user_id: "finance-1".to_string(),
+                    owner_user_ids: vec!["finance-1".to_string()],
+                    strategy: AssignmentStrategy::RoundRobin,
                     status: EnableStatus::Active,
                 },
                 "admin-1",
@@ -593,17 +600,44 @@ mod tests {
         ];
         let set = FinanceResponsibilityRuleSet::new(&rules);
         assert_eq!(
-            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-1").unwrap().owner_user_id,
-            "finance-exact"
+            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-1").unwrap().owner_user_ids,
+            ["finance-exact"]
         );
         assert_eq!(
-            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-2").unwrap().owner_user_id,
-            "finance-default"
+            set.resolve(FinanceResponsibilityOperation::SalesInvoice, "customer-2").unwrap().owner_user_ids,
+            ["finance-default"]
         );
         assert!(
             FinanceResponsibilityRuleSet::new(&[])
                 .resolve(FinanceResponsibilityOperation::SupplierPayment, "supplier-1")
                 .is_err()
         );
+    }
+    #[test]
+    fn finance_pool_update_preserves_order_and_rejects_duplicates_atomically() {
+        let mut rule = rule(
+            "pool",
+            FinanceResponsibilityOperation::SalesInvoice,
+            FinanceResponsibilityScope::Default,
+            None,
+            "first",
+        );
+        let data = FinanceResponsibilityRuleData {
+            operation: rule.operation,
+            scope: rule.scope,
+            counterparty_id: None,
+            owner_user_ids: vec![" second ".into(), "first".into()],
+            strategy: AssignmentStrategy::RoundRobin,
+            status: EnableStatus::Active,
+        };
+        rule.update(data.clone(), "admin").unwrap();
+        assert_eq!(rule.owner_user_ids, ["second", "first"]);
+        assert_eq!(rule.strategy.select(&rule.owner_user_ids, Some("second")).unwrap(), "first");
+        let before = rule.clone();
+        for members in [vec![], vec!["first".into(), " first ".into()]] {
+            let invalid = FinanceResponsibilityRuleData { owner_user_ids: members, ..data.clone() };
+            assert!(rule.update(invalid, "admin").is_err());
+            assert_eq!(rule, before);
+        }
     }
 }

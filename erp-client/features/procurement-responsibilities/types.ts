@@ -1,3 +1,4 @@
+import type { AssignmentStrategy } from "@/components/business/responsibility-pool/model"
 import type { ProductKind } from "@/features/master-data/types"
 
 export type ProcurementResponsibilityRuleType =
@@ -17,7 +18,7 @@ export type ProcurementResponsibilityRule = Readonly<{
     productKind?: ProductKind
     ownerUserIds: readonly string[]
     ownerNames: readonly string[]
-    strategy: "ROUND_ROBIN"
+    strategy: AssignmentStrategy
     enabled: boolean
     version: number
 }>
@@ -29,7 +30,7 @@ export type SaveProcurementResponsibilityRuleInput = {
     categoryId?: string
     productKind?: ProductKind
     ownerUserIds: string[]
-    strategy: "ROUND_ROBIN"
+    strategy: AssignmentStrategy
     enabled: boolean
     expectedVersion?: number
 }

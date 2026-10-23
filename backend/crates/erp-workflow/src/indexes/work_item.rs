@@ -6,6 +6,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::rotation::migrate_scalar_array;
 
 use crate::repository::{WorkItemCommandExt, WorkItemExt};
 
@@ -26,6 +27,19 @@ pub const FINANCE_RESPONSIBILITY_RULES: &str =
 /// # 错误
 /// 既有数据违反开放唯一性，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
+    migrate_scalar_array(db, FINANCE_RESPONSIBILITY_RULES, "owner_user_id", "owner_user_ids").await?;
+    db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)
+        .update_many(
+            doc! { "strategy": { "$exists": false } },
+            doc! { "$set": { "strategy": "ROUND_ROBIN" } },
+        )
+        .await?;
+    db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)
+        .update_many(
+            doc! { "owner_user_ids": { "$exists": true }, "owner_user_id": { "$exists": true } },
+            doc! { "$unset": { "owner_user_id": "" } },
+        )
+        .await?;
     reconcile_open_object_type_index(db).await?;
     reconcile_approval_execution_index(db).await?;
     db.collection::<Document>(WORK_ITEMS).create_indexes(work_item_indexes()).await?;
@@ -258,8 +272,8 @@ fn finance_responsibility_indexes() -> Vec<IndexModel> {
             doc! { "deleted_at": 1, "operation": 1, "status": 1, "scope": 1, "created_at": 1 },
         ),
         named_index(
-            "idx_finance_responsibility_owner",
-            doc! { "deleted_at": 1, "owner_user_id": 1, "status": 1 },
+            "idx_finance_responsibility_pool_owner",
+            doc! { "deleted_at": 1, "owner_user_ids": 1, "status": 1 },
         ),
     ]
 }

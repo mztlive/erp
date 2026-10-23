@@ -317,8 +317,8 @@ async function ensureDefaultFinanceRules(adminToken, seeded) {
   for (const rule of financeRules()) {
     const owner = seededAccount(seeded, rule.accountKey, "财务责任人");
     const existing = findDefaultFinanceRule(rows, rule.operation);
-    if (existing?.status === "active" && existing.owner_user_id === owner.id) {
-      console.log(`${rule.label}已是 ${owner.account}，跳过`);
+    if (existing?.status === "active") {
+      console.log(`${rule.label}已配置启用负责人池，保留现有成员`);
       continue;
     }
     if (existing) {
@@ -328,7 +328,8 @@ async function ensureDefaultFinanceRules(adminToken, seeded) {
           version: existing.version,
           operation: rule.operation,
           scope: "DEFAULT",
-          owner_user_id: owner.id,
+          owner_user_ids: [owner.id],
+          strategy: "ROUND_ROBIN",
           status: "active",
         },
       });
@@ -340,7 +341,8 @@ async function ensureDefaultFinanceRules(adminToken, seeded) {
       body: {
         operation: rule.operation,
         scope: "DEFAULT",
-        owner_user_id: owner.id,
+        owner_user_ids: [owner.id],
+        strategy: "ROUND_ROBIN",
         status: "active",
       },
     });
@@ -359,15 +361,16 @@ async function ensureDefaultProcurementRule(adminToken, seeded) {
   }
   const defaults = rows.filter((row) => row.rule_type === "DEFAULT_DISPATCHER");
   const existing = defaults.find((row) => row.status === "active") ?? defaults[0];
-  if (existing?.status === "active" && existing.owner_user_id === owner.id) {
-    console.log(`默认采购调度人已是 ${owner.account}，跳过`);
+  if (existing?.status === "active") {
+    console.log("默认采购负责人池已启用，保留现有成员");
     return;
   }
   await call(existing ? "PUT" : "POST", existing ? `${path}/${encodeURIComponent(existing.id)}` : path, {
     token: adminToken,
     body: {
       rule_type: "DEFAULT_DISPATCHER",
-      owner_user_id: owner.id,
+      owner_user_ids: [owner.id],
+      strategy: "ROUND_ROBIN",
       status: "active",
       ...(existing ? { version: existing.version } : {}),
     },

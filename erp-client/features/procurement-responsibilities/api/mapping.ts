@@ -1,3 +1,4 @@
+import { assignmentStrategySchema } from "@/components/business/responsibility-pool/model"
 import type {
     ProcurementResponsibilityRule,
     SaveProcurementResponsibilityRuleInput,
@@ -20,7 +21,7 @@ export function mapProcurementResponsibilityRule(
         ownerNames: rule.owner_user_ids.map(
             (_, index) => rule.owner_names[index]?.trim() || "负责人待确认",
         ),
-        strategy: rule.strategy,
+        strategy: assignmentStrategySchema.parse(rule.strategy),
         enabled: rule.status === "active",
         version: rule.version ?? 1,
     }

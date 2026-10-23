@@ -1,3 +1,4 @@
+import { assignmentStrategySchema } from "@/components/business/responsibility-pool/model"
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import type {
     FinanceResponsibilityOperation,
@@ -16,8 +17,9 @@ type BackendRule = Readonly<{
     scope: string
     counterparty_id?: string | null
     counterparty_no?: string | null
-    owner_user_id: string
-    owner_name?: string | null
+    owner_user_ids: string[]
+    strategy: string
+    owner_names: (string | null)[]
     status: string
     version: number
 }>
@@ -55,8 +57,11 @@ function mapRule(rule: BackendRule): FinanceResponsibilityRule {
         scope: scope(rule.scope),
         counterpartyId: rule.counterparty_id ?? undefined,
         counterpartyNo: rule.counterparty_no ?? undefined,
-        ownerUserId: rule.owner_user_id,
-        ownerName: rule.owner_name?.trim() || "负责人账号不可用",
+        ownerUserIds: rule.owner_user_ids,
+        ownerNames: rule.owner_user_ids.map(
+            (_, index) => rule.owner_names[index]?.trim() || "负责人账号不可用",
+        ),
+        strategy: assignmentStrategySchema.parse(rule.strategy),
         enabled: enabled(rule.status),
         version: rule.version,
     }
@@ -68,7 +73,8 @@ function payload(input: SaveFinanceResponsibilityRuleInput) {
         scope: input.scope,
         counterparty_id:
             input.scope === "COUNTERPARTY" ? input.counterpartyId : undefined,
-        owner_user_id: input.ownerUserId,
+        owner_user_ids: input.ownerUserIds,
+        strategy: input.strategy,
         status: input.enabled ? "active" : "disabled",
     }
 }

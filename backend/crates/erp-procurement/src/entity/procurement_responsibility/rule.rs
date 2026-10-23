@@ -2,12 +2,12 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_core::assignment::{AssignmentStrategy, normalize_pool};
 use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::rotation::{AssignmentStrategy, normalize_pool};
 use super::status::EnableStatus;
 use crate::entity::facts::ProductKind;
 

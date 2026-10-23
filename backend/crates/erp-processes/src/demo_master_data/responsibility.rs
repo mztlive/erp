@@ -3,6 +3,7 @@
 //! 已有启用的同层默认规则时保留现有负责人。删除演示主数据时这些规则保留。
 
 use application_core::AuditActor;
+use erp_core::assignment::AssignmentStrategy;
 use erp_procurement::dto::procurement_responsibility::CreateProcurementResponsibilityRuleRequest;
 use erp_procurement::entity::procurement_responsibility::{
     EnableStatus as ProcurementStatus, ProcurementResponsibilityRuleType,
@@ -132,7 +133,9 @@ impl DemoMasterDataService {
                 .finance_responsibility_owner_options()
                 .await?;
             for rule in defaults.iter().filter(|rule| rule.is_active()) {
-                ensure_finance_owner(operation, &rule.owner_user_id, &options)?;
+                for owner in &rule.owner_user_ids {
+                    ensure_finance_owner(operation, owner, &options)?;
+                }
             }
         }
         Ok(defaults.iter().map(|rule| rule.is_active()).collect())
@@ -168,7 +171,8 @@ impl DemoMasterDataService {
                     operation,
                     scope: FinanceResponsibilityScope::Default,
                     counterparty_id: None,
-                    owner_user_id: owner_user_id.to_string(),
+                    owner_user_ids: vec![owner_user_id.to_string()],
+                    strategy: AssignmentStrategy::RoundRobin,
                     status: FinanceStatus::Active,
                 },
                 actor.clone(),

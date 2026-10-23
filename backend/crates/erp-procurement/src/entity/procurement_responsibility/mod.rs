@@ -7,7 +7,8 @@ mod catalog;
 mod resolution;
 mod rotation;
 mod rule;
-pub use rotation::{AssignmentStrategy, ResolutionPurpose};
+pub use erp_core::assignment::AssignmentStrategy;
+pub use rotation::ResolutionPurpose;
 mod status;
 
 pub use catalog::{

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_core::assignment::AssignmentStrategy;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,7 @@ use crate::error::{Error, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::WorkItemExt;
 use crate::repository::prelude::*;
+use crate::repository::work_item::finance_rotation;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -34,9 +36,11 @@ pub struct CreateFinanceResponsibilityRuleRequest {
     /// 精确供应商或客户 ID。
     #[validate(length(max = 128, message = "往来方ID过长"))]
     pub counterparty_id: Option<String>,
-    /// 具体负责人账号 ID。
-    #[validate(length(min = 1, max = 128, message = "财务负责人长度必须在1-128之间"))]
-    pub owner_user_id: String,
+    /// 按分配顺序保存的负责人池。
+    #[validate(length(min = 1, max = 100, message = "负责人池人数必须在1-100之间"))]
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
 }
@@ -47,7 +51,8 @@ impl CreateFinanceResponsibilityRuleRequest {
             operation: self.operation,
             scope: self.scope,
             counterparty_id: self.counterparty_id,
-            owner_user_id: self.owner_user_id,
+            owner_user_ids: self.owner_user_ids,
+            strategy: self.strategy,
             status: self.status,
         }
     }
@@ -67,9 +72,11 @@ pub struct UpdateFinanceResponsibilityRuleRequest {
     /// 精确供应商或客户 ID。
     #[validate(length(max = 128, message = "往来方ID过长"))]
     pub counterparty_id: Option<String>,
-    /// 具体负责人账号 ID。
-    #[validate(length(min = 1, max = 128, message = "财务负责人长度必须在1-128之间"))]
-    pub owner_user_id: String,
+    /// 按分配顺序保存的负责人池。
+    #[validate(length(min = 1, max = 100, message = "负责人池人数必须在1-100之间"))]
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
     /// 启停状态。
     pub status: EnableStatus,
 }
@@ -82,7 +89,8 @@ impl UpdateFinanceResponsibilityRuleRequest {
                 operation: self.operation,
                 scope: self.scope,
                 counterparty_id: self.counterparty_id,
-                owner_user_id: self.owner_user_id,
+                owner_user_ids: self.owner_user_ids,
+                strategy: self.strategy,
                 status: self.status,
             },
         )
@@ -102,10 +110,12 @@ pub struct FinanceResponsibilityRuleView {
     pub counterparty_id: Option<String>,
     /// 供应商编号或客户编号。
     pub counterparty_no: Option<String>,
-    /// 具体负责人账号 ID。
-    pub owner_user_id: String,
-    /// 负责人姓名。
-    pub owner_name: Option<String>,
+    /// 按分配顺序保存的负责人池。
+    pub owner_user_ids: Vec<String>,
+    /// 负责人池分配策略。
+    pub strategy: AssignmentStrategy,
+    /// 与池成员同序的姓名；缺失账号保留空位。
+    pub owner_names: Vec<Option<String>>,
     /// 启停状态。
     pub status: EnableStatus,
     /// 乐观锁版本。
@@ -124,8 +134,9 @@ impl From<FinanceResponsibilityRule> for FinanceResponsibilityRuleView {
             scope: rule.scope,
             counterparty_id: rule.counterparty_id,
             counterparty_no: None,
-            owner_user_id: rule.owner_user_id,
-            owner_name: None,
+            owner_user_ids: rule.owner_user_ids,
+            strategy: rule.strategy,
+            owner_names: Vec::new(),
             status: rule.status,
             version: rule.base.version,
             created_at: rule.base.created_at,
@@ -206,10 +217,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         async move {
             let data = request.into_data();
             let probe = self.validate_finance_rule_data(&data, true, false, &mut NoTransaction).await?;
-            let policy_revision =
-                self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await?;
-            let rule =
-                FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id()).map_err(Error::Logic)?;
+            let policy_revision = self.authorize_finance_pool(probe.operation, &probe.owner_user_ids).await?;
+            let rule = FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id())
+                .map_err(|error| Error::ValidationError(error.to_string()))?;
             let audit = PreparedWorkflowAudit::resource(
                 actor,
                 "finance_responsibility_rule.create",
@@ -314,7 +324,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             || probe.scope != current.scope
             || probe.counterparty_id != current.counterparty_id;
         let owner_must_be_eligible = probe.status.is_active()
-            || probe.owner_user_id != current.owner_user_id
+            || probe.owner_user_ids != current.owner_user_ids
             || probe.operation != current.operation;
         self.validate_finance_rule_data(
             data,
@@ -324,7 +334,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         )
         .await?;
         if owner_must_be_eligible {
-            self.authorize_finance_owner_eligibility(probe.operation, &probe.owner_user_id).await
+            self.authorize_finance_pool(probe.operation, &probe.owner_user_ids).await
         } else {
             self.auth.current_policy_revision().await
         }
@@ -357,7 +367,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             || probe.scope != rule.scope
             || probe.counterparty_id != rule.counterparty_id;
         let owner_must_be_eligible = probe.status.is_active()
-            || probe.owner_user_id != rule.owner_user_id
+            || probe.owner_user_ids != rule.owner_user_ids
             || probe.operation != rule.operation;
         self.validate_finance_rule_data(
             &data,
@@ -366,7 +376,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             executor,
         )
         .await?;
-        rule.update(data, updated_by).map_err(Error::Logic)?;
+        let current = finance_rotation::rotation(&self.db, id, executor).await?;
+        finance_rotation::advance(&self.db, id, &current, current.last_owner_user_id.as_deref(), executor)
+            .await?;
+        rule.update(data, updated_by).map_err(|error| Error::ValidationError(error.to_string()))?;
         self.db.finance_responsibility_rules().update(&mut rule, executor).await?;
         Ok(rule)
     }
@@ -417,14 +430,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         Ok(options)
     }
 
-    async fn authorize_finance_owner_eligibility(
+    async fn authorize_finance_pool(
         &self,
         operation: FinanceResponsibilityOperation,
-        owner_user_id: &str,
+        owner_user_ids: &[String],
     ) -> Result<u64> {
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = self.auth.current_policy_revision().await?;
-            self.ensure_finance_owner_eligible(operation, owner_user_id.to_string()).await?;
+            for owner in owner_user_ids {
+                self.ensure_finance_owner_eligible(operation, owner.clone()).await?;
+            }
             let after = self.auth.current_policy_revision().await?;
             if before == after {
                 return Ok(before);
@@ -433,7 +448,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         Err(Error::Rbac(format!("{}负责人授权策略持续变化，请重试", operation.label())))
     }
 
-    /// 在业务事务内按精确往来方、默认规则顺序解析并重验具体负责人。
+    /// 在任务创建事务内匹配负责人池、重验选中人员并推进一次轮次。
     ///
     /// # 参数
     /// * `operation` - 财务责任操作
@@ -441,7 +456,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     /// * `executor` - 业务事务执行器
     ///
     /// # 返回
-    /// 返回冻结的负责人账号与责任键。
+    /// 返回冻结的负责人账号与责任键；后续失败由调用方回滚原事务。
     ///
     /// # 错误
     /// 往来方失效、规则零/多命中、账号不可用或权限不足时失败关闭。
@@ -460,9 +475,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let rule = FinanceResponsibilityRuleSet::new(&rules)
             .resolve(operation, counterparty_id)
             .map_err(|error| Error::BusinessLogicError(format!("{}，请先维护财务责任配置", error)))?;
-        self.ensure_finance_owner_eligible(operation, rule.owner_user_id.clone()).await?;
+        let current = finance_rotation::rotation(&self.db, &rule.base.id, executor).await?;
+        let owner = rule
+            .strategy
+            .select(&rule.owner_user_ids, current.last_owner_user_id.as_deref())
+            .map_err(|error| Error::ValidationError(error.to_string()))?
+            .to_owned();
+        self.ensure_finance_owner_eligible(operation, owner.clone()).await?;
+        finance_rotation::advance(&self.db, &rule.base.id, &current, Some(&owner), executor).await?;
         Ok(ResolvedFinanceResponsibility {
-            owner_user_id: rule.owner_user_id.clone(),
+            owner_user_id: owner,
             responsibility_key: rule.work_item_responsibility_key(),
         })
     }
@@ -511,13 +533,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         validate_owner: bool,
         executor: &mut dyn Executor,
     ) -> Result<FinanceResponsibilityRule> {
-        let probe =
-            FinanceResponsibilityRule::new("validation", data.clone(), "validation").map_err(Error::Logic)?;
+        let probe = FinanceResponsibilityRule::new("validation", data.clone(), "validation")
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
         if validate_counterparty && let Some(counterparty_id) = probe.counterparty_id.as_deref() {
             self.ensure_counterparty(probe.operation, counterparty_id, executor).await?;
         }
         if validate_owner {
-            self.ensure_finance_owner_eligible(probe.operation, probe.owner_user_id.clone()).await?;
+            for owner in &probe.owner_user_ids {
+                self.ensure_finance_owner_eligible(probe.operation, owner.clone()).await?;
+            }
         }
         Ok(probe)
     }
@@ -589,7 +613,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         &self,
         rules: Vec<FinanceResponsibilityRule>,
     ) -> Result<Vec<FinanceResponsibilityRuleView>> {
-        let owner_ids = rules.iter().map(|rule| rule.owner_user_id.clone()).collect::<Vec<_>>();
+        let owner_ids = rules.iter().flat_map(|rule| rule.owner_user_ids.iter().cloned()).collect::<Vec<_>>();
         let owner_names = self
             .auth
             .load_accounts(&owner_ids, &mut NoTransaction)
@@ -629,10 +653,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                         customer_numbers.get(counterparty_id).cloned()
                     },
                 });
-            let owner_name = owner_names.get(&rule.owner_user_id).cloned();
+            let names = rule.owner_user_ids.iter().map(|id| owner_names.get(id).cloned()).collect();
             let mut view = FinanceResponsibilityRuleView::from(rule);
             view.counterparty_no = counterparty_no;
-            view.owner_name = owner_name;
+            view.owner_names = names;
             views.push(view);
         }
         Ok(views)

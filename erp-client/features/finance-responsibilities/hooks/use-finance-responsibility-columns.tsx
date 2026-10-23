@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { ASSIGNMENT_STRATEGY_LABEL } from "@/components/business/responsibility-pool/model"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge } from "@/components/business"
@@ -47,9 +48,15 @@ export function useFinanceResponsibilityColumns() {
             },
             {
                 id: "owner",
-                accessorFn: (row) => row.ownerName,
-                header: "负责人",
-                meta: { label: "负责人", width: "default" },
+                accessorFn: (row) => row.ownerNames.join("、"),
+                header: "负责人池",
+                meta: { label: "负责人池", width: "default" },
+            },
+            {
+                id: "strategy",
+                accessorFn: (row) => ASSIGNMENT_STRATEGY_LABEL[row.strategy],
+                header: "分配方式",
+                meta: { label: "分配方式", width: "status" },
             },
             {
                 id: "status",

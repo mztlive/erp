@@ -1,3 +1,4 @@
+import type { AssignmentStrategy } from "@/components/business/responsibility-pool/model"
 export type FinanceResponsibilityOperation =
     | "SUPPLIER_PAYMENT"
     | "SALES_INVOICE"
@@ -10,8 +11,9 @@ export type FinanceResponsibilityRule = Readonly<{
     scope: FinanceResponsibilityScope
     counterpartyId?: string
     counterpartyNo?: string
-    ownerUserId: string
-    ownerName: string
+    ownerUserIds: string[]
+    strategy: AssignmentStrategy
+    ownerNames: readonly string[]
     enabled: boolean
     version: number
 }>
@@ -29,7 +31,8 @@ export type SaveFinanceResponsibilityRuleInput = {
     operation: FinanceResponsibilityOperation
     scope: FinanceResponsibilityScope
     counterpartyId?: string
-    ownerUserId: string
+    ownerUserIds: string[]
+    strategy: AssignmentStrategy
     enabled: boolean
     expectedVersion?: number
 }
@@ -45,5 +48,5 @@ export const FINANCE_SCOPE_LABEL: Readonly<
     Record<FinanceResponsibilityScope, string>
 > = {
     COUNTERPARTY: "指定往来方",
-    DEFAULT: "默认负责人",
+    DEFAULT: "默认负责人池",
 }

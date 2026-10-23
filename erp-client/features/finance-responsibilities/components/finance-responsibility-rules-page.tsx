@@ -1,6 +1,14 @@
 "use client"
 
 import * as React from "react"
+import {
+    OwnerPoolField,
+    AssignmentStrategyField,
+} from "@/components/business/responsibility-pool/fields"
+import {
+    ownerPoolSchema,
+    assignmentStrategySchema,
+} from "@/components/business/responsibility-pool/model"
 import { PlusIcon } from "lucide-react"
 import { z } from "zod"
 
@@ -66,7 +74,8 @@ const ruleFormSchema = z
         operation: z.enum(OPERATION_VALUES),
         scope: z.enum(SCOPE_VALUES),
         counterpartyId: z.string(),
-        ownerUserId: z.string().min(1, "请选择负责人"),
+        ownerUserIds: ownerPoolSchema,
+        strategy: assignmentStrategySchema,
         enabled: z.boolean(),
     })
     .superRefine((value, context) => {
@@ -89,7 +98,8 @@ function defaultValues(rule?: FinanceResponsibilityRule): RuleFormValue {
         operation: rule?.operation ?? "SUPPLIER_PAYMENT",
         scope: rule?.scope ?? "COUNTERPARTY",
         counterpartyId: rule?.counterpartyId ?? "",
-        ownerUserId: rule?.ownerUserId ?? "",
+        ownerUserIds: [...(rule?.ownerUserIds ?? [])],
+        strategy: rule?.strategy ?? "ROUND_ROBIN",
         enabled: rule?.enabled ?? true,
     }
 }
@@ -145,7 +155,8 @@ function RuleDialog({
                         value.scope === "COUNTERPARTY"
                             ? value.counterpartyId
                             : undefined,
-                    ownerUserId: value.ownerUserId,
+                    ownerUserIds: value.ownerUserIds,
+                    strategy: value.strategy,
                     enabled: value.enabled,
                     expectedVersion: target?.version,
                 })
@@ -174,7 +185,7 @@ function RuleDialog({
                         {target ? "编辑财务责任规则" : "新增财务责任规则"}
                     </DialogTitle>
                     <DialogDescription>
-                        指定往来方规则优先于同业务的默认负责人。保存只影响新任务；已有任务请在工作台转交。
+                        指定往来方规则优先于同业务的默认负责人池。保存只影响新任务；已有任务请在工作台转交。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -198,7 +209,7 @@ function RuleDialog({
                                     required
                                     onValueChange={() => {
                                         form.setFieldValue("counterpartyId", "")
-                                        form.setFieldValue("ownerUserId", "")
+                                        form.setFieldValue("ownerUserIds", [])
                                     }}
                                 />
                             )}
@@ -212,7 +223,7 @@ function RuleDialog({
                                         value,
                                         label: FINANCE_SCOPE_LABEL[value],
                                     }))}
-                                    description="每项业务最多启用一条默认规则；指定往来方可覆盖默认负责人。"
+                                    description="每项业务最多启用一条默认规则；指定往来方可覆盖默认负责人池。"
                                     allowClear={false}
                                     required
                                     onValueChange={() =>
@@ -285,21 +296,32 @@ function RuleDialog({
                                             )}
                                         </form.AppField>
                                     ) : null}
-                                    <form.AppField name="ownerUserId">
-                                        {(field) => (
-                                            <field.SelectField
+                                    <form.AppField name="ownerUserIds">
+                                        {() => (
+                                            <OwnerPoolField
                                                 id="finance-responsibilities-rule-owner"
-                                                label="负责人"
-                                                onRefresh={onRefreshOwners}
                                                 options={eligibleOwners(
                                                     owners,
                                                     operation,
                                                 )}
-                                                placeholder="选择具备完整执行权限的账号"
-                                                emptyLabel="没有符合资格的负责人，请先配置角色权限"
-                                                allowClear={false}
-                                                required
+                                                selectedNames={Object.fromEntries(
+                                                    (
+                                                        target?.ownerUserIds ??
+                                                        []
+                                                    ).map((id, index) => [
+                                                        id,
+                                                        target?.ownerNames[
+                                                            index
+                                                        ] ?? "已选负责人",
+                                                    ]),
+                                                )}
+                                                onRefresh={onRefreshOwners}
                                             />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="strategy">
+                                        {() => (
+                                            <AssignmentStrategyField id="finance-responsibilities-rule-strategy" />
                                         )}
                                     </form.AppField>
                                 </>
@@ -452,7 +474,7 @@ export function FinanceResponsibilityRulesPage() {
                 className="pb-4 md:pb-4"
                 eyebrow="财务"
                 title="财务责任配置"
-                description="为供应商付款和客户销项开票指定具体负责人；指定往来方优先，默认规则兜底。"
+                description="为供应商付款和客户销项开票配置负责人池，各池独立轮询；指定往来方优先，默认规则兜底。"
             >
                 {canManage ? (
                     <Button
@@ -546,7 +568,7 @@ export function FinanceResponsibilityRulesPage() {
                                             listWorkspaceEmptyStateClassName
                                         }
                                         title="还没有财务责任规则"
-                                        description="请先分别配置供应商付款和销项开票的默认负责人。"
+                                        description="请先分别配置供应商付款和销项开票的默认负责人池。"
                                         action={
                                             canManage && !ownerUnavailable ? (
                                                 <Button

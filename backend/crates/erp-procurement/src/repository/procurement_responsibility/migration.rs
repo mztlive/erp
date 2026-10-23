@@ -3,6 +3,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
+use persistence_core::rotation::migrate_scalar_array;
 use persistence_core::{Error, Result};
 use serde::Deserialize;
 
@@ -24,12 +25,13 @@ struct LegacyPool {
 pub(crate) async fn migrate_pools(db: &Database) -> Result<()> {
     let rules = db
         .collection::<Document>(<Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES);
-    rules
-        .update_many(
-            doc! { "owner_user_ids": { "$exists": false }, "owner_user_id": { "$type": "string" } },
-            vec![doc! { "$set": { "owner_user_ids": ["$owner_user_id"] } }],
-        )
-        .await?;
+    migrate_scalar_array(
+        db,
+        <Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES,
+        "owner_user_id",
+        "owner_user_ids",
+    )
+    .await?;
     rules
         .update_many(
             doc! { "strategy": { "$exists": false } },

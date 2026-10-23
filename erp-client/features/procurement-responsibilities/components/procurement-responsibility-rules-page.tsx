@@ -1,6 +1,14 @@
 "use client"
 
 import * as React from "react"
+import {
+    OwnerPoolField,
+    AssignmentStrategyField,
+} from "@/components/business/responsibility-pool/fields"
+import {
+    ownerPoolSchema,
+    assignmentStrategySchema,
+} from "@/components/business/responsibility-pool/model"
 import { PlusIcon } from "lucide-react"
 import { z } from "zod"
 
@@ -73,11 +81,8 @@ const ruleFormSchema = z
         skuId: z.string(),
         categoryId: z.string(),
         productKind: z.string(),
-        ownerUserIds: z
-            .array(z.string())
-            .min(1, "请至少选择一名采购负责人")
-            .max(100, "最多选择 100 名采购负责人"),
-        strategy: z.enum(["ROUND_ROBIN"]),
+        ownerUserIds: ownerPoolSchema,
+        strategy: assignmentStrategySchema,
         enabled: z.boolean(),
     })
     .superRefine((value, context) => {
@@ -144,20 +149,6 @@ function RuleDialog({
     ownerOptions: readonly { value: string; label: string }[]
 }) {
     const mutation = useSaveProcurementResponsibilityRuleMutation()
-    const poolOwnerOptions = [
-        ...ownerOptions,
-        ...(target?.ownerUserIds ?? []).flatMap((id, index) =>
-            ownerOptions.some((option) => option.value === id)
-                ? []
-                : [
-                      {
-                          value: id,
-                          label: `${target?.ownerNames[index] ?? "已选负责人"}（当前不可用）`,
-                          disabled: true,
-                      },
-                  ],
-        ),
-    ]
     const form = useAppForm({
         defaultValues: defaultValues(target),
         validators: { onChange: ruleFormSchema },
@@ -325,29 +316,27 @@ function RuleDialog({
                             )}
                         </form.Subscribe>
                         <form.AppField name="ownerUserIds">
-                            {(field) => (
-                                <field.MultiSelectField
+                            {() => (
+                                <OwnerPoolField
                                     id="procurement-responsibility-rules-dialog-owner"
-                                    label="负责人池"
-                                    required
-                                    options={poolOwnerOptions}
+                                    options={ownerOptions}
+                                    selectedNames={Object.fromEntries(
+                                        (target?.ownerUserIds ?? []).map(
+                                            (id, index) => [
+                                                id,
+                                                target?.ownerNames[index] ??
+                                                    "已选负责人",
+                                            ],
+                                        ),
+                                    )}
                                     onRefresh={onRefreshOwners}
-                                    placeholder="选择采购负责人，可多选"
-                                    description="按选择顺序轮流分派；同一单命中本规则的商品交给同一人。"
+                                    description="按选择顺序轮流分派；同一单命中本规则的商品交给同一人。需要调整顺序时，移除后重新选择。"
                                 />
                             )}
                         </form.AppField>
                         <form.AppField name="strategy">
-                            {(field) => (
-                                <field.SelectField
-                                    id="procurement-responsibility-rules-dialog-strategy"
-                                    label="分配方式"
-                                    required
-                                    allowClear={false}
-                                    options={[
-                                        { value: "ROUND_ROBIN", label: "轮询" },
-                                    ]}
-                                />
+                            {() => (
+                                <AssignmentStrategyField id="procurement-responsibility-rules-dialog-strategy" />
                             )}
                         </form.AppField>
                         <form.AppField name="enabled">

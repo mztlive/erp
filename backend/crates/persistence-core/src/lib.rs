@@ -16,3 +16,5 @@ pub use repository::{
 };
 pub use reset::{DatabaseReset, ResetRetention};
 pub use transaction::Transactional;
+
+pub mod rotation;

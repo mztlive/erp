@@ -107,3 +107,42 @@ pub async fn finance_responsibility_owner_options(
     let views = work_item_service(state.db(), state.rbac()).finance_responsibility_owner_options().await?;
     Ok(ApiResponse::ok_with_data(views))
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn finance_pool_request_requires_members_and_implemented_strategy() {
+        let request = json!({
+            "operation": "SUPPLIER_PAYMENT", "scope": "DEFAULT",
+            "owner_user_ids": ["payer-a", "payer-b"], "strategy": "ROUND_ROBIN", "status": "active"
+        });
+        let parsed: CreateFinanceResponsibilityRuleRequest = serde_json::from_value(request.clone()).unwrap();
+        parsed.validate().unwrap();
+        assert_eq!(parsed.owner_user_ids, ["payer-a", "payer-b"]);
+        let mut update = request.clone();
+        update["version"] = json!(1);
+        serde_json::from_value::<UpdateFinanceResponsibilityRuleRequest>(update).unwrap().validate().unwrap();
+        let mut empty = request.clone();
+        empty["owner_user_ids"] = json!([]);
+        assert!(
+            serde_json::from_value::<CreateFinanceResponsibilityRuleRequest>(empty)
+                .unwrap()
+                .validate()
+                .is_err()
+        );
+        for field in ["owner_user_id", "strategy"] {
+            let mut invalid = request.clone();
+            invalid[field] = json!("unsupported");
+            assert!(serde_json::from_value::<CreateFinanceResponsibilityRuleRequest>(invalid).is_err());
+        }
+        for field in ["owner_user_ids", "strategy"] {
+            let mut missing = request.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<CreateFinanceResponsibilityRuleRequest>(missing).is_err());
+        }
+    }
+}

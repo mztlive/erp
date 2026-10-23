@@ -15,3 +15,5 @@ pub mod validation;
 pub use errors::{Error, Result};
 pub use field_update::FieldUpdate;
 pub use identity::{AccountKind, InvalidAccountKind};
+
+pub mod assignment;

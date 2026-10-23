@@ -195,6 +195,9 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
+        "uk_finance_responsibility_active_selector" => {
+            Some("同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员")
+        },
         "uk_work_items_open_fulfillment_object" => Some("该履约对象已存在开放任务，请刷新后重试"),
         "uk_work_items_open_customer_acceptance_object" => {
             Some("该销售单已存在开放客户验收任务，请刷新后重试")

@@ -10,6 +10,7 @@ use crate::entity::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatu
 
 mod approval;
 mod finance;
+pub(crate) mod finance_rotation;
 mod fulfillment;
 mod integration_task_binding;
 mod query;
