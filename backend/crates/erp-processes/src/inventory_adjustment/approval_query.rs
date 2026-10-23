@@ -6,8 +6,8 @@ use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStat
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_inventory::{
     CancelStockAdjustmentApprovalTokenView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
-    DocumentApprovalInstanceView, DocumentApprovalView, StockAdjustment, StockAdjustmentState,
-    SubmitStockAdjustmentApprovalTokenView,
+    DocumentApprovalInstanceView, DocumentApprovalNodeView, DocumentApprovalView, StockAdjustment,
+    StockAdjustmentState, SubmitStockAdjustmentApprovalTokenView,
 };
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -27,7 +27,7 @@ use super::adapter::{
     RECENT_HISTORY_LIMIT, document_approval_view_with_history, require_frozen_binding,
     stock_adjustment_subject_ref,
 };
-use super::approval_prepare::actor_can_submit;
+use super::approval_prepare::{actor_can_submit, load_bound_definition_graph};
 use super::cancel_approval::{
     actor_can_cancel, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
     ensure_stock_adjustment_open_task_identity,
@@ -55,20 +55,41 @@ pub(super) async fn load_document_approval(
 ) -> Result<DocumentApprovalView> {
     let submit_command = submit_token(service, adjustment, binding, actor).await?;
     let subject = stock_adjustment_subject_ref(&adjustment.base.id)?;
-    let Some(instance) =
-        service.db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await?
-    else {
-        return Ok(document_approval_view_with_history(
-            binding,
-            None,
-            Vec::new(),
-            empty_history_page(),
-            adjustment.status,
-            submit_command,
-            None,
-        ));
-    };
-    project_runtime(service, adjustment, binding, instance, submit_command, actor).await
+    let mut view =
+        match service.db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await? {
+            None => document_approval_view_with_history(
+                binding,
+                None,
+                Vec::new(),
+                empty_history_page(),
+                adjustment.status,
+                submit_command,
+                None,
+            ),
+            Some(instance) => {
+                project_runtime(service, adjustment, binding, instance, submit_command, actor).await?
+            },
+        };
+    if let (Some(binding), Some(definition)) = (binding, view.definition.as_mut()) {
+        let graph = load_bound_definition_graph(&service.db, binding).await?;
+        definition.name = graph.definition.name.clone();
+        definition.nodes = graph
+            .ordered_nodes()
+            .map_err(|e| Error::ValidationError(e.to_string()))?
+            .iter()
+            .map(|node| DocumentApprovalNodeView {
+                key: node.node_key.clone(),
+                name: node.node_name.clone(),
+                assignee_source: node.assignee_rule.clone(),
+                assignee_name: Some(if node.assignee_rule.is_some() {
+                    node.assignee_label_snapshot.clone()
+                } else {
+                    node.participants().into_iter().map(|p| p.name).collect::<Vec<_>>().join("、")
+                }),
+            })
+            .collect();
+    }
+    Ok(view)
 }
 
 /// 按签署收据的 `result_ref` 精确投影审批实例。

@@ -22,6 +22,7 @@ use persistence_core::NoTransaction;
 
 use super::super::{ReceivableProcess, start_approval};
 use super::*;
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::audit::persist_log;
 
 impl ReceivableProcess {
@@ -195,6 +196,7 @@ async fn start(
 ) -> Result<()> {
     let now = Instant::now();
     let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
+    let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
     let subject = subject_ref_for(DocumentType::SalesInvoiceRequest, &request.base.id)?;
     let input = start_approval::build_document_start_input(start_approval::DocumentStartInput {
         document_type: DocumentType::SalesInvoiceRequest,

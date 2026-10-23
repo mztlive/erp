@@ -4,6 +4,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
+use super::AssigneeResolution;
 use crate::ids::{ApprovalInstanceAssigneeId, ApprovalProcessInstanceId};
 use crate::model::types::{
     ApprovalAssigneeBindingSource, ModelError, ModelResult, NODE_KEY_MAX_LEN, base_model_at,
@@ -29,6 +30,9 @@ pub struct ApprovalInstanceAssignee {
     pub additional_assignees: Vec<ApprovalParticipant>,
     /// 绑定来源，永久为定义冻结。
     pub assignment_source: ApprovalAssigneeBindingSource,
+    /// 启动时冻结的动态来源依据。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution: Option<AssigneeResolution>,
     /// 保留的变更审计字段，运行时永久为空。
     pub changed_by: Option<ParticipantId>,
     /// 保留的变更时间字段，运行时永久为空。
@@ -79,6 +83,7 @@ impl ApprovalInstanceAssignee {
             current_assignee_participant_id: definition_assignee,
             additional_assignees: Vec::new(),
             assignment_source: ApprovalAssigneeBindingSource::Definition,
+            resolution: None,
             changed_by: None,
             changed_at: None,
             change_reason: None,

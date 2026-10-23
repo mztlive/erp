@@ -31,6 +31,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_change_order_object_readable;
+use crate::adapters::workflow::approver_directory::revalidate_approvers;
 use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -314,7 +315,7 @@ fn start_bindings_from_graph(
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
             node_key: node.node_key.clone(),
-            participant: node.assignee_participant_id.clone(),
+            participant: node.assignee().map_err(|e| Error::ValidationError(e.to_string()))?.clone(),
             eligibility: converge_node_eligibility(
                 node,
                 |assignee| match sales_change_order_object_readable(organization_id, assignee) {
@@ -474,6 +475,7 @@ async fn persist_runtime_writes(
         .created_executions
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交销售变更单".to_string()))?;
+    revalidate_approvers(db, writes, executor).await?;
     db.bpm_workflow()
         .create_bpm_runtime_after_receipt(
             &writes.instance,

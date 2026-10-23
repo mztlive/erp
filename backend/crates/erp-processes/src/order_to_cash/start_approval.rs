@@ -39,6 +39,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_object_readable;
 use super::authorization::SalesCommandAccess;
+use crate::adapters::workflow::approver_directory::revalidate_approvers;
 use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::order_to_cash::command_event::{SalesCommandEvent, replay_submission_with_executor};
 use crate::{Error, Result};
@@ -356,7 +357,7 @@ fn start_bindings_from_graph(
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
             node_key: node.node_key.clone(),
-            participant: node.assignee_participant_id.clone(),
+            participant: node.assignee().map_err(|e| Error::ValidationError(e.to_string()))?.clone(),
             eligibility: converge_node_eligibility(node, |assignee| {
                 match sales_order_object_readable(organization_id, assignee) {
                     Ok(_) => None,
@@ -675,6 +676,7 @@ pub(super) async fn persist_runtime_writes(
         .created_executions
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交销售单".to_string()))?;
+    revalidate_approvers(db, writes, executor).await?;
     db.bpm_workflow()
         .create_bpm_runtime_after_receipt(
             &writes.instance,

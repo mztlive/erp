@@ -2,7 +2,9 @@
 
 mod access;
 mod bootstrap;
+pub mod leader;
 mod profile;
+pub mod qualification;
 
 use std::mem::take;
 use std::sync::Arc;
@@ -223,7 +225,8 @@ impl OrganizationService {
             return Ok(());
         }
         match change {
-            OrganizationOperation::TransferMember { user_id, .. } => {
+            OrganizationOperation::SetLeader { user_id: Some(user_id), .. }
+            | OrganizationOperation::TransferMember { user_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
             },
             OrganizationOperation::TransferMembers { user_ids, .. } => {

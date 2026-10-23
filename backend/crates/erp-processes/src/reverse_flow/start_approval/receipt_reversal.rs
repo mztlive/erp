@@ -27,6 +27,7 @@ use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_star
 use super::mapping::list_projection_from_execution;
 use super::prepare::{ensure_return_start_replay_authorized, load_start_receipt_for_document_type};
 use super::reversal_submit::{committed_reversal_submit, mark_reversal_started};
+use crate::adapters::workflow::approver_directory::revalidate_approvers;
 use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -338,6 +339,7 @@ pub async fn persist_receipt_reversal_runtime(
         .created_executions
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交回款冲正".to_string()))?;
+    revalidate_approvers(db, writes, executor).await?;
     db.bpm_workflow()
         .create_bpm_runtime_after_receipt(
             &writes.instance,

@@ -156,6 +156,7 @@ export type ApprovalCommandViewDto = Readonly<{
 
 /** 定义节点只读摘要。 */
 export type ApprovalDefinitionNodeDto = Readonly<{
+    assignee_source?: string | null
     key: string
     name: string
     assignee_name?: string | null
@@ -354,6 +355,7 @@ export type ApprovalCommandView = Readonly<{
 }>
 
 export type ApprovalDefinitionNode = Readonly<{
+    assigneeSource?: string
     key: string
     name: string
     assigneeName?: string
@@ -518,6 +520,7 @@ export const mapDefinitionNodeDto = (
 ): ApprovalDefinitionNode => ({
     key: dto.key,
     name: dto.name,
+    assigneeSource: optionalText(dto.assignee_source),
     assigneeName: optionalText(dto.assignee_name),
 })
 

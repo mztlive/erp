@@ -357,6 +357,10 @@ pub struct DocumentApprovalDefinitionView {
 /// 定义节点只读摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DocumentApprovalNodeView {
+    /// 动态审批来源。
+    pub assignee_source: Option<String>,
+    /// 指定人员或来源规则名称。
+    pub assignee_name: Option<String>,
     /// 节点键。
     pub key: String,
     /// 节点名称。

@@ -112,24 +112,19 @@ fn freeze_binding(
             .iter()
             .find(|prior| prior.node_key == node.node_key)
             .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
-        if prior.eligibility.participant_ref() != &node.assignee_participant_id {
+        if prior.eligibility.participant_ref() != node.assignee()? {
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
         return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
     };
-    if eligibility.participant_ref() != &node.assignee_participant_id {
+    if eligibility.participant_ref() != node.assignee()? {
         return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
     }
     eligibility.validate_node(node)?;
     if frozen.iter().any(|prior| prior.id == assignee_id) {
         return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
     }
-    Ok(StartAssigneeBinding {
-        id: assignee_id,
-        node_key,
-        participant: node.assignee_participant_id.clone(),
-        eligibility,
-    })
+    Ok(StartAssigneeBinding { id: assignee_id, node_key, participant: node.assignee()?.clone(), eligibility })
 }
 
 #[cfg(test)]
@@ -352,7 +347,7 @@ mod tests {
         graph.nodes[1] = graph.nodes[0].clone();
         for changed_participant in [false, true] {
             if changed_participant {
-                graph.nodes[1].assignee_participant_id = participant("u9");
+                graph.nodes[1].assignee_participant_id = Some(participant("u9"));
             }
             let error = plan_start(StartPlanInput {
                 graph: &graph,

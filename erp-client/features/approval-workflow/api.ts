@@ -193,3 +193,10 @@ export const upgradeUnsubmittedBinding = (
         `/admin/business-documents/${encodeURIComponent(params.documentType)}/${encodeURIComponent(params.documentId)}/approval-definition/upgrade`,
         params.request,
     ).then(mapUpgradeBindingResultViewDto)
+
+/** 只查询当前账号的组织负责人，服务端同时校验审批资格。 */
+export function fetchOwnApprovalLeader(kind: "team" | "department") {
+    return apiGet<{ name: string; organization_name: string }>(
+        `/account/approval-leader?kind=${kind}`,
+    )
+}

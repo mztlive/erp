@@ -32,6 +32,7 @@ use super::super::start_approval::{
     persist_receipt_reversal_runtime,
 };
 use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
 
@@ -126,6 +127,7 @@ impl ReturnsProcess {
                     )
                     .await?;
                     let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
+                    let graph = resolve_approvers(&db, graph, actor_owned.id(), executor).await?;
                     let start_input = build_receipt_reversal_start_input(ReceiptReversalStartInput {
                         graph,
                         binding: &binding,

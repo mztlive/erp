@@ -13,8 +13,9 @@ use super::super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
-use super::RECENT_HISTORY_LIMIT;
+use super::{RECENT_HISTORY_LIMIT, optional_approval_binding};
 use crate::Result;
+use crate::approval_runtime::binding_route;
 
 /// 为已授权单据详情补齐真实实例、当前执行和有界历史。
 ///
@@ -35,6 +36,13 @@ pub async fn load_runtime(
     id: &str,
     mut view: DocumentApprovalView,
 ) -> Result<DocumentApprovalView> {
+    if let Some(definition) = view.definition.as_mut()
+        && let Some(binding) = optional_approval_binding(db, id).await?
+    {
+        let (name, nodes) = binding_route(db, &binding, &mut NoTransaction).await?;
+        definition.name = name;
+        definition.nodes = nodes;
+    }
     let subject = erp_workflow::entity::approval_integration::subject_ref_for(document_type, id)
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await? else {

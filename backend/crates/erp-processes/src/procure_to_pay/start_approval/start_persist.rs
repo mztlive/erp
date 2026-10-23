@@ -40,6 +40,7 @@ use super::super::payment_subject::revalidate_payment_subject;
 use super::super::procurement_task_sync::sync_purchase_source_updates;
 use super::super::source_recheck::ensure_source_unaffected;
 use super::supply_selection::revalidate_selected_supply;
+use crate::adapters::workflow::approver_directory::revalidate_approvers;
 use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -396,6 +397,7 @@ async fn persist_runtime_writes(
         .created_executions
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交采购单".to_string()))?;
+    revalidate_approvers(db, writes, executor).await?;
     db.bpm_workflow()
         .create_bpm_runtime_after_receipt(
             &writes.instance,

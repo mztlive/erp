@@ -43,10 +43,11 @@ use super::cancel_approval::{
 };
 use super::start_approval::{
     PaymentReversalStartInput, PaymentReversalStartPersistInput, ReversalSubmitReplayInput,
-    build_payment_reversal_start_input, load_bound_definition_graph,
-    load_bound_definition_graph_with_executor, load_payment_reversal_start_receipt,
-    persist_payment_reversal_runtime, persist_payment_reversal_start, reversal_result_read_error,
+    build_payment_reversal_start_input, load_bound_definition_graph_with_executor,
+    load_payment_reversal_start_receipt, load_start_graph, persist_payment_reversal_runtime,
+    persist_payment_reversal_start, reversal_result_read_error,
 };
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::audit::persist_log;
 use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
@@ -174,6 +175,7 @@ impl ReturnsProcess {
                     )
                     .await?;
                     let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
+                    let graph = resolve_approvers(&db, graph, actor_owned.id(), executor).await?;
                     let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
                         graph,
                         binding: &binding,
@@ -341,10 +343,10 @@ impl ReturnsProcess {
         );
         let _ = payment_reversal_start_command_kind(&start);
         let _ = payment_reversal_object_readable(&organization_id, actor.id())?;
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
         let version = reversal.approval_subject_version;
         let existing_receipt =
             load_payment_reversal_start_receipt(&self.db, &subject, version, &idempotency_key).await?;
+        let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
             graph,
             binding: &binding,

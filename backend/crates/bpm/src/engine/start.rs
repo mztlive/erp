@@ -137,11 +137,12 @@ fn freeze_assignees(
     let instance_id = instance.typed_id();
     let mut assignees = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
+        node.validate_assignment()?;
         let binding = by_node
             .get(node.node_key.as_str())
             .copied()
             .ok_or(EngineError::InvalidCommand("节点审批人绑定缺失或重复"))?;
-        if binding.participant != node.assignee_participant_id {
+        if binding.participant != *node.assignee()? {
             return Err(EngineError::InvalidCommand("实例审批人绑定必须匹配定义审批人"));
         }
         if binding.eligibility.participant_ref() != &binding.participant {
@@ -151,6 +152,9 @@ fn freeze_assignees(
         if binding.eligibility.members().iter().any(|item| item.blocked_code().is_some()) {
             return Err(EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例"));
         }
+        if node.resolution.as_ref().is_some_and(|r| r.subject_id != instance.started_by.as_str()) {
+            return Err(EngineError::InvalidCommand("动态审批来源必须属于本次申请人"));
+        }
         let mut frozen = ApprovalInstanceAssignee::from_definition(
             binding.id.clone(),
             instance_id.clone(),
@@ -159,6 +163,7 @@ fn freeze_assignees(
             now,
         )?;
         frozen.additional_assignees = node.additional_assignees.clone();
+        frozen.resolution = node.resolution.clone();
         assignees.push(frozen);
     }
     Ok(assignees)

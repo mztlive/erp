@@ -17,7 +17,12 @@ const editorNodeSchema = z
             .trim()
             .min(1, "请输入节点名称")
             .max(64, "节点名称过长"),
-        assignee_user_id: z.string().min(1, "请选择一位审批人"),
+        assignee_source: z.enum([
+            "SPECIFIED",
+            "APPLICANT_TEAM_LEADER",
+            "APPLICANT_DEPARTMENT_LEADER",
+        ]),
+        assignee_user_id: z.string(),
         assignee_name: z.string(),
         additional_assignees: z
             .array(z.object({ user_id: z.string().min(1), name: z.string() }))
@@ -25,6 +30,12 @@ const editorNodeSchema = z
         node_purpose: z.string().nullable(),
         unsaved_purpose_slot: z.boolean(),
     })
+    .refine(
+        (node) =>
+            node.assignee_source !== "SPECIFIED" ||
+            Boolean(node.assignee_user_id),
+        "请选择一位审批人",
+    )
     .refine(
         (node) =>
             new Set([

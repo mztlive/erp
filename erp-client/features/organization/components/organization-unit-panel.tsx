@@ -160,6 +160,35 @@ export function OrganizationUnitPanel({
                 ) : null}
             </div>
 
+            <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 lg:px-7">
+                <div className="text-sm">
+                    负责人：
+                    {unit.leader
+                        ? personLabel(view.people, unit.leader.user_id)
+                        : "未设置"}
+                    {unit.leader && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                            {clockLabel(unit.leader.assigned_at)} 起生效
+                        </span>
+                    )}
+                </div>
+                {canManage && (
+                    <Button
+                        id={`organization-unit-${segment}-leader`}
+                        size="sm"
+                        variant="outline"
+                        disabled={!unit.enabled}
+                        onClick={() =>
+                            onChange("set_leader", {
+                                orgUnitId: unit.id,
+                                userId: unit.leader?.user_id ?? "",
+                            })
+                        }
+                    >
+                        设置负责人
+                    </Button>
+                )}
+            </div>
             <div className="min-w-0 px-4 py-4 sm:px-6 lg:px-7">
                 <div className="min-w-0 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">

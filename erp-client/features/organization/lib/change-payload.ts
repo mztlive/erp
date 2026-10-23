@@ -54,6 +54,12 @@ export function buildOrganizationOperation(
     draft: OrganizationChangeDraft,
 ): OrganizationOperation {
     switch (draft.operation) {
+        case "set_leader":
+            return {
+                operation: "set_leader",
+                org_unit_id: draft.orgUnitId,
+                user_id: draft.userId || null,
+            }
         case "create_unit":
             return {
                 operation: "create_unit",

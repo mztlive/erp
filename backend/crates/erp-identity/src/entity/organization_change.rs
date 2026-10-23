@@ -33,6 +33,10 @@ pub enum OrganizationOperation {
         parent_id: Option<String>,
         kind: OrgUnitKind,
     },
+    SetLeader {
+        org_unit_id: String,
+        user_id: Option<String>,
+    },
     MoveUnit {
         org_unit_id: String,
         parent_id: Option<String>,
@@ -230,6 +234,17 @@ impl OrganizationState {
             OrganizationOperation::CreateUnit { .. }
             | OrganizationOperation::MoveUnit { .. }
             | OrganizationOperation::RenameUnit { .. } => self.change_unit(change, id, actor, reason)?,
+            OrganizationOperation::SetLeader { org_unit_id, user_id } => {
+                if user_id.as_ref().is_some_and(|id| id.trim().is_empty()) {
+                    return Err(Error::ValidationError("请选择负责人，或明确清除负责人".into()));
+                }
+                self.unit_mut(org_unit_id, actor, reason)?.leader = user_id.as_ref().map(|user| OrgLeader {
+                    assignment_id: id.into(),
+                    user_id: user.clone(),
+                    assigned_at: at,
+                    assigned_by: actor.into(),
+                });
+            },
             OrganizationOperation::DisableUnit { org_unit_id } => {
                 self.disable(org_unit_id, actor, reason, at)?
             },
@@ -373,6 +388,35 @@ impl OrganizationState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leader_changes_keep_history_and_do_not_change_membership_or_permissions() {
+        let before = state();
+        let first = before
+            .changed(
+                &request(OrganizationOperation::SetLeader {
+                    org_unit_id: "one".into(),
+                    user_id: Some("manager".into()),
+                }),
+                "assignment1",
+                "admin",
+                Instant::from_unix_secs(10),
+            )
+            .unwrap();
+        assert!(before.units[0].leader.is_none());
+        assert_eq!(first.units[0].leader.as_ref().unwrap().user_id, "manager");
+        assert_eq!(first.memberships, before.memberships);
+        assert_eq!(first.management, before.management);
+        let mut next = request(OrganizationOperation::SetLeader {
+            org_unit_id: "one".into(),
+            user_id: Some("next".into()),
+        });
+        next.expected_version = first.version;
+        let after = first.changed(&next, "assignment2", "admin", Instant::from_unix_secs(20)).unwrap();
+        assert_eq!(first.units[0].leader.as_ref().unwrap().user_id, "manager");
+        assert_eq!(after.units[0].leader.as_ref().unwrap().assigned_at, Instant::from_unix_secs(20));
+        assert!(after.changed(&next, "assignment3", "admin", Instant::from_unix_secs(30)).is_err());
+    }
 
     fn state() -> OrganizationState {
         OrganizationState {

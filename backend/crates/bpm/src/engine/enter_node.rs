@@ -83,9 +83,7 @@ fn build_enter_plan(
     mut input: EnterNodeInput<'_>,
     node: &ApprovalNodeDefinition,
 ) -> EngineResult<TransitionPlan> {
-    if input.participant != node.assignee_participant_id
-        || input.eligibility.participant_ref() != &node.assignee_participant_id
-    {
+    if input.participant != *node.assignee()? || input.eligibility.participant_ref() != node.assignee()? {
         return Err(EngineError::InvalidCommand("节点责任人必须匹配定义审批人"));
     }
     input.eligibility.validate_node(node)?;

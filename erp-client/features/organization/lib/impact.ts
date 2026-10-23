@@ -49,6 +49,19 @@ export function impactChanges(
             })
             continue
         }
+        if (previous.leader?.user_id !== unit.leader?.user_id) {
+            changes.push({
+                id: `unit-leader-${unit.id}`,
+                field: `${unit.name}负责人`,
+                before: previous.leader
+                    ? resolvePerson(people, previous.leader.user_id)
+                    : "未设置",
+                after: unit.leader
+                    ? resolvePerson(people, unit.leader.user_id)
+                    : "未设置",
+                note: "确认后立即生效；已开始的审批保持原审批人",
+            })
+        }
         if (previous.name !== unit.name) {
             changes.push({
                 id: `unit-rename-${unit.id}`,

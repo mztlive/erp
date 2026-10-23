@@ -71,7 +71,9 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             targets.push(parent_id.as_deref());
             add_subtree_targets(state, org_unit_id, &mut targets)?;
         },
-        RenameUnit { org_unit_id, .. } | DisableUnit { org_unit_id } => targets.push(Some(org_unit_id)),
+        SetLeader { org_unit_id, .. } | RenameUnit { org_unit_id, .. } | DisableUnit { org_unit_id } => {
+            targets.push(Some(org_unit_id))
+        },
         TransferMember { user_id, org_unit_id } => {
             targets.push(Some(org_unit_id));
             targets.push(state.own_org(user_id, access.as_of)?);
@@ -309,6 +311,24 @@ mod tests {
             changed_by: "admin".into(),
             reason: "初始化".into(),
         }
+    }
+
+    #[test]
+    fn leader_assignment_requires_target_management_scope() {
+        let change =
+            OrganizationOperation::SetLeader { org_unit_id: "two".into(), user_id: Some("leader".into()) };
+        let limited = access_with(
+            ResolvedScope {
+                role_clauses: vec![ScopeClause {
+                    org_unit_ids: ["one".into()].into(),
+                    ..ScopeClause::default()
+                }],
+                user_limit: None,
+            },
+            state(),
+        );
+        assert!(matches!(ensure_targets(&change, &limited), Err(Error::Forbidden(_))));
+        assert!(ensure_targets(&change, &company_access(state())).is_ok());
     }
 
     /// 批量调岗必须逐一校验每个人的原组织和目标组织。

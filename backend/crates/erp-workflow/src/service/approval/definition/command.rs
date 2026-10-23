@@ -940,6 +940,7 @@ mod tests {
 
         let nodes = prepare_definition_nodes(vec![
             DefinitionNodeRequest {
+                assignee_source: Default::default(),
                 additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: " 财务 ".to_string(),
@@ -947,6 +948,7 @@ mod tests {
                 assignee_user_id: " u2 ".to_string(),
             },
             DefinitionNodeRequest {
+                assignee_source: Default::default(),
                 additional_assignee_user_ids: Vec::new(),
                 node_id: Some(" node-1 ".to_string()),
                 node_name: " 仓储复核 ".to_string(),
@@ -1016,6 +1018,7 @@ mod tests {
         .expect("分隔符文本");
         assert_ne!(create.current.digest(), create_changed.current.digest());
         let literal_null_nodes = prepare_definition_nodes(vec![DefinitionNodeRequest {
+            assignee_source: Default::default(),
             additional_assignee_user_ids: Vec::new(),
             node_id: Some("NULL".to_string()),
             node_name: "审批".to_string(),
@@ -1024,6 +1027,7 @@ mod tests {
         }])
         .expect("字面量 NULL");
         let absent_nodes = prepare_definition_nodes(vec![DefinitionNodeRequest {
+            assignee_source: Default::default(),
             additional_assignee_user_ids: Vec::new(),
             node_id: None,
             node_name: "审批".to_string(),

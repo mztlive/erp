@@ -4,6 +4,12 @@ export type OrgUnit = {
     id: string
     name: string
     parent_id: string | null
+    leader?: {
+        assignment_id: string
+        user_id: string
+        assigned_at: number
+        assigned_by: string
+    } | null
     kind: OrgUnitKind
     enabled: boolean
     version: number
@@ -72,6 +78,7 @@ export type PersonProfileChange = {
     org_unit_id: string | null
 }
 export type OrganizationOperation =
+    | { operation: "set_leader"; org_unit_id: string; user_id: string | null }
     | { operation: "update_person_profile"; profile: PersonProfileChange }
     | {
           operation: "create_unit"

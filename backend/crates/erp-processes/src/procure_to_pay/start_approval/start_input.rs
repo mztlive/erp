@@ -205,7 +205,7 @@ pub(crate) mod tests {
             node_name: name.into(),
             node_purpose: None,
             display_order: order,
-            assignee_participant_id: ParticipantId::new(user).unwrap(),
+            assignee_participant_id: Some(ParticipantId::new(user).unwrap()),
             assignee_label_snapshot: label.into(),
             at,
         })

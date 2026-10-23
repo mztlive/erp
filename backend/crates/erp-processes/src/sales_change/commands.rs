@@ -42,6 +42,7 @@ use super::start_approval::{
     load_bound_definition_graph, load_start_receipt, persist_sales_change_start,
     replay_sales_change_start_with_executor,
 };
+use crate::adapters::workflow::approver_directory::resolve_start_approvers;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -320,6 +321,14 @@ impl SalesChangeProcess {
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
         let existing_receipt =
             load_start_receipt(&self.db, &subject, submission.submission_no, &idempotency_key).await?;
+        let graph = resolve_start_approvers(
+            &self.db,
+            graph,
+            actor.id(),
+            existing_receipt.as_ref(),
+            &mut NoTransaction,
+        )
+        .await?;
         let start_input = build_sales_change_start_input(SalesChangeStartInput {
             graph,
             binding: &binding,

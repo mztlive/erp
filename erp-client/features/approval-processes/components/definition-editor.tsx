@@ -84,7 +84,10 @@ export function DefinitionEditor({
             setSubmitError(INCOMPLETE_DRAFT_MESSAGE)
             setSaveState("failed")
             const invalid = form.state.values.nodes.find(
-                (node) => !node.node_name.trim() || !node.assignee_user_id,
+                (node) =>
+                    !node.node_name.trim() ||
+                    (node.assignee_source === "SPECIFIED" &&
+                        !node.assignee_user_id),
             )
             if (invalid) setSelectedNodeId(invalid.client_id)
         },
@@ -348,7 +351,8 @@ export function DefinitionEditor({
                                 const incomplete = nodes.filter(
                                     (node) =>
                                         !node.node_name.trim() ||
-                                        !node.assignee_user_id,
+                                        (node.assignee_source === "SPECIFIED" &&
+                                            !node.assignee_user_id),
                                 ).length
                                 return (
                                     <span className="text-xs text-muted-foreground">

@@ -7,7 +7,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::approval_view::document_approval_view;
-use crate::approval_runtime::load_document_runtime;
+use crate::approval_runtime::{binding_route, load_document_runtime};
 use crate::finance::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalView,
 };
@@ -33,6 +33,11 @@ pub(super) async fn load_receipt_document_approval(
     executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
     let mut view = document_approval_view(binding, None, receipt.status);
+    if let (Some(binding), Some(definition)) = (binding, view.definition.as_mut()) {
+        let (name, nodes) = binding_route(db, binding, executor).await?;
+        definition.name = name;
+        definition.nodes = nodes;
+    }
     let Some(runtime) =
         load_document_runtime(db, DocumentType::CustomerReceipt, &receipt.base.id, binding, executor).await?
     else {

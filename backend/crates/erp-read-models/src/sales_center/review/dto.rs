@@ -154,14 +154,7 @@ impl DocumentApprovalDefinitionView {
 }
 
 /// 定义节点只读摘要。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalNodeView {
-    /// 节点键。
-    pub key: String,
-    /// 节点名称。
-    pub name: String,
-}
-
+pub use crate::approval_runtime::DocumentApprovalNodeView;
 pub use crate::approval_runtime::{DocumentApprovalHistoryItemView, DocumentApprovalInstanceView};
 
 /// 完整历史分页。

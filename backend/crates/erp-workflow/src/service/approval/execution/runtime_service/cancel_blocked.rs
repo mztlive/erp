@@ -469,7 +469,7 @@ async fn prepare_blocked_cancel(
     adapter_spec_of(source.document_type)?;
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(&source.instance.process_definition_id, executor)
+        .load_instance_graph(&source.instance, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".into()))?;
     match (source.instance.blocker_code, source.current.blocker_code) {

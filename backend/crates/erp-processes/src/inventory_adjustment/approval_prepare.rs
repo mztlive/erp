@@ -88,6 +88,7 @@ pub(super) async fn load_bound_definition_graph_with_executor(
         .bpm_workflow()
         .load_definition_graph(&binding.approval_process_definition_id, executor)
         .await?
+        .filter(|graph| graph.definition.definition_version == binding.approval_definition_version)
         .ok_or_else(|| Error::ConflictError("库存调整单绑定的审批定义不存在".to_string()))?;
     Ok(engine_graph(graph))
 }
@@ -650,7 +651,7 @@ async fn start_bindings_from_graph(
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
             node_key: node.node_key.clone(),
-            participant: node.assignee_participant_id.clone(),
+            participant: node.assignee().map_err(|e| Error::ValidationError(e.to_string()))?.clone(),
             eligibility: converge_node_eligibility(node, |_| None)?,
         });
     }

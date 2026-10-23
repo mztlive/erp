@@ -8,6 +8,7 @@ use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ModelError, ModelR
 use bpm::{Error as BpmError, ParticipantId};
 use serde::{Deserialize, Serialize};
 
+use super::assignee_source::AssigneeSource;
 use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::entity::document_registry::DocumentType;
 
@@ -66,7 +67,11 @@ pub struct DefinitionNodeRequest {
     /// 从 1 开始的展示顺序。
     pub display_order: u32,
     /// 指定审批人账号。
+    #[serde(default)]
     pub assignee_user_id: String,
+    /// 指派来源；旧请求默认指定人员。
+    #[serde(default)]
+    pub assignee_source: AssigneeSource,
     /// 同节点的其他或签审批人账号。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub additional_assignee_user_ids: Vec<String>,
@@ -90,6 +95,7 @@ impl DefinitionNodeRequest {
             node_name,
             display_order: 1,
             assignee_user_id,
+            assignee_source: Default::default(),
             additional_assignee_user_ids: Vec::new(),
         }
     }
@@ -110,6 +116,13 @@ impl DefinitionNodeRequest {
     pub fn prepare(mut self) -> ModelResult<Self> {
         self.node_id = self.node_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
         self.node_name = ApprovalNodeDefinition::normalize_name(self.node_name)?;
+        if self.assignee_source != AssigneeSource::Specified {
+            if !self.assignee_user_id.trim().is_empty() || !self.additional_assignee_user_ids.is_empty() {
+                return Err(ModelError::InvalidField("负责人审批节点不得同时指定人员"));
+            }
+            self.assignee_user_id.clear();
+            return Ok(self);
+        }
         let assignee = self.assignee_user_id.trim().to_string();
         ParticipantId::new(assignee.clone()).map_err(|error| match error {
             BpmError::InvalidParticipantId(message) => ModelError::InvalidField(message),
@@ -261,6 +274,7 @@ pub struct DefinitionNodeView {
     pub display_order: u32,
     /// 指定审批人。
     pub assignee_user_id: String,
+    pub assignee_source: AssigneeSource,
     /// 审批人显示名快照。
     pub assignee_name_snapshot: String,
     /// 同节点其他参与人的姓名快照。
@@ -430,6 +444,7 @@ mod tests {
     #[test]
     fn node_request_prepare_trims_external_text() {
         let prepared = DefinitionNodeRequest {
+            assignee_source: Default::default(),
             additional_assignee_user_ids: Vec::new(),
             node_id: Some("  node-1  ".to_string()),
             node_name: " 仓储复核 ".to_string(),
@@ -443,6 +458,7 @@ mod tests {
         assert_eq!(prepared.assignee_user_id, "u1");
 
         let blank_id = DefinitionNodeRequest {
+            assignee_source: Default::default(),
             additional_assignee_user_ids: Vec::new(),
             node_id: Some("   ".to_string()),
             node_name: "财务".to_string(),
@@ -455,6 +471,7 @@ mod tests {
 
         assert!(
             DefinitionNodeRequest {
+                assignee_source: Default::default(),
                 additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: "   ".to_string(),
@@ -466,6 +483,7 @@ mod tests {
         );
         assert!(
             DefinitionNodeRequest {
+                assignee_source: Default::default(),
                 additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: "仓储".to_string(),

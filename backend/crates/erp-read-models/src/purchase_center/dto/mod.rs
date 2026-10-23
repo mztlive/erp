@@ -60,6 +60,8 @@ mod wire_tests {
         let view = DocumentApprovalDefinitionView::new("def-1".to_string(), "采购审批".to_string())
             .with_version(3)
             .with_nodes(vec![DocumentApprovalNodeView {
+                assignee_source: None,
+                assignee_name: None,
                 key: "node-1".to_string(),
                 name: "节点一".to_string(),
             }]);

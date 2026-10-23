@@ -1,4 +1,5 @@
 //! 消费方拥有的端口：授权、对象读取、升级事实与工作项事实。
+pub mod approver_directory;
 
 mod audit;
 mod authorization;

@@ -14,6 +14,7 @@ use persistence_core::NoTransaction;
 use serde::Serialize;
 
 use super::ReceivableReadService;
+use crate::approval_runtime::binding_route;
 use crate::finance::dto::DocumentApprovalView;
 use crate::{Error, Result};
 
@@ -136,6 +137,11 @@ impl ReceivableReadService {
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
         let mut approval = super::approval_view::document_approval_view(binding.as_ref(), None, status);
+        if let (Some(binding), Some(definition)) = (binding.as_ref(), approval.definition.as_mut()) {
+            let (name, nodes) = binding_route(&self.db, binding, &mut NoTransaction).await?;
+            definition.name = name;
+            definition.nodes = nodes;
+        }
         let subject = erp_workflow::entity::approval_integration::subject_ref_for(
             erp_workflow::DocumentType::SalesInvoiceRequest,
             &request.base.id,

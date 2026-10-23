@@ -35,6 +35,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_adapter::purchase_change_order_object_readable;
+use crate::adapters::workflow::approver_directory::revalidate_approvers;
 use crate::adapters::{freeze_approval_materials, persist_approval_snapshot, purchase_access};
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -473,6 +474,7 @@ async fn persist_runtime_writes(
         .created_executions
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交采购变更单".to_string()))?;
+    revalidate_approvers(db, writes, executor).await?;
     db.bpm_workflow()
         .create_bpm_runtime_after_receipt(
             &writes.instance,
@@ -593,7 +595,7 @@ mod tests {
             node_name: name.into(),
             node_purpose: None,
             display_order: order,
-            assignee_participant_id: ParticipantId::new(user).unwrap(),
+            assignee_participant_id: Some(ParticipantId::new(user).unwrap()),
             assignee_label_snapshot: label.into(),
             at,
         })

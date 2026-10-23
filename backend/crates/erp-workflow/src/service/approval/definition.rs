@@ -88,7 +88,7 @@ pub(super) mod test_support {
             node_name: format!("节点{order}"),
             node_purpose: purpose.map(ToOwned::to_owned),
             display_order: order,
-            assignee_participant_id: ParticipantId::new(user).unwrap(),
+            assignee_participant_id: Some(ParticipantId::new(user).unwrap()),
             assignee_label_snapshot: "张三".to_string(),
             at: Timestamp::from_unix_secs(1).unwrap(),
         })

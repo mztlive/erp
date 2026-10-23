@@ -41,6 +41,7 @@ use super::approval_prepare::{
 };
 use super::approval_query::load_approval_binding;
 use super::mapping::{list_projection_from_execution, stock_adjustment_start_scopes};
+use crate::adapters::workflow::approver_directory::revalidate_approvers;
 use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -176,7 +177,10 @@ async fn validate_stock_adjustment_start(
     if persisted_binding != &input.binding {
         return Err(Error::ConflictError("库存调整审批定义绑定已变化，请刷新后重试".to_string()));
     }
-    let graph = load_bound_definition_graph_with_executor(db, persisted_binding, executor).await?;
+    let graph = load_bound_definition_graph_with_executor(db, persisted_binding, executor)
+        .await?
+        .with_frozen_assignees(&input.writes.instance, &input.writes.created_assignees)
+        .map_err(|e| Error::ValidationError(e.to_string()))?;
     revalidate_stock_adjustment_start_candidates(
         db,
         &input.rbac,
@@ -347,7 +351,7 @@ fn validate_start_execution(
     if first.node_key != entry.node_key
         || first.node_name != entry.node_name
         || first.additional_assignees != entry.additional_assignees
-        || first.assignee_participant_id != entry.assignee_participant_id
+        || Some(&first.assignee_participant_id) != entry.assignee_participant_id.as_ref()
         || first.assignee_name_snapshot != entry.assignee_label_snapshot
     {
         return Err(Error::ConflictError("库存调整启动入口执行与事务内定义事实不一致".to_string()));
@@ -358,8 +362,10 @@ fn validate_start_execution(
             !writes.created_assignees.iter().any(|assignee| {
                 assignee.process_instance_id.as_ref() == writes.instance.base.id
                     && assignee.node_key == node.node_key
-                    && assignee.definition_assignee_participant_id == node.assignee_participant_id
-                    && assignee.current_assignee_participant_id == node.assignee_participant_id
+                    && Some(&assignee.definition_assignee_participant_id)
+                        == node.assignee_participant_id.as_ref()
+                    && Some(&assignee.current_assignee_participant_id)
+                        == node.assignee_participant_id.as_ref()
                     && assignee.additional_assignees == node.additional_assignees
             })
         })
@@ -446,6 +452,7 @@ async fn persist_runtime_writes(
         .created_executions
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交库存调整".to_string()))?;
+    revalidate_approvers(db, writes, executor).await?;
     db.bpm_workflow()
         .create_bpm_runtime_after_receipt(
             &writes.instance,

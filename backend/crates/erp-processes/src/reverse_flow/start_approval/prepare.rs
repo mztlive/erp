@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use bpm::engine::DefinitionGraph;
 use bpm::ids::ApprovalProcessInstanceId;
-use bpm::model::SubjectRef;
+use bpm::model::{ApprovalCommandReceipt, SubjectRef};
 use erp_identity::SharedRbacService;
 use erp_workflow::BpmExt;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -14,6 +14,7 @@ use erp_workflow::service::approval::process_kind::process_kind_of;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
+use crate::adapters::workflow::approver_directory::resolve_start_approvers;
 use crate::{Error, Result};
 
 /// 在读取具体退款/冲正资源前先重验认证主体仍有效。
@@ -98,17 +99,36 @@ pub fn replay_subject_versions(current: u32) -> Result<Vec<u32>> {
     Ok(versions)
 }
 
-/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
+/// 加载绑定定义并解析新申请负责人；收据回放恢复原实例指派。
 ///
 /// # 参数
 /// * `db` - 数据库
 /// * `binding` - 创建时冻结的定义绑定
+/// * `actor` - 本次申请人
+/// * `receipt` - 已提交启动收据，可空
 ///
 /// # 返回
-/// 返回已持久化的定义图。
+/// 返回已解析新人员或恢复原实例人员的启动图。
 ///
 /// # 错误
 /// 定义不存在或仓储失败时返回冲突或仓储错误。
+pub async fn load_start_graph(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+    actor: &str,
+    receipt: Option<&ApprovalCommandReceipt>,
+) -> Result<DefinitionGraph> {
+    let graph = load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await?;
+    resolve_start_approvers(db, graph, actor, receipt, &mut NoTransaction).await
+}
+
+/// 读取取消流程使用的绑定定义，不重新解析负责人。
+/// # 参数
+/// 数据库及原绑定。
+/// # 返回
+/// 原定义图。
+/// # 错误
+/// 定义缺失或查询失败时拒绝。
 pub async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,

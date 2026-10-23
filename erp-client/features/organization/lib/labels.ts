@@ -13,6 +13,7 @@ export const OPERATION_LABEL: Record<
     string
 > = {
     update_person_profile: "保存人员资料",
+    set_leader: "设置负责人",
     create_unit: "新建组织",
     move_unit: "移动组织",
     rename_unit: "重命名组织",

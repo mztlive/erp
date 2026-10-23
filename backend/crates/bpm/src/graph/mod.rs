@@ -1,5 +1,6 @@
 //! BPM 定义图规则：节点规划、线性连线生成、发布图校验与运行期连线解析。
 
+mod assignment;
 pub mod linear;
 pub mod validator;
 
@@ -45,7 +46,9 @@ pub struct NodeReplacementDraft {
     /// 从 1 开始的展示顺序。
     pub display_order: u32,
     /// 指定审批人。
-    pub assignee_participant_id: ParticipantId,
+    pub assignee_participant_id: Option<ParticipantId>,
+    /// 不透明动态指派规则。
+    pub assignee_rule: Option<String>,
     /// 同节点的其他或签参与人。
     pub additional_assignees: Vec<ApprovalParticipant>,
 }
@@ -76,7 +79,7 @@ impl NodeReplacementDraft {
         new_node_key: impl Into<String>,
         node_name: impl Into<String>,
         display_order: u32,
-        assignee_participant_id: ParticipantId,
+        assignee_participant_id: impl Into<Option<ParticipantId>>,
     ) -> ModelResult<Self> {
         if display_order == 0 {
             return Err(ModelError::InvalidField("节点顺序必须从 1 开始"));
@@ -95,7 +98,8 @@ impl NodeReplacementDraft {
             new_node_key,
             node_name: ApprovalNodeDefinition::normalize_name(node_name)?,
             display_order,
-            assignee_participant_id,
+            assignee_participant_id: assignee_participant_id.into(),
+            assignee_rule: None,
             additional_assignees: Vec::new(),
         })
     }
@@ -312,7 +316,8 @@ impl DefinitionGraph {
                     assignee_label_snapshot: "pending".to_string(),
                     at,
                 })?
-                .with_additional_assignees(draft.additional_assignees.clone())?,
+                .with_additional_assignees(draft.additional_assignees.clone())?
+                .with_rule(draft.assignee_rule.clone())?,
             );
         }
         ensure_unique_node_identities(&planned)?;
@@ -479,7 +484,8 @@ pub fn copy_nodes_for_definition(
                 assignee_label_snapshot: node.assignee_label_snapshot.clone(),
                 at,
             })?
-            .with_additional_assignees(node.additional_assignees.clone())?,
+            .with_additional_assignees(node.additional_assignees.clone())?
+            .with_rule(node.assignee_rule.clone())?,
         );
     }
     ensure_unique_node_identities(&copied)?;
@@ -683,7 +689,7 @@ mod tests {
             node_name: format!("节点{order}"),
             node_purpose: purpose.map(ToOwned::to_owned),
             display_order: order,
-            assignee_participant_id: ParticipantId::new(format!("u{order}")).unwrap(),
+            assignee_participant_id: Some(ParticipantId::new(format!("u{order}")).unwrap()),
             assignee_label_snapshot: format!("人员{order}"),
             at: Timestamp::from_unix_secs(1).unwrap(),
         })

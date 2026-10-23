@@ -2,8 +2,10 @@
 //!
 //! 旧 bootstrap、编译期 registry、resolver 与 runtime 已删除。
 //! 目标运行只通过 `execution` 进入 BPM，不得回退旧步骤模型。
+pub mod dynamic_assignees;
 
 pub mod action;
+pub mod assignee_source;
 pub mod binding;
 pub mod business_adapter;
 pub mod definition;

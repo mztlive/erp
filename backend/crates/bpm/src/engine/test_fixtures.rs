@@ -45,7 +45,7 @@ pub(crate) fn node(
         node_name: name.into(),
         node_purpose: None,
         display_order: order,
-        assignee_participant_id: participant(user),
+        assignee_participant_id: Some(participant(user)),
         assignee_label_snapshot: label.into(),
         at,
     })

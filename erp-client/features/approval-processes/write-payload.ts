@@ -39,6 +39,7 @@ export const buildNodeWrites = (
         const write: DefinitionNodeWrite = {
             node_name: node.node_name.trim(),
             display_order: index + 1,
+            assignee_source: node.assignee_source,
             assignee_user_id: node.assignee_user_id,
         }
         if (node.additional_assignees.length)
@@ -85,6 +86,7 @@ const sameNodeWrites = (
             node.node_id === other.node_id &&
             node.node_name === other.node_name &&
             node.display_order === other.display_order &&
+            node.assignee_source === other.assignee_source &&
             node.assignee_user_id === other.assignee_user_id &&
             JSON.stringify(node.additional_assignee_user_ids ?? []) ===
                 JSON.stringify(other.additional_assignee_user_ids ?? [])

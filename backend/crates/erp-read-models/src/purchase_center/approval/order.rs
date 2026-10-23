@@ -85,12 +85,7 @@ pub(in crate::purchase_center) fn definition_view_from_binding(
         graph.map(|item| item.definition.name.clone()).unwrap_or_default(),
     )
     .with_version(binding.approval_definition_version)
-    .with_nodes(
-        nodes
-            .into_iter()
-            .map(|node| DocumentApprovalNodeView { key: node.node_key.clone(), name: node.node_name.clone() })
-            .collect(),
-    )
+    .with_nodes(nodes.into_iter().map(DocumentApprovalNodeView::from_node).collect())
 }
 
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。

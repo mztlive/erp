@@ -4,6 +4,8 @@
 //! 不得读取系统时钟或自行生成主键。
 
 mod approval_participant;
+mod assignment;
+pub use assignment::AssigneeResolution;
 pub mod command_identity;
 pub mod command_receipt;
 pub mod instance_assignee;

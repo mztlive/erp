@@ -150,7 +150,7 @@ pub fn reverse_start_bindings(
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
             node_key: node.node_key.clone(),
-            participant: node.assignee_participant_id.clone(),
+            participant: node.assignee().map_err(|e| Error::ValidationError(e.to_string()))?.clone(),
             eligibility: converge_node_eligibility(node, |assignee| {
                 match readable(organization_id, assignee) {
                     Ok(_) => None,

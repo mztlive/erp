@@ -42,10 +42,11 @@ use super::cancel_approval::{
 use super::start_approval::{
     CustomerRefundStartInput, CustomerRefundStartPersistInput, ReplayReturnStartInput,
     build_customer_refund_start_input, ensure_return_start_actor_active,
-    ensure_return_start_replay_authorized, load_bound_definition_graph,
-    load_bound_definition_graph_with_executor, load_start_receipt, persist_customer_refund_start,
-    persist_runtime_writes, replay_return_start_with_executor, replay_subject_versions,
+    ensure_return_start_replay_authorized, load_bound_definition_graph_with_executor, load_start_graph,
+    load_start_receipt, persist_customer_refund_start, persist_runtime_writes,
+    replay_return_start_with_executor, replay_subject_versions,
 };
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
 
@@ -170,6 +171,7 @@ impl ReturnsProcess {
                     )
                     .await?;
                     let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
+                    let graph = resolve_approvers(&db, graph, actor_owned.id(), executor).await?;
                     let start_input = build_customer_refund_start_input(CustomerRefundStartInput {
                         graph,
                         binding: &binding,

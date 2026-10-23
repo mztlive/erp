@@ -106,7 +106,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let graph = self
             .db
             .bpm_workflow()
-            .load_definition_graph(&runtime.instance.process_definition_id, &mut NoTransaction)
+            .load_instance_graph(&runtime.instance, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
         let now = Instant::now();

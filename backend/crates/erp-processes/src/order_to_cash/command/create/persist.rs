@@ -20,6 +20,7 @@ use super::replay_creation_event;
 use super::submission::{CreationDraft, CreationPlan, CreationSubmit};
 use crate::Result;
 use crate::adapters::selection_access;
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::business_ownership::ensure_creation_org as ensure_order_creation_org;
 use crate::order_to_cash::SalesOrderCommandProcess;
 use crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter;
@@ -200,6 +201,7 @@ async fn prepare_bound_submission(
 ) -> Result<PreparedExecution> {
     let approval = &submit.approval;
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
+    let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
     let start_input = build_sales_order_start_input(SalesOrderStartInput {
         graph,
         binding,

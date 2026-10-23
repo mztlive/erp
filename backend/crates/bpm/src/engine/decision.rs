@@ -135,7 +135,7 @@ fn ensure_actor(
     command: &DecideCommand,
 ) -> EngineResult<()> {
     let node = graph.node(&current.node_key).ok_or(EngineError::GraphCorrupted)?;
-    if current.assignee_participant_id != node.assignee_participant_id
+    if current.assignee_participant_id != *node.assignee()?
         || current.additional_assignees != node.additional_assignees
     {
         return Err(EngineError::InvalidCommand("执行参与人必须匹配冻结定义"));

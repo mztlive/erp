@@ -20,6 +20,7 @@ use super::dto::{
     DocumentApprovalView,
 };
 use crate::Result;
+use crate::approval_runtime::binding_route;
 
 /// 加载销售单详情的只读审批结构。
 ///
@@ -54,14 +55,20 @@ pub(super) async fn load_document_approval(
     let subject = super::subject_ref_for_sales_business(business_type, sales_order_id)
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     let runtime = load_runtime(db, &subject).await?;
-    Ok(document_approval_view_with_history(
+    let mut view = document_approval_view_with_history(
         binding,
         runtime.instance,
         runtime.recent_history,
         runtime.history_page,
         commercial,
         review,
-    ))
+    );
+    if let (Some(binding), Some(definition)) = (binding, view.definition.as_mut()) {
+        let (name, nodes) = binding_route(db, binding, &mut NoTransaction).await?;
+        definition.name = name;
+        definition.nodes = nodes;
+    }
+    Ok(view)
 }
 
 /// 已投影的运行事实。

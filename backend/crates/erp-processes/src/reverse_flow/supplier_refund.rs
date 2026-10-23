@@ -50,11 +50,11 @@ use super::return_settlement::validate_settlement;
 use super::start_approval::{
     ReplayReturnStartInput, SupplierRefundStartInput, SupplierRefundStartPersistInput,
     build_supplier_refund_start_input, ensure_return_start_actor_active,
-    ensure_return_start_replay_authorized, load_bound_definition_graph,
-    load_bound_definition_graph_with_executor, load_supplier_refund_start_receipt,
-    persist_supplier_refund_runtime, persist_supplier_refund_start, replay_return_start_with_executor,
-    replay_subject_versions,
+    ensure_return_start_replay_authorized, load_bound_definition_graph_with_executor, load_start_graph,
+    load_supplier_refund_start_receipt, persist_supplier_refund_runtime, persist_supplier_refund_start,
+    replay_return_start_with_executor, replay_subject_versions,
 };
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
 
@@ -182,6 +182,7 @@ impl ReturnsProcess {
                     )
                     .await?;
                     let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
+                    let graph = resolve_approvers(&db, graph, actor_owned.id(), executor).await?;
                     let start_input = build_supplier_refund_start_input(SupplierRefundStartInput {
                         graph,
                         binding: &binding,
@@ -307,7 +308,6 @@ impl ReturnsProcess {
         let organization_id = self.supplier_refund_responsible_org(&refund.supplier_id).await?;
         let snapshot = build_supplier_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
         let _ = supplier_refund_object_readable(&organization_id, actor.id())?;
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
         let existing_receipt = load_supplier_refund_start_receipt(
             &self.db,
             &subject,
@@ -315,6 +315,7 @@ impl ReturnsProcess {
             &idempotency_key,
         )
         .await?;
+        let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_supplier_refund_start_input(SupplierRefundStartInput {
             graph,
             binding: &binding,

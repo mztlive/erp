@@ -45,6 +45,7 @@ use super::super::change_start::{
     replay_purchase_change_start_with_executor,
 };
 use super::guard::check_change_inputs;
+use crate::adapters::workflow::approver_directory::resolve_start_approvers;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -405,6 +406,14 @@ impl PurchaseOrderProcess {
             &subject,
             change.approval_subject_version,
             &prepared.idempotency_key,
+        )
+        .await?;
+        let graph = resolve_start_approvers(
+            &self.db,
+            graph,
+            actor.id(),
+            existing_receipt.as_ref(),
+            &mut NoTransaction,
         )
         .await?;
         let start_input = build_purchase_change_start_input(PurchaseChangeStartInput {

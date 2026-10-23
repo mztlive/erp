@@ -13,6 +13,7 @@ use validator::Validate;
 
 use super::projection::document_approval_view;
 use super::{SalesChangeOrderDetailView, SalesChangeProcurementView, SalesChangeReadService};
+use crate::approval_runtime::DocumentApprovalNodeView;
 use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
@@ -235,11 +236,7 @@ async fn runtime_detail_view(
     if let (Some(definition), Some(mut graph)) = (view.approval.definition.as_mut(), graph) {
         definition.name = graph.definition.name;
         graph.nodes.sort_by_key(|node| node.display_order);
-        definition.nodes = graph
-            .nodes
-            .into_iter()
-            .map(|node| super::dto::DocumentApprovalNodeView { key: node.node_key, name: node.node_name })
-            .collect();
+        definition.nodes = graph.nodes.iter().map(DocumentApprovalNodeView::from_node).collect();
     }
     Ok(view)
 }

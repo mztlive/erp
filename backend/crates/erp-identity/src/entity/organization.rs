@@ -26,9 +26,21 @@ pub struct OrgUnit {
     pub name: String,
     pub parent_id: Option<String>,
     pub kind: OrgUnitKind,
+    /// 当前负责人；历史指派保留在组织变更回执中。
+    #[serde(default)]
+    pub leader: Option<OrgLeader>,
     pub enabled: bool,
     pub changed_by: String,
     pub reason: String,
+}
+
+/// 单个组织当前唯一负责人，提交变更立即生效。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OrgLeader {
+    pub assignment_id: String,
+    pub user_id: String,
+    pub assigned_at: Instant,
+    pub assigned_by: String,
 }
 
 /// UTC 半开有效期；不改变客户归属的自然日规则。
@@ -229,6 +241,33 @@ impl<'a> OrgTree<'a> {
 }
 
 impl OrgUnit {
+    /// 验证完整祖先路径后选择最近同类组织，不跨过缺负责人节点兜底。
+    /// # 参数
+    /// `path` 从本人主属组织向根排列，`kind` 是目标类型，`at` 是解析时点。
+    /// # 返回
+    /// 含有效负责人配置的最近组织。
+    /// # 错误
+    /// 祖先停用、目标类型或负责人缺失、指派尚未生效时拒绝。
+    pub fn leader_on_path(path: Vec<Self>, kind: OrgUnitKind, at: Instant) -> Result<Self> {
+        if path.iter().any(|unit| !unit.enabled || unit.base.is_deleted()) {
+            return Err(Error::ValidationError("申请人所属组织或上级组织已停用，请调整所属组织".into()));
+        }
+        let label = match kind {
+            OrgUnitKind::Team => "团队",
+            OrgUnitKind::Department => "部门",
+        };
+        let unit = path.into_iter().find(|unit| unit.kind == kind).ok_or_else(|| {
+            Error::ValidationError(format!("申请人没有所属{label}，请检查组织配置或审批流程"))
+        })?;
+        if unit.leader.as_ref().is_none_or(|leader| leader.assigned_at > at) {
+            return Err(Error::ValidationError(format!(
+                "{}未配置有效负责人，请在组织与人员中设置负责人",
+                unit.name
+            )));
+        }
+        Ok(unit)
+    }
+
     /// 构造启用组织；父子关系由完整树在事务中校验。
     ///
     /// # 参数
@@ -257,6 +296,7 @@ impl OrgUnit {
             name: normalize_required_text(name, "组织名称不能为空", 100, "组织名称过长")?,
             parent_id,
             kind,
+            leader: None,
             enabled: true,
             changed_by: normalize_required_text(actor, "操作人不能为空", 128, "操作人身份过长")?,
             reason: normalize_required_text(reason, "变更原因不能为空", 1000, "变更原因过长")?,

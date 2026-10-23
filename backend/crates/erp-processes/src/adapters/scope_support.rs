@@ -288,6 +288,7 @@ mod tests {
             name: id.to_string(),
             parent_id: parent.map(str::to_string),
             kind: OrgUnitKind::Department,
+            leader: None,
             enabled,
             changed_by: "admin".to_string(),
             reason: "test".to_string(),

@@ -227,6 +227,7 @@ fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Ve
                 slice::from_ref(&assignee),
             )?;
             Ok(DefinitionNodeRequest {
+                assignee_source: Default::default(),
                 additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: node.name.clone(),

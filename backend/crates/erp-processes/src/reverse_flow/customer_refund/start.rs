@@ -1,4 +1,6 @@
 //! 客户退款审批启动、精确授权回放、8次fresh恢复与撤回编排。
+use persistence_core::NoTransaction;
+
 use super::*;
 impl ReturnsProcess {
     /// 从绑定读取定义并持久化启动事实。
@@ -34,9 +36,9 @@ impl ReturnsProcess {
             customer_refund_start_command(id, refund.approval_subject_version, actor.id(), &idempotency_key);
         let _ = start_approval_command_kind(&start);
         let _ = customer_refund_object_readable(&organization_id, actor.id())?;
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
         let existing_receipt =
             load_start_receipt(&self.db, &subject, refund.approval_subject_version, &idempotency_key).await?;
+        let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_customer_refund_start_input(CustomerRefundStartInput {
             graph,
             binding: &binding,

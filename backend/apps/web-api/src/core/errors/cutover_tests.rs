@@ -320,7 +320,7 @@ const ORIGINAL_INDEXES: [(&str, &str); 17] = [
     ),
     (
         "uk_procurement_responsibility_active_selector",
-        "同一采购责任选择器只能有一条启用规则，请核对当前资料后再操作",
+        "同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员",
     ),
     ("uk_work_items_open_fulfillment_object", "该履约对象已存在开放任务，请刷新后重试"),
     ("uk_work_items_open_customer_acceptance_object", "该销售单已存在开放客户验收任务，请刷新后重试"),

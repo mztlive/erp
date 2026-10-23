@@ -17,6 +17,7 @@ use crate::core::middleware::authenticate;
 pub fn routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/profile", get(auth::profile::account_profile))
+        .route("/approval-leader", get(auth::profile::own_approval_leader))
         .route("/regions", get(region::list_regions))
         .merge(copy_routes())
         .route(

@@ -9,6 +9,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
+use super::super::assignee_source::AssigneeSource;
 use super::super::definition_dto::{
     DefinitionDetailView, DefinitionNodeRequest, ReplaceDefinitionNodesRequest,
 };
@@ -390,9 +391,14 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
                 next_id(),
                 request.node_name.clone(),
                 request.display_order,
-                ParticipantId::new(request.assignee_user_id.clone()).map_err(map_bpm_error)?,
+                if request.assignee_source.rule().is_some() {
+                    None
+                } else {
+                    Some(ParticipantId::new(request.assignee_user_id.clone()).map_err(map_bpm_error)?)
+                },
             )
             .map_err(map_model_error)?;
+            draft.assignee_rule = request.assignee_source.rule().map(str::to_owned);
             draft.additional_assignees = request
                 .additional_assignee_user_ids
                 .iter()
@@ -539,8 +545,15 @@ pub(super) fn apply_snapshots(
     let at = now()?;
     let mut refreshed = Vec::with_capacity(nodes.len());
     for node in nodes {
+        if node.assignee_rule.is_some() {
+            let source = AssigneeSource::from_rule(node.assignee_rule.as_deref())?;
+            let mut node = node;
+            node.assignee_label_snapshot = source.label().into();
+            refreshed.push(node);
+            continue;
+        }
         let account = accounts
-            .get(node.assignee_participant_id.as_str())
+            .get(node.assignee().map_err(map_model_error)?.as_str())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         let additional = node
             .additional_assignees
@@ -755,7 +768,7 @@ mod tests {
                 node_name: id.into(),
                 node_purpose: None,
                 display_order,
-                assignee_participant_id: ParticipantId::new("approver").unwrap(),
+                assignee_participant_id: Some(ParticipantId::new("approver").unwrap()),
                 assignee_label_snapshot: "审批人".into(),
                 at: Timestamp::from_unix_secs(1).unwrap(),
             })

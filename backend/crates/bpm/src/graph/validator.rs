@@ -89,6 +89,7 @@ pub fn validate_linear_graph(
     transitions: &[ApprovalTransitionDefinition],
 ) -> ModelResult<()> {
     for node in nodes {
+        node.validate_assignment()?;
         node.clone().with_additional_assignees(node.additional_assignees.clone())?;
     }
     let ordered = ordered_nodes(nodes)?;
@@ -184,7 +185,7 @@ mod tests {
             node_name: format!("节点{order}"),
             node_purpose: None,
             display_order: order,
-            assignee_participant_id: ParticipantId::new(format!("u{order}")).unwrap(),
+            assignee_participant_id: Some(ParticipantId::new(format!("u{order}")).unwrap()),
             assignee_label_snapshot: format!("人员{order}"),
             at: Timestamp::from_unix_secs(1).unwrap(),
         })

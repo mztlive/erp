@@ -10,7 +10,7 @@ use crate::model::types::{
     ApprovalNodeType, LABEL_MAX_LEN, ModelError, ModelResult, NAME_MAX_LEN, NODE_KEY_MAX_LEN,
     PURPOSE_MAX_LEN, base_model_at, normalize_optional, normalize_required,
 };
-use crate::model::{ApprovalParticipant, ParticipantId, Timestamp};
+use crate::model::{ApprovalParticipant, AssigneeResolution, ParticipantId, Timestamp};
 
 /// 创建人工审批节点所需的身份与责任快照。
 pub struct NewNodeDefinition {
@@ -27,7 +27,7 @@ pub struct NewNodeDefinition {
     /// 从 1 开始的展示顺序。
     pub display_order: u32,
     /// 指定审批人。
-    pub assignee_participant_id: ParticipantId,
+    pub assignee_participant_id: Option<ParticipantId>,
     /// 发布时冻结的显示名。
     pub assignee_label_snapshot: String,
     /// 调用方时间。
@@ -52,15 +52,80 @@ pub struct ApprovalNodeDefinition {
     /// 从 1 开始的展示顺序。
     pub display_order: u32,
     /// 指定审批人。
-    pub assignee_participant_id: ParticipantId,
+    pub assignee_participant_id: Option<ParticipantId>,
     /// 发布时冻结的显示名。
     pub assignee_label_snapshot: String,
+    /// 不透明的动态指派规则；解析由调用方完成。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assignee_rule: Option<String>,
+    /// 动态规则的本次解析依据，仅运行内存图使用。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution: Option<AssigneeResolution>,
     /// 同节点的其他或签审批人；缺失时兼容单人节点。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub additional_assignees: Vec<ApprovalParticipant>,
 }
 
 impl ApprovalNodeDefinition {
+    /// 配置动态指派规则，指定人员节点传空。
+    /// # 参数
+    /// `rule` 是调用方识别的规则键。
+    /// # 返回
+    /// 返回校验后的节点。
+    /// # 错误
+    /// 规则与人员混用或均缺失时拒绝。
+    pub fn with_rule(mut self, rule: Option<String>) -> ModelResult<Self> {
+        self.assignee_rule = rule;
+        self.validate_assignment()?;
+        Ok(self)
+    }
+
+    /// 校验定义规则或已解析运行图的指派完整性。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 合法指派返回成功。
+    /// # 错误
+    /// 缺少规则或人员、动态规则混合或签时拒绝。
+    pub fn validate_assignment(&self) -> ModelResult<()> {
+        normalize_required(
+            self.assignee_label_snapshot.clone(),
+            "审批人显示名不能为空",
+            LABEL_MAX_LEN,
+            "审批人显示名过长",
+        )?;
+        if let Some(rule) = &self.assignee_rule {
+            if rule.trim().is_empty()
+                || rule.len() > 64
+                || !self.additional_assignees.is_empty()
+                || self.assignee_participant_id.is_some() != self.resolution.is_some()
+                || self.resolution.as_ref().is_some_and(|r| {
+                    &r.rule != rule
+                        || r.subject_id.is_empty()
+                        || r.source_id.is_empty()
+                        || r.assignment_id.is_empty()
+                        || r.participant_name != self.assignee_label_snapshot
+                })
+            {
+                return Err(ModelError::InvalidField("动态指派规则与解析结果不匹配"));
+            }
+        } else if self.assignee_participant_id.is_none() || self.resolution.is_some() {
+            return Err(ModelError::InvalidField("指定审批人不能为空"));
+        }
+        Ok(())
+    }
+
+    /// 读取已确定的审批人；未解析规则不得进入引擎。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回首位审批人。
+    /// # 错误
+    /// 未解析时拒绝。
+    pub fn assignee(&self) -> ModelResult<&ParticipantId> {
+        self.assignee_participant_id.as_ref().ok_or(ModelError::InvalidField("审批人来源尚未解析"))
+    }
+
     /// 设置同节点的其他或签审批人。
     /// # 参数
     /// `assignees` 为除首位之外的参与人快照。
@@ -69,7 +134,11 @@ impl ApprovalNodeDefinition {
     /// # 错误
     /// 人员重复、超限或显示名非法时失败。
     pub fn with_additional_assignees(mut self, assignees: Vec<ApprovalParticipant>) -> ModelResult<Self> {
-        validate_additional(&self.assignee_participant_id, &assignees)?;
+        if let Some(id) = &self.assignee_participant_id {
+            validate_additional(id, &assignees)?;
+        } else if !assignees.is_empty() {
+            return Err(ModelError::InvalidField("动态节点不得混合指定人员"));
+        }
         self.additional_assignees = assignees;
         Ok(self)
     }
@@ -82,10 +151,14 @@ impl ApprovalNodeDefinition {
     /// # 错误
     /// 无。
     pub fn participants(&self) -> Vec<ApprovalParticipant> {
-        let mut result = vec![ApprovalParticipant {
-            participant_id: self.assignee_participant_id.clone(),
-            name: self.assignee_label_snapshot.clone(),
-        }];
+        let mut result = self
+            .assignee_participant_id
+            .iter()
+            .map(|id| ApprovalParticipant {
+                participant_id: id.clone(),
+                name: self.assignee_label_snapshot.clone(),
+            })
+            .collect::<Vec<_>>();
         result.extend(self.additional_assignees.clone());
         result
     }
@@ -98,7 +171,7 @@ impl ApprovalNodeDefinition {
     /// # 错误
     /// 无。
     pub fn has_participant(&self, id: &str) -> bool {
-        self.assignee_participant_id.as_str() == id
+        self.assignee_participant_id.as_ref().is_some_and(|value| value.as_str() == id)
             || self.additional_assignees.iter().any(|item| item.participant_id.as_str() == id)
     }
 
@@ -144,6 +217,8 @@ impl ApprovalNodeDefinition {
             node_purpose: normalize_optional(input.node_purpose, PURPOSE_MAX_LEN, "用途键过长")?,
             display_order: input.display_order,
             additional_assignees: Vec::new(),
+            assignee_rule: None,
+            resolution: None,
             assignee_participant_id: input.assignee_participant_id,
             assignee_label_snapshot: normalize_required(
                 input.assignee_label_snapshot,
@@ -184,7 +259,8 @@ impl ApprovalNodeDefinition {
             assignee_label_snapshot: assignee_label_snapshot.into(),
             at,
         })?
-        .with_additional_assignees(self.additional_assignees.clone())
+        .with_additional_assignees(self.additional_assignees.clone())?
+        .with_rule(self.assignee_rule.clone())
     }
 }
 
@@ -208,7 +284,7 @@ mod tests {
                 node_name: "仓储复核".into(),
                 node_purpose: None,
                 display_order: 0,
-                assignee_participant_id: assignee.clone(),
+                assignee_participant_id: Some(assignee.clone()),
                 assignee_label_snapshot: "张三".into(),
                 at,
             })
@@ -222,7 +298,7 @@ mod tests {
                 node_name: "仓储复核".into(),
                 node_purpose: None,
                 display_order: 1,
-                assignee_participant_id: assignee.clone(),
+                assignee_participant_id: Some(assignee.clone()),
                 assignee_label_snapshot: "张三".into(),
                 at,
             })
@@ -235,7 +311,7 @@ mod tests {
             node_name: "仓储复核".into(),
             node_purpose: None,
             display_order: 1,
-            assignee_participant_id: assignee,
+            assignee_participant_id: Some(assignee),
             assignee_label_snapshot: "张三".into(),
             at,
         })

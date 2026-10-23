@@ -27,6 +27,7 @@ use super::start_approval::{
     PurchaseOrderStartInput, PurchaseOrderStartPersistInput, build_purchase_order_start_input,
     load_bound_definition_graph_with_executor, persist_purchase_order_start,
 };
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::{Error, Result};
 
 /// 创建并提交后的正式号与乐观锁版本。
@@ -283,6 +284,7 @@ async fn prepare_created_order_start(
     let binding = find_approval_binding(db, &order.base.id, executor).await.map_err(crate::Error::from)?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
+    let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
     let start = purchase_order_start_command(
         &order.base.id,
         order.approval_subject_version,

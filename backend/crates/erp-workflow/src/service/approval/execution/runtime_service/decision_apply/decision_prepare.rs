@@ -406,7 +406,7 @@ async fn load_frozen_definition_graph(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     db.bpm_workflow()
-        .load_definition_graph(&loaded.instance.process_definition_id, executor)
+        .load_instance_graph(&loaded.instance, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))
 }

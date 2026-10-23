@@ -1,6 +1,8 @@
 //! 单据详情共用的审批运行事实；调用方负责完整业务对象读取授权。
 
+mod definition;
 mod dto;
+pub use definition::{DocumentApprovalNodeView, binding_route};
 mod query;
 
 use application_core::AuditActor;

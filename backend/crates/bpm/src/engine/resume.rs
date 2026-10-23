@@ -172,7 +172,7 @@ fn ensure_binding_eligibility_affinity(
     let node = graph.node(&assignee.node_key).ok_or(EngineError::GraphCorrupted)?;
     if node.additional_assignees != assignee.additional_assignees
         || current.additional_assignees != assignee.additional_assignees
-        || node.assignee_participant_id != assignee.definition_assignee_participant_id
+        || *node.assignee()? != assignee.definition_assignee_participant_id
     {
         return Err(EngineError::GraphCorrupted);
     }

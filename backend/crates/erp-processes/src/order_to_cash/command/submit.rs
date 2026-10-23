@@ -37,6 +37,7 @@ use super::super::start_approval::{
     SalesOrderWorkingCopyPersistPlan, build_sales_order_start_input, load_bound_definition_graph,
     load_start_receipt, persist_sales_order_start, replay_sales_order_start_with_executor,
 };
+use crate::adapters::workflow::approver_directory::resolve_start_approvers;
 use crate::order_to_cash::command_event::{
     SalesCommandEvent, finish_receipt_recovery, replay_submission_with_executor,
 };
@@ -321,6 +322,14 @@ impl SalesOrderCommandProcess {
             &subject,
             submission.submission_no,
             idempotency_key,
+        )
+        .await?;
+        let graph = resolve_start_approvers(
+            &self.db,
+            graph,
+            actor.id(),
+            existing_receipt.as_ref(),
+            &mut NoTransaction,
         )
         .await?;
         let start_input = build_sales_order_start_input(SalesOrderStartInput {

@@ -16,6 +16,7 @@ use super::adapter::{
 use super::approval_query::load_approval_binding;
 use super::mapping::build_adjustment_line_updates;
 use super::{InventoryAdjustmentService, approval_prepare as start_approval, persist as start_persist};
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::{Error, Result};
 
 impl InventoryAdjustmentService {
@@ -97,6 +98,7 @@ impl InventoryAdjustmentService {
         let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let organization_id = adjustment.warehouse_id.to_string();
         let graph = start_approval::load_bound_definition_graph(&self.db, &binding).await?;
+        let graph = resolve_approvers(&self.db, graph, actor.id(), &mut NoTransaction).await?;
         let start_input = start_approval::build_stock_adjustment_start_input(
             &self.db,
             &self.rbac,

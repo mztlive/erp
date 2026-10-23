@@ -43,6 +43,7 @@ const schema = z
             "create_unit",
             "move_unit",
             "rename_unit",
+            "set_leader",
             "disable_unit",
             "transfer_member",
             "end_membership",
@@ -346,6 +347,7 @@ export function OrganizationChangeDialog({
                                 ) : null}
                                 {operation === "move_unit" ||
                                 operation === "rename_unit" ||
+                                operation === "set_leader" ||
                                 operation === "disable_unit" ||
                                 operation === "transfer_member" ? (
                                     <form.AppField
@@ -401,6 +403,20 @@ export function OrganizationChangeDialog({
                                             />
                                         )}
                                     </form.Subscribe>
+                                ) : null}
+                                {operation === "set_leader" ? (
+                                    <form.AppField
+                                        name="userId"
+                                        children={(field) => (
+                                            <field.SelectField
+                                                id="organization-change-leader"
+                                                label="负责人"
+                                                options={peopleOptions}
+                                                placeholder="未设置负责人"
+                                                description="清除选择后提交，可移除当前负责人。"
+                                            />
+                                        )}
+                                    />
                                 ) : null}
                                 {operation === "end_membership" ||
                                 (operation === "transfer_member" &&

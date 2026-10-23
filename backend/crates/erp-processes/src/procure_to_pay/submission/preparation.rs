@@ -22,6 +22,7 @@ use id_generator::next_id;
 use persistence_core::NoTransaction;
 
 use super::{PurchaseOrderProcess, PurchaseSubmitCommand};
+use crate::adapters::workflow::approver_directory::resolve_start_approvers;
 use crate::procure_to_pay::adapter::{
     RECENT_HISTORY_LIMIT, build_purchase_order_snapshot, execute_purchase_order_domain_action,
     purchase_order_adapter, purchase_order_object_readable, purchase_order_responsible_org_id,
@@ -233,6 +234,14 @@ impl PurchaseOrderProcess {
             &subject,
             draft.order.approval_subject_version,
             &command.request.idempotency_key,
+        )
+        .await?;
+        let graph = resolve_start_approvers(
+            &self.db,
+            graph,
+            command.actor.id(),
+            receipt.as_ref(),
+            &mut NoTransaction,
         )
         .await?;
         let input = build_purchase_order_start_input(PurchaseOrderStartInput {

@@ -294,7 +294,7 @@ mod tests {
                     node_name: "入口".into(),
                     node_purpose: None,
                     display_order: 1,
-                    assignee_participant_id: participant("u1"),
+                    assignee_participant_id: Some(participant("u1")),
                     assignee_label_snapshot: "张三".into(),
                     at: started,
                 })

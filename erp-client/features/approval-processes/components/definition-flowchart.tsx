@@ -124,13 +124,15 @@ export function DefinitionFlowchart({
                                         {node.node_name.trim() || "未命名节点"}
                                     </span>
                                     <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                        {node.additional_assignees.length
-                                            ? overview
-                                                ? "或签 · 任一人通过"
-                                                : "或签"
-                                            : overview
-                                              ? "单人审批"
-                                              : "单人"}
+                                        {node.assignee_source !== "SPECIFIED"
+                                            ? "组织负责人"
+                                            : node.additional_assignees.length
+                                              ? overview
+                                                  ? "或签 · 任一人通过"
+                                                  : "或签"
+                                              : overview
+                                                ? "单人审批"
+                                                : "单人"}
                                     </span>
                                 </div>
                                 <div className="flex items-start gap-2 px-4 py-3 text-xs text-muted-foreground">
@@ -138,7 +140,9 @@ export function DefinitionFlowchart({
                                     <span
                                         className={cn(
                                             "min-w-0 break-words leading-5",
-                                            !node.assignee_user_id &&
+                                            node.assignee_source ===
+                                                "SPECIFIED" &&
+                                                !node.assignee_user_id &&
                                                 "text-warning-soft-foreground",
                                         )}
                                     >
@@ -159,7 +163,8 @@ export function DefinitionFlowchart({
                             "w-full overflow-hidden rounded-lg border bg-card text-left shadow-sm transition-colors",
                             selected
                                 ? "border-primary ring-2 ring-primary/15"
-                                : !node.assignee_user_id ||
+                                : (node.assignee_source === "SPECIFIED" &&
+                                        !node.assignee_user_id) ||
                                     !node.node_name.trim()
                                   ? "border-warning-border"
                                   : "border-border",

@@ -418,7 +418,6 @@ export function AccountProfileEditor({
                                                 </p>
                                             ) : null}
                                         </div>
-                                        
                                     </div>
                                 )}
                             </form.AppField>

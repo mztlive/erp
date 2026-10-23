@@ -52,13 +52,7 @@ impl PurchasePaymentRequestReadService {
         Ok(Some(
             DocumentApprovalDefinitionView::new(id.to_string(), graph.definition.name)
                 .with_version(version)
-                .with_nodes(
-                    graph
-                        .nodes
-                        .into_iter()
-                        .map(|node| DocumentApprovalNodeView { key: node.node_key, name: node.node_name })
-                        .collect(),
-                ),
+                .with_nodes(graph.nodes.iter().map(DocumentApprovalNodeView::from_node).collect()),
         ))
     }
 }

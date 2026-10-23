@@ -1,3 +1,8 @@
+export type AssigneeSource =
+    | "SPECIFIED"
+    | "APPLICANT_TEAM_LEADER"
+    | "APPLICANT_DEPARTMENT_LEADER"
+
 /**
  * 审批流程配置（W24）与阶段 06 HTTP DTO 对齐的线协议类型。
  *
@@ -134,6 +139,7 @@ export type DefinitionNodeView = {
     node_type: string
     node_purpose: string | null
     display_order: number
+    assignee_source: AssigneeSource
     assignee_user_id: string
     assignee_name_snapshot: string
     additional_assignees?: { participant_id: string; name: string }[]
@@ -181,6 +187,7 @@ export type DefinitionNodeWrite = {
     node_id?: string
     node_name: string
     display_order: number
+    assignee_source: AssigneeSource
     assignee_user_id: string
 }
 
@@ -209,6 +216,7 @@ export type EditorNode = {
     client_id: string
     node_id: string | null
     node_name: string
+    assignee_source: AssigneeSource
     assignee_user_id: string
     assignee_name: string
     additional_assignees: EligibleAssignee[]

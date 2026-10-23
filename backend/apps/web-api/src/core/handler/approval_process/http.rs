@@ -98,6 +98,25 @@ mod tests {
     use super::{DefinitionLockHttpRequest, EligibleAssigneesQuery, ReplaceNodesHttpRequest};
 
     #[test]
+    fn dynamic_node_http_contract_accepts_rules_and_rejects_mixed_people() {
+        let request: ReplaceNodesHttpRequest = serde_json::from_value(json!({
+            "expected_definition_lock_version":"1", "idempotency_key":"leader",
+            "nodes":[{"node_name":"团队审核", "display_order":1, "assignee_source":"APPLICANT_TEAM_LEADER"}]
+        }))
+        .unwrap();
+        assert!(request.nodes[0].clone().prepare().is_ok());
+        let mut mixed = request.nodes[0].clone();
+        mixed.assignee_user_id = "forged".into();
+        assert!(mixed.prepare().is_err());
+        assert!(
+            serde_json::from_value::<DefinitionNodeRequest>(json!({
+                "node_name":"审核", "display_order":1, "assignee_source":"UNKNOWN"
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn draft_and_node_requests_deny_unknown_and_forbidden_fields() {
         assert!(
             serde_json::from_value::<CreateDefinitionDraftRequest>(json!({

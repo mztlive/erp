@@ -17,6 +17,7 @@ export const emptyEditorNode = (): EditorNode => ({
     client_id: nextClientId(),
     node_id: null,
     node_name: "",
+    assignee_source: "SPECIFIED",
     assignee_user_id: "",
     assignee_name: "",
     additional_assignees: [],
@@ -41,6 +42,7 @@ export const toEditorNode = (node: DefinitionNodeView): EditorNode => ({
     client_id: node.node_id,
     node_id: node.node_id,
     node_name: node.node_name,
+    assignee_source: node.assignee_source ?? "SPECIFIED",
     assignee_user_id: node.assignee_user_id,
     assignee_name: node.assignee_name_snapshot,
     additional_assignees: (node.additional_assignees ?? []).map((person) => ({

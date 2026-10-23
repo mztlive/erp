@@ -1,4 +1,5 @@
 //! 工作流消费方端口的生产装配。
+pub mod approver_directory;
 
 use std::sync::Arc;
 

@@ -38,6 +38,9 @@ pub(in crate::service::approval::definition) fn replace_nodes_identity(
                 CommandPayloadField::U32(node.display_order),
                 CommandPayloadField::Text(&node.assignee_user_id),
             ];
+            if let Some(rule) = node.assignee_source.rule() {
+                fields.push(CommandPayloadField::Text(rule));
+            }
             if !node.additional_assignee_user_ids.is_empty() {
                 fields.push(CommandPayloadField::Sequence(
                     node.additional_assignee_user_ids
@@ -74,6 +77,19 @@ pub(in crate::service::approval::definition) fn replace_nodes_identity(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn leader_source_changes_command_digest() {
+        use crate::service::approval::assignee_source::AssigneeSource;
+        let key = IdempotencyKey::parse("leader-save").unwrap();
+        let mut node = DefinitionNodeRequest::new("负责人审核".into(), String::new());
+        node.assignee_source = AssigneeSource::ApplicantTeamLeader;
+        let team = replace_nodes_identity(key.clone(), "def", 1, &[node.clone()], None, "admin").unwrap();
+        node.assignee_source = AssigneeSource::ApplicantDepartmentLeader;
+        let department = replace_nodes_identity(key, "def", 1, &[node], None, "admin").unwrap();
+        assert_eq!(team.current.scope(), department.current.scope());
+        assert_ne!(team.current.digest(), department.current.digest());
+    }
+
     #[test]
     fn copy_rules_participate_in_retry_identity() {
         use crate::entity::approval_copy::{ApprovalCopyRule, CopyTrigger};

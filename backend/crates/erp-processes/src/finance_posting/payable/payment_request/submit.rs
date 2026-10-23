@@ -25,6 +25,7 @@ use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
 use persistence_core::NoTransaction;
 
 use super::*;
+use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::audit::persist_log;
 use crate::finance_posting::command_recovery::recovered_resource;
 use crate::finance_posting::receivable::start_approval;
@@ -295,6 +296,7 @@ impl SubmitWrite<'_> {
     ) -> Result<PlannedWrites> {
         let Self { db, rbac, object_read, req, actor, .. } = *self;
         let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
+        let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
         let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
         let context =
             BindingRevalidationContext::new(request.payer_party_id.clone(), request.created_by.clone())

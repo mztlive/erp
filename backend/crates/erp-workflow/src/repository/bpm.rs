@@ -263,6 +263,7 @@ mod cas;
 mod definition_command;
 mod definition_query;
 mod execution_query;
+mod instance_graph;
 mod instance_query;
 mod runtime_write;
 

@@ -5,6 +5,7 @@ use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::super::assignee_source::AssigneeSource;
 use super::super::definition_dto::{
     ApprovalRequirementView, DefinitionAllowedAction, DefinitionCatalogItem, DefinitionConfigurationStatus,
     DefinitionDetailView, DefinitionNodeView, DefinitionVersionItem,
@@ -182,11 +183,11 @@ fn requirement_view(requirement: ApprovalRequirement) -> ApprovalRequirementView
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
+pub(super) fn detail_view(graph: &DefinitionGraph) -> Result<DefinitionDetailView> {
     let document_type = document_type_of(graph.definition.process_kind);
     let mut nodes = graph.nodes.iter().collect::<Vec<_>>();
     nodes.sort_by_key(|node| node.display_order);
-    DefinitionDetailView {
+    Ok(DefinitionDetailView {
         copy_rules: Vec::new(),
         copy_recipient_names: Default::default(),
         definition_id: graph.definition.base.id.clone(),
@@ -197,13 +198,13 @@ pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
         status: graph.definition.status.as_str().to_string(),
         entry_node_key: graph.definition.entry_node_key.clone(),
         definition_lock_version: graph.definition.definition_lock_version(),
-        nodes: nodes.into_iter().map(node_view).collect(),
+        nodes: nodes.into_iter().map(node_view).collect::<Result<Vec<_>>>()?,
         created_by: graph.definition.created_by.as_str().to_string(),
         published_by: graph.definition.published_by.as_ref().map(|item| item.as_str().to_string()),
         published_at: graph.definition.published_at.map(|item| item.unix_secs()),
         retired_by: graph.definition.retired_by.as_ref().map(|item| item.as_str().to_string()),
         retired_at: graph.definition.retired_at.map(|item| item.unix_secs()),
-    }
+    })
 }
 
 /// 构造节点视图。
@@ -216,18 +217,22 @@ pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn node_view(node: &ApprovalNodeDefinition) -> DefinitionNodeView {
-    DefinitionNodeView {
+pub(super) fn node_view(node: &ApprovalNodeDefinition) -> Result<DefinitionNodeView> {
+    Ok(DefinitionNodeView {
         node_id: node.base.id.clone(),
         node_key: node.node_key.clone(),
         node_name: node.node_name.clone(),
         node_type: node.node_type.as_str().to_string(),
         node_purpose: node.node_purpose.clone(),
         display_order: node.display_order,
-        assignee_user_id: node.assignee_participant_id.as_str().to_string(),
+        assignee_user_id: node
+            .assignee_participant_id
+            .as_ref()
+            .map_or_else(String::new, |id| id.as_str().to_string()),
+        assignee_source: AssigneeSource::from_rule(node.assignee_rule.as_deref())?,
         additional_assignees: node.additional_assignees.clone(),
         assignee_name_snapshot: node.assignee_label_snapshot.clone(),
-    }
+    })
 }
 
 /// 构造版本摘要。
@@ -262,7 +267,7 @@ pub(super) async fn detail_with_copies(
     graph: &DefinitionGraph,
     ex: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
-    let mut view = detail_view(graph);
+    let mut view = detail_view(graph)?;
     if let Some(config) = db.approval_copies().config(&graph.definition.base.id, ex).await? {
         view.copy_rules = config.rules;
         view.copy_recipient_names = config.recipient_names;
@@ -327,7 +332,7 @@ mod tests {
     fn detail_and_version_views_assemble_sorted_nodes_and_audit() {
         let mut graph = two_node_publish_graph();
         graph.nodes.reverse();
-        let draft_view = detail_view(&graph);
+        let draft_view = detail_view(&graph).unwrap();
         assert_eq!(draft_view.nodes.iter().map(|item| item.display_order).collect::<Vec<_>>(), vec![1, 2]);
         assert_eq!(draft_view.nodes[0].node_key, "n1");
         assert_eq!(draft_view.nodes[0].node_type, "USER_APPROVAL");
@@ -340,13 +345,13 @@ mod tests {
 
         let actor = ParticipantId::new("admin").unwrap();
         graph.definition.publish(actor.clone(), Timestamp::from_unix_secs(2).unwrap()).unwrap();
-        let published_view = detail_view(&graph);
+        let published_view = detail_view(&graph).unwrap();
         assert_eq!(published_view.status, "PUBLISHED");
         assert_eq!(published_view.published_by.as_deref(), Some("admin"));
         assert_eq!(published_view.published_at, Some(2));
 
         graph.definition.retire(actor, Timestamp::from_unix_secs(3).unwrap()).unwrap();
-        let retired_view = detail_view(&graph);
+        let retired_view = detail_view(&graph).unwrap();
         assert_eq!(retired_view.status, "RETIRED");
         assert_eq!(retired_view.retired_by.as_deref(), Some("admin"));
         assert_eq!(retired_view.retired_at, Some(3));
@@ -357,6 +362,6 @@ mod tests {
         assert_eq!(item.status, "RETIRED");
         assert_eq!(item.name, "测试流程");
         assert_eq!(item.definition_lock_version, graph.definition.definition_lock_version());
-        assert_eq!(node_view(&graph.nodes[1]).node_id, "id1");
+        assert_eq!(node_view(&graph.nodes[1]).unwrap().node_id, "id1");
     }
 }

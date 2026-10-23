@@ -2,6 +2,9 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
+import { useLeaderPreview } from "../hooks/use-leader-preview"
+import { getErrorMessage } from "@/lib/api"
+
 import { displayRoute } from "../display"
 import type { ApprovalDefinitionBinding } from "../types"
 
@@ -17,6 +20,7 @@ export function SubmissionRouteConfirmation({
     definition?: ApprovalDefinitionBinding
     documentType?: string
 }) {
+    const preview = useLeaderPreview(definition?.nodes ?? [])
     if (!definition || definition.nodes.length === 0) {
         return (
             <Alert>
@@ -28,8 +32,8 @@ export function SubmissionRouteConfirmation({
         )
     }
 
-    const firstNode = definition.nodes[0]
-    const route = displayRoute(definition.nodes)
+    const firstNode = preview.nodes[0]
+    const route = displayRoute(preview.nodes)
     const firstLabel = displayRoute([firstNode])
 
     return (
@@ -37,6 +41,20 @@ export function SubmissionRouteConfirmation({
             <AlertTitle>提交后的审批路线</AlertTitle>
             <AlertDescription>
                 <p>{route}</p>
+                {preview.loading && <p>正在确认组织负责人…</p>}
+                {preview.error && (
+                    <p className="text-destructive">
+                        {getErrorMessage(
+                            preview.error,
+                            "负责人查询失败，请重试",
+                        )}
+                    </p>
+                )}
+                {definition.nodes.some((node) => node.assigneeSource) && (
+                    <p>
+                        负责人以正式提交时的组织配置为准，审批开始后保持不变。
+                    </p>
+                )}
                 <p className="mt-2">
                     {documentType === "purchase_payment_request"
                         ? `任一层驳回后，本次申请结束并释放未付金额；重新提交后从${firstLabel}重新审核。`

@@ -20,7 +20,7 @@ pub(super) use payment_reversal::{
 };
 pub(super) use prepare::{
     ReplayReturnStartInput, ensure_return_start_actor_active, ensure_return_start_replay_authorized,
-    load_bound_definition_graph, load_bound_definition_graph_with_executor,
+    load_bound_definition_graph, load_bound_definition_graph_with_executor, load_start_graph,
     replay_return_start_with_executor, replay_subject_versions,
 };
 pub(super) use receipt_reversal::{
