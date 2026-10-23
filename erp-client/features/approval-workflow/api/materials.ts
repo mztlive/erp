@@ -3,6 +3,15 @@ import { apiGet, apiGetBlob } from "@/lib/api"
 /** 仅提交时冻结的展示与文件白名单；关联对象标识不构成读取入口。 */
 export type ApprovalMaterials = {
     document_no: string
+    /** 最新登记评估，独立于提交时冻结的供应商名称。 */
+    latest_supplier_rating?: {
+        rating_label: string | null
+        initial_score: number | null
+        current_score: number | null
+        revision_no: number | null
+        valid_from: string | null
+        valid_to: string | null
+    } | null
     sales_order?: ApprovalSalesSubmission | null
     purchase_lines?: ApprovalPurchaseLine[] | null
     /** 费用采购单：来源销售单已生效的附加费用合计（不含本次提交）。 */

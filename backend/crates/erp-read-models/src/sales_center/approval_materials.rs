@@ -1,4 +1,4 @@
-//! 审批实例授权后读取冻结提交；开票申请另列唯一来源的当前生效销售依据。
+//! 审批实例授权后读取冻结提交，另列开票当前销售依据和采购最新供应商评估。
 
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
@@ -19,6 +19,7 @@ use super::approval_source_sales::{ApprovalSourceSalesOrder, source_sales_orders
 use crate::purchase_center::approval_materials::{
     ApprovalExtraCostSummary, ApprovalPurchaseLine, extra_cost_summary, purchase_lines,
 };
+use crate::purchase_center::approval_supplier::{ApprovalSupplierRating, supplier_rating};
 use crate::workbench::{InvoiceSalesBasis, optional_sales_basis};
 use crate::{Error, Result};
 
@@ -33,13 +34,15 @@ pub struct ApprovalDocumentMaterials {
     pub source_sales_orders: Vec<ApprovalSourceSalesOrder>,
     pub current_sales_basis: Option<InvoiceSalesBasis>,
     pub current_sales_basis_error: Option<String>,
+    /// 独立的最新登记评估，不属于提交冻结资料；抄送读取不提供。
+    pub latest_supplier_rating: Option<ApprovalSupplierRating>,
 }
 
 /// 在实例读取授权后装载精确销售提交，不授予普通销售单读取资格。
 /// # 参数
 /// 数据库、审批运行服务、当前账号与精确审批实例 ID。
 /// # 返回
-/// 原冻结资料及完整提交明细；开票审批另列当前销售资料，不覆盖提交内容。
+/// 原冻结资料及完整提交明细；另列开票当前销售资料和采购最新供应商评估，不覆盖提交内容。
 /// # 错误
 /// 实例未授权、原资料缺失、销售提交缺失或身份及明细不匹配时拒绝。
 pub async fn materials<A: WorkflowAuthorizationPort>(
@@ -61,6 +64,7 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
     };
     let source_sales_orders = source_sales_orders(db, &materials).await?;
     let (current_sales_basis, current_sales_basis_error) = optional_sales_basis(db, &materials).await?;
+    let latest_supplier_rating = supplier_rating(db, &materials).await?;
     runtime.materials(actor, instance_id).await?;
     Ok(ApprovalDocumentMaterials {
         materials,
@@ -70,6 +74,7 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
         source_sales_orders,
         current_sales_basis,
         current_sales_basis_error,
+        latest_supplier_rating,
     })
 }
 
@@ -121,6 +126,7 @@ pub async fn copy_detail<A: WorkflowAuthorizationPort>(
             extra_cost_summary: None,
             current_sales_basis: None,
             current_sales_basis_error: None,
+            latest_supplier_rating: None,
         },
     })
 }

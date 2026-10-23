@@ -12,6 +12,7 @@ import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-app
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 import { WorkspacePurchaseComparisonTable } from "./workspace-purchase-comparison-table"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
@@ -42,12 +43,12 @@ export function WorkspacePurchaseApproval({
             <>
                 <section
                     className={sectionClass}
-                    aria-label="来源销售与采购依据"
+                    aria-label="供应商与客户"
                     role="status"
                 >
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Spinner />
-                        正在读取来源销售与采购依据…
+                        正在读取供应商与客户…
                     </p>
                 </section>
             </>
@@ -58,7 +59,7 @@ export function WorkspacePurchaseApproval({
                 <section className={sectionClass}>
                     <BusinessFailureState
                         id={`${prefix}-retry`}
-                        title="来源销售与采购依据读取失败"
+                        title="供应商与客户读取失败"
                         error={query.error}
                         onRetry={() => void query.refetch()}
                     />
@@ -75,68 +76,95 @@ export function WorkspacePurchaseApproval({
     return (
         <>
             <section
-                className={cn(sectionClass, "space-y-3 bg-info-soft/30")}
-                aria-label="来源销售与采购依据"
-            >
-                <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h3 className="text-sm font-semibold">
-                        来源销售与采购依据
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                        依据本次提交锁定的销售版本
-                    </p>
-                </header>
-                {sources.length ? (
-                    sources.map((sales) => (
-                        <div
-                            key={sales.revision_id}
-                            className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2"
-                        >
-                            <p className="min-w-0 text-sm font-semibold wrap-anywhere">
-                                {displayName(sales.source.customer) ||
-                                    "未记录客户名称"}
-                            </p>
-                            <p className="min-w-0 text-sm wrap-anywhere">
-                                <span className="num">
-                                    {displayBusinessText(
-                                        sales.document_no,
-                                        sales.document_id,
-                                    ) || "未记录销售单号"}
-                                </span>
-                                <span className="ml-2 text-muted-foreground">
-                                    · 销售版本 V{sales.revision_no}
-                                </span>
-                            </p>
-                            <Button
-                                id={`${prefix}-source-${toAutomationIdSegment(sales.revision_id)}`}
-                                variant="outline"
-                                size="sm"
-                                className="ml-auto"
-                                onClick={() =>
-                                    preview("source-sales", sales.revision_id)
-                                }
-                            >
-                                <FileTextIcon aria-hidden="true" />
-                                预览销售单
-                                <ChevronRightIcon aria-hidden="true" />
-                            </Button>
-                            {sales.source.extra_sections
-                                .filter((field) => field.label === "合同或凭证")
-                                .map((field) => (
-                                    <p
-                                        key={field.label}
-                                        className="text-sm text-warning-soft-foreground basis-full"
-                                    >
-                                        {field.value}
-                                    </p>
-                                ))}
-                        </div>
-                    ))
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        此次提交未保留来源销售资料，请联系申请人核对后再审批。
-                    </p>
+                className={cn(
+                    sectionClass,
+                    "grid gap-5 bg-info-soft/30 @min-[720px]/document:grid-cols-2 @min-[720px]/document:gap-6",
                 )}
+                aria-label="供应商与客户"
+            >
+                <div className="min-w-0 space-y-3">
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                        供应商
+                    </h3>
+                    <p className="text-sm font-semibold wrap-anywhere">
+                        {displayName(
+                            display.source.extra_sections.find(
+                                (field) => field.label === "供应商",
+                            )?.value,
+                        ) ||
+                            displayName(display.counterparty_label) ||
+                            "未记录供应商名称，请联系申请人核对"}
+                    </p>
+                    <WorkspaceSupplierRating
+                        rating={query.data.latest_supplier_rating}
+                    />
+                </div>
+                <div className="min-w-0 space-y-3 border-t border-grid pt-4 @min-[720px]/document:border-t-0 @min-[720px]/document:border-l @min-[720px]/document:pt-0 @min-[720px]/document:pl-6">
+                    <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <h3 className="text-sm font-medium text-muted-foreground">
+                            客户与销售单
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                            依据本次提交锁定的销售版本
+                        </p>
+                    </header>
+                    {sources.length ? (
+                        sources.map((sales) => (
+                            <div
+                                key={sales.revision_id}
+                                className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2"
+                            >
+                                <p className="min-w-0 basis-full text-sm font-semibold wrap-anywhere">
+                                    {displayName(sales.source.customer) ||
+                                        "未记录客户名称"}
+                                </p>
+                                <p className="min-w-0 text-sm wrap-anywhere">
+                                    <span className="num">
+                                        {displayBusinessText(
+                                            sales.document_no,
+                                            sales.document_id,
+                                        ) || "未记录销售单号"}
+                                    </span>
+                                    <span className="ml-2 text-muted-foreground">
+                                        · 销售版本 V{sales.revision_no}
+                                    </span>
+                                </p>
+                                <Button
+                                    id={`${prefix}-source-${toAutomationIdSegment(sales.revision_id)}`}
+                                    variant="outline"
+                                    size="sm"
+                                    className="ml-auto"
+                                    onClick={() =>
+                                        preview(
+                                            "source-sales",
+                                            sales.revision_id,
+                                        )
+                                    }
+                                >
+                                    <FileTextIcon aria-hidden="true" />
+                                    预览销售单
+                                    <ChevronRightIcon aria-hidden="true" />
+                                </Button>
+                                {sales.source.extra_sections
+                                    .filter(
+                                        (field) => field.label === "合同或凭证",
+                                    )
+                                    .map((field) => (
+                                        <p
+                                            key={field.label}
+                                            className="text-sm text-warning-soft-foreground basis-full"
+                                        >
+                                            {field.value}
+                                        </p>
+                                    ))}
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            此次提交未保留来源销售资料，请联系申请人核对后再审批。
+                        </p>
+                    )}
+                </div>
             </section>
 
             <section

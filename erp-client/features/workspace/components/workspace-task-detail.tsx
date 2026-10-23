@@ -632,6 +632,7 @@ function WorkspaceDocumentTaskDetail({
             className="border-t border-grid/60 pt-3"
             sections={documentFields.filter(
                 (field) =>
+                    field.label !== "供应商" &&
                     field.label !== "来源销售单" &&
                     field.label !== "提交号" &&
                     !(primaryAmount && field.label === "付款条件"),
