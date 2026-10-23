@@ -28,12 +28,17 @@ import {
     lockVersionText,
 } from "../write-payload"
 import { CopyFlowDialog } from "./copy-flow-dialog"
-import { DefinitionFlowchart } from "./definition-flowchart"
-import { NodeListEditor } from "./node-list-editor"
+import { DefinitionFlowCanvas } from "./definition-flow-canvas"
+import { NodeInlineEditor } from "./node-inline-editor"
+import {
+    insertionIndex,
+    type NodeInsertion,
+    type NodeInsertionResult,
+} from "./flow-node-insertion"
 
 const INCOMPLETE_DRAFT_MESSAGE = "请补全每个节点的名称和审批人后再保存。"
 
-/** 流程图负责选择与顺序，属性栏只编辑当前节点。 */
+/** 流程图内展开当前节点配置，所有修改由同一草稿表单保存。 */
 export function DefinitionEditor({
     detail,
     lockVersion,
@@ -139,12 +144,64 @@ export function DefinitionEditor({
             }
         },
     })
-    const addNode = () => {
-        if (form.state.values.nodes.length >= 20) return
+    const insertNode = (
+        placement: NodeInsertion,
+    ): NodeInsertionResult | null => {
+        if (readOnly || replaceNodes.isPending) return null
+        const nodes = form.state.values.nodes
+        if (nodes.length >= 20) {
+            toast.add({ title: "最多配置 20 个审批步骤", type: "warning" })
+            return null
+        }
+        const index = insertionIndex(nodes, placement)
+        if (index === null) {
+            toast.add({
+                title: "目标节点已变更，请重新打开节点菜单",
+                type: "warning",
+            })
+            return null
+        }
         const node = emptyEditorNode()
-        form.setFieldValue("nodes", [...form.state.values.nodes, node])
+        const next = [...nodes]
+        next.splice(index, 0, node)
+        form.setFieldValue("nodes", next)
         setSelectedNodeId(node.client_id)
         setSaveState("idle")
+        setSubmitError(null)
+        return { node, nodes: next }
+    }
+    const removeNode = (clientId: string): boolean => {
+        if (readOnly || replaceNodes.isPending) return false
+        const nodes = form.state.values.nodes
+        const index = nodes.findIndex((node) => node.client_id === clientId)
+        if (index < 0) {
+            toast.add({
+                title: "目标节点已变更，请重新打开节点菜单",
+                type: "warning",
+            })
+            return false
+        }
+        const next = nodes.filter((node) => node.client_id !== clientId)
+        form.setFieldValue("nodes", next)
+        form.setFieldValue(
+            "copyRules",
+            form.state.values.copyRules.filter(
+                (rule) => rule.nodeClientId !== clientId,
+            ),
+        )
+        setSelectedNodeId((selected) =>
+            selected &&
+            selected !== clientId &&
+            next.some((node) => node.client_id === selected)
+                ? selected
+                : (next[Math.min(index, next.length - 1)]?.client_id ?? null),
+        )
+        setSaveState("idle")
+        setSubmitError(null)
+        return true
+    }
+    const addNode = () => {
+        insertNode({ position: "end" })
     }
     return (
         <>
@@ -167,7 +224,7 @@ export function DefinitionEditor({
                                 {detail.name}
                             </h2>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                选择流程图中的节点，设置审批人及顺序。
+                                右键节点插入或追加审批步骤，拖动调整位置，点击节点直接编辑。
                             </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -225,9 +282,16 @@ export function DefinitionEditor({
                         }
                     >
                         {([nodes, copyRules]) => (
-                            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-                                <DefinitionFlowchart
+                            <div className="space-y-4">
+                                <DefinitionFlowCanvas
                                     id={`${id}-flow`}
+                                    definitionId={detail.definition_id}
+                                    documentType={detail.document_type}
+                                    onInsertNode={insertNode}
+                                    onRemoveNode={removeNode}
+                                    disabled={
+                                        readOnly || replaceNodes.isPending
+                                    }
                                     nodes={nodes}
                                     copyRules={copyRules}
                                     onConfigureCopies={(nodeClientId) => {
@@ -245,97 +309,84 @@ export function DefinitionEditor({
                                                 selectedNodeId,
                                         )?.client_id ?? nodes[0]?.client_id
                                     }
-                                    onSelect={(clientId) => {
-                                        setSelectedNodeId(clientId)
-                                        if (
-                                            window.matchMedia(
-                                                "(max-width: 1023px)",
-                                            ).matches
-                                        ) {
-                                            document
-                                                .getElementById(
-                                                    `${id}-settings`,
-                                                )
-                                                ?.scrollIntoView({
-                                                    behavior: "smooth",
-                                                    block: "start",
-                                                })
-                                        }
+                                    onSelect={setSelectedNodeId}
+                                    onReorder={(next) => {
+                                        setSelectedNodeId(
+                                            selectedNodeId ??
+                                                nodes[0]?.client_id ??
+                                                null,
+                                        )
+                                        form.setFieldValue("nodes", next)
+                                        setSaveState("idle")
                                     }}
-                                    onAdd={
-                                        readOnly ||
-                                        replaceNodes.isPending ||
-                                        nodes.length >= 20
-                                            ? undefined
-                                            : addNode
-                                    }
-                                />
-                                <div
-                                    id={`${id}-settings`}
-                                    className="min-w-0 scroll-mt-4 space-y-4 lg:sticky lg:top-4"
-                                >
-                                    <NodeListEditor
-                                        id={`${id}-nodes`}
-                                        documentType={detail.document_type}
-                                        nodes={nodes}
-                                        readOnly={
-                                            readOnly || replaceNodes.isPending
-                                        }
-                                        selectedClientId={selectedNodeId}
-                                        onChange={(next) => {
-                                            const activeId =
-                                                nodes.find(
-                                                    (node) =>
-                                                        node.client_id ===
-                                                        selectedNodeId,
-                                                )?.client_id ??
-                                                nodes[0]?.client_id
-                                            const oldIndex = nodes.findIndex(
-                                                (node) =>
-                                                    node.client_id === activeId,
-                                            )
-                                            setSelectedNodeId(
-                                                next.find(
-                                                    (node) =>
-                                                        node.client_id ===
-                                                        activeId,
-                                                )?.client_id ??
-                                                    next[
-                                                        Math.max(
-                                                            0,
-                                                            Math.min(
-                                                                oldIndex,
-                                                                next.length - 1,
+                                    renderNodeEditor={(node) => (
+                                        <NodeInlineEditor
+                                            id={`${id}-nodes`}
+                                            nodes={nodes}
+                                            readOnly={
+                                                readOnly ||
+                                                replaceNodes.isPending
+                                            }
+                                            node={node}
+                                            onChange={(next) => {
+                                                const activeId =
+                                                    nodes.find(
+                                                        (node) =>
+                                                            node.client_id ===
+                                                            selectedNodeId,
+                                                    )?.client_id ??
+                                                    nodes[0]?.client_id
+                                                const oldIndex =
+                                                    nodes.findIndex(
+                                                        (node) =>
+                                                            node.client_id ===
+                                                            activeId,
+                                                    )
+                                                setSelectedNodeId(
+                                                    next.find(
+                                                        (node) =>
+                                                            node.client_id ===
+                                                            activeId,
+                                                    )?.client_id ??
+                                                        next[
+                                                            Math.max(
+                                                                0,
+                                                                Math.min(
+                                                                    oldIndex,
+                                                                    next.length -
+                                                                        1,
+                                                                ),
+                                                            )
+                                                        ]?.client_id ??
+                                                        null,
+                                                )
+                                                form.setFieldValue(
+                                                    "nodes",
+                                                    next,
+                                                )
+                                                form.setFieldValue(
+                                                    "copyRules",
+                                                    form.state.values.copyRules.filter(
+                                                        (r) =>
+                                                            !r.nodeClientId ||
+                                                            next.some(
+                                                                (n) =>
+                                                                    n.client_id ===
+                                                                    r.nodeClientId,
                                                             ),
-                                                        )
-                                                    ]?.client_id ??
-                                                    null,
-                                            )
-                                            form.setFieldValue("nodes", next)
-                                            form.setFieldValue(
-                                                "copyRules",
-                                                form.state.values.copyRules.filter(
-                                                    (r) =>
-                                                        !r.nodeClientId ||
-                                                        next.some(
-                                                            (n) =>
-                                                                n.client_id ===
-                                                                r.nodeClientId,
-                                                        ),
-                                                ),
-                                            )
-                                            setSaveState("idle")
-                                        }}
-                                    />
-                                    <p className="px-1 text-xs leading-5 text-muted-foreground">
-                                        <span className="font-medium text-foreground">
-                                            驳回规则：
-                                        </span>
-                                        {rejectionPolicyCopy(
-                                            detail.document_type,
-                                        )}
-                                    </p>
-                                </div>
+                                                    ),
+                                                )
+                                                setSaveState("idle")
+                                            }}
+                                        />
+                                    )}
+                                />
+                                <p className="px-1 text-xs leading-5 text-muted-foreground">
+                                    <span className="font-medium text-foreground">
+                                        驳回规则：
+                                    </span>
+                                    {rejectionPolicyCopy(detail.document_type)}
+                                </p>
                             </div>
                         )}
                     </form.Subscribe>
@@ -359,7 +410,7 @@ export function DefinitionEditor({
                                         {nodes.length === 0
                                             ? "请添加至少一个审批节点"
                                             : incomplete
-                                              ? `${incomplete} 个节点待补全，点击流程图继续配置`
+                                              ? `${incomplete} 个节点待补全，点击对应节点直接编辑`
                                               : dirty
                                                 ? "有未保存的修改，请保存后再发布"
                                                 : "草稿未发布，不影响当前生效流程"}

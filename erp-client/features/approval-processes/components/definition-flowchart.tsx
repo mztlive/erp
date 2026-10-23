@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import type { EditorCopyRule, EditorNode } from "../types"
+import { isOrSign } from "./flow-canvas-model"
+import { OrSignPreview } from "./or-sign-preview"
 
 /** 共用线性流程画布；概览完整展示审批人，编辑模式提供节点选择和增加入口。 */
 export function DefinitionFlowchart({
@@ -97,16 +99,21 @@ export function DefinitionFlowchart({
                                     rule.nodeClientId === node.client_id,
                             )?.recipients.length ?? 0
                         const people = [
-                            node.assignee_name ||
-                                (overview && node.assignee_user_id
-                                    ? "待确认人员"
-                                    : ""),
-                            ...node.additional_assignees.map(
-                                (person) =>
+                            {
+                                user_id: node.assignee_user_id,
+                                name:
+                                    node.assignee_name ||
+                                    (overview && node.assignee_user_id
+                                        ? "待确认人员"
+                                        : ""),
+                            },
+                            ...node.additional_assignees.map((person) => ({
+                                ...person,
+                                name:
                                     person.name ||
                                     (overview ? "待确认人员" : ""),
-                            ),
-                        ].filter(Boolean)
+                            })),
+                        ].filter((person) => Boolean(person.name))
                         const content = (
                             <>
                                 <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
@@ -127,36 +134,57 @@ export function DefinitionFlowchart({
                                         {node.assignee_source !== "SPECIFIED"
                                             ? "组织负责人"
                                             : node.additional_assignees.length
-                                              ? overview
-                                                  ? "或签 · 任一人通过"
-                                                  : "或签"
+                                              ? "或签"
                                               : overview
                                                 ? "单人审批"
                                                 : "单人"}
                                     </span>
                                 </div>
-                                <div className="flex items-start gap-2 px-4 py-3 text-xs text-muted-foreground">
-                                    <UserRoundIcon className="mt-0.5 size-3.5 shrink-0" />
-                                    <span
-                                        className={cn(
-                                            "min-w-0 break-words leading-5",
-                                            node.assignee_source ===
-                                                "SPECIFIED" &&
-                                                !node.assignee_user_id &&
-                                                "text-warning-soft-foreground",
+                                {isOrSign(node) ? (
+                                    <OrSignPreview node={node} />
+                                ) : (
+                                    <div className="space-y-2 px-4 py-3 text-xs text-muted-foreground">
+                                        {node.assignee_source === "SPECIFIED" &&
+                                        people.length > 0 ? (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {(overview
+                                                    ? people
+                                                    : people.slice(0, 4)
+                                                ).map((person) => (
+                                                    <span
+                                                        key={person.user_id}
+                                                        className={cn(
+                                                            "flex min-w-0 items-center gap-2 rounded-md border px-3 py-2",
+                                                            node
+                                                                .additional_assignees
+                                                                .length
+                                                                ? "border-info-border bg-info-soft text-info-soft-foreground"
+                                                                : "border-border bg-muted/40",
+                                                        )}
+                                                    >
+                                                        <UserRoundIcon className="size-3.5 shrink-0" />
+                                                        <span className="min-w-0 break-words">
+                                                            {person.name}
+                                                        </span>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="flex items-center gap-2 leading-5">
+                                                <UserRoundIcon className="size-3.5 shrink-0" />
+                                                {people
+                                                    .map(
+                                                        (person) => person.name,
+                                                    )
+                                                    .join("、") ||
+                                                    "待设置审批人"}
+                                            </span>
                                         )}
-                                    >
-                                        {people.length
-                                            ? (overview
-                                                  ? people
-                                                  : people.slice(0, 4)
-                                              ).join("、")
-                                            : "待设置审批人"}
-                                        {!overview && people.length > 4
-                                            ? ` 等 ${people.length} 人`
-                                            : ""}
-                                    </span>
-                                </div>
+                                        {!overview && people.length > 4 && (
+                                            <p>共 {people.length} 人</p>
+                                        )}
+                                    </div>
+                                )}
                             </>
                         )
                         const cardClass = cn(

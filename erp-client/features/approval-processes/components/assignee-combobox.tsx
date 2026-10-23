@@ -13,6 +13,7 @@ import type { DocumentType, EligibleAssignee } from "../types"
 export function AssigneeCombobox({
     documentType,
     copies = false,
+    allowClear = true,
     value,
     selectedName,
     onChange,
@@ -23,6 +24,7 @@ export function AssigneeCombobox({
     placeholder = "搜索并选择一位审批人",
 }: {
     copies?: boolean
+    allowClear?: boolean
     documentType: DocumentType
     value: string
     selectedName: string
@@ -101,7 +103,7 @@ export function AssigneeCombobox({
                 copies ? "没有匹配的有效内部账号" : "没有符合定义期资格的账号"
             }
             disabled={disabled}
-            allowClear
+            allowClear={allowClear}
         />
     )
 }
