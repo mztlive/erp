@@ -1,3 +1,20 @@
+import type { WorkspaceWorkItem } from "../types"
+
+/** 采购审批与只读审批跟踪共用单列核对工作面。 */
+export function isPurchaseApprovalTask(item: WorkspaceWorkItem): boolean {
+    return (
+        item.businessObjectType === "purchase_order" &&
+        Boolean(item.approvalProcessInstanceId ?? item.approval?.instanceId) &&
+        (isApprovalWorkbenchTask(
+            item.allowedActions,
+            item.approvalProcessInstanceId,
+            item.approvalNodeExecutionId,
+        ) ||
+            item.workItemType === "APPROVAL_INSTANCE" ||
+            item.workItemType === "DOCUMENT_APPROVAL")
+    )
+}
+
 /**
  * 工作台只把服务端动作当作打开单据或页内决定的资格。
  * 只接受查看、打开对象或正式领域处理动作。

@@ -1,6 +1,30 @@
 @import "tailwindcss";
+
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+
+/* 采购审批采用蓝色操作态和浅橙色核对提示，仅覆盖该工作面的语义色。 */
+.purchase-approval-surface {
+    --info: #2563eb;
+    --info-foreground: #ffffff;
+    --info-soft: #eff6ff;
+    --info-soft-foreground: #1d4ed8;
+    --info-border: #bfdbfe;
+    --warning-soft: #fff7ed;
+    --warning-soft-foreground: #9a3412;
+    --warning-border: #fed7aa;
+}
+
+.dark .purchase-approval-surface {
+    --info: #60a5fa;
+    --info-foreground: #172554;
+    --info-soft: #172554;
+    --info-soft-foreground: #93c5fd;
+    --info-border: #1e40af;
+    --warning-soft: #431407;
+    --warning-soft-foreground: #fed7aa;
+    --warning-border: #9a3412;
+}
 
 @custom-variant dark (&:is(.dark *));
 

@@ -15,6 +15,7 @@ import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
 import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
 import { WorkspaceMoney } from "./workspace-money"
+import { WorkspacePurchaseApprovalStatus } from "./workspace-purchase-approval-status"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
@@ -54,7 +55,10 @@ import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts
 import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
 import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
-import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
+import {
+    isApprovalWorkbenchTask,
+    isPurchaseApprovalTask,
+} from "../lib/navigation-eligibility"
 import { workspacePaperKind } from "../lib/paper-kind"
 import {
     linkedDocumentHref,
@@ -507,10 +511,7 @@ function WorkspaceDocumentTaskDetail({
     const salesApproval =
         approvalDocument &&
         ["sales_order", "voucher_sales_order"].includes(item.businessObjectType)
-    const purchaseApproval =
-        approvalDocument &&
-        item.businessObjectType === "purchase_order" &&
-        Boolean(instanceId)
+    const purchaseApproval = isPurchaseApprovalTask(item)
     const receiptApproval =
         approvalDocument &&
         item.businessObjectType === "customer_receipt" &&
@@ -564,6 +565,9 @@ function WorkspaceDocumentTaskDetail({
         ...detailFacts.keyFields,
         ...detailFacts.moreFields,
     ]
+    const purchasePaymentTerm = documentFields.find(
+        (field) => field.label === "付款条件",
+    )?.value
     const lineCount = (briefLines?.length ?? 0) + (briefMoreCount ?? 0)
     const instance = item.approval
         ? {
@@ -586,6 +590,7 @@ function WorkspaceDocumentTaskDetail({
         approvalTask && !trackingTask ? (
             <ApprovalActionBar
                 presentation="workspace"
+                showInlineOpinion={!purchaseApproval}
                 id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
                 allowedActions={item.allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
@@ -621,24 +626,54 @@ function WorkspaceDocumentTaskDetail({
             item.allowedActions.includes("OPEN_DOCUMENT")),
     )
 
+    const purchaseInformation = purchaseApproval ? (
+        <FieldGrid
+            inline
+            className="border-t border-grid/60 pt-3"
+            sections={documentFields.filter(
+                (field) =>
+                    field.label !== "来源销售单" &&
+                    field.label !== "提交号" &&
+                    !(primaryAmount && field.label === "付款条件"),
+            )}
+            returnTo={returnTo}
+            onPreview={(section) => {
+                const kind = linkedDocumentPaperKind(section.label)
+                if (!kind || !section.objectId) return
+                setPaper({
+                    kind,
+                    objectId: section.objectId,
+                    title: `${section.label} ${section.value}`,
+                })
+            }}
+        />
+    ) : null
+
     return (
         <WorkspaceTaskPane
-            className="@container/document"
+            className={cn(
+                "@container/document",
+                purchaseApproval && "purchase-approval-surface",
+            )}
             header={
                 <>
                     <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                                {item.workItemTypeLabel}
-                            </span>
-                            <StatusBadge
-                                label={item.statusLabel}
-                                tone={item.statusTone}
-                            />
-                        </div>
+                        {!purchaseApproval && (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                    {item.workItemTypeLabel}
+                                </span>
+                                <StatusBadge
+                                    label={item.statusLabel}
+                                    tone={item.statusTone}
+                                />
+                            </div>
+                        )}
                         <h2 className="break-words text-xl font-medium tracking-tight">
                             {canReadSensitive
-                                ? counterpartyName || item.objectTitle
+                                ? purchaseApproval
+                                    ? "采购单审批"
+                                    : counterpartyName || item.objectTitle
                                 : "业务详情"}
                         </h2>
                         <p className="break-all text-sm text-muted-foreground">
@@ -794,7 +829,34 @@ function WorkspaceDocumentTaskDetail({
                                     </span>
                                 </div>
                             ))}
+                            {purchaseApproval && lineCount > 0 && (
+                                <div className="flex flex-col gap-1">
+                                    <span className="num text-lg font-medium">
+                                        {lineCount} 项
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        采购明细
+                                    </span>
+                                </div>
+                            )}
+                            {purchaseApproval && purchasePaymentTerm && (
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-sm font-medium">
+                                        {purchasePaymentTerm}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        付款条件
+                                    </span>
+                                </div>
+                            )}
+                            {purchaseApproval && (
+                                <WorkspacePurchaseApprovalStatus
+                                    item={item}
+                                    instance={instance}
+                                />
+                            )}
                         </div>
+                        {purchaseInformation}
                     </DetailBlock>
                 ) : !receiptApproval &&
                   !deliveryBrief &&
@@ -806,37 +868,21 @@ function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
+                {purchaseApproval && !primaryAmount && (
+                    <DetailBlock>
+                        <WorkspacePurchaseApprovalStatus
+                            item={item}
+                            instance={instance}
+                        />
+                        {purchaseInformation}
+                    </DetailBlock>
+                )}
                 {purchaseApproval && instanceId ? (
                     <WorkspacePurchaseApproval
                         key={instanceId}
                         instanceId={instanceId}
                         onPreview={setPaper}
-                    >
-                        {documentFields.length > 0 ? (
-                            <DetailBlock title="采购信息" compact>
-                                <FieldGrid
-                                    className="gap-y-1"
-                                    sections={documentFields.filter(
-                                        (field) =>
-                                            field.label !== "来源销售单" &&
-                                            field.label !== "提交号",
-                                    )}
-                                    returnTo={returnTo}
-                                    onPreview={(section) => {
-                                        const kind = linkedDocumentPaperKind(
-                                            section.label,
-                                        )
-                                        if (!kind || !section.objectId) return
-                                        setPaper({
-                                            kind,
-                                            objectId: section.objectId,
-                                            title: `${section.label} ${section.value}`,
-                                        })
-                                    }}
-                                />
-                            </DetailBlock>
-                        ) : null}
-                    </WorkspacePurchaseApproval>
+                    />
                 ) : (
                     <>
                         {!receiptApproval &&
@@ -972,7 +1018,7 @@ function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {!fullPage && approvalTask && instance ? (
+                {!fullPage && !purchaseApproval && approvalTask && instance ? (
                     <DetailBlock compact={purchaseApproval || receiptApproval}>
                         <WorkspaceApprovalProgress
                             instance={instance}
@@ -1084,24 +1130,34 @@ function FieldGrid({
     returnTo,
     onPreview,
     className,
+    inline = false,
 }: {
     sections: readonly DetailSection[]
     returnTo: string
     onPreview: (section: DetailSection) => void
     className?: string
+    inline?: boolean
 }) {
+    if (sections.length === 0) return null
     return (
         <DescriptionList
             columns="one"
             className={cn(
-                "gap-y-2 @min-[640px]/document:grid-cols-2",
+                inline
+                    ? "flex flex-wrap gap-x-8 gap-y-2"
+                    : "gap-y-2 @min-[640px]/document:grid-cols-2",
                 className,
             )}
         >
             {sections.map((section) => (
                 <DescriptionItem
                     key={section.label}
-                    className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-3 space-y-0"
+                    className={cn(
+                        "items-baseline gap-3 space-y-0",
+                        inline
+                            ? "flex min-w-0"
+                            : "grid grid-cols-[6rem_minmax(0,1fr)]",
+                    )}
                 >
                     <DescriptionTerm className="font-normal">
                         {section.label}

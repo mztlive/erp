@@ -55,6 +55,7 @@ export function ApprovalActionBar({
     decisionContext,
     onDecisionApplied,
     presentation = "default",
+    showInlineOpinion = true,
     id = "governance-approval-action-bar",
 }: {
     allowedActions: readonly string[]
@@ -83,6 +84,8 @@ export function ApprovalActionBar({
     onDecisionApplied?: (view: ApprovalCommandView) => void
     /** 工作台侧栏使用紧凑动作顺序；其它页面保留原样。 */
     presentation?: "default" | "workspace"
+    /** 是否在完整工作台页预填意见；关闭后仅在决定弹窗内填写。 */
+    showInlineOpinion?: boolean
     id?: string
 }) {
     const router = useRouter()
@@ -112,6 +115,7 @@ export function ApprovalActionBar({
     return (
         <div className="flex flex-wrap gap-2">
             {fullPage &&
+                showInlineOpinion &&
                 (showApprove || showReject) &&
                 workItemId &&
                 expectedTaskVersion && (
@@ -237,7 +241,7 @@ export function ApprovalActionBar({
                     allowedActions={allowedActions}
                     context={decisionContext}
                     initialReason={
-                        fullPage
+                        fullPage && showInlineOpinion
                             ? opinionForm.getFieldValue("reason")
                             : undefined
                     }

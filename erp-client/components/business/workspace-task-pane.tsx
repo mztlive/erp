@@ -23,6 +23,7 @@ const WorkspaceTaskFooterHostContext =
 type WorkspaceTaskPageLayout = {
     compact?: boolean
     fullWidth?: boolean
+    singleColumn?: boolean
     summary?: ReactNode
     aside: ReactNode
     footerLeading?: ReactNode
@@ -193,17 +194,20 @@ export function WorkspaceTaskPane({
                             >
                                 {header}
                             </header>
-                            {layout && !layout.fullWidth && (
-                                <div
-                                    className={cn(
-                                        "px-5 pb-5 sm:px-6",
-                                        layout.compact && "px-0 pb-0 sm:px-0",
-                                    )}
-                                >
-                                    {layout.summary}
-                                    <div ref={setSummaryHost} />
-                                </div>
-                            )}
+                            {layout &&
+                                !layout.fullWidth &&
+                                !layout.singleColumn && (
+                                    <div
+                                        className={cn(
+                                            "px-5 pb-5 sm:px-6",
+                                            layout.compact &&
+                                                "px-0 pb-0 sm:px-0",
+                                        )}
+                                    >
+                                        {layout.summary}
+                                        <div ref={setSummaryHost} />
+                                    </div>
+                                )}
                         </div>
                         <div
                             className={cn(
@@ -215,6 +219,8 @@ export function WorkspaceTaskPane({
                                     : "flex flex-1 flex-col",
                                 layout.fullWidth &&
                                     "flex flex-1 shrink flex-col items-stretch overflow-hidden",
+                                layout.singleColumn &&
+                                    "grid-cols-1 xl:grid-cols-1",
                             )}
                         >
                             <div
@@ -236,22 +242,24 @@ export function WorkspaceTaskPane({
                                     className="px-5 pb-6 empty:hidden sm:px-7"
                                 />
                             </div>
-                            {layout && !layout.fullWidth && (
-                                <aside
-                                    aria-label="办理进度与状态"
-                                    className={cn(
-                                        "space-y-6 rounded-xl border border-border/60 bg-card p-5 shadow-xs xl:sticky xl:top-0",
-                                        layout.compact &&
-                                            "shadow-none lg:sticky lg:top-0",
-                                    )}
-                                >
-                                    {layout.aside}
-                                    <div
-                                        ref={setAsideHost}
-                                        className="space-y-5 empty:hidden"
-                                    />
-                                </aside>
-                            )}
+                            {layout &&
+                                !layout.fullWidth &&
+                                !layout.singleColumn && (
+                                    <aside
+                                        aria-label="办理进度与状态"
+                                        className={cn(
+                                            "space-y-6 rounded-xl border border-border/60 bg-card p-5 shadow-xs xl:sticky xl:top-0",
+                                            layout.compact &&
+                                                "shadow-none lg:sticky lg:top-0",
+                                        )}
+                                    >
+                                        {layout.aside}
+                                        <div
+                                            ref={setAsideHost}
+                                            className="space-y-5 empty:hidden"
+                                        />
+                                    </aside>
+                                )}
                         </div>
                     </div>
                     <footer

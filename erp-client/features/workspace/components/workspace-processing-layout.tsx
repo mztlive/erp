@@ -6,6 +6,7 @@ import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { WorkspaceWorkItem } from "../types"
+import { isPurchaseApprovalTask } from "../lib/navigation-eligibility"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
 import { WorkspaceMoney } from "./workspace-money"
@@ -28,6 +29,7 @@ export function WorkspaceProcessingLayout({
 }) {
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
     const approval = item.approval
+    const purchaseApproval = isPurchaseApprovalTask(item)
     const payment = item.businessObjectType === "purchase_payment_request"
     const paymentArrangement =
         item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
@@ -36,6 +38,7 @@ export function WorkspaceProcessingLayout({
     )
     return (
         <WorkspaceTaskPageProvider
+            singleColumn={purchaseApproval}
             compact={paymentArrangement}
             fullWidth={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
@@ -44,7 +47,9 @@ export function WorkspaceProcessingLayout({
             }
             summary={
                 <>
-                    {payment || paymentArrangement ? undefined : (
+                    {payment ||
+                    paymentArrangement ||
+                    purchaseApproval ? undefined : (
                         <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
                             {item.amountSummary && (
                                 <Fact
@@ -161,6 +166,11 @@ export function WorkspaceProcessingLayout({
                             {item.workItemType === "APPROVAL_INSTANCE"
                                 ? "审批进度与提交记录"
                                 : "当前任务资料"}
+                        </span>
+                    )}
+                    {purchaseApproval && actionable && (
+                        <span className="text-xs text-muted-foreground">
+                            本次操作审批整张采购单
                         </span>
                     )}
                 </>
