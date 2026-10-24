@@ -61,5 +61,4 @@ rust_xlsxwriter = { workspace = true }
 zune-jpeg = { workspace = true }
 
 [dev-dependencies]
-tracing-subscriber = { workspace = true }
 test-support = { workspace = true }

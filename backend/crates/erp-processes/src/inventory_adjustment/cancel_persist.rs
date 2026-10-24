@@ -5,6 +5,7 @@
 
 use application_core::AuditActor;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
@@ -22,6 +23,8 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::{PlannedWrites, map_receipt_first_write_error};
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
+use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::{ApprovalActionContext, ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -390,7 +393,7 @@ pub(crate) async fn persist_stock_adjustment_cancel_notifications(
 pub async fn cancel_stock_adjustment_approval_apply(
     db: &Database,
     context: &ApprovalActionContext,
-    action: erp_workflow::service::approval::policy::ApprovalDomainAction,
+    action: ApprovalDomainAction,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -453,7 +456,7 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
         .approval_node_execution_id()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| Error::ConflictError("库存调整受阻取消缺少审批执行".to_string()))?;
-    let instance_id = bpm::ids::ApprovalProcessInstanceId::new(context.approval_process_instance_id());
+    let instance_id = ApprovalProcessInstanceId::new(context.approval_process_instance_id());
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&instance_id, executor)
@@ -473,9 +476,8 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
             subject_version,
         )
         .map_err(|_| Error::ConflictError("库存调整受阻实例冻结快照已变化".to_string()))?;
-    if instance.status != bpm::model::types::ApprovalProcessInstanceStatus::Blocked
-        || instance.process_kind
-            != erp_workflow::service::approval::process_kind::process_kind_of(DocumentType::StockAdjustment)
+    if instance.status != ApprovalProcessInstanceStatus::Blocked
+        || instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
         || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
@@ -485,14 +487,27 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
     {
         return Err(Error::ConflictError("库存调整受阻实例上下文已变化".to_string()));
     }
-    let execution_id = bpm::ids::ApprovalNodeExecutionId::new(execution_id);
+    validate_blocked_execution(db, context, actor, &instance, execution_id, executor).await
+}
+
+/// 实例和冻结快照校验通过后，读取受阻执行并确认不存在开放任务。
+async fn validate_blocked_execution(
+    db: &Database,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    instance: &ApprovalProcessInstance,
+    execution_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let instance_id = ApprovalProcessInstanceId::new(context.approval_process_instance_id());
+    let execution_id = ApprovalNodeExecutionId::new(execution_id);
     let execution = db
         .bpm_workflow()
         .find_execution_by_id(&execution_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整受阻执行不存在".to_string()))?;
     if execution.process_instance_id != instance_id
-        || execution.status != bpm::model::types::ApprovalNodeExecutionStatus::Blocked
+        || execution.status != ApprovalNodeExecutionStatus::Blocked
         || execution.round_no != instance.current_round_no
         || execution.blocker_code.is_none()
         || execution.blocker_code != instance.blocker_code

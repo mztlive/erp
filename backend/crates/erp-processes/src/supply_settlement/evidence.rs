@@ -2,11 +2,13 @@
 //!
 //! 审计和根事务由本流程组合；本域复验与 CAS 由供应链服务完成。
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_supply::dto::supplier_settlement::*;
+use erp_supply::entity::supplier_settlement::SupplierSettlementDifferenceEvidence;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::evidence::{evidence_command_hash, evidence_result};
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierSettlementProcess;
@@ -54,31 +56,18 @@ impl SupplierSettlementProcess {
         let audit = actor.clone().resource_log(
             "supplier_settlement.difference_evidence.append",
             "supplier_settlement_difference",
-            difference_id.to_string(),
+            req.difference_id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let evidence_for_tx = evidence.clone();
-        let expected_difference_version = req.expected_difference_version;
-        let difference_id_for_tx = difference_id.to_string();
-        let statement_id_for_tx = req.statement_id.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    SupplierSettlementService::new(db.clone())
-                        .persist_difference_evidence(
-                            &difference_id_for_tx,
-                            &statement_id_for_tx,
-                            expected_difference_version,
-                            &evidence_for_tx,
-                            executor,
-                        )
-                        .await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<(), crate::Error>(())
-                })
-            })
-            .await;
+        let input = EvidenceWrite {
+            db: self.db.clone(),
+            difference_id: req.difference_id.clone(),
+            statement_id: req.statement_id.clone(),
+            expected_difference_version: req.expected_difference_version,
+            evidence: evidence.clone(),
+            audit,
+        };
+        let transaction_result =
+            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
         if let Err(error) = transaction_result {
             if let Some(result) = self
                 .domain()
@@ -90,5 +79,31 @@ impl SupplierSettlementProcess {
             return Err(error);
         }
         Ok(evidence_result(evidence, "RECORDED", "差异补证已登记，不会直接改变正式差异结论"))
+    }
+}
+
+struct EvidenceWrite {
+    db: Database,
+    difference_id: String,
+    statement_id: String,
+    expected_difference_version: u64,
+    evidence: SupplierSettlementDifferenceEvidence,
+    audit: AuditLog,
+}
+
+impl EvidenceWrite {
+    /// 原补证和审计沿命令入口执行器原子写入，恢复仍由入口负责。
+    async fn persist(self, executor: &mut dyn Executor) -> Result<()> {
+        SupplierSettlementService::new(self.db.clone())
+            .persist_difference_evidence(
+                &self.difference_id,
+                &self.statement_id,
+                self.expected_difference_version,
+                &self.evidence,
+                executor,
+            )
+            .await?;
+        persist_log(&self.db, &self.audit, executor).await?;
+        Ok(())
     }
 }

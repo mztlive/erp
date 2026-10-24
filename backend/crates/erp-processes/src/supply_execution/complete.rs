@@ -2,23 +2,30 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
+use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_fulfillment::SupplierOrderTaskCompletionCommand;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
 use erp_supply::repository::SupplierFulfillmentExt;
+use erp_supply::service::supplier_fulfillment::complete::{
+    ensure_current_resolution, parse_completion_evidence, prepare_terminal_action,
+};
+use erp_supply::service::supplier_fulfillment::investigate::{create_action, verified_terminal_evidence};
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use super::dto::SupplierOrderTaskCompletionResultView;
 use super::investigate::{ensure_task_subject_matches_order, validate_w26_task};
 use super::receipt::{
     CompletionReceipt, parse_positive_version, persist_supply_receipt, serialized_fingerprint, stable_digest,
     stable_evidence_id, stable_internal_idempotency_key,
 };
 use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
+use crate::adapters::identity::shared_rbac_service;
 use crate::adapters::workflow::work_item_service;
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -65,87 +72,12 @@ impl SupplierFulfillmentProcess {
             return Ok(result);
         }
 
-        let terminal_action_id = stable_evidence_id("w26c", &command_id);
-        let completion_idempotency_key = stable_internal_idempotency_key("w26c", &command_id);
-        let actor_id = actor.id().to_string();
-        let actor_for_tx = actor.clone();
-        let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
-        let command_for_tx = command.clone();
+        let completion =
+            TaskCompletion::new(&self.db, &command, actor, expected_task_version, &command_id, &fingerprint);
         let db = self.db.clone();
         let client = db.client().clone();
-        let command_id_for_tx = command_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let terminal_action_id_for_tx = terminal_action_id.clone();
         let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let mut work_item = load_completion_task(
-                        &db,
-                        &command_for_tx,
-                        &actor_for_tx,
-                        &rbac_for_tx,
-                        expected_task_version,
-                        executor,
-                    )
-                    .await?;
-
-                    let order = db
-                        .supplier_fulfillment_orders()
-                        .find_by_id(command_for_tx.decision.order_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    order.ensure_version(command_for_tx.decision.expected_order_lock_version).map_err(
-                        |_| Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string()),
-                    )?;
-                    ensure_task_subject_matches_order(
-                        &work_item,
-                        &command_for_tx.expected_subject_version,
-                        order.base.version,
-                    )?;
-                    let evidence = db
-                        .supplier_order_actions()
-                        .find_by_id(
-                            command_for_tx.decision.verified_supplier_action_result_id.as_ref(),
-                            executor,
-                        )
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应商结果证据不存在".to_string()))?;
-                    let evidence_record =
-                        verified_terminal_evidence(&evidence, &order, command_for_tx.decision.resolution)?;
-                    let target_action = db
-                        .supplier_order_actions()
-                        .find_by_id(evidence_record.target_supplier_action_id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("结果证据引用的原供应商动作不存在".to_string()))?;
-                    ensure_current_resolution(&order, &target_action, command_for_tx.decision.resolution)?;
-                    let terminal_action = prepare_terminal_action(
-                        work_item.base.id.clone(),
-                        &evidence,
-                        command_for_tx.decision.resolution,
-                        order.base.id.as_str(),
-                        terminal_action_id_for_tx.clone(),
-                        completion_idempotency_key,
-                    )?;
-                    let completed_at = Instant::now();
-                    work_item.record_activity(&actor_id, completed_at)?;
-                    work_item.complete_by_domain_command(&actor_id, completed_at)?;
-
-                    persist_completed_task(
-                        CompletionWrite {
-                            db: &db,
-                            work_item: &mut work_item,
-                            order: &order,
-                            terminal_action: &terminal_action,
-                            command: &command_for_tx,
-                            actor: &actor_for_tx,
-                            command_id: &command_id_for_tx,
-                            fingerprint: &fingerprint_for_tx,
-                        },
-                        executor,
-                    )
-                    .await
-                })
-            })
+            .with_transaction(move |executor| Box::pin(async move { completion.apply(&db, executor).await }))
             .await;
 
         super::execution::recover_final_result(
@@ -203,6 +135,107 @@ impl SupplierFulfillmentProcess {
     }
 }
 
+struct TaskCompletion {
+    terminal_action_id: String,
+    idempotency_key: String,
+    actor: AuditActor,
+    rbac: SharedRbacService,
+    command: SupplierOrderTaskCompletionCommand,
+    expected_task_version: u64,
+    command_id: String,
+    fingerprint: String,
+}
+
+impl TaskCompletion {
+    fn new(
+        db: &Database,
+        command: &SupplierOrderTaskCompletionCommand,
+        actor: &AuditActor,
+        expected_task_version: u64,
+        command_id: &str,
+        fingerprint: &str,
+    ) -> Self {
+        Self {
+            terminal_action_id: stable_evidence_id("w26c", command_id),
+            idempotency_key: stable_internal_idempotency_key("w26c", command_id),
+            actor: actor.clone(),
+            rbac: shared_rbac_service(db.clone()),
+            command: command.clone(),
+            expected_task_version,
+            command_id: command_id.to_string(),
+            fingerprint: fingerprint.to_string(),
+        }
+    }
+
+    async fn apply(self, db: &Database, executor: &mut dyn Executor) -> Result<CompletionReceipt> {
+        let mut work_item = load_completion_task(
+            db,
+            &self.command,
+            &self.actor,
+            &self.rbac,
+            self.expected_task_version,
+            executor,
+        )
+        .await?;
+        let (order, evidence) = load_completion_evidence(db, &self.command, &work_item, executor).await?;
+        let terminal_action = prepare_terminal_action(
+            work_item.base.id.clone(),
+            &evidence,
+            self.command.decision.resolution,
+            order.base.id.as_str(),
+            self.terminal_action_id,
+            self.idempotency_key,
+        )?;
+        let completed_at = Instant::now();
+        work_item.record_activity(self.actor.id(), completed_at)?;
+        work_item.complete_by_domain_command(self.actor.id(), completed_at)?;
+        persist_completed_task(
+            CompletionWrite {
+                db,
+                work_item: &mut work_item,
+                order: &order,
+                terminal_action: &terminal_action,
+                command: &self.command,
+                actor: &self.actor,
+                command_id: &self.command_id,
+                fingerprint: &self.fingerprint,
+            },
+            executor,
+        )
+        .await
+    }
+}
+
+async fn load_completion_evidence(
+    db: &Database,
+    command: &SupplierOrderTaskCompletionCommand,
+    work_item: &WorkItem,
+    executor: &mut dyn Executor,
+) -> Result<(SupplierFulfillmentOrder, SupplierOrderAction)> {
+    let order = db
+        .supplier_fulfillment_orders()
+        .find_by_id(command.decision.order_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
+    order
+        .ensure_version(command.decision.expected_order_lock_version)
+        .map_err(|_| Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string()))?;
+    ensure_task_subject_matches_order(work_item, &command.expected_subject_version, order.base.version)?;
+    let evidence = db
+        .supplier_order_actions()
+        .find_by_id(command.decision.verified_supplier_action_result_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商结果证据不存在".to_string()))?;
+    let evidence_record = verified_terminal_evidence(&evidence, &order, command.decision.resolution)?;
+    let target_action = db
+        .supplier_order_actions()
+        .find_by_id(evidence_record.target_supplier_action_id(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("结果证据引用的原供应商动作不存在".to_string()))?;
+    ensure_current_resolution(&order, &target_action, command.decision.resolution)?;
+    Ok((order, evidence))
+}
+
 fn completion_result(
     work_item_id: &str,
     receipt: CompletionReceipt,
@@ -223,14 +256,6 @@ fn completion_command_id(actor_id: &str, work_item_id: &str, key: &str) -> Strin
         stable_digest(&format!("{actor_id}|supplier_fulfillment.task_complete|{work_item_id}|{key}"))
     )
 }
-
-use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
-use erp_supply::service::supplier_fulfillment::complete::{
-    ensure_current_resolution, parse_completion_evidence, prepare_terminal_action,
-};
-use erp_supply::service::supplier_fulfillment::investigate::{create_action, verified_terminal_evidence};
-
-use super::dto::SupplierOrderTaskCompletionResultView;
 
 /// 保持正式确认动作、任务、独立回执与事件的原写入顺序。
 struct CompletionWrite<'a> {

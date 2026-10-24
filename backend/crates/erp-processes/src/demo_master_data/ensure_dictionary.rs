@@ -7,7 +7,7 @@ use erp_catalog::{
 };
 use persistence_core::NoTransaction;
 
-use super::DemoMasterDataService;
+use super::DemoMasterDataProcess;
 use super::lifecycle::{self, DemoKindDictionary};
 use super::plan::DemoStep;
 use super::record::{self, DemoMasterRecord};
@@ -25,7 +25,7 @@ pub(super) enum EnsureOutcome {
     Notice(String),
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 读取单位种子并创建或恢复已登记记录。
     ///
     /// # 参数

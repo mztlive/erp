@@ -86,6 +86,6 @@ pub fn legacy_import_service(db: Database) -> LegacyImportService {
 ///
 /// # 错误
 /// 不返回错误。
-pub fn import_apply_service(db: Database) -> crate::import_apply::ImportApplyService {
-    crate::import_apply::ImportApplyService::new(db)
+pub fn import_apply_process(db: Database) -> crate::import_apply::ImportApplyProcess {
+    crate::import_apply::ImportApplyProcess::new(db)
 }

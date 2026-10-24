@@ -43,7 +43,7 @@ pub async fn supplier_profile_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<SaveSupplierProfileRequest>,
 ) -> Result<SupplierProfileMutationView> {
-    let view = state.supplier_profile_service().create(req, &actor).await?;
+    let view = state.supplier_profile_process().create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -74,7 +74,7 @@ pub async fn supplier_profile_create_with_assets(
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
     let result =
-        create_supplier_profile_with_assets(&state.supplier_profile_service(), req, pending.clone(), actor)
+        create_supplier_profile_with_assets(&state.supplier_profile_process(), req, pending.clone(), actor)
             .await;
     let result = finish_asset_command(&state, &pending, result, |result| result.assets_committed).await?;
     Ok(ApiResponse::ok_with_data(result.view))
@@ -94,7 +94,7 @@ pub async fn supplier_profile_update(
     Path(id): Path<String>,
     Json(req): Json<SaveSupplierProfileRequest>,
 ) -> Result<SupplierProfileMutationView> {
-    let view = state.supplier_profile_service().update(&id, req, &actor).await?;
+    let view = state.supplier_profile_process().update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -127,7 +127,7 @@ pub async fn supplier_profile_update_with_assets(
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
     let result = update_supplier_profile_with_assets(
-        &state.supplier_profile_service(),
+        &state.supplier_profile_process(),
         id,
         req,
         pending.clone(),
@@ -159,7 +159,7 @@ pub async fn supplier_profile_command_detail(
     State(state): State<AppState>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<SupplierProfileMutationView>> {
-    let view = state.supplier_profile_service().command_result(&idempotency_key).await?;
+    let view = state.supplier_profile_process().command_result(&idempotency_key).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -176,7 +176,7 @@ pub async fn supplier_sensitive_reveal(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RevealSupplierSensitiveRequest>,
 ) -> Result<SupplierSensitiveRevealView> {
-    let view = state.supplier_profile_service().reveal_sensitive(req, &actor).await?;
+    let view = state.supplier_profile_process().reveal_sensitive(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -280,7 +280,7 @@ pub async fn supplier_handover(
     Path(id): Path<String>,
     Json(req): Json<HandoverSupplierRequest>,
 ) -> Result<HandoverSupplierView> {
-    let view = state.supplier_profile_service().handover_supplier(&id, req, &actor).await?;
+    let view = state.supplier_profile_process().handover_supplier(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -308,7 +308,7 @@ pub async fn supplier_handover_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let view = state.supplier_profile_service().handover_candidates(&id, &actor).await?;
+    let view = state.supplier_profile_process().handover_candidates(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -339,6 +339,6 @@ pub async fn supplier_capability_handover(
     Path((id, capability_id)): Path<(String, String)>,
     Json(req): Json<HandoverSupplierCapabilityRequest>,
 ) -> Result<HandoverSupplierCapabilityView> {
-    let view = state.supplier_profile_service().handover_capability(&id, &capability_id, req, &actor).await?;
+    let view = state.supplier_profile_process().handover_capability(&id, &capability_id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }

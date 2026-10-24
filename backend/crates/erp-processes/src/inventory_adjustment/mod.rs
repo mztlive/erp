@@ -11,6 +11,7 @@ use mongodb::Database;
 mod adapter;
 mod approval_prepare;
 pub mod cancel_approval;
+mod cancel_authorization;
 mod cancel_facts;
 pub(super) mod cancel_persist;
 pub(super) mod cancel_runtime;
@@ -28,13 +29,13 @@ mod start_tests;
 ///
 /// Holds the root transaction for submit/cancel/create and reuses the caller
 /// Executor for approval-runtime post and cancel actions.
-pub struct InventoryAdjustmentService {
+pub struct InventoryAdjustmentProcess {
     db: Database,
     rbac: SharedRbacService,
     object_read: Arc<dyn ApprovalObjectReadPort>,
 }
 
-impl InventoryAdjustmentService {
+impl InventoryAdjustmentProcess {
     /// 创建绑定到 `db` 的库存调整流程服务。
     ///
     /// # 参数

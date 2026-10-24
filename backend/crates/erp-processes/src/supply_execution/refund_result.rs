@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
-use erp_core::ids::{InboxMessageId, SourceSystemId, SupplierRefundFactId};
+use erp_core::ids::{InboxMessageId, SourceSystemId, SupplierApiConnectionId, SupplierRefundFactId};
 use erp_integration::entity::integration_ops::{
     InboxMessage, InboxMessageData, InboxMessageStatus, MessageType,
 };
@@ -46,25 +46,8 @@ impl SupplierFulfillmentProcess {
         req.validate()?;
         let mut order = self.require_scoped_order(id, actor, "refund", &mut NoTransaction).await?;
         let connection_id = order.connection_id.clone();
-        if let Some(existing) = self
-            .db
-            .supplier_refund_facts()
-            .find_by_connection_and_refund(
-                &connection_id,
-                &req.external_refund_no,
-                &req.external_refund_version,
-                &mut NoTransaction,
-            )
-            .await?
-        {
-            tracing::info!(account = %actor.id(), order_id = %id, "退款结果幂等命中");
-            let fact_id = SupplierRefundFactId::new(existing.base.id.as_str());
-            let allocations = self
-                .db
-                .supplier_refund_allocations()
-                .find_allocations_by_fact_ids(&[fact_id], &mut NoTransaction)
-                .await?;
-            return Ok(refund_fact_view(&existing, &allocations));
+        if let Some(view) = self.replayed_refund_result(id, &req, &connection_id, actor).await? {
+            return Ok(view);
         }
         self.domain().advance_refund_result(id, &mut order, req.refund_amount).await?;
         let message = build_refund_message(&order, &req, &connection_id, InboxMessageStatus::Received)?;
@@ -105,6 +88,36 @@ impl SupplierFulfillmentProcess {
             .await?;
         Ok(refund_fact_view(&fact, &allocations))
     }
+
+    async fn replayed_refund_result(
+        &self,
+        id: &str,
+        req: &RecordRefundResultRequest,
+        connection_id: &SupplierApiConnectionId,
+        actor: &AuditActor,
+    ) -> Result<Option<SupplierRefundFactView>> {
+        if let Some(existing) = self
+            .db
+            .supplier_refund_facts()
+            .find_by_connection_and_refund(
+                connection_id,
+                &req.external_refund_no,
+                &req.external_refund_version,
+                &mut NoTransaction,
+            )
+            .await?
+        {
+            tracing::info!(account = %actor.id(), order_id = %id, "退款结果幂等命中");
+            let fact_id = SupplierRefundFactId::new(existing.base.id.as_str());
+            let allocations = self
+                .db
+                .supplier_refund_allocations()
+                .find_allocations_by_fact_ids(&[fact_id], &mut NoTransaction)
+                .await?;
+            return Ok(Some(refund_fact_view(&existing, &allocations)));
+        }
+        Ok(None)
+    }
 }
 
 /// 构建退款结果 `inbox_message` 信封（来源事件取外部退款身份）。
@@ -123,7 +136,7 @@ impl SupplierFulfillmentProcess {
 fn build_refund_message(
     order: &SupplierFulfillmentOrder,
     req: &RecordRefundResultRequest,
-    connection_id: &erp_core::ids::SupplierApiConnectionId,
+    connection_id: &SupplierApiConnectionId,
     status: InboxMessageStatus,
 ) -> Result<InboxMessage> {
     let event_key = format!("refund:{}:{}", req.external_refund_no, req.external_refund_version);

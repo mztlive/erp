@@ -21,14 +21,14 @@ use erp_workflow::service::work_item::{
 use persistence_core::NoTransaction;
 
 use super::accounts::PreparedAccounts;
-use super::{DemoFoundationReport, DemoMasterDataService, spec};
+use super::{DemoFoundationReport, DemoMasterDataProcess, spec};
 use crate::adapters::workflow::work_item_service;
 use crate::procure_to_pay::responsibility::ProcurementResponsibilityProcess;
 use crate::{Error, Result};
 
 const RULE_PAGE_SIZE: u32 = 100;
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 补齐默认采购调度人和财务付款、开票负责人。
     ///
     /// 已有启用的同层默认规则时保留现有负责人。

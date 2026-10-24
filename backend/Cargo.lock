@@ -2076,7 +2076,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "validator",
  "zip 2.4.2",
  "zune-jpeg",

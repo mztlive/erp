@@ -6,10 +6,10 @@ use erp_customer::{
 };
 use persistence_core::NoTransaction;
 
-use super::CustomerProfileService;
+use super::CustomerProfileProcess;
 use crate::{Error, Result};
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 按幂等键查询已成功客户资料命令的稳定结果。
     ///
     /// # 参数

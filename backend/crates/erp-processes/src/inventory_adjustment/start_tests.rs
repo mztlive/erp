@@ -178,6 +178,40 @@ fn stock_start_identity_accepts_only_exact_generation_pairs() {
     assert_eq!(identity.classify(Some(&generic)), ReceiptBranch::PayloadConflict);
 }
 
+/// V3 身份规范化明细数量与顺序，并保持库存余额版本的签署约束。
+#[test]
+fn stock_start_identity_normalizes_order_and_signs_balance_version() {
+    let req = submit_request();
+    let identity = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3).unwrap();
+    let receipt = ApprovalCommandReceipt::new(
+        ApprovalCommandReceiptId::new("receipt-1"),
+        identity.current(),
+        "instance-1",
+        Timestamp::from_unix_secs(10).unwrap(),
+    )
+    .unwrap();
+    let mut equivalent = req.clone();
+    equivalent.lines.reverse();
+    equivalent.balances.reverse();
+    equivalent.lines[0].line_id = " line-a ".to_string();
+    equivalent.lines[0].quantity = "1.000".to_string();
+    let normalized = stock_adjustment_start_identity("adj-1", &equivalent, "actor", "def-1", 3).unwrap();
+    assert!(matches!(normalized.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)));
+
+    equivalent.balances[0].expected_version += 1;
+    let changed = stock_adjustment_start_identity("adj-1", &equivalent, "actor", "def-1", 3).unwrap();
+    assert_eq!(changed.classify(Some(&receipt)), ReceiptBranch::PayloadConflict);
+}
+
+/// 规范化启动身份时明细数量解析失败必须停止，不能生成可回放身份。
+#[test]
+fn stock_start_identity_rejects_invalid_line_quantity() {
+    let mut req = submit_request();
+    req.lines[0].quantity = "invalid".to_string();
+    let result = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3);
+    assert!(matches!(result, Err(crate::Error::ValidationError(_))));
+}
+
 /// Unknown-result 查询按作用域只接受对应世代的摘要形状。
 #[test]
 fn submit_result_receipt_digest_shape_is_fail_closed() {

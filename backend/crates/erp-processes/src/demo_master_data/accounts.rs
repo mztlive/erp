@@ -12,7 +12,7 @@ use persistence_core::NoTransaction;
 
 use super::roles::DemoRole;
 use super::spec::{self, AccountSpec};
-use super::{DemoFoundationReport, DemoMasterDataService};
+use super::{DemoFoundationReport, DemoMasterDataProcess};
 use crate::{Error, Result};
 
 /// 规格键和登录名到账号 ID。
@@ -23,7 +23,7 @@ pub(super) struct PreparedAccounts {
     pub by_login: HashMap<String, String>,
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 按规格补齐岗位账号，并汇总新建、已有和改名数量。
     ///
     /// 已有账号不改密码。缺角色时补上，姓名与演示人名不一致时同步。

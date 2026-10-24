@@ -29,6 +29,7 @@ mod source;
 mod void;
 use std::sync::Arc;
 
+use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_read_models::supplier_center::settlement::dto::SettlementReviewDecisionResult;
 use erp_supply::dto::supplier_settlement as dto;
@@ -44,6 +45,12 @@ pub struct SupplierSettlementProcess {
     data_scope: Arc<dyn SettlementDataScopePort>,
     rbac: Option<SharedRbacService>,
 }
+struct SettlementWriteContext {
+    db: Database,
+    data_scope: Arc<dyn SettlementDataScopePort>,
+    actor: AuditActor,
+}
+
 impl SupplierSettlementProcess {
     /// 使用原数据库依赖构造结算流程；范围 Port 缺省失败关闭。
     ///
@@ -78,6 +85,14 @@ impl SupplierSettlementProcess {
         self.data_scope = data_scope;
         self.rbac = Some(rbac);
         self
+    }
+
+    fn write_context(&self, actor: &AuditActor) -> SettlementWriteContext {
+        SettlementWriteContext {
+            db: self.db.clone(),
+            data_scope: self.data_scope.clone(),
+            actor: actor.clone(),
+        }
     }
 
     fn domain(&self) -> SupplierSettlementService {

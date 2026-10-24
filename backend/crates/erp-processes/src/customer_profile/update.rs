@@ -16,14 +16,14 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
-use super::CustomerProfileService;
+use super::CustomerProfileProcess;
 use super::facts::PartyFactChanges;
 use super::idempotency::{checked_command_view, command_view};
 use crate::adapters::customer_access;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 原子修订 Party 身份、客户角色与显式提交的资料事实集合。
     ///
     /// # 参数

@@ -90,7 +90,7 @@ pub async fn cost_entry_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCostEntryRequest>,
 ) -> Result<CostEntryView> {
-    let view = erp_processes::finance_posting::cost::CostService::new(state.db())
+    let view = erp_processes::finance_posting::cost::CostProcess::new(state.db())
         .create_cost_entry(req, &actor)
         .await?;
 

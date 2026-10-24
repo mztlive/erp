@@ -18,7 +18,7 @@ use erp_supplier::{
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
-use super::SupplierProfileService;
+use super::SupplierProfileProcess;
 use crate::audit::{AuditedCommand, AuditedWrite, run_audited_event};
 use crate::handover_common::{
     HANDOVER_AUDIT_FIELDS, HandoverEventFacts, ensure_org_enabled, handover_content, handover_context,
@@ -42,7 +42,7 @@ const CAPABILITY_ACTION: AuditAction = AuditAction {
     allowed_fields: HANDOVER_AUDIT_FIELDS,
 };
 
-impl SupplierProfileService {
+impl SupplierProfileProcess {
     /// 显式交接供应商整体维护人；开放审批任务不改派。
     ///
     /// # 参数

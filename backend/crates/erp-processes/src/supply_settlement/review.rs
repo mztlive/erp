@@ -2,10 +2,12 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
+use erp_identity::SharedRbacService;
+use erp_supply::SettlementAccess;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
-    SettlementReviewResult, SettlementStatus, SupplierSettlementStatement,
+    SettlementReviewRejectReason, SettlementReviewResult, SettlementStatus, SupplierSettlementStatement,
 };
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
@@ -23,14 +25,31 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use super::review_posting::{self, Posting};
+use super::review_preparation::{self, PreparedReview, ReviewInput};
 use super::{
     SETTLEMENT_REVIEW_OWNER_ROLE, SettlementReviewCommand, SettlementReviewDecisionResult,
-    SubmitSettlementReviewRequest, SubmitSettlementReviewResult, SupplierSettlementProcess, command_audit_id,
-    digest_parts, dto, ensure_same_id,
+    SettlementWriteContext, SubmitSettlementReviewRequest, SubmitSettlementReviewResult,
+    SupplierSettlementProcess, command_audit_id, digest_parts, dto, ensure_same_id, reviewers,
 };
+use crate::adapters::identity::shared_rbac_service;
+use crate::adapters::workflow::{WorkflowAuth, workflow_auth};
 use crate::audit::{persist_log, recover_command};
 use crate::supply_execution::receipt::persist_supply_receipt;
 use crate::{Error, Result};
+
+struct PreparedSubmission {
+    statement: SupplierSettlementStatement,
+    work_item: WorkItem,
+    auth: WorkflowAuth,
+    policy_revision: u64,
+}
+
+struct PreparedDecision {
+    statement: SupplierSettlementStatement,
+    work_item: WorkItem,
+    financial: PreparedReview,
+}
 
 impl SupplierSettlementProcess {
     /// 提交冻结结算主题并原子创建唯一财务复核任务。
@@ -69,64 +88,20 @@ impl SupplierSettlementProcess {
         let statement =
             self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         validate_submission_command(&statement, &req, actor)?;
-        let auth = crate::adapters::workflow::workflow_auth(
-            self.db.clone(),
-            crate::adapters::identity::shared_rbac_service(self.db.clone()),
-        );
+        let auth = workflow_auth(self.db.clone(), shared_rbac_service(self.db.clone()));
         let policy_revision = self
             .authorize_reviewer(&auth, &req.reviewer_user_id, actor.id(), &statement.business_org_unit_id)
             .await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
-        let db = self.db.clone();
-        let data_scope = self.data_scope.clone();
-        let actor_id = actor.id().to_string();
-        let expected_subject_hash = statement.subject_hash.clone();
-        let audit_actor = actor.clone();
         let operation_id = req.operation_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let audit_id_for_tx = audit_id.clone();
-        let auth_for_tx = auth.clone();
+        let prepared = PreparedSubmission { statement, work_item, auth, policy_revision };
+        let auth = prepared.auth.clone();
+        let policy_revision = prepared.policy_revision;
+        let input = SubmissionCommit::new(self, req, actor, prepared, (&audit_id, &fingerprint));
         let transaction_result = auth
             .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(async move {
-                    let mut current = erp_supply::SettlementAccess::new(db.clone(), data_scope)
-                        .require_statement(&audit_actor, "submit", &statement.base.id, executor)
-                        .await?;
-                    if current.base.version != statement.base.version
-                        || current.subject_hash != expected_subject_hash
-                    {
-                        return Err(Error::ConflictError("结算单版本或主题已变化，请刷新后重试".to_string()));
-                    }
-                    ensure_review_submission_ready(&db, &current, &actor_id, executor).await?;
-                    super::reviewers::ensure_reviewer(
-                        &auth_for_tx,
-                        &req.reviewer_user_id,
-                        &current.prepared_by,
-                        &current.business_org_unit_id,
-                        executor,
-                    )
-                    .await?;
-                    current.submit_review()?;
-                    SupplierSettlementService::new(db.clone())
-                        .persist_statement(&mut current, executor)
-                        .await?;
-                    db.work_items().create(&work_item, executor).await?;
-                    persist_review_submission(
-                        ReviewSubmissionWrite {
-                            db: &db,
-                            actor: &audit_actor,
-                            statement: &current,
-                            work_item: &work_item,
-                            command_id: &audit_id_for_tx,
-                            fingerprint: &fingerprint_for_tx,
-                            request: &req,
-                        },
-                        executor,
-                    )
-                    .await?;
-                    Ok::<(SupplierSettlementStatement, WorkItem), crate::Error>((current, work_item))
-                })
+                Box::pin(input.persist(executor))
             })
             .await;
         let (statement, work_item) = match transaction_result {
@@ -191,73 +166,11 @@ impl SupplierSettlementProcess {
         {
             return Ok(result);
         }
-        let (mut statement, mut work_item) =
-            self.load_review_decision_state(id, &req, actor, expected_task_version).await?;
-        let items = self.domain().load_statement_items(id, &mut NoTransaction).await?;
-        let differences = self.domain().load_statement_differences(&items, &mut NoTransaction).await?;
-        ensure_current_subject_and_resolved_differences(&statement, &differences)?;
-        let now = Instant::now();
-        let super::review_preparation::PreparedReview {
-            payable,
-            payable_entry,
-            cost_entries,
-            cost_delta,
-            result_status,
-        } = super::review_preparation::prepare(
-            &mut statement,
-            &mut work_item,
-            &items,
-            &differences,
-            super::review_preparation::ReviewInput {
-                request: &req,
-                reject_reason,
-                actor_id: actor.id(),
-                at: now,
-            },
-        )?;
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let actor_id = actor.id().to_string();
-        let audit_actor = actor.clone();
-        let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
+        let prepared = self.prepare_decision(id, &req, actor, expected_task_version, reject_reason).await?;
         let operation_id = req.decision.operation_id.clone();
-        let operation_id_for_tx = operation_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let audit_id_for_tx = audit_id.clone();
-        let action_for_tx = action.to_string();
-        let result_status_for_tx = result_status;
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let receipt = super::review_posting::post(
-                        super::review_posting::Posting {
-                            db: &db,
-                            actor: &audit_actor,
-                            actor_id: &actor_id,
-                            rbac: &rbac_for_tx,
-                            statement: &mut statement,
-                            work_item: &mut work_item,
-                            payable: payable.as_ref(),
-                            payable_entry: payable_entry.as_ref(),
-                            cost_entries: &cost_entries,
-                            cost_delta,
-                            result_status: result_status_for_tx,
-                            operation_id: operation_id_for_tx,
-                            fingerprint: fingerprint_for_tx,
-                            audit_id: audit_id_for_tx,
-                            idempotency_key: req.idempotency_key.clone(),
-                            action: action_for_tx,
-                        },
-                        executor,
-                    )
-                    .await?;
-                    Ok::<(SupplierSettlementStatement, WorkItem, ReviewDecisionReceipt), crate::Error>((
-                        statement, work_item, receipt,
-                    ))
-                })
-            })
-            .await;
+        let input = DecisionCommit::new(self, &req, actor, prepared, (&audit_id, &fingerprint, action));
+        let transaction_result =
+            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
         let (statement, work_item, receipt) = match transaction_result {
             Ok(result) => result,
             Err(error) => {
@@ -276,6 +189,32 @@ impl SupplierSettlementProcess {
             },
         };
         Ok(review_decision_result(statement, work_item, operation_id, receipt))
+    }
+
+    /// 按原先的结算单、任务、明细、差异顺序准备领域决定与财务构造结果。
+    async fn prepare_decision(
+        &self,
+        id: &str,
+        req: &SettlementReviewCommand,
+        actor: &AuditActor,
+        expected_task_version: u64,
+        reject_reason: Option<SettlementReviewRejectReason>,
+    ) -> Result<PreparedDecision> {
+        let (mut statement, mut work_item) =
+            self.load_review_decision_state(id, req, actor, expected_task_version).await?;
+        let items = self.domain().load_statement_items(id, &mut NoTransaction).await?;
+        let differences = self.domain().load_statement_differences(&items, &mut NoTransaction).await?;
+        ensure_current_subject_and_resolved_differences(&statement, &differences)?;
+        let now = Instant::now();
+        let financial = review_preparation::prepare(
+            &mut statement,
+            &mut work_item,
+            &items,
+            &differences,
+            ReviewInput { request: req, reject_reason, actor_id: actor.id(), at: now },
+        )?;
+
+        Ok(PreparedDecision { statement, work_item, financial })
     }
 
     /// 按原顺序读取并验证决定所针对的结算单与正式任务。
@@ -384,11 +323,8 @@ impl SupplierSettlementProcess {
         if work_item.owner_user_id.as_deref() != Some(actor.id()) {
             return Err(Error::Forbidden("仅原复核人可重放决定".into()));
         }
-        let auth = crate::adapters::workflow::workflow_auth(
-            self.db.clone(),
-            crate::adapters::identity::shared_rbac_service(self.db.clone()),
-        );
-        super::reviewers::ensure_reviewer(
+        let auth = workflow_auth(self.db.clone(), shared_rbac_service(self.db.clone()));
+        reviewers::ensure_reviewer(
             &auth,
             actor.id(),
             &statement.prepared_by,
@@ -398,6 +334,135 @@ impl SupplierSettlementProcess {
         .await?;
         ensure_decision_replay(&statement, &work_item, &receipt)?;
         Ok(Some(review_decision_result(statement, work_item, receipt.operation_id.clone(), receipt)))
+    }
+}
+
+struct SubmissionCommit {
+    context: SettlementWriteContext,
+    request: SubmitSettlementReviewRequest,
+    prepared: PreparedSubmission,
+    command_id: String,
+    fingerprint: String,
+}
+
+impl SubmissionCommit {
+    fn new(
+        process: &SupplierSettlementProcess,
+        request: SubmitSettlementReviewRequest,
+        actor: &AuditActor,
+        prepared: PreparedSubmission,
+        identity: (&str, &str),
+    ) -> Self {
+        Self {
+            context: process.write_context(actor),
+            request,
+            prepared,
+            command_id: identity.0.to_string(),
+            fingerprint: identity.1.to_string(),
+        }
+    }
+
+    /// 主题、复核人、结算单、任务与收据按原顺序使用入口授权事务的执行器。
+    async fn persist(self, executor: &mut dyn Executor) -> Result<(SupplierSettlementStatement, WorkItem)> {
+        let context = self.context;
+        let mut current = SettlementAccess::new(context.db.clone(), context.data_scope)
+            .require_statement(&context.actor, "submit", &self.prepared.statement.base.id, executor)
+            .await?;
+        if current.base.version != self.prepared.statement.base.version
+            || current.subject_hash != self.prepared.statement.subject_hash
+        {
+            return Err(Error::ConflictError("结算单版本或主题已变化，请刷新后重试".to_string()));
+        }
+        ensure_review_submission_ready(&context.db, &current, context.actor.id(), executor).await?;
+        reviewers::ensure_reviewer(
+            &self.prepared.auth,
+            &self.request.reviewer_user_id,
+            &current.prepared_by,
+            &current.business_org_unit_id,
+            executor,
+        )
+        .await?;
+        current.submit_review()?;
+        SupplierSettlementService::new(context.db.clone()).persist_statement(&mut current, executor).await?;
+        context.db.work_items().create(&self.prepared.work_item, executor).await?;
+        persist_review_submission(
+            ReviewSubmissionWrite {
+                db: &context.db,
+                actor: &context.actor,
+                statement: &current,
+                work_item: &self.prepared.work_item,
+                command_id: &self.command_id,
+                fingerprint: &self.fingerprint,
+                request: &self.request,
+            },
+            executor,
+        )
+        .await?;
+        Ok((current, self.prepared.work_item))
+    }
+}
+
+struct DecisionCommit {
+    db: Database,
+    actor: AuditActor,
+    rbac: SharedRbacService,
+    prepared: PreparedDecision,
+    operation_id: String,
+    fingerprint: String,
+    command_id: String,
+    idempotency_key: String,
+    action: String,
+}
+
+impl DecisionCommit {
+    fn new(
+        process: &SupplierSettlementProcess,
+        request: &SettlementReviewCommand,
+        actor: &AuditActor,
+        prepared: PreparedDecision,
+        identity: (&str, &str, &str),
+    ) -> Self {
+        Self {
+            db: process.db.clone(),
+            actor: actor.clone(),
+            rbac: shared_rbac_service(process.db.clone()),
+            prepared,
+            operation_id: request.decision.operation_id.clone(),
+            fingerprint: identity.1.to_string(),
+            command_id: identity.0.to_string(),
+            idempotency_key: request.idempotency_key.clone(),
+            action: identity.2.to_string(),
+        }
+    }
+
+    /// 沿公开决定入口的执行器调用原授权、事实重验和财务过账步骤。
+    async fn persist(
+        mut self,
+        executor: &mut dyn Executor,
+    ) -> Result<(SupplierSettlementStatement, WorkItem, ReviewDecisionReceipt)> {
+        let receipt = review_posting::post(
+            Posting {
+                db: &self.db,
+                actor: &self.actor,
+                actor_id: self.actor.id(),
+                rbac: &self.rbac,
+                statement: &mut self.prepared.statement,
+                work_item: &mut self.prepared.work_item,
+                payable: self.prepared.financial.payable.as_ref(),
+                payable_entry: self.prepared.financial.payable_entry.as_ref(),
+                cost_entries: &self.prepared.financial.cost_entries,
+                cost_delta: self.prepared.financial.cost_delta,
+                result_status: self.prepared.financial.result_status,
+                operation_id: self.operation_id,
+                fingerprint: self.fingerprint,
+                audit_id: self.command_id,
+                idempotency_key: self.idempotency_key,
+                action: self.action,
+            },
+            executor,
+        )
+        .await?;
+        Ok((self.prepared.statement, self.prepared.work_item, receipt))
     }
 }
 

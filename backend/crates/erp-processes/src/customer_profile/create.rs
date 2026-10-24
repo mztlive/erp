@@ -16,7 +16,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use super::CustomerProfileService;
+use super::CustomerProfileProcess;
 use super::facts::PartyFacts;
 use super::idempotency::{checked_command_view, command_view};
 use super::identity::CreationIdentity;
@@ -25,7 +25,7 @@ use crate::adapters::customer_access;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 原子创建 Party、客户角色、首条 OWNER 与首批资料事实。
     ///
     /// 首条 OWNER 固定为当前创建人；请求体中的 `owner_user_id` 即使提交也会被忽略。
@@ -313,7 +313,7 @@ mod tests {
     async fn reuse_creates_only_customer_role_and_preserves_existing_identity() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let service =
-            CustomerProfileService::new(db, Arc::new(SensitiveDataCodec::from_secret(b"reuse-unit-test")));
+            CustomerProfileProcess::new(db, Arc::new(SensitiveDataCodec::from_secret(b"reuse-unit-test")));
         let actor = AuditActor::new("sales-a".into(), "sales".into(), AccountKind::Admin);
         let mut req: SaveCustomerProfileRequest = serde_json::from_value(json!({
             "idempotency_key": "reuse-supplier-party", "reuse_existing_party": true,

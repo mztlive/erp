@@ -12,7 +12,7 @@ use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::approval_prepare::ensure_stock_adjustment_submit_authorized_with_executor;
+use super::approval_prepare::ensure_submit_authorized;
 use super::cancel_runtime::{
     ensure_cancel_authorized_with_executor, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
     ensure_stock_adjustment_open_task_identity,
@@ -32,12 +32,7 @@ impl InventoryAdjustmentApprovalPolicyPort for StockAdjustmentReadPolicy {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        eligibility(
-            ensure_stock_adjustment_submit_authorized_with_executor(
-                &self.db, &self.rbac, adjustment, actor, executor,
-            )
-            .await,
-        )
+        eligibility(ensure_submit_authorized(&self.db, &self.rbac, adjustment, actor, executor).await)
     }
 
     async fn actor_can_cancel(

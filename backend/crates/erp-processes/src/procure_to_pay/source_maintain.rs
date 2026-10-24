@@ -59,7 +59,7 @@ impl PurchaseOrderProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let order = access.current(&id, executor).await?;
-                    maintain_in_transaction(&db, &order, &req, &actor, executor).await
+                    apply_maintenance(&db, &order, &req, &actor, executor).await
                 })
             })
             .await
@@ -67,7 +67,7 @@ impl PurchaseOrderProcess {
 }
 
 /// 在事务内校验并写入维持登记、关闭待办和审计。
-async fn maintain_in_transaction(
+async fn apply_maintenance(
     db: &Database,
     order: &PurchaseOrder,
     req: &MaintainPurchaseSourceRequest,

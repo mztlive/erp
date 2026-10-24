@@ -3262,17 +3262,55 @@
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
-        ".resource_log",
-        ".run_audited",
+        ".run_audited"
+      ],
+      "call_counts": {
+        ".run_audited": 1
+      },
+      "location_count": 1,
+      "reason": "收件消息回写命令完成原版本与分支准备校验后，统一通过 run_audited 开启原原子事务；准备错误仍直接返回，事务内步骤仅接收同一 Executor。"
+    },
+    {
+      "path": "crates/erp-processes/src/integration_resolution/inbox_message.rs",
+      "function": "prepare_processed_message",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "收件消息成功分支按原顺序执行领域状态准备并构造一次处理完成事件；不在准备步骤中开启事务或持久化审计。"
+    },
+    {
+      "path": "crates/erp-processes/src/integration_resolution/inbox_message.rs",
+      "function": "prepare_failed_message",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "收件消息失败分支按原顺序执行状态准备、处理组织授权、失败任务及正式工作项准备，再构造一次失败事件；任一步失败直接返回，不启动事务。"
+    },
+    {
+      "path": "crates/erp-processes/src/integration_resolution/inbox_message.rs",
+      "function": "persist",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
         "persist_log"
       ],
       "call_counts": {
-        ".resource_log": 2,
-        ".run_audited": 2,
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 write_back_inbox_result 在自身事务或已声明 run_audited 边界通过 .resource_log、.run_audited、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "回写事务步骤 InboxResultWrite::persist 接收原命令的 Executor；成功分支依次更新消息和 persist_log，失败分支委托原 persist_created 保存失败事实、正式任务及事件。"
     },
     {
       "path": "crates/erp-processes/src/integration_resolution/reconciliation_difference.rs",
@@ -3440,7 +3478,7 @@
     },
     {
       "path": "crates/erp-processes/src/inventory_adjustment/create.rs",
-      "function": "persist_created_adjustment",
+      "function": "apply_created_adjustment",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
@@ -3450,7 +3488,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 persist_created_adjustment 在自身事务或已声明 run_audited 边界通过 persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "库存调整创建步骤使用入口事务的 Executor 写入业务单据、冻结绑定及一次 persist_log；失败由原创建事务回滚，不新增恢复或成功事件。"
     },
     {
       "path": "crates/erp-processes/src/inventory_adjustment/persist.rs",
@@ -3574,17 +3612,29 @@
       "path": "crates/erp-processes/src/order_to_cash/command/save.rs",
       "function": "save_working_copy",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "MetadataFactory",
       "boundaries": [
-        ".resource_log",
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "销售草稿保存入口在原准备步骤之后构造一次 .resource_log；正式保存与审计由同一入口事务中的 SavedWorkingCopyWrite::persist 执行。"
+    },
+    {
+      "path": "crates/erp-processes/src/order_to_cash/command/save.rs",
+      "function": "persist",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
         "persist_log"
       ],
       "call_counts": {
-        ".resource_log": 1,
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 save_working_copy 在自身事务或已声明 run_audited 边界通过 .resource_log、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "销售草稿保存步骤接收原入口事务的 Executor，依次重验订单、绑定与可售资格、保存工作副本和 persist_log；保留首错与原写入顺序。"
     },
     {
       "path": "crates/erp-processes/src/order_to_cash/command/void.rs",
@@ -3722,9 +3772,9 @@
     },
     {
       "path": "crates/erp-processes/src/order_to_cash/start_approval.rs",
-      "function": "persist_sales_order_start",
+      "function": "persist",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         "audit.persist"
       ],
@@ -3732,7 +3782,7 @@
         "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 persist_sales_order_start 在自身事务或已声明 run_audited 边界通过 audit.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "销售启动写入步骤沿用入口事务的 Executor，在既有业务与运行事实写入后调用一次 audit.persist；不新建事务或扩大恢复范围。"
     },
     {
       "path": "crates/erp-processes/src/party.rs",
@@ -3808,7 +3858,7 @@
     },
     {
       "path": "crates/erp-processes/src/procure_to_pay/change/submit.rs",
-      "function": "dispatch_change_start",
+      "function": "persist_change_dispatch",
       "policy": "Audited",
       "stage": "MetadataFactory",
       "boundaries": [
@@ -3818,7 +3868,7 @@
         ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 dispatch_change_start 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "采购变更启动准备完成后在 persist_change_dispatch 构造一次 .resource_log，并委托原启动持久化入口；审计构造失败仍直接返回，只有原持久化错误进入有界恢复。"
     },
     {
       "path": "crates/erp-processes/src/procure_to_pay/change/submit.rs",
@@ -4714,7 +4764,7 @@
     },
     {
       "path": "crates/erp-processes/src/sales_change/commands.rs",
-      "function": "start_change_approval",
+      "function": "prepare_change_start",
       "policy": "Audited",
       "stage": "MetadataFactory",
       "boundaries": [
@@ -4724,7 +4774,7 @@
         ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 start_change_approval 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "销售变更启动准备步骤在原冻结绑定、快照与审批输入准备之后构造一次 .resource_log；不在此处保存事件或开启事务，持久化及恢复仍由原启动入口负责。"
     },
     {
       "path": "crates/erp-processes/src/sales_change/commands.rs",
@@ -4818,9 +4868,9 @@
     },
     {
       "path": "crates/erp-processes/src/sales_change/start_approval.rs",
-      "function": "persist_sales_change_start",
+      "function": "persist",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         "persist_log"
       ],
@@ -4828,7 +4878,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 persist_sales_change_start 在自身事务或已声明 run_audited 边界通过 persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "销售变更启动写入步骤接收入口事务的 Executor，保持业务单据、审批运行事实和 persist_log 的原顺序；不创建新事务或重复业务事件。"
     },
     {
       "path": "crates/erp-processes/src/source_registry.rs",
@@ -5248,7 +5298,7 @@
     },
     {
       "path": "crates/erp-processes/src/supply_governance/supplier_api/command.rs",
-      "function": "confirm_business_capability_requirement",
+      "function": "persist_confirmation",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
@@ -5260,7 +5310,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 confirm_business_capability_requirement 在自身事务或已声明 run_audited 边界通过 .resource_log_with_id、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "能力要求确认步骤接收已推进连接版本的准备结果，沿用命令入口的 Executor，依次构造 .resource_log_with_id、保存确认事实和 persist_log。"
     },
     {
       "path": "crates/erp-processes/src/supply_governance/supplier_api/command.rs",
@@ -5340,17 +5390,17 @@
     },
     {
       "path": "crates/erp-processes/src/supply_settlement/draft.rs",
-      "function": "create_statement",
+      "function": "persist",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         "persist_log"
       ],
       "call_counts": {
         "persist_log": 1
       },
-      "location_count": 1,
-      "reason": "用例 create_statement 在自身事务或已声明 run_audited 边界通过 persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "location_count": 2,
+      "reason": "结算单创建步骤 CreateWrite::persist 沿用公开命令的 Executor，依次重验授权、保存结算单及明细和 persist_log；同文件另一个 RefreshPersistence::persist 无直接审计调用，按精确路径和函数名合计两个位置、一次 persist_log。"
     },
     {
       "path": "crates/erp-processes/src/supply_settlement/draft.rs",
@@ -5412,17 +5462,29 @@
       "path": "crates/erp-processes/src/supply_settlement/evidence.rs",
       "function": "append_difference_evidence",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "MetadataFactory",
       "boundaries": [
-        ".resource_log",
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "结算差异补证入口在原准备步骤之后构造一次 .resource_log；正式补证与事件写入沿用该入口事务的 Executor。"
+    },
+    {
+      "path": "crates/erp-processes/src/supply_settlement/evidence.rs",
+      "function": "persist",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
         "persist_log"
       ],
       "call_counts": {
-        ".resource_log": 1,
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 append_difference_evidence 在自身事务或已声明 run_audited 边界通过 .resource_log、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "结算补证写入步骤沿用命令入口的 Executor，校验差异版本、明细归属和结算状态后，依次更新结算单、创建证据和 persist_log；幂等恢复由入口按请求 ID 查询证据记录。"
     },
     {
       "path": "crates/erp-processes/src/supply_settlement/handover.rs",
@@ -6604,7 +6666,7 @@
     },
     {
       "path": "crates/erp-processes/src/procure_to_pay/source_maintain.rs",
-      "function": "maintain_in_transaction",
+      "function": "apply_maintenance",
       "policy": "Audited",
       "stage": "Command",
       "boundaries": [
@@ -6616,7 +6678,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 maintain_in_transaction 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "用例步骤 apply_maintenance 通过 .resource_log 构造审计并使用调用方 Executor 执行原维护写入及 persist_log；不另开事务，不改变来源维护与首错语义。"
     },
     {
       "path": "crates/erp-processes/src/procure_to_pay/source_withdraw.rs",

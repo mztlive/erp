@@ -264,7 +264,6 @@ mod tests {
     #[test]
     fn media_targets_limit_each_row_to_three_columns() {
         let sheet = ParsedProductSheet {
-            sheet_name: "对内".into(),
             rows: Vec::new(),
             image_targets: HashMap::from([
                 ("ID_A".into(), "a".into()),

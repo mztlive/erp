@@ -14,11 +14,11 @@ use super::dto::{
     RevealPaymentRecipientRequest,
 };
 use super::mapping::resolve_current_payment_recipient;
-use super::{PayableService, payment_task};
+use super::{PayableProcess, payment_task};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl PayableService {
+impl PayableProcess {
     /// 在付款任务责任校验后揭示当前默认收款账号。
     ///
     /// 查看不修改任务版本；页面可在核对账号后继续使用同一任务版本提交付款。

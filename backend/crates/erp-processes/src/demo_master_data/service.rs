@@ -15,9 +15,9 @@ use super::ensure_dictionary::EnsureOutcome;
 use super::plan::{self, DemoCounts, DemoStep};
 use super::record::{self, DemoMasterRecord};
 use super::seed::SeedRequest;
-use super::{DemoMasterDataService, offerings};
+use super::{DemoMasterDataProcess, offerings};
 use crate::adapters::{party_service, scoped_catalog_service, warehouse_service};
-use crate::{CustomerProfileService, Error, Result, SupplierProfileService};
+use crate::{CustomerProfileProcess, Error, Result, SupplierProfileProcess};
 
 /// 继续生成时提交的清单位置。
 #[derive(Debug, Default, serde::Deserialize)]
@@ -63,7 +63,7 @@ pub struct DemoStatus {
     pub removed: DemoCounts,
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 创建演示主数据服务。
     ///
     /// # 参数
@@ -285,8 +285,8 @@ impl DemoMasterDataService {
     ///
     /// # 错误
     /// 无。
-    pub(super) fn customers(&self) -> CustomerProfileService {
-        CustomerProfileService::new(self.db.clone(), Arc::clone(&self.sensitive)).with_rbac(self.rbac.clone())
+    pub(super) fn customers(&self) -> CustomerProfileProcess {
+        CustomerProfileProcess::new(self.db.clone(), Arc::clone(&self.sensitive)).with_rbac(self.rbac.clone())
     }
 
     /// 装配供应商资料写入流程。
@@ -299,8 +299,8 @@ impl DemoMasterDataService {
     ///
     /// # 错误
     /// 无。
-    pub(super) fn suppliers(&self) -> SupplierProfileService {
-        SupplierProfileService::new(self.db.clone(), Arc::clone(&self.sensitive)).with_rbac(self.rbac.clone())
+    pub(super) fn suppliers(&self) -> SupplierProfileProcess {
+        SupplierProfileProcess::new(self.db.clone(), Arc::clone(&self.sensitive)).with_rbac(self.rbac.clone())
     }
 }
 

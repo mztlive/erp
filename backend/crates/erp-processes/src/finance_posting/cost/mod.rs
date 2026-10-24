@@ -1,21 +1,16 @@
-//! 域 D20 `cost` 根流程编排（页面：W16 实际经营盈亏）。
+//! 手工成本登记 Process：校验销售单关联并协调财务事实与审计写入。
 //!
-//! 事务边界只在 Service（conventions §6.1）：
-//! - 跨集合写入（成本事实 + 分配行）→
-//!   `persistence_core::Transactional::with_transaction`；
-//! - 列表查询单集合 → `&mut NoTransaction`。
-//!
-//! 跨域只经各领域 `*Ext` 扩展 trait 调对方域 Repository：D13 `sales_order()`
-//! 按 ID 集合批量校验成本归属销售单存在（D20 依赖域 D15/D16/D13，本期 P3
-//! 只落地 D13 校验与查询编排，D15/D16 的采购/履约来源由对方域在 P3 经
-//! `CostExt` 直接写入）。
+//! 成本事实、分配金额规则及业务唯一键归 `erp-finance`；销售单存在性通过
+//! `erp-sales` 仓储批量读取。入口先完成请求与关联校验，再在单一事务中使用
+//! 同一 Executor 保存成本事实、分配行和审计。提交后由财务领域读取登记详情。
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::ids::CostEntryId;
 use erp_finance::dto::cost::{CostEntryView, CreateCostEntryRequest};
 use erp_finance::service::cost::{
-    dedupe_order_ids, missing_order_id, persist_cost_entry, prepare_cost_entry, validate_create_cost_entry,
+    CostService as FinanceCostService, dedupe_order_ids, missing_order_id, persist_cost_entry,
+    prepare_cost_entry, validate_create_cost_entry,
 };
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
@@ -23,18 +18,18 @@ use persistence_core::{NoTransaction, Transactional};
 
 use crate::audit::persist_log;
 use crate::{Error, Result};
-/// 手工成本登记的根流程服务。
-pub struct CostService {
+/// 手工成本登记的跨域流程。
+pub struct CostProcess {
     db: Database,
 }
-impl CostService {
+impl CostProcess {
     /// 创建成本登记流程，复用入口数据库。
     ///
     /// # 参数
     /// * `db` - 入口数据库。
     ///
     /// # 返回
-    /// 返回尚未执行登记的服务实例。
+    /// 返回尚未执行登记的流程实例。
     ///
     /// # 错误
     /// 不返回错误。
@@ -43,8 +38,8 @@ impl CostService {
     }
     /// 手工登记成本事实与分配行（跨集合事务写入）。
     ///
-    /// 同一事务内：校验归属销售单存在（D13 Repository）；分配合计必须等于
-    /// 成本事实金额（含税与不含税双侧）；写入成本事实与分配行，保证「事实 +
+    /// 事务前校验归属销售单存在，分配合计必须等于成本事实金额（含税与
+    /// 不含税双侧）；事务内写入成本事实、分配行与审计，保证「事实 +
     /// 分配行」原子可见（数据模型 §6.10）。业务幂等唯一
     /// `(source_fact_type, source_document_id, source_line_id, source_version,
     /// cost_stage, cost_type)` 由唯一索引保证，重复提交落入 409。
@@ -67,7 +62,7 @@ impl CostService {
     ) -> Result<CostEntryView> {
         validate_create_cost_entry(&req)?;
         // 归属销售单存在性：先去重、一次批量读取存在性事实，再解释缺失订单；
-        // Repository 只返回已存在 ID 的最小事实，跨聚合报错决策保留 Service。
+        // Repository 只返回已存在 ID 的最小事实，跨聚合报错决策保留 Process。
         let requested_order_ids =
             req.allocations.iter().map(|line| line.sales_order_id.clone()).collect::<Vec<_>>();
         let unique_order_ids = dedupe_order_ids(&requested_order_ids);
@@ -87,11 +82,11 @@ impl CostService {
                 Box::pin(async move {
                     persist_cost_entry(&db, prepared, executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    Ok::<(), Error>(())
                 })
             })
             .await?;
 
-        Ok(erp_finance::service::cost::CostService::new(self.db.clone()).cost_entry_detail(&entry_id).await?)
+        Ok(FinanceCostService::new(self.db.clone()).cost_entry_detail(&entry_id).await?)
     }
 }

@@ -9,26 +9,29 @@ use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId, SalesOrderLineId};
 use erp_core::money::Quantity;
 use erp_fulfillment::entity::fulfillment::{
-    Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, FulfillmentResult,
-    PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
+    Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, DeliveryType,
+    FulfillmentResult, PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
     PurchaseReceiptLineId, QualityResult, ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentId,
 };
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_fulfillment::service::document_number::next_delivery_no;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
 use erp_procurement::entity::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderRevision,
-    PurchaseOrderSubmission, PurchaseOrderSubmissionLine, PurchaseType,
+    PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine, PurchaseType,
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_read_models::finance::extra_cost::extra_cost_category;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderProcess;
 use super::allocation_maintenance::prepare_current_sales_allocations;
 use super::delivery_plan::validate_revision_delivery;
 use super::payment_subject::revalidate_payment_subject;
+use crate::fulfillment_execution::task::{FulfillmentTaskObject, ensure_fulfillment_task};
 use crate::{Error, Result};
 
 impl PurchaseOrderProcess {
@@ -227,7 +230,7 @@ pub struct FormalizedOrderPersist {
     /// 生效版本。
     revision: erp_procurement::entity::purchase_order::PurchaseOrderRevision,
     /// 生效版本行。
-    revision_lines: Vec<erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine>,
+    revision_lines: Vec<PurchaseOrderRevisionLine>,
     /// 应付账户与分录。
     payable: (erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry),
     /// 确认成本分录。
@@ -236,9 +239,9 @@ pub struct FormalizedOrderPersist {
 
 /// 为生效采购单按创建时冻结的目标仓库创建采购入库草稿。
 async fn create_receipt_draft_for_order(
-    db: &mongodb::Database,
+    db: &Database,
     order: &PurchaseOrder,
-    revision_lines: &[erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine],
+    revision_lines: &[PurchaseOrderRevisionLine],
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let warehouse_id = order
@@ -280,12 +283,7 @@ async fn create_receipt_draft_for_order(
         );
     }
     db.fulfillment().create_purchase_receipt_with_lines(&receipt, &lines, executor).await?;
-    crate::fulfillment_execution::task::ensure_fulfillment_task(
-        db,
-        crate::fulfillment_execution::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
-        executor,
-    )
-    .await?;
+    ensure_fulfillment_task(db, FulfillmentTaskObject::PurchaseReceipt(&receipt), executor).await?;
     Ok(())
 }
 
@@ -295,27 +293,14 @@ async fn create_receipt_draft_for_order(
 /// （`DeliveryLine` 行级校验要求直发必填分配）；草稿进入 W01 履约任务作业面
 /// 「交付与代发」通道，采购登记物流后过账发货。
 async fn create_delivery_draft_for_order(
-    db: &mongodb::Database,
+    db: &Database,
     order: &PurchaseOrder,
-    revision_lines: &[erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine],
+    revision_lines: &[PurchaseOrderRevisionLine],
     allocations: &HashMap<String, PurchaseLineSalesAllocationId>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let delivery_id = DeliveryId::new(next_id());
-    let delivery = Delivery::new(
-        delivery_id.clone(),
-        DeliveryData {
-            delivery_no: erp_fulfillment::service::document_number::next_delivery_no(db).await?,
-            delivery_type: erp_fulfillment::entity::fulfillment::DeliveryType::SupplierDirect,
-            sales_order_id: order.sales_order_id.clone(),
-            purchase_order_id: Some(PurchaseOrderId::new(order.base.id.clone())),
-            warehouse_id: None,
-            tracking_entries: Vec::new(),
-            address_snapshot_encrypted: None,
-            address_snapshot_fingerprint: None,
-        },
-    )
-    .map_err(Error::Logic)?;
+    let delivery = prepare_direct_delivery(db, order).await?;
+    let delivery_id = DeliveryId::new(delivery.base.id.clone());
     let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
     let mut lines = Vec::with_capacity(revision_lines.len());
     for (index, line) in revision_lines.iter().enumerate() {
@@ -342,7 +327,7 @@ async fn create_delivery_draft_for_order(
                     stock_reservation_id: None,
                     purchase_line_sales_allocation_id: Some(allocation_id.clone()),
                 },
-                erp_fulfillment::entity::fulfillment::DeliveryType::SupplierDirect,
+                DeliveryType::SupplierDirect,
             )
             .map_err(Error::Logic)?,
         );
@@ -351,13 +336,27 @@ async fn create_delivery_draft_for_order(
         return Ok(());
     }
     db.fulfillment().create_delivery_with_lines(&delivery, &lines, executor).await?;
-    crate::fulfillment_execution::task::ensure_fulfillment_task(
-        db,
-        crate::fulfillment_execution::task::FulfillmentTaskObject::Delivery(&delivery),
-        executor,
-    )
-    .await?;
+    ensure_fulfillment_task(db, FulfillmentTaskObject::Delivery(&delivery), executor).await?;
     Ok(())
+}
+
+/// 在原调用位置分配发货标识和单号；行验证仍在此步骤之后执行。
+async fn prepare_direct_delivery(db: &Database, order: &PurchaseOrder) -> Result<Delivery> {
+    let delivery_id = DeliveryId::new(next_id());
+    Delivery::new(
+        delivery_id.clone(),
+        DeliveryData {
+            delivery_no: next_delivery_no(db).await?,
+            delivery_type: DeliveryType::SupplierDirect,
+            sales_order_id: order.sales_order_id.clone(),
+            purchase_order_id: Some(PurchaseOrderId::new(order.base.id.clone())),
+            warehouse_id: None,
+            tracking_entries: Vec::new(),
+            address_snapshot_encrypted: None,
+            address_snapshot_fingerprint: None,
+        },
+    )
+    .map_err(Error::Logic)
 }
 
 /// 服务履约草稿敏感字段的查询指纹密钥（域内常量，同 warehouse 域先例；
@@ -371,16 +370,16 @@ const SERVICE_FULFILLMENT_FINGERPRINT_KEY: &[u8] = b"erp-service-fulfillment-dra
 /// 服务类型。采购登记服务地点、时间、结果和现场图片凭证后确认完成。
 /// 交付对象为占位快照（UI 不采集）；服务地点占位值必须在确认时替换。
 async fn create_service_fulfillment_draft_for_order(
-    db: &mongodb::Database,
+    db: &Database,
     order: &PurchaseOrder,
-    revision_lines: &[erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine],
+    revision_lines: &[PurchaseOrderRevisionLine],
     allocations: &HashMap<String, PurchaseLineSalesAllocationId>,
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
-    let now = Instant::now();
-    let placeholder = "待填写".to_string();
+    let context =
+        ServiceDraftContext { order, now: Instant::now(), placeholder: "待填写".to_string(), actor_id };
     for line in revision_lines {
         if line.line_type != PurchaseLineType::ItemService {
             continue;
@@ -394,48 +393,7 @@ async fn create_service_fulfillment_draft_for_order(
             ));
         };
         let quantity = line.quantity.unwrap_or(zero);
-        let record_id = ServiceFulfillmentId::new(next_id());
-        let record = ServiceFulfillment::new(
-            record_id.clone(),
-            ServiceFulfillmentData {
-                fulfillment_no: format!("SF-{}", record_id.as_ref()),
-                sales_order_line_id: SalesOrderLineId::new(confirmation_line_id.to_string()),
-                purchase_order_id: PurchaseOrderId::new(order.base.id.clone()),
-                purchase_line_sales_allocation_id: allocation_id.clone(),
-                recipient_snapshot: placeholder.clone(),
-                recipient_snapshot_fingerprint: ServiceFulfillment::recipient_snapshot_fingerprint(
-                    &placeholder,
-                    SERVICE_FULFILLMENT_FINGERPRINT_KEY,
-                ),
-                quantity,
-                result: FulfillmentResult::Success,
-                evidence_attachment_id: None,
-                service_location_encrypted: placeholder.clone(),
-                service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
-                    &placeholder,
-                    SERVICE_FULFILLMENT_FINGERPRINT_KEY,
-                ),
-                service_started_at: None,
-                service_ended_at: None,
-                completion_note: None,
-                fact_no: next_id(),
-                occurred_at: now,
-                recorded_at: now,
-                recorded_by: actor_id.to_string(),
-                source_type: SourceType::Erp,
-                source_reference: None,
-                reason_code: None,
-                reason_text: None,
-            },
-        )
-        .map_err(Error::Logic)?;
-        db.service_fulfillments().create(&record, executor).await?;
-        crate::fulfillment_execution::task::ensure_fulfillment_task(
-            db,
-            crate::fulfillment_execution::task::FulfillmentTaskObject::ServiceFulfillment(&record),
-            executor,
-        )
-        .await?;
+        context.persist(db, confirmation_line_id.as_ref(), allocation_id, quantity, executor).await?;
     }
     Ok(())
 }
@@ -459,7 +417,7 @@ impl PreparedFormalizedOrder {
 /// 已写入采购版本后，等待财务和履约消费的冻结事实。
 pub struct FormalizedPurchaseEffects {
     order: PurchaseOrder,
-    revision_lines: Vec<erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine>,
+    revision_lines: Vec<PurchaseOrderRevisionLine>,
     allocations_by_line: HashMap<String, PurchaseLineSalesAllocationId>,
     payable: (erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry),
     cost_entries: Vec<erp_finance::entity::cost::CostEntry>,
@@ -496,7 +454,7 @@ impl FormalizedOrderPersist {
     /// 来源、版本或 CAS 校验失败时，在调用方唯一事务内传播错误。
     pub async fn persist_order(
         self,
-        db: &mongodb::Database,
+        db: &Database,
         actor: &AuditActor,
         session: &mut dyn Executor,
     ) -> Result<FormalizedPurchaseEffects> {
@@ -589,7 +547,7 @@ impl FormalizedPurchaseEffects {
     /// 履约事实不完整或持久化失败时传播给调用方事务。
     pub async fn persist_fulfillment(
         self,
-        db: &mongodb::Database,
+        db: &Database,
         actor_id: &str,
         session: &mut dyn Executor,
     ) -> Result<()> {
@@ -630,5 +588,60 @@ impl FormalizedPurchaseEffects {
     }
 }
 
-#[cfg(test)]
-mod tests {}
+/// 一批服务草稿共享的时间与占位快照；逐行写入仍复用调用方执行器。
+struct ServiceDraftContext<'a> {
+    order: &'a PurchaseOrder,
+    now: Instant,
+    placeholder: String,
+    actor_id: &'a str,
+}
+
+impl ServiceDraftContext<'_> {
+    async fn persist(
+        &self,
+        db: &Database,
+        confirmation_line_id: &str,
+        allocation_id: &PurchaseLineSalesAllocationId,
+        quantity: Quantity,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let record_id = ServiceFulfillmentId::new(next_id());
+        let record = ServiceFulfillment::new(
+            record_id.clone(),
+            ServiceFulfillmentData {
+                fulfillment_no: format!("SF-{}", record_id.as_ref()),
+                sales_order_line_id: SalesOrderLineId::new(confirmation_line_id.to_string()),
+                purchase_order_id: PurchaseOrderId::new(self.order.base.id.clone()),
+                purchase_line_sales_allocation_id: allocation_id.clone(),
+                recipient_snapshot: self.placeholder.clone(),
+                recipient_snapshot_fingerprint: ServiceFulfillment::recipient_snapshot_fingerprint(
+                    &self.placeholder,
+                    SERVICE_FULFILLMENT_FINGERPRINT_KEY,
+                ),
+                quantity,
+                result: FulfillmentResult::Success,
+                evidence_attachment_id: None,
+                service_location_encrypted: self.placeholder.clone(),
+                service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
+                    &self.placeholder,
+                    SERVICE_FULFILLMENT_FINGERPRINT_KEY,
+                ),
+                service_started_at: None,
+                service_ended_at: None,
+                completion_note: None,
+                fact_no: next_id(),
+                occurred_at: self.now,
+                recorded_at: self.now,
+                recorded_by: self.actor_id.to_string(),
+                source_type: SourceType::Erp,
+                source_reference: None,
+                reason_code: None,
+                reason_text: None,
+            },
+        )
+        .map_err(Error::Logic)?;
+        db.service_fulfillments().create(&record, executor).await?;
+        ensure_fulfillment_task(db, FulfillmentTaskObject::ServiceFulfillment(&record), executor).await?;
+        Ok(())
+    }
+}

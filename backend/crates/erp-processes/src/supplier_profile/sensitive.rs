@@ -9,12 +9,12 @@ use erp_supplier::{RevealSupplierSensitiveRequest, SupplierExt, SupplierSensitiv
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::SupplierProfileService;
+use super::SupplierProfileProcess;
 use super::validation::ensure_sensitive_party;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl SupplierProfileService {
+impl SupplierProfileProcess {
     /// 验证短时令牌、归属与权限入口后解密单个敏感字段并记录审计。
     ///
     /// # 参数

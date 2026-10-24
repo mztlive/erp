@@ -11,7 +11,7 @@ use mongodb::Database;
 
 use super::pending::PendingFileAssets;
 use crate::Result;
-use crate::finance_posting::payable::{PayableService, SupplierPaymentWithAssetsResult};
+use crate::finance_posting::payable::{PayableProcess, SupplierPaymentWithAssetsResult};
 
 /// 原子登记供应商付款与本次上传的银行回单。
 ///
@@ -48,7 +48,7 @@ pub async fn commit_supplier_payment_with_assets(
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
     let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
-    PayableService::new(db)
+    PayableProcess::new(db)
         .with_rbac(rbac)
         .with_object_read(object_read)
         .commit_supplier_payment_with_assets(req, pending, &actor)

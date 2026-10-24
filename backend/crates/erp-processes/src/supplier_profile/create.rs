@@ -3,13 +3,14 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::{
     PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
     SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
 };
+use erp_identity::SharedRbacService;
 use erp_party::service::party::identity::ensure_identity_available;
 use erp_party::{
     AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyBankAccount,
@@ -17,12 +18,13 @@ use erp_party::{
     PartyRevisionData, PartyStatus, PartyTaxProfile, PartyTaxProfileData,
 };
 use erp_supplier::{
-    SaveSupplierProfileRequest, SupplierAccount, SupplierCapability, SupplierCapabilityRevision,
-    SupplierCommercialProfileRevision, SupplierCreationIds, SupplierCreationInputs,
-    SupplierCreationQualificationIds, SupplierCreationQualificationInput, SupplierCreationRatingInput,
-    SupplierExt, SupplierPartySeed, SupplierProfileCommand, SupplierProfileCommandData,
-    SupplierProfileMutationView, SupplierQualification, SupplierQualificationCapability,
-    SupplierQualificationRevision, SupplierRatingRevision, command_view,
+    CapabilityCode, SaveSupplierProfileRequest, SupplierAccount, SupplierCapability,
+    SupplierCapabilityRevision, SupplierCommercialProfileRevision, SupplierCreationIds,
+    SupplierCreationInputs, SupplierCreationPlan, SupplierCreationQualificationIds,
+    SupplierCreationQualificationInput, SupplierCreationRatingInput, SupplierExt, SupplierPartySeed,
+    SupplierProfileCommand, SupplierProfileCommandData, SupplierProfileMutationView, SupplierQualification,
+    SupplierQualificationCapability, SupplierQualificationRevision, SupplierRatingRevision, command_view,
+    plan_supplier_creation,
 };
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
@@ -30,11 +32,12 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::validation::resolve_supplier_file_references;
-use super::{SupplierProfileService, SupplierProfileWithAssetsResult};
+use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
+use crate::adapters::supplier_access;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl SupplierProfileService {
+impl SupplierProfileProcess {
     /// 创建 Party、Supplier 及其当前资料；全部写入与幂等结果原子提交。
     ///
     /// # 参数
@@ -87,30 +90,12 @@ impl SupplierProfileService {
                 assets_committed: false,
             });
         }
-        let used = resolve_supplier_file_references(&mut req, pending_assets.as_ref())?;
-        pending_assets.ensure_all_used(&used)?;
-        let party_no =
-            SaveSupplierProfileRequest::required_create_identity(req.party_no.as_deref(), "主体编号")?;
-        let supplier_no =
-            SaveSupplierProfileRequest::required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
-        self.ensure_party_active(&req.signing_entity_party_id).await?;
-        self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachment_references(&req.qualifications, &pending_assets).await?;
-        self.ensure_unique_inputs(&req)?;
-
+        let references =
+            self.prepare_creation_references(&mut req, &pending_assets, rbac.clone(), actor).await?;
         let idempotency_key = req.idempotency_key.clone();
-        let maintainer = required_maintainer(&req)?;
-        let org = resolve_create_org(&self.db, rbac.clone(), actor, &maintainer).await?;
-        let prepared = self.prepare_create(
-            req,
-            party_no,
-            supplier_no,
-            request_fingerprint.clone(),
-            actor,
-            pending_assets,
-            maintainer.clone(),
-            org,
-        )?;
+        let maintainer = references.maintainer.clone();
+        let prepared =
+            self.prepare_create(req, references, request_fingerprint.clone(), actor, pending_assets)?;
         let result = prepared.result.clone();
         let db = self.db.clone();
         let client = db.client().clone();
@@ -118,9 +103,7 @@ impl SupplierProfileService {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    crate::adapters::supplier_access(db.clone(), rbac)
-                        .require_create(&actor, &maintainer, executor)
-                        .await?;
+                    supplier_access(db.clone(), rbac).require_create(&actor, &maintainer, executor).await?;
                     prepared.persist(&db, executor).await
                 })
             })
@@ -136,35 +119,41 @@ impl SupplierProfileService {
         .await
     }
 
+    /// 依次解析附件、主数据引用和创建授权，失败即停止后续准备。
+    async fn prepare_creation_references(
+        &self,
+        req: &mut SaveSupplierProfileRequest,
+        pending_assets: &Arc<dyn PendingAttachmentBatch>,
+        rbac: SharedRbacService,
+        actor: &AuditActor,
+    ) -> Result<CreationReferences> {
+        let used = resolve_supplier_file_references(req, pending_assets.as_ref())?;
+        pending_assets.ensure_all_used(&used)?;
+        let party_no =
+            SaveSupplierProfileRequest::required_create_identity(req.party_no.as_deref(), "主体编号")?;
+        let supplier_no =
+            SaveSupplierProfileRequest::required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
+        self.ensure_party_active(&req.signing_entity_party_id).await?;
+        self.ensure_party_active(&req.payment_entity_party_id).await?;
+        self.ensure_attachment_references(&req.qualifications, pending_assets).await?;
+        self.ensure_unique_inputs(req)?;
+
+        let maintainer = required_maintainer(req)?;
+        let org = resolve_create_org(&self.db, rbac, actor, &maintainer).await?;
+        Ok(CreationReferences { party_no, supplier_no, maintainer, org })
+    }
+
     /// 从已校验创建命令构造全部待写实体。
-    #[allow(clippy::too_many_arguments)]
     fn prepare_create(
         &self,
         req: SaveSupplierProfileRequest,
-        party_no: String,
-        supplier_no: String,
+        references: CreationReferences,
         request_fingerprint: String,
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
-        maintainer_user_id: String,
-        business_org_unit_id: String,
     ) -> Result<PreparedCreate> {
-        let party_id = PartyId::new(next_id());
-        let supplier_id = SupplierAccountId::new(next_id());
-        let profile_id = SupplierCommercialProfileRevisionId::new(next_id());
-        let (ids, inputs) = allocate_creation_plan(
-            &req,
-            party_no,
-            supplier_no,
-            &party_id,
-            &supplier_id,
-            &profile_id,
-            actor.id(),
-            maintainer_user_id,
-            business_org_unit_id,
-        )?;
-        let plan = erp_supplier::plan_supplier_creation(ids, inputs)
-            .map_err(|e| Error::ValidationError(e.to_string()))?;
+        let plan = creation_plan(&req, references, actor.id())?;
+        let party_id = plan.party_seed.party_id.clone();
         let (party, party_revision) = party_from_seed(&plan.party_seed)?;
         let contact = self.create_contact(&req, &party_id, actor.id())?;
         let address = self.create_address(&req, &party_id, actor.id())?;
@@ -176,9 +165,9 @@ impl SupplierProfileService {
                 idempotency_key: req.idempotency_key,
                 operation: "create".to_string(),
                 request_fingerprint,
-                supplier_id: supplier_id.to_string(),
+                supplier_id: plan.supplier.base.id.clone(),
                 supplier_no: plan.supplier.supplier_no.clone(),
-                revision_id: profile_id.to_string(),
+                revision_id: plan.commercial_profile.base.id.clone(),
                 revision_no: 1,
                 supplier_version: plan.supplier.base.version,
                 effective_from: req.effective_from,
@@ -189,7 +178,7 @@ impl SupplierProfileService {
         let audit = actor.clone().resource_log(
             "supplier_profile.create",
             "supplier_profile",
-            supplier_id.to_string(),
+            plan.supplier.base.id.clone(),
         )?;
         Ok(PreparedCreate {
             party,
@@ -356,7 +345,7 @@ struct PreparedCreate {
     qualification_links: Vec<SupplierQualificationCapability>,
     rating: Option<SupplierRatingRevision>,
     command: SupplierProfileCommand,
-    audit: erp_audit::AuditLog,
+    audit: AuditLog,
     result: SupplierProfileMutationView,
     pending_assets: Arc<dyn PendingAttachmentBatch>,
 }
@@ -433,9 +422,9 @@ fn party_from_seed(seed: &SupplierPartySeed) -> Result<(Party, PartyRevision)> {
     Ok((party, revision))
 }
 
-/// 分配根资料创建所需的全部主键并组织领域工厂输入（保留在 Service）。
+/// 分配根资料创建所需的全部主键并组织领域工厂输入。
 ///
-/// Service 负责 ID 生成、审计操作人与 DTO 到领域输入的映射；纯构造与校验
+/// Process 负责 ID 生成、审计操作人与 DTO 到领域输入的映射；纯构造与校验
 /// 由 `erp_supplier::creation_plan` 承担。
 ///
 /// # 参数
@@ -451,7 +440,7 @@ fn party_from_seed(seed: &SupplierPartySeed) -> Result<(Party, PartyRevision)> {
 /// 返回已分配主键与领域工厂输入。
 ///
 /// # 错误
-/// 无；ID 分配不失败，字段校验由领域工厂返回。
+/// 能力负责人缺失时返回校验错误；实体不变式由领域工厂校验。
 ///
 /// # 约束
 /// 本函数可分配 ID、读取 DTO 与操作人；不得实现实体不变式。
@@ -467,28 +456,7 @@ fn allocate_creation_plan(
     maintainer_user_id: String,
     business_org_unit_id: String,
 ) -> Result<(SupplierCreationIds, SupplierCreationInputs)> {
-    let capability_ids = req
-        .capability_codes
-        .iter()
-        .copied()
-        .map(|code| {
-            (code, SupplierCapabilityId::new(next_id()), SupplierCapabilityRevisionId::new(next_id()))
-        })
-        .collect();
-    let qualification_ids = req
-        .qualifications
-        .iter()
-        .map(|input| SupplierCreationQualificationIds {
-            qualification_id: SupplierQualificationId::new(next_id()),
-            revision_id: SupplierQualificationRevisionId::new(next_id()),
-            link_ids: input
-                .capability_codes
-                .iter()
-                .map(|_| SupplierQualificationCapabilityId::new(next_id()))
-                .collect(),
-        })
-        .collect();
-    let rating_id = req.rating.as_ref().map(|_| SupplierRatingRevisionId::new(next_id()));
+    let ids = allocate_creation_ids(req, party_id, supplier_id, profile_id);
     let qualifications = req
         .qualifications
         .iter()
@@ -508,15 +476,6 @@ fn allocate_creation_plan(
         current_score: input.current_score,
         valid_from: input.valid_from,
     });
-    let ids = SupplierCreationIds {
-        party_id: party_id.clone(),
-        party_revision_id: PartyRevisionId::new(next_id()),
-        supplier_id: supplier_id.clone(),
-        commercial_profile_id: profile_id.clone(),
-        capability_ids,
-        qualification_ids,
-        rating_id,
-    };
     let inputs = SupplierCreationInputs {
         party_no,
         supplier_no,
@@ -576,7 +535,7 @@ pub(super) fn required_maintainer(req: &SaveSupplierProfileRequest) -> Result<St
 /// 任一能力没有非空负责人时返回校验错误。
 pub(super) fn capability_owners_of(
     req: &SaveSupplierProfileRequest,
-) -> Result<Vec<(erp_supplier::CapabilityCode, String)>> {
+) -> Result<Vec<(CapabilityCode, String)>> {
     let mut owners = Vec::new();
     for code in &req.capability_codes {
         let owner = req
@@ -592,7 +551,7 @@ pub(super) fn capability_owners_of(
 /// 在独立事务中证明创建资格并读取维护人主属组织。
 async fn resolve_create_org(
     db: &Database,
-    rbac: erp_identity::SharedRbacService,
+    rbac: SharedRbacService,
     actor: &AuditActor,
     maintainer: &str,
 ) -> Result<String> {
@@ -603,7 +562,7 @@ async fn resolve_create_org(
         .clone()
         .with_transaction(move |executor| {
             Box::pin(async move {
-                crate::adapters::supplier_access(db, rbac)
+                supplier_access(db, rbac)
                     .require_create(&actor, &maintainer, executor)
                     .await
                     .map(|(_, org)| org)
@@ -645,4 +604,75 @@ pub(super) fn create_tax_profile(
         },
         actor_id,
     )?))
+}
+
+/// 已顺序校验的创建引用与维护责任。
+struct CreationReferences {
+    party_no: String,
+    supplier_no: String,
+    maintainer: String,
+    org: String,
+}
+
+/// 分配根主键并将创建请求交给供应商领域工厂。
+fn creation_plan(
+    req: &SaveSupplierProfileRequest,
+    references: CreationReferences,
+    actor_id: &str,
+) -> Result<SupplierCreationPlan> {
+    let party_id = PartyId::new(next_id());
+    let supplier_id = SupplierAccountId::new(next_id());
+    let profile_id = SupplierCommercialProfileRevisionId::new(next_id());
+    let (ids, inputs) = allocate_creation_plan(
+        req,
+        references.party_no,
+        references.supplier_no,
+        &party_id,
+        &supplier_id,
+        &profile_id,
+        actor_id,
+        references.maintainer,
+        references.org,
+    )?;
+    plan_supplier_creation(ids, inputs).map_err(|e| Error::ValidationError(e.to_string()))
+}
+
+/// 主键分配顺序保持能力、资质及关联、评级、主体修订不变。
+fn allocate_creation_ids(
+    req: &SaveSupplierProfileRequest,
+    party_id: &PartyId,
+    supplier_id: &SupplierAccountId,
+    profile_id: &SupplierCommercialProfileRevisionId,
+) -> SupplierCreationIds {
+    let capability_ids = req
+        .capability_codes
+        .iter()
+        .copied()
+        .map(|code| {
+            (code, SupplierCapabilityId::new(next_id()), SupplierCapabilityRevisionId::new(next_id()))
+        })
+        .collect();
+    let qualification_ids = req
+        .qualifications
+        .iter()
+        .map(|input| SupplierCreationQualificationIds {
+            qualification_id: SupplierQualificationId::new(next_id()),
+            revision_id: SupplierQualificationRevisionId::new(next_id()),
+            link_ids: input
+                .capability_codes
+                .iter()
+                .map(|_| SupplierQualificationCapabilityId::new(next_id()))
+                .collect(),
+        })
+        .collect();
+    let rating_id = req.rating.as_ref().map(|_| SupplierRatingRevisionId::new(next_id()));
+    SupplierCreationIds {
+        party_id: party_id.clone(),
+        party_revision_id: PartyRevisionId::new(next_id()),
+        supplier_id: supplier_id.clone(),
+        commercial_profile_id: profile_id.clone(),
+        capability_ids,
+        qualification_ids,
+        rating_id,
+    }
 }

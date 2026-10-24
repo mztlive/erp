@@ -1,3 +1,5 @@
+mod commit;
+
 use crate::audit::persist_log;
 
 mod commit_source;
@@ -12,8 +14,7 @@ use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::dto::CustomerRefundView;
 use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::{
-    CancelCustomerRefundApprovalRequest, CommitCustomerRefundRequest, CreateCustomerRefundRequest,
-    SubmitCustomerRefundRequest,
+    CancelCustomerRefundApprovalRequest, CreateCustomerRefundRequest, SubmitCustomerRefundRequest,
 };
 use erp_returns::entity::returns::CustomerRefund;
 use erp_returns::service::approval::start_customer_refund_approval;
@@ -42,12 +43,9 @@ use super::cancel_approval::{
 use super::start_approval::{
     CustomerRefundStartInput, CustomerRefundStartPersistInput, ReplayReturnStartInput,
     build_customer_refund_start_input, ensure_return_start_actor_active,
-    ensure_return_start_replay_authorized, load_bound_definition_graph_with_executor, load_start_graph,
-    load_start_receipt, persist_customer_refund_start, persist_runtime_writes,
-    replay_return_start_with_executor, replay_subject_versions,
+    ensure_return_start_replay_authorized, load_start_graph, load_start_receipt,
+    persist_customer_refund_start, replay_return_start_with_executor, replay_subject_versions,
 };
-use crate::adapters::workflow::approver_directory::resolve_approvers;
-use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
 
 impl ReturnsProcess {
@@ -84,137 +82,6 @@ impl ReturnsProcess {
         )
         .await?;
         self.reads().customer_refund_detail(&refund.base.id).await.map_err(crate::Error::from)
-    }
-
-    /// 按原回款一次创建客户退款并启动审批。
-    ///
-    /// 单据注册、定义绑定、退款实体、审批快照、运行事实、入口任务和两类审计
-    /// 全部在同一 MongoDB 事务内写入。
-    ///
-    /// # 参数
-    /// * `req` - 一次创建并提交的请求。
-    /// * `actor` - 已通过鉴权的审计操作人。
-    ///
-    /// # 返回
-    /// 返回新建退款单视图；同载荷命令已提交时返回已有退款单视图。
-    ///
-    /// # 错误
-    /// 请求校验、命令收据、原回款、发布定义、审批启动或仓储写入失败时返回对应错误。
-    /// 提交结果未知时按同一命令回读，未确认则保留原错误。视图读取失败时返回对应错误。
-    pub async fn commit_customer_refund(
-        &self,
-        req: CommitCustomerRefundRequest,
-        actor: &AuditActor,
-    ) -> Result<CustomerRefundView> {
-        req.validate()?;
-        let command_receipt = CommandReceipt::from_payload(
-            "customer-refund-commit-",
-            actor.id(),
-            "customer_refund.commit",
-            "customer_refund",
-            &req.idempotency_key,
-            &req,
-        )?;
-        if let Some(refund_id) = self.customer_refund_commit_replay(&command_receipt, actor).await? {
-            return self.reads().customer_refund_detail(&refund_id).await.map_err(crate::Error::from);
-        }
-        let (source_fact_id, source_version, mut refund) =
-            self.customer_refund_commit_source(&req, actor).await?;
-        let adapter = customer_refund_adapter()?;
-        start_customer_refund_approval(&mut refund)?;
-        let id = refund.base.id.clone();
-        let subject = customer_refund_subject_ref(&id)?;
-        let organization_id = load_customer_responsible_org_id(&self.db, &refund.customer_id).await?;
-        let _ = customer_refund_object_readable(&organization_id, actor.id())?;
-        let now = Instant::now();
-        let snapshot = build_customer_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
-        let bind_command = BindPublishedDefinitionCommand {
-            document_type: DocumentType::CustomerRefund,
-            business_object_id: id.clone(),
-            business_object_version: refund.base.version,
-            context: BindingRevalidationContext::new(organization_id.clone(), actor.id().to_string()),
-        };
-        let document = new_registered_document(&id, DocumentType::CustomerRefund, refund.refund_no.clone())
-            .map_err(crate::Error::from)?;
-        let (create_audit, submit_audit) = commit_audits(actor, &command_receipt, &id)?;
-        let command = command_receipt.clone();
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let idempotency_key = req.idempotency_key;
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    refund.ensure_submitter(actor_owned.id())?;
-                    if let Some(existing_id) = replay_customer_commit(
-                        &db,
-                        &rbac,
-                        &actor_owned,
-                        (&source_fact_id, source_version),
-                        &command,
-                        executor,
-                    )
-                    .await?
-                    {
-                        return Ok::<Option<String>, crate::Error>(Some(existing_id));
-                    }
-                    let binding = persist_bound_customer_refund_document(
-                        &db,
-                        &rbac,
-                        object_read.as_ref(),
-                        document,
-                        &bind_command,
-                        &actor_owned,
-                        executor,
-                    )
-                    .await?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
-                    let graph = resolve_approvers(&db, graph, actor_owned.id(), executor).await?;
-                    let start_input = build_customer_refund_start_input(CustomerRefundStartInput {
-                        graph,
-                        binding: &binding,
-                        subject,
-                        subject_version: refund.approval_subject_version,
-                        actor_id: actor_owned.id(),
-                        organization_id: &organization_id,
-                        idempotency_key: &idempotency_key,
-                        receipt: None,
-                        now,
-                    })?;
-                    let prepared = prepare_start(start_input)?;
-                    erp_returns::service::ReturnsService::new(db.clone())
-                        .create_customer_refund(&refund, executor)
-                        .await?;
-                    if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
-                        prepared
-                    {
-                        persist_runtime_writes(
-                            &db,
-                            &writes,
-                            &snapshot,
-                            adapter.owner_role,
-                            &organization_id,
-                            now,
-                            executor,
-                        )
-                        .await?;
-                    }
-                    save_commit(&db, &command, &refund.base.id, (&create_audit, &submit_audit), executor)
-                        .await?;
-                    Ok::<Option<String>, crate::Error>(None)
-                })
-            })
-            .await;
-        let detail_id = match transaction_result {
-            Ok(Some(existing_id)) => existing_id,
-            Ok(None) => id,
-            Err(error) => {
-                recovered_resource(error, self.customer_refund_commit_replay(&command_receipt, actor).await)?
-            },
-        };
-        self.reads().customer_refund_detail(&detail_id).await.map_err(crate::Error::from)
     }
 
     /// 提交客户退款并调用统一 `start_approval`。

@@ -1,13 +1,26 @@
 //! 已结束写事务后的只读命令查证结果；提交未知时不得覆盖原未知分类。
 
 use application_core::{AuditActor, CommandReceipt};
+use bpm::SubjectRef;
 use erp_audit::{AuditActorLogs, AuditLog};
+use erp_core::common::time::Instant;
 use erp_returns::ReturnsCommandReceiptService;
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::audit::persist_log;
 use crate::{Error, Result};
+
+/// 创建提交事务使用的冻结审批上下文，不替代各单据的授权与来源校验。
+pub(super) struct CommitApproval {
+    pub(super) subject: SubjectRef,
+    pub(super) organization_id: String,
+    pub(super) snapshot: ApprovalSubjectSnapshotPayload,
+    pub(super) owner_role: &'static str,
+    pub(super) idempotency_key: String,
+    pub(super) now: Instant,
+}
 
 /// 按实际创建、提交顺序生成同一逆向命令的两条业务事件。
 ///

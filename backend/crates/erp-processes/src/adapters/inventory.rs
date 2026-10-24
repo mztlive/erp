@@ -641,11 +641,11 @@ pub fn inventory_service(db: Database, rbac: SharedRbacService) -> InventoryServ
 ///
 /// # 错误
 /// 不返回错误。
-pub fn inventory_adjustment_service(
+pub fn inventory_adjustment_process(
     db: Database,
     rbac: SharedRbacService,
-) -> crate::inventory_adjustment::InventoryAdjustmentService {
-    crate::inventory_adjustment::InventoryAdjustmentService::new(db, rbac)
+) -> crate::inventory_adjustment::InventoryAdjustmentProcess {
+    crate::inventory_adjustment::InventoryAdjustmentProcess::new(db, rbac)
 }
 
 fn map_audit_to_inventory(error: erp_audit::Error) -> erp_inventory::Error {

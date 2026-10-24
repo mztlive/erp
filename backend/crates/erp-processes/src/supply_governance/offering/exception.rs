@@ -1,8 +1,10 @@
 //! 核对供应停止来源并完成原正式任务；不恢复供给或发布。
 use application_core::{AuditActor, CommandReceipt};
-use erp_audit::AuditActorLogs;
+use async_trait::async_trait;
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOfferingId;
+use erp_identity::SharedRbacService;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{SupplyCommandReceipt, SupplyCommandResult, SupplyExceptionReceipt};
 use erp_supply::dto::supplier_offering::{
@@ -11,11 +13,13 @@ use erp_supply::dto::supplier_offering::{
 use erp_supply::repository::SupplierOfferingExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::service::work_item::expected_task_version;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierOfferingProcess;
+use crate::adapters::identity::shared_rbac_service;
 use crate::adapters::workflow::work_item_service;
 use crate::audit::{persist_log, recover_command};
 use crate::{Error, Result};
@@ -51,8 +55,7 @@ impl SupplierOfferingProcess {
         if work_item_id.is_empty() || subject_version.is_empty() {
             return Err(Error::ValidationError("任务 ID 与来源版本不能为空".to_string()));
         }
-        let expected_task_version =
-            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
+        let expected_task_version = expected_task_version(&req.expected_task_version)?;
         let receipt = CommandReceipt::from_payload(
             "supplier-supply-exception:",
             actor.id(),
@@ -67,68 +70,43 @@ impl SupplierOfferingProcess {
 
         let db = self.db.clone();
         let client = db.client().clone();
-        let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
-        let actor_for_tx = actor.clone();
-        let req_for_tx = req.clone();
-        let receipt_for_tx = receipt.clone();
-        let offering_id_for_tx = offering_id.to_string();
+        let target = ExceptionCompletionTarget {
+            rbac: shared_rbac_service(db.clone()),
+            actor: actor.clone(),
+            request: req.clone(),
+            command: receipt.clone(),
+            offering_id: offering_id.to_string(),
+            expected_task_version,
+        };
         let transaction_result = client
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let typed_offering_id = SupplierOfferingId::new(&offering_id_for_tx);
-                    db.supplier_offerings()
-                        .find_by_id(&typed_offering_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
-                    let mut work_item = db
-                        .work_items()
-                        .find_by_id(&req_for_tx.work_item_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应停止任务不存在".to_string()))?;
-                    ensure_supply_exception_work_item(
-                        &work_item,
-                        &offering_id_for_tx,
-                        expected_task_version,
-                        &req_for_tx.expected_subject_version,
-                    )?;
-                    work_item_service(db.clone(), rbac.clone())
-                        .ensure_domain_decision_access(&actor_for_tx, &work_item, executor)
-                        .await?;
-
-                    let completed_at = Instant::now();
-                    work_item.complete_by_domain_command(actor_for_tx.id(), completed_at)?;
-                    commit_exception_completion(
-                        ExceptionCompletion {
-                            db: &db,
-                            work_item: &mut work_item,
-                            actor: &actor_for_tx,
-                            request: &req_for_tx,
-                            command: &receipt_for_tx,
-                            offering_id: &offering_id_for_tx,
-                        },
-                        executor,
-                    )
-                    .await
-                })
+                Box::pin(async move { apply_exception_completion(&db, target, executor).await })
             })
             .await;
 
         match transaction_result {
             Ok(result) => Ok(result),
-            Err(error) => {
-                let recovered = async {
-                    match self.committed_exception_resource(&receipt).await? {
-                        Some(committed_id) => {
-                            self.replay_supply_exception_completion(&committed_id, &req).await.map(Some)
-                        },
-                        None => Ok(None),
-                    }
-                }
-                .await;
-                recover_command(error, recovered)
-            },
+            Err(error) => self.recover_exception_completion(error, &receipt, &req).await,
         }
     }
+    async fn recover_exception_completion(
+        &self,
+        error: Error,
+        receipt: &CommandReceipt,
+        req: &CompleteSupplierSupplyExceptionTaskRequest,
+    ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
+        let recovered = async {
+            match self.committed_exception_resource(receipt).await? {
+                Some(committed_id) => {
+                    self.replay_supply_exception_completion(&committed_id, req).await.map(Some)
+                },
+                None => Ok(None),
+            }
+        }
+        .await;
+        recover_command(error, recovered)
+    }
+
     /// 仅通过拥有领域回执恢复已提交的任务定位。
     async fn committed_exception_resource(
         &self,
@@ -174,6 +152,57 @@ impl SupplierOfferingProcess {
         Ok(supply_exception_completion_result(&work_item, req))
     }
 }
+
+struct ExceptionCompletionTarget {
+    offering_id: String,
+    expected_task_version: u64,
+    request: CompleteSupplierSupplyExceptionTaskRequest,
+    command: CommandReceipt,
+    actor: AuditActor,
+    rbac: SharedRbacService,
+}
+
+async fn apply_exception_completion(
+    db: &Database,
+    target: ExceptionCompletionTarget,
+    executor: &mut dyn Executor,
+) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
+    let typed_offering_id = SupplierOfferingId::new(&target.offering_id);
+    db.supplier_offerings()
+        .find_by_id(&typed_offering_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
+    let mut work_item = db
+        .work_items()
+        .find_by_id(&target.request.work_item_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应停止任务不存在".to_string()))?;
+    ensure_supply_exception_work_item(
+        &work_item,
+        &target.offering_id,
+        target.expected_task_version,
+        &target.request.expected_subject_version,
+    )?;
+    work_item_service(db.clone(), target.rbac.clone())
+        .ensure_domain_decision_access(&target.actor, &work_item, executor)
+        .await?;
+
+    let completed_at = Instant::now();
+    work_item.complete_by_domain_command(target.actor.id(), completed_at)?;
+    commit_exception_completion(
+        ExceptionCompletion {
+            db,
+            work_item: &mut work_item,
+            actor: &target.actor,
+            request: &target.request,
+            command: &target.command,
+            offering_id: &target.offering_id,
+        },
+        executor,
+    )
+    .await
+}
+
 fn ensure_supply_exception_work_item(
     work_item: &WorkItem,
     offering_id: &str,
@@ -251,27 +280,27 @@ mod tests {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 trait CompletionWritePort: Send {
-    async fn task(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()>;
-    async fn decision(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()>;
-    async fn receipt(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()>;
+    async fn task(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    async fn decision(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    async fn receipt(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 struct MongoCompletionWrite<'a> {
     db: &'a Database,
     work_item: &'a mut WorkItem,
-    decision: &'a erp_audit::AuditLog,
+    decision: &'a AuditLog,
     receipt: &'a SupplyCommandReceipt,
 }
-#[async_trait::async_trait]
+#[async_trait]
 impl CompletionWritePort for MongoCompletionWrite<'_> {
-    async fn task(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()> {
+    async fn task(&mut self, executor: &mut dyn Executor) -> Result<()> {
         self.db.work_items().update(self.work_item, executor).await.map_err(Into::into)
     }
-    async fn decision(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()> {
+    async fn decision(&mut self, executor: &mut dyn Executor) -> Result<()> {
         persist_log(self.db, self.decision, executor).await.map_err(Into::into)
     }
-    async fn receipt(&mut self, executor: &mut dyn persistence_core::Executor) -> Result<()> {
+    async fn receipt(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let mut receipt = self.receipt.clone();
         if let SupplyCommandResult::SupplyException(result) = &mut receipt.result {
             result.task_version = self.work_item.base.version;
@@ -281,10 +310,7 @@ impl CompletionWritePort for MongoCompletionWrite<'_> {
     }
 }
 /// 原任务CAS、单次业务事件、领域回执顺序；任一失败停止后续步骤。
-async fn persist_completion<P: CompletionWritePort>(
-    port: &mut P,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<()> {
+async fn persist_completion<P: CompletionWritePort>(port: &mut P, executor: &mut dyn Executor) -> Result<()> {
     port.task(executor).await?;
     port.decision(executor).await?;
     port.receipt(executor).await
@@ -316,7 +342,7 @@ mod completion_tests {
             Ok(())
         }
     }
-    #[async_trait::async_trait]
+    #[async_trait]
     impl CompletionWritePort for Recorder {
         async fn task(&mut self, executor: &mut dyn Executor) -> Result<()> {
             self.record("task", executor)

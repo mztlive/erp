@@ -9,10 +9,10 @@ use persistence_core::NoTransaction;
 use super::ensure_dictionary::EnsureOutcome;
 use super::plan::DemoStep;
 use super::record::{self, DemoMasterRecord};
-use super::{DemoMasterDataService, lifecycle, spec};
+use super::{DemoMasterDataProcess, lifecycle, spec};
 use crate::{Error, Result};
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 解析公司及采购岗位后执行供应商种子。
     ///
     /// # 参数

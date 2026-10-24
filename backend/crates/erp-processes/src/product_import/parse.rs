@@ -13,9 +13,6 @@ use crate::{Error, Result};
 /// 解析后的报价表。
 #[derive(Debug, Clone)]
 pub struct ParsedProductSheet {
-    /// 工作表名。
-    #[allow(dead_code)]
-    pub sheet_name: String,
     /// 数据行（不含表头）。
     pub rows: Vec<ParsedProductRow>,
     /// DISPIMG ID → zip 内媒体路径。
@@ -67,11 +64,7 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
         return Err(invalid("每次导入最多 1000 行"));
     }
     let image_targets = parse_image_targets(&mut archive)?;
-    Ok(ParsedProductSheet {
-        sheet_name: PRODUCT_IMPORT_SHEET_NAME.to_string(),
-        rows: data_rows,
-        image_targets,
-    })
+    Ok(ParsedProductSheet { rows: data_rows, image_targets })
 }
 
 /// 模板后的附加列继续忽略；DISPIMG 保留公式，其余单元格使用缓存值。

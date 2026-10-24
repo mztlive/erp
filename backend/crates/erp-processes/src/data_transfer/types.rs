@@ -107,7 +107,18 @@ pub(super) struct Envelope {
     pub account_kind: AccountKind,
 }
 impl Envelope {
-    pub fn actor(&self, id: &str, request: &str) -> Result<AuditActor> {
+    /// 使用任务提交时冻结的账号与账号类型恢复审计操作人。
+    ///
+    /// # 参数
+    /// * `id` - 任务记录的提交人 ID。
+    /// * `request` - 任务记录的稳定请求号。
+    ///
+    /// # 返回
+    /// 返回绑定该请求号的审计操作人；业务权限由执行入口重新校验。
+    ///
+    /// # 错误
+    /// 操作人身份或请求号不符合审计约束时返回错误。
+    pub(super) fn actor(&self, id: &str, request: &str) -> Result<AuditActor> {
         Ok(AuditActor::new(id.into(), self.account.clone(), self.account_kind)
             .with_request_id(Some(request.into()))?)
     }

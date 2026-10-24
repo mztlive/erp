@@ -14,7 +14,7 @@ use persistence_core::{NoTransaction, Transactional};
 
 use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
 use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, ImportBudget};
-use crate::{Error, Result, SupplierProfileService};
+use crate::{Error, Result, SupplierProfileProcess};
 
 mod rows;
 use rows::{SupplierRowExecution, execute_rows};
@@ -97,7 +97,7 @@ impl SupplierImportProcess {
             .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut NoTransaction)
             .await?;
         let service =
-            SupplierProfileService::new(self.db.clone(), self.codec.clone()).with_rbac(self.rbac.clone());
+            SupplierProfileProcess::new(self.db.clone(), self.codec.clone()).with_rbac(self.rbac.clone());
         let actor = AuditActor::new(job.requested_by.clone(), job.requested_by.clone(), AccountKind::Admin);
         let mut execution = SupplierRows { process: self, service: &service, actor: &actor, request };
         execute_rows(&mut execution, job, items, ImportBudget::new()).await
@@ -122,7 +122,7 @@ impl SupplierImportProcess {
     /// 有界执行单行；超时或未知响应返回待确认，不推断是否已经写入。
     async fn import_item(
         &self,
-        service: &SupplierProfileService,
+        service: &SupplierProfileProcess,
         actor: &AuditActor,
         request: &SupplierImportJobRequest,
         item: &BackgroundJobItem,
@@ -200,7 +200,7 @@ impl SupplierImportProcess {
 /// 本轮导入依赖；实际业务写入和进度事务沿用既有实现。
 struct SupplierRows<'a> {
     process: &'a SupplierImportProcess,
-    service: &'a SupplierProfileService,
+    service: &'a SupplierProfileProcess,
     actor: &'a AuditActor,
     request: &'a SupplierImportJobRequest,
 }

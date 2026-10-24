@@ -1,10 +1,11 @@
 //! 供应商资料根级命令。
 //!
-//! 页面只调用本服务维护 Party、Supplier、当前事实与独立资质；服务在一个
+//! 本 Process 协调 Party、Supplier、当前事实与独立资质，在一个
 //! MongoDB 事务中提交全部写入，并把幂等结果与业务数据一并落库。
 
 mod create;
 mod handover;
+mod party_change;
 mod sensitive;
 #[cfg(test)]
 mod tests;
@@ -23,10 +24,8 @@ use persistence_core::NoTransaction;
 
 use crate::{Error, Result};
 
-mod party_change;
-
-/// 完整供应商资料的根级写服务。
-pub struct SupplierProfileService {
+/// 完整供应商资料的跨域写入与事务编排。
+pub struct SupplierProfileProcess {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
     rbac: Option<SharedRbacService>,
@@ -40,15 +39,15 @@ pub struct SupplierProfileWithAssetsResult {
     pub assets_committed: bool,
 }
 
-impl SupplierProfileService {
-    /// 创建根级供应商资料服务。不在构造时注入 RBAC。
+impl SupplierProfileProcess {
+    /// 创建供应商资料 Process。不在构造时注入 RBAC。
     ///
     /// # 参数
     /// * `db` - 数据库。
     /// * `sensitive_data` - 敏感字段编解码器。
     ///
     /// # 返回
-    /// 未注入授权源的资料服务。
+    /// 未注入授权源的资料 Process。
     ///
     /// # 错误
     /// 不返回错误。
@@ -62,7 +61,7 @@ impl SupplierProfileService {
     /// * `rbac` - 共享 RBAC 服务
     ///
     /// # 返回
-    /// 返回可在同一写入事务证明供应商范围的资料服务。
+    /// 返回可在同一写入事务证明供应商范围的资料 Process。
     ///
     /// # 错误
     /// 无。

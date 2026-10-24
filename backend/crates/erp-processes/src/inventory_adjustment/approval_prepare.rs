@@ -6,14 +6,17 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::types::ApprovalCommandKind;
-use bpm::model::{IdempotencyKey, ParticipantId, SubjectRef, Timestamp};
+use bpm::model::{
+    ApprovalCommandReceipt, ApprovalProcessInstance, IdempotencyKey, ParticipantId, SubjectRef, Timestamp,
+};
 use erp_core::common::time::Instant;
+use erp_core::ids::StockAdjustmentId;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, AccountCore, SharedRbacService};
 use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
 use erp_inventory::{
-    ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
-    SubmitStockAdjustmentRequest,
+    ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentApprovalSnapshot,
+    StockAdjustmentLine, StockAdjustmentState, SubmitStockAdjustmentRequest,
 };
 use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
@@ -40,7 +43,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
-use super::adapter::require_frozen_binding;
+use super::adapter::{require_frozen_binding, workflow_snapshot_from_inventory};
 use super::mapping::{
     build_adjustment_line_updates, is_supported_start_receipt_identity, stock_adjustment_start_identity,
     stock_adjustment_start_scopes,
@@ -130,7 +133,7 @@ async fn find_stock_adjustment_start_receipt(
     scopes: &[String],
     key: &IdempotencyKey,
     executor: &mut dyn Executor,
-) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+) -> Result<Option<ApprovalCommandReceipt>> {
     for scope in scopes {
         let receipt = db
             .bpm_workflow()
@@ -177,6 +180,56 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     {
         return Err(Error::ConflictError("库存调整启动收据与命令作用域不一致".to_string()));
     }
+    let (instance, snapshot, binding) =
+        load_start_receipt_facts(db, &receipt, adjustment_id, req, actor, executor).await?;
+    let identity = stock_adjustment_start_identity(
+        adjustment_id,
+        req,
+        actor.id(),
+        binding.approval_process_definition_id.as_ref(),
+        binding.approval_definition_version,
+    )?;
+    if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
+        return Err(payload_conflict_error().into());
+    }
+    let legacy_standard_identity = start_identity(StartIdentityParams {
+        idempotency_key: key.clone(),
+        process_kind: process_kind_of(DocumentType::StockAdjustment).as_str(),
+        subject_kind: DocumentType::StockAdjustment.as_str(),
+        subject_id: adjustment_id,
+        subject_version: req.expected_subject_version,
+        binding_id: binding.approval_process_definition_id.as_ref(),
+        definition_version: binding.approval_definition_version,
+        actor_participant_id: actor.id(),
+    })?;
+    let weak_legacy_receipt =
+        matches!(legacy_standard_identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_));
+    let adjustment = db
+        .inventory()
+        .stock_adjustment(adjustment_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+    if adjustment.approval_subject_version < req.expected_subject_version {
+        return Err(Error::ConflictError("库存调整启动收据早于当前业务事实".to_string()));
+    }
+    if weak_legacy_receipt
+        && !legacy_start_payload_matches_result(db, &adjustment, &snapshot, req, actor, executor).await?
+    {
+        return Err(payload_conflict_error().into());
+    }
+    ensure_submit_authorized(db, rbac, &adjustment, actor, executor).await?;
+    Ok(Some(instance.base.id))
+}
+
+/// 在收据身份校验后，按原顺序读取实例、冻结快照和绑定。
+async fn load_start_receipt_facts(
+    db: &Database,
+    receipt: &ApprovalCommandReceipt,
+    adjustment_id: &str,
+    req: &SubmitStockAdjustmentRequest,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<(ApprovalProcessInstance, ApprovalSubjectSnapshot, ApprovalDefinitionBinding)> {
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
@@ -215,43 +268,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     {
         return Err(Error::ConflictError("库存调整启动实例与冻结定义绑定不一致".to_string()));
     }
-    let identity = stock_adjustment_start_identity(
-        adjustment_id,
-        req,
-        actor.id(),
-        binding.approval_process_definition_id.as_ref(),
-        binding.approval_definition_version,
-    )?;
-    if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
-        return Err(payload_conflict_error().into());
-    }
-    let legacy_standard_identity = start_identity(StartIdentityParams {
-        idempotency_key: key.clone(),
-        process_kind: process_kind_of(DocumentType::StockAdjustment).as_str(),
-        subject_kind: DocumentType::StockAdjustment.as_str(),
-        subject_id: adjustment_id,
-        subject_version: req.expected_subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref(),
-        definition_version: binding.approval_definition_version,
-        actor_participant_id: actor.id(),
-    })?;
-    let weak_legacy_receipt =
-        matches!(legacy_standard_identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_));
-    let adjustment = db
-        .inventory()
-        .stock_adjustment(adjustment_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-    if adjustment.approval_subject_version < req.expected_subject_version {
-        return Err(Error::ConflictError("库存调整启动收据早于当前业务事实".to_string()));
-    }
-    if weak_legacy_receipt
-        && !legacy_start_payload_matches_result(db, &adjustment, &snapshot, req, actor, executor).await?
-    {
-        return Err(payload_conflict_error().into());
-    }
-    ensure_stock_adjustment_submit_authorized_with_executor(db, rbac, &adjustment, actor, executor).await?;
-    Ok(Some(instance.base.id))
+    Ok((instance, snapshot, binding.clone()))
 }
 
 /// 按稳定 StartApproval 作用域与幂等键只读解析已提交结果。
@@ -308,6 +325,27 @@ pub async fn find_stock_adjustment_start_result(
     if instance.started_by.as_str() != actor.id() {
         return Err(Error::NotFound("库存调整提交结果不存在".to_string()));
     }
+    validate_start_result_snapshot(db, &instance, adjustment_id, expected_subject_version, executor).await?;
+    let adjustment = db
+        .inventory()
+        .stock_adjustment(adjustment_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+    if adjustment.approval_subject_version < expected_subject_version {
+        return Err(Error::ConflictError("库存调整提交结果早于当前业务事实".to_string()));
+    }
+    ensure_submit_authorized(db, rbac, &adjustment, actor, executor).await?;
+    Ok(Some(instance.base.id))
+}
+
+/// 只读结果查询按实例读取冻结快照与绑定，禁止以当前定义代替冻结事实。
+async fn validate_start_result_snapshot(
+    db: &Database,
+    instance: &ApprovalProcessInstance,
+    adjustment_id: &str,
+    expected_subject_version: u32,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
@@ -330,16 +368,7 @@ pub async fn find_stock_adjustment_start_result(
     {
         return Err(Error::ConflictError("库存调整提交结果与冻结定义绑定不一致".to_string()));
     }
-    let adjustment = db
-        .inventory()
-        .stock_adjustment(adjustment_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-    if adjustment.approval_subject_version < expected_subject_version {
-        return Err(Error::ConflictError("库存调整提交结果早于当前业务事实".to_string()));
-    }
-    ensure_stock_adjustment_submit_authorized_with_executor(db, rbac, &adjustment, actor, executor).await?;
-    Ok(Some(instance.base.id))
+    Ok(())
 }
 
 /// 对无版本前缀的历史收据，从未再修改的成功结果重建完整提交载荷。
@@ -374,10 +403,7 @@ async fn legacy_start_payload_matches_result(
     }
     let persisted_lines = db
         .inventory()
-        .adjustment_lines_by_adjustment_ids(
-            &[erp_core::ids::StockAdjustmentId::new(adjustment.base.id.clone())],
-            executor,
-        )
+        .adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(adjustment.base.id.clone())], executor)
         .await?;
     let updates = match build_adjustment_line_updates(&req.lines) {
         Ok(updates) => updates,
@@ -389,14 +415,12 @@ async fn legacy_start_payload_matches_result(
     {
         return Ok(false);
     }
-    let reconstructed_snapshot = super::adapter::workflow_snapshot_from_inventory(
-        erp_inventory::StockAdjustmentApprovalSnapshot::build(
-            adjustment,
-            &persisted_lines,
-            actor.id(),
-            snapshot.payload.submitted_at,
-        )?,
-    );
+    let reconstructed_snapshot = workflow_snapshot_from_inventory(StockAdjustmentApprovalSnapshot::build(
+        adjustment,
+        &persisted_lines,
+        actor.id(),
+        snapshot.payload.submitted_at,
+    )?);
     if reconstructed_snapshot != snapshot.payload {
         return Ok(false);
     }
@@ -432,7 +456,7 @@ async fn legacy_balance_versions_match(
 ///
 /// # 错误
 /// 账号未激活、不是制单人、没有 `stock_adjustment:submit`，或对象不可读时返回 `Forbidden`。授权读取失败时返回对应错误。
-pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
+pub async fn ensure_submit_authorized(
     db: &Database,
     rbac: &SharedRbacService,
     adjustment: &StockAdjustment,
@@ -494,7 +518,7 @@ pub struct StockAdjustmentStartInput<'a> {
     /// 规范化前的幂等键。
     pub idempotency_key: &'a str,
     /// 已存在收据。
-    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    pub receipt: Option<ApprovalCommandReceipt>,
     /// 调用方时间。
     pub now: Instant,
 }

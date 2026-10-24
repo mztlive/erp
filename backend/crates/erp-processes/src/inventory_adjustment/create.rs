@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
+use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
 use erp_identity::SharedRbacService;
@@ -10,6 +12,7 @@ use erp_inventory::{
 };
 use erp_read_models::inventory_center::document_approval_view_with_history;
 use erp_warehouse::WarehouseExt;
+use erp_workflow::ApprovalObjectReadPort;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
@@ -20,12 +23,12 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::{InventoryAdjustmentService, approval_prepare as start_approval};
+use super::{InventoryAdjustmentProcess, approval_prepare as start_approval};
 use crate::adapters::authorize_inventory;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl InventoryAdjustmentService {
+impl InventoryAdjustmentProcess {
     /// 创建库存调整单（草稿，跨集合：表头 + 明细 + 绑定 + 审计）。
     ///
     /// 同一事务内注册 `BusinessDocument` 并调用统一绑定端口。无已发布定义
@@ -86,7 +89,7 @@ impl InventoryAdjustmentService {
         persist_created_adjustment(
             &self.db,
             &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
+            Arc::clone(&self.object_read),
             CreatedAdjustmentPersist {
                 adjustment: adjustment.clone(),
                 lines,
@@ -128,7 +131,7 @@ struct CreatedAdjustmentPersist {
     /// 发布定义绑定命令。
     bind_command: BindPublishedDefinitionCommand,
     /// 已构造审计。
-    audit: erp_audit::AuditLog,
+    audit: AuditLog,
     /// 审计操作人。
     actor: AuditActor,
     /// 用户发起时所依据的库存余额行。
@@ -161,81 +164,77 @@ struct CreatedAdjustmentPersist {
 async fn persist_created_adjustment(
     db: &Database,
     rbac: &SharedRbacService,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    object_read: Arc<dyn ApprovalObjectReadPort>,
     persist: CreatedAdjustmentPersist,
 ) -> Result<StockAdjustmentDetailView> {
-    let CreatedAdjustmentPersist {
-        adjustment,
-        lines,
-        mut document,
-        bind_command,
-        audit,
-        actor,
-        balance_id,
-        expected_balance_version,
-    } = persist;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                let authorization = authorize_inventory(&db, &rbac, &actor, executor).await?;
-                if !authorization.actor_is_active()
-                    || !authorization.can_create(adjustment.warehouse_id.as_ref())
-                {
-                    return Err(Error::Forbidden("无权在该仓库创建库存调整单".to_string()));
-                }
-                db.warehouse()
-                    .warehouse(adjustment.warehouse_id.as_ref(), executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
-                let balance = db
-                    .inventory()
-                    .stock_balance(&balance_id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
-                if balance.warehouse_id != adjustment.warehouse_id {
-                    return Err(Error::NotFound("库存余额不存在".to_string()));
-                }
-                if !balance.matches_version(expected_balance_version) {
-                    return Err(Error::ConflictError("库存余额已变化，请刷新后重试".to_string()));
-                }
-                if !balance.matches_adjustment_dimensions(&adjustment, &lines) {
-                    return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
-                }
-                // 提交资格沿已持久化的来源对象检查仓库范围，须先在同一事务内写入新单据。
-                db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, executor).await?;
-                let can_submit =
-                    match start_approval::ensure_stock_adjustment_submit_authorized_with_executor(
-                        &db,
-                        &rbac,
-                        &adjustment,
-                        &actor,
-                        executor,
-                    )
-                    .await
-                    {
-                        Ok(()) => true,
-                        Err(Error::Forbidden(_)) => false,
-                        Err(error) => return Err(error),
-                    };
-                let binding = persist_bound_document(
-                    &db,
-                    &rbac,
-                    object_read.as_ref(),
-                    &mut document,
-                    &bind_command,
-                    &actor,
-                    executor,
-                )
-                .await?;
-                persist_log(&db, &audit, executor).await?;
-                created_adjustment_detail(adjustment, lines, binding, can_submit)
+                apply_created_adjustment(&db, &rbac, object_read.as_ref(), persist, executor).await
             })
         })
         .await
+}
+
+/// 在原创建事务内重验来源余额；授权失败先于仓库和余额读取返回。
+async fn validate_creation_source(
+    db: &Database,
+    rbac: &SharedRbacService,
+    persist: &CreatedAdjustmentPersist,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let authorization = authorize_inventory(db, rbac, &persist.actor, executor).await?;
+    if !authorization.actor_is_active() || !authorization.can_create(persist.adjustment.warehouse_id.as_ref())
+    {
+        return Err(Error::Forbidden("无权在该仓库创建库存调整单".to_string()));
+    }
+    db.warehouse()
+        .warehouse(persist.adjustment.warehouse_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
+    let balance = db
+        .inventory()
+        .stock_balance(&persist.balance_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
+    if balance.warehouse_id != persist.adjustment.warehouse_id {
+        return Err(Error::NotFound("库存余额不存在".to_string()));
+    }
+    if !balance.matches_version(persist.expected_balance_version) {
+        return Err(Error::ConflictError("库存余额已变化，请刷新后重试".to_string()));
+    }
+    if !balance.matches_adjustment_dimensions(&persist.adjustment, &persist.lines) {
+        return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
+    }
+    Ok(())
+}
+
+/// 单据、绑定和审计沿同一执行器顺序写入，响应使用本事务内的已知事实。
+async fn apply_created_adjustment(
+    db: &Database,
+    rbac: &SharedRbacService,
+    object_read: &dyn ApprovalObjectReadPort,
+    persist: CreatedAdjustmentPersist,
+    executor: &mut dyn Executor,
+) -> Result<StockAdjustmentDetailView> {
+    validate_creation_source(db, rbac, &persist, executor).await?;
+    let CreatedAdjustmentPersist { adjustment, lines, mut document, bind_command, audit, actor, .. } =
+        persist;
+    // 提交资格沿已持久化的来源对象检查仓库范围，须先在同一事务内写入新单据。
+    db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, executor).await?;
+    let can_submit =
+        match start_approval::ensure_submit_authorized(db, rbac, &adjustment, &actor, executor).await {
+            Ok(()) => true,
+            Err(Error::Forbidden(_)) => false,
+            Err(error) => return Err(error),
+        };
+    let binding =
+        persist_bound_document(db, rbac, object_read, &mut document, &bind_command, &actor, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    created_adjustment_detail(adjustment, lines, binding, can_submit)
 }
 
 /// 使用创建事务已持有的事实构造成功响应，避免提交后再次授权或查询失败。
@@ -281,7 +280,7 @@ fn created_adjustment_detail(
 async fn persist_bound_document(
     db: &Database,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
+    object_read: &dyn ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,

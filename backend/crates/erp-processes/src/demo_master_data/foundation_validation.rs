@@ -12,7 +12,7 @@ use persistence_core::NoTransaction;
 
 use super::accounts::PreparedAccounts;
 use super::spec::{FoundationFile, document_type};
-use super::{DemoMasterDataService, spec};
+use super::{DemoMasterDataProcess, spec};
 use crate::{Error, Result};
 
 impl FoundationFile {
@@ -116,7 +116,7 @@ impl FoundationFile {
     }
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 对当前启用角色逐项核验演示操作，不自动覆盖人工撤权。
     /// # 参数
     /// `accounts` 为已准备的真实岗位 ID。

@@ -47,7 +47,7 @@ pub async fn customer_profile_create(
         ensure_permission(&state, &subject, "party_bank_account:create").await?;
     }
     erp_processes::adapters::customer_access(state.db(), state.rbac()).ensure_create(&actor).await?;
-    let view = state.customer_profile_service().create(req, &actor).await?;
+    let view = state.customer_profile_process().create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -79,7 +79,7 @@ pub async fn customer_profile_update(
         ensure_permission(&state, &subject, "party_bank_account:detail").await?;
         ensure_permission(&state, &subject, "party_bank_account:update").await?;
     }
-    let view = state.customer_profile_service().update(&id, req, &actor).await?;
+    let view = state.customer_profile_process().update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -98,7 +98,7 @@ pub async fn customer_profile_detail(
     Path(id): Path<String>,
 ) -> Result<CustomerProfileDetailView> {
     ensure_customer_access(&state, &actor, "detail", &id).await?;
-    let mut view = state.customer_profile_service().detail(&id).await?;
+    let mut view = state.customer_profile_process().detail(&id).await?;
     view.allowed_actions = allowed_actions(&state, &subject, view.account.status.is_active()).await?;
     let can_view_contact = has_permission(&state, &subject, "party_contact:detail").await?;
     let can_view_address = has_permission(&state, &subject, "party_address:detail").await?;
@@ -200,7 +200,7 @@ pub async fn customer_profile_command_detail(
     Extension(actor): Extension<AuditActor>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<CustomerProfileMutationView>> {
-    let view = state.customer_profile_service().command_result(&idempotency_key).await?;
+    let view = state.customer_profile_process().command_result(&idempotency_key).await?;
     if let Some(result) = &view
         && result.initiated_by != actor.id()
     {
@@ -236,7 +236,7 @@ pub async fn customer_sensitive_reveal(
     ensure_customer_access(&state, &actor, "detail", &scope.supplier_id).await?;
     ensure_permission(&state, &subject, detail_permission).await?;
     ensure_permission(&state, &subject, reveal_permission).await?;
-    let view = state.customer_profile_service().reveal_sensitive(req, &actor).await?;
+    let view = state.customer_profile_process().reveal_sensitive(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

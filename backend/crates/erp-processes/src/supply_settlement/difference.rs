@@ -1,5 +1,6 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_supply::SettlementAccess;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{DifferenceDecisionReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
@@ -16,7 +17,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::{SettlementDifferenceDecisionRequest, SettlementDifferenceDecisionResult};
-use super::{SupplierSettlementProcess, command_audit_id, dto, ensure_same_id};
+use super::{SettlementWriteContext, SupplierSettlementProcess, command_audit_id, dto, ensure_same_id};
 use crate::audit::{persist_log, recover_command};
 use crate::supply_execution::receipt::persist_supply_receipt;
 use crate::{Error, Result};
@@ -59,46 +60,15 @@ impl SupplierSettlementProcess {
             .access()
             .require_statement(actor, "update", &req.statement_id, &mut NoTransaction)
             .await?;
-        let (mut statement, mut difference) = self
+        let (statement, difference) = self
             .domain()
             .prepare_difference_decision(id, &req, &conclusion, actor.id(), &mut NoTransaction)
             .await?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let data_scope = self.data_scope.clone();
-        let audit_actor = actor.clone();
-        let statement_id = req.statement_id.clone();
         let operation_id = req.operation_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let audit_id_for_tx = audit_id.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    erp_supply::SettlementAccess::new(db.clone(), data_scope)
-                        .require_statement(&audit_actor, "update", &statement_id, executor)
-                        .await?;
-                    SupplierSettlementService::new(db.clone())
-                        .persist_difference_decision(&mut statement, &mut difference, executor)
-                        .await?;
-                    persist_difference_result(
-                        DifferenceWrite {
-                            db: &db,
-                            actor: &audit_actor,
-                            statement: &statement,
-                            difference: &difference,
-                            command_id: &audit_id_for_tx,
-                            fingerprint: &fingerprint_for_tx,
-                            request: &req,
-                        },
-                        executor,
-                    )
-                    .await?;
-                    Ok::<(SupplierSettlementStatement, SupplierSettlementDifference), crate::Error>((
-                        statement, difference,
-                    ))
-                })
-            })
-            .await;
+        let input =
+            DifferenceCommit::new(self, req, actor, (statement, difference), (&audit_id, &fingerprint));
+        let transaction_result =
+            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
         let (statement, difference) = match transaction_result {
             Ok(result) => result,
             Err(error) => {
@@ -171,6 +141,62 @@ impl SupplierSettlementProcess {
             statement_lock_version: receipt.statement_version,
             difference: settlement_difference_view(difference),
         }))
+    }
+}
+
+struct DifferenceCommit {
+    context: SettlementWriteContext,
+    request: SettlementDifferenceDecisionRequest,
+    statement: SupplierSettlementStatement,
+    difference: SupplierSettlementDifference,
+    command_id: String,
+    fingerprint: String,
+}
+
+impl DifferenceCommit {
+    fn new(
+        process: &SupplierSettlementProcess,
+        request: SettlementDifferenceDecisionRequest,
+        actor: &AuditActor,
+        prepared: (SupplierSettlementStatement, SupplierSettlementDifference),
+        identity: (&str, &str),
+    ) -> Self {
+        Self {
+            context: process.write_context(actor),
+            request,
+            statement: prepared.0,
+            difference: prepared.1,
+            command_id: identity.0.to_string(),
+            fingerprint: identity.1.to_string(),
+        }
+    }
+
+    /// 在入口执行器上重验范围后保存结算主题、差异、回执和审计。
+    async fn persist(
+        mut self,
+        executor: &mut dyn Executor,
+    ) -> Result<(SupplierSettlementStatement, SupplierSettlementDifference)> {
+        let context = self.context;
+        SettlementAccess::new(context.db.clone(), context.data_scope)
+            .require_statement(&context.actor, "update", &self.request.statement_id, executor)
+            .await?;
+        SupplierSettlementService::new(context.db.clone())
+            .persist_difference_decision(&mut self.statement, &mut self.difference, executor)
+            .await?;
+        persist_difference_result(
+            DifferenceWrite {
+                db: &context.db,
+                actor: &context.actor,
+                statement: &self.statement,
+                difference: &self.difference,
+                command_id: &self.command_id,
+                fingerprint: &self.fingerprint,
+                request: &self.request,
+            },
+            executor,
+        )
+        .await?;
+        Ok((self.statement, self.difference))
     }
 }
 

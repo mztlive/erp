@@ -9,7 +9,7 @@ use erp_identity::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind};
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
 use erp_identity::{AccessControlExt, AccountCoreRepositoryExt};
 
-use super::DemoMasterDataService;
+use super::DemoMasterDataProcess;
 use super::spec::{self, DepartmentSpec};
 use crate::adapters::organization_service;
 use crate::{Error, Result};
@@ -20,7 +20,7 @@ struct OrgSnap {
     memberships: Vec<OrgMembership>,
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 按规格补齐部门和成员。账号已在其他部门时改到规格部门。
     ///
     /// # 参数

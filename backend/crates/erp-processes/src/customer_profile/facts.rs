@@ -19,11 +19,11 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
-use super::CustomerProfileService;
+use super::CustomerProfileProcess;
 use super::numbering::business_no;
 use crate::{Error, Result};
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 构造创建场景的全部从属事实并完成敏感值加密。未提交的集合按空处理。
     ///
     /// # 参数

@@ -2,9 +2,9 @@
 use application_core::AuditActor;
 use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
 
-use super::PayableService;
+use super::PayableProcess;
 use crate::{Error, Result};
-impl PayableService {
+impl PayableProcess {
     /// 停止旧应付任务合并入口。
     /// # 参数
     /// * `params` - 旧任务筛选。

@@ -26,13 +26,13 @@ use super::create_confirmation::{confirmation_next_step, replace_confirmation_in
 use super::dto::CompleteImportBusinessConfirmationResult;
 use super::{
     IMPORT_CONFIRMATION_COMMAND_PREFIX, IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION,
-    ImportApplyService,
+    ImportApplyProcess,
 };
 use crate::adapters::workflow::work_item_service;
 use crate::audit::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use crate::{Error, Result};
 
-impl ImportApplyService {
+impl ImportApplyProcess {
     /// 执行确认完成命令，正式事实、任务、独立回执与成功事件原子提交。
     /// # 参数
     /// * `req` - 已认证入口传入的强类型命令。

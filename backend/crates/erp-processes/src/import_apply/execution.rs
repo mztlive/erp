@@ -21,7 +21,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::command_event::{import_event_content, import_event_context};
-use super::{IMPORT_EXECUTION_COMMAND_PREFIX, ImportApplyService};
+use super::{IMPORT_EXECUTION_COMMAND_PREFIX, ImportApplyProcess};
 use crate::audit::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use crate::{Error, Result};
 
@@ -32,7 +32,7 @@ fn ensure_executor_available(action: ImportExecutionAction) -> Result<()> {
     Ok(())
 }
 
-impl ImportApplyService {
+impl ImportApplyProcess {
     /// 执行 W18 应用阶段命令，行、批次、后台任务、独立回执及事件原子提交。
     /// # 参数
     /// * `batch_id` - 路径导入批次身份。

@@ -1,24 +1,18 @@
 //! 供应商资料修订用例与事务载荷。
 
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::field_update::FieldUpdate;
 use erp_core::ids::{
-    PartyId, PartyRevisionId, SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
-    SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
-    SupplierQualificationRevisionId, SupplierRatingRevisionId,
+    PartyId, PartyRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    SupplierRatingRevisionId,
 };
 use erp_party::repository::prelude::*;
-use erp_party::{Party, PartyExt};
-use erp_supplier::repository::prelude::*;
+use erp_party::{Party, PartyExt, PartyRevision};
 use erp_supplier::{
-    QualificationStatus, SaveSupplierProfileRequest, SupplierAccount, SupplierCapability,
-    SupplierCapabilityUpdate, SupplierExt, SupplierProfileMutationView, SupplierProfileUpdateViolation,
-    SupplierQualification, SupplierQualificationCapability, SupplierQualificationUpdate,
-    SupplierRatingRevision, SupplierRatingRevisionData, command_view, next_supplier_revision_no,
-    profile_change, qualification_identity_key,
+    SaveSupplierProfileRequest, SupplierAccount, SupplierCommercialProfileRevision, SupplierExt,
+    SupplierProfileMutationView, SupplierProfileUpdateViolation, SupplierRatingRevision,
+    SupplierRatingRevisionData, command_view, next_supplier_revision_no, profile_change,
 };
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
@@ -26,13 +20,16 @@ use persistence_core::{NoTransaction, Transactional};
 
 use super::create::create_tax_profile;
 use super::validation::resolve_supplier_file_references;
-use super::{SupplierProfileService, SupplierProfileWithAssetsResult, party_change};
+use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult, party_change};
+use crate::adapters::supplier_access;
 use crate::{Error, Result};
 
+mod capabilities;
 mod persist;
+mod qualifications;
 use persist::*;
 
-impl SupplierProfileService {
+impl SupplierProfileProcess {
     /// 修订完整供应商资料；全部写入与幂等结果原子提交。
     ///
     /// # 参数
@@ -103,7 +100,7 @@ impl SupplierProfileService {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    crate::adapters::supplier_access(db.clone(), rbac)
+                    supplier_access(db.clone(), rbac)
                         .require_with(&actor, "update", &scoped_id, executor)
                         .await?;
                     prepared.persist(&db, executor).await
@@ -130,8 +127,44 @@ impl SupplierProfileService {
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
     ) -> Result<PreparedUpdate> {
-        let mut supplier = self.load_supplier_for_update(supplier_id, &req).await?;
-        let mut party = self.load_party_for_update(&supplier, &req).await?;
+        let UpdateRoots { party, party_revision, supplier, commercial_profile } =
+            self.prepare_update_roots(supplier_id, &req, actor).await?;
+        let party_id = supplier.party_id.clone();
+        let supplier_id = SupplierAccountId::new(supplier_id);
+        let facts = self.prepare_party_facts(&party_id, &req, actor.id()).await?;
+        let capabilities = self.prepare_capability_changes(&supplier_id, &req, actor.id()).await?;
+        let qualifications =
+            self.prepare_qualification_changes(&supplier_id, &req, &capabilities.ids, actor.id()).await?;
+        let ratings = self.prepare_rating_changes(&supplier_id, &req).await?;
+        PreparedUpdate::new(
+            PreparedUpdateContext {
+                party,
+                party_revision,
+                supplier,
+                commercial_profile,
+                facts,
+                capabilities,
+                qualifications,
+                ratings,
+            },
+            req.idempotency_key,
+            request_fingerprint,
+            req.effective_from,
+            req.change_reason,
+            actor,
+            pending_assets,
+        )
+    }
+
+    /// 按既有读取与 ID 分配顺序准备主体、供应商根和不可变修订。
+    async fn prepare_update_roots(
+        &self,
+        supplier_id: &str,
+        req: &SaveSupplierProfileRequest,
+        actor: &AuditActor,
+    ) -> Result<UpdateRoots> {
+        let mut supplier = self.load_supplier_for_update(supplier_id, req).await?;
+        let mut party = self.load_party_for_update(&supplier, req).await?;
         let party_id = supplier.party_id.clone();
         let supplier_id = SupplierAccountId::new(supplier_id);
         let party_revision_no = self.next_party_revision_no(&party_id).await?;
@@ -168,29 +201,7 @@ impl SupplierProfileService {
             },
         )
         .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-        let facts = self.prepare_party_facts(&party_id, &req, actor.id()).await?;
-        let capabilities = self.prepare_capability_changes(&supplier_id, &req, actor.id()).await?;
-        let qualifications =
-            self.prepare_qualification_changes(&supplier_id, &req, &capabilities.ids, actor.id()).await?;
-        let ratings = self.prepare_rating_changes(&supplier_id, &req).await?;
-        PreparedUpdate::new(
-            PreparedUpdateContext {
-                party,
-                party_revision,
-                supplier,
-                commercial_profile,
-                facts,
-                capabilities,
-                qualifications,
-                ratings,
-            },
-            req.idempotency_key,
-            request_fingerprint,
-            req.effective_from,
-            req.change_reason,
-            actor,
-            pending_assets,
-        )
+        Ok(UpdateRoots { party, party_revision, supplier, commercial_profile })
     }
 
     /// 加载并校验供应商资料修订门禁。
@@ -340,277 +351,6 @@ impl SupplierProfileService {
         Ok(changes)
     }
 
-    /// 将能力代码集合解析为新增、启停与不可变快照。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `req` - 已校验的根资料命令
-    /// * `actor_id` - 执行变更的账号 ID
-    ///
-    /// # 返回
-    /// 返回待事务持久化的能力实体、修订和稳定 ID 映射。
-    ///
-    /// # 错误
-    /// 仓储查询、状态迁移、修订号生成或实体构造失败时返回错误。
-    async fn prepare_capability_changes(
-        &self,
-        supplier_id: &SupplierAccountId,
-        req: &SaveSupplierProfileRequest,
-        actor_id: &str,
-    ) -> Result<CapabilityChanges> {
-        let existing = self.db.supplier().list_capabilities(supplier_id, &mut NoTransaction).await?;
-        let plan = profile_change::SupplierProfileChangePlan::from_loaded(
-            &existing,
-            &[],
-            &HashMap::new(),
-            &HashMap::new(),
-            &req.capability_codes,
-            &[],
-        )
-        .map_err(|e| Error::ValidationError(e.to_string()))?;
-        let mut changes = CapabilityChanges::default();
-        let mut existing_by_code: HashMap<String, SupplierCapability> =
-            existing.into_iter().map(|cap| (cap.capability_code.as_str().to_string(), cap)).collect();
-        for cap in existing_by_code.values() {
-            changes
-                .ids
-                .insert(cap.capability_code.as_str().to_string(), SupplierCapabilityId::new(&cap.base.id));
-        }
-        for toggle in plan.capability_toggles {
-            let mut capability = existing_by_code
-                .remove(toggle.code.as_str())
-                .ok_or_else(|| Error::Internal("能力计划与已加载事实不一致".to_string()))?;
-            capability
-                .update(
-                    SupplierCapabilityUpdate {
-                        service_region: FieldUpdate::Unchanged,
-                        owner_user_id: None,
-                        fulfillment_note: FieldUpdate::Unchanged,
-                        valid_to: FieldUpdate::Unchanged,
-                        status: Some(toggle.target_status),
-                    },
-                    actor_id,
-                )
-                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            let revision_no = self
-                .db
-                .supplier()
-                .next_capability_revision_no(
-                    &capability.supplier_id,
-                    capability.capability_code,
-                    &mut NoTransaction,
-                )
-                .await?;
-            let revision_id = SupplierCapabilityRevisionId::new(next_id());
-            capability.stable.current_revision_id = Some(revision_id.to_string());
-            let revision = capability
-                .snapshot_revision(revision_id, revision_no)
-                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            changes.updated.push(capability);
-            changes.revisions.push(revision);
-        }
-        for code in plan.capability_creates {
-            let capability_id = SupplierCapabilityId::new(next_id());
-            let revision_id = SupplierCapabilityRevisionId::new(next_id());
-            let owner = req
-                .capability_owners
-                .iter()
-                .find(|item| item.capability_code == code && !item.owner_user_id.trim().is_empty())
-                .map(|item| item.owner_user_id.trim().to_string())
-                .ok_or_else(|| Error::ValidationError("供给能力负责人必须显式指定".to_string()))?;
-            let (capability, revision) = profile_change::new_capability(
-                supplier_id,
-                code,
-                req.effective_from,
-                &owner,
-                actor_id,
-                capability_id.clone(),
-                revision_id,
-            )
-            .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            changes.ids.insert(code.as_str().to_string(), SupplierCapabilityId::new(&capability.base.id));
-            changes.created.push(capability);
-            changes.revisions.push(revision);
-        }
-        Ok(changes)
-    }
-
-    /// 将资质集合解析为新增、更新、停用、快照及能力关联替换。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `req` - 已校验的根资料命令
-    /// * `capability_ids` - 当前命令能力代码到稳定能力 ID 的映射
-    /// * `actor_id` - 执行变更的账号 ID
-    ///
-    /// # 返回
-    /// 返回待事务持久化的资质、修订及关联替换集合。
-    ///
-    /// # 错误
-    /// 仓储查询、能力引用、领域更新或修订构造失败时返回错误。
-    async fn prepare_qualification_changes(
-        &self,
-        supplier_id: &SupplierAccountId,
-        req: &SaveSupplierProfileRequest,
-        capability_ids: &HashMap<String, SupplierCapabilityId>,
-        actor_id: &str,
-    ) -> Result<QualificationChanges> {
-        let existing = self.db.supplier().list_qualifications(supplier_id, &mut NoTransaction).await?;
-        let qualification_ids: Vec<SupplierQualificationId> =
-            existing.iter().map(|item| SupplierQualificationId::new(&item.base.id)).collect();
-        let existing_links = self
-            .db
-            .supplier_qualification_capabilities()
-            .list_by_qualification_ids(&qualification_ids, &mut NoTransaction)
-            .await?;
-        let mut linked_capabilities: HashMap<String, HashSet<String>> = HashMap::new();
-        for link in existing_links {
-            linked_capabilities
-                .entry(link.qualification_id.to_string())
-                .or_default()
-                .insert(link.capability_id.to_string());
-        }
-        let planned_inputs: Vec<profile_change::PlannedQualificationInput> = req
-            .qualifications
-            .iter()
-            .map(|input| profile_change::PlannedQualificationInput {
-                qualification_type: input.qualification_type,
-                certificate_no: input.certificate_no.clone(),
-                issuer: input.issuer.clone(),
-                valid_from: input.valid_from,
-                valid_to: input.valid_to,
-                attachment_id: input.attachment_id.clone(),
-                capability_codes: input.capability_codes.clone(),
-            })
-            .collect();
-        let plan = profile_change::SupplierProfileChangePlan::from_loaded(
-            &[],
-            &existing,
-            &linked_capabilities,
-            capability_ids,
-            &[],
-            &planned_inputs,
-        )
-        .map_err(|e| Error::ValidationError(e.to_string()))?;
-        let requested_map: HashMap<String, &profile_change::PlannedQualificationInput> = planned_inputs
-            .iter()
-            .map(|input| (qualification_identity_key(input.qualification_type, &input.certificate_no), input))
-            .collect();
-        let mut existing_by_key: HashMap<String, SupplierQualification> =
-            existing.into_iter().map(|qual| (qual.identity_key(), qual)).collect();
-        let mut changes = QualificationChanges::default();
-        for key in plan.qualification_updates {
-            let mut qualification = existing_by_key
-                .remove(&key)
-                .ok_or_else(|| Error::Internal("资质计划与已加载事实不一致".to_string()))?;
-            let input =
-                requested_map.get(&key).ok_or_else(|| Error::Internal("资质请求与计划不一致".to_string()))?;
-            profile_change::apply_qualification_input(
-                &mut qualification,
-                input.issuer.clone(),
-                input.valid_from,
-                input.valid_to,
-                input.attachment_id.clone(),
-                actor_id,
-            )
-            .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            let revision_no = self
-                .db
-                .supplier()
-                .next_qualification_revision_no(
-                    &qualification.supplier_id,
-                    qualification.qualification_type,
-                    &qualification.certificate_no,
-                    &mut NoTransaction,
-                )
-                .await?;
-            let revision_id = SupplierQualificationRevisionId::new(next_id());
-            qualification.stable.current_revision_id = Some(revision_id.to_string());
-            let revision = qualification
-                .snapshot_revision(revision_id, revision_no)
-                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            let link_ids = input
-                .capability_codes
-                .iter()
-                .map(|_| SupplierQualificationCapabilityId::new(next_id()))
-                .collect();
-            let links = SupplierQualificationCapability::links_for_qualification(
-                SupplierQualificationId::new(&qualification.base.id),
-                &input.capability_codes,
-                capability_ids,
-                link_ids,
-            )
-            .map_err(|e| Error::ValidationError(e.to_string()))?;
-            changes.replacements.push((SupplierQualificationId::new(&qualification.base.id), links));
-            changes.updated.push(qualification);
-            changes.revisions.push(revision);
-        }
-        for key in plan.qualification_disables {
-            let mut qualification = existing_by_key
-                .remove(&key)
-                .ok_or_else(|| Error::Internal("资质停用计划与已加载事实不一致".to_string()))?;
-            qualification
-                .update(
-                    SupplierQualificationUpdate {
-                        issuer: FieldUpdate::Unchanged,
-                        attachment_id: FieldUpdate::Unchanged,
-                        valid_from: FieldUpdate::Unchanged,
-                        valid_to: FieldUpdate::Unchanged,
-                        status: Some(QualificationStatus::Disabled),
-                    },
-                    actor_id,
-                )
-                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            let revision_no = self
-                .db
-                .supplier()
-                .next_qualification_revision_no(
-                    &qualification.supplier_id,
-                    qualification.qualification_type,
-                    &qualification.certificate_no,
-                    &mut NoTransaction,
-                )
-                .await?;
-            let revision_id = SupplierQualificationRevisionId::new(next_id());
-            qualification.stable.current_revision_id = Some(revision_id.to_string());
-            let revision = qualification
-                .snapshot_revision(revision_id, revision_no)
-                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            changes.updated.push(qualification);
-            changes.revisions.push(revision);
-        }
-        for input in plan.qualification_creates {
-            let qualification_id = SupplierQualificationId::new(next_id());
-            let revision_id = SupplierQualificationRevisionId::new(next_id());
-            let link_ids = input
-                .capability_codes
-                .iter()
-                .map(|_| SupplierQualificationCapabilityId::new(next_id()))
-                .collect();
-            let (qualification, revision, links) =
-                profile_change::new_qualification(profile_change::NewQualificationParams {
-                    supplier_id,
-                    qualification_type: input.qualification_type,
-                    certificate_no: input.certificate_no.clone(),
-                    issuer: input.issuer.clone(),
-                    valid_from: input.valid_from,
-                    valid_to: input.valid_to,
-                    attachment_id: input.attachment_id.clone(),
-                    capability_codes: &input.capability_codes,
-                    capability_ids,
-                    actor_id,
-                    qualification_id: qualification_id.clone(),
-                    revision_id,
-                    link_ids,
-                })
-                .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-            changes.replacements.push((SupplierQualificationId::new(&qualification.base.id), links));
-            changes.created.push(qualification);
-            changes.revisions.push(revision);
-        }
-        Ok(changes)
-    }
-
     /// 构造评级开放区间关闭与下一评级版本。
     ///
     /// # 参数
@@ -656,4 +396,12 @@ impl SupplierProfileService {
         )?;
         Ok(RatingChanges { current, created: Some(created) })
     }
+}
+
+/// 已完成领域变更计划的根记录，不持有执行器或开启事务。
+struct UpdateRoots {
+    party: Party,
+    party_revision: PartyRevision,
+    supplier: SupplierAccount,
+    commercial_profile: SupplierCommercialProfileRevision,
 }

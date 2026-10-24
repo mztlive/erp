@@ -10,7 +10,7 @@ use erp_party::{Party, PartyExt, PartyRevision};
 use id_generator::next_id;
 use persistence_core::Executor;
 
-use super::CustomerProfileService;
+use super::CustomerProfileProcess;
 use super::create::create_party;
 use crate::{Error, Result};
 
@@ -21,7 +21,7 @@ pub(super) struct CreationIdentity {
     pub(super) reused: bool,
 }
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 在写事务内锁定名称、查重并解析创建身份。
     /// # 参数
     /// * `req` / `actor` / `executor` - 创建请求、操作人及原事务执行器。

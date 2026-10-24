@@ -1,16 +1,22 @@
 //! 销售变更提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
 
+use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::{ParticipantId, SubjectRef, Timestamp};
+use bpm::model::types::ApprovalCommandKind;
+use bpm::model::{ApprovalCommandReceipt, ParticipantId, SubjectRef, Timestamp};
+use erp_audit::AuditLog;
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
+use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::service::sales_review::SalesChangeSubmissionWrite;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
-use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::document_registry::{DocumentType, WorkflowAction};
 use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::authorization::{
     AuthorizationFailure, converge_node_eligibility,
 };
@@ -75,7 +81,7 @@ pub(super) async fn load_start_receipt(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
-) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+) -> Result<Option<ApprovalCommandReceipt>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::SalesChangeOrder);
     let scopes = start_scope_candidates(
@@ -87,12 +93,7 @@ pub(super) async fn load_start_receipt(
     for scope in scopes {
         let receipt = db
             .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                &scope,
-                &key,
-                &mut NoTransaction,
-            )
+            .find_command_receipt(ApprovalCommandKind::StartApproval, &scope, &key, &mut NoTransaction)
             .await?;
         if receipt.is_some() {
             return Ok(receipt);
@@ -143,7 +144,7 @@ pub(super) async fn replay_sales_change_start_with_executor(
         receipt = db
             .bpm_workflow()
             .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
+                ApprovalCommandKind::StartApproval,
                 scope,
                 identity.idempotency_key(),
                 executor,
@@ -209,7 +210,7 @@ pub(super) struct SalesChangeStartInput<'a> {
     /// 规范化前的幂等键。
     pub idempotency_key: &'a str,
     /// 已存在收据。
-    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    pub receipt: Option<ApprovalCommandReceipt>,
     /// 调用方时间。
     pub now: Instant,
 }
@@ -338,7 +339,7 @@ pub(super) struct SalesChangeStartPersistInput {
     /// 销售本域冻结提交与副本写入计划。
     pub sales_write: SalesChangeSubmissionWrite,
     /// 工作流动作。
-    pub workflow_action: erp_workflow::entity::document_registry::WorkflowAction,
+    pub workflow_action: WorkflowAction,
     /// 冻结快照载荷。
     pub snapshot_payload: ApprovalSubjectSnapshotPayload,
     /// `prepare_start` 结果。
@@ -350,11 +351,11 @@ pub(super) struct SalesChangeStartPersistInput {
     /// 调用方时间。
     pub now: Instant,
     /// 已构造审计。
-    pub audit: erp_audit::AuditLog,
+    pub audit: AuditLog,
     /// 已认证操作人，用于事务内重验来源销售单范围。
-    pub actor: application_core::AuditActor,
+    pub actor: AuditActor,
     /// 与写事务绑定的授权源。
-    pub rbac: erp_identity::SharedRbacService,
+    pub rbac: SharedRbacService,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
@@ -380,69 +381,62 @@ pub(super) async fn persist_sales_change_start(
 ) -> Result<()> {
     let db = db.clone();
     let client = db.client().clone();
-    let SalesChangeStartPersistInput {
-        mut sales_write,
-        workflow_action,
-        snapshot_payload,
-        prepared,
-        owner_role,
-        organization_id,
-        now,
-        audit,
-        actor,
-        rbac,
-    } = input;
-    let PreparedExecution::Apply(writes) = prepared else {
+    if !matches!(input.prepared, PreparedExecution::Apply(_)) {
         return Ok(());
-    };
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
-                    .require_object(
-                        &actor,
-                        "submit",
-                        sales_write.change().sales_order_id.as_ref(),
-                        &[],
-                        executor,
-                    )
-                    .await
-                    .map_err(crate::Error::from)?;
-                db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-                let guarded = db
-                    .business_documents()
-                    .mark_approval_started(
-                        writes.instance.subject.subject_id(),
-                        DocumentType::SalesChangeOrder,
-                        &writes.instance.process_definition_id,
-                        writes.instance.definition_version,
-                        now,
-                        executor,
-                    )
-                    .await?;
-                if guarded.is_none() {
-                    return Err(Error::ConflictError("销售变更单审批启动守卫冲突，请刷新后重试".to_string()));
-                }
-                sales_write.persist(&db, executor).await?;
-                db.workflow_actions().create(&workflow_action, executor).await?;
-                persist_runtime_writes(
-                    &db,
-                    &writes,
-                    &snapshot_payload,
-                    owner_role,
-                    &organization_id,
-                    now,
-                    executor,
-                )
-                .await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    }
+    client.with_transaction(move |executor| Box::pin(async move { input.persist(&db, executor).await })).await
+}
+
+impl SalesChangeStartPersistInput {
+    /// 在入口事务中重验来源授权，并依原顺序写收据、业务事实、运行态和审计。
+    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        let PreparedExecution::Apply(writes) = self.prepared else {
+            return Ok(());
+        };
+        SalesAccess::new(db.clone(), self.rbac)
+            .require_object(
+                &self.actor,
+                "submit",
+                self.sales_write.change().sales_order_id.as_ref(),
+                &[],
+                executor,
+            )
+            .await
+            .map_err(Error::from)?;
+        db.bpm_workflow()
+            .insert_command_receipt(&writes.receipt, executor)
+            .await
+            .map_err(map_receipt_first_write_error)?;
+        let guarded = db
+            .business_documents()
+            .mark_approval_started(
+                writes.instance.subject.subject_id(),
+                DocumentType::SalesChangeOrder,
+                &writes.instance.process_definition_id,
+                writes.instance.definition_version,
+                self.now,
+                executor,
+            )
+            .await?;
+        if guarded.is_none() {
+            return Err(Error::ConflictError("销售变更单审批启动守卫冲突，请刷新后重试".to_string()));
+        }
+        self.sales_write.persist(db, executor).await?;
+        db.workflow_actions().create(&self.workflow_action, executor).await?;
+        persist_runtime_writes(
+            db,
+            &writes,
+            &self.snapshot_payload,
+            self.owner_role,
+            &self.organization_id,
+            self.now,
+            executor,
+        )
+        .await?;
+        persist_log(db, &self.audit, executor).await?;
+
+        Ok(())
+    }
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
@@ -451,7 +445,7 @@ pub(super) async fn persist_sales_change_start(
 /// 计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
-    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
+    writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     owner_role: &str,
     organization_id: &str,

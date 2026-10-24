@@ -91,22 +91,10 @@ impl PostingSteps for MongoPosting<'_> {
                 }
             },
             RegisterDocument => {
-                if let Some(mut document) =
-                    write.db.business_documents().find_by_id(&write.order_id, executor).await?
-                {
-                    document.formalize(write.now);
-                    write.db.business_documents().update(&mut document, executor).await?;
-                }
+                persist_registered_document(write, executor).await?;
             },
             SalesRevision => {
-                crate::business_ownership::ensure_attribution(&write.db, &write.order, executor).await?;
-                erp_sales::service::sales_order::formalize::persist_revision(
-                    &write.db,
-                    &mut write.order,
-                    &write.aggregate,
-                    executor,
-                )
-                .await?;
+                persist_sales_revision(write, executor).await?;
             },
             SynchronizeProcurement => {
                 if write.procurement.is_some() {
@@ -135,6 +123,34 @@ impl PostingSteps for MongoPosting<'_> {
         }
         Ok(())
     }
+}
+
+/// 在销售过账的原位置更新已存在的业务登记；缺失时继续后续步骤。
+async fn persist_registered_document(
+    write: &FormalizedSubmissionWrite,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if let Some(mut document) = write.db.business_documents().find_by_id(&write.order_id, executor).await? {
+        document.formalize(write.now);
+        write.db.business_documents().update(&mut document, executor).await?;
+    }
+    Ok(())
+}
+
+/// 归属快照与正式版本沿用同一执行器，归属失败时不写正式版本。
+async fn persist_sales_revision(
+    write: &mut FormalizedSubmissionWrite,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    crate::business_ownership::ensure_attribution(&write.db, &write.order, executor).await?;
+    erp_sales::service::sales_order::formalize::persist_revision(
+        &write.db,
+        &mut write.order,
+        &write.aggregate,
+        executor,
+    )
+    .await?;
+    Ok(())
 }
 
 /// 在销售生效的原事务中读取客户企业身份，形成对客户的应收。

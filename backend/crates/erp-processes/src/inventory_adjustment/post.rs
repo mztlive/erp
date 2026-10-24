@@ -1,21 +1,25 @@
 use application_core::AuditActor;
+use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use erp_audit::AuditActorLogs;
 use erp_core::ids::StockAdjustmentId;
 use erp_inventory::{InventoryExt, StockAdjustment, StockAdjustmentView};
 use erp_read_models::inventory_center::load_approval_binding;
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::{ApprovalActionContext, ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::InventoryAdjustmentService;
+use super::InventoryAdjustmentProcess;
 use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl InventoryAdjustmentService {
+impl InventoryAdjustmentProcess {
     /// 在审批运行时持有的唯一事务内过账库存调整单。
     ///
     /// 本方法是合同 §4.4.4 签署的最终通过端口。调用方必须传入审批决定
@@ -116,52 +120,9 @@ async fn validate_post_runtime_context(
         .work_item_id()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| Error::ConflictError("库存调整最终动作缺少审批任务".to_string()))?;
-    let instance_id = bpm::ids::ApprovalProcessInstanceId::new(context.approval_process_instance_id());
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&instance_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
-    let binding = load_approval_binding(db, &adjustment.base.id, executor).await?;
-    let binding = require_frozen_binding(binding.as_ref())?;
-    let snapshot = db
-        .approval_subject_snapshots()
-        .find_by_process_instance_id(&instance.base.id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("库存调整审批实例缺少冻结快照".to_string()))?;
-    snapshot
-        .ensure_matches_runtime_subject(
-            DocumentType::StockAdjustment,
-            adjustment.base.id.as_str(),
-            subject_version,
-        )
-        .map_err(|_| Error::ConflictError("库存调整审批冻结快照已变化".to_string()))?;
-    let current_execution = instance.current_node_execution_id.as_ref().map(ToString::to_string);
-    if instance.status != bpm::model::types::ApprovalProcessInstanceStatus::Running
-        || instance.process_kind
-            != erp_workflow::service::approval::process_kind::process_kind_of(DocumentType::StockAdjustment)
-        || instance.process_definition_id != binding.approval_process_definition_id
-        || instance.definition_version != binding.approval_definition_version
-        || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
-        || instance.subject.subject_id() != adjustment.base.id
-        || instance.subject_version != subject_version
-        || current_execution.as_deref() != Some(execution_id)
-    {
-        return Err(Error::ConflictError("库存调整审批实例上下文已变化".to_string()));
-    }
-    let execution = db
-        .bpm_workflow()
-        .find_execution_by_id(&bpm::ids::ApprovalNodeExecutionId::new(execution_id), executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("库存调整审批执行不存在".to_string()))?;
-    if execution.process_instance_id != instance_id
-        || execution.status != bpm::model::types::ApprovalNodeExecutionStatus::Active
-        || execution.round_no != instance.current_round_no
-        || execution.blocker_code.is_some()
-        || !execution.has_participant(actor.id())
-    {
-        return Err(Error::ConflictError("库存调整审批执行上下文已变化".to_string()));
-    }
+    let snapshot =
+        load_post_runtime_snapshot(db, context, actor, adjustment, subject_version, execution_id, executor)
+            .await?;
     let task = db
         .work_items()
         .find_document_approval_by_id(work_item_id, executor)
@@ -182,4 +143,62 @@ async fn validate_post_runtime_context(
         return Err(Error::ConflictError("库存调整审批任务上下文已变化".to_string()));
     }
     Ok(())
+}
+
+/// 依次读取运行实例、冻结绑定、快照和当前执行，沿用审批决定事务快照。
+async fn load_post_runtime_snapshot(
+    db: &Database,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    adjustment: &StockAdjustment,
+    subject_version: u32,
+    execution_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalSubjectSnapshot> {
+    let instance_id = ApprovalProcessInstanceId::new(context.approval_process_instance_id());
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&instance_id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
+    let binding = load_approval_binding(db, &adjustment.base.id, executor).await?;
+    let binding = require_frozen_binding(binding.as_ref())?;
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&instance.base.id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("库存调整审批实例缺少冻结快照".to_string()))?;
+    snapshot
+        .ensure_matches_runtime_subject(
+            DocumentType::StockAdjustment,
+            adjustment.base.id.as_str(),
+            subject_version,
+        )
+        .map_err(|_| Error::ConflictError("库存调整审批冻结快照已变化".to_string()))?;
+    let current_execution = instance.current_node_execution_id.as_ref().map(ToString::to_string);
+    if instance.status != ApprovalProcessInstanceStatus::Running
+        || instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
+        || instance.process_definition_id != binding.approval_process_definition_id
+        || instance.definition_version != binding.approval_definition_version
+        || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
+        || instance.subject.subject_id() != adjustment.base.id
+        || instance.subject_version != subject_version
+        || current_execution.as_deref() != Some(execution_id)
+    {
+        return Err(Error::ConflictError("库存调整审批实例上下文已变化".to_string()));
+    }
+    let execution = db
+        .bpm_workflow()
+        .find_execution_by_id(&ApprovalNodeExecutionId::new(execution_id), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("库存调整审批执行不存在".to_string()))?;
+    if execution.process_instance_id != instance_id
+        || execution.status != ApprovalNodeExecutionStatus::Active
+        || execution.round_no != instance.current_round_no
+        || execution.blocker_code.is_some()
+        || !execution.has_participant(actor.id())
+    {
+        return Err(Error::ConflictError("库存调整审批执行上下文已变化".to_string()));
+    }
+    Ok(snapshot)
 }

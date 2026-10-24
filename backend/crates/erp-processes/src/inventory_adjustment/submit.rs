@@ -19,7 +19,7 @@ use super::adapter::{
     stock_adjustment_subject_ref, workflow_snapshot_from_inventory,
 };
 use super::mapping::build_adjustment_line_updates;
-use super::{InventoryAdjustmentService, approval_prepare as start_approval, persist as start_persist};
+use super::{InventoryAdjustmentProcess, approval_prepare as start_approval, persist as start_persist};
 use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::{Error, Result};
 
@@ -63,7 +63,7 @@ impl StockAdjustmentSubmission {
     }
 }
 
-impl InventoryAdjustmentService {
+impl InventoryAdjustmentProcess {
     /// 提交库存调整并调用统一 `start_approval`。
     ///
     /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
@@ -162,7 +162,7 @@ impl InventoryAdjustmentService {
         actor: &AuditActor,
     ) -> Result<(StockAdjustment, ApprovalDefinitionBinding, Vec<StockAdjustmentLine>)> {
         let mut adjustment = self.inventory().load_stock_adjustment(id).await?;
-        start_approval::ensure_stock_adjustment_submit_authorized_with_executor(
+        start_approval::ensure_submit_authorized(
             &self.db,
             &self.rbac,
             &adjustment,
@@ -291,7 +291,7 @@ const START_REPLAY_RECOVERY_ATTEMPTS: usize = 32;
 
 /// 使用独立只读事务先解析启动收据，再返回当前可读详情。
 async fn committed_stock_adjustment_start_replay(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentProcess,
     id: &str,
     req: &SubmitStockAdjustmentRequest,
     actor: &AuditActor,
@@ -334,7 +334,7 @@ async fn committed_stock_adjustment_start_replay(
 
 /// 事务失败或结果未知后，以有限次新会话等待并发 winner 的收据可见。
 async fn recover_stock_adjustment_start_replay(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentProcess,
     id: &str,
     req: &SubmitStockAdjustmentRequest,
     actor: &AuditActor,

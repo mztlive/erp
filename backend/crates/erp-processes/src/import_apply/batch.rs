@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId, PartyId};
 use erp_import::repository::prelude::*;
 use erp_import::{
     ApplyLegacyImportBatchRequest, ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet,
@@ -17,13 +18,13 @@ use erp_import::{
 };
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
-use erp_support::BulkJobExt;
 use erp_support::repository::prelude::*;
+use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::ImportApplyService;
+use super::ImportApplyProcess;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -58,7 +59,7 @@ fn apply_result_draft_from(row: ApplyRowResult) -> ApplyResultDraft {
     }
 }
 
-impl ImportApplyService {
+impl ImportApplyProcess {
     /// 应用导入批次（后台应用阶段逐行结果）。
     ///
     /// 批次处于 `Importing` 时执行：请求 VO 先拒绝重复 ID，仓储按请求 ID
@@ -98,7 +99,7 @@ impl ImportApplyService {
             return Err(Error::BusinessLogicError("批次尚未进入导入阶段，禁止应用".to_string()));
         }
         let job = self.load_running_import_job(&batch).await?;
-        let scope_batch_id = erp_core::ids::LegacyImportBatchId::new(batch_id.to_string());
+        let scope_batch_id = LegacyImportBatchId::new(batch_id.to_string());
         let mut scope = self
             .db
             .legacy_import_rows()
@@ -126,15 +127,14 @@ impl ImportApplyService {
     ///
     /// # 错误
     /// 任务缺失或尚未启动时返回错误。
-    async fn load_running_import_job(&self, batch: &LegacyImportBatch) -> Result<erp_support::BackgroundJob> {
+    async fn load_running_import_job(&self, batch: &LegacyImportBatch) -> Result<BackgroundJob> {
         let job = self
             .db
             .background_jobs()
             .find_by_request_id(&batch.batch_no, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Internal("导入批次后台任务缺失".to_string()))?;
-        if !matches!(job.status, erp_support::JobStatus::Running | erp_support::JobStatus::PartiallySucceeded)
-        {
+        if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
             return Err(Error::BusinessLogicError("后台应用尚未由 START_APPLY 启动".to_string()));
         }
         Ok(job)
@@ -161,7 +161,6 @@ impl ImportApplyService {
         result_set: &ApplyResultSet,
         rows: &HashMap<String, LegacyImportRow>,
     ) -> Result<HashMap<String, bool>> {
-        use erp_core::ids::PartyId;
         let targets = collect_customer_import_targets(result_set, rows);
         if targets.is_empty() {
             return Ok(HashMap::new());
@@ -194,7 +193,7 @@ impl ImportApplyService {
     async fn persist_apply_batch(
         &self,
         batch: LegacyImportBatch,
-        job: erp_support::BackgroundJob,
+        job: BackgroundJob,
         deltas: ApplyBatchDeltas,
         all_terminal: bool,
         actor: &AuditActor,
@@ -329,7 +328,7 @@ fn apply_result_set_from_request(req: ApplyLegacyImportBatchRequest) -> Result<A
 ///
 /// # 错误
 /// 存在缺失 ID 时返回 `ValidationError`。
-fn ensure_no_missing_apply_rows(missing: &[erp_core::ids::LegacyImportRowId]) -> Result<()> {
+fn ensure_no_missing_apply_rows(missing: &[LegacyImportRowId]) -> Result<()> {
     let Some(first) = missing.first() else {
         return Ok(());
     };
@@ -457,7 +456,7 @@ struct PersistApplyWrite<'a> {
     /// 批次。
     batch: &'a mut LegacyImportBatch,
     /// 后台任务。
-    job: &'a mut erp_support::BackgroundJob,
+    job: &'a mut BackgroundJob,
     /// 审计日志。
     audit: &'a erp_audit::AuditLog,
     /// 本批成功数。

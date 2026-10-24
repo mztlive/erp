@@ -68,7 +68,7 @@ pub async fn legacy_import_batch_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateLegacyImportBatchRequest>,
 ) -> Result<LegacyImportBatchView> {
-    let view = state.import_apply_service().create_batch(req, &actor).await?;
+    let view = state.import_apply_process().create_batch(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -121,7 +121,7 @@ pub async fn legacy_import_batch_apply(
     Path(id): Path<String>,
     Json(req): Json<ApplyLegacyImportBatchRequest>,
 ) -> Result<LegacyImportBatchView> {
-    let view = state.import_apply_service().apply_batch(&id, req, &actor).await?;
+    let view = state.import_apply_process().apply_batch(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -149,7 +149,7 @@ pub async fn legacy_import_execution_command(
     Path(id): Path<String>,
     Json(command): Json<ImportExecutionCommand>,
 ) -> Result<ImportExecutionResult> {
-    let result = state.import_apply_service().execute_import_command(&id, command, &actor).await?;
+    let result = state.import_apply_process().execute_import_command(&id, command, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(result))
 }
@@ -201,7 +201,7 @@ pub async fn legacy_import_confirmation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<LegacyImportConfirmationListParams>,
 ) -> Result<PageView<LegacyImportConfirmationView>> {
-    let page = state.import_apply_service().confirmation_list(&params, &actor, state.rbac()).await?;
+    let page = state.import_apply_process().confirmation_list(&params, &actor, state.rbac()).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -227,7 +227,7 @@ pub async fn legacy_import_confirmation_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateLegacyImportConfirmationRequest>,
 ) -> Result<LegacyImportConfirmationView> {
-    let view = state.import_apply_service().create_confirmation(req, &actor).await?;
+    let view = state.import_apply_process().create_confirmation(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -253,7 +253,7 @@ pub async fn legacy_import_confirmation_complete(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CompleteImportBusinessConfirmationCommand>,
 ) -> Result<CompleteImportBusinessConfirmationResult> {
-    let view = state.import_apply_service().complete_import_business_confirmation(req, &actor).await?;
+    let view = state.import_apply_process().complete_import_business_confirmation(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

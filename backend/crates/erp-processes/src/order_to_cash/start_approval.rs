@@ -12,6 +12,8 @@ use erp_core::common::time::Instant;
 use erp_sales::dto::sales_order::SubmissionView;
 use erp_sales::entity::command_receipt::SalesCommandReceipt;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::service::sales_order::SalesOrderService;
+use erp_sales::service::sales_order::mapper::submission_view;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -35,6 +37,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_object_readable;
+use super::adapters::catalog::CatalogQualificationAdapter;
 use super::authorization::SalesCommandAccess;
 use crate::approval_start::{
     StartTaskContext, persist_start_runtime, persist_start_snapshot, persist_start_tasks,
@@ -439,107 +442,121 @@ pub(super) async fn persist_sales_order_start(
 ) -> Result<SubmissionView> {
     let db = db.clone();
     let client = db.client().clone();
-    let SalesOrderStartPersistInput {
-        mut order,
-        mut working_copy,
-        submission,
-        submission_lines,
-        workflow_action,
-        document_type,
-        snapshot_payload,
-        prepared,
-        owner_role,
-        organization_id,
-        now,
-        audit,
-        working_copy_plan,
-        sellable_refs,
-    } = input;
-    let submission_view = erp_sales::service::sales_order::mapper::submission_view(
-        submission.clone(),
-        submission_lines.clone(),
-    );
-    let replayed =
-        check_sales_submission_start(&db, &access, &audit.receipt, &order.base.id, expected_order_version)
-            .await?;
-    if let Some(view) = replayed {
+    let view = submission_view(input.submission.clone(), input.submission_lines.clone());
+    if let Some(view) = check_sales_submission_start(
+        &db,
+        &access,
+        &input.audit.receipt,
+        &input.order.base.id,
+        expected_order_version,
+    )
+    .await?
+    {
         return Ok(view);
     }
-    let PreparedExecution::Apply(writes) = prepared else {
+    if !matches!(input.prepared, PreparedExecution::Apply(_)) {
         return Err(Error::Internal("销售提交启动收据缺少领域命令结果".to_string()));
-    };
+    }
     let replayed = client
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                access.related_order(&order, executor).await?;
-                if let Some(view) = replay_submission_with_executor(
-                    &db,
-                    &audit.receipt.base.id,
-                    (&audit.receipt.fingerprint, &audit.receipt.idempotency_key_hash),
-                    &order.base.id,
-                    &audit.receipt.actor_id,
-                    &access,
-                    executor,
-                )
-                .await?
-                {
-                    return Ok::<Option<SubmissionView>, crate::Error>(Some(view));
-                }
-                access.revalidate(&order.base.id, expected_order_version, executor).await?;
-                let current = access.current(&order.base.id, executor).await?;
-                SalesOrderCommandProcess::check_first_contract_binding(
-                    &db,
-                    &access,
-                    &current,
-                    &order,
-                    working_copy.contract_revision_id.as_ref(),
-                    executor,
-                )
-                .await?;
-                db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-                guard_sales_approval_start(&db, &writes, document_type, now, executor).await?;
-                erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                    .ensure_sellable_refs(
-                        &sellable_refs,
-                        &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(
-                            db.clone(),
-                        ),
-                        executor,
-                    )
-                    .await?;
-                erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                    .persist_submission_start(
-                        &mut order,
-                        &mut working_copy,
-                        &submission,
-                        &submission_lines,
-                        working_copy_plan,
-                        executor,
-                    )
-                    .await?;
-                db.workflow_actions().create(&workflow_action, executor).await?;
-                persist_runtime_writes(
-                    &db,
-                    &writes,
-                    SalesOrderRuntimeWriteInput {
-                        document_type,
-                        snapshot_payload: &snapshot_payload,
-                        owner_role,
-                        organization_id: &organization_id,
-                        now,
-                    },
-                    executor,
-                )
-                .await?;
-                audit.persist(&db, executor).await?;
-                Ok::<Option<SubmissionView>, crate::Error>(None)
-            })
+            Box::pin(async move { input.persist(&db, &access, expected_order_version, executor).await })
         })
         .await?;
-    Ok(replayed.unwrap_or(submission_view))
+    Ok(replayed.unwrap_or(view))
+}
+
+impl SalesOrderStartPersistInput {
+    /// 事务内先重验关联和回执，未命中才执行首次提交绑定检查。
+    async fn validate(
+        &self,
+        db: &Database,
+        access: &SalesCommandAccess,
+        expected_order_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SubmissionView>> {
+        access.related_order(&self.order, executor).await?;
+        if let Some(view) = replay_submission_with_executor(
+            db,
+            &self.audit.receipt.base.id,
+            (&self.audit.receipt.fingerprint, &self.audit.receipt.idempotency_key_hash),
+            &self.order.base.id,
+            &self.audit.receipt.actor_id,
+            access,
+            executor,
+        )
+        .await?
+        {
+            return Ok::<Option<SubmissionView>, crate::Error>(Some(view));
+        }
+        access.revalidate(&self.order.base.id, expected_order_version, executor).await?;
+        let current = access.current(&self.order.base.id, executor).await?;
+        SalesOrderCommandProcess::check_first_contract_binding(
+            db,
+            access,
+            &current,
+            &self.order,
+            self.working_copy.contract_revision_id.as_ref(),
+            executor,
+        )
+        .await?;
+
+        Ok(None)
+    }
+
+    /// 在调用方事务中依次写入收据、守卫、销售事实、运行态与审计。
+    async fn persist(
+        mut self,
+        db: &Database,
+        access: &SalesCommandAccess,
+        expected_order_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SubmissionView>> {
+        if let Some(view) = self.validate(db, access, expected_order_version, executor).await? {
+            return Ok(Some(view));
+        }
+        let PreparedExecution::Apply(writes) = self.prepared else {
+            return Err(Error::Internal("销售提交启动收据缺少领域命令结果".to_string()));
+        };
+        db.bpm_workflow()
+            .insert_command_receipt(&writes.receipt, executor)
+            .await
+            .map_err(map_receipt_first_write_error)?;
+        guard_sales_approval_start(db, &writes, self.document_type, self.now, executor).await?;
+        SalesOrderService::new(db.clone())
+            .ensure_sellable_refs(
+                &self.sellable_refs,
+                &CatalogQualificationAdapter::new(db.clone()),
+                executor,
+            )
+            .await?;
+        SalesOrderService::new(db.clone())
+            .persist_submission_start(
+                &mut self.order,
+                &mut self.working_copy,
+                &self.submission,
+                &self.submission_lines,
+                self.working_copy_plan,
+                executor,
+            )
+            .await?;
+        db.workflow_actions().create(&self.workflow_action, executor).await?;
+        persist_runtime_writes(
+            db,
+            &writes,
+            SalesOrderRuntimeWriteInput {
+                document_type: self.document_type,
+                snapshot_payload: &self.snapshot_payload,
+                owner_role: self.owner_role,
+                organization_id: &self.organization_id,
+                now: self.now,
+            },
+            executor,
+        )
+        .await?;
+        self.audit.persist(db, executor).await?;
+
+        Ok(None)
+    }
 }
 
 /// 在原只读事务内先查证提交回执，未命中才校验待写销售版本。

@@ -5,7 +5,10 @@ use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{RefreshReceipt, SupplyCommandResult};
-use erp_supply::entity::supplier_settlement::{SupplierSettlementDraftSnapshot, SupplierSettlementStatement};
+use erp_supply::entity::supplier_settlement::{
+    SupplierSettlementDifference, SupplierSettlementDraftSnapshot, SupplierSettlementItem,
+    SupplierSettlementStatement,
+};
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::draft::{PreparedStatement, StatementPreparation};
@@ -16,7 +19,8 @@ use validator::Validate;
 
 use super::{
     CreateSettlementStatementRequest, RefreshSettlementStatementRequest, SettlementDraftAction,
-    SettlementDraftCommandResult, SupplierSettlementProcess, command_audit_id, digest_parts,
+    SettlementDraftCommandResult, SettlementWriteContext, SupplierSettlementProcess, command_audit_id,
+    digest_parts,
 };
 use crate::audit::{persist_log, recover_command};
 use crate::supply_execution::receipt::persist_supply_receipt;
@@ -50,33 +54,15 @@ impl SupplierSettlementProcess {
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.create", &statement_no, &req.idempotency_key);
         let audit = create_statement_audit(actor, audit_id, &statement)?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let data_scope = self.data_scope.clone();
-        let actor_for_tx = actor.clone();
-        let owner_id = actor.id().to_string();
-        let statement_for_tx = statement.clone();
-        let items_for_tx = snapshot.items.clone();
-        let differences_for_tx = snapshot.differences.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    erp_supply::SettlementAccess::new(db.clone(), data_scope)
-                        .require_create(&actor_for_tx, &owner_id, executor)
-                        .await?;
-                    SupplierSettlementService::new(db.clone())
-                        .persist_statement_with_items(
-                            &statement_for_tx,
-                            &items_for_tx,
-                            &differences_for_tx,
-                            executor,
-                        )
-                        .await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<(), crate::Error>(())
-                })
-            })
-            .await;
+        let input = CreateWrite {
+            context: self.write_context(actor),
+            statement: statement.clone(),
+            items: snapshot.items.clone(),
+            differences: snapshot.differences.clone(),
+            audit,
+        };
+        let transaction_result =
+            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
         if let Err(error) = transaction_result {
             return recover_command(
                 error,
@@ -157,42 +143,15 @@ impl SupplierSettlementProcess {
                 )
                 .await;
         };
-        let receipt = RefreshReceipt::new(req.request_id.clone(), statement.source_snapshot_hash.clone())
-            .with_counts(statement.base.version + 1, snapshot.items.len(), snapshot.differences.len());
-        let audit = refresh_audit(audit_id.clone(), &statement, actor)?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let data_scope = self.data_scope.clone();
-        let actor_for_tx = actor.clone();
-        let id_for_tx = id.to_string();
-        let mut statement_for_tx = statement.clone();
-        let snapshot_for_tx = snapshot;
-        let receipt_for_tx = receipt.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    persist_refreshed_result(
-                        RefreshWrite {
-                            db: &db,
-                            data_scope,
-                            actor: &actor_for_tx,
-                            id: &id_for_tx,
-                            statement: &mut statement_for_tx,
-                            snapshot: &snapshot_for_tx,
-                            old_ids: (&prepared.old_item_ids, &prepared.old_difference_ids),
-                            request: &req,
-                            audit: &audit,
-                            fingerprint: &fingerprint_for_tx,
-                            receipt: receipt_for_tx,
-                        },
-                        executor,
-                    )
-                    .await?;
-                    Ok::<SupplierSettlementStatement, crate::Error>(statement_for_tx)
-                })
-            })
-            .await;
+        let snapshot = RefreshSnapshot {
+            statement,
+            snapshot,
+            old_ids: (prepared.old_item_ids, prepared.old_difference_ids),
+        };
+        let (input, receipt) =
+            self.prepare_refresh_write(id, actor, req, snapshot, (&audit_id, &fingerprint))?;
+        let transaction_result =
+            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
         let statement = match transaction_result {
             Ok(statement) => statement,
             Err(error) => {
@@ -203,6 +162,35 @@ impl SupplierSettlementProcess {
             },
         };
         Ok(refresh_result(statement, receipt, "REFRESHED", "结算试算已刷新为最新权威来源快照"))
+    }
+
+    /// 只准备原版本回执与审计；构造错误必须在进入事务恢复分支前传播。
+    fn prepare_refresh_write(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        request: RefreshSettlementStatementRequest,
+        prepared: RefreshSnapshot,
+        identity: (&str, &str),
+    ) -> Result<(RefreshPersistence, RefreshReceipt)> {
+        let receipt =
+            RefreshReceipt::new(request.request_id.clone(), prepared.statement.source_snapshot_hash.clone())
+                .with_counts(
+                    prepared.statement.base.version + 1,
+                    prepared.snapshot.items.len(),
+                    prepared.snapshot.differences.len(),
+                );
+        let audit = refresh_audit(identity.0.to_string(), &prepared.statement, actor)?;
+        let input = RefreshPersistence {
+            context: self.write_context(actor),
+            id: id.to_string(),
+            prepared,
+            request,
+            audit,
+            fingerprint: identity.1.to_string(),
+            receipt: receipt.clone(),
+        };
+        Ok((input, receipt))
     }
 
     /// 相同来源仍保存原版本、明细计数及同事务审计结果。
@@ -384,6 +372,71 @@ fn create_statement_audit(
         .with_command_id(Some(command_id))?
         .with_resource_number(Some(statement.statement_no.clone()))?;
     Ok(audit)
+}
+
+/// 创建写入持有原命令事实，事务由公开命令开启。
+struct CreateWrite {
+    context: SettlementWriteContext,
+    statement: SupplierSettlementStatement,
+    items: Vec<SupplierSettlementItem>,
+    differences: Vec<SupplierSettlementDifference>,
+    audit: AuditLog,
+}
+
+impl CreateWrite {
+    /// 沿入口执行器按范围、草稿明细、审计的原顺序写入。
+    async fn persist(self, executor: &mut dyn Executor) -> Result<()> {
+        let context = self.context;
+        SettlementAccess::new(context.db.clone(), context.data_scope)
+            .require_create(&context.actor, context.actor.id(), executor)
+            .await?;
+        SupplierSettlementService::new(context.db.clone())
+            .persist_statement_with_items(&self.statement, &self.items, &self.differences, executor)
+            .await?;
+        persist_log(&context.db, &self.audit, executor).await?;
+        Ok(())
+    }
+}
+
+struct RefreshSnapshot {
+    statement: SupplierSettlementStatement,
+    snapshot: SupplierSettlementDraftSnapshot,
+    old_ids: (Vec<String>, Vec<String>),
+}
+
+/// 刷新事务使用的已准备来源和原命令身份。
+struct RefreshPersistence {
+    context: SettlementWriteContext,
+    id: String,
+    prepared: RefreshSnapshot,
+    request: RefreshSettlementStatementRequest,
+    audit: AuditLog,
+    fingerprint: String,
+    receipt: RefreshReceipt,
+}
+
+impl RefreshPersistence {
+    async fn persist(self, executor: &mut dyn Executor) -> Result<SupplierSettlementStatement> {
+        let mut statement = self.prepared.statement;
+        persist_refreshed_result(
+            RefreshWrite {
+                db: &self.context.db,
+                data_scope: self.context.data_scope,
+                actor: &self.context.actor,
+                id: &self.id,
+                statement: &mut statement,
+                snapshot: &self.prepared.snapshot,
+                old_ids: (&self.prepared.old_ids.0, &self.prepared.old_ids.1),
+                request: &self.request,
+                audit: &self.audit,
+                fingerprint: &self.fingerprint,
+                receipt: self.receipt,
+            },
+            executor,
+        )
+        .await?;
+        Ok(statement)
+    }
 }
 
 /// 已准备的来源快照与原请求沿调用方执行器提交。

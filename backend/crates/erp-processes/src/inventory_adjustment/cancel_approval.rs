@@ -15,15 +15,12 @@ use erp_workflow::service::approval::execution::{PreparedExecution, prepare_docu
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::InventoryAdjustmentService;
+use super::InventoryAdjustmentProcess;
 use super::adapter::{
     execute_stock_adjustment_domain_action, require_frozen_binding, stock_adjustment_adapter,
 };
-#[allow(unused_imports)]
-pub(crate) use super::cancel_persist::{
-    StockAdjustmentCancelPersistInput, cancel_stock_adjustment_approval_apply,
-    persist_stock_adjustment_cancel,
-};
+pub(crate) use super::cancel_persist::cancel_stock_adjustment_approval_apply;
+use super::cancel_persist::{StockAdjustmentCancelPersistInput, persist_stock_adjustment_cancel};
 pub(crate) use super::cancel_runtime::{
     LoadedCancelRuntime, build_stock_adjustment_cancel_input, committed_cancel_replay,
     ensure_cancel_authorized, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
@@ -32,7 +29,7 @@ pub(crate) use super::cancel_runtime::{
 };
 use crate::{Error, Result};
 
-impl InventoryAdjustmentService {
+impl InventoryAdjustmentProcess {
     /// 撤回审批中的库存调整单，回到草稿且保持审批主题版本不变。
     ///
     /// 本方法是合同 §4.4.4 签署的普通撤回端口。它以审批实例作为稳定幂等
@@ -83,7 +80,7 @@ impl InventoryAdjustmentService {
 
 /// 事务外一次性加载并校验撤回目标（实例/单据/绑定/运行事实）。
 async fn load_cancel_target(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentProcess,
     id: &str,
     req: &CancelStockAdjustmentApprovalRequest,
     actor: &AuditActor,
@@ -106,7 +103,7 @@ async fn load_cancel_target(
 
 /// 事务外构图取消计划、执行领域动作并组装持久化输入。
 fn build_cancel_persist_input(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentProcess,
     target: LoadedCancelTarget,
     req: &CancelStockAdjustmentApprovalRequest,
     actor: &AuditActor,

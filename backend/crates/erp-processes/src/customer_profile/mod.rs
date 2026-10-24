@@ -22,13 +22,13 @@ use crate::{Error, Result};
 
 /// 完整客户资料的根级服务。
 #[derive(Clone)]
-pub struct CustomerProfileService {
+pub struct CustomerProfileProcess {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
     rbac: Option<SharedRbacService>,
 }
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 创建客户资料根级服务。
     ///
     /// # 参数

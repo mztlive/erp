@@ -43,9 +43,9 @@ use erp_party::{
 };
 use erp_supplier::SupplierService;
 pub use funds_data_scope::{MongoFundsDataScope, funds_access_with_rbac};
-pub use import::{MongoImportBulkJobs, import_apply_service, legacy_import_service};
+pub use import::{MongoImportBulkJobs, import_apply_process, legacy_import_service};
 pub use integration_data_scope::{MongoIntegrationDataScope, scoped_integration_ops_service};
-pub use inventory::{authorize_inventory, inventory_adjustment_service, inventory_service};
+pub use inventory::{authorize_inventory, inventory_adjustment_process, inventory_service};
 use mongodb::Database;
 pub use organization::organization_service;
 pub use party::{MongoPartyAudit, MongoSupplierRole};

@@ -1,14 +1,18 @@
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::SalesOrder;
-use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::{ApprovalObjectReadPort, DocumentRegistryExt};
+use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::adapter::{sales_order_object_readable, sales_order_responsible_org_id};
+use super::super::document_type_of_sales_business;
+use crate::adapters::workflow::bind_published_definition_on_document_create;
 use crate::{Error, Result};
 
 /// 按业务性质构造创建时绑定命令。
@@ -29,7 +33,7 @@ pub(super) fn sales_create_bind_command(
     actor: &AuditActor,
 ) -> Result<BindPublishedDefinitionCommand> {
     Ok(BindPublishedDefinitionCommand {
-        document_type: crate::order_to_cash::document_type_of_sales_business(order.business_type),
+        document_type: document_type_of_sales_business(order.business_type),
         business_object_id: order.base.id.clone(),
         business_object_version: order.base.version,
         context: BindingRevalidationContext::new(
@@ -60,25 +64,19 @@ pub(super) fn sales_create_bind_command(
 /// # 错误
 /// 无发布定义或绑定失败时返回错误，调用方必须回滚。
 pub(super) async fn persist_bound_sales_document(
-    db: &mongodb::Database,
+    db: &Database,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
+    object_read: &dyn ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
+) -> Result<ApprovalDefinitionBinding> {
     let _ =
         sales_order_object_readable(&bind_command.context.organization_id, &bind_command.context.creator_id)?;
-    let binding = crate::adapters::workflow::bind_published_definition_on_document_create(
-        db,
-        rbac,
-        object_read,
-        bind_command,
-        actor,
-        executor,
-    )
-    .await?;
+    let binding =
+        bind_published_definition_on_document_create(db, rbac, object_read, bind_command, actor, executor)
+            .await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
     db.business_documents().create(document, executor).await?;

@@ -7,7 +7,7 @@ use erp_identity::service::iam::builtin_role_templates;
 use erp_identity::{CreateRoleParams, GenerateBuiltinRolesRequest, Permission};
 
 use super::spec::{AccountSpec, FoundationFile};
-use super::{DemoFoundationReport, DemoMasterDataService, spec};
+use super::{DemoFoundationReport, DemoMasterDataProcess, spec};
 use crate::{Error, Result};
 
 /// 一份明确的演示岗位授权输入，不赋予管理员或全局通配权限。
@@ -62,7 +62,7 @@ impl DemoRole {
     }
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 以当前管理员授权准备缺失岗位角色和演示角色，由账号步骤绑定并继续复验资格。
     /// # 参数
     /// `actor` 为请求发起人；`report` 接收变更说明。

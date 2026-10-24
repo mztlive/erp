@@ -25,7 +25,7 @@ pub async fn supplier_import(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<SupplierImportRequest>,
 ) -> Result<Vec<SupplierImportResult>> {
-    Ok(ApiResponse::ok_with_data(state.supplier_profile_service().import(request, &actor).await?))
+    Ok(ApiResponse::ok_with_data(state.supplier_profile_process().import(request, &actor).await?))
 }
 
 /// 提交供应商后台导入任务。

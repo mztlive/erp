@@ -5,15 +5,15 @@ use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_integration::entity::integration_ops::{
     ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ReconciliationDifferenceId,
-    ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionId, ResolutionType,
-    W29CloseDecision,
+    ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionId, ResolutionAction,
+    ResolutionType, W29CloseDecision, W29EvidenceReference,
 };
 use erp_integration::repository::IntegrationOpsExt;
 use erp_integration::repository::prelude::*;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::ports::W29CloseFact;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::{Error as WorkflowError, Result as WorkflowResult, WorkItemExt};
+use erp_workflow::{Error as WorkflowError, Result as WorkflowResult, WorkItemExt, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -162,7 +162,8 @@ async fn persist(
     input: W29CloseInput<'_>,
     executor: &mut dyn Executor,
 ) -> WorkflowResult<()> {
-    let W29CloseInput { item, decision, evidence_reference, actor_id, receipt_id, closed_at } = input;
+    let item = input.item;
+    let decision = input.decision;
     if let Some(replacement_work_item_id) = decision.replacement_work_item_id.as_deref() {
         let replacement = port
             .replacement(replacement_work_item_id, executor)
@@ -175,68 +176,76 @@ async fn persist(
         }
     }
     match item.business_object_type.as_str() {
-        "integration_error_task" => {
-            let mut task = port
-                .error_task(&item.business_object_id, executor)
-                .await?
-                .ok_or_else(|| WorkflowError::NotFound("集成异常任务不存在".to_string()))?;
-            let registered_type = if task.error_class == ErrorClass::ResultUnknown {
-                erp_workflow::WorkItemType::IntegrationResultUnknown
-            } else {
-                erp_workflow::WorkItemType::BusinessException
-            };
-            if item.work_item_type != registered_type {
-                return Err(WorkflowError::ConflictError("任务类型与集成异常分类不一致，请刷新".to_string()));
-            }
-            task.transition(
-                ErrorTaskStatus::Closed,
-                Some(ResolutionType::Close),
-                Some(evidence_reference.to_string()),
-                closed_at,
-            )
-            .map_err(|error| map_service(Error::from(error)))?;
-            task.record_completed_by(actor_id.to_string())
-                .map_err(|error| map_service(Error::from(error)))?;
-            port.persist_task(&mut task, executor).await?;
-            Ok(())
-        },
-        "reconciliation_difference" => {
-            let difference_id = ReconciliationDifferenceId::new(item.business_object_id.clone());
-            port.difference(&item.business_object_id, executor)
-                .await?
-                .ok_or_else(|| WorkflowError::NotFound("对账差异不存在".to_string()))?;
-            let latest = port.latest(&difference_id, executor).await?;
-            if latest.as_ref().is_some_and(|resolution| resolution.resulting_status.is_terminal()) {
-                return Err(WorkflowError::ConflictError("对账差异已经关闭或形成正式结论".to_string()));
-            }
-            let resolution_no = W29CloseDecision::next_resolution_no(
-                latest.as_ref().map(|resolution| resolution.resolution_no),
-            )
-            .map_err(|error| map_service(Error::from(error)))?;
-            let resolution_id_digest = CommandFingerprint::from_parts([receipt_id.to_string()]);
-            let resolution = ReconciliationDifferenceResolution::new_close_evidence(
-                ReconciliationDifferenceResolutionId::new(format!(
-                    "w29-close-{}",
-                    resolution_id_digest.digest_hex()
-                )),
-                difference_id,
-                resolution_no,
-                if decision.replacement_work_item_id.is_some() {
-                    erp_integration::entity::integration_ops::ResolutionAction::CloseDuplicate
-                } else {
-                    erp_integration::entity::integration_ops::ResolutionAction::CloseMisrouted
-                },
-                erp_integration::entity::integration_ops::W29EvidenceReference::parse(evidence_reference)
-                    .map_err(|error| map_service(Error::from(error)))?,
-                actor_id.to_string(),
-                closed_at,
-            )
-            .map_err(|error| map_service(Error::from(error)))?;
-            port.persist_resolution(&resolution, executor).await?;
-            Ok(())
-        },
+        "integration_error_task" => close_error_task(port, &input, executor).await,
+        "reconciliation_difference" => close_difference(port, &input, executor).await,
         _ => Err(WorkflowError::BusinessLogicError("只有 W29 登记的异常对象允许受控关闭".to_string())),
     }
+}
+
+async fn close_error_task(
+    port: &impl W29ClosePort,
+    input: &W29CloseInput<'_>,
+    executor: &mut dyn Executor,
+) -> WorkflowResult<()> {
+    let W29CloseInput { item, evidence_reference, actor_id, closed_at, .. } = *input;
+    let mut task = port
+        .error_task(&item.business_object_id, executor)
+        .await?
+        .ok_or_else(|| WorkflowError::NotFound("集成异常任务不存在".to_string()))?;
+    let registered_type = if task.error_class == ErrorClass::ResultUnknown {
+        WorkItemType::IntegrationResultUnknown
+    } else {
+        WorkItemType::BusinessException
+    };
+    if item.work_item_type != registered_type {
+        return Err(WorkflowError::ConflictError("任务类型与集成异常分类不一致，请刷新".to_string()));
+    }
+    task.transition(
+        ErrorTaskStatus::Closed,
+        Some(ResolutionType::Close),
+        Some(evidence_reference.to_string()),
+        closed_at,
+    )
+    .map_err(|error| map_service(Error::from(error)))?;
+    task.record_completed_by(actor_id.to_string()).map_err(|error| map_service(Error::from(error)))?;
+    port.persist_task(&mut task, executor).await?;
+    Ok(())
+}
+
+async fn close_difference(
+    port: &impl W29ClosePort,
+    input: &W29CloseInput<'_>,
+    executor: &mut dyn Executor,
+) -> WorkflowResult<()> {
+    let W29CloseInput { item, decision, evidence_reference, actor_id, receipt_id, closed_at } = *input;
+    let difference_id = ReconciliationDifferenceId::new(item.business_object_id.clone());
+    port.difference(&item.business_object_id, executor)
+        .await?
+        .ok_or_else(|| WorkflowError::NotFound("对账差异不存在".to_string()))?;
+    let latest = port.latest(&difference_id, executor).await?;
+    if latest.as_ref().is_some_and(|resolution| resolution.resulting_status.is_terminal()) {
+        return Err(WorkflowError::ConflictError("对账差异已经关闭或形成正式结论".to_string()));
+    }
+    let resolution_no =
+        W29CloseDecision::next_resolution_no(latest.as_ref().map(|resolution| resolution.resolution_no))
+            .map_err(|error| map_service(Error::from(error)))?;
+    let resolution_id_digest = CommandFingerprint::from_parts([receipt_id.to_string()]);
+    let resolution = ReconciliationDifferenceResolution::new_close_evidence(
+        ReconciliationDifferenceResolutionId::new(format!("w29-close-{}", resolution_id_digest.digest_hex())),
+        difference_id,
+        resolution_no,
+        if decision.replacement_work_item_id.is_some() {
+            ResolutionAction::CloseDuplicate
+        } else {
+            ResolutionAction::CloseMisrouted
+        },
+        W29EvidenceReference::parse(evidence_reference).map_err(|error| map_service(Error::from(error)))?,
+        actor_id.to_string(),
+        closed_at,
+    )
+    .map_err(|error| map_service(Error::from(error)))?;
+    port.persist_resolution(&resolution, executor).await?;
+    Ok(())
 }
 
 #[cfg(test)]

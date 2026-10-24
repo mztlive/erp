@@ -1,10 +1,13 @@
+use std::collections::HashSet;
+
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use erp_core::ids::BackgroundJobId;
+use erp_core::ids::{BackgroundJobId, FileAssetId};
 use erp_import::repository::prelude::*;
 use erp_import::{
-    CreateLegacyImportBatchRequest, LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus,
-    LegacyImportBatchView, LegacyImportExt, LegacyImportRow, LegacyImportRowId,
+    CreateLegacyImportBatchRequest, ImportRowSpec, LegacyImportBatch, LegacyImportBatchData,
+    LegacyImportBatchId, LegacyImportBatchStatus, LegacyImportBatchView, LegacyImportExt, LegacyImportRow,
+    LegacyImportRowId, build_import_rows,
 };
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, FileAssetExt};
@@ -12,11 +15,11 @@ use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
-use super::ImportApplyService;
+use super::ImportApplyProcess;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl ImportApplyService {
+impl ImportApplyProcess {
     /// 构造导入批次详情视图，并补上同请求号的后台任务关联。
     ///
     /// # 参数
@@ -68,23 +71,7 @@ impl ImportApplyService {
 
         let id = LegacyImportBatchId::new(next_id());
         let rows = self.build_rows(&req, &id)?;
-        let batch = LegacyImportBatch::new(
-            id.clone(),
-            erp_import::LegacyImportBatchData {
-                batch_no: req.batch_no,
-                source_system_id: req.source_system_id,
-                source_object_set: req.source_object_set,
-                baseline_date: req.baseline_date,
-                import_rule_version: req.import_rule_version,
-                source_file_hmac: req.source_file_hmac,
-                status: LegacyImportBatchStatus::PendingValidation,
-                total_rows: rows.len() as u64,
-                success_rows: 0,
-                failed_rows: 0,
-                failure_code_summary: None,
-                confirmation_status_summary: None,
-            },
-        )?;
+        let batch = new_batch(req, id.clone(), rows.len())?;
         let background_job = BackgroundJob::for_legacy_import(
             BackgroundJobId::new(next_id()),
             &batch.batch_no,
@@ -109,7 +96,7 @@ impl ImportApplyService {
                     db.legacy_import().create_batch_with_rows(&batch_for_tx, &rows_for_tx, executor).await?;
                     db.background_jobs().create(&job_for_tx, executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    Ok::<(), Error>(())
                 })
             })
             .await?;
@@ -130,7 +117,7 @@ impl ImportApplyService {
     /// # 错误
     /// * `NotFound` - 资产引用不存在
     async fn ensure_file_assets_exist(&self, req: &CreateLegacyImportBatchRequest) -> Result<()> {
-        let labeled: [(&str, Option<&erp_core::ids::FileAssetId>); 3] = [
+        let labeled: [(&str, Option<&FileAssetId>); 3] = [
             ("成功白名单包", req.successful_sanitized_file_asset_id.as_ref()),
             ("成功 manifest", req.success_manifest_file_asset_id.as_ref()),
             ("失败诊断包", req.failure_diagnostic_file_asset_id.as_ref()),
@@ -149,7 +136,7 @@ impl ImportApplyService {
 
     /// 经领域行工厂装配导入行实体（INT-E24）。
     ///
-    /// Service 只预分配行 ID 并注入批次，字符串规范化与批内唯一判定由
+    /// Process 只预分配行 ID 并注入批次，字符串规范化与批内唯一判定由
     /// `erp_import::import_row_factory` 独占。
     ///
     /// # 参数
@@ -169,15 +156,39 @@ impl ImportApplyService {
         let specs = req
             .rows
             .iter()
-            .map(|row| erp_import::ImportRowSpec {
+            .map(|row| ImportRowSpec {
                 row_id: LegacyImportRowId::new(next_id()),
                 source_object_type: row.source_object_type.clone(),
                 source_row_key: row.source_row_key.clone(),
                 normalized_payload_reference: row.normalized_payload_reference.clone(),
             })
             .collect::<Vec<_>>();
-        erp_import::build_import_rows(batch_id, specs).map_err(Into::into)
+        build_import_rows(batch_id, specs).map_err(Into::into)
     }
+}
+
+fn new_batch(
+    req: CreateLegacyImportBatchRequest,
+    id: LegacyImportBatchId,
+    row_count: usize,
+) -> Result<LegacyImportBatch> {
+    Ok(LegacyImportBatch::new(
+        id,
+        LegacyImportBatchData {
+            batch_no: req.batch_no,
+            source_system_id: req.source_system_id,
+            source_object_set: req.source_object_set,
+            baseline_date: req.baseline_date,
+            import_rule_version: req.import_rule_version,
+            source_file_hmac: req.source_file_hmac,
+            status: LegacyImportBatchStatus::PendingValidation,
+            total_rows: row_count as u64,
+            success_rows: 0,
+            failed_rows: 0,
+            failure_code_summary: None,
+            confirmation_status_summary: None,
+        },
+    )?)
 }
 
 /// 按输入顺序定位首个缺失资产的字段标签（INT-R27 纯映射）。
@@ -198,10 +209,9 @@ impl ImportApplyService {
 /// # 约束
 /// 纯内存映射，不访问数据库；不解释软删除与缺失的区分（由仓储决定）。
 fn first_missing_asset_label(
-    labeled: &[(&str, Option<&erp_core::ids::FileAssetId>); 3],
-    missing: &[erp_core::ids::FileAssetId],
+    labeled: &[(&str, Option<&FileAssetId>); 3],
+    missing: &[FileAssetId],
 ) -> Option<String> {
-    use std::collections::HashSet;
     let missing_set = missing.iter().map(ToString::to_string).collect::<HashSet<_>>();
     for (label, id) in labeled {
         if let Some(id) = id

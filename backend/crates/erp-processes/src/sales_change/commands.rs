@@ -1,6 +1,7 @@
 //! 销售变更创建、启动、作废及撤回的跨域根流程。
 
 use application_core::AuditActor;
+use bpm::model::SubjectRef;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::BusinessDocumentId;
@@ -12,8 +13,12 @@ use erp_sales::dto::sales_review::{
 };
 use erp_sales::entity::sales_review::SalesChangeOrder;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
-use erp_sales::service::sales_review::{CreatedChangeWrite, SalesReviewService, latest_change_submission_no};
+use erp_sales::service::sales_review::{
+    CreatedChangeWrite, SalesChangeSubmissionWrite, SalesReviewService, latest_change_submission_no,
+};
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{
     BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
@@ -24,14 +29,16 @@ use erp_workflow::service::approval::execution::idempotency::normalize_idempoten
 use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use id_generator::next_id;
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SalesChangeProcess;
 use super::adapter::{
-    build_sales_change_snapshot, execute_sales_change_domain_action, require_frozen_binding,
-    sales_change_order_adapter, sales_change_order_object_readable, sales_change_order_subject_ref,
-    sales_change_responsible_org_id, sales_change_start_command, start_approval_command_kind,
+    SalesChangeOrderAdapter, build_sales_change_snapshot, execute_sales_change_domain_action,
+    require_frozen_binding, sales_change_order_adapter, sales_change_order_object_readable,
+    sales_change_order_subject_ref, sales_change_responsible_org_id, sales_change_start_command,
+    start_approval_command_kind,
 };
 use super::cancel_approval::{
     SalesChangeCancelPersistInput, build_sales_change_cancel_input, load_cancel_runtime,
@@ -291,8 +298,33 @@ impl SalesChangeProcess {
         change_order: SalesChangeOrder,
         idempotency_key: String,
         actor: &AuditActor,
-        adapter: super::adapter::SalesChangeOrderAdapter,
+        adapter: SalesChangeOrderAdapter,
     ) -> Result<SalesChangeOrderDetailView> {
+        let context = self.prepare_change_context(id, change_order, &idempotency_key, actor).await?;
+        let recovery_subject_version = context.sales_write.submission().submission_no;
+        let input = self.prepare_change_start(id, context, &idempotency_key, actor, adapter).await?;
+        let persisted = persist_sales_change_start(&self.db, input).await;
+        if let Err(error) = persisted {
+            if !error.command_may_have_committed() {
+                return Err(error);
+            }
+            self.recover_sales_change_start(id, recovery_subject_version, &idempotency_key, actor, error)
+                .await?;
+        }
+        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+            .sales_change_order_detail(id, actor)
+            .await
+            .map_err(crate::Error::from)
+    }
+
+    /// 在原读取位置准备领域提交与冻结快照，不执行写入。
+    async fn prepare_change_context(
+        &self,
+        id: &str,
+        change_order: SalesChangeOrder,
+        idempotency_key: &str,
+        actor: &AuditActor,
+    ) -> Result<SalesChangeApprovalContext> {
         let sales_order = self
             .db
             .sales_orders()
@@ -315,12 +347,27 @@ impl SalesChangeProcess {
             actor.id(),
             now,
         )?;
-        let start = sales_change_start_command(id, submission.submission_no, actor.id(), &idempotency_key);
+        let start = sales_change_start_command(id, submission.submission_no, actor.id(), idempotency_key);
         let _ = start_approval_command_kind(&start);
         let organization_id = sales_change_responsible_org_id(&sales_order.settlement_party_id)?;
+        Ok(SalesChangeApprovalContext { sales_write, subject, binding, now, snapshot, organization_id })
+    }
+
+    /// 从冻结定义生成启动计划及元数据，保留审批人重验和审计构造顺序。
+    async fn prepare_change_start(
+        &self,
+        id: &str,
+        context: SalesChangeApprovalContext,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        adapter: SalesChangeOrderAdapter,
+    ) -> Result<SalesChangeStartPersistInput> {
+        let SalesChangeApprovalContext { sales_write, subject, binding, now, snapshot, organization_id } =
+            context;
+        let submission = sales_write.submission();
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
         let existing_receipt =
-            load_start_receipt(&self.db, &subject, submission.submission_no, &idempotency_key).await?;
+            load_start_receipt(&self.db, &subject, submission.submission_no, idempotency_key).await?;
         let graph = resolve_start_approvers(
             &self.db,
             graph,
@@ -336,53 +383,26 @@ impl SalesChangeProcess {
             subject_version: submission.submission_no,
             actor_id: actor.id(),
             organization_id: &organization_id,
-            idempotency_key: &idempotency_key,
+            idempotency_key,
             receipt: existing_receipt,
             now,
         })?;
         let prepared = prepare_start(start_input)?;
-        let workflow_action = WorkflowAction::new(
-            WorkflowActionId::new(next_id()),
-            WorkflowActionData {
-                document_id: BusinessDocumentId::new(id.to_string()),
-                action_type: WorkflowActionType::Submit,
-                from_status: "DRAFT".to_string(),
-                to_status: "IN_APPROVAL".to_string(),
-                actor_id: actor.id().to_string(),
-                actor_role: adapter.owner_role.to_string(),
-                comment: None,
-            },
-        )?;
+        let workflow_action = submission_workflow_action(id, actor, adapter.owner_role)?;
         let audit =
             actor.clone().resource_log("sales_change_order.submit", "sales_change_order", id.to_string())?;
-        let recovery_subject_version = submission.submission_no;
-        let persisted = persist_sales_change_start(
-            &self.db,
-            SalesChangeStartPersistInput {
-                sales_write,
-                workflow_action,
-                snapshot_payload: snapshot,
-                prepared,
-                owner_role: adapter.owner_role,
-                organization_id,
-                now,
-                audit,
-                actor: actor.clone(),
-                rbac: self.require_rbac()?,
-            },
-        )
-        .await;
-        if let Err(error) = persisted {
-            if !error.command_may_have_committed() {
-                return Err(error);
-            }
-            self.recover_sales_change_start(id, recovery_subject_version, &idempotency_key, actor, error)
-                .await?;
-        }
-        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
-            .sales_change_order_detail(id, actor)
-            .await
-            .map_err(crate::Error::from)
+        Ok(SalesChangeStartPersistInput {
+            sales_write,
+            workflow_action,
+            snapshot_payload: snapshot,
+            prepared,
+            owner_role: adapter.owner_role,
+            organization_id,
+            now,
+            audit,
+            actor: actor.clone(),
+            rbac: self.require_rbac()?,
+        })
     }
 
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
@@ -405,30 +425,11 @@ impl SalesChangeProcess {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        let change = db
-                            .sales_change_orders()
-                            .find_by_id(&change_order_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-                        let sales_order = db
-                            .sales_orders()
-                            .find_by_id(&change.sales_order_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-                        let organization_id =
-                            sales_change_responsible_org_id(&sales_order.settlement_party_id)?;
-                        let _ = sales_change_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &change_order_id, executor)
-                            .await
-                            .map_err(crate::Error::from)?;
-                        let binding = require_frozen_binding(binding.as_ref())?;
-                        let subject = sales_change_order_subject_ref(&change_order_id)?;
-                        replay_sales_change_start_with_executor(
+                        replay_change_start(
                             &db,
-                            &subject,
+                            &change_order_id,
                             subject_version,
                             &idempotency_key,
-                            binding,
                             &actor_id,
                             executor,
                         )
@@ -564,4 +565,66 @@ async fn persist_bound_change_document(
     attach_published_binding(document, binding)?;
     db.business_documents().create(document, executor).await?;
     Ok(())
+}
+
+struct SalesChangeApprovalContext {
+    sales_write: SalesChangeSubmissionWrite,
+    subject: SubjectRef,
+    binding: ApprovalDefinitionBinding,
+    now: Instant,
+    snapshot: ApprovalSubjectSnapshotPayload,
+    organization_id: String,
+}
+
+/// 在单次恢复事务内查证原对象、冻结绑定和启动回执。
+async fn replay_change_start(
+    db: &Database,
+    change_order_id: &str,
+    subject_version: u32,
+    idempotency_key: &str,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let change = db
+        .sales_change_orders()
+        .find_by_id(change_order_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
+    let sales_order = db
+        .sales_orders()
+        .find_by_id(&change.sales_order_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+    let organization_id = sales_change_responsible_org_id(&sales_order.settlement_party_id)?;
+    let _ = sales_change_order_object_readable(&organization_id, actor_id)?;
+    let binding = find_approval_binding(db, change_order_id, executor).await.map_err(crate::Error::from)?;
+    let binding = require_frozen_binding(binding.as_ref())?;
+    let subject = sales_change_order_subject_ref(change_order_id)?;
+    replay_sales_change_start_with_executor(
+        db,
+        &subject,
+        subject_version,
+        idempotency_key,
+        binding,
+        actor_id,
+        executor,
+    )
+    .await
+}
+
+/// 构造本次提交的工作流元数据；不承载状态迁移规则。
+fn submission_workflow_action(id: &str, actor: &AuditActor, owner_role: &str) -> Result<WorkflowAction> {
+    WorkflowAction::new(
+        WorkflowActionId::new(next_id()),
+        WorkflowActionData {
+            document_id: BusinessDocumentId::new(id.to_string()),
+            action_type: WorkflowActionType::Submit,
+            from_status: "DRAFT".to_string(),
+            to_status: "IN_APPROVAL".to_string(),
+            actor_id: actor.id().to_string(),
+            actor_role: owner_role.to_string(),
+            comment: None,
+        },
+    )
+    .map_err(Error::from)
 }

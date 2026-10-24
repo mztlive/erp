@@ -12,10 +12,10 @@ use erp_supplier::{
 use erp_support::{FileAssetExt, PendingAttachmentBatch, SensitivityClass};
 use persistence_core::NoTransaction;
 
-use super::{SupplierProfileService, SupplierProfileWithAssetsResult};
+use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 use crate::{Error, Result};
 
-impl SupplierProfileService {
+impl SupplierProfileProcess {
     /// 事务失败时查询同幂等键结果；并发首请求已提交时返回该稳定结果。
     ///
     /// # 参数

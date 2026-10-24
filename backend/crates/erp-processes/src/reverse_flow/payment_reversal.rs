@@ -1,4 +1,6 @@
-use application_core::{AuditActor, CommandReceipt};
+mod commit;
+
+use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierAccountId, SupplierPaymentId};
@@ -6,7 +8,6 @@ use erp_finance::entity::payable::SupplierPaymentStatus;
 use erp_finance::repository::PayableExt;
 use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::dto::PaymentReversalView;
-use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::{
     CancelPaymentReversalApprovalRequest, CommitPaymentReversalRequest, CreatePaymentReversalRequest,
     SubmitPaymentReversalRequest,
@@ -43,13 +44,10 @@ use super::cancel_approval::{
 };
 use super::start_approval::{
     PaymentReversalStartInput, PaymentReversalStartPersistInput, ReversalSubmitReplayInput,
-    build_payment_reversal_start_input, load_bound_definition_graph_with_executor,
-    load_payment_reversal_start_receipt, load_start_graph, persist_payment_reversal_runtime,
+    build_payment_reversal_start_input, load_payment_reversal_start_receipt, load_start_graph,
     persist_payment_reversal_start, reversal_result_read_error,
 };
-use crate::adapters::workflow::approver_directory::resolve_approvers;
 use crate::audit::persist_log;
-use crate::reverse_flow::command_recovery::{commit_audits, recovered_resource, save_commit};
 use crate::{Error, Result};
 
 impl ReturnsProcess {
@@ -88,139 +86,6 @@ impl ReturnsProcess {
         )
         .await?;
         self.reads().payment_reversal_detail(&reversal.base.id).await.map_err(crate::Error::from)
-    }
-
-    /// 按原付款一次创建付款冲正并启动审批。
-    ///
-    /// 单据注册、定义绑定、冲正实体、审批快照、运行事实、入口任务和审计在同一
-    /// MongoDB 事务内完成。
-    ///
-    /// # 参数
-    /// * `req` - 一次创建并提交的请求。
-    /// * `actor` - 已通过鉴权的审计操作人。
-    ///
-    /// # 返回
-    /// 返回新建冲正单视图；同载荷命令已提交时返回已有冲正单视图。
-    ///
-    /// # 错误
-    /// 请求校验、命令收据、原付款、发布定义、审批启动或仓储写入失败时返回对应错误。
-    /// 提交结果未知时按同一命令回读，未确认则保留原错误。视图读取失败时返回对应错误。
-    pub async fn commit_payment_reversal(
-        &self,
-        req: CommitPaymentReversalRequest,
-        actor: &AuditActor,
-    ) -> Result<PaymentReversalView> {
-        req.validate()?;
-        let command_receipt = CommandReceipt::from_payload(
-            "payment-reversal-commit-",
-            actor.id(),
-            "payment_reversal.commit",
-            "payment_reversal",
-            &req.idempotency_key,
-            &req,
-        )?;
-        if let Some(reversal_id) = ReturnsCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command_receipt, &mut NoTransaction)
-            .await?
-        {
-            return self.reads().payment_reversal_detail(&reversal_id).await.map_err(crate::Error::from);
-        }
-        let (source_fact_id, source_version, mut reversal) =
-            self.payment_reversal_commit_source(&req, actor).await?;
-        let adapter = payment_reversal_adapter()?;
-        start_payment_reversal_approval(&mut reversal)?;
-        let id = reversal.base.id.clone();
-        let subject = payment_reversal_subject_ref(&id)?;
-        let (organization_id, supplier_id) =
-            load_payment_reversal_context(&self.db, &reversal.original_supplier_payment_id).await?;
-        let _ = payment_reversal_object_readable(&organization_id, actor.id())?;
-        let now = Instant::now();
-        let snapshot =
-            build_payment_reversal_snapshot(&reversal, &organization_id, &supplier_id, actor.id(), now)?;
-        let bind_command = BindPublishedDefinitionCommand {
-            document_type: DocumentType::PaymentReversal,
-            business_object_id: id.clone(),
-            business_object_version: reversal.base.version,
-            context: BindingRevalidationContext::new(organization_id.clone(), actor.id().to_string()),
-        };
-        let document =
-            new_registered_document(&id, DocumentType::PaymentReversal, reversal.reversal_no.clone())
-                .map_err(crate::Error::from)?;
-        let (create_audit, submit_audit) = commit_audits(actor, &command_receipt, &id)?;
-        let command = command_receipt.clone();
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let idempotency_key = req.idempotency_key;
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    validate_payment_reversal_source(&db, &source_fact_id, source_version, executor).await?;
-                    if let Some(existing_id) = ReturnsCommandReceiptService::new(db.clone())
-                        .committed_resource_id(&command, executor)
-                        .await?
-                    {
-                        return Ok::<Option<String>, crate::Error>(Some(existing_id));
-                    }
-                    let binding = persist_bound_payment_reversal_document(
-                        &db,
-                        &rbac,
-                        object_read.as_ref(),
-                        document,
-                        &bind_command,
-                        &actor_owned,
-                        executor,
-                    )
-                    .await?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, executor).await?;
-                    let graph = resolve_approvers(&db, graph, actor_owned.id(), executor).await?;
-                    let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
-                        graph,
-                        binding: &binding,
-                        subject,
-                        subject_version: reversal.approval_subject_version,
-                        actor_id: actor_owned.id(),
-                        organization_id: &organization_id,
-                        idempotency_key: &idempotency_key,
-                        receipt: None,
-                        now,
-                    })?;
-                    let prepared = prepare_start(start_input)?;
-                    ReturnsService::new(db.clone()).create_payment_reversal(&reversal, executor).await?;
-                    if let erp_workflow::service::approval::execution::PreparedExecution::Apply(writes) =
-                        prepared
-                    {
-                        persist_payment_reversal_runtime(
-                            &db,
-                            &writes,
-                            &snapshot,
-                            adapter.owner_role,
-                            &organization_id,
-                            now,
-                            executor,
-                        )
-                        .await?;
-                    }
-                    save_commit(&db, &command, &reversal.base.id, (&create_audit, &submit_audit), executor)
-                        .await?;
-                    Ok::<Option<String>, crate::Error>(None)
-                })
-            })
-            .await;
-        let detail_id = match transaction_result {
-            Ok(Some(existing_id)) => existing_id,
-            Ok(None) => id,
-            Err(error) => recovered_resource(
-                error,
-                ReturnsCommandReceiptService::new(self.db.clone())
-                    .committed_resource_id(&command_receipt, &mut NoTransaction)
-                    .await
-                    .map_err(Error::from),
-            )?,
-        };
-        self.reads().payment_reversal_detail(&detail_id).await.map_err(crate::Error::from)
     }
 
     /// 按原顺序读取原付款及版本，准备一次创建提交所需的冲正事实。

@@ -1,4 +1,5 @@
 //! 客户退款审批启动、精确授权回放、8次fresh恢复与撤回编排。
+use erp_returns::service::ReturnsService;
 use persistence_core::NoTransaction;
 
 use super::*;
@@ -97,26 +98,7 @@ impl ReturnsProcess {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        ensure_return_start_actor_active(&db, &rbac, &actor, executor).await?;
-                        let refund = erp_returns::service::ReturnsService::new(db.clone())
-                            .load_customer_refund(&refund_id, executor)
-                            .await?;
-                        let customer = db
-                            .customer_accounts()
-                            .find_by_id(&refund.customer_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-                        customer_refund_responsible_org_id(customer.party_id.as_ref())?;
-                        ensure_return_start_replay_authorized(
-                            &db,
-                            &rbac,
-                            &actor,
-                            DocumentType::CustomerRefund,
-                            "customer_refund:submit",
-                            &refund_id,
-                            executor,
-                        )
-                        .await?;
+                        authorized_customer_refund(&db, &rbac, &actor, &refund_id, executor).await?;
                         let binding = find_approval_binding(&db, &refund_id, executor)
                             .await
                             .map_err(crate::Error::from)?;
@@ -177,26 +159,7 @@ impl ReturnsProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_return_start_actor_active(&db, &rbac, &actor, executor).await?;
-                    let refund = erp_returns::service::ReturnsService::new(db.clone())
-                        .load_customer_refund(&refund_id, executor)
-                        .await?;
-                    let customer = db
-                        .customer_accounts()
-                        .find_by_id(&refund.customer_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-                    customer_refund_responsible_org_id(customer.party_id.as_ref())?;
-                    ensure_return_start_replay_authorized(
-                        &db,
-                        &rbac,
-                        &actor,
-                        DocumentType::CustomerRefund,
-                        "customer_refund:submit",
-                        &refund_id,
-                        executor,
-                    )
-                    .await?;
+                    let refund = authorized_customer_refund(&db, &rbac, &actor, &refund_id, executor).await?;
                     let binding =
                         find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
                     let binding = require_frozen_binding(binding.as_ref())?;
@@ -289,4 +252,33 @@ impl ReturnsProcess {
     async fn customer_responsible_org_id(&self, customer_id: &CustomerAccountId) -> Result<String> {
         load_customer_responsible_org_id(&self.db, customer_id).await
     }
+}
+
+/// 按原顺序重验账号、退款来源和提交权限，沿用调用方事务。
+async fn authorized_customer_refund(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    refund_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<CustomerRefund> {
+    ensure_return_start_actor_active(db, rbac, actor, executor).await?;
+    let refund = ReturnsService::new(db.clone()).load_customer_refund(refund_id, executor).await?;
+    let customer = db
+        .customer_accounts()
+        .find_by_id(&refund.customer_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
+    customer_refund_responsible_org_id(customer.party_id.as_ref())?;
+    ensure_return_start_replay_authorized(
+        db,
+        rbac,
+        actor,
+        DocumentType::CustomerRefund,
+        "customer_refund:submit",
+        refund_id,
+        executor,
+    )
+    .await?;
+    Ok(refund)
 }

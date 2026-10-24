@@ -8,13 +8,18 @@ use erp_core::ids::DeliveryId;
 use erp_fulfillment::dto::{DeliveryView, PostDeliveryRequest};
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine, DeliveryType, DeliveryUpdate};
 use erp_fulfillment::service::FulfillmentService;
+use erp_fulfillment::service::delivery_posting::supplier_purchase_source;
+use erp_inventory::service::fulfillment::delivery::{WarehouseShipmentLine, post_warehouse_ship_line};
 use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::FulfillmentProcess;
+use super::customer_acceptance::task::{CustomerAcceptanceTaskReason, ensure_customer_acceptance_task};
+use super::delivery_tracking::ensure_tracking_sources;
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
+use super::task::{FulfillmentTaskObject, complete_fulfillment_task};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -69,15 +74,14 @@ impl FulfillmentProcess {
                             executor,
                         )
                         .await?;
-                    super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor)
-                        .await?;
+                    ensure_tracking_sources(&db, &delivery, &lines, executor).await?;
                     let occurred_at = Instant::now();
                     let delivery_type = delivery.delivery_type;
                     let line_count = lines.len();
                     let mut posting =
                         DeliveryPosting { db: &db, delivery_id, delivery, lines, occurred_at, actor };
                     execute_posting(&mut posting, delivery_type, line_count, executor).await?;
-                    Ok::<Delivery, crate::Error>(posting.delivery)
+                    Ok::<Delivery, Error>(posting.delivery)
                 })
             })
             .await?;
@@ -137,54 +141,30 @@ impl PostingSteps for DeliveryPosting<'_> {
     async fn apply(&mut self, step: PostingStep, executor: &mut dyn Executor) -> Result<()> {
         match step {
             PostingStep::WarehouseLine(index) => {
-                let line = &self.lines[index];
-                erp_inventory::service::fulfillment::delivery::post_warehouse_ship_line(
-                    self.db,
-                    executor,
-                    &erp_inventory::service::fulfillment::delivery::WarehouseShipmentLine {
-                        delivery_id: self.delivery.base.id.clone(),
-                        line_id: line.base.id.clone(),
-                        sales_order_line_id: line.sales_order_line_id.clone(),
-                        stock_reservation_id: line.stock_reservation_id.clone(),
-                        warehouse_id: self.delivery.warehouse_id.clone(),
-                        quantity: line.quantity,
-                    },
-                    self.occurred_at,
-                    self.actor.id(),
-                )
-                .await?;
+                self.post_warehouse_line(index, executor).await?;
             },
             PostingStep::SupplierGate => {
-                let po =
-                    erp_fulfillment::service::delivery_posting::supplier_purchase_source(&self.delivery)?;
-                let po = self
-                    .db
-                    .purchase_orders()
-                    .find_by_id(po.as_ref(), executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
-                ensure_po_fulfillable(&po)?;
-                ensure_prepay_gate(self.db, executor, &po).await?;
+                self.ensure_supplier_gate(executor).await?;
             },
             PostingStep::Delivery => {
-                erp_fulfillment::service::FulfillmentService::new(self.db.clone())
+                FulfillmentService::new(self.db.clone())
                     .persist_posted_delivery(&mut self.delivery, self.occurred_at, executor)
                     .await?;
             },
             PostingStep::Task => {
-                super::task::complete_fulfillment_task(
+                complete_fulfillment_task(
                     self.db,
-                    super::task::FulfillmentTaskObject::Delivery(&self.delivery),
+                    FulfillmentTaskObject::Delivery(&self.delivery),
                     self.actor.id(),
                     executor,
                 )
                 .await?;
             },
             PostingStep::AcceptanceTask => {
-                super::customer_acceptance::task::ensure_customer_acceptance_task(
+                ensure_customer_acceptance_task(
                     self.db,
                     &self.delivery.sales_order_id,
-                    super::customer_acceptance::task::CustomerAcceptanceTaskReason::DeliveryAvailable,
+                    CustomerAcceptanceTaskReason::DeliveryAvailable,
                     executor,
                 )
                 .await?;
@@ -198,6 +178,41 @@ impl PostingSteps for DeliveryPosting<'_> {
                 persist_log(self.db, &audit, executor).await?;
             },
         }
+        Ok(())
+    }
+}
+
+impl DeliveryPosting<'_> {
+    async fn post_warehouse_line(&self, index: usize, executor: &mut dyn Executor) -> Result<()> {
+        let line = &self.lines[index];
+        post_warehouse_ship_line(
+            self.db,
+            executor,
+            &WarehouseShipmentLine {
+                delivery_id: self.delivery.base.id.clone(),
+                line_id: line.base.id.clone(),
+                sales_order_line_id: line.sales_order_line_id.clone(),
+                stock_reservation_id: line.stock_reservation_id.clone(),
+                warehouse_id: self.delivery.warehouse_id.clone(),
+                quantity: line.quantity,
+            },
+            self.occurred_at,
+            self.actor.id(),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn ensure_supplier_gate(&self, executor: &mut dyn Executor) -> Result<()> {
+        let po = supplier_purchase_source(&self.delivery)?;
+        let po = self
+            .db
+            .purchase_orders()
+            .find_by_id(po.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
+        ensure_po_fulfillable(&po)?;
+        ensure_prepay_gate(self.db, executor, &po).await?;
         Ok(())
     }
 }

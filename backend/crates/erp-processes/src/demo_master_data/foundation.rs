@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 
-use super::{DemoMasterDataService, spec};
+use super::{DemoMasterDataProcess, spec};
 use crate::{Error, Result};
 
 /// 岗位账号、部门与审批流程的准备结果。
@@ -26,7 +26,7 @@ pub struct DemoFoundationReport {
     pub notices: Vec<String>,
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 补齐岗位账号、部门、尚未发布的审批流程，以及缺失的默认责任规则。
     ///
     /// # 参数

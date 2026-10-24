@@ -14,12 +14,12 @@ use sha2::{Digest, Sha256};
 use super::plan::DemoStep;
 use super::record::DemoMasterRecord;
 use super::seed::SeedRequest;
-use super::{DemoMasterDataService, image_assets, prices};
+use super::{DemoMasterDataProcess, image_assets, prices};
 use crate::adapters::catalog_access;
 use crate::attachments::product_update_with_assets;
 use crate::{Error, Result};
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 仅给已登记的演示商品补齐图片及价格缺项；失败可再次生成继续。
     /// # 参数
     /// `actor` 为操作人；`step` 为种子；`records` 为实际 ID 登记。

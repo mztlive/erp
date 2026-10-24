@@ -19,7 +19,7 @@ use erp_finance::dto::payable::{
 use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
 use erp_processes::adapters::{funds_access_with_rbac, purchase_access};
 use erp_processes::commit_supplier_payment_with_assets;
-use erp_processes::finance_posting::payable::PayableService;
+use erp_processes::finance_posting::payable::PayableProcess;
 use erp_read_models::finance::funds_scope::{
     FundsScopedPage, FundsScopedResult, ScopedPayableAccountRow, ScopedPurchaseInvoiceAllocationRow,
     ScopedSupplierPaymentRow,
@@ -120,7 +120,7 @@ pub async fn payment_recipient_reveal(
     Json(req): Json<RevealPaymentRecipientRequest>,
 ) -> Result<PaymentRecipientRevealView> {
     let sensitive_data = state.sensitive_data();
-    let view = PayableService::new(state.db())
+    let view = PayableProcess::new(state.db())
         .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .reveal_payment_recipient(&id, req, &actor, sensitive_data.as_ref())
@@ -150,7 +150,7 @@ pub async fn payable_account_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePayableAccountRequest>,
 ) -> Result<PayableAccountView> {
-    let view = PayableService::new(state.db())
+    let view = PayableProcess::new(state.db())
         .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .create_payable_account(req, &actor)
@@ -241,7 +241,7 @@ pub async fn supplier_payment_merge_candidates(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PaymentMergeCandidatesParams>,
 ) -> Result<PaymentMergeCandidatesView> {
-    let view = PayableService::new(state.db())
+    let view = PayableProcess::new(state.db())
         .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .payment_merge_candidates(params, &actor)
@@ -308,7 +308,7 @@ pub async fn supplier_payment_bank_receipt(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> std::result::Result<Response, Error> {
-    let payable = PayableService::new(state.db())
+    let payable = PayableProcess::new(state.db())
         .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read());
     let snapshot = payable.supplier_payment_bank_receipt(&id, &actor).await?;
@@ -393,7 +393,7 @@ pub async fn purchase_invoice_allocation_post(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterPurchaseInvoiceRequest>,
 ) -> Result<PurchaseInvoiceRegisteredView> {
-    let view = PayableService::new(state.db())
+    let view = PayableProcess::new(state.db())
         .with_rbac(state.rbac())
         .with_object_read(state.approval_object_read())
         .register_purchase_invoice(req, &actor)

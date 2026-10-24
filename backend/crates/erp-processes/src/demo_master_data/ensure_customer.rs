@@ -13,11 +13,11 @@ use persistence_core::NoTransaction;
 use super::ensure_dictionary::{EnsureOutcome, step_label};
 use super::plan::DemoStep;
 use super::record::{self, DemoMasterRecord};
-use super::{DemoMasterDataService, lifecycle, spec};
+use super::{DemoMasterDataProcess, lifecycle, spec};
 use crate::adapters::scoped_customer_assignment_service;
 use crate::{Error, Result};
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 以销售岗位读取并执行客户种子。
     ///
     /// # 参数

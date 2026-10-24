@@ -13,6 +13,9 @@ use erp_supply::service::supplier_api::command::{
     CommandIdentity, capability_update_fingerprint, confirmation_fingerprint,
     map_capability_change_rejection, replay_confirmation,
 };
+use erp_supply::service::supplier_api::confirmation::{
+    BusinessConfirmationInput, PreparedBusinessConfirmation,
+};
 use erp_supply::service::supplier_api::context::{digest, map_command_shape_rejection};
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_support::BulkJobExt;
@@ -26,6 +29,15 @@ use super::receipt::{CommandReceiptWrite, persist_command_receipt};
 use crate::audit::persist_log;
 use crate::supply_execution::receipt::persist_supply_receipt;
 use crate::{Error, Result};
+struct CapabilityUpdate {
+    id: String,
+    command: UpdateSupplierCapabilitiesCommand,
+    change_set: CapabilityChangeSet,
+    actor: AuditActor,
+    audit_id: String,
+    fingerprint: String,
+}
+
 impl SupplierApiGovernanceProcess {
     /// 执行固定连接治理命令并返回可幂等重放的正式回执。
     ///
@@ -62,42 +74,32 @@ impl SupplierApiGovernanceProcess {
             command.check_type,
         )
         .map_err(map_command_shape_rejection)?;
+        self.dispatch_connection_command(id, prepared, identity, actor).await
+    }
+
+    async fn dispatch_connection_command(
+        &self,
+        id: &str,
+        prepared: PreparedSupplierConnectionCommand,
+        identity: CommandIdentity,
+        actor: &AuditActor,
+    ) -> Result<SupplierConnectionCommandResult> {
         match prepared {
             PreparedSupplierConnectionCommand::UpdateBusinessProfile {
                 expected_version,
                 payload_reference,
-            } => {
-                self.execute_reference_command(
-                    id,
-                    SupplierConnectionAction::UpdateBusinessProfile,
-                    &payload_reference,
-                    expected_version,
-                    identity,
-                    actor,
-                )
-                .await
-            },
-            PreparedSupplierConnectionCommand::BindEndpointReference {
+            }
+            | PreparedSupplierConnectionCommand::BindEndpointReference {
+                expected_version,
+                payload_reference,
+            }
+            | PreparedSupplierConnectionCommand::BindCredentialReference {
                 expected_version,
                 payload_reference,
             } => {
                 self.execute_reference_command(
                     id,
-                    SupplierConnectionAction::BindEndpointReference,
-                    &payload_reference,
-                    expected_version,
-                    identity,
-                    actor,
-                )
-                .await
-            },
-            PreparedSupplierConnectionCommand::BindCredentialReference {
-                expected_version,
-                payload_reference,
-            } => {
-                self.execute_reference_command(
-                    id,
-                    SupplierConnectionAction::BindCredentialReference,
+                    identity.action,
                     &payload_reference,
                     expected_version,
                     identity,
@@ -108,25 +110,9 @@ impl SupplierApiGovernanceProcess {
             PreparedSupplierConnectionCommand::RunHealthCheck { expected_version, check_type } => {
                 self.create_health_job(id, check_type, expected_version, identity, actor).await
             },
-            PreparedSupplierConnectionCommand::Enable { expected_version } => {
-                self.execute_status_command(
-                    id,
-                    SupplierConnectionAction::Enable,
-                    expected_version,
-                    identity,
-                    actor,
-                )
-                .await
-            },
-            PreparedSupplierConnectionCommand::Disable { expected_version, .. } => {
-                self.execute_status_command(
-                    id,
-                    SupplierConnectionAction::Disable,
-                    expected_version,
-                    identity,
-                    actor,
-                )
-                .await
+            PreparedSupplierConnectionCommand::Enable { expected_version }
+            | PreparedSupplierConnectionCommand::Disable { expected_version, .. } => {
+                self.execute_status_command(id, identity.action, expected_version, identity, actor).await
             },
             PreparedSupplierConnectionCommand::StartCatalogSync { expected_version } => {
                 self.create_catalog_job(id, expected_version, identity, actor).await
@@ -176,7 +162,7 @@ impl SupplierApiGovernanceProcess {
                 Box::pin(async move {
                     let prepared = SupplierApiService::new(db.clone())
                         .prepare_business_confirmation(
-                            erp_supply::service::supplier_api::confirmation::BusinessConfirmationInput {
+                            BusinessConfirmationInput {
                                 id: connection_id_value,
                                 command,
                                 operation_id: operation_id.clone(),
@@ -187,32 +173,7 @@ impl SupplierApiGovernanceProcess {
                             executor,
                         )
                         .await?;
-                    let erp_supply::service::supplier_api::confirmation::PreparedBusinessConfirmation {
-                        connection,
-                        capability,
-                        confirmation,
-                    } = prepared;
-                    let audit_id = format!("w20-audit-{}", digest(&[&confirmation.base.id]));
-                    let audit = actor.clone().resource_log_with_id(
-                        audit_id.clone(),
-                        "supplier_api_capability.confirm_requirement",
-                        "supplier_api_capability",
-                        capability.base.id.clone(),
-                        Some("供应商接口采购业务确认已登记".to_string()),
-                    )?;
-                    SupplierApiService::new(db.clone())
-                        .persist_business_confirmation(&confirmation, executor)
-                        .await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok(ConfirmBusinessCapabilityRequirementResult {
-                        outcome: SupplierCommandOutcome::Succeeded,
-                        operation_id,
-                        confirmation_id: confirmation.base.id,
-                        confirmation_version: confirmation.base.version,
-                        connection_version: connection.base.version,
-                        capability_version: capability.base.version,
-                        audit_event_id: audit_id,
-                    })
+                    persist_confirmation(&db, prepared, operation_id, &actor, executor).await
                 })
             })
             .await
@@ -259,40 +220,21 @@ impl SupplierApiGovernanceProcess {
             return Ok(result);
         }
 
+        let operation_id = command.operation_id.clone();
         let db = self.db.clone();
         let client = db.client().clone();
-        let actor = actor.clone();
-        let actor_tx = actor.clone();
-        let operation_id = command.operation_id.clone();
-        let connection_id_value = id.to_string();
-        let audit_id_tx = audit_id.clone();
+        let update = CapabilityUpdate {
+            actor: actor.clone(),
+            id: id.to_string(),
+            audit_id: audit_id.clone(),
+            command,
+            change_set,
+            fingerprint,
+        };
         let result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let connection = SupplierApiService::new(db.clone())
-                        .apply_capability_changes(
-                            &connection_id_value,
-                            command.expected_connection_version,
-                            change_set,
-                            actor_tx.id(),
-                            executor,
-                        )
-                        .await?;
-                    persist_capability_event(
-                        &db,
-                        &actor_tx,
-                        &audit_id_tx,
-                        &connection_id_value,
-                        &fingerprint,
-                        &command.idempotency_key,
-                        executor,
-                    )
-                    .await?;
-                    Ok::<u64, Error>(connection.base.version)
-                })
-            })
+            .with_transaction(move |executor| Box::pin(async move { update.apply(&db, executor).await }))
             .await?;
-        let detail = self.reads().connection_detail_for_actor(id, &actor).await?;
+        let detail = self.reads().connection_detail_for_actor(id, actor).await?;
         Ok(UpdateSupplierCapabilitiesResult {
             outcome: SupplierCommandOutcome::Succeeded,
             operation_id,
@@ -460,4 +402,59 @@ async fn persist_capability_event(
     .await?;
     persist_log(db, &audit, executor).await?;
     Ok(())
+}
+
+/// 在连接版本推进之后依次保存确认事实和审计，沿用调用方事务。
+async fn persist_confirmation(
+    db: &Database,
+    prepared: PreparedBusinessConfirmation,
+    operation_id: String,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<ConfirmBusinessCapabilityRequirementResult> {
+    let PreparedBusinessConfirmation { connection, capability, confirmation } = prepared;
+    let audit_id = format!("w20-audit-{}", digest(&[&confirmation.base.id]));
+    let audit = actor.clone().resource_log_with_id(
+        audit_id.clone(),
+        "supplier_api_capability.confirm_requirement",
+        "supplier_api_capability",
+        capability.base.id.clone(),
+        Some("供应商接口采购业务确认已登记".to_string()),
+    )?;
+    SupplierApiService::new(db.clone()).persist_business_confirmation(&confirmation, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(ConfirmBusinessCapabilityRequirementResult {
+        outcome: SupplierCommandOutcome::Succeeded,
+        operation_id,
+        confirmation_id: confirmation.base.id,
+        confirmation_version: confirmation.base.version,
+        connection_version: connection.base.version,
+        capability_version: capability.base.version,
+        audit_event_id: audit_id,
+    })
+}
+
+impl CapabilityUpdate {
+    async fn apply(self, db: &Database, executor: &mut dyn Executor) -> Result<u64> {
+        let connection = SupplierApiService::new(db.clone())
+            .apply_capability_changes(
+                &self.id,
+                self.command.expected_connection_version,
+                self.change_set,
+                self.actor.id(),
+                executor,
+            )
+            .await?;
+        persist_capability_event(
+            db,
+            &self.actor,
+            &self.audit_id,
+            &self.id,
+            &self.fingerprint,
+            &self.command.idempotency_key,
+            executor,
+        )
+        .await?;
+        Ok(connection.base.version)
+    }
 }

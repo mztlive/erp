@@ -1,4 +1,7 @@
+mod recovery;
+
 use application_core::AuditActor;
+use bpm::model::SubjectRef;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
@@ -19,13 +22,18 @@ use erp_procurement::service::purchase_order::line_input::build_change_submissio
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
+use erp_workflow::service::approval::execution::{
+    PreparedExecution, command_recovery_delay, prepare_cancel, prepare_start,
+};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use persistence_core::{Executor, NoTransaction, Transactional};
+use recovery::replay_change_start;
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
@@ -377,35 +385,56 @@ impl PurchaseOrderProcess {
         dispatch: ChangeStartDispatch<'_>,
         actor: &AuditActor,
     ) -> Result<PurchaseChangeSubmitResult> {
-        let ChangeStartDispatch { id, change, sales_order, prepared, adapter } = dispatch;
-        let subject = purchase_change_order_subject_ref(id)?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let context = self.prepare_change_start_context(&dispatch, actor).await?;
+        let prepared_exec = self.prepare_change_execution(&dispatch, &context, actor).await?;
+        self.persist_change_dispatch(dispatch, context, prepared_exec, actor).await
+    }
+
+    /// 按既有顺序读取冻结绑定、构造快照并校验启动组织。
+    async fn prepare_change_start_context(
+        &self,
+        dispatch: &ChangeStartDispatch<'_>,
+        actor: &AuditActor,
+    ) -> Result<PurchaseChangeApprovalContext> {
+        let subject = purchase_change_order_subject_ref(dispatch.id)?;
+        let binding = find_approval_binding(&self.db, dispatch.id, &mut NoTransaction)
+            .await
+            .map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let snapshot = build_purchase_change_snapshot(
-            &change,
-            &sales_order,
-            &prepared.submission,
-            &prepared.lines,
+            &dispatch.change,
+            &dispatch.sales_order,
+            &dispatch.prepared.submission,
+            &dispatch.prepared.lines,
             actor.id(),
             now,
         )?;
         let start = purchase_change_start_command(
-            id,
-            change.approval_subject_version,
+            dispatch.id,
+            dispatch.change.approval_subject_version,
             actor.id(),
-            &prepared.idempotency_key,
+            &dispatch.prepared.idempotency_key,
         );
         let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
-        let organization_id = purchase_change_responsible_org_id(&sales_order)?;
+        let organization_id = purchase_change_responsible_org_id(&dispatch.sales_order)?;
         let _ = purchase_change_order_object_readable(&organization_id, actor.id())?;
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
+        Ok(PurchaseChangeApprovalContext { subject, binding, now, snapshot, organization_id })
+    }
+
+    /// 从绑定图和候选收据准备启动，不提前执行持久化。
+    async fn prepare_change_execution(
+        &self,
+        dispatch: &ChangeStartDispatch<'_>,
+        context: &PurchaseChangeApprovalContext,
+        actor: &AuditActor,
+    ) -> Result<PreparedExecution> {
+        let graph = load_bound_definition_graph(&self.db, &context.binding).await?;
         let existing_receipt = load_start_receipt(
             &self.db,
-            &subject,
-            change.approval_subject_version,
-            &prepared.idempotency_key,
+            &context.subject,
+            dispatch.change.approval_subject_version,
+            &dispatch.prepared.idempotency_key,
         )
         .await?;
         let graph = resolve_start_approvers(
@@ -418,16 +447,28 @@ impl PurchaseOrderProcess {
         .await?;
         let start_input = build_purchase_change_start_input(PurchaseChangeStartInput {
             graph,
-            binding: &binding,
-            subject,
-            subject_version: change.approval_subject_version,
+            binding: &context.binding,
+            subject: context.subject.clone(),
+            subject_version: dispatch.change.approval_subject_version,
             actor_id: actor.id(),
-            organization_id: &organization_id,
-            idempotency_key: &prepared.idempotency_key,
+            organization_id: &context.organization_id,
+            idempotency_key: &dispatch.prepared.idempotency_key,
             receipt: existing_receipt,
-            now,
+            now: context.now,
         })?;
-        let prepared_exec = prepare_start(start_input)?;
+        Ok(prepare_start(start_input)?)
+    }
+
+    /// 准备审计后提交原写入计划，只有原持久化错误进入有界恢复。
+    async fn persist_change_dispatch(
+        &self,
+        dispatch: ChangeStartDispatch<'_>,
+        context: PurchaseChangeApprovalContext,
+        prepared_exec: PreparedExecution,
+        actor: &AuditActor,
+    ) -> Result<PurchaseChangeSubmitResult> {
+        let ChangeStartDispatch { id, change, prepared, adapter, .. } = dispatch;
+        let PurchaseChangeApprovalContext { snapshot, organization_id, now, .. } = context;
         let audit = actor.clone().resource_log(
             "purchase_change_order.submit",
             "purchase_change_order",
@@ -496,65 +537,15 @@ impl PurchaseOrderProcess {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        let change = db
-                            .purchase_change_orders()
-                            .find_by_id(&change_order_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
-                        let order = db
-                            .purchase_orders()
-                            .find_by_id(&change.purchase_order_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("原采购单不存在".to_string()))?;
-                        let sales_order = db
-                            .sales_orders()
-                            .find_by_id(&order.sales_order_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-                        let organization_id = purchase_change_responsible_org_id(&sales_order)?;
-                        let _ = purchase_change_order_object_readable(&organization_id, &actor_id)?;
-                        let binding = find_approval_binding(&db, &change_order_id, executor)
-                            .await
-                            .map_err(crate::Error::from)?;
-                        let binding = require_frozen_binding(binding.as_ref())?;
-                        let subject = purchase_change_order_subject_ref(&change_order_id)?;
-                        let Some(_) = replay_purchase_change_start_with_executor(
+                        replay_change_start(
                             &db,
-                            &subject,
+                            &change_order_id,
                             subject_version,
                             &idempotency_key,
-                            binding,
                             &actor_id,
                             executor,
                         )
-                        .await?
-                        else {
-                            return Ok(None);
-                        };
-                        if change.approval_subject_version != subject_version {
-                            return Err(Error::ConflictError(
-                                "采购变更启动结果与业务主题版本不一致".to_string(),
-                            ));
-                        }
-                        let submission_id = change.current_submission_id.as_ref().ok_or_else(|| {
-                            Error::ConflictError("采购变更启动结果缺少冻结提交".to_string())
-                        })?;
-                        let submission = db
-                            .purchase_change_submissions()
-                            .find_by_id(submission_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::ConflictError("采购变更冻结提交不存在".to_string()))?;
-                        if submission.purchase_change_order_id.as_ref() != change_order_id {
-                            return Err(Error::ConflictError("采购变更冻结提交与业务对象不一致".to_string()));
-                        }
-                        Ok(Some(PurchaseChangeSubmitResult {
-                            change_id: change.base.id.clone(),
-                            submission_id: submission.base.id.clone(),
-                            submission_no: submission.submission_no.clone(),
-                            status: change.stable.status.as_str().to_string(),
-                            lock_version: change.base.version,
-                            reference: format!("CS-{}", submission.submission_no),
-                        }))
+                        .await
                     })
                 })
                 .await;
@@ -737,4 +728,12 @@ async fn persist_bound_change_document(
     attach_published_binding(document, binding)?;
     db.business_documents().create(document, executor).await?;
     Ok(())
+}
+
+struct PurchaseChangeApprovalContext {
+    subject: SubjectRef,
+    binding: ApprovalDefinitionBinding,
+    now: Instant,
+    snapshot: ApprovalSubjectSnapshotPayload,
+    organization_id: String,
 }

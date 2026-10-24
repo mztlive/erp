@@ -1,22 +1,36 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::ids::SupplierOrderActionId;
-use erp_integration::entity::integration_ops::InboxMessageStatus;
+use erp_integration::entity::integration_ops::{InboxMessage, InboxMessageStatus};
 use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
-use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
-use erp_supply::entity::supplier_fulfillment::SupplierOrderActionType;
+use erp_supply::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
+use erp_supply::entity::supplier_fulfillment::{
+    SupplierFulfillmentOrder, SupplierOrderAction, SupplierOrderActionLine, SupplierOrderActionType,
+};
 use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
+use erp_supply::service::supplier_fulfillment::cancel::persist_after_sales;
 use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
+use super::execution::after_intent;
 use super::place::build_action_message;
 use crate::audit::persist_log;
 use crate::{Error, Result};
+
+#[derive(Clone)]
+struct AfterSalesIntent {
+    order: SupplierFulfillmentOrder,
+    action: SupplierOrderAction,
+    lines: Vec<SupplierOrderActionLine>,
+    message: InboxMessage,
+    connection: SupplierApiConnection,
+}
 
 impl SupplierFulfillmentProcess {
     /// 提交供应商取消（幂等键：「订单号 + CANCEL」，§6.19）。
@@ -74,7 +88,7 @@ impl SupplierFulfillmentProcess {
             SupplierOrderActionType::Refund => "refund",
             _ => "cancel",
         };
-        let mut order = self.require_scoped_order(id, actor, action_name, &mut NoTransaction).await?;
+        let order = self.require_scoped_order(id, actor, action_name, &mut NoTransaction).await?;
         let idempotency_key = format!("{}+{}", order.fulfillment_order_no, action_type.as_str(),);
         if let Some(existing) = self
             .db
@@ -83,20 +97,66 @@ impl SupplierFulfillmentProcess {
             .await?
         {
             tracing::info!(account = %actor.id(), order_id = %id, action_type = %action_type.as_str(), "售后动作幂等命中");
-            let lines = self
-                .db
-                .supplier_order_action_lines()
-                .find_lines_by_action_ids(
-                    &[SupplierOrderActionId::new(existing.base.id.as_str())],
-                    &mut NoTransaction,
-                )
-                .await?;
-            return Ok(SubmitActionResultView {
-                action: existing.into(),
-                lines: lines.into_iter().map(action_line_view).collect(),
-                order: order.into(),
-            });
+            return self.replayed_after_sales_result(order, existing).await;
         }
+        let mut intent = self.prepare_after_sales_intent(order, &req, &idempotency_key, action_type).await?;
+        let audit = actor.clone().resource_log(
+            "supplier_fulfillment.after_sales_action",
+            "supplier_order_action",
+            intent.action.base.id.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let mut intent_for_tx = intent.clone();
+        let intent_write = client.with_transaction(move |executor| {
+            Box::pin(async move {
+                intent_for_tx.persist(&db, executor).await?;
+                persist_log(&db, &audit, executor).await?;
+                Ok::<(), Error>(())
+            })
+        });
+        after_intent(intent_write, || async {
+            tracing::info!(account = %actor.id(), action_id = %intent.action.base.id, "售后动作事务已提交，开始事务外供应商派发");
+            self.settle_dispatch(
+                &mut intent.order, &mut intent.action, &mut intent.message, &intent.connection, actor,
+            )
+            .await
+        })
+        .await?;
+        Ok(SubmitActionResultView {
+            action: intent.action.into(),
+            lines: intent.lines.into_iter().map(action_line_view).collect(),
+            order: intent.order.into(),
+        })
+    }
+
+    async fn replayed_after_sales_result(
+        &self,
+        order: SupplierFulfillmentOrder,
+        action: SupplierOrderAction,
+    ) -> Result<SubmitActionResultView> {
+        let lines = self
+            .db
+            .supplier_order_action_lines()
+            .find_lines_by_action_ids(
+                &[SupplierOrderActionId::new(action.base.id.as_str())],
+                &mut NoTransaction,
+            )
+            .await?;
+        Ok(SubmitActionResultView {
+            action: action.into(),
+            lines: lines.into_iter().map(action_line_view).collect(),
+            order: order.into(),
+        })
+    }
+
+    async fn prepare_after_sales_intent(
+        &self,
+        mut order: SupplierFulfillmentOrder,
+        req: &SubmitAfterSalesActionRequest,
+        idempotency_key: &str,
+        action_type: SupplierOrderActionType,
+    ) -> Result<AfterSalesIntent> {
         let connection = self
             .db
             .supplier_api_connections()
@@ -114,48 +174,19 @@ impl SupplierFulfillmentProcess {
             _ => return Err(Error::BusinessLogicError("不支持的售后动作类型".to_string())),
         };
         ensure_capability(&capabilities, needed)?;
-        self.domain().ensure_action_lines(&order, &req).await?;
-        let mut action =
-            self.domain().build_after_sales_action(&order, &req, &idempotency_key, action_type)?;
-        let lines = self.domain().build_action_lines(&action, &req)?;
+        self.domain().ensure_action_lines(&order, req).await?;
+        let action = self.domain().build_after_sales_action(&order, req, idempotency_key, action_type)?;
+        let lines = self.domain().build_action_lines(&action, req)?;
         self.domain().advance_after_sales(&mut order, action_type)?;
-        let mut message = build_action_message(&action, &connection, InboxMessageStatus::Received)?;
-        let audit = actor.clone().resource_log(
-            "supplier_fulfillment.after_sales_action",
-            "supplier_order_action",
-            action.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut order_for_tx = order.clone();
-        let action_for_tx = action.clone();
-        let lines_for_tx = lines.clone();
-        let message_for_tx = message.clone();
-        let audit_for_tx = audit.clone();
-        super::execution::after_intent(client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    erp_supply::service::supplier_fulfillment::cancel::persist_after_sales(
-                        &db,
-                        &action_for_tx,
-                        &lines_for_tx,
-                        &mut order_for_tx,
-                        executor,
-                    )
-                    .await?;
-                    db.inbox_messages().create(&message_for_tx, executor).await?;
-                    persist_log(&db, &audit_for_tx, executor).await?;
-                    Ok::<(), crate::Error>(())
-                })
-            }), || async {
-        tracing::info!(account = %actor.id(), action_id = %action.base.id, "售后动作事务已提交，开始事务外供应商派发");
-        self.settle_dispatch(&mut order, &mut action, &mut message, &connection, actor)
-            .await
-        }).await?;
-        Ok(SubmitActionResultView {
-            action: action.into(),
-            lines: lines.into_iter().map(action_line_view).collect(),
-            order: order.into(),
-        })
+        let message = build_action_message(&action, &connection, InboxMessageStatus::Received)?;
+        Ok(AfterSalesIntent { order, action, lines, message, connection })
+    }
+}
+
+impl AfterSalesIntent {
+    async fn persist(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        persist_after_sales(db, &self.action, &self.lines, &mut self.order, executor).await?;
+        db.inbox_messages().create(&self.message, executor).await?;
+        Ok(())
     }
 }

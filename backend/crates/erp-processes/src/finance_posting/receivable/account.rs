@@ -7,11 +7,12 @@ use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderRevisionId
 use erp_finance::dto::receivable::CreateReceivableAccountRequest;
 use erp_finance::entity::receivable::{
     AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
-    ReceivableEntryData, ReceivableEntryType,
+    ReceivableEntryData, ReceivableEntryType, SalesBusinessTypeFact,
 };
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::zero_amount;
 use erp_read_models::finance::dto::ReceivableAccountView;
+use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
@@ -62,7 +63,7 @@ impl ReceivableProcess {
             sales_business_type_fact(sales_order.business_type),
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-        if sales_order.business_type == erp_sales::entity::sales_order::BusinessType::Voucher
+        if sales_order.business_type == BusinessType::Voucher
             && sales_order.stable.current_revision_id.as_deref()
                 != Some(req.source_sales_order_revision_id.as_str())
         {
@@ -71,42 +72,8 @@ impl ReceivableProcess {
         let account_id = ReceivableAccountId::new(next_id());
         let entry_id = ReceivableEntryId::new(next_id());
         let posted_at = Instant::now();
-        let account = ReceivableAccount::new(
-            account_id.clone(),
-            ReceivableAccountData {
-                sales_order_id: req.sales_order_id.clone().into(),
-                account_seq: req.account_seq,
-                customer_id: req.customer_id.clone(),
-                counterparty_party_id: req.counterparty_party_id.clone(),
-                source_sales_order_revision_id: SalesOrderRevisionId::new(
-                    &req.source_sales_order_revision_id,
-                ),
-                review_status,
-                reviewed_by: None,
-                reviewed_at: None,
-                review_evidence_reference: None,
-                gross_total: req.gross_total,
-                settled_total: zero_amount(),
-                invoiceable_total: req.invoiceable_total.unwrap_or(req.gross_total),
-                invoiced_total: zero_amount(),
-            },
-            actor.id(),
-        )?;
-        let entry = ReceivableEntry::new(
-            entry_id,
-            ReceivableEntryData {
-                receivable_account_id: account_id.clone(),
-                entry_type: ReceivableEntryType::Original,
-                direction: EntryDirection::Increase,
-                amount: account.gross_total,
-                due_date: req.due_date,
-                source_fact_type: "sales_order".to_string(),
-                source_document_id: req.sales_order_id.clone(),
-                source_revision_id: req.source_sales_order_revision_id,
-                source_sequence: req.source_sequence,
-                posted_at,
-            },
-        )?;
+        let account = new_account(&req, account_id.clone(), review_status, actor.id())?;
+        let entry = new_entry(&req, entry_id, account_id.clone(), &account, posted_at)?;
         let audit = actor.clone().resource_log(
             "receivable_account.create",
             "receivable_account",
@@ -120,27 +87,72 @@ impl ReceivableProcess {
                 Box::pin(async move {
                     db.receivable().create_receivable_with_entry(&account, &entry, executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    Ok::<(), Error>(())
                 })
             })
             .await?;
 
-        self.read.receivable_account_detail(&account_id).await.map_err(crate::Error::from)
+        self.read.receivable_account_detail(&account_id).await.map_err(Error::from)
     }
 }
 
 /// 把已持久化的销售业务类型显式映射为财务消费的稳定事实。
 ///
 /// 每个来源变体都有对应项，不用缺省分支改变复核政策。
-fn sales_business_type_fact(
-    value: erp_sales::entity::sales_order::BusinessType,
-) -> erp_finance::entity::receivable::SalesBusinessTypeFact {
+fn sales_business_type_fact(value: BusinessType) -> SalesBusinessTypeFact {
     match value {
-        erp_sales::entity::sales_order::BusinessType::GoodsService => {
-            erp_finance::entity::receivable::SalesBusinessTypeFact::GoodsService
-        },
-        erp_sales::entity::sales_order::BusinessType::Voucher => {
-            erp_finance::entity::receivable::SalesBusinessTypeFact::Voucher
-        },
+        BusinessType::GoodsService => SalesBusinessTypeFact::GoodsService,
+        BusinessType::Voucher => SalesBusinessTypeFact::Voucher,
     }
+}
+
+fn new_account(
+    req: &CreateReceivableAccountRequest,
+    account_id: ReceivableAccountId,
+    review_status: AccountReviewStatus,
+    actor_id: &str,
+) -> Result<ReceivableAccount> {
+    Ok(ReceivableAccount::new(
+        account_id,
+        ReceivableAccountData {
+            sales_order_id: req.sales_order_id.clone().into(),
+            account_seq: req.account_seq,
+            customer_id: req.customer_id.clone(),
+            counterparty_party_id: req.counterparty_party_id.clone(),
+            source_sales_order_revision_id: SalesOrderRevisionId::new(&req.source_sales_order_revision_id),
+            review_status,
+            reviewed_by: None,
+            reviewed_at: None,
+            review_evidence_reference: None,
+            gross_total: req.gross_total,
+            settled_total: zero_amount(),
+            invoiceable_total: req.invoiceable_total.unwrap_or(req.gross_total),
+            invoiced_total: zero_amount(),
+        },
+        actor_id,
+    )?)
+}
+
+fn new_entry(
+    req: &CreateReceivableAccountRequest,
+    entry_id: ReceivableEntryId,
+    account_id: ReceivableAccountId,
+    account: &ReceivableAccount,
+    posted_at: Instant,
+) -> Result<ReceivableEntry> {
+    Ok(ReceivableEntry::new(
+        entry_id,
+        ReceivableEntryData {
+            receivable_account_id: account_id,
+            entry_type: ReceivableEntryType::Original,
+            direction: EntryDirection::Increase,
+            amount: account.gross_total,
+            due_date: req.due_date,
+            source_fact_type: "sales_order".to_string(),
+            source_document_id: req.sales_order_id.clone(),
+            source_revision_id: req.source_sales_order_revision_id.clone(),
+            source_sequence: req.source_sequence,
+            posted_at,
+        },
+    )?)
 }

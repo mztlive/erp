@@ -206,7 +206,7 @@ async fn dispatch_inventory(
 ) -> ServiceResult<()> {
     match action {
         ApprovalDomainAction::StockAdjustmentPost => {
-            crate::inventory_adjustment::InventoryAdjustmentService::new(
+            crate::inventory_adjustment::InventoryAdjustmentProcess::new(
                 registry.db.clone(),
                 registry.rbac.clone(),
             )

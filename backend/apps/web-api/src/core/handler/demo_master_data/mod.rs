@@ -26,7 +26,7 @@ use crate::core::response::ApiResponse;
 /// # 返回
 /// 返回计划数量和当前数量。
 pub async fn demo_master_data_status(State(state): State<AppState>) -> Result<DemoStatus> {
-    let status = state.demo_master_data_service().status().await?;
+    let status = state.demo_master_data_process().status().await?;
     Ok(ApiResponse::ok_with_data(status))
 }
 
@@ -52,7 +52,7 @@ pub async fn demo_master_data_foundation(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
 ) -> Result<DemoFoundationReport> {
-    let report = state.demo_master_data_service().ensure_foundation(&actor).await?;
+    let report = state.demo_master_data_process().ensure_foundation(&actor).await?;
     Ok(ApiResponse::ok_with_data(report))
 }
 
@@ -77,7 +77,7 @@ pub async fn demo_master_data_apply(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<ApplyDemoMasterDataRequest>,
 ) -> Result<DemoChunkReport> {
-    let report = state.demo_master_data_service().apply_chunk(&actor, req.cursor).await?;
+    let report = state.demo_master_data_process().apply_chunk(&actor, req.cursor).await?;
     Ok(ApiResponse::ok_with_data(report))
 }
 
@@ -103,7 +103,7 @@ pub async fn demo_master_data_remove(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
 ) -> Result<DemoResetReport> {
-    let report = state.demo_master_data_service().reset_database(&actor).await?;
+    let report = state.demo_master_data_process().reset_database(&actor).await?;
     tracing::warn!(
         account = actor.account(),
         actor_id = actor.id(),

@@ -34,7 +34,7 @@ use persistence_core::{Executor, Transactional};
 
 use super::adapter::require_frozen_binding;
 use super::approval_prepare::{
-    ensure_stock_adjustment_submit_authorized_with_executor, load_bound_definition_graph_with_executor,
+    ensure_submit_authorized, load_bound_definition_graph_with_executor,
     revalidate_stock_adjustment_start_candidates,
 };
 use super::mapping::stock_adjustment_start_scopes;
@@ -162,14 +162,7 @@ async fn validate_stock_adjustment_start(
         input.expected_document_version,
         input.expected_subject_version,
     )?;
-    ensure_stock_adjustment_submit_authorized_with_executor(
-        db,
-        &input.rbac,
-        &current,
-        &input.actor,
-        executor,
-    )
-    .await?;
+    ensure_submit_authorized(db, &input.rbac, &current, &input.actor, executor).await?;
     let persisted_binding = load_approval_binding(db, &input.id, executor).await?;
     let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
     if persisted_binding != &input.binding {

@@ -19,7 +19,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::PayableService;
+use super::PayableProcess;
 use super::dto::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
 use crate::audit::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use crate::{Error, Result};
@@ -36,7 +36,7 @@ const PURCHASE_INVOICE_REGISTER: AuditAction = AuditAction {
     ],
 };
 
-impl PayableService {
+impl PayableProcess {
     /// 进项发票登记过账并分配（§8.3-2 事务不变量）。
     ///
     /// 在同一 Executor 内保存发票、分配、收票额度、独立财务回执及一次业务

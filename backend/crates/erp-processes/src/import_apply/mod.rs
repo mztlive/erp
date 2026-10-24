@@ -28,11 +28,11 @@ const IMPORT_EXECUTION_COMMAND_PREFIX: &str = "import-execution-command-";
 /// 跨域导入应用流程服务。
 ///
 /// 持有应用、执行与确认命令的根事务。
-pub struct ImportApplyService {
+pub struct ImportApplyProcess {
     db: Database,
 }
 
-impl ImportApplyService {
+impl ImportApplyProcess {
     /// 创建绑定到 `db` 的导入应用流程。
     ///
     /// # 参数

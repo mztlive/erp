@@ -3,10 +3,10 @@ use application_core::AuditActor;
 use erp_catalog::{CreateProductRequest, CreateVoucherCategoryRequest, ProductKind, VoucherSkuInput};
 use validator::Validate;
 
-use super::{DemoMasterDataService, spec};
+use super::{DemoMasterDataProcess, spec};
 use crate::{Error, Result};
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 按类型选择正式创建入口，返回可登记的商品 ID。
     /// # 参数
     /// `request` 已解析字典 ID，`actor` 为初始化操作人。

@@ -7,10 +7,10 @@ use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult, Sup
 use erp_supplier::repository::prelude::*;
 use persistence_core::NoTransaction;
 
-use super::SupplierProfileService;
+use super::SupplierProfileProcess;
 use crate::{Error, Result};
 
-impl SupplierProfileService {
+impl SupplierProfileProcess {
     /// 执行有界导入并返回每一行结果；不持久化上传中的明文敏感资料。
     ///
     /// # 参数

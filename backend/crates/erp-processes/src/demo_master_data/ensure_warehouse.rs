@@ -10,11 +10,11 @@ use persistence_core::NoTransaction;
 use super::ensure_dictionary::{EnsureOutcome, step_label};
 use super::plan::DemoStep;
 use super::record::{self, DemoMasterRecord};
-use super::{DemoMasterDataService, lifecycle};
+use super::{DemoMasterDataProcess, lifecycle};
 use crate::adapters::MongoWarehouseIdentity;
 use crate::{Error, Result};
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 解析仓储岗位后创建或恢复登记仓库。
     ///
     /// # 参数

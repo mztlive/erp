@@ -29,7 +29,7 @@ use validator::Validate;
 use super::dto::CommitSupplierPaymentRequest;
 use super::posting::post_supplier_payment;
 use super::{
-    PayableService, SupplierPaymentBankReceiptSnapshot, SupplierPaymentWithAssetsResult, payment_request,
+    PayableProcess, SupplierPaymentBankReceiptSnapshot, SupplierPaymentWithAssetsResult, payment_request,
 };
 use crate::adapters::{funds_access_with_rbac, purchase_access};
 use crate::audit::persist_log;
@@ -48,7 +48,7 @@ const PAYMENT_COMMIT: AuditAction = AuditAction {
     allowed_fields: &[AuditField { code: "amount", label: "付款金额", kind: AuditFieldKind::Amount }],
 };
 
-impl PayableService {
+impl PayableProcess {
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
     ///
     /// 完整对象资格、付款引用和文件资产在同一事务 Executor 读取，资格通过后

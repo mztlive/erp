@@ -1,10 +1,11 @@
 //! 跨域流程：审批分发、带审计的事务和命名用例。
 
 mod approval_start;
+mod document_object;
 mod errors;
+mod handover_common;
+pub(crate) mod sales_inquiry_expense;
 mod xlsx;
-
-pub use errors::{Error, Result};
 
 pub mod adapters;
 pub mod approval_dispatch;
@@ -14,26 +15,42 @@ pub mod audit;
 pub mod background;
 pub mod business_ownership;
 pub mod catalog;
+pub mod connectors;
 pub mod contract;
+pub mod contract_import;
 pub mod customer;
 pub mod customer_profile;
 pub mod data_transfer;
 pub mod delivery_coverage_refresh;
 pub mod demo_master_data;
 pub mod finance_posting;
+pub mod fulfillment_execution;
 pub mod import_apply;
+pub mod integration_resolution;
 pub mod inventory_adjustment;
 pub mod offering_handover;
+pub mod order_to_cash;
 pub mod party;
+pub mod procure_to_pay;
 pub mod product_handover;
 pub mod product_import;
+pub mod purchase_correspondence;
+pub mod reverse_flow;
+pub mod sales_change;
+pub mod sales_inquiry;
+pub mod sales_inquiry_import;
+pub mod sales_selection;
+pub mod sellable_projection_refresh;
 pub mod source_registry;
 pub mod supplier;
+pub mod supplier_connection_execution;
 pub mod supplier_delivery_template;
 pub mod supplier_import;
 pub mod supplier_portal;
 pub mod supplier_profile;
-pub use supplier_import::SupplierImportProcess;
+pub mod supply_execution;
+pub mod supply_governance;
+pub mod supply_settlement;
 pub mod warehouse;
 
 pub use approval_dispatch::ApprovalActionRegistry;
@@ -49,45 +66,20 @@ pub use catalog::{
 };
 pub use contract::upload_contract;
 pub use customer::delete_customer;
-pub use customer_profile::CustomerProfileService;
-pub use import_apply::ImportApplyService;
-pub use inventory_adjustment::InventoryAdjustmentService;
+pub use customer_profile::CustomerProfileProcess;
+pub(crate) use document_object::document_object_readable;
+pub use errors::{Error, Result};
+pub use import_apply::ImportApplyProcess;
+pub use inventory_adjustment::InventoryAdjustmentProcess;
 pub use offering_handover::{handover_candidates as offering_handover_candidates, handover_offering};
 pub use party::delete_party;
 pub use product_handover::{handover_candidates as product_handover_candidates, handover_product};
 pub use product_import::ProductImportProcess;
 pub use source_registry::create_source_system;
 pub use supplier::delete_supplier;
-pub use supplier_profile::{SupplierProfileService, SupplierProfileWithAssetsResult};
+pub use supplier_import::SupplierImportProcess;
+pub use supplier_profile::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 pub use warehouse::create_warehouse_sku_policy;
-
-mod document_object;
-mod handover_common;
-pub(crate) use document_object::document_object_readable;
-pub mod order_to_cash;
-pub mod procure_to_pay;
-pub mod reverse_flow;
-pub mod sales_change;
-pub mod sales_inquiry;
-pub(crate) mod sales_inquiry_expense;
-pub mod sales_selection;
-pub mod sellable_projection_refresh;
-
-pub mod fulfillment_execution;
-
-pub mod integration_resolution;
-pub mod supplier_connection_execution;
-
-pub mod supply_execution;
-pub mod supply_governance;
-pub mod supply_settlement;
 
 #[cfg(test)]
 mod test_indexes;
-
-pub mod connectors;
-pub mod contract_import;
-
-pub mod purchase_correspondence;
-
-pub mod sales_inquiry_import;

@@ -42,7 +42,7 @@ pub use service::{ApplyDemoMasterDataRequest, DemoChunkReport, DemoStatus};
 use storage::S3Storage;
 
 /// 演示主数据生成与删除。
-pub struct DemoMasterDataService {
+pub struct DemoMasterDataProcess {
     pub(super) db: mongodb::Database,
     pub(super) sensitive: Arc<SensitiveDataCodec>,
     pub(super) rbac: SharedRbacService,

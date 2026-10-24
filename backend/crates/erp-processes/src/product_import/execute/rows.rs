@@ -313,7 +313,6 @@ mod tests {
                     let source = JobRowSource::Legacy {
                         bytes: Arc::new(vec![1, 2, 3]),
                         parsed: ParsedProductSheet {
-                            sheet_name: "对内".into(),
                             rows: (1..=1000)
                                 .map(|row_number| ParsedProductRow {
                                     row_number,

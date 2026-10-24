@@ -5,15 +5,18 @@ use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::{ParticipantId, SubjectRef, Timestamp};
+use bpm::model::types::ApprovalCommandKind;
+use bpm::model::{ApprovalCommandReceipt, ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::receipt_capacity::reserve_receipt;
+use erp_read_models::workbench::capture_approval_display;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::authorization::{
     AuthorizationFailure, converge_node_eligibility,
 };
@@ -78,7 +81,9 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
     Ok(graph)
 }
 
-/// 读取同载荷启动收据；不存在时返回 `None`。
+/// 读取候选启动收据；不存在时返回 `None`。
+///
+/// 本步骤只按命令类型、作用域与幂等键查找；载荷一致性由后续启动校验承担。
 ///
 /// # 参数
 /// * `db` - 数据库
@@ -87,7 +92,7 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
 /// * `idempotency_key` - 调用方幂等键
 ///
 /// # 返回
-/// 已提交收据或空。
+/// 尚待启动校验确认载荷一致性的候选收据或空。
 ///
 /// # 错误
 /// 幂等键非法或仓储失败时返回错误。
@@ -96,11 +101,13 @@ pub(crate) async fn load_start_receipt(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
-) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+) -> Result<Option<ApprovalCommandReceipt>> {
     load_start_receipt_with_executor(db, subject, subject_version, idempotency_key, &mut NoTransaction).await
 }
 
-/// 使用调用方执行器读取同载荷启动收据。
+/// 使用调用方执行器读取候选启动收据。
+///
+/// 本步骤不比较载荷；调用方须通过后续启动校验确认候选收据与请求一致。
 ///
 /// # 参数
 /// * `db` - 数据库
@@ -110,7 +117,7 @@ pub(crate) async fn load_start_receipt(
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
-/// 已存在收据或空。
+/// 尚待启动校验确认载荷一致性的候选收据或空。
 ///
 /// # 错误
 /// 幂等键非法或仓储失败时返回错误。
@@ -120,7 +127,7 @@ pub(crate) async fn load_start_receipt_with_executor(
     subject_version: u32,
     idempotency_key: &str,
     executor: &mut dyn Executor,
-) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+) -> Result<Option<ApprovalCommandReceipt>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::CustomerReceipt);
     let scopes = start_scope_candidates(
@@ -132,12 +139,7 @@ pub(crate) async fn load_start_receipt_with_executor(
     for scope in scopes {
         let receipt = db
             .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                &scope,
-                &key,
-                executor,
-            )
+            .find_command_receipt(ApprovalCommandKind::StartApproval, &scope, &key, executor)
             .await?;
         if receipt.is_some() {
             return Ok(receipt);
@@ -418,7 +420,7 @@ pub(crate) struct RuntimeSubject<'a> {
 /// 计划缺少入口执行、快照构造、展示捕获或任一步写入失败时返回错误。
 pub(crate) async fn persist_runtime_writes(
     db: &Database,
-    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
+    writes: &PlannedWrites,
     subject: RuntimeSubject<'_>,
     owner_role: &str,
     organization_id: &str,
@@ -437,13 +439,7 @@ pub(crate) async fn persist_runtime_writes(
     )
     .await?;
     snapshot.display = Some(
-        erp_read_models::workbench::capture_approval_display(
-            db,
-            snapshot.document_type,
-            &snapshot.business_object_id,
-            executor,
-        )
-        .await?,
+        capture_approval_display(db, snapshot.document_type, &snapshot.business_object_id, executor).await?,
     );
     persist_start_snapshot(db, snapshot, executor).await?;
     persist_start_tasks(

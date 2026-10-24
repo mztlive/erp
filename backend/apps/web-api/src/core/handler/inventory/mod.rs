@@ -326,7 +326,7 @@ pub async fn stock_adjustment_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<StockAdjustmentDetailView> {
-    let view = state.inventory_adjustment_service().read_model().stock_adjustment_detail(&id, &actor).await?;
+    let view = state.inventory_adjustment_process().read_model().stock_adjustment_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -355,7 +355,7 @@ pub async fn stock_adjustment_create(
 ) -> std::result::Result<ApiResponse<StockAdjustmentDetailView>, ApprovalHttpError> {
     let req = req.into_service(&headers)?;
     let view = state
-        .inventory_adjustment_service()
+        .inventory_adjustment_process()
         .create_stock_adjustment(req, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -423,7 +423,7 @@ pub async fn stock_adjustment_submit(
 ) -> std::result::Result<ApiResponse<StockAdjustmentDetailView>, ApprovalHttpError> {
     let req = req.into_service(&headers)?;
     let view = state
-        .inventory_adjustment_service()
+        .inventory_adjustment_process()
         .submit_stock_adjustment(&id, req, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -450,7 +450,7 @@ pub async fn stock_adjustment_submit_result(
 ) -> std::result::Result<ApiResponse<StockAdjustmentDetailView>, ApprovalHttpError> {
     let query = query.into_service(&headers)?;
     let view = state
-        .inventory_adjustment_service()
+        .inventory_adjustment_process()
         .stock_adjustment_submit_result(&id, query, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
@@ -486,7 +486,7 @@ pub async fn stock_adjustment_cancel_approval(
 ) -> std::result::Result<ApiResponse<StockAdjustmentView>, ApprovalHttpError> {
     let command = req.into_service(&headers)?;
     let view = state
-        .inventory_adjustment_service()
+        .inventory_adjustment_process()
         .cancel_stock_adjustment_approval(&id, command, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;

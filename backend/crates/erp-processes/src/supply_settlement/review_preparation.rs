@@ -59,64 +59,81 @@ fn execute(
     differences: &[SupplierSettlementDifference],
     input: ReviewInput<'_>,
 ) -> Result<PreparedReview> {
-    let (payable, payable_entry, cost_entries, cost_delta, result_status) =
-        match input.request.decision.action {
-            dto::SettlementReviewAction::Confirm => {
-                let cost_delta = statement.ensure_confirmable(items, differences)?;
-                let payable_amount = statement.erp_amount.checked_add(cost_delta.gross);
-                let source = SettlementPayableSource {
-                    statement_no: statement.statement_no.clone(),
-                    supplier_id: statement.supplier_id.clone(),
-                    subject_hash: statement.subject_hash.clone(),
-                    period_end: statement.period_end,
-                };
-                let (account, entry) = finance.payable(&source, payable_amount, input.actor_id, input.at)?;
-                let cost_entries = finance.cost(&SettlementCostDeltaFact {
-                    gross: cost_delta.gross,
-                    net: cost_delta.net,
-                    tax: cost_delta.tax,
-                })?;
-                statement.record_review(
-                    SettlementReviewDecision::Confirm {
-                        payable_account_id: account.base.id.clone().into(),
-                        comment: input.request.decision.comment.clone(),
-                    },
-                    input.actor_id,
-                    input.at,
-                )?;
-                (
-                    Some(account),
-                    Some(entry),
-                    cost_entries,
-                    Some(cost_delta.gross),
-                    dto::SettlementReviewDecisionStatus::Confirmed,
-                )
-            },
-            dto::SettlementReviewAction::Reject => {
-                let return_status = if differences.is_empty() {
-                    SettlementStatus::Draft
-                } else {
-                    SettlementStatus::HasDifference
-                };
-                let Some(reason) = input.reject_reason else {
-                    return Err(Error::ValidationError("驳回必须携带原因代码".to_string()));
-                };
-                statement.record_review(
-                    SettlementReviewDecision::Reject {
-                        return_status,
-                        reason_code: reason,
-                        comment: input.request.decision.comment.clone(),
-                    },
-                    input.actor_id,
-                    input.at,
-                )?;
-                (None, None, Vec::new(), None, dto::SettlementReviewDecisionStatus::Rejected)
-            },
-        };
+    let prepared = match input.request.decision.action {
+        dto::SettlementReviewAction::Confirm => {
+            prepare_confirmation(finance, statement, items, differences, &input)?
+        },
+        dto::SettlementReviewAction::Reject => {
+            let return_status = if differences.is_empty() {
+                SettlementStatus::Draft
+            } else {
+                SettlementStatus::HasDifference
+            };
+            let Some(reason) = input.reject_reason else {
+                return Err(Error::ValidationError("驳回必须携带原因代码".to_string()));
+            };
+            statement.record_review(
+                SettlementReviewDecision::Reject {
+                    return_status,
+                    reason_code: reason,
+                    comment: input.request.decision.comment.clone(),
+                },
+                input.actor_id,
+                input.at,
+            )?;
+            PreparedReview {
+                payable: None,
+                payable_entry: None,
+                cost_entries: Vec::new(),
+                cost_delta: None,
+                result_status: dto::SettlementReviewDecisionStatus::Rejected,
+            }
+        },
+    };
     work_item.record_activity(input.actor_id, input.at)?;
     work_item.complete_by_domain_command(input.actor_id, input.at)?;
-    Ok(PreparedReview { payable, payable_entry, cost_entries, cost_delta, result_status })
+    Ok(prepared)
 }
+
+/// 确认先完成财务构造，再记录领域决定；成本构造失败仍不改变结算单和任务。
+fn prepare_confirmation(
+    finance: &mut impl FinancePreparation,
+    statement: &mut SupplierSettlementStatement,
+    items: &[SupplierSettlementItem],
+    differences: &[SupplierSettlementDifference],
+    input: &ReviewInput<'_>,
+) -> Result<PreparedReview> {
+    let cost_delta = statement.ensure_confirmable(items, differences)?;
+    let payable_amount = statement.erp_amount.checked_add(cost_delta.gross);
+    let source = SettlementPayableSource {
+        statement_no: statement.statement_no.clone(),
+        supplier_id: statement.supplier_id.clone(),
+        subject_hash: statement.subject_hash.clone(),
+        period_end: statement.period_end,
+    };
+    let (account, entry) = finance.payable(&source, payable_amount, input.actor_id, input.at)?;
+    let cost_entries = finance.cost(&SettlementCostDeltaFact {
+        gross: cost_delta.gross,
+        net: cost_delta.net,
+        tax: cost_delta.tax,
+    })?;
+    statement.record_review(
+        SettlementReviewDecision::Confirm {
+            payable_account_id: account.base.id.clone().into(),
+            comment: input.request.decision.comment.clone(),
+        },
+        input.actor_id,
+        input.at,
+    )?;
+    Ok(PreparedReview {
+        payable: Some(account),
+        payable_entry: Some(entry),
+        cost_entries,
+        cost_delta: Some(cost_delta.gross),
+        result_status: dto::SettlementReviewDecisionStatus::Confirmed,
+    })
+}
+
 /// 在变更结算状态与完成任务之前构造应付和成本。
 ///
 /// # 参数

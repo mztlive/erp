@@ -4,7 +4,7 @@ use application_core::AuditActor;
 use persistence_core::DatabaseReset;
 use serde::Serialize;
 
-use super::DemoMasterDataService;
+use super::DemoMasterDataProcess;
 use crate::{Error, Result};
 
 /// 全库重置结果，不提供继续删除的分批游标。
@@ -14,7 +14,7 @@ pub struct DemoResetReport {
     pub deleted_documents: u64,
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 清空配置数据库，仅原样保留 admin 和必要超管授权。
     /// # 参数
     /// `actor` 必须是具有内建超管授权的 admin 本人。

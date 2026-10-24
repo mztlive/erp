@@ -1,6 +1,8 @@
+mod commit;
+mod prepare;
+
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use erp_core::common::time::Instant;
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_fulfillment::{
@@ -8,28 +10,42 @@ use erp_supply::dto::supplier_fulfillment::{
     SupplierOrderInvestigationOutcome, SupplierOrderInvestigationResultStatus,
     SupplierOrderObjectInvestigationCommand, SupplierOrderTaskInvestigationCommand,
 };
-use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
-use erp_supply::repository::prelude::*;
-use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
-use erp_supply::service::supplier_fulfillment::place::ensure_capability;
+use erp_supply::repository::SupplierFulfillmentExt;
+use erp_supply::service::supplier_fulfillment::investigate::{
+    InvestigationEvidenceRecord, InvestigationFinding, InvestigationSubject, PreparedInvestigation,
+    bounded_prepared_investigation, investigation_evidence_record, parse_investigation_evidence,
+};
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use erp_workflow::repository::prelude::*;
+use erp_workflow::repository::prelude::WorkItemRepositoryExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use self::commit::InvestigationCommit;
+use super::dto::{SupplierOrderInvestigationResultView, SupplierOrderInvestigationWorkItemView};
+use super::execution::{recover_final_result, reuse_or_prepare};
 use super::receipt::{
     InvestigationReceipt, parse_positive_version, persist_supply_receipt, serialized_fingerprint,
     stable_digest, stable_evidence_id, stable_internal_idempotency_key,
 };
 use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
-use crate::adapters::workflow::work_item_service;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
 const INVESTIGATION_COMMAND_PREFIX: &str = "w26-investigation-";
+
+type InvestigationCommitResult =
+    (SupplierFulfillmentOrder, SupplierOrderAction, InvestigationEvidenceRecord, Option<u64>);
+
+#[derive(Clone)]
+struct InvestigationIdentity {
+    command_id: String,
+    fingerprint: String,
+    evidence_id: String,
+    evidence_idempotency_key: String,
+}
 
 #[derive(Debug, Clone)]
 struct InvestigationCommandContext {
@@ -174,148 +190,20 @@ impl SupplierFulfillmentProcess {
         fingerprint: String,
         actor: &AuditActor,
     ) -> Result<SupplierOrderInvestigationResultView> {
-        let evidence_id = stable_evidence_id("w26e", &command_id);
-        let evidence_idempotency_key = stable_internal_idempotency_key("w26e", &command_id);
-        let existing_prepared = self
-            .ensure_investigation_intent(&context, &evidence_id, &evidence_idempotency_key, actor)
-            .await?;
-        let prepared = super::execution::reuse_or_prepare(existing_prepared, || async {
-            let prepared = bounded_prepared_investigation(self.prepare_investigation(&context, actor).await?);
-            self.persist_prepared_investigation(&context, &evidence_id, &evidence_idempotency_key, prepared)
-                .await
-        })
-        .await?;
-        let context_for_tx = context.clone();
-        let prepared_for_tx = prepared.clone();
-        let actor_id = actor.id().to_string();
-        let actor_for_tx = actor.clone();
-        let rbac_for_tx = crate::adapters::identity::shared_rbac_service(self.db.clone());
-        let command_id_for_tx = command_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let evidence_id_for_tx = evidence_id.clone();
-        let evidence_idempotency_key_for_tx = evidence_idempotency_key.clone();
+        let identity = InvestigationIdentity {
+            evidence_id: stable_evidence_id("w26e", &command_id),
+            evidence_idempotency_key: stable_internal_idempotency_key("w26e", &command_id),
+            command_id,
+            fingerprint,
+        };
+        let prepared = self.prepare_investigation_result(&context, &identity, actor).await?;
+        let commit = InvestigationCommit::new(&self.db, &context, &identity, prepared, actor);
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let mut order = db
-                        .supplier_fulfillment_orders()
-                        .find_by_id(&context_for_tx.order_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    order.ensure_version(context_for_tx.expected_order_version).map_err(|_| {
-                        Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
-                    })?;
-                    let mut target_action = db
-                        .supplier_order_actions()
-                        .find_by_id(&context_for_tx.target_action_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
-                    target_action
-                        .ensure_original_for_order(&order.base.id)
-                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-                    let investigated_order_version = order.base.version;
-                    if context_for_tx.task.is_none() {
-                        ensure_no_active_w26_task(&db, &order.base.id, executor).await?;
-                    }
-                    if context_for_tx.action == SupplierOrderInvestigationAction::Replay {
-                        ensure_replay_safe(&db, &order, &target_action, executor).await?;
-                    }
-
-                    let original_order = order.clone();
-                    let original_target = target_action.clone();
-                    let finding = apply_prepared_investigation(
-                        &context_for_tx.subject(),
-                        &prepared_for_tx,
-                        &mut order,
-                        &mut target_action,
-                    )?;
-                    if order != original_order {
-                        persist_order(&db, &mut order, executor).await?;
-                    }
-                    if target_action != original_target {
-                        persist_action(&db, &mut target_action, executor).await?;
-                    }
-
-                    let (evidence_record, response_summary) =
-                        serialize_investigation_record(&context_for_tx.subject(), &target_action, &finding)?;
-                    let mut evidence = db
-                        .supplier_order_actions()
-                        .find_by_id(&evidence_id_for_tx, executor)
-                        .await?
-                        .ok_or_else(|| Error::Internal("供应商调查意图记录不存在".to_string()))?;
-                    validate_investigation_intent(
-                        &evidence,
-                        &context_for_tx.subject(),
-                        &evidence_idempotency_key_for_tx,
-                    )?;
-                    let durable = parse_prepared_investigation(&evidence, &context_for_tx.subject())?;
-                    if durable != prepared_for_tx {
-                        return Err(Error::ConflictError(
-                            "供应商调查结果已由同一命令的另一执行确定".to_string(),
-                        ));
-                    }
-                    finish_evidence(&mut evidence, finding.outcome, response_summary)?;
-                    persist_action(&db, &mut evidence, executor).await?;
-
-                    let task_version = if let Some(task_context) = &context_for_tx.task {
-                        let mut work_item = db
-                            .work_items()
-                            .find_by_id(&task_context.work_item_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-                        validate_w26_task(
-                            &work_item,
-                            &order.base.id,
-                            task_context.expected_task_version,
-                            &task_context.expected_subject_version,
-                            &actor_id,
-                        )?;
-                        ensure_task_subject_matches_order(
-                            &work_item,
-                            &task_context.expected_subject_version,
-                            investigated_order_version,
-                        )?;
-                        ensure_task_actor_eligible(&db, &work_item, &actor_id, executor).await?;
-                        work_item_service(db.clone(), rbac_for_tx.clone())
-                            .ensure_domain_decision_access(&actor_for_tx, &work_item, executor)
-                            .await?;
-                        work_item.subject_version = order.base.version.to_string();
-                        work_item.record_activity(&actor_id, Instant::now())?;
-                        db.work_items().update(&mut work_item, executor).await?;
-                        Some(work_item.base.version)
-                    } else {
-                        None
-                    };
-                    persist_investigation_result(
-                        InvestigationWrite {
-                            db: &db,
-                            order: &order,
-                            evidence: &evidence,
-                            context: &context_for_tx,
-                            actor: &actor_for_tx,
-                            command_id: &command_id_for_tx,
-                            fingerprint: &fingerprint_for_tx,
-                            task_version,
-                        },
-                        executor,
-                    )
-                    .await?;
-                    Ok::<
-                        (
-                            SupplierFulfillmentOrder,
-                            SupplierOrderAction,
-                            InvestigationEvidenceRecord,
-                            Option<u64>,
-                        ),
-                        crate::Error,
-                    >((order, evidence, evidence_record, task_version))
-                })
-            })
+            .with_transaction(move |executor| Box::pin(async move { commit.apply(&db, executor).await }))
             .await;
-
-        super::execution::recover_final_result(
+        recover_final_result(
             transaction_result.map(|(order, evidence, record, task_version)| {
                 investigation_result(
                     order,
@@ -327,14 +215,11 @@ impl SupplierFulfillmentProcess {
             }),
             || {
                 self.replay_investigation(
-                    &command_id,
-                    &fingerprint,
+                    &identity.command_id,
+                    &identity.fingerprint,
                     &context.operation_id,
                     context.task.as_ref(),
-                    context
-                        .task
-                        .as_ref()
-                        .map_or(context.order_id.as_str(), |task| task.work_item_id.as_str()),
+                    context.scope_id(),
                     (actor.id(), &context.idempotency_key),
                 )
             },
@@ -342,210 +227,18 @@ impl SupplierFulfillmentProcess {
         .await
     }
 
-    /// 在任何供应商查询或重放之前原子登记稳定调查意图。
-    async fn ensure_investigation_intent(
+    async fn prepare_investigation_result(
         &self,
         context: &InvestigationCommandContext,
-        evidence_id: &str,
-        evidence_idempotency_key: &str,
-        actor: &AuditActor,
-    ) -> Result<Option<PreparedInvestigation>> {
-        let context = context.clone();
-        let evidence_id = evidence_id.to_string();
-        let evidence_idempotency_key = evidence_idempotency_key.to_string();
-        let actor = actor.clone();
-        let actor_id = actor.id().to_string();
-        let rbac = crate::adapters::identity::shared_rbac_service(self.db.clone());
-        let db = self.db.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let order = db
-                        .supplier_fulfillment_orders()
-                        .find_by_id(&context.order_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    order.ensure_version(context.expected_order_version).map_err(|_| {
-                        Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
-                    })?;
-                    let target_action = db
-                        .supplier_order_actions()
-                        .find_by_id(&context.target_action_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
-                    target_action
-                        .ensure_original_for_order(&order.base.id)
-                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-                    if let Some(task_context) = &context.task {
-                        let work_item = db
-                            .work_items()
-                            .find_by_id(&task_context.work_item_id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-                        validate_w26_task(
-                            &work_item,
-                            &order.base.id,
-                            task_context.expected_task_version,
-                            &task_context.expected_subject_version,
-                            &actor_id,
-                        )?;
-                        ensure_task_subject_matches_order(
-                            &work_item,
-                            &task_context.expected_subject_version,
-                            order.base.version,
-                        )?;
-                        ensure_task_actor_eligible(&db, &work_item, &actor_id, executor).await?;
-                        work_item_service(db.clone(), rbac.clone())
-                            .ensure_domain_decision_access(&actor, &work_item, executor)
-                            .await?;
-                    } else {
-                        ensure_no_active_w26_task(&db, &order.base.id, executor).await?;
-                    }
-                    if context.action == SupplierOrderInvestigationAction::Replay {
-                        ensure_replay_safe(&db, &order, &target_action, executor).await?;
-                    }
-
-                    if let Some(existing) =
-                        db.supplier_order_actions().find_by_id(&evidence_id, executor).await?
-                    {
-                        validate_investigation_intent(
-                            &existing,
-                            &context.subject(),
-                            &evidence_idempotency_key,
-                        )?;
-                        return Ok(existing
-                            .response_summary
-                            .as_deref()
-                            .map(|_| parse_prepared_investigation(&existing, &context.subject()))
-                            .transpose()?);
-                    }
-
-                    let intent = prepare_intent(
-                        &context.subject(),
-                        evidence_id,
-                        evidence_idempotency_key,
-                        order.base.id.as_str(),
-                    )?;
-                    create_action(&db, &intent, executor).await?;
-                    Ok::<Option<PreparedInvestigation>, Error>(None)
-                })
-            })
-            .await
-    }
-
-    /// 将事务外网关结果先持久化，再进入可能因任务或对象 CAS 失败的领域结算事务。
-    async fn persist_prepared_investigation(
-        &self,
-        context: &InvestigationCommandContext,
-        evidence_id: &str,
-        evidence_idempotency_key: &str,
-        prepared: PreparedInvestigation,
-    ) -> Result<PreparedInvestigation> {
-        let context = context.clone();
-        let evidence_id = evidence_id.to_string();
-        let evidence_idempotency_key = evidence_idempotency_key.to_string();
-        let prepared_for_tx = prepared.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let mut evidence = db
-                        .supplier_order_actions()
-                        .find_by_id(&evidence_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::Internal("供应商调查意图记录不存在".to_string()))?;
-                    validate_investigation_intent(&evidence, &context.subject(), &evidence_idempotency_key)?;
-                    if evidence.response_summary.is_some() {
-                        return Ok(parse_prepared_investigation(&evidence, &context.subject())?);
-                    }
-                    prepare_durable_evidence(&mut evidence, &context.subject(), &prepared_for_tx)?;
-                    persist_action(&db, &mut evidence, executor).await?;
-                    Ok::<PreparedInvestigation, Error>(prepared_for_tx)
-                })
-            })
-            .await
-    }
-
-    async fn prepare_investigation(
-        &self,
-        context: &InvestigationCommandContext,
+        identity: &InvestigationIdentity,
         actor: &AuditActor,
     ) -> Result<PreparedInvestigation> {
-        let order = self.load_order(&context.order_id).await?;
-        order
-            .ensure_version(context.expected_order_version)
-            .map_err(|_| Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string()))?;
-        let target_action = self
-            .db
-            .supplier_order_actions()
-            .find_by_id(&context.target_action_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
-        target_action
-            .ensure_original_for_order(&order.base.id)
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-        if let Some(task_context) = &context.task {
-            let work_item = self
-                .db
-                .work_items()
-                .find_by_id(&task_context.work_item_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-            validate_w26_task(
-                &work_item,
-                &order.base.id,
-                task_context.expected_task_version,
-                &task_context.expected_subject_version,
-                actor.id(),
-            )?;
-            ensure_task_subject_matches_order(
-                &work_item,
-                &task_context.expected_subject_version,
-                order.base.version,
-            )?;
-            ensure_task_actor_eligible(&self.db, &work_item, actor.id(), &mut NoTransaction).await?;
-        } else {
-            ensure_no_active_w26_task(&self.db, &order.base.id, &mut NoTransaction).await?;
-        }
-
-        if context.action == SupplierOrderInvestigationAction::QueryResult {
-            if let Some(resolution) = order.verified_resolution(&target_action).map(Into::into) {
-                return Ok(PreparedInvestigation::PersistedTerminal(resolution));
-            }
-        } else {
-            ensure_replay_safe(&self.db, &order, &target_action, &mut NoTransaction).await?;
-        }
-
-        let connection = self
-            .db
-            .supplier_api_connections()
-            .find_by_id(&order.connection_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商连接不存在".to_string()))?;
-        if !connection.is_active() {
-            return Err(Error::BusinessLogicError("供应商连接未启用".to_string()));
-        }
-        let capabilities = self
-            .db
-            .supplier_api_capabilities()
-            .find_capabilities_by_connection(&order.connection_id, &mut NoTransaction)
-            .await?;
-        match context.action {
-            SupplierOrderInvestigationAction::QueryResult => {
-                ensure_capability(&capabilities, SupplierApiCapabilityCode::Query)?;
-                Ok(PreparedInvestigation::Queried(
-                    self.gateway.investigate(&target_action, &order, &connection).await,
-                ))
-            },
-            SupplierOrderInvestigationAction::Replay => {
-                ensure_capability(&capabilities, capability_for_action(target_action.action_type)?)?;
-                Ok(PreparedInvestigation::Replayed(
-                    self.gateway.dispatch(&target_action, &order, &connection).await,
-                ))
-            },
-        }
+        let existing = self.ensure_investigation_intent(context, identity, actor).await?;
+        reuse_or_prepare(existing, || async {
+            let prepared = bounded_prepared_investigation(self.prepare_investigation(context, actor).await?);
+            self.persist_prepared_investigation(context, identity, prepared).await
+        })
+        .await
     }
 
     async fn replay_investigation(
@@ -752,11 +445,11 @@ fn investigation_command_id(actor_id: &str, action: &str, object_id: &str, key: 
     )
 }
 
-use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
-use erp_supply::service::supplier_fulfillment::investigate::*;
-
-use super::dto::{SupplierOrderInvestigationResultView, SupplierOrderInvestigationWorkItemView};
 impl InvestigationCommandContext {
+    fn scope_id(&self) -> &str {
+        self.task.as_ref().map_or(self.order_id.as_str(), |task| task.work_item_id.as_str())
+    }
+
     fn subject(&self) -> InvestigationSubject {
         InvestigationSubject {
             order_id: self.order_id.clone(),
@@ -810,11 +503,7 @@ async fn persist_investigation_result(
         &audit,
         input.fingerprint,
         &input.context.idempotency_key,
-        input
-            .context
-            .task
-            .as_ref()
-            .map_or(input.context.order_id.as_str(), |task| task.work_item_id.as_str()),
+        input.context.scope_id(),
         SupplyCommandResult::Investigation(receipt),
         executor,
     )

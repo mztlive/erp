@@ -485,8 +485,8 @@ impl AppState {
     }
 
     /// Customer profile root process.
-    pub fn customer_profile_service(&self) -> erp_processes::CustomerProfileService {
-        erp_processes::CustomerProfileService::new(self.db(), self.sensitive_data()).with_rbac(self.rbac())
+    pub fn customer_profile_process(&self) -> erp_processes::CustomerProfileProcess {
+        erp_processes::CustomerProfileProcess::new(self.db(), self.sensitive_data()).with_rbac(self.rbac())
     }
 
     /// Supplier list/detail service with party facts and reveal tokens.
@@ -499,8 +499,8 @@ impl AppState {
     }
 
     /// Supplier profile root process.
-    pub fn supplier_profile_service(&self) -> erp_processes::SupplierProfileService {
-        erp_processes::SupplierProfileService::new(self.db(), self.sensitive_data()).with_rbac(self.rbac())
+    pub fn supplier_profile_process(&self) -> erp_processes::SupplierProfileProcess {
+        erp_processes::SupplierProfileProcess::new(self.db(), self.sensitive_data()).with_rbac(self.rbac())
     }
 
     /// 绑定供应商后台导入所需数据库、授权源、对象存储和密文编解码器。
@@ -552,8 +552,8 @@ impl AppState {
     ///
     /// # 返回
     /// 返回绑定当前数据库和授权快照的服务。
-    pub fn demo_master_data_service(&self) -> erp_processes::demo_master_data::DemoMasterDataService {
-        erp_processes::demo_master_data::DemoMasterDataService::new(
+    pub fn demo_master_data_process(&self) -> erp_processes::demo_master_data::DemoMasterDataProcess {
+        erp_processes::demo_master_data::DemoMasterDataProcess::new(
             self.db(),
             self.sensitive_data(),
             self.rbac(),
@@ -611,8 +611,8 @@ impl AppState {
     }
 
     /// Import-apply process that owns cross-domain apply/confirmation transactions.
-    pub fn import_apply_service(&self) -> erp_processes::ImportApplyService {
-        erp_processes::adapters::import_apply_service(self.db())
+    pub fn import_apply_process(&self) -> erp_processes::ImportApplyProcess {
+        erp_processes::adapters::import_apply_process(self.db())
     }
 
     /// Inventory query service with authorization and foreign-fact adapters.
@@ -621,8 +621,8 @@ impl AppState {
     }
 
     /// Inventory-adjustment process that owns approval submit/cancel/post.
-    pub fn inventory_adjustment_service(&self) -> erp_processes::InventoryAdjustmentService {
-        erp_processes::adapters::inventory_adjustment_service(self.db(), self.rbac())
+    pub fn inventory_adjustment_process(&self) -> erp_processes::InventoryAdjustmentProcess {
+        erp_processes::adapters::inventory_adjustment_process(self.db(), self.rbac())
             .with_object_read(self.approval_object_read())
     }
 

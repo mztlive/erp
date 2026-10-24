@@ -17,10 +17,10 @@ use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision};
 use persistence_core::NoTransaction;
 
-use super::CustomerProfileService;
+use super::CustomerProfileProcess;
 use crate::{Error, Result};
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 查询客户资料对象中心的当前事实、历史版本与敏感字段揭示入口。
     ///
     /// # 参数

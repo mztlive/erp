@@ -7,12 +7,12 @@ use erp_identity::access_control::DataScopeType;
 #[cfg(test)]
 use erp_identity::access_control::{ScopeDimension, ScopeTargetMode};
 
-use super::DemoMasterDataService;
+use super::DemoMasterDataProcess;
 use super::spec::DemoPersonScope;
 use crate::Result;
 use crate::adapters::scope_configuration;
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 对明确演示人员补齐尚未配置的操作，保留已有配置。
     /// # 参数
     /// 操作人及演示账号登录名到身份映射。

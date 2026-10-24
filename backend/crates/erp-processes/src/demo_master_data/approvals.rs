@@ -19,11 +19,11 @@ use persistence_core::NoTransaction;
 
 use super::accounts::PreparedAccounts;
 use super::spec::{self, ApprovalSpec};
-use super::{DemoFoundationReport, DemoMasterDataService};
+use super::{DemoFoundationReport, DemoMasterDataProcess};
 use crate::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth};
 use crate::{Error, Result};
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 按当前工作流权限发布全部缺失定义，已有发布版本只核对。
     /// # 参数
     /// 操作人、已准备账号及基础准备报告。

@@ -6,7 +6,7 @@ use erp_support::PendingFileAssetRequest;
 
 use super::pending::PendingFileAssets;
 use crate::Result;
-use crate::supplier_profile::{SupplierProfileService, SupplierProfileWithAssetsResult};
+use crate::supplier_profile::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 
 /// 创建供应商资料，并在同一事务中持久化已上传的资质文件。
 ///
@@ -22,7 +22,7 @@ use crate::supplier_profile::{SupplierProfileService, SupplierProfileWithAssetsR
 /// # 错误
 /// 临时文件校验失败，或资料创建与附件事务失败时返回错误。
 pub async fn supplier_profile_create_with_assets(
-    service: &SupplierProfileService,
+    service: &SupplierProfileProcess,
     req: SaveSupplierProfileRequest,
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
@@ -46,7 +46,7 @@ pub async fn supplier_profile_create_with_assets(
 /// # 错误
 /// 临时文件校验失败，或资料更新与附件事务失败时返回错误。
 pub async fn supplier_profile_update_with_assets(
-    service: &SupplierProfileService,
+    service: &SupplierProfileProcess,
     id: String,
     req: SaveSupplierProfileRequest,
     asset_requests: Vec<PendingFileAssetRequest>,
@@ -71,9 +71,9 @@ mod tests {
     use crate::adapters::identity::shared_rbac_service;
 
     /// 只构造惰性客户端；用例在授权依赖或输入校验阶段返回，不执行数据库及对象存储操作。
-    async fn service(with_rbac: bool) -> SupplierProfileService {
+    async fn service(with_rbac: bool) -> SupplierProfileProcess {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let service = SupplierProfileService::new(
+        let service = SupplierProfileProcess::new(
             db.clone(),
             Arc::new(SensitiveDataCodec::from_secret(b"supplier-assets-unit-test")),
         );
@@ -118,7 +118,7 @@ mod tests {
     }
 
     async fn save(
-        service: &SupplierProfileService,
+        service: &SupplierProfileProcess,
         req: SaveSupplierProfileRequest,
         update: bool,
     ) -> Result<SupplierProfileWithAssetsResult> {

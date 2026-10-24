@@ -112,43 +112,7 @@ pub(super) fn stock_adjustment_start_identity(
 ) -> Result<PreparedCommandIdentity> {
     let key = normalize_idempotency_key(&req.idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::StockAdjustment);
-    let mut lines = build_adjustment_line_updates(&req.lines)?
-        .into_iter()
-        .map(|line| {
-            (
-                line.line_id,
-                line.quantity.to_decimal().normalize().to_string(),
-                line.direction.map(|value| value.as_str()).unwrap_or("").to_string(),
-            )
-        })
-        .collect::<Vec<_>>();
-    lines.sort();
-    let mut balances = req
-        .balances
-        .iter()
-        .map(|balance| (balance.balance_id.clone(), balance.expected_version))
-        .collect::<Vec<_>>();
-    balances.sort();
-    let occurred_at = req.occurred_at.to_string();
-    let line_fields = lines
-        .iter()
-        .map(|(line_id, quantity, direction)| {
-            CommandPayloadField::Sequence(vec![
-                CommandPayloadField::Text(line_id),
-                CommandPayloadField::Text(quantity),
-                CommandPayloadField::Text(direction),
-            ])
-        })
-        .collect::<Vec<_>>();
-    let balance_fields = balances
-        .iter()
-        .map(|(balance_id, expected_version)| {
-            CommandPayloadField::Sequence(vec![
-                CommandPayloadField::Text(balance_id),
-                CommandPayloadField::U64(*expected_version),
-            ])
-        })
-        .collect::<Vec<_>>();
+    let payload = StartPayload::new(req)?;
     let identity = specialized_start_identity(
         key,
         process_kind.as_str(),
@@ -156,18 +120,7 @@ pub(super) fn stock_adjustment_start_identity(
         adjustment_id,
         req.expected_subject_version,
         STOCK_ADJUSTMENT_START_VARIANT,
-        vec![
-            CommandPayloadField::Text(binding_id),
-            CommandPayloadField::U32(definition_version),
-            CommandPayloadField::U64(req.expected_version),
-            CommandPayloadField::U32(req.expected_subject_version),
-            CommandPayloadField::Text(req.reason_type.as_str()),
-            CommandPayloadField::Sequence(line_fields),
-            CommandPayloadField::Sequence(balance_fields),
-            CommandPayloadField::Text(req.note.trim()),
-            CommandPayloadField::Text(&occurred_at),
-            CommandPayloadField::Text(actor_id),
-        ],
+        payload.fields(req, actor_id, binding_id, definition_version),
     )?
     .with_legacy(legacy_start_receipt_identity(
         process_kind.as_str(),
@@ -186,6 +139,79 @@ pub(super) fn stock_adjustment_start_identity(
         actor_id,
     ));
     Ok(identity)
+}
+
+/// 规范化启动摘要所需的拥有数据；字段视图只负责序列化，不改变领域校验。
+struct StartPayload {
+    lines: Vec<(String, String, String)>,
+    balances: Vec<(String, u64)>,
+    occurred_at: String,
+}
+
+impl StartPayload {
+    fn new(req: &SubmitStockAdjustmentRequest) -> Result<Self> {
+        let mut lines = build_adjustment_line_updates(&req.lines)?
+            .into_iter()
+            .map(|line| {
+                (
+                    line.line_id,
+                    line.quantity.to_decimal().normalize().to_string(),
+                    line.direction.map(|value| value.as_str()).unwrap_or("").to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        lines.sort();
+        let mut balances = req
+            .balances
+            .iter()
+            .map(|balance| (balance.balance_id.clone(), balance.expected_version))
+            .collect::<Vec<_>>();
+        balances.sort();
+        let occurred_at = req.occurred_at.to_string();
+        Ok(Self { lines, balances, occurred_at })
+    }
+
+    fn fields<'a>(
+        &'a self,
+        req: &'a SubmitStockAdjustmentRequest,
+        actor_id: &'a str,
+        binding_id: &'a str,
+        definition_version: u32,
+    ) -> Vec<CommandPayloadField<'a>> {
+        let line_fields = self
+            .lines
+            .iter()
+            .map(|(line_id, quantity, direction)| {
+                CommandPayloadField::Sequence(vec![
+                    CommandPayloadField::Text(line_id),
+                    CommandPayloadField::Text(quantity),
+                    CommandPayloadField::Text(direction),
+                ])
+            })
+            .collect::<Vec<_>>();
+        let balance_fields = self
+            .balances
+            .iter()
+            .map(|(balance_id, expected_version)| {
+                CommandPayloadField::Sequence(vec![
+                    CommandPayloadField::Text(balance_id),
+                    CommandPayloadField::U64(*expected_version),
+                ])
+            })
+            .collect::<Vec<_>>();
+        vec![
+            CommandPayloadField::Text(binding_id),
+            CommandPayloadField::U32(definition_version),
+            CommandPayloadField::U64(req.expected_version),
+            CommandPayloadField::U32(req.expected_subject_version),
+            CommandPayloadField::Text(req.reason_type.as_str()),
+            CommandPayloadField::Sequence(line_fields),
+            CommandPayloadField::Sequence(balance_fields),
+            CommandPayloadField::Text(req.note.trim()),
+            CommandPayloadField::Text(&self.occurred_at),
+            CommandPayloadField::Text(actor_id),
+        ]
+    }
 }
 
 /// 未知结果查询仅接受作用域与摘要版本的精确历史配对。

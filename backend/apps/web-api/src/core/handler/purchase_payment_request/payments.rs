@@ -8,7 +8,7 @@ use erp_finance::dto::payable::{
     SupplierPaymentView,
 };
 use erp_processes::attachments::PendingFileAssets;
-use erp_processes::finance_posting::payable::PayableService;
+use erp_processes::finance_posting::payable::PayableProcess;
 use erp_support::SensitivityClass;
 
 use super::process;
@@ -54,7 +54,7 @@ pub async fn pay(
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let result = async {
         let batch = PendingFileAssets::prepare(pending.clone(), &actor)?.shared();
-        PayableService::new(state.db())
+        PayableProcess::new(state.db())
             .with_rbac(state.rbac())
             .with_object_read(state.approval_object_read())
             .commit_purchase_payment_request_with_assets(&id, req, batch, &actor)

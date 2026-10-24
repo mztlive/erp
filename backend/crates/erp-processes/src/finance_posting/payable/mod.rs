@@ -1,25 +1,18 @@
-//! 域 D19 `payable` 服务编排（页面：W12 供应商往来）。
+//! 供应商往来 Process：协调付款、付款申请与进项发票的跨域写入。
 //!
-//! 事务边界只在 Service（conventions §6.1）：
-//! - 供应商付款必须在付款执行事务注册无审批 `BusinessDocument`；
-//! - 跨集合资金/票款过账（§8.3 不变量）→
-//!   `persistence_core::Transactional::with_transaction`。
-//! - 资金类入口（付款过账、进项发票登记）以业务唯一键
-//!   （付款单号/规范化发票号码）与状态迁移构成去重机制。
-//!   采购审批形成付款授权，付款任务由当前责任出纳直接登记并过账。
+//! 命令入口负责事务边界；事务内步骤沿用调用方 Executor，原子保存财务过账、
+//! 单据注册、任务状态及审计。供应商付款在付款执行事务中注册无审批的
+//! `BusinessDocument`；付款单号、规范化发票号码及状态迁移保留各入口的去重合同。
 //!
-//! 跨域只经各领域 `*Ext` 扩展 trait 调对方域 Repository：
-//! - D15 `purchase_orders()` 校验来源采购单存在，并解析采购单号供展示；
-//! - D09 `supplier_accounts()` 校验供应商存在并取 `party_id`（进项发票
-//!   与应付子账的往来主体相等键）；
-//! - D18 `invoices()` 复用发票仓储（`invoice` 由 D18 拥有实体与仓储，
-//!   D19 只拥有 `purchase_invoice_allocation`，禁止复制发票实体）；
-//! - D33 `supplier_settlement_statements()` 解析结算单号供展示。
+//! 财务实体、分配与资金规则归 `erp-finance`；采购来源、供应商主体与结算事实
+//! 分别由 `erp-procurement`、`erp-supplier`、`erp-supply` 的公开读取合同提供。
+//! 展示读取复用 `erp-read-models`，文件上传与其他外部 I/O 在数据库事务外执行。
 
 use std::sync::Arc;
 
+use erp_finance::dto::payable::{self as dto, SupplierPaymentView};
 use erp_identity::SharedRbacService;
-use erp_read_models::finance::payable::PayableReadService;
+use erp_read_models::finance::payable::{PayableReadService, mapping};
 use erp_support::FileAssetView;
 use erp_workflow::{ApprovalObjectReadPort, FailClosedObjectReadPort};
 use mongodb::Database;
@@ -28,27 +21,23 @@ use crate::Result;
 use crate::adapters::identity::shared_rbac_service;
 
 mod account;
-
-use erp_finance::dto::payable as dto;
 mod invoice;
-use erp_read_models::finance::payable::mapping;
 mod payment;
-pub mod payment_request;
-pub use payment_request::PurchasePaymentRequestProcess;
 mod payment_merge;
+pub mod payment_request;
 pub mod payment_task;
 mod posting;
 
-use erp_finance::dto::payable::SupplierPaymentView;
+pub use payment_request::PurchasePaymentRequestProcess;
 
-/// 供应商往来服务。
+/// 供应商往来跨域写入流程。
 ///
 /// 提供应付台账、付款单与进项发票登记编排。
-pub struct PayableService {
+pub struct PayableProcess {
     db: Database,
     /// 付款任务和单据绑定读取复用的授权实例。
     authorization_rbac: SharedRbacService,
-    /// 保持本服务局部 policy 写锁与提交未知隔离边界的事务实例。
+    /// 保持本流程局部 policy 写锁与提交未知隔离边界的事务实例。
     transaction_rbac: SharedRbacService,
     object_read: Arc<dyn ApprovalObjectReadPort>,
 }
@@ -72,14 +61,14 @@ pub struct SupplierPaymentBankReceiptSnapshot {
     qualification: (u64, String),
 }
 
-impl PayableService {
-    /// 创建供应商往来服务实例。
+impl PayableProcess {
+    /// 创建供应商往来流程实例。
     ///
     /// # 参数
     /// * `db` - 数据库实例
     ///
     /// # 返回
-    /// 返回服务实例。
+    /// 返回流程实例。
     ///
     /// # 错误
     /// 不返回错误。
@@ -99,7 +88,7 @@ impl PayableService {
     /// * `rbac` - 组合根已经装配的共享 RBAC 授权读取实例
     ///
     /// # 返回
-    /// 返回复用共享 Enforcer、但保留局部 policy 写锁及未知提交状态的服务。
+    /// 返回复用共享 Enforcer、并保留局部 policy 写锁及未知提交状态的流程。
     ///
     /// # 错误
     /// 本方法不执行 I/O，不返回错误。
@@ -114,7 +103,7 @@ impl PayableService {
     /// * `object_read` - 组合根装配的对象读取端口。
     ///
     /// # 返回
-    /// 返回已绑定该端口的服务。
+    /// 返回已绑定该端口的流程。
     ///
     /// # 错误
     /// 不返回错误。
@@ -124,7 +113,7 @@ impl PayableService {
     }
 }
 
-impl PayableService {
+impl PayableProcess {
     /// 取得应付跨领域读模型，命令回读复用相同装配实现。
     fn read(&self) -> PayableReadService {
         PayableReadService::new(self.db.clone())

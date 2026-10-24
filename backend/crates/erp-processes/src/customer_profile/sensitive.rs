@@ -10,11 +10,11 @@ use erp_party::{PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyOwn
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::CustomerProfileService;
+use super::CustomerProfileProcess;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl CustomerProfileService {
+impl CustomerProfileProcess {
     /// 验证短时令牌和客户归属后解密单个敏感字段，并记录成功审计。
     ///
     /// HTTP 层必须先依据令牌字段类型执行对应 RBAC 校验。

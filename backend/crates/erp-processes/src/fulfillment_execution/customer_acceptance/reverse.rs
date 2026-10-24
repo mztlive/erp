@@ -7,6 +7,7 @@ use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_fulfillment::repository::extensions::FulfillmentExt;
 use erp_fulfillment::service::FulfillmentService;
 use erp_identity::SharedRbacService;
+use erp_read_models::fulfillment_center::access::AcceptanceReadService;
 use erp_read_models::sales_center::access::SalesAccess;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -50,12 +51,7 @@ impl CustomerAcceptanceProcess {
         actor: &AuditActor,
     ) -> Result<CustomerAcceptanceView> {
         req.validate()?;
-        erp_read_models::fulfillment_center::access::AcceptanceReadService::new(
-            self.db.clone(),
-            self.rbac.clone(),
-        )
-        .detail(id, actor)
-        .await?;
+        AcceptanceReadService::new(self.db.clone(), self.rbac.clone()).detail(id, actor).await?;
         let command_receipt = CommandReceipt::from_resource_parts(
             "customer-acceptance-reverse-",
             actor.id(),
@@ -80,32 +76,8 @@ impl CustomerAcceptanceProcess {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    if let Some(persisted) =
-                        replay_reverse(&db, rbac, &original_id, &actor, &command_receipt_for_tx, executor)
-                            .await?
-                    {
-                        return Ok(persisted);
-                    }
-                    let (original, reverse_acceptance) =
-                        FulfillmentService::persist_customer_acceptance_reverse(
-                            &db,
-                            &original_id,
-                            &req,
-                            executor,
-                        )
-                        .await?;
-                    complete_acceptance(
-                        &db,
-                        &reverse_acceptance,
-                        &actor,
-                        CompletionKind::Reverse {
-                            original_id: original.base.id,
-                            receipt: Box::new(command_receipt_for_tx),
-                        },
-                        executor,
-                    )
-                    .await?;
-                    Ok::<CustomerAcceptance, crate::Error>(reverse_acceptance)
+                    commit_reverse(&db, rbac, &original_id, &req, &actor, command_receipt_for_tx, executor)
+                        .await
                 })
             })
             .await;
@@ -156,4 +128,30 @@ async fn replay_reverse(
         .await?
         .map(Some)
         .ok_or_else(|| Error::NotFound("验收单不存在".to_string()))
+}
+
+/// 重验授权和回执后，沿用当前事务依次写反向事实与后续任务。
+async fn commit_reverse(
+    db: &Database,
+    rbac: SharedRbacService,
+    original_id: &CustomerAcceptanceId,
+    req: &ReverseCustomerAcceptanceRequest,
+    actor: &AuditActor,
+    receipt: CommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<CustomerAcceptance> {
+    if let Some(persisted) = replay_reverse(db, rbac, original_id, actor, &receipt, executor).await? {
+        return Ok(persisted);
+    }
+    let (original, reverse_acceptance) =
+        FulfillmentService::persist_customer_acceptance_reverse(db, original_id, req, executor).await?;
+    complete_acceptance(
+        db,
+        &reverse_acceptance,
+        actor,
+        CompletionKind::Reverse { original_id: original.base.id, receipt: Box::new(receipt) },
+        executor,
+    )
+    .await?;
+    Ok::<CustomerAcceptance, Error>(reverse_acceptance)
 }

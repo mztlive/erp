@@ -76,19 +76,7 @@ impl SalesOrderCommandProcess {
         {
             return Ok(existing);
         }
-        let access = self.command_access(actor, "update")?;
-        let current = access.current(id, &mut NoTransaction).await?;
-        if current.base.version != req.expected_version {
-            return Err(Error::ConflictError("销售单责任或版本已变化，请刷新后重试".to_string()));
-        }
-        self.ensure_handover_target(
-            &target,
-            &current.sales_owner_user_id,
-            &current.base.id,
-            &mut NoTransaction,
-        )
-        .await?;
-        self.ensure_handover_org(req.target_business_org_unit_id.as_deref(), &mut NoTransaction).await?;
+        let access = self.prepare_handover(id, &req, actor, &target).await?;
 
         let transaction_result = handover_transaction(
             self.db.clone(),
@@ -117,6 +105,31 @@ impl SalesOrderCommandProcess {
                 self.replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor).await,
             ),
         }
+    }
+
+    /// 在写事务前校验当前版本、接收资格与显式组织；事务内仍按原路径重验。
+    async fn prepare_handover(
+        &self,
+        id: &str,
+        req: &HandoverSalesOrderRequest,
+        actor: &AuditActor,
+        target: &str,
+    ) -> Result<SalesCommandAccess> {
+        let access = self.command_access(actor, "update")?;
+        let current = access.current(id, &mut NoTransaction).await?;
+        if current.base.version != req.expected_version {
+            return Err(Error::ConflictError("销售单责任或版本已变化，请刷新后重试".to_string()));
+        }
+        self.ensure_handover_target(
+            target,
+            &current.sales_owner_user_id,
+            &current.base.id,
+            &mut NoTransaction,
+        )
+        .await?;
+        self.ensure_handover_org(req.target_business_org_unit_id.as_deref(), &mut NoTransaction).await?;
+
+        Ok(access)
     }
 
     /// 查询当前销售单可交接的合格目标候选。

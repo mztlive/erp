@@ -17,11 +17,11 @@ use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::dto::{ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationView};
-use super::{IMPORT_CONFIRMATION_HANDLER, IMPORT_CONFIRMATION_WORKSPACE, ImportApplyService};
+use super::{IMPORT_CONFIRMATION_HANDLER, IMPORT_CONFIRMATION_WORKSPACE, ImportApplyProcess};
 use crate::adapters::workflow::work_item_service;
 use crate::{Error, Result};
 
-impl ImportApplyService {
+impl ImportApplyProcess {
     /// 分页查询导入确认事实列表。
     ///
     /// # 参数

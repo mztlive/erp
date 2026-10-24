@@ -28,7 +28,7 @@ use validator::Validate;
 use super::plan::{DemoKind, DemoStep};
 use super::record::DemoMasterRecord;
 use super::seed::SeedRequest;
-use super::{DemoMasterDataService, spec};
+use super::{DemoMasterDataProcess, spec};
 use crate::adapters::catalog_supply_query::MongoCatalogSupplyQuery;
 use crate::adapters::scoped_offering_process;
 use crate::{Error, Result};
@@ -185,7 +185,7 @@ fn sku_offerings<'a>(
     Ok(matches)
 }
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 通过采购身份登记供给并上架已登记商品；失败停止当前批次，可用原游标重试。
     ///
     /// # 参数

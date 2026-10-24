@@ -10,11 +10,11 @@ use persistence_core::NoTransaction;
 use super::ensure_dictionary::EnsureOutcome;
 use super::plan::{DemoKind, DemoStep};
 use super::record::{self, DemoMasterRecord};
-use super::{DemoMasterDataService, lifecycle, spec};
+use super::{DemoMasterDataProcess, lifecycle, spec};
 use crate::adapters::catalog_access;
 use crate::{Error, Result, handover_product};
 
-impl DemoMasterDataService {
+impl DemoMasterDataProcess {
     /// 解析字典引用后创建或恢复商品及 SKU。
     ///
     /// # 参数

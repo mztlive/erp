@@ -19,11 +19,11 @@ use validator::Validate;
 
 use super::confirmation_query::confirmation_view;
 use super::dto::LegacyImportConfirmationView;
-use super::{IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION, ImportApplyService};
+use super::{IMPORT_CONFIRMATION_OBJECT_TYPE, IMPORT_CONFIRMATION_ORGANIZATION, ImportApplyProcess};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-impl ImportApplyService {
+impl ImportApplyProcess {
     /// 创建待确认确认事实。
     ///
     /// 批次推进到 `PendingConfirmation`（试算完成）；同一
