@@ -4,30 +4,18 @@ use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use erp_sales::entity::sales_inquiry_import::InquiryImportIssue;
-use regex::Regex;
+use erp_sales::entity::sales_inquiry_pool::{
+    POOL_DELIVERY_HEADERS as HEADERS, POOL_DELIVERY_SOURCE_HEADERS as SOURCE_FIELDS, POOL_SHEET,
+    POOL_TABLE_NAME, automatic_delivery_formula,
+};
+use regex::{Regex, escape};
 
 use super::parse::{Cell, DELIVERY_SHEET, Row, data_rows, issue};
-use super::pool::POOL_SHEET;
 use crate::{Error, Result};
 
-pub(super) const AUTO_POOL_VERSION: &str = "sales-inquiry-pool-v2";
-pub(super) const HEADERS: [&str; 12] = [
-    "商品名称",
-    "SKU 编号",
-    "SPU 编号",
-    "收件人",
-    "联系电话",
-    "省",
-    "市",
-    "区县",
-    "详细地址",
-    "配送数量",
-    "要求交付日期",
-    "交付条件",
-];
-const SOURCE_FIELDS: [&str; 5] = ["配送关联", "商品名称", "SKU 编号", "SPU 编号", "需求数量"];
 static LINK_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"MATCH\("(line-[1-9][0-9]*)",InquirySelection\[配送关联\],0\)"#).expect("static link regex")
+    Regex::new(&format!(r#"MATCH\("(line-[1-9][0-9]*)",{}\[配送关联\],0\)"#, escape(POOL_TABLE_NAME)))
+        .expect("static link regex")
 });
 
 struct SourceProduct {
@@ -147,13 +135,7 @@ fn resolve_row(
 fn formula_key(cell: &Cell, field: &str) -> Option<String> {
     let formula = cell.formula_text.as_deref()?;
     let key = LINK_RE.captures(formula)?.get(1)?.as_str();
-    (formula == automatic_formula(key, field)).then(|| key.into())
-}
-
-fn automatic_formula(key: &str, field: &str) -> String {
-    let lookup =
-        |column| format!("INDEX(InquirySelection[{column}],MATCH(\"{key}\",InquirySelection[配送关联],0))");
-    format!("IF({}=\"\",\"\",{})", lookup("需求数量"), lookup(field))
+    (formula == automatic_delivery_formula(key, field)).then(|| key.into())
 }
 
 #[cfg(test)]
@@ -182,7 +164,7 @@ mod tests {
             row.cells[index] = Cell {
                 value: "incorrect-cache".into(),
                 formula: true,
-                formula_text: Some(automatic_formula("line-1", field)),
+                formula_text: Some(automatic_delivery_formula("line-1", field)),
                 ..Default::default()
             };
         }

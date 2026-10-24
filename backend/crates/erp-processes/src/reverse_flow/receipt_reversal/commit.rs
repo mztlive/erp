@@ -32,7 +32,7 @@ use super::super::adapter::{
     receipt_reversal_subject_ref,
 };
 use super::super::start_approval::{
-    ReceiptReversalStartInput, build_receipt_reversal_start_input, load_bound_definition_graph_with_executor,
+    ReverseStartInput, build_receipt_reversal_start_input, load_bound_definition_graph_with_executor,
     persist_receipt_reversal_runtime,
 };
 use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
@@ -270,7 +270,7 @@ async fn prepare_commit_start(
 ) -> Result<PreparedExecution> {
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
-    let start_input = build_receipt_reversal_start_input(ReceiptReversalStartInput {
+    let start_input = build_receipt_reversal_start_input(ReverseStartInput {
         graph,
         binding,
         subject: approval.subject.clone(),

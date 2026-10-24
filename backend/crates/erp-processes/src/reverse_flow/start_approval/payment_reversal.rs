@@ -1,5 +1,4 @@
 use application_core::{AuditActor, CommandReceipt};
-use bpm::engine::DefinitionGraph;
 use bpm::model::SubjectRef;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
@@ -11,7 +10,6 @@ use erp_returns::service::ReturnsService;
 use erp_workflow::BpmExt;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
@@ -56,43 +54,6 @@ pub async fn load_payment_reversal_start_receipt(
     .await
 }
 
-/// 付款冲正启动输入。
-///
-/// # 用途
-/// 收拢 `build_payment_reversal_start_input` 的定义图、绑定与提交人参数。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 审批人取自已发布节点，不接受客户端选择。
-pub struct PaymentReversalStartInput<'a> {
-    /// 绑定定义图。
-    pub graph: DefinitionGraph,
-    /// 冻结绑定。
-    pub binding: &'a ApprovalDefinitionBinding,
-    /// 业务对象引用。
-    pub subject: SubjectRef,
-    /// 冻结提交版本。
-    pub subject_version: u32,
-    /// 提交人。
-    pub actor_id: &'a str,
-    /// 单据责任组织。
-    pub organization_id: &'a str,
-    /// 规范化前的幂等键。
-    pub idempotency_key: &'a str,
-    /// 已存在收据。
-    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
-    /// 调用方时间。
-    pub now: Instant,
-}
-
 /// 由定义图与单据组织构造付款冲正启动输入。
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
@@ -111,32 +72,9 @@ pub struct PaymentReversalStartInput<'a> {
 ///
 /// # 关键业务约束
 /// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
-pub fn build_payment_reversal_start_input(
-    input: PaymentReversalStartInput<'_>,
-) -> Result<StartExecutionInput> {
-    let PaymentReversalStartInput {
-        graph,
-        binding,
-        subject,
-        subject_version,
-        actor_id,
-        organization_id,
-        idempotency_key,
-        receipt,
-        now,
-    } = input;
+pub fn build_payment_reversal_start_input(input: ReverseStartInput<'_>) -> Result<StartExecutionInput> {
     build_reverse_start_input(
-        ReverseStartInput {
-            graph,
-            binding,
-            subject,
-            subject_version,
-            actor_id,
-            organization_id,
-            idempotency_key,
-            receipt,
-            now,
-        },
+        input,
         &ReverseStartContracts {
             document_type: DocumentType::PaymentReversal,
             readable: payment_reversal_object_readable,

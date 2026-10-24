@@ -5,14 +5,11 @@
 
 use bpm::engine::DefinitionGraph;
 use bpm::model::SubjectRef;
-use erp_workflow::BpmExt;
 use erp_workflow::entity::approval_integration::ApprovalStartIdentity;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, start_scope_candidates,
-};
 use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::read;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -57,12 +54,9 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
     binding: &ApprovalDefinitionBinding,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let graph = db
-        .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("采购单绑定的审批定义不存在".to_string()))?;
-    Ok(graph)
+    read::bound_definition_graph(db, binding, "采购单绑定的审批定义不存在", executor)
+        .await
+        .map_err(Error::from)
 }
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -84,29 +78,16 @@ pub(crate) async fn load_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::PurchaseOrder);
-    let scopes = start_scope_candidates(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    read::start_receipt(
+        db,
+        DocumentType::PurchaseOrder,
+        subject,
         subject_version,
-    )?;
-    for scope in scopes {
-        let receipt = db
-            .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                &scope,
-                &key,
-                &mut NoTransaction,
-            )
-            .await?;
-        if receipt.is_some() {
-            return Ok(receipt);
-        }
-    }
-    Ok(None)
+        idempotency_key,
+        &mut NoTransaction,
+    )
+    .await
+    .map_err(Error::from)
 }
 
 /// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购启动结果。

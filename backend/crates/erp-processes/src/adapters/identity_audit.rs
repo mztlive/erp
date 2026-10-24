@@ -1,16 +1,15 @@
 //! 流程与入口经 `erp-audit` 持久化身份审计。
 
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use entity_core::BaseModel;
-use erp_audit::{AuditActorLogs, AuditLog, AuditLogData, prepare_business_log};
+use erp_audit::AuditActorLogs;
 use erp_identity::{IdentityAuditPort, PreparedResourceAudit};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::audit_conversion::{PreparedAudit, map_audit_error};
 use crate::audit::persist_log;
 
 /// 把身份审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -59,7 +58,7 @@ impl IdentityAuditPort for MongoIdentityAudit {
         resource_id: String,
     ) -> erp_identity::Result<PreparedResourceAudit> {
         let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_error)?;
-        Ok(prepared_from_log(&log))
+        Ok(PreparedResourceAudit::from_log(&log))
     }
 
     async fn persist(
@@ -67,82 +66,20 @@ impl IdentityAuditPort for MongoIdentityAudit {
         audit: &PreparedResourceAudit,
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<()> {
-        let log = audit_log_from_prepared(audit).map_err(map_audit_error)?;
+        let log = audit.to_log().map_err(map_audit_error)?;
         persist_log(&self.db, &log, executor).await.map_err(map_audit_error)?;
         Ok(())
     }
 }
 
-/// 拷贝已构造的审计字段，避免持久化时重新生成时间戳。
-fn prepared_from_log(log: &AuditLog) -> PreparedResourceAudit {
-    PreparedResourceAudit::from_validated(
-        &log.base,
-        log.actor_id.clone(),
-        log.actor_account.clone(),
-        log.actor_type,
-        log.action.clone(),
-        log.resource_type.clone(),
-        log.resource_id.clone(),
-        log.success,
-        log.message.clone(),
-    )
-    .with_actor_name_snapshot(
-        log.structured_event.as_ref().and_then(|event| event.actor_name_snapshot.clone()),
-    )
-    .with_request_id(log.structured_event.as_ref().and_then(|event| event.request_id.clone()))
-    .with_event_sequence(
-        log.structured_event.as_ref().map(|event| event.event_sequence).unwrap_or(NonZeroU32::MIN),
-    )
-}
-
-/// 用原来的 `BaseModel` 快照重建审计实体。
-fn audit_log_from_prepared(audit: &PreparedResourceAudit) -> erp_audit::Result<AuditLog> {
-    let mut log = AuditLog::new(
-        audit.id.clone(),
-        AuditLogData {
-            actor_id: audit.actor_id.clone(),
-            actor_account: audit.actor_account.clone(),
-            actor_type: audit.actor_type,
-            action: audit.action.clone(),
-            resource_type: audit.resource_type.clone(),
-            resource_id: audit.resource_id.clone(),
-            success: audit.success,
-            message: audit.message.clone(),
-        },
-    )?;
-    log.base = BaseModel {
-        id: audit.id.clone(),
-        version: audit.version,
-        created_at: audit.created_at,
-        updated_at: audit.updated_at,
-        deleted_at: audit.deleted_at,
-    };
-    prepare_business_log(&log)?
-        .with_actor_name_snapshot(audit.actor_name_snapshot.clone())?
-        .with_request_id(audit.request_id.clone())?
-        .with_event_sequence(audit.event_sequence.get())
-}
-
-fn map_audit_error(error: erp_audit::Error) -> erp_identity::Error {
-    match error {
-        erp_audit::Error::Internal(message) => erp_identity::Error::Internal(message),
-        erp_audit::Error::NotFound(message) => erp_identity::Error::NotFound(message),
-        erp_audit::Error::ValidationError(message) => erp_identity::Error::ValidationError(message),
-        erp_audit::Error::InvalidInput(message) => erp_identity::Error::InvalidInput(message),
-        erp_audit::Error::BusinessLogicError(message) => erp_identity::Error::BusinessLogicError(message),
-        erp_audit::Error::ConflictError(message) => erp_identity::Error::ConflictError(message),
-        erp_audit::Error::ReceiptDuplicate(error) => erp_identity::Error::ReceiptDuplicate(error),
-        erp_audit::Error::TransientTransaction(error) => erp_identity::Error::TransientTransaction(error),
-        erp_audit::Error::Forbidden(message) => erp_identity::Error::Forbidden(message),
-        erp_audit::Error::Unauthenticated(message) => erp_identity::Error::Unauthenticated(message),
-        erp_audit::Error::Logic(error) => erp_identity::Error::Logic(error),
-        erp_audit::Error::OutcomeUnknown(error) => erp_identity::Error::OutcomeUnknown(error),
-        erp_audit::Error::RepositoryError(error) => erp_identity::Error::RepositoryError(error),
-    }
-}
+map_audit_error!(fn map_audit_error -> erp_identity);
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
+
+    use entity_core::BaseModel;
+    use erp_audit::prepare_business_log;
     use erp_core::AccountKind;
 
     use super::*;
@@ -167,7 +104,7 @@ mod tests {
         };
         log.structured_event.as_mut().unwrap().occurred_at = log.base.created_at;
         let log = prepare_business_log(&log).unwrap();
-        let prepared = prepared_from_log(&log);
+        let prepared = PreparedResourceAudit::from_log(&log);
         assert_eq!(prepared.actor_name_snapshot.as_deref(), Some("周晓彤"));
         assert_eq!(prepared.request_id.as_deref(), Some("request-original"));
         assert_eq!(prepared.event_sequence.get(), 7);
@@ -178,13 +115,13 @@ mod tests {
             .unwrap();
         assert_eq!(renamed_actor.actor_name_snapshot(), Some("新名称"));
         assert_eq!(renamed_actor.request_id(), Some("request-next"));
-        let restored = audit_log_from_prepared(&prepared).unwrap();
+        let restored = prepared.to_log().unwrap();
         assert_eq!(restored, log);
         assert!(restored.message.as_deref().unwrap().contains("周晓彤"));
         let mut invalid = prepared;
         invalid.actor_id = " ".into();
         invalid.action = " ".into();
-        assert!(audit_log_from_prepared(&invalid).unwrap_err().to_string().contains("操作人ID不能为空"));
+        assert!(invalid.to_log().unwrap_err().to_string().contains("操作人ID不能为空"));
     }
 
     #[test]
@@ -192,9 +129,9 @@ mod tests {
         let log = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
             .resource_log("admin.update", "admin", "object-1".into())
             .unwrap();
-        let mut prepared = prepared_from_log(&log);
+        let mut prepared = PreparedResourceAudit::from_log(&log);
         prepared.message = Some("password bank-account ciphertext private-request".into());
-        let restored = audit_log_from_prepared(&prepared).unwrap();
+        let restored = prepared.to_log().unwrap();
         let event = restored.structured_event.as_ref().unwrap();
         assert_eq!(event.actor_name_snapshot, None);
         assert_eq!(event.request_id, None);
@@ -216,8 +153,8 @@ mod tests {
             .resource_log("admin.update", "admin", "object-1".into())
             .unwrap();
         for request_id in ["unsafe\nrequest".into(), "x".repeat(129)] {
-            let prepared = prepared_from_log(&log).with_request_id(Some(request_id));
-            assert!(audit_log_from_prepared(&prepared).unwrap_err().to_string().contains("请求编号"));
+            let prepared = PreparedResourceAudit::from_log(&log).with_request_id(Some(request_id));
+            assert!(prepared.to_log().unwrap_err().to_string().contains("请求编号"));
         }
     }
 
@@ -226,8 +163,9 @@ mod tests {
         let log = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin)
             .resource_log("admin.update", "admin", "object-1".into())
             .unwrap();
-        let prepared = prepared_from_log(&log).with_actor_name_snapshot(Some("unsafe\nname".into()));
-        assert!(audit_log_from_prepared(&prepared).is_err());
+        let prepared =
+            PreparedResourceAudit::from_log(&log).with_actor_name_snapshot(Some("unsafe\nname".into()));
+        assert!(prepared.to_log().is_err());
     }
 
     #[test]

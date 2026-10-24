@@ -8,9 +8,8 @@ use erp_catalog::entity::handover_receipt::{
 };
 use erp_catalog::repository::handover_receipt::ProductHandoverReceiptExt;
 use erp_catalog::{HandoverCandidateView, HandoverProductRequest, HandoverProductView};
-use erp_core::AccountKind;
-use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService, subject};
+use erp_identity::SharedRbacService;
+use erp_identity::service::account_permissions::{account_has_permission, permission_candidates};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
@@ -106,28 +105,15 @@ pub async fn handover_candidates(
     let product = crate::adapters::catalog_access(db.clone(), rbac.clone())
         .require_product(actor, "update", id, &mut NoTransaction)
         .await?;
-    let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
-    let mut candidates = Vec::new();
-    for account in accounts {
-        if account.base.id == product.maintainer_user_id || !account.is_active_backoffice() {
-            continue;
-        }
-        if !account_can_maintain(&rbac, account.kind, &account.base.id).await? {
-            continue;
-        }
-        candidates.push(HandoverCandidateView {
-            user_id: account.base.id.clone(),
-            display_name: account.name.clone(),
-            account: account.secret.account().to_string(),
-        });
-    }
-    candidates.sort_by(|left, right| {
-        left.display_name
-            .cmp(&right.display_name)
-            .then_with(|| left.account.cmp(&right.account))
-            .then_with(|| left.user_id.cmp(&right.user_id))
-    });
-    Ok(candidates)
+    Ok(permission_candidates(&db, &rbac, &product.maintainer_user_id, "product:update", &mut NoTransaction)
+        .await?
+        .into_iter()
+        .map(|candidate| HandoverCandidateView {
+            user_id: candidate.user_id,
+            display_name: candidate.display_name,
+            account: candidate.account,
+        })
+        .collect())
 }
 
 /// 在原执行器中匹配独立回执，并重验当前访问读取当前责任视图。
@@ -224,62 +210,26 @@ impl AuditedCommand for ProductHandoverCommand {
 /// 校验目标账号有效且具备商品维护资格。
 ///
 /// # 参数
-/// * `db` - 数据库
-/// * `rbac` - RBAC 快照
-/// * `target` - 目标账号
-/// * `executor` - 调用方执行器
+/// * `db` - 数据库。
+/// * `rbac` - 当前权限服务。
+/// * `target` - 目标账号。
+/// * `executor` - 调用方执行器。
 ///
 /// # 返回
-/// 合格时成功。
+/// 账号资格满足时成功。
 ///
 /// # 错误
-/// 账号不存在、失效或无 `product:update` 时拒绝。
+/// 账号缺失、失效或缺少 `product:update` 时返回既有拒绝文案。
 async fn ensure_target_qualified(
     db: &Database,
     rbac: &SharedRbacService,
     target: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
-        return Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()));
-    };
-    if !account.is_active_backoffice() || !account_can_maintain(rbac, account.kind, target).await? {
-        return Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()));
+    if account_has_permission(db, rbac, target, "product:update", executor).await? {
+        return Ok(());
     }
-    Ok(())
-}
-
-/// 判断账号是否具备 `product:update`。
-///
-/// # 参数
-/// * `rbac` - RBAC 快照
-/// * `kind` - 目标账号类型
-/// * `user_id` - 目标账号 ID
-///
-/// # 返回
-/// 具备维护资格时为 true。
-///
-/// # 错误
-/// RBAC 判定失败时拒绝。
-async fn account_can_maintain(rbac: &SharedRbacService, kind: AccountKind, user_id: &str) -> Result<bool> {
-    let (subject, permission) = maintainer_authorization(kind, user_id)?;
-    Ok(rbac.enforce(&subject, &permission).await?)
-}
-
-/// 构造商品维护资格所需的规范主体和固定权限。
-///
-/// # 参数
-/// * `kind` - 已读取的目标账号类型
-/// * `user_id` - 已读取的目标账号 ID
-///
-/// # 返回
-/// 返回与 HTTP 鉴权一致的 `user:{kind}:{id}` 主体及 `product:update`。
-///
-/// # 错误
-/// 固定权限无法解析时返回错误，不降级为通配权限。
-fn maintainer_authorization(kind: AccountKind, user_id: &str) -> Result<(String, Permission)> {
-    let permission = Permission::parse("product:update").map_err(Error::from)?;
-    Ok((subject(kind, user_id), permission))
+    Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()))
 }
 
 /// 计算交接命令指纹，供幂等回放比对。
@@ -311,33 +261,4 @@ fn handover_fingerprint(
         key,
     ))
     .map_err(|error| Error::Internal(format!("商品交接命令序列化失败: {error}")))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 维护资格请求使用规范主体和商品更新权限，避免裸 ID 导致全部拒绝。
-    #[test]
-    fn maintainer_authorization_uses_canonical_subject_and_product_update() {
-        let (subject, permission) = maintainer_authorization(AccountKind::Admin, "maintainer-1").unwrap();
-
-        assert_eq!(subject, "user:admin:maintainer-1");
-        assert_ne!(subject, "maintainer-1");
-        assert_eq!(permission.resource(), "product");
-        assert_eq!(permission.action(), "update");
-        assert!(!permission.covers(&Permission::parse("product:delete").unwrap()));
-        assert!(!permission.covers(&Permission::parse("supplier_offering:update").unwrap()));
-    }
-
-    /// 不同维护人保留各自的主体，禁止交接目标共用授权身份。
-    #[test]
-    fn maintainer_authorization_keeps_distinct_account_subjects() {
-        let first = maintainer_authorization(AccountKind::Admin, "maintainer-1").unwrap();
-        let second = maintainer_authorization(AccountKind::Admin, "maintainer-2").unwrap();
-
-        assert_ne!(first.0, second.0);
-        assert_eq!(second.0, "user:admin:maintainer-2");
-        assert_eq!(first.1, second.1);
-    }
 }

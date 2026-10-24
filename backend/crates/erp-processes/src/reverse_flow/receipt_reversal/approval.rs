@@ -28,7 +28,7 @@ use super::super::cancel_approval::{
     persist_receipt_reversal_cancel,
 };
 use super::super::start_approval::{
-    ReceiptReversalStartInput, ReceiptReversalStartPersistInput, ReversalSubmitReplayInput,
+    ReceiptReversalStartPersistInput, ReversalSubmitReplayInput, ReverseStartInput,
     build_receipt_reversal_start_input, load_receipt_reversal_start_receipt, load_start_graph,
     persist_receipt_reversal_start, reversal_result_read_error,
 };
@@ -134,7 +134,7 @@ impl ReturnsProcess {
         let existing_receipt =
             load_receipt_reversal_start_receipt(&self.db, &subject, version, &idempotency_key).await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
-        let start_input = build_receipt_reversal_start_input(ReceiptReversalStartInput {
+        let start_input = build_receipt_reversal_start_input(ReverseStartInput {
             graph,
             binding: &binding,
             subject,

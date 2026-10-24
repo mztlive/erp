@@ -28,7 +28,7 @@ use super::super::adapter::{
     payment_reversal_subject_ref,
 };
 use super::super::start_approval::{
-    PaymentReversalStartInput, build_payment_reversal_start_input, load_bound_definition_graph_with_executor,
+    ReverseStartInput, build_payment_reversal_start_input, load_bound_definition_graph_with_executor,
     persist_payment_reversal_runtime,
 };
 use super::{
@@ -240,7 +240,7 @@ async fn prepare_commit_start(
 ) -> Result<PreparedExecution> {
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
-    let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
+    let start_input = build_payment_reversal_start_input(ReverseStartInput {
         graph,
         binding,
         subject: approval.subject.clone(),

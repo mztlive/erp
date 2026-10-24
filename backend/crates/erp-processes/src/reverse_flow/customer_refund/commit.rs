@@ -27,7 +27,7 @@ use super::super::adapter::{
     customer_refund_subject_ref,
 };
 use super::super::start_approval::{
-    CustomerRefundStartInput, build_customer_refund_start_input, load_bound_definition_graph_with_executor,
+    ReverseStartInput, build_customer_refund_start_input, load_bound_definition_graph_with_executor,
     persist_runtime_writes,
 };
 use super::{
@@ -236,7 +236,7 @@ async fn prepare_commit_start(
 ) -> Result<PreparedExecution> {
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
-    let start_input = build_customer_refund_start_input(CustomerRefundStartInput {
+    let start_input = build_customer_refund_start_input(ReverseStartInput {
         graph,
         binding,
         subject: approval.subject.clone(),

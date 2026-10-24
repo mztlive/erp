@@ -2,6 +2,7 @@
 
 pub mod command_receipt;
 pub mod sales_inquiry_import;
+pub mod sales_inquiry_pool;
 pub mod sales_order;
 pub mod sales_review;
 pub mod sales_selection;

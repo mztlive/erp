@@ -39,6 +39,7 @@
 | [src/service/sales_review/mod.rs](src/service/sales_review/mod.rs) | SalesReviewService |
 | [src/ports/mod.rs](src/ports/mod.rs) | 销售及变更消费方合同 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
+| [src/entity/sales_inquiry_pool.rs](src/entity/sales_inquiry_pool.rs) | 商品池模板版本、列布局及需求导入白名单；导入导出共用同一合同 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |
 | [src/indexes/mod.rs](src/indexes/mod.rs) | 公开索引注册入口 |
 

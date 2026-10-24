@@ -1,13 +1,11 @@
 //! 客户审计、主体事实与账号事实 adapter。
 
 use std::collections::HashMap;
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use entity_core::BaseModel;
-use erp_audit::{AuditActorLogs, AuditLog, AuditLogData, prepare_business_log};
+use erp_audit::AuditActorLogs;
 use erp_core::ids::PartyId;
 use erp_customer::{
     AccountFactPort, CustomerAuditPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit,
@@ -19,6 +17,7 @@ use erp_party::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
+use super::audit_conversion::{PreparedAudit, map_audit_error};
 use crate::audit::persist_log;
 
 /// 把客户审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -67,7 +66,7 @@ impl CustomerAuditPort for MongoCustomerAudit {
         resource_id: String,
     ) -> erp_customer::Result<PreparedCustomerAudit> {
         let log = actor.resource_log(action, resource_type, resource_id).map_err(map_audit_to_customer)?;
-        Ok(prepared_customer_audit(&log))
+        Ok(PreparedCustomerAudit::from_log(&log))
     }
 
     async fn persist(
@@ -75,7 +74,7 @@ impl CustomerAuditPort for MongoCustomerAudit {
         audit: &PreparedCustomerAudit,
         executor: &mut dyn Executor,
     ) -> erp_customer::Result<()> {
-        let log = audit_log_from_customer(audit).map_err(map_audit_to_customer)?;
+        let log = audit.to_log().map_err(map_audit_to_customer)?;
         persist_log(&self.db, &log, executor).await.map_err(map_audit_to_customer)?;
         Ok(())
     }
@@ -223,74 +222,14 @@ impl AccountFactPort for MongoCustomerAccountFacts {
     }
 }
 
-fn prepared_customer_audit(log: &AuditLog) -> PreparedCustomerAudit {
-    PreparedCustomerAudit::from_validated(
-        &log.base,
-        log.actor_id.clone(),
-        log.actor_account.clone(),
-        log.actor_type,
-        log.action.clone(),
-        log.resource_type.clone(),
-        log.resource_id.clone(),
-        log.success,
-        log.message.clone(),
-    )
-    .with_actor_name_snapshot(
-        log.structured_event.as_ref().and_then(|event| event.actor_name_snapshot.clone()),
-    )
-    .with_request_id(log.structured_event.as_ref().and_then(|event| event.request_id.clone()))
-    .with_event_sequence(
-        log.structured_event.as_ref().map(|event| event.event_sequence).unwrap_or(NonZeroU32::MIN),
-    )
-}
-
-fn audit_log_from_customer(audit: &PreparedCustomerAudit) -> erp_audit::Result<AuditLog> {
-    let mut log = AuditLog::new(
-        audit.id.clone(),
-        AuditLogData {
-            actor_id: audit.actor_id.clone(),
-            actor_account: audit.actor_account.clone(),
-            actor_type: audit.actor_type,
-            action: audit.action.clone(),
-            resource_type: audit.resource_type.clone(),
-            resource_id: audit.resource_id.clone(),
-            success: audit.success,
-            message: audit.message.clone(),
-        },
-    )?;
-    log.base = BaseModel {
-        id: audit.id.clone(),
-        version: audit.version,
-        created_at: audit.created_at,
-        updated_at: audit.updated_at,
-        deleted_at: audit.deleted_at,
-    };
-    prepare_business_log(&log)?
-        .with_actor_name_snapshot(audit.actor_name_snapshot.clone())?
-        .with_request_id(audit.request_id.clone())?
-        .with_event_sequence(audit.event_sequence.get())
-}
-
-fn map_audit_to_customer(error: erp_audit::Error) -> erp_customer::Error {
-    match error {
-        erp_audit::Error::Internal(message) => erp_customer::Error::Internal(message),
-        erp_audit::Error::NotFound(message) => erp_customer::Error::NotFound(message),
-        erp_audit::Error::ValidationError(message) => erp_customer::Error::ValidationError(message),
-        erp_audit::Error::InvalidInput(message) => erp_customer::Error::InvalidInput(message),
-        erp_audit::Error::BusinessLogicError(message) => erp_customer::Error::BusinessLogicError(message),
-        erp_audit::Error::ConflictError(message) => erp_customer::Error::ConflictError(message),
-        erp_audit::Error::ReceiptDuplicate(error) => erp_customer::Error::ReceiptDuplicate(error),
-        erp_audit::Error::TransientTransaction(error) => erp_customer::Error::TransientTransaction(error),
-        erp_audit::Error::Forbidden(message) => erp_customer::Error::Forbidden(message),
-        erp_audit::Error::Unauthenticated(message) => erp_customer::Error::Unauthenticated(message),
-        erp_audit::Error::Logic(error) => erp_customer::Error::Logic(error),
-        erp_audit::Error::OutcomeUnknown(error) => erp_customer::Error::OutcomeUnknown(error),
-        erp_audit::Error::RepositoryError(error) => erp_customer::Error::RepositoryError(error),
-    }
-}
+map_audit_error!(fn map_audit_to_customer -> erp_customer);
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
+
+    use entity_core::BaseModel;
+    use erp_audit::prepare_business_log;
     use erp_core::AccountKind;
 
     use super::*;
@@ -319,7 +258,7 @@ mod tests {
         };
         log.structured_event.as_mut().unwrap().occurred_at = log.base.created_at;
         let log = prepare_business_log(&log).unwrap();
-        let prepared = prepared_customer_audit(&log);
+        let prepared = PreparedCustomerAudit::from_log(&log);
         assert_eq!(prepared.actor_name_snapshot.as_deref(), Some("周晓彤"));
         assert_eq!(prepared.request_id.as_deref(), Some("request-original"));
         assert_eq!(prepared.event_sequence.get(), 7);
@@ -330,7 +269,7 @@ mod tests {
             .unwrap();
         assert_eq!(renamed_actor.actor_name_snapshot(), Some("新名称"));
         assert_eq!(renamed_actor.request_id(), Some("request-next"));
-        let restored = audit_log_from_customer(&prepared).unwrap();
+        let restored = prepared.to_log().unwrap();
         assert_eq!(restored, log);
         assert!(restored.message.as_deref().unwrap().contains("周晓彤"));
         assert!(restored.message.as_deref().unwrap().contains("客户"));
@@ -339,9 +278,9 @@ mod tests {
     #[test]
     fn prepared_audit_preserves_unknown_name_and_discards_private_body() {
         let log = actor().resource_log("customer.update", "customer", "object-1".into()).unwrap();
-        let mut prepared = prepared_customer_audit(&log);
+        let mut prepared = PreparedCustomerAudit::from_log(&log);
         prepared.message = Some("password bank-account ciphertext private-request".into());
-        let restored = audit_log_from_customer(&prepared).unwrap();
+        let restored = prepared.to_log().unwrap();
         let event = restored.structured_event.as_ref().unwrap();
         assert_eq!(event.actor_name_snapshot, None);
         assert_eq!(event.request_id, None);
@@ -361,15 +300,16 @@ mod tests {
     fn prepared_audit_rejects_invalid_request_id() {
         let log = actor().resource_log("customer.update", "customer", "object-1".into()).unwrap();
         for request_id in ["unsafe\nrequest".into(), "x".repeat(129)] {
-            let prepared = prepared_customer_audit(&log).with_request_id(Some(request_id));
-            assert!(audit_log_from_customer(&prepared).unwrap_err().to_string().contains("请求编号"));
+            let prepared = PreparedCustomerAudit::from_log(&log).with_request_id(Some(request_id));
+            assert!(prepared.to_log().unwrap_err().to_string().contains("请求编号"));
         }
     }
 
     #[test]
     fn prepared_audit_rejects_invalid_name_snapshot() {
         let log = actor().resource_log("customer.update", "customer", "object-1".into()).unwrap();
-        let prepared = prepared_customer_audit(&log).with_actor_name_snapshot(Some("unsafe\nname".into()));
-        assert!(audit_log_from_customer(&prepared).is_err());
+        let prepared =
+            PreparedCustomerAudit::from_log(&log).with_actor_name_snapshot(Some("unsafe\nname".into()));
+        assert!(prepared.to_log().is_err());
     }
 }

@@ -36,6 +36,10 @@
 3. 一个原子用例沿用同一 Executor，保留写入顺序、幂等恢复、审计及错误映射合同。
 4. 外部 HTTP、S3 和供应商 I/O 必须位于数据库事务之外；按既有流程持久化意图、执行外部调用、再确认结果。
 5. 应用入口选择具体命名 Process；不得重新建立通用 services 中转层。
+6. 审批定义与启动回执读取复用 `erp-workflow::service::approval::read`；普通单据撤回复用 `execution::cancel_prepare`。各入口保留自身授权、定义版本策略、精确命令身份及业务写入顺序，采购取消计划和库存调整恢复不得套用普通撤回策略。
+7. 领域预制审计与 `AuditLog` 的转换复用 `adapters::audit_conversion`，保留原事件元数据和关联字段；各领域继续拥有自己的审计 Port 和快照类型。
+8. 公司商品池导入导出使用 `erp-sales::entity::sales_inquiry_pool` 的模板合同。展示列不得取得需求写入资格，辅助公式和缓存不得成为业务事实。
+9. 商品与供给交接的候选及账号资格复用 `erp-identity::service::account_permissions`。候选查询前校验业务对象访问，实际交接前沿业务写入执行器重验目标资格。
 
 ## 代码入口
 

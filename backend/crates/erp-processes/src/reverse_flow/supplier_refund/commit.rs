@@ -28,7 +28,7 @@ use super::super::adapter::{
 };
 use super::super::return_settlement::{freeze_confirmation, validate_settlement};
 use super::super::start_approval::{
-    SupplierRefundStartInput, build_supplier_refund_start_input, load_bound_definition_graph_with_executor,
+    ReverseStartInput, build_supplier_refund_start_input, load_bound_definition_graph_with_executor,
     persist_supplier_refund_runtime,
 };
 use super::{load_supplier_refund_org_id, persist_bound_supplier_refund_document, replay_supplier_commit};
@@ -237,7 +237,7 @@ async fn prepare_commit_start(
 ) -> Result<PreparedExecution> {
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
-    let start_input = build_supplier_refund_start_input(SupplierRefundStartInput {
+    let start_input = build_supplier_refund_start_input(ReverseStartInput {
         graph,
         binding,
         subject: approval.subject.clone(),

@@ -5,7 +5,6 @@ use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
 use erp_finance::entity::receivable::CustomerReceipt;
@@ -20,13 +19,12 @@ use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::authorization::{
     AuthorizationFailure, converge_node_eligibility,
 };
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, start_scope_candidates,
-};
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{
     ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::read;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
 use mongodb::Database;
@@ -73,12 +71,9 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
     binding: &ApprovalDefinitionBinding,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let graph = db
-        .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("客户回款单绑定的审批定义不存在".to_string()))?;
-    Ok(graph)
+    read::bound_definition_graph(db, binding, "客户回款单绑定的审批定义不存在", executor)
+        .await
+        .map_err(Error::from)
 }
 
 /// 读取候选启动收据；不存在时返回 `None`。
@@ -128,24 +123,16 @@ pub(crate) async fn load_start_receipt_with_executor(
     idempotency_key: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::CustomerReceipt);
-    let scopes = start_scope_candidates(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    read::start_receipt(
+        db,
+        DocumentType::CustomerReceipt,
+        subject,
         subject_version,
-    )?;
-    for scope in scopes {
-        let receipt = db
-            .bpm_workflow()
-            .find_command_receipt(ApprovalCommandKind::StartApproval, &scope, &key, executor)
-            .await?;
-        if receipt.is_some() {
-            return Ok(receipt);
-        }
-    }
-    Ok(None)
+        idempotency_key,
+        executor,
+    )
+    .await
+    .map_err(Error::from)
 }
 
 /// 客户回款启动输入。

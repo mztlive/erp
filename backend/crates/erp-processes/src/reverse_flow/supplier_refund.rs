@@ -48,7 +48,7 @@ use super::cancel_approval::{
     persist_supplier_refund_cancel,
 };
 use super::start_approval::{
-    ReplayReturnStartInput, SupplierRefundStartInput, SupplierRefundStartPersistInput,
+    ReplayReturnStartInput, ReverseStartInput, SupplierRefundStartPersistInput,
     build_supplier_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_start_graph, load_supplier_refund_start_receipt,
     persist_supplier_refund_start, replay_return_start_with_executor, replay_subject_versions,
@@ -182,7 +182,7 @@ impl ReturnsProcess {
         )
         .await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
-        let start_input = build_supplier_refund_start_input(SupplierRefundStartInput {
+        let start_input = build_supplier_refund_start_input(ReverseStartInput {
             graph,
             binding: &binding,
             subject,

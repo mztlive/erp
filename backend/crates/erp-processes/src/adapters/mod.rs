@@ -1,6 +1,7 @@
 //! 把消费方端口接到提供方领域的组合 adapter。
 
 mod approval_materials;
+mod audit_conversion;
 mod catalog;
 pub(crate) use approval_materials::{
     freeze_approval_materials, persist_approval_snapshot, persist_cancel_copies,

@@ -1,36 +1,10 @@
 //! 公司商品池原导出格式的需求列映射；展示资料不进入询价。
 
 use erp_sales::entity::sales_inquiry_import::{INQUIRY_IMPORT_MAX_ROWS, InquiryImportIssue};
+use erp_sales::entity::sales_inquiry_pool::{INVALID_POOL_HEADERS, POOL_SHEET, PoolSelectionLayout};
 
 use super::parse::{Row, issue};
 use crate::{Error, Result};
-
-pub(super) const POOL_SHEET: &str = "选品";
-pub(super) const POOL_VERSION: &str = "sales-inquiry-pool-v1";
-const HEADERS: [&str; 20] = [
-    "主图",
-    "商品名称",
-    "规格",
-    "SKU 编号",
-    "SPU 编号",
-    "一件代发价（含税）",
-    "集采价（含税）",
-    "市场价（含税）",
-    "集采起订量",
-    "供应商编号",
-    "供应保障",
-    "商品类型",
-    "基础单位",
-    "条码",
-    "需求数量",
-    "销售价",
-    "需求备注",
-    "询价说明",
-    "单位编码",
-    "配送关联",
-];
-const REQUIRED: [&str; 5] = ["SKU 编号", "单位编码", "需求数量", "销售价", "需求备注"];
-const MAPPING: [&str; 7] = ["SKU 编号", "商品名称", "规格", "单位编码", "需求数量", "销售价", "需求备注"];
 
 /// 解析已版本校验的选品页，只映射客户实际填写的需求。
 /// # 参数
@@ -46,26 +20,16 @@ pub(super) fn pool_rows(rows: Vec<Row>, errors: &mut Vec<InquiryImportIssue>) ->
     let Some(header) = rows.iter().find(|row| row.number == 2) else {
         return Err(Error::ValidationError("选品页第 2 行表头缺失，请使用公司商品池导出文件".into()));
     };
-    let names = header
-        .cells
-        .iter()
-        .map(|cell| match cell.value.as_str() {
-            "销售参考价" => "销售价",
-            name => name,
-        })
-        .collect::<Vec<_>>();
-    if header.cells.iter().any(|cell| cell.formula)
-        || names.iter().any(|name| !HEADERS.contains(name))
-        || REQUIRED.iter().any(|name| !names.contains(name))
-        || names.iter().enumerate().any(|(index, name)| names[..index].contains(name))
-    {
-        return Err(Error::ValidationError("选品页表头无效；可删除展示列，但须保留 SKU 编号、单位编码、需求数量、销售价及需求备注，且不能新增列或重复表头".into()));
+    if header.cells.iter().any(|cell| cell.formula) {
+        return Err(Error::ValidationError(INVALID_POOL_HEADERS.into()));
     }
-    let mapping = MAPPING.map(|name| names.iter().position(|header| *header == name));
+    let names = header.cells.iter().map(|cell| cell.value.as_str()).collect::<Vec<_>>();
+    let layout = PoolSelectionLayout::new(&names)?;
     let mut products = Vec::new();
     for row in rows.iter().filter(|row| row.number > 2) {
-        validate_cells(row, &names, errors);
-        let cells = mapping
+        validate_cells(row, layout.headers(), errors);
+        let cells = layout
+            .mapping()
             .iter()
             .map(|index| index.and_then(|index| row.cells.get(index)).cloned().unwrap_or_default())
             .collect::<Vec<_>>();
@@ -94,6 +58,8 @@ fn validate_cells(row: &Row, headers: &[&str], errors: &mut Vec<InquiryImportIss
 
 #[cfg(test)]
 mod tests {
+    use erp_sales::entity::sales_inquiry_pool::{POOL_HEADERS as HEADERS, POOL_REQUIRED_HEADERS as REQUIRED};
+
     use super::*;
     use crate::sales_inquiry_import::parse::Cell;
 

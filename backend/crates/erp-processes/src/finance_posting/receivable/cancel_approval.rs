@@ -1,45 +1,22 @@
 //! 客户回款撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
-use bpm::engine::DefinitionGraph;
-use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use bpm::model::{
-    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
-    ParticipantId, Timestamp,
-};
+use bpm::model::{IdempotencyKey, SubjectRef};
 use erp_core::common::time::Instant;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::repository::prelude::*;
-use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+pub(crate) use erp_workflow::service::approval::execution::cancel_prepare::DocumentCancelRuntime as LoadedCancelRuntime;
+use erp_workflow::service::approval::execution::cancel_prepare::document_cancel_runtime;
 use erp_workflow::service::approval::execution::{
-    CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
-    claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason,
+    CancelExecutionInput, PreparedExecution, claim_and_persist_document_cancel_runtime,
 };
-use erp_workflow::{BpmExt, WorkItemExt};
-use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
-use super::start_approval::load_bound_definition_graph;
+use crate::Result;
 use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
-use crate::{Error, Result};
-
-/// 已加载的可撤回运行事实。
-pub(crate) struct LoadedCancelRuntime {
-    /// 绑定定义图。
-    pub graph: DefinitionGraph,
-    /// 非终态实例。
-    pub instance: ApprovalProcessInstance,
-    /// 当前执行。
-    pub current: ApprovalNodeExecution,
-    /// 当前实例决定的任务关闭策略。
-    pub task_policy: ApprovalCancellationTaskPolicy,
-    /// 当前执行上的开放任务。
-    pub open_tasks: Vec<WorkItem>,
-}
 
 /// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
 ///
@@ -59,41 +36,18 @@ pub(crate) struct LoadedCancelRuntime {
 pub(crate) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
-    subject: &bpm::SubjectRef,
+    subject: &SubjectRef,
     subject_version: u32,
 ) -> Result<LoadedCancelRuntime> {
-    let instance = db
-        .bpm_workflow()
-        .cancellation_instance_by_subject(subject, subject_version, &mut NoTransaction)
-        .await?
-        .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
-    let task_policy =
-        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
-    let current = db
-        .bpm_workflow()
-        .current_execution_for_cancellation(
-            &ApprovalProcessInstanceId::new(instance.base.id.clone()),
-            &mut NoTransaction,
-        )
-        .await?
-        .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
-    let open_tasks = db
-        .work_items()
-        .open_approval_tasks_for_execution(
-            &ApprovalNodeExecutionId::new(current.base.id.clone()),
-            &mut NoTransaction,
-        )
-        .await?;
-    current
-        .ensure_cancellation_tasks(task_policy, open_tasks.len())
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
-    Ok(LoadedCancelRuntime {
-        graph: load_bound_definition_graph(db, binding).await?,
-        instance,
-        current,
-        task_policy,
-        open_tasks,
-    })
+    Ok(document_cancel_runtime(
+        db,
+        binding,
+        subject,
+        subject_version,
+        "客户回款单绑定的审批定义不存在",
+        &mut NoTransaction,
+    )
+    .await?)
 }
 
 /// 构造统一 `cancel_approval` 输入。
@@ -121,35 +75,7 @@ pub fn build_customer_receipt_cancel_input(
     receipt: Option<bpm::model::ApprovalCommandReceipt>,
     now: Instant,
 ) -> Result<CancelExecutionInput> {
-    let reason = normalize_document_cancel_reason(reason)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
-    let eligibility = converge_eligibility(
-        runtime.current.assignee_participant_id.as_str(),
-        &runtime.current.assignee_name_snapshot,
-        None,
-    )?;
-    Ok(CancelExecutionInput {
-        command: ExecutionCommandInput {
-            graph: runtime.graph.clone(),
-            current_eligibility: eligibility.clone(),
-            next_eligibility: eligibility,
-            receipt,
-            idempotency_key: idempotency_key.clone(),
-            now: Timestamp::from_utc(now.as_utc()),
-        },
-        instance: runtime.instance.clone(),
-        current: runtime.current.clone(),
-        subject_version: runtime.instance.subject_version,
-        expected_instance_version: runtime.instance.base.version,
-        expected_execution_version: runtime.current.base.version,
-        expected_task_version: runtime.open_tasks.first().map(|item| item.base.version),
-        reason,
-        actor,
-        close_open_task: runtime.task_policy.closes_open_task(),
-        blocked_port: false,
-        receipt_id: ApprovalCommandReceiptId::new(next_id()),
-    })
+    Ok(runtime.cancel_input(reason, actor_id, idempotency_key, receipt, now)?)
 }
 
 /// 客户回款撤回事务写入集合。

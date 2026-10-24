@@ -5,6 +5,10 @@ use std::time::Duration;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_sales::entity::sales_inquiry_pool::{
+    DELIVERY_SHEET, INSTRUCTIONS_SHEET, POOL_DELIVERY_HEADERS, POOL_HEADERS as HEADERS, POOL_SHEET,
+    POOL_TABLE_NAME, PoolTemplateVersion, automatic_delivery_formula,
+};
 use erp_support::FileAssetExt;
 use image::{DynamicImage, GrayImage, ImageFormat, RgbImage};
 use persistence_core::NoTransaction;
@@ -21,28 +25,6 @@ use super::business::BusinessTransfers;
 use super::{TransferKind, TransferResult};
 use crate::{Error, Result};
 
-const HEADERS: [&str; 20] = [
-    "主图",
-    "商品名称",
-    "规格",
-    "SKU 编号",
-    "SPU 编号",
-    "一件代发价（含税）",
-    "集采价（含税）",
-    "市场价（含税）",
-    "集采起订量",
-    "供应商编号",
-    "供应保障",
-    "商品类型",
-    "基础单位",
-    "条码",
-    "需求数量",
-    "销售价",
-    "需求备注",
-    "询价说明",
-    "单位编码",
-    "配送关联",
-];
 const POOL_WIDTHS: [u16; 20] =
     [18, 32, 24, 24, 24, 20, 18, 18, 16, 26, 16, 14, 12, 24, 16, 18, 36, 32, 16, 16];
 const IMAGE_CELL_WIDTH: u32 = 128;
@@ -168,10 +150,16 @@ pub(super) fn write_row(sheet: &mut Worksheet, row: u32, values: &[String]) -> S
     Ok(())
 }
 fn pool_workbook(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Vec<u8>> {
+    pool_book(rows, images)?.save_to_buffer().map_err(xlsx)
+}
+
+fn pool_book(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Workbook> {
     let mut book = Workbook::new();
-    book.set_properties(&DocProperties::new().set_subject("sales-inquiry-pool-v4").set_author("公司商品池"));
+    book.set_properties(
+        &DocProperties::new().set_subject(PoolTemplateVersion::CURRENT.marker()).set_author("公司商品池"),
+    );
     let sheet = book.add_worksheet();
-    sheet.set_name("选品").map_err(xlsx)?;
+    sheet.set_name(POOL_SHEET).map_err(xlsx)?;
     configure_pool_sheet(sheet).map_err(xlsx)?;
     sheet
         .merge_range(
@@ -196,7 +184,7 @@ fn pool_workbook(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Ve
             u32::try_from(rows.len() + 1).map_err(|_| Error::ValidationError("商品数量超限".into()))?,
             19,
             &Table::new()
-                .set_name("InquirySelection")
+                .set_name(POOL_TABLE_NAME)
                 .set_style(TableStyle::None)
                 .set_banded_rows(false)
                 .set_columns(&cols),
@@ -204,7 +192,7 @@ fn pool_workbook(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Ve
         .map_err(xlsx)?;
     delivery_sheet(&mut book, rows).map_err(xlsx)?;
     pool_notes(&mut book)?;
-    book.save_to_buffer().map_err(xlsx)
+    Ok(book)
 }
 
 fn catalog_format() -> Format {
@@ -254,7 +242,7 @@ fn configure_pool_sheet(sheet: &mut Worksheet) -> StdResult<(), XlsxError> {
 }
 fn delivery_sheet(book: &mut Workbook, rows: &[Value]) -> StdResult<(), XlsxError> {
     let sheet = book.add_worksheet();
-    sheet.set_name("配送需求")?;
+    sheet.set_name(DELIVERY_SHEET)?;
     sheet.set_screen_gridlines(false);
     sheet.set_freeze_panes(1, 3)?;
     configure_delivery_sheet(sheet)?;
@@ -268,13 +256,7 @@ fn delivery_sheet(book: &mut Workbook, rows: &[Value]) -> StdResult<(), XlsxErro
         sheet.set_row_height(n, 42)?;
         quantity_checks(sheet, n)?;
         for (col, field) in [(0, "商品名称"), (1, "SKU 编号"), (2, "SPU 编号"), (9, "需求数量")] {
-            let lookup = |field: &str| {
-                format!(
-                    "INDEX(InquirySelection[{field}],MATCH(\"line-{}\",InquirySelection[配送关联],0))",
-                    i + 1
-                )
-            };
-            let formula = format!("IF({}=\"\",\"\",{})", lookup("需求数量"), lookup(field));
+            let formula = automatic_delivery_formula(&format!("line-{}", i + 1), field);
             sheet.write_formula(n, col, Formula::new(formula).set_result(""))?;
         }
     }
@@ -282,26 +264,11 @@ fn delivery_sheet(book: &mut Workbook, rows: &[Value]) -> StdResult<(), XlsxErro
 }
 
 fn configure_delivery_sheet(sheet: &mut Worksheet) -> StdResult<(), XlsxError> {
-    let headers = [
-        "商品名称",
-        "SKU 编号",
-        "SPU 编号",
-        "收件人",
-        "联系电话",
-        "省",
-        "市",
-        "区县",
-        "详细地址",
-        "配送数量",
-        "要求交付日期",
-        "交付条件",
-        "需求数量",
-        "已分配数量",
-        "剩余数量",
-        "分配状态",
-        "核对数量",
-        "核对商品",
-    ];
+    let headers = POOL_DELIVERY_HEADERS
+        .iter()
+        .chain(PoolTemplateVersion::CURRENT.check_headers())
+        .copied()
+        .collect::<Vec<_>>();
     let widths = [32, 24, 24, 16, 22, 16, 16, 16, 40, 16, 20, 28, 16, 16, 16, 24, 16, 24];
     sheet.set_row_height(0, 36)?;
     for (col, width) in widths.iter().enumerate() {
@@ -411,11 +378,11 @@ fn insert_pool_image(sheet: &mut Worksheet, row: u32, bytes: &[u8]) -> Result<()
 
 fn pool_notes(book: &mut Workbook) -> Result<()> {
     let notes = book.add_worksheet();
-    notes.set_name("填写说明").map_err(xlsx)?;
+    notes.set_name(INSTRUCTIONS_SHEET).map_err(xlsx)?;
     notes.set_screen_gridlines(false);
     notes.set_column_width(0, 20).map_err(xlsx)?;
     notes.set_column_width(1, 100).map_err(xlsx)?;
-    write_row(notes, 0, &["模板版本".into(), "sales-inquiry-pool-v4".into()]).map_err(xlsx)?;
+    write_row(notes, 0, &["模板版本".into(), PoolTemplateVersion::CURRENT.marker().into()]).map_err(xlsx)?;
     write_row(
         notes,
         1,
@@ -476,9 +443,10 @@ fn pool_values(row: &Value, i: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
+    use std::io::{Read, Write};
 
-    use zip::ZipArchive;
+    use zip::write::SimpleFileOptions;
+    use zip::{ZipArchive, ZipWriter};
 
     use super::*;
     use crate::sales_inquiry_import::parse;
@@ -491,6 +459,96 @@ mod tests {
         assert_eq!(parsed.product_sheet, "选品");
         assert!(parsed.automatic_delivery);
     }
+
+    fn filled_pool_bytes() -> Vec<u8> {
+        let rows = [
+            json!({"name":"=1+1 礼盒","sku_no":"001-A*","product_no":"000-SPU","specification":"红","sales_visible_price_gross":"999.9999","bulk_price_gross":"888.8888","base_unit_code":"BOX","base_unit_name":"盒","product_kind":"PHYSICAL","supplier_count":1,"supplier_codes":["private-supplier"]}),
+            json!({"name":"未选商品","sku_no":"002","product_no":"P2","base_unit_code":"PCS","product_kind":"PHYSICAL","supplier_count":0}),
+        ];
+        let mut book = pool_book(&rows, &HashMap::new()).unwrap();
+        let sheet = book.worksheet_from_name(POOL_SHEET).unwrap();
+        for (column, value) in [(14, "2.500001"), (15, "12.5001"), (16, "客户填写备注")] {
+            sheet.write_string(2, column, value).unwrap();
+        }
+        let sheet = book.worksheet_from_name(DELIVERY_SHEET).unwrap();
+        for (column, value) in [
+            (3, "张三"),
+            (4, "0013800000000"),
+            (5, "广东省"),
+            (6, "深圳市"),
+            (7, "南山区"),
+            (8, "科技园 001 号"),
+            (10, "2027-01-02"),
+            (11, "工作日配送"),
+        ] {
+            sheet.write_string(1, column, value).unwrap();
+        }
+        book.save_to_buffer().unwrap()
+    }
+
+    fn replace_shared_text(bytes: Vec<u8>, from: &str, to: &str) -> Vec<u8> {
+        let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        for index in 0..archive.len() {
+            let mut file = archive.by_index(index).unwrap();
+            let name = file.name().to_string();
+            let mut content = Vec::new();
+            file.read_to_end(&mut content).unwrap();
+            if name == "xl/sharedStrings.xml" {
+                let xml = String::from_utf8(content).unwrap();
+                assert!(xml.contains(from));
+                content = xml.replace(from, to).into_bytes();
+            }
+            writer.start_file(name, SimpleFileOptions::default()).unwrap();
+            writer.write_all(&content).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn filled_export_preserves_exact_demand_and_never_imports_display_prices_or_supplier() {
+        let parsed = parse::parse(&filled_pool_bytes()).unwrap();
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        assert_eq!(parsed.products.len(), 1);
+        let product = &parsed.products[0];
+        assert_eq!(product.number, 3);
+        assert_eq!(
+            product.cells.iter().map(|cell| cell.value.as_str()).collect::<Vec<_>>(),
+            ["001-A*", "=1+1 礼盒", "红", "BOX", "2.500001", "12.5001", "客户填写备注"]
+        );
+        assert!(product.cells.iter().all(|cell| cell.text && !cell.formula));
+        assert_eq!(parsed.deliveries.len(), 1);
+        assert_eq!(
+            parsed.deliveries[0].cells.iter().map(|cell| cell.value.as_str()).collect::<Vec<_>>(),
+            [
+                "001-A*",
+                "张三",
+                "0013800000000",
+                "广东省",
+                "深圳市",
+                "南山区",
+                "科技园 001 号",
+                "2.500001",
+                "2027-01-02",
+                "工作日配送"
+            ]
+        );
+        assert!(parsed.deliveries[0].cells.iter().all(|cell| !cell.formula));
+    }
+
+    #[test]
+    fn filled_export_accepts_legacy_price_header_and_rejects_both_price_names() {
+        let bytes = filled_pool_bytes();
+        let legacy = replace_shared_text(bytes.clone(), "<t>销售价</t>", "<t>销售参考价</t>");
+        let parsed = parse::parse(&legacy).unwrap();
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        assert_eq!(parsed.products[0].cells[5].value, "12.5001");
+        let duplicate = replace_shared_text(bytes, "<t>条码</t>", "<t>销售参考价</t>");
+        assert!(
+            matches!(parse::parse(&duplicate), Err(Error::ValidationError(message)) if message.contains("重复表头"))
+        );
+    }
+
     #[test]
     fn valid_png_and_jpeg_are_bounded_thumbnails() {
         let image = DynamicImage::new_rgb8(32, 32);

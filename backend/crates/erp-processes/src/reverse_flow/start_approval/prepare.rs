@@ -2,14 +2,11 @@ use application_core::AuditActor;
 use bpm::engine::DefinitionGraph;
 use bpm::model::{ApprovalCommandReceipt, SubjectRef};
 use erp_identity::SharedRbacService;
-use erp_workflow::BpmExt;
 use erp_workflow::entity::approval_integration::ApprovalStartIdentity;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, start_scope_candidates,
-};
 use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::read;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -122,20 +119,6 @@ pub async fn load_start_graph(
     resolve_start_approvers(db, graph, actor, receipt, &mut NoTransaction).await
 }
 
-/// 读取取消流程使用的绑定定义，不重新解析负责人。
-/// # 参数
-/// 数据库及原绑定。
-/// # 返回
-/// 原定义图。
-/// # 错误
-/// 定义缺失或查询失败时拒绝。
-pub async fn load_bound_definition_graph(
-    db: &Database,
-    binding: &ApprovalDefinitionBinding,
-) -> Result<DefinitionGraph> {
-    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
-}
-
 /// 使用调用方执行器加载冻结绑定的定义图。
 ///
 /// # 参数
@@ -153,12 +136,9 @@ pub async fn load_bound_definition_graph_with_executor(
     binding: &ApprovalDefinitionBinding,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let graph = db
-        .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("客户退款单绑定的审批定义不存在".to_string()))?;
-    Ok(graph)
+    read::bound_definition_graph(db, binding, "客户退款单绑定的审批定义不存在", executor)
+        .await
+        .map_err(Error::from)
 }
 
 /// 按精确单据类型依次读取当前 V3 与已知历史 StartApproval 作用域。
@@ -182,29 +162,9 @@ pub async fn load_start_receipt_for_document_type(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(document_type);
-    let scopes = start_scope_candidates(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
-        subject_version,
-    )?;
-    for scope in scopes {
-        let receipt = db
-            .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                &scope,
-                &key,
-                &mut NoTransaction,
-            )
-            .await?;
-        if receipt.is_some() {
-            return Ok(receipt);
-        }
-    }
-    Ok(None)
+    read::start_receipt(db, document_type, subject, subject_version, idempotency_key, &mut NoTransaction)
+        .await
+        .map_err(Error::from)
 }
 
 /// 退款/冲正启动收据回放入参。

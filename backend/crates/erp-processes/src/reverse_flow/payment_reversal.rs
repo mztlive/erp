@@ -43,7 +43,7 @@ use super::cancel_approval::{
     persist_payment_reversal_cancel,
 };
 use super::start_approval::{
-    PaymentReversalStartInput, PaymentReversalStartPersistInput, ReversalSubmitReplayInput,
+    PaymentReversalStartPersistInput, ReversalSubmitReplayInput, ReverseStartInput,
     build_payment_reversal_start_input, load_payment_reversal_start_receipt, load_start_graph,
     persist_payment_reversal_start, reversal_result_read_error,
 };
@@ -212,7 +212,7 @@ impl ReturnsProcess {
         let existing_receipt =
             load_payment_reversal_start_receipt(&self.db, &subject, version, &idempotency_key).await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
-        let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
+        let start_input = build_payment_reversal_start_input(ReverseStartInput {
             graph,
             binding: &binding,
             subject,

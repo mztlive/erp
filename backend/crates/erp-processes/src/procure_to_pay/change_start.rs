@@ -17,14 +17,13 @@ use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::{
     AuthorizationFailure, converge_node_eligibility,
 };
-use erp_workflow::service::approval::execution::idempotency::{
-    normalize_idempotency_key, start_scope_candidates,
-};
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::start::map_engine_error;
 use erp_workflow::service::approval::execution::{
     ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::read;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
 use mongodb::Database;
@@ -54,12 +53,9 @@ pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
 ) -> Result<DefinitionGraph> {
-    let graph = db
-        .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, &mut NoTransaction)
-        .await?
-        .ok_or_else(|| Error::ConflictError("采购变更单绑定的审批定义不存在".to_string()))?;
-    Ok(graph)
+    read::bound_definition_graph(db, binding, "采购变更单绑定的审批定义不存在", &mut NoTransaction)
+        .await
+        .map_err(Error::from)
 }
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -81,29 +77,16 @@ pub(super) async fn load_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::PurchaseChangeOrder);
-    let scopes = start_scope_candidates(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    read::start_receipt(
+        db,
+        DocumentType::PurchaseChangeOrder,
+        subject,
         subject_version,
-    )?;
-    for scope in scopes {
-        let receipt = db
-            .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                &scope,
-                &key,
-                &mut NoTransaction,
-            )
-            .await?;
-        if receipt.is_some() {
-            return Ok(receipt);
-        }
-    }
-    Ok(None)
+        idempotency_key,
+        &mut NoTransaction,
+    )
+    .await
+    .map_err(Error::from)
 }
 
 /// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购变更启动结果。

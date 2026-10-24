@@ -1,8 +1,8 @@
 //! 四类逆向单据共用的启动输入构图与节点绑定。
 //!
 //! 客户退款、供应商退款、回款冲正与付款冲正的启动输入仅单据类型、对象可读
-//! 判定与三处文案不同；各单据的公开输入结构只做薄转换后调用本模块，不得再
-//! 复制版本校验、绑定构图与入口查找。
+//! 判定与错误文案不同；各单据启动入口直接接收公共载荷，并声明各自合同，
+//! 不得再复制输入结构、字段搬运、版本校验、绑定构图与入口查找。
 
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::ids::{
@@ -163,4 +163,142 @@ pub fn reverse_start_bindings(
         return Err(Error::ConflictError(empty_definition.to_string()));
     }
     Ok(bindings)
+}
+
+#[cfg(test)]
+mod tests {
+    use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
+    use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, NewNodeDefinition};
+
+    use super::*;
+    use crate::reverse_flow::start_approval::{
+        build_customer_refund_start_input, build_payment_reversal_start_input,
+        build_receipt_reversal_start_input, build_supplier_refund_start_input,
+    };
+
+    type BuildStart = for<'a> fn(ReverseStartInput<'a>) -> Result<StartExecutionInput>;
+
+    fn cases() -> [(DocumentType, BuildStart, &'static str, &'static str); 4] {
+        [
+            (
+                DocumentType::CustomerRefund,
+                build_customer_refund_start_input,
+                "客户退款单绑定定义版本与已加载定义不一致",
+                "审批定义没有节点，无法启动客户退款审批",
+            ),
+            (
+                DocumentType::SupplierRefund,
+                build_supplier_refund_start_input,
+                "供应商退款单绑定定义版本与已加载定义不一致",
+                "审批定义没有节点，无法启动供应商退款审批",
+            ),
+            (
+                DocumentType::PaymentReversal,
+                build_payment_reversal_start_input,
+                "付款冲正单绑定定义版本与已加载定义不一致",
+                "审批定义没有节点，无法启动付款冲正审批",
+            ),
+            (
+                DocumentType::ReceiptReversal,
+                build_receipt_reversal_start_input,
+                "回款冲正单绑定定义版本与已加载定义不一致",
+                "审批定义没有节点，无法启动回款冲正审批",
+            ),
+        ]
+    }
+
+    fn graph(document_type: DocumentType) -> DefinitionGraph {
+        let at = Timestamp::from_unix_secs(1).unwrap();
+        let definition_id = ApprovalProcessDefinitionId::new("definition");
+        DefinitionGraph {
+            definition: ApprovalProcessDefinition::new_draft(
+                definition_id.clone(),
+                process_kind_of(document_type),
+                1,
+                "逆向审批",
+                "entry",
+                ParticipantId::new("admin").unwrap(),
+                at,
+            )
+            .unwrap(),
+            nodes: vec![
+                ApprovalNodeDefinition::new(NewNodeDefinition {
+                    id: ApprovalNodeDefinitionId::new("node"),
+                    process_definition_id: definition_id,
+                    node_key: "entry".into(),
+                    node_name: "复核".into(),
+                    node_purpose: None,
+                    display_order: 1,
+                    assignee_participant_id: Some(ParticipantId::new("reviewer").unwrap()),
+                    assignee_label_snapshot: "复核人".into(),
+                    at,
+                })
+                .unwrap(),
+            ],
+            transitions: vec![],
+        }
+    }
+
+    fn binding(version: u32) -> ApprovalDefinitionBinding {
+        ApprovalDefinitionBinding::new(
+            ApprovalProcessDefinitionId::new("definition"),
+            version,
+            Instant::from_unix_secs(1),
+        )
+        .unwrap()
+    }
+
+    fn input<'a>(
+        document_type: DocumentType,
+        graph: DefinitionGraph,
+        binding: &'a ApprovalDefinitionBinding,
+    ) -> ReverseStartInput<'a> {
+        ReverseStartInput {
+            graph,
+            binding,
+            subject: SubjectRef::new(document_type.as_str(), "document").unwrap(),
+            subject_version: 3,
+            actor_id: "submitter",
+            organization_id: "business-org",
+            idempotency_key: "  operation-key  ",
+            receipt: None,
+            now: Instant::from_unix_secs(10),
+        }
+    }
+
+    #[test]
+    fn all_reverse_entries_keep_shared_payload_and_document_process_kind() {
+        for (document_type, build, _, _) in cases() {
+            let built = build(input(document_type, graph(document_type), &binding(1))).unwrap();
+            assert_eq!(built.process_kind, process_kind_of(document_type));
+            assert_eq!(built.subject, SubjectRef::new(document_type.as_str(), "document").unwrap());
+            assert_eq!(built.subject_version, 3);
+            assert_eq!(built.actor.as_str(), "submitter");
+            assert_eq!(built.binding_id, "definition");
+            assert_eq!(built.definition_version, 1);
+            assert_eq!(built.command.idempotency_key.as_str(), "operation-key");
+            assert_eq!(built.command.now, Timestamp::from_unix_secs(10).unwrap());
+            assert_eq!(built.bindings.len(), 1);
+            assert_eq!(built.bindings[0].participant.as_str(), "reviewer");
+            assert_eq!(built.command.current_eligibility.participant().as_str(), "reviewer");
+        }
+    }
+
+    #[test]
+    fn all_reverse_entries_preserve_definition_version_conflict_messages() {
+        for (document_type, build, version_mismatch, _) in cases() {
+            let error = build(input(document_type, graph(document_type), &binding(2))).unwrap_err();
+            assert!(matches!(error, Error::ConflictError(message) if message == version_mismatch));
+        }
+    }
+
+    #[test]
+    fn all_reverse_entries_preserve_empty_definition_conflict_messages() {
+        for (document_type, build, _, empty_definition) in cases() {
+            let mut empty = graph(document_type);
+            empty.nodes.clear();
+            let error = build(input(document_type, empty, &binding(1))).unwrap_err();
+            assert!(matches!(error, Error::ConflictError(message) if message == empty_definition));
+        }
+    }
 }

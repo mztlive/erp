@@ -36,7 +36,7 @@ use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::{
     approval_action_roles_with_executor, approval_actor_is_active_with_executor,
-    approval_participant_permissions_with_executor,
+    approval_participant_permissions_with_executor, read,
 };
 use erp_workflow::{ApprovalIntegrationExt, BpmExt};
 use id_generator::next_id;
@@ -87,13 +87,9 @@ pub(super) async fn load_bound_definition_graph_with_executor(
     binding: &ApprovalDefinitionBinding,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let graph = db
-        .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, executor)
-        .await?
-        .filter(|graph| graph.definition.definition_version == binding.approval_definition_version)
-        .ok_or_else(|| Error::ConflictError("库存调整单绑定的审批定义不存在".to_string()))?;
-    Ok(graph)
+    read::exact_bound_definition_graph(db, binding, "库存调整单绑定的审批定义不存在", executor)
+        .await
+        .map_err(Error::from)
 }
 
 /// 使用完整库存提交身份规划启动；禁止调用方在规划后覆盖 receipt digest。
@@ -134,16 +130,7 @@ async fn find_stock_adjustment_start_receipt(
     key: &IdempotencyKey,
     executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalCommandReceipt>> {
-    for scope in scopes {
-        let receipt = db
-            .bpm_workflow()
-            .find_command_receipt(ApprovalCommandKind::StartApproval, scope, key, executor)
-            .await?;
-        if receipt.is_some() {
-            return Ok(receipt);
-        }
-    }
-    Ok(None)
+    read::start_receipt_for_scopes(db, scopes, key, executor).await.map_err(Error::from)
 }
 
 /// 在同一数据库快照内先按稳定作用域解析启动收据，再重验当前权限与结果事实。

@@ -5,18 +5,17 @@ use std::collections::HashMap;
 use erp_sales::entity::sales_inquiry_import::{
     INQUIRY_IMPORT_MAX_BYTES, INQUIRY_IMPORT_MAX_ROWS, INQUIRY_TEMPLATE_VERSION, InquiryImportIssue,
 };
+use erp_sales::entity::sales_inquiry_pool::{INSTRUCTIONS_SHEET, POOL_SHEET, PoolTemplateVersion};
 
-use super::pool::{POOL_SHEET, POOL_VERSION, pool_rows};
-use super::pool_delivery::{self, AUTO_POOL_VERSION};
-use super::pool_delivery_checks::{CHECKED_POOL_VERSION, SCALAR_POOL_VERSION, strip_checks};
-use super::scalar_cells;
+use super::pool::pool_rows;
+use super::pool_delivery_checks::strip_checks;
+use super::{pool_delivery, scalar_cells};
 use crate::xlsx::{self, Archive, ArchiveLimits, SheetLimits};
 pub(crate) use crate::xlsx::{Cell, Row};
 use crate::{Error, Result};
 
 pub(super) const PRODUCT_SHEET: &str = "商品清单";
-pub(super) const DELIVERY_SHEET: &str = "配送需求";
-const INSTRUCTIONS: &str = "填写说明";
+pub(super) use erp_sales::entity::sales_inquiry_pool::DELIVERY_SHEET;
 pub(super) const PRODUCT_HEADERS: [&str; 7] =
     ["SKU编码", "商品名称", "规格", "单位", "需求数量", "销售价", "需求备注"];
 pub(super) const DELIVERY_HEADERS: [&str; 10] =
@@ -81,14 +80,8 @@ pub(crate) fn quote_sheets(bytes: &[u8]) -> Result<HashMap<String, Vec<Row>>> {
 }
 
 fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
-    let automatic = check_version(&sheets)?;
-    let version = sheets
-        .get(INSTRUCTIONS)
-        .and_then(|rows| rows.iter().find(|row| row.number == 1))
-        .and_then(|row| row.cells.get(1))
-        .map(|cell| cell.value.as_str());
-    let scalar = version == Some(SCALAR_POOL_VERSION);
-    let checked = scalar || version == Some(CHECKED_POOL_VERSION);
+    let version = check_version(&sheets)?;
+    let automatic = version.is_some_and(PoolTemplateVersion::automatic_delivery);
     let mut errors = Vec::new();
     let product_sheet = if sheets.contains_key(POOL_SHEET) { POOL_SHEET } else { PRODUCT_SHEET };
     let product_rows = sheets.remove(product_sheet).unwrap_or_default();
@@ -98,8 +91,8 @@ fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
         data_rows(product_rows.clone(), PRODUCT_SHEET, &PRODUCT_HEADERS, &mut errors)
     };
     let mut delivery_rows = sheets.remove(DELIVERY_SHEET).unwrap_or_default();
-    if checked {
-        strip_checks(&mut delivery_rows, scalar, &mut errors);
+    if let Some(version) = version {
+        strip_checks(&mut delivery_rows, version, &mut errors);
     }
     let mut deliveries = if automatic {
         pool_delivery::delivery_rows(&product_rows, delivery_rows, &mut errors)?
@@ -120,7 +113,7 @@ fn sheet_paths(archive: &mut Archive<'_>, quote: bool) -> Result<Vec<(String, St
     let allowed = if quote {
         &["报价表", "回导信息", "配送需求"][..]
     } else {
-        &[PRODUCT_SHEET, POOL_SHEET, DELIVERY_SHEET, INSTRUCTIONS][..]
+        &[PRODUCT_SHEET, POOL_SHEET, DELIVERY_SHEET, INSTRUCTIONS_SHEET][..]
     };
     if result.iter().any(|(name, _)| !allowed.contains(&name.as_str())) {
         return Err(invalid("只接受选品（或商品清单）、配送需求、填写说明三个工作表"));
@@ -128,41 +121,39 @@ fn sheet_paths(archive: &mut Archive<'_>, quote: bool) -> Result<Vec<(String, St
     if !quote
         && (result.len() != 3
             || !result.iter().any(|(name, _)| name == DELIVERY_SHEET)
-            || !result.iter().any(|(name, _)| name == INSTRUCTIONS))
+            || !result.iter().any(|(name, _)| name == INSTRUCTIONS_SHEET))
     {
         return Err(invalid("须包含选品（或商品清单）、配送需求及填写说明三个工作表"));
     }
     Ok(result)
 }
 
-fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<bool> {
-    let row = sheets.get(INSTRUCTIONS).and_then(|rows| rows.iter().find(|row| row.number == 1));
-    let versions = if sheets.contains_key(POOL_SHEET) {
-        &[POOL_VERSION, AUTO_POOL_VERSION, CHECKED_POOL_VERSION, SCALAR_POOL_VERSION][..]
+fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<Option<PoolTemplateVersion>> {
+    let row = sheets.get(INSTRUCTIONS_SHEET).and_then(|rows| rows.iter().find(|row| row.number == 1));
+    let marker = row.and_then(|row| row.cells.get(1)).map(|cell| cell.value.as_str());
+    let pool_version = marker.and_then(PoolTemplateVersion::from_marker);
+    let matches_template = if sheets.contains_key(POOL_SHEET) {
+        pool_version.is_some()
     } else {
-        &[INQUIRY_TEMPLATE_VERSION][..]
+        marker == Some(INQUIRY_TEMPLATE_VERSION)
     };
     let valid = row.is_some_and(|row| {
         row.cells.len() >= 2
             && row.cells[0].value == "模板版本"
-            && versions.contains(&row.cells[1].value.as_str())
+            && matches_template
             && !row.cells.iter().any(|cell| cell.formula)
     });
     if !valid {
         return Err(invalid("填写说明第 1 行模板版本与工作表不匹配，请使用当前导出文件"));
     }
-    if sheets.values().flatten().any(|row| row.cells.iter().any(|cell| cell.formula)) {
-        // 明细公式在 data_rows 中定位；说明页公式不参与业务，但仍须先转值。
-        if sheets
-            .get(INSTRUCTIONS)
-            .is_some_and(|rows| rows.iter().any(|row| row.cells.iter().any(|cell| cell.formula)))
-        {
-            return Err(invalid("填写说明含公式，请先转换为值"));
-        }
+    // 说明页公式不参与业务，但仍须先转值；明细公式由各模板解析器定位。
+    if sheets
+        .get(INSTRUCTIONS_SHEET)
+        .is_some_and(|rows| rows.iter().any(|row| row.cells.iter().any(|cell| cell.formula)))
+    {
+        return Err(invalid("填写说明含公式，请先转换为值"));
     }
-    Ok(row.is_some_and(|row| {
-        [AUTO_POOL_VERSION, CHECKED_POOL_VERSION, SCALAR_POOL_VERSION].contains(&row.cells[1].value.as_str())
-    }))
+    Ok(pool_version)
 }
 
 pub(super) fn data_rows(
@@ -242,6 +233,7 @@ mod tests {
 
     use erp_sales::entity::sales_inquiry::{InquiryFulfillmentKind, InquiryRequirementData};
     use erp_sales::entity::sales_inquiry_import::{InquiryImportSku, InquiryImportValidation};
+    use erp_sales::entity::sales_inquiry_pool::POOL_DELIVERY_HEADERS;
     use regex::Regex;
     use zip::write::SimpleFileOptions;
     use zip::{ZipArchive, ZipWriter};
@@ -368,8 +360,8 @@ mod tests {
             (
                 "xl/worksheets/sheet2.xml",
                 sheet(
-                    if version == AUTO_POOL_VERSION {
-                        &pool_delivery::HEADERS[..]
+                    if version == PoolTemplateVersion::V2.marker() {
+                        &POOL_DELIVERY_HEADERS[..]
                     } else {
                         &DELIVERY_HEADERS[..]
                     },
@@ -407,7 +399,9 @@ mod tests {
         let headers = ["SKU 编号", "单位编码", "需求数量", "销售参考价", "需求备注", "供应商编号"];
         let xml = sheet(&headers, "").replace("1\"", "2\"").replace("</sheetData>", r#"<c r="A4" t="inlineStr"><is><t>001</t></is></c><c r="B4" t="inlineStr"><is><t>PCS</t></is></c><c r="C4" t="inlineStr"><is><t>2</t></is></c><c r="F4" t="inlineStr"><is><t>private</t></is></c><c r="A5" t="inlineStr"><is><t>unused</t></is></c></sheetData>"#);
         let delivery = r#"<c r="A2" t="inlineStr"><is><t>unused</t></is></c><c r="A8" t="inlineStr"><is><t>001</t></is></c><c r="C8" t="inlineStr"><is><t>0012345</t></is></c><c r="H8" t="inlineStr"><is><t>2</t></is></c>"#;
-        let parsed = parse(&package_sheet(POOL_VERSION, POOL_SHEET, xml.clone(), delivery)).unwrap();
+        let parsed =
+            parse(&package_sheet(PoolTemplateVersion::V1.marker(), POOL_SHEET, xml.clone(), delivery))
+                .unwrap();
         assert!(parsed.errors.is_empty());
         assert_eq!(parsed.product_sheet, POOL_SHEET);
         assert_eq!(parsed.products.len(), 1);
@@ -445,7 +439,8 @@ mod tests {
             sheet(&headers, "").replace("1\"", "2\"").replace("</sheetData>", &format!("{data}</sheetData>"));
         let delivery = [("A", "商品名称"), ("B", "SKU 编号"), ("C", "SPU 编号"), ("J", "需求数量")]
             .iter().map(|(column, field)| format!(r#"<c r="{column}2" t="str"><f>IF(INDEX(InquirySelection[需求数量],MATCH("line-1",InquirySelection[配送关联],0))="","",INDEX(InquirySelection[{field}],MATCH("line-1",InquirySelection[配送关联],0)))</f><v>stale-cache</v></c>"#)).collect::<String>();
-        let parsed = parse(&package_sheet(AUTO_POOL_VERSION, POOL_SHEET, xml, &delivery)).unwrap();
+        let parsed =
+            parse(&package_sheet(PoolTemplateVersion::V2.marker(), POOL_SHEET, xml, &delivery)).unwrap();
         assert!(parsed.errors.is_empty());
         assert_eq!(parsed.products[0].cells[0].value, "00123");
         assert_eq!(parsed.deliveries[0].cells[0].value, "00123");

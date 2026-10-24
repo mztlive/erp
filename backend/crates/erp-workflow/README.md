@@ -34,6 +34,8 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/approval/mod.rs](src/service/approval/mod.rs) | 审批定义、运行与政策入口 |
+| [src/service/approval/read.rs](src/service/approval/read.rs) | 冻结定义与有序启动回执读取；收据命中后仍须核验精确命令身份 |
+| [src/service/approval/execution/cancel_prepare.rs](src/service/approval/execution/cancel_prepare.rs) | 普通单据撤回事实读取与输入构造；全程沿用调用方 Executor |
 | [src/service/work_item/mod.rs](src/service/work_item/mod.rs) | 工作项命令入口 |
 | [src/repository/bpm.rs](src/repository/bpm.rs) | BPM 持久化适配 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |

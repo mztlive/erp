@@ -40,7 +40,7 @@ impl ReturnsProcess {
         let existing_receipt =
             load_start_receipt(&self.db, &subject, refund.approval_subject_version, &idempotency_key).await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
-        let start_input = build_customer_refund_start_input(CustomerRefundStartInput {
+        let start_input = build_customer_refund_start_input(ReverseStartInput {
             graph,
             binding: &binding,
             subject,

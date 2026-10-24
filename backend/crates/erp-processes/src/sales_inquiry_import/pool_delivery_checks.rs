@@ -1,35 +1,42 @@
 //! 数量核对列只作填写提示；导入丢弃缓存，仍按配送明细执行领域守恒校验。
 
 use erp_sales::entity::sales_inquiry_import::InquiryImportIssue;
+use erp_sales::entity::sales_inquiry_pool::{POOL_DELIVERY_HEADERS, PoolTemplateVersion};
 
 use super::parse::{DELIVERY_SHEET, Row, issue};
 
-pub(super) const CHECKED_POOL_VERSION: &str = "sales-inquiry-pool-v3";
-pub(super) const SCALAR_POOL_VERSION: &str = "sales-inquiry-pool-v4";
-const HEADERS: [&str; 6] = ["需求数量", "已分配数量", "剩余数量", "分配状态", "核对数量", "核对商品"];
-
 /// 校验并移除不参与业务写入的数量核对列。
 /// # 参数
-/// `rows` 为配送页原始行，`scalar` 表示 v4 逐行核对，`errors` 接收格式错误。
+/// `rows` 为配送页原始行，`version` 决定已发布辅助列，`errors` 接收格式错误。
 /// # 返回
 /// 原地保留既有十二列配送明细。
 /// # 错误
 /// 非约定表头或额外字段登记逐行错误，阻止后续确认；辅助公式不参与校验。
-pub(super) fn strip_checks(rows: &mut [Row], scalar: bool, errors: &mut Vec<InquiryImportIssue>) {
-    let headers = if scalar { &HEADERS[..] } else { &HEADERS[..4] };
+pub(super) fn strip_checks(
+    rows: &mut [Row],
+    version: PoolTemplateVersion,
+    errors: &mut Vec<InquiryImportIssue>,
+) {
+    let headers = version.check_headers();
+    if headers.is_empty() {
+        return;
+    }
+    let business_columns = POOL_DELIVERY_HEADERS.len();
     for row in rows {
-        if row.cells.len() > 12 + headers.len() {
+        if row.cells.len() > business_columns + headers.len() {
             issue(errors, DELIVERY_SHEET, row.number, "附加列", "配送页不得添加字段");
         }
         if row.number == 1
             && !headers.iter().enumerate().all(|(index, name)| {
-                row.cells.get(index + 12).is_some_and(|cell| cell.value == *name && !cell.formula)
+                row.cells
+                    .get(index + business_columns)
+                    .is_some_and(|cell| cell.value == *name && !cell.formula)
             })
         {
             issue(errors, DELIVERY_SHEET, 1, "表头", "请保留数量核对列及原导出的隐藏核对列");
         }
         // 辅助列不进入业务数据；共享公式、软件改写和缓存均直接丢弃，不执行表达式。
-        row.cells.truncate(12);
+        row.cells.truncate(business_columns);
     }
 }
 
@@ -55,7 +62,7 @@ mod tests {
         rows[0].cells[9].value = "60".into();
         rows[1].cells[9].value = "40".into();
         let mut errors = vec![];
-        strip_checks(&mut rows, false, &mut errors);
+        strip_checks(&mut rows, PoolTemplateVersion::V3, &mut errors);
         assert!(errors.is_empty());
         assert_eq!(rows[0].cells.len(), 12);
         assert_eq!(rows[0].cells[9].value, "60");
@@ -68,7 +75,7 @@ mod tests {
         rows[0].cells[13].formula_text = Some("1+1".into());
         rows[0].cells.push(Cell::default());
         let mut errors = vec![];
-        strip_checks(&mut rows, false, &mut errors);
+        strip_checks(&mut rows, PoolTemplateVersion::V3, &mut errors);
         assert_eq!(errors.len(), 1);
         assert!(errors.iter().any(|error| error.column == "附加列"));
     }
@@ -84,7 +91,7 @@ mod tests {
         }
         rows[0].cells[16].formula_text = Some("1+1".into());
         let mut errors = vec![];
-        strip_checks(&mut rows, true, &mut errors);
+        strip_checks(&mut rows, PoolTemplateVersion::V4, &mut errors);
         assert!(errors.is_empty());
         assert_eq!(rows[0].cells.len(), 12);
         assert!(rows[0].cells.iter().all(|cell| !cell.formula && cell.value.is_empty()));
@@ -94,7 +101,7 @@ mod tests {
     fn missing_check_headers_are_rejected() {
         let mut rows = vec![Row { number: 1, cells: vec![Cell::default(); 12] }];
         let mut errors = vec![];
-        strip_checks(&mut rows, false, &mut errors);
+        strip_checks(&mut rows, PoolTemplateVersion::V3, &mut errors);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].column, "表头");
     }

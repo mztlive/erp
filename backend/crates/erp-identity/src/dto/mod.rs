@@ -1,6 +1,7 @@
 //! 身份、IAM、认证与访问控制 DTO。
 
 mod access_control;
+mod account_permission;
 mod auth;
 pub mod authorization_bundle;
 mod iam;
@@ -10,6 +11,7 @@ mod portal;
 mod role_template;
 
 pub use access_control::*;
+pub use account_permission::*;
 pub use auth::*;
 pub use iam::*;
 pub use organization::*;

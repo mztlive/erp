@@ -35,6 +35,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/iam/mod.rs](src/service/iam/mod.rs) | 账号、角色与 RBAC 服务入口 |
+| [src/service/account_permissions.rs](src/service/account_permissions.rs) | 按功能权限筛选有效后台账号及重验目标资格；不替代业务对象授权 |
 | [src/service/access_control/policy_bundle/mod.rs](src/service/access_control/policy_bundle/mod.rs) | 授权文件预览、应用及导出 |
 | [src/entity/authorization_bundle/mod.rs](src/entity/authorization_bundle/mod.rs) | 文件格式、权限差异、审核摘要和重放规则 |
 | [src/service/auth/mod.rs](src/service/auth/mod.rs) | 后台认证入口 |

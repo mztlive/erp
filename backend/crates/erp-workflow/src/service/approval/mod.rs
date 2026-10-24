@@ -15,6 +15,7 @@ use crate::dto::approval as dto;
 pub mod execution;
 pub mod policy;
 pub mod process_kind;
+pub mod read;
 mod scope;
 pub mod upgrade_subject;
 
