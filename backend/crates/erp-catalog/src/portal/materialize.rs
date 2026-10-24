@@ -93,8 +93,7 @@ impl CatalogPortalService {
             ensure_version(product.base.version, target.version)?;
             if !product.is_active()
                 || product.product_kind != input.product_kind
-                || product.stable.current_revision_id.as_ref().map(ToString::to_string).as_deref()
-                    != Some(&target.revision_id)
+                || product.stable.current_revision_id.as_deref() != Some(target.revision_id.as_str())
             {
                 return Err(Error::ConflictError("匹配商品已变化或不可用".into()));
             }
@@ -190,8 +189,7 @@ impl CatalogPortalService {
                 || sku.product_id.as_ref() != product.base.id
                 || sku.base_unit_id.as_ref() != mapped.unit_id
                 || sku.specification_signature != signature
-                || sku.stable.current_revision_id.as_ref().map(ToString::to_string).as_deref()
-                    != Some(&target.revision_id)
+                || sku.stable.current_revision_id.as_deref() != Some(target.revision_id.as_str())
             {
                 return Err(Error::ConflictError("匹配SKU身份、单位、规格或修订已变化".into()));
             }

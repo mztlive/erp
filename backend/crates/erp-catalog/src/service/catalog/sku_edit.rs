@@ -54,10 +54,11 @@ impl CatalogService {
         ctx: NewSkuContext<'_>,
         input: ProductSkuInput,
     ) -> Result<SkuEditItem> {
-        new_sku_edit_identity(&input).ensure_new().map_err(map_sku_edit_error)?;
+        sku_edit_identity(&input, None).ensure_new().map_err(map_sku_edit_error)?;
         let signature = specification_signature_for(&input.spec_entries)?;
         self.ensure_barcode_available(&input.barcode, None).await?;
-        let revision = build_initial_sku_revision(&input, ctx.effective_from, ctx.effective_to)?;
+        let revision =
+            sku_revision_for_input(SkuId::new(next_id()), 1, ctx.effective_from, ctx.effective_to, &input)?;
         let mut sku = Sku::new(
             SkuId::new(revision.sku_id.to_string()),
             SkuData {
@@ -163,25 +164,6 @@ pub(super) fn sku_revision_for_input(
     )?)
 }
 
-/// 构造新 SKU 的首个修订。
-///
-/// # 参数
-/// * `input` - 新 SKU 输入
-/// * `effective_from` / `effective_to` - 首个修订生效区间
-///
-/// # 返回
-/// 返回使用新稳定 SKU ID、修订号 1 的不可变 SKU 修订。
-///
-/// # 错误
-/// SKU 修订字段违反实体不变式时返回错误。
-fn build_initial_sku_revision(
-    input: &ProductSkuInput,
-    effective_from: BusinessDate,
-    effective_to: Option<BusinessDate>,
-) -> Result<SkuRevision> {
-    sku_revision_for_input(SkuId::new(next_id()), 1, effective_from, effective_to, input)
-}
-
 /// 根据请求中的 SPU 局部规格名和值计算 SKU 身份签名。
 ///
 /// # 参数
@@ -229,20 +211,6 @@ pub(super) fn sku_edit_identity<'a>(
         reenable: input.reenable,
         change_reason,
     }
-}
-
-/// 构造新 SKU 身份值对象。
-///
-/// # 参数
-/// * `input` - 客户端提交的新 SKU 行
-///
-/// # 返回
-/// 返回用于校验“不得猜测既有身份”的借用快照。
-///
-/// # 错误
-/// 无；具体身份规则由 [`SkuEditIdentity::ensure_new`] 校验。
-fn new_sku_edit_identity(input: &ProductSkuInput) -> SkuEditIdentity<'_> {
-    sku_edit_identity(input, None)
 }
 
 /// 把 SKU 身份领域错误映射为稳定的 Service 错误语义。

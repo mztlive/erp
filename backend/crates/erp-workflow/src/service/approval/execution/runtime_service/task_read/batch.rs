@@ -149,8 +149,8 @@ async fn load_runtime_facts(
     let mut seen = HashSet::new();
     let instance_ids = executions
         .iter()
+        .filter(|execution| seen.insert(&execution.process_instance_id))
         .map(|execution| execution.process_instance_id.clone())
-        .filter(|id| seen.insert(id.clone()))
         .collect::<Vec<_>>();
     let instances = db.bpm_workflow().list_instances_by_ids(&instance_ids, executor).await?;
     let mut facts = RuntimeBatchFacts {
@@ -183,8 +183,9 @@ fn execution_ids(items: &[&WorkItem]) -> Vec<ApprovalNodeExecutionId> {
     let mut seen = HashSet::new();
     items
         .iter()
-        .filter_map(|item| item.approval_node_execution_id.clone())
-        .filter(|id| seen.insert(id.clone()))
+        .filter_map(|item| item.approval_node_execution_id.as_ref())
+        .filter(|id| seen.insert(*id))
+        .cloned()
         .collect()
 }
 
@@ -209,7 +210,7 @@ fn snapshot_instance_ids(items: &[&WorkItem], facts: &RuntimeBatchFacts) -> Vec<
         if runtime_document_type(instance, false).is_err() {
             break;
         }
-        if seen.insert(instance.base.id.clone()) {
+        if seen.insert(instance.base.id.as_str()) {
             result.push(instance.base.id.clone());
         }
     }
@@ -320,7 +321,7 @@ fn open_execution_ids(
         }
         if item.status == WorkItemStatus::Open
             && let Some(id) = &item.approval_node_execution_id
-            && seen.insert(id.clone())
+            && seen.insert(id)
         {
             result.push(id.clone());
         }

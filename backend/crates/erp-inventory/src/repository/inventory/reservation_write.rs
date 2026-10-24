@@ -22,8 +22,7 @@ impl InventoryRepository<'_> {
         reservations: &[StockReservation],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_many(&self.db.stock_reservations().collection(), reservations.to_vec(), executor)
-            .await
+        mongo_ops::insert_many(&self.db.stock_reservations().collection(), reservations, executor).await
     }
 
     /// 按输入顺序批量保存预占分录；与预占写入复用同一执行器。
@@ -42,7 +41,6 @@ impl InventoryRepository<'_> {
         entries: &[StockReservationEntry],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_many(&self.db.stock_reservation_entries().collection(), entries.to_vec(), executor)
-            .await
+        mongo_ops::insert_many(&self.db.stock_reservation_entries().collection(), entries, executor).await
     }
 }

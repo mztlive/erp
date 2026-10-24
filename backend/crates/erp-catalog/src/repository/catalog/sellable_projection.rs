@@ -9,7 +9,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::change_scan::{ChangeWatermarks, ChangeWindow};
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
-use mongodb::bson::{Bson, Document, doc, serialize_to_bson};
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
 use persistence_core::dirty_marks::{self, DirtyMark};
@@ -448,7 +448,7 @@ fn projection_filter(filter: &SellableSkuFilter, restrict: Option<&[String]>) ->
         query.insert("_id", doc! { "$in": ids });
     }
     if let Some(kind) = filter.product_kind {
-        query.insert("row.product_kind", serialize_to_bson(&kind).unwrap_or(Bson::Null));
+        query.insert("row.product_kind", kind.as_str());
     }
     for (field, value) in [
         ("row.category_id", &filter.category_id),
@@ -516,7 +516,7 @@ mod tests {
 
     use erp_core::common::time::BusinessDate;
     use erp_core::money::Amount;
-    use mongodb::bson::{Bson, doc};
+    use mongodb::bson::{Bson, doc, serialize_to_bson};
 
     use super::{
         SELLABLE_SKU_PROJECTION_VERSION, SellableSkuProjectionState, projection_filter, projection_sort,
@@ -550,6 +550,18 @@ mod tests {
     #[test]
     fn empty_filter_only_keeps_sellable_rows() {
         assert_eq!(projection_filter(&filter(), None), doc! { "row": { "$type": "object" } });
+    }
+
+    #[test]
+    fn product_kind_filter_matches_persisted_codes() {
+        for kind in
+            [ProductKind::Physical, ProductKind::Virtual, ProductKind::OfflineService, ProductKind::Voucher]
+        {
+            let mut value = filter();
+            value.product_kind = Some(kind);
+            let query = projection_filter(&value, None);
+            assert_eq!(query.get("row.product_kind"), Some(&serialize_to_bson(&kind).unwrap()));
+        }
     }
 
     #[test]

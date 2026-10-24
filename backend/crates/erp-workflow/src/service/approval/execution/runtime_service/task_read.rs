@@ -1,6 +1,7 @@
 //! 审批任务只读入口复用冻结运行责任链，不依赖普通业务列表范围。
 
 use application_core::AuditActor;
+use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -92,13 +93,10 @@ async fn task_subject_readable(
     open_tasks: &[WorkItem],
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let Some(_execution) = &subject.current_execution else {
-        return Ok(false);
-    };
-    let owner = item.owner_user_id.as_deref().unwrap_or_default();
     if !task_chain_matches_subject(item, subject, open_tasks)? {
         return Ok(false);
     }
+    let owner = item.owner_user_id.as_deref().unwrap_or_default();
     if owner == actor.id()
         && (item.status != WorkItemStatus::Open
             || approval_participant_permissions_with_executor(auth, actor, executor).await?)
@@ -134,7 +132,7 @@ fn task_chain_matches_subject(
             && open_tasks.iter().any(|task| task.base.id == item.base.id)
             && task_proves_current_responsibility(item, execution, subject, owner, owner_role.as_str())
     } else {
-        terminal_task_matches_subject(item, subject, owner, owner_role.as_str())
+        terminal_task_matches_subject(item, subject, execution, owner, owner_role.as_str())
     })
 }
 
@@ -176,6 +174,7 @@ async fn manager_can_read(
 ///
 /// # 参数
 /// * `item` / `subject` - 完成任务与冻结运行事实
+/// * `execution` - 责任链校验入口已确认存在的执行事实
 /// * `owner` / `owner_role` - 实际执行人及业务规定岗位
 ///
 /// # 返回
@@ -186,12 +185,10 @@ async fn manager_can_read(
 fn terminal_task_matches_subject(
     item: &WorkItem,
     subject: &RuntimeReadSubject,
+    execution: &ApprovalNodeExecution,
     owner: &str,
     owner_role: &str,
 ) -> bool {
-    let Some(execution) = &subject.current_execution else {
-        return false;
-    };
     if item.status == WorkItemStatus::Closed
         && item.close_reason.as_deref() == Some("APPROVAL_OR_SIGN_RESOLVED")
     {

@@ -1,5 +1,6 @@
 //! 专项报价跨销售和采购的累计采用台账；采用记录与采购同事务保存。
 use std::collections::BTreeSet;
+use std::mem;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -178,11 +179,11 @@ impl InquiryQuoteBalance {
         released.quantity = delta;
         released.addresses = restoration_difference(&result.addresses, addresses)?;
         self.release(&released)?;
-        result
-            .history
-            .push(QuoteReservationHistory { quantity: result.quantity, addresses: result.addresses.clone() });
+        result.history.push(QuoteReservationHistory {
+            quantity: result.quantity,
+            addresses: mem::replace(&mut result.addresses, addresses.to_vec()),
+        });
         result.quantity = quantity;
-        result.addresses = addresses.to_vec();
         Ok(result)
     }
 
@@ -212,10 +213,9 @@ impl InquiryQuoteBalance {
         if result.quantity != target.quantity || result.addresses != target.addresses {
             result.history.push(QuoteReservationHistory {
                 quantity: result.quantity,
-                addresses: result.addresses.clone(),
+                addresses: mem::replace(&mut result.addresses, target.addresses),
             });
             result.quantity = target.quantity;
-            result.addresses = target.addresses;
         }
         *self = next;
         Ok(result)

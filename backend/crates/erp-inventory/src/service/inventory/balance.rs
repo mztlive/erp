@@ -114,7 +114,7 @@ impl InventoryService {
                     active_reservation_dims.contains(&(balance.warehouse_id.clone(), balance.sku_id.clone()));
                 let can_create_adjustment = enrichments.warehouses.contains_key(&balance.warehouse_id)
                     && authorization.can_create(balance.warehouse_id.as_str());
-                enrich_balance_view(&balance, &enrichments, has_active_reservation, can_create_adjustment)
+                enrich_balance_view(balance, &enrichments, has_active_reservation, can_create_adjustment)
             })
             .collect();
         ensure_scope_version(
@@ -196,8 +196,8 @@ impl InventoryService {
         let enrichments = self
             .load_enrichments(&[balance.warehouse_id.to_string()], &[balance.sku_id.to_string()], &[])
             .await?;
-        let balance_view = build_balance_view(
-            &balance,
+        let balance_view = enrich_balance_view(
+            (&balance).into(),
             &enrichments,
             !reservations.is_empty(),
             authorization.can_create(balance.warehouse_id.as_ref()),
@@ -380,7 +380,7 @@ impl From<&StockBalance> for StockBalanceRef {
 /// # 返回
 /// 返回契约形状的余额视图。
 fn enrich_balance_view(
-    balance: &StockBalanceRef,
+    balance: StockBalanceRef,
     enrichments: &BalanceEnrichments,
     has_active_reservation: bool,
     can_create_adjustment: bool,
@@ -394,47 +394,26 @@ fn enrich_balance_view(
     let sku_revision = sku
         .and_then(|sku| sku.current_revision_id.as_deref())
         .and_then(|revision_id| enrichments.sku_revisions.get(revision_id));
+    let last_movement = balance.last_movement_id.as_ref().and_then(|id| enrichments.movements.get(id));
     StockBalanceView {
-        id: balance.id.clone(),
-        warehouse_id: balance.warehouse_id.clone(),
+        id: balance.id,
+        warehouse_id: balance.warehouse_id,
         warehouse_code: warehouse.map(|wh| wh.warehouse_code.clone()).unwrap_or_default(),
         warehouse_name: warehouse_name.unwrap_or_default(),
-        sku_id: balance.sku_id.clone(),
+        sku_id: balance.sku_id,
         sku_code: sku.map(|sku| sku.sku_no.clone()).unwrap_or_default(),
         sku_name: sku_revision.map(|revision| revision.name.clone()).unwrap_or_default(),
         spec_summary: sku_revision.and_then(|revision| revision.specification.clone()),
         on_hand_quantity: balance.on_hand_quantity,
         reserved_quantity: balance.reserved_quantity,
         available_quantity: balance.available_quantity,
-        version: balance.version.clone(),
-        last_movement_id: balance.last_movement_id.clone(),
-        last_movement_at: balance
-            .last_movement_id
-            .as_ref()
-            .and_then(|id| enrichments.movements.get(id))
-            .map(|movement| movement.fact.occurred_at.unix_secs()),
-        last_movement_type: balance
-            .last_movement_id
-            .as_ref()
-            .and_then(|id| enrichments.movements.get(id))
-            .map(|movement| movement.movement_type),
+        version: balance.version,
+        last_movement_id: balance.last_movement_id,
+        last_movement_at: last_movement.map(|movement| movement.fact.occurred_at.unix_secs()),
+        last_movement_type: last_movement.map(|movement| movement.movement_type),
         has_active_reservation,
         allowed_actions: balance_allowed_actions(can_create_adjustment && warehouse.is_some()),
     }
-}
-
-fn build_balance_view(
-    balance: &StockBalance,
-    enrichments: &BalanceEnrichments,
-    has_active_reservation: bool,
-    can_create_adjustment: bool,
-) -> StockBalanceView {
-    enrich_balance_view(
-        &StockBalanceRef::from(balance),
-        enrichments,
-        has_active_reservation,
-        can_create_adjustment,
-    )
 }
 
 fn balance_allowed_actions(can_create_adjustment: bool) -> Vec<String> {
@@ -443,11 +422,75 @@ fn balance_allowed_actions(can_create_adjustment: bool) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::balance_allowed_actions;
+    use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
+
+    use super::*;
 
     #[test]
     fn balance_create_action_is_only_emitted_from_server_authorization() {
         assert!(balance_allowed_actions(false).is_empty());
         assert_eq!(balance_allowed_actions(true), vec!["CREATE_ADJUSTMENT".to_string()]);
+    }
+
+    #[test]
+    fn balance_view_keeps_stock_facts_and_requires_existing_warehouse_for_action() {
+        let mut enrichments = BalanceEnrichments {
+            warehouses: HashMap::new(),
+            warehouse_revisions: HashMap::new(),
+            skus: HashMap::new(),
+            sku_revisions: HashMap::new(),
+            movements: HashMap::new(),
+        };
+        for has_warehouse in [false, true] {
+            if has_warehouse {
+                enrichments.warehouses.insert(
+                    "warehouse".into(),
+                    WarehouseFact {
+                        id: "warehouse".into(),
+                        warehouse_code: "WH-1".into(),
+                        current_revision_id: Some("revision".into()),
+                    },
+                );
+                enrichments.warehouse_revisions.insert(
+                    "revision".into(),
+                    WarehouseRevisionFact { id: "revision".into(), name: "一号仓".into() },
+                );
+            }
+            let view = enrich_balance_view(
+                StockBalanceRow {
+                    id: "balance".into(),
+                    warehouse_id: WarehouseId::new("warehouse"),
+                    sku_id: SkuId::new("sku"),
+                    on_hand_quantity: "5".parse().unwrap(),
+                    reserved_quantity: "2".parse().unwrap(),
+                    available_quantity: "3".parse().unwrap(),
+                    version: 7,
+                    last_movement_id: Some(StockMovementId::new("unresolved-movement")),
+                }
+                .into(),
+                &enrichments,
+                true,
+                true,
+            );
+            assert_eq!(view.id, "balance");
+            assert_eq!(view.warehouse_id, "warehouse");
+            assert_eq!(view.sku_id, "sku");
+            assert_eq!(view.on_hand_quantity.to_string(), "5");
+            assert_eq!(view.reserved_quantity.to_string(), "2");
+            assert_eq!(view.available_quantity.to_string(), "3");
+            assert_eq!(view.version, "7");
+            assert_eq!(view.last_movement_id.as_deref(), Some("unresolved-movement"));
+            assert!(view.last_movement_at.is_none());
+            assert!(view.last_movement_type.is_none());
+            assert!(view.has_active_reservation);
+            assert!(view.sku_code.is_empty());
+            assert!(view.sku_name.is_empty());
+            assert_eq!(view.warehouse_code, if has_warehouse { "WH-1" } else { "" });
+            assert_eq!(view.warehouse_name, if has_warehouse { "一号仓" } else { "" });
+            assert_eq!(
+                view.allowed_actions,
+                if has_warehouse { vec!["CREATE_ADJUSTMENT".to_string()] } else { vec![] }
+            );
+        }
     }
 }

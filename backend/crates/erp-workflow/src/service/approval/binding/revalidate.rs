@@ -6,7 +6,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::business_adapter::{BindingRevalidationContext, ensure_separation_of_duties};
-use super::super::policy::{ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy};
+use super::super::policy::ProcessRequiredApprovalPolicy;
 use super::super::scope::approval_participant_permissions_with_executor;
 use super::process_not_configured;
 use super::upgrade::map_model_error;
@@ -112,29 +112,6 @@ async fn load_assignee_accounts(
         .collect())
 }
 
-/// 将账号实体的后台有效性判断映射为绑定校验错误。
-///
-/// # 参数
-/// * `account` - Repository 返回的审批人账号
-///
-/// # 返回
-/// 账号可承担后台责任时返回 `Ok(())`。
-///
-/// # 错误
-/// 账号已停用或身份不满足后台责任时返回校验错误。
-///
-/// # 关键业务约束
-/// 类型与状态组合规则只由 `WorkflowAccountFact::is_active_backoffice` 提供。
-fn ensure_assignee_ready(account: &WorkflowAccountFact) -> Result<()> {
-    match ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission {
-        ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {},
-    }
-    if account.is_active_backoffice() {
-        return Ok(());
-    }
-    Err(assignee_unavailable_error())
-}
-
 /// 按当前审批人 ID 从批量快照映射中取回可承担责任的账号。
 ///
 /// # 参数
@@ -149,9 +126,7 @@ fn ensure_assignee_ready(account: &WorkflowAccountFact) -> Result<()> {
 /// # 关键业务约束
 /// 调用方必须按 BPM 审批人顺序逐个调用，不得依赖 `HashMap` 迭代顺序。
 pub(super) fn require_ready_assignee(account: Option<&WorkflowAccountFact>) -> Result<&WorkflowAccountFact> {
-    let account = account.ok_or_else(assignee_unavailable_error)?;
-    ensure_assignee_ready(account)?;
-    Ok(account)
+    account.filter(|account| account.is_active_backoffice()).ok_or_else(assignee_unavailable_error)
 }
 
 /// 构造审批人账号不可用的合同固定错误。

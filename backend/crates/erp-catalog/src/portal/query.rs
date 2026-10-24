@@ -328,9 +328,7 @@ impl CatalogPortalService {
             let Some(sku) = self.db.skus().find_by_id(revision.sku_id.as_ref(), executor).await? else {
                 continue;
             };
-            if sku.is_active()
-                && sku.stable.current_revision_id.as_ref().map(ToString::to_string).as_deref()
-                    == Some(&revision.base.id)
+            if sku.is_active() && sku.stable.current_revision_id.as_deref() == Some(revision.base.id.as_str())
             {
                 let id = sku.product_id.to_string();
                 if seen.insert(id.clone()) {

@@ -63,6 +63,11 @@ impl QuoteTerms {
     /// # 错误
     /// 非正价格/数量、非法税率、重复地址或地址额度不足时拒绝。
     pub fn validated(self) -> Result<Self> {
+        self.validate()?;
+        Ok(self)
+    }
+
+    fn validate(&self) -> Result<()> {
         if !Self::unit_cost_is_valid(self.unit_cost_gross.to_decimal(), self.unavailable)
             || (!self.unavailable && self.available_quantity.to_decimal() <= Decimal::ZERO)
             || (self.unavailable && self.available_quantity.to_decimal() != Decimal::ZERO)
@@ -71,8 +76,7 @@ impl QuoteTerms {
         {
             return Err(Error::ValidationError("专项报价价格、税率或数量非法".into()));
         }
-        validate_addresses(&self.address_limits, self.available_quantity, false)?;
-        Ok(self)
+        validate_addresses(&self.address_limits, self.available_quantity, false)
     }
 
     /// 核对回复价格是否符合正常报价或无法供货的价格规则。
@@ -105,7 +109,7 @@ impl QuoteTerms {
     /// # 错误
     /// 地址变化、可供量或交期不满足时拒绝。
     pub fn ensure_applicable(&self, usage: &InquiryQuoteUse) -> Result<()> {
-        self.clone().validated()?;
+        self.validate()?;
         if self.unavailable {
             return Err(Error::BusinessLogicError("供应商已回复无法供货，请重新确认".into()));
         }

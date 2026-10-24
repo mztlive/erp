@@ -66,6 +66,25 @@ fn exact_quote_accepts_original_terms_without_mutating_history() {
     quote.ensure_applicable(&usage("10")).unwrap();
     assert_eq!(serde_json::to_value(&quote).unwrap(), before);
 }
+
+#[test]
+fn applicability_revalidates_stored_terms_before_checking_usage() {
+    for (invalid_price, expected) in [
+        (true, "参数验证失败: 专项报价价格、税率或数量非法"),
+        (false, "参数验证失败: 专项报价地址身份、指纹或数量非法"),
+    ] {
+        let mut terms = terms();
+        if invalid_price {
+            terms.unit_cost_gross = "0".parse().unwrap();
+        } else {
+            terms.address_limits.push(address("1"));
+        }
+        let before = serde_json::to_value(&terms).unwrap();
+        assert_eq!(terms.ensure_applicable(&usage("0")).unwrap_err().to_string(), expected);
+        assert_eq!(serde_json::to_value(&terms).unwrap(), before);
+        assert_eq!(terms.validated().unwrap_err().to_string(), expected);
+    }
+}
 #[test]
 fn scope_supplier_sku_and_version_cannot_be_reused() {
     let quote = quote();
@@ -231,8 +250,11 @@ fn pending_change_does_not_release_original_supply_and_effective_change_resizes_
     let effective = balance.resized(&quote, &usage("5"), &pending, false).unwrap();
     assert_eq!(balance.reserved_quantity.to_string(), "5");
     assert_eq!(effective.quantity.to_string(), "5");
+    assert_eq!(effective.addresses, vec![address("5")]);
     assert_eq!(effective.history.len(), 1);
     assert_eq!(effective.history[0].quantity.to_string(), "10");
+    assert_eq!(effective.history[0].addresses, original.addresses);
+    assert!(original.history.is_empty());
 }
 
 #[test]
@@ -277,8 +299,12 @@ fn legacy_expiry_does_not_prevent_restoring_existing_formal_exposure() {
     quote.ensure_applicable(&initial).unwrap();
     let restored = balance.restore_existing_usage(&held, initial.quantity, &initial.addresses).unwrap();
     assert_eq!(restored.quantity.to_string(), "10");
+    assert_eq!(restored.addresses, initial.addresses);
     assert_eq!(balance.reserved_quantity.to_string(), "10");
+    assert_eq!(restored.history.len(), held.history.len() + 1);
     assert_eq!(restored.history.last().unwrap().quantity.to_string(), "15");
+    assert_eq!(restored.history.last().unwrap().addresses, held.addresses);
+    assert_eq!(restored.history[0].addresses, original.addresses);
 }
 
 #[test]

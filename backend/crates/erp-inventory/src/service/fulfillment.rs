@@ -479,10 +479,10 @@ async fn establish_receipt_reservation_with_store(
         StockReservationData {
             warehouse_id: fact.warehouse_id.clone(),
             sku_id: fact.sku_id.clone(),
-            sales_order_line_id: fact.sales_order_line_id.clone(),
+            sales_order_line_id: fact.sales_order_line_id,
             source_type: StockReservationSourceType::PurchaseReceipt,
-            purchase_line_sales_allocation_id: Some(fact.allocation_id.clone()),
-            source_receipt_line_id: Some(fact.receipt_line_id.clone()),
+            purchase_line_sales_allocation_id: Some(fact.allocation_id),
+            source_receipt_line_id: Some(fact.receipt_line_id),
             source_allocation_id: None,
             reserved_quantity: fact.quantity,
             consumed_quantity: zero_quantity(),
@@ -497,7 +497,7 @@ async fn establish_receipt_reservation_with_store(
     let entry = StockReservationEntry::new(
         StockReservationEntryId::new(next_id()),
         StockReservationEntryData {
-            reservation_id: reservation.base.id.to_string().into(),
+            reservation_id: reservation.base.id.into(),
             entry_type: ReservationEntryType::Establish,
             quantity: fact.quantity,
             source_document_id: fact.receipt_id.to_string(),

@@ -110,6 +110,16 @@ fn approval_task_batch_chain_requires_unique_exact_open_task() {
     assert!(!task_chain_matches_subject(&task, &subject, &[task.clone(), other]).unwrap());
 }
 
+#[test]
+fn approval_task_chain_without_execution_is_unreadable_for_open_and_terminal_tasks() {
+    let (mut subject, mut task) = fixture();
+    subject.current_execution = None;
+    for status in [WorkItemStatus::Open, WorkItemStatus::Completed, WorkItemStatus::Closed] {
+        task.status = status;
+        assert!(!task_chain_matches_subject(&task, &subject, from_ref(&task)).unwrap());
+    }
+}
+
 /// 批量判定沿用节点、岗位、组织、责任人和精确提交版本全部约束。
 #[test]
 fn approval_task_batch_chain_rejects_frozen_responsibility_drift() {
