@@ -1,9 +1,9 @@
 //! ERP 审批集成集合索引。
 
 use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use super::approval_copy::ensure_indexes as ensure_copy_indexes;
 use crate::repository::{ApprovalCancellationExt, ApprovalIntegrationExt};
@@ -77,17 +77,6 @@ fn outbox_indexes() -> Vec<IndexModel> {
             doc! { "delivery_status": 1, "dead_lettered_at": -1 },
         ),
     ]
-}
-
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 #[cfg(test)]

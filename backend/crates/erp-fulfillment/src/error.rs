@@ -1,20 +1,12 @@
 //! 履约领域应用错误，并保留原有唯一索引冲突文案映射。
 
-use application_core::{ErrorClass, ValidationIssues};
+use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
+use persistence_core::impl_repository_error;
 
 /// Fulfillment-domain result alias.
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为履约领域错误。
-    fn from(error: application_core::Error) -> Self {
-        match error {
-            application_core::Error::Internal(message) => Self::Internal(message),
-            application_core::Error::ValidationError(message) => Self::ValidationError(message),
-            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
-        }
-    }
-}
+impl_application_error_conversions!(Error);
 
 /// Fulfillment order and revision errors.
 #[derive(Debug, thiserror::Error)]
@@ -85,27 +77,10 @@ impl Error {
     }
 }
 
-impl From<persistence_core::Error> for Error {
-    /// 将仓储错误转换为履约领域错误。
-    ///
-    /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
-    /// 其余错误保持内部仓储错误。
-    fn from(error: persistence_core::Error) -> Self {
-        match error {
-            error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
-            },
-            persistence_core::Error::OptimisticLockingError => {
-                Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            },
-            error @ persistence_core::Error::TransientTransactionConflict(_) => {
-                Self::TransientTransaction(error)
-            },
-            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
-            other => Self::RepositoryError(other),
-        }
-    }
-}
+impl_repository_error!(
+    Error,
+    duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
+);
 
 /// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
@@ -124,13 +99,6 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         Some("uk_service_fulfillments_fulfillment_no") => "服务履约单号重复，请勿重复提交".to_string(),
         Some("uk_customer_acceptances_acceptance_no") => "客户验收单号重复，请勿重复提交".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
-    }
-}
-
-impl From<validator::ValidationErrors> for Error {
-    /// 从校验错误构建履约领域错误。
-    fn from(err: validator::ValidationErrors) -> Self {
-        Error::InvalidInput(err.into())
     }
 }
 

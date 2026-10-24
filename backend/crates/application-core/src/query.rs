@@ -22,6 +22,93 @@ pub enum SortDir {
     Desc,
 }
 
+/// 已按调用方白名单规范化的分页与排序参数。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageParams {
+    /// 页码；入口负责拒绝非法页码，规范化保留显式的零。
+    pub page: u64,
+    /// 单页条数，规范化后位于 `1..=MAX_PAGE_SIZE`。
+    pub page_size: u32,
+    /// 调用方白名单中的排序字段，缺省为 `created_at`。
+    pub sort_by: &'static str,
+    /// 排序方向。
+    pub sort_dir: SortDir,
+}
+
+impl PageParams {
+    /// 返回仓储筛选使用的排序字段。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回排序字段的 owned 副本。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn sort_field(&self) -> String {
+        self.sort_by.to_string()
+    }
+
+    /// 返回排序方向是否为升序。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 升序返回 `true`，降序返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn sort_ascending(&self) -> bool {
+        matches!(self.sort_dir, SortDir::Asc)
+    }
+
+    /// 返回采用可选排序字段的仓储筛选参数。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回始终为 `Some` 的排序字段和是否升序。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn sort_selection(&self) -> (Option<String>, bool) {
+        (Some(self.sort_field()), self.sort_ascending())
+    }
+}
+
+/// 规范化分页与排序参数，业务筛选和排序白名单由调用方拥有。
+///
+/// # 参数
+/// * `sort_by` - 可选排序字段，空白按缺省处理。
+/// * `sort_dir` - 可选排序方向，空白按降序处理。
+/// * `page` - 可选页码，缺省为首页。
+/// * `page_size` - 可选单页条数，缺省为 20 并夹紧至 1–100。
+/// * `allowed_fields` - 调用方允许的排序字段。
+///
+/// # 返回
+/// 返回可交给仓储的分页排序参数；显式零页码原样保留。
+///
+/// # 错误
+/// 排序字段或方向不合法时返回校验错误；字段错误优先于方向错误。
+pub fn normalize_paging(
+    sort_by: &Option<String>,
+    sort_dir: &Option<String>,
+    page: Option<u64>,
+    page_size: Option<u32>,
+    allowed_fields: &'static [&'static str],
+) -> Result<PageParams> {
+    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
+    Ok(PageParams {
+        page: page_or_default(page),
+        page_size: page_size_or_default(page_size),
+        sort_by,
+        sort_dir,
+    })
+}
+
 /// 空白判定：去首尾空白后为空即空白，三处查询规范化入口共用。
 fn is_blank(value: &str) -> bool {
     value.trim().is_empty()
@@ -174,7 +261,8 @@ pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_SORT_DIR, DEFAULT_SORT_FIELD, PageView, SortDir, normalize_sort, page_size_or_default,
+        DEFAULT_SORT_DIR, DEFAULT_SORT_FIELD, PageView, SortDir, normalize_paging, normalize_sort,
+        page_size_or_default,
     };
 
     #[test]
@@ -213,5 +301,31 @@ mod tests {
         assert_eq!(view.total, 0);
         assert_eq!(view.page, 1);
         assert_eq!(view.page_size, 20);
+    }
+
+    #[test]
+    fn paging_defaults_and_explicit_bounds_preserve_input_contract() {
+        let defaults = normalize_paging(&None, &None, None, None, &["name"]).unwrap();
+        assert_eq!((defaults.page, defaults.page_size), (1, 20));
+        assert_eq!((defaults.sort_by, defaults.sort_dir), ("created_at", SortDir::Desc));
+        let bounded = normalize_paging(
+            &Some(" name ".into()),
+            &Some(" asc ".into()),
+            Some(0),
+            Some(u32::MAX),
+            &["name"],
+        )
+        .unwrap();
+        assert_eq!((bounded.page, bounded.page_size), (0, 100));
+        assert_eq!(bounded.sort_selection(), (Some("name".into()), true));
+        assert_eq!(normalize_paging(&None, &None, Some(2), Some(0), &[]).unwrap().page_size, 1);
+    }
+
+    #[test]
+    fn paging_rejects_sort_errors_before_applying_defaults() {
+        let field = normalize_paging(&Some("bad".into()), &Some("up".into()), None, None, &[]).unwrap_err();
+        assert_eq!(field.to_string(), "参数验证失败: 不支持的排序字段: bad");
+        let direction = normalize_paging(&None, &Some("up".into()), None, None, &[]).unwrap_err();
+        assert_eq!(direction.to_string(), "参数验证失败: 非法排序方向: up");
     }
 }

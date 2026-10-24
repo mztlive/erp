@@ -1,12 +1,10 @@
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::ReceivableAccountId;
 use erp_core::money::Amount;
-use mongodb::bson::{Bson, Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Repository, Result};
 
 use super::InvoicingBatchResult;
-use super::write::{ReceivableAccountWriteExt, amount_bson, progress_pipeline};
 use crate::entity::receivable::ReceivableAccount;
+use crate::repository::invoicing::{InvoicingDirection, update, update_many};
 
 #[allow(async_fn_in_trait)]
 pub trait ReceivableAccountInvoicingExt {
@@ -118,7 +116,7 @@ pub trait ReceivableAccountInvoicingExt {
     ) -> Result<InvoicingBatchResult>;
 }
 
-impl ReceivableAccountInvoicingExt for persistence_core::Repository<'_, ReceivableAccount> {
+impl ReceivableAccountInvoicingExt for Repository<'_, ReceivableAccount> {
     async fn apply_invoicing(
         &self,
         id: &str,
@@ -126,23 +124,7 @@ impl ReceivableAccountInvoicingExt for persistence_core::Repository<'_, Receivab
         updated_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let amount = amount_bson(amount)?;
-        let filter = doc! {
-            "id": id,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "$expr": {
-                "$lte": [
-                    { "$add": ["$invoiced_total", &amount] },
-                    "$invoiceable_total",
-                ],
-            },
-        };
-        self.conditional_update(
-            filter,
-            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
-            executor,
-        )
-        .await
+        update(self, id, amount, updated_by, InvoicingDirection::Apply, executor).await
     }
 
     async fn apply_invoicings_many(
@@ -151,25 +133,8 @@ impl ReceivableAccountInvoicingExt for persistence_core::Repository<'_, Receivab
         updated_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<InvoicingBatchResult> {
-        let mut applied = Vec::new();
-        let mut rejected = Vec::new();
-        for (id, amount) in deltas {
-            let amount = amount_bson(amount)?;
-            let filter = invoicing_guard(id.as_ref(), &amount);
-            let hit = self
-                .conditional_update(
-                    filter,
-                    progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, true, updated_by),
-                    executor,
-                )
-                .await?;
-            if hit {
-                applied.push(id.clone());
-            } else {
-                rejected.push(id.clone());
-            }
-        }
-        Ok(InvoicingBatchResult { applied, rejected })
+        let result = update_many(self, deltas, updated_by, InvoicingDirection::Apply, executor).await?;
+        Ok(InvoicingBatchResult { applied: result.applied, rejected: result.rejected })
     }
 
     async fn revert_invoicing(
@@ -179,20 +144,7 @@ impl ReceivableAccountInvoicingExt for persistence_core::Repository<'_, Receivab
         updated_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let amount = amount_bson(amount)?;
-        let filter = doc! {
-            "id": id,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "$expr": {
-                "$gte": ["$invoiced_total", &amount],
-            },
-        };
-        self.conditional_update(
-            filter,
-            progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, false, updated_by),
-            executor,
-        )
-        .await
+        update(self, id, amount, updated_by, InvoicingDirection::Revert, executor).await
     }
 
     async fn revert_invoicings_many(
@@ -201,55 +153,7 @@ impl ReceivableAccountInvoicingExt for persistence_core::Repository<'_, Receivab
         updated_by: &str,
         executor: &mut dyn Executor,
     ) -> Result<InvoicingBatchResult> {
-        let mut applied = Vec::new();
-        let mut rejected = Vec::new();
-        for (id, amount) in deltas {
-            let amount = amount_bson(amount)?;
-            let filter = doc! {
-                "id": id.to_string(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                "$expr": {
-                    "$gte": ["$invoiced_total", &amount],
-                },
-            };
-            let hit = self
-                .conditional_update(
-                    filter,
-                    progress_pipeline("invoiced_total", "open_invoiceable_total", &amount, false, updated_by),
-                    executor,
-                )
-                .await?;
-            if hit {
-                applied.push(id.clone());
-            } else {
-                rejected.push(id.clone());
-            }
-        }
-        Ok(InvoicingBatchResult { applied, rejected })
-    }
-}
-
-/// 构造条件开票的写前置条件（不超额开票）。
-///
-/// 以写条件而非读后判断保证 `invoiced_total + 本次开票 <= invoiceable_total`，
-/// 不满足时整个更新不生效（matched 为 0）。金额形态与管道复用应付侧共用 helper，
-/// 本文件只保留应收特有的守卫文档。
-///
-/// # 参数
-/// * `id` - 应收往来子账 ID
-/// * `amount` - 本次开票含税金额（已转为 Decimal128 形态）
-///
-/// # 返回
-/// 返回未删除账户的开票额度守卫文档。
-fn invoicing_guard(id: &str, amount: &Bson) -> Document {
-    doc! {
-        "id": id,
-        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        "$expr": {
-            "$lte": [
-                { "$add": ["$invoiced_total", amount] },
-                "$invoiceable_total",
-            ],
-        },
+        let result = update_many(self, deltas, updated_by, InvoicingDirection::Revert, executor).await?;
+        Ok(InvoicingBatchResult { applied: result.applied, rejected: result.rejected })
     }
 }

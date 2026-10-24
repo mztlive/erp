@@ -18,6 +18,7 @@ mod runtime_persistence_contract;
 pub mod runtime_query;
 pub mod runtime_service;
 pub mod start;
+pub mod start_input;
 #[cfg(test)]
 pub mod store;
 pub mod view;

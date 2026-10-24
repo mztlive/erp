@@ -13,6 +13,7 @@ pub mod inquiry_basis;
 mod no_contract;
 mod revision_lines;
 pub mod selection_basis;
+mod stored_lines;
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;

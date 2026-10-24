@@ -1,29 +1,12 @@
 //! 采购领域错误及原唯一索引冲突映射。
 
-use application_core::{ErrorClass, ValidationIssues};
+use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
+use persistence_core::impl_repository_error;
 
 /// 采购领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为采购领域错误。
-    ///
-    /// # 参数
-    /// * `error` - 应用合同错误。
-    ///
-    /// # 返回
-    /// `Internal` 与 `ValidationError` 分别映射为同名采购领域变体。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn from(error: application_core::Error) -> Self {
-        match error {
-            application_core::Error::Internal(message) => Self::Internal(message),
-            application_core::Error::ValidationError(message) => Self::ValidationError(message),
-            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
-        }
-    }
-}
+impl_application_error_conversions!(Error);
 
 /// 采购订单与责任规则错误。
 #[derive(Debug, thiserror::Error)]
@@ -144,39 +127,10 @@ impl Error {
     }
 }
 
-impl From<persistence_core::Error> for Error {
-    /// 将仓储错误转换为采购领域错误。
-    ///
-    /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
-    /// 其余错误保持内部仓储错误。
-    ///
-    /// # 参数
-    /// * `error` - 持久化层错误。
-    ///
-    /// # 返回
-    /// `DuplicateKey` 转为 `ConflictError`，文案来自本域已知唯一索引或通用重复提交提示；
-    /// `OptimisticLockingError` 转为要求刷新后重试的 `ConflictError`；
-    /// `TransientTransactionConflict` 转为 `TransientTransaction`；
-    /// `CommitOutcomeUnknown` 转为 `OutcomeUnknown`；其余转为 `RepositoryError`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn from(error: persistence_core::Error) -> Self {
-        match error {
-            error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
-            },
-            persistence_core::Error::OptimisticLockingError => {
-                Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            },
-            error @ persistence_core::Error::TransientTransactionConflict(_) => {
-                Self::TransientTransaction(error)
-            },
-            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
-            other => Self::RepositoryError(other),
-        }
-    }
-}
+impl_repository_error!(
+    Error,
+    duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
+);
 
 /// 将持久化源错误映射为稳定错误分类（唯一分类入口）。
 ///
@@ -226,22 +180,6 @@ pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
             Some("同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员")
         },
         _ => None,
-    }
-}
-
-impl From<validator::ValidationErrors> for Error {
-    /// 从校验错误构建采购领域错误。
-    ///
-    /// # 参数
-    /// * `err` - 字段校验错误集合。
-    ///
-    /// # 返回
-    /// 返回 `ValidationError`，文案为 `err` 的展示文本。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn from(err: validator::ValidationErrors) -> Self {
-        Error::InvalidInput(err.into())
     }
 }
 

@@ -1,9 +1,9 @@
 //! 审计日志集合索引。
 
 use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::AuditAttemptExt;
 
@@ -40,29 +40,6 @@ fn audit_log_indexes() -> Vec<IndexModel> {
             doc! { "resource_type": 1, "resource_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 },
         ),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    build_index(name, keys, false)
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    build_index(name, keys, true)
-}
-
-/// 索引构造的唯一入口（erp-audit-009）。
-///
-/// 普通索引与唯一索引仅 `unique` 选项不同；索引名与键保持不变。
-fn build_index(name: impl Into<String>, keys: Document, unique: bool) -> IndexModel {
-    let name = name.into();
-    let options = if unique {
-        IndexOptions::builder().name(name).unique(true).build()
-    } else {
-        IndexOptions::builder().name(name).build()
-    };
-    IndexModel::builder().keys(keys).options(options).build()
 }
 
 #[cfg(test)]

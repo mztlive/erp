@@ -2,9 +2,6 @@
 
 use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
-use bpm::ids::{
-    ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
-};
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
 use erp_finance::entity::receivable::CustomerReceipt;
@@ -16,17 +13,16 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
-use erp_workflow::service::approval::execution::authorization::{
-    AuthorizationFailure, converge_node_eligibility,
-};
+use erp_workflow::service::approval::execution::authorization::AuthorizationFailure;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{
-    ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+use erp_workflow::service::approval::execution::start_input::{
+    StartInputContext, assemble_start_input, start_bindings,
 };
-use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::execution::{
+    PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
+};
 use erp_workflow::service::approval::read;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
-use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -213,32 +209,20 @@ pub(crate) fn build_document_start_input(input: DocumentStartInput<'_>) -> Resul
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(&graph, organization_id)?;
-    let entry = graph.entry_node().map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
-    let entry_eligibility = bindings
-        .iter()
-        .find(|item| item.node_key == entry.node_key)
-        .map(|item| item.eligibility.clone())
-        .ok_or_else(|| Error::ConflictError("入口节点缺少审批人绑定".to_string()))?;
-    Ok(StartExecutionInput {
-        command: ExecutionCommandInput {
-            graph,
-            current_eligibility: entry_eligibility.clone(),
-            next_eligibility: entry_eligibility,
-            receipt,
+    Ok(assemble_start_input(
+        graph,
+        bindings,
+        StartInputContext {
+            binding,
+            document_type,
+            subject,
+            subject_version,
+            actor,
             idempotency_key,
+            receipt,
             now: timestamp,
         },
-        process_kind: process_kind_of(document_type),
-        subject,
-        subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref().to_string(),
-        definition_version: binding.approval_definition_version,
-        actor,
-        instance_id: ApprovalProcessInstanceId::new(next_id()),
-        entry_execution_id: ApprovalNodeExecutionId::new(next_id()),
-        receipt_id: ApprovalCommandReceiptId::new(next_id()),
-        bindings,
-    })
+    )?)
 }
 
 /// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
@@ -256,25 +240,14 @@ fn start_bindings_from_graph(
     graph: &DefinitionGraph,
     organization_id: &str,
 ) -> Result<Vec<StartAssigneeBinding>> {
-    let mut bindings = Vec::with_capacity(graph.nodes.len());
-    for node in &graph.nodes {
-        bindings.push(StartAssigneeBinding {
-            id: ApprovalInstanceAssigneeId::new(next_id()),
-            node_key: node.node_key.clone(),
-            participant: node.assignee().map_err(|e| Error::ValidationError(e.to_string()))?.clone(),
-            eligibility: converge_node_eligibility(node, |assignee| match customer_receipt_object_readable(
-                organization_id,
-                assignee,
-            ) {
-                Ok(_) => None,
-                Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-            })?,
-        });
-    }
-    if bindings.is_empty() {
-        return Err(Error::ConflictError("审批定义没有节点，无法启动客户回款审批".to_string()));
-    }
-    Ok(bindings)
+    Ok(start_bindings(
+        graph,
+        |assignee| match customer_receipt_object_readable(organization_id, assignee) {
+            Ok(_) => None,
+            Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+        },
+        "审批定义没有节点，无法启动客户回款审批",
+    )?)
 }
 
 /// 客户回款启动事务写入集合。

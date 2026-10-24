@@ -5,20 +5,16 @@
 //! 不得再复制输入结构、字段搬运、版本校验、绑定构图与入口查找。
 
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
-use bpm::ids::{
-    ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
-};
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::authorization::{
-    AuthorizationFailure, converge_node_eligibility,
-};
+use erp_workflow::service::approval::execution::StartExecutionInput;
+use erp_workflow::service::approval::execution::authorization::AuthorizationFailure;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{ExecutionCommandInput, StartExecutionInput};
-use erp_workflow::service::approval::process_kind::process_kind_of;
-use id_generator::next_id;
+use erp_workflow::service::approval::execution::start_input::{
+    StartInputContext, assemble_start_input, start_bindings,
+};
 
 use crate::{Error, Result};
 
@@ -98,32 +94,20 @@ pub fn build_reverse_start_input(
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings =
         reverse_start_bindings(&graph, organization_id, contracts.readable, contracts.empty_definition)?;
-    let entry = graph.entry_node().map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
-    let entry_eligibility = bindings
-        .iter()
-        .find(|item| item.node_key == entry.node_key)
-        .map(|item| item.eligibility.clone())
-        .ok_or_else(|| Error::ConflictError("入口节点缺少审批人绑定".to_string()))?;
-    Ok(StartExecutionInput {
-        command: ExecutionCommandInput {
-            graph,
-            current_eligibility: entry_eligibility.clone(),
-            next_eligibility: entry_eligibility,
-            receipt,
+    Ok(assemble_start_input(
+        graph,
+        bindings,
+        StartInputContext {
+            binding,
+            document_type: contracts.document_type,
+            subject,
+            subject_version,
+            actor,
             idempotency_key,
+            receipt,
             now: timestamp,
         },
-        process_kind: process_kind_of(contracts.document_type),
-        subject,
-        subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref().to_string(),
-        definition_version: binding.approval_definition_version,
-        actor,
-        instance_id: ApprovalProcessInstanceId::new(next_id()),
-        entry_execution_id: ApprovalNodeExecutionId::new(next_id()),
-        receipt_id: ApprovalCommandReceiptId::new(next_id()),
-        bindings,
-    })
+    )?)
 }
 
 /// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
@@ -145,30 +129,21 @@ pub fn reverse_start_bindings(
     readable: fn(&str, &str) -> Result<bool>,
     empty_definition: &str,
 ) -> Result<Vec<StartAssigneeBinding>> {
-    let mut bindings = Vec::with_capacity(graph.nodes.len());
-    for node in &graph.nodes {
-        bindings.push(StartAssigneeBinding {
-            id: ApprovalInstanceAssigneeId::new(next_id()),
-            node_key: node.node_key.clone(),
-            participant: node.assignee().map_err(|e| Error::ValidationError(e.to_string()))?.clone(),
-            eligibility: converge_node_eligibility(node, |assignee| {
-                match readable(organization_id, assignee) {
-                    Ok(_) => None,
-                    Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-                }
-            })?,
-        });
-    }
-    if bindings.is_empty() {
-        return Err(Error::ConflictError(empty_definition.to_string()));
-    }
-    Ok(bindings)
+    Ok(start_bindings(
+        graph,
+        |assignee| match readable(organization_id, assignee) {
+            Ok(_) => None,
+            Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+        },
+        empty_definition,
+    )?)
 }
 
 #[cfg(test)]
 mod tests {
     use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
     use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, NewNodeDefinition};
+    use erp_workflow::service::approval::process_kind::process_kind_of;
 
     use super::*;
     use crate::reverse_flow::start_approval::{

@@ -8,6 +8,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index, unique_partial_index};
 
 use crate::repository::DocumentRegistryExt;
 
@@ -116,29 +117,6 @@ fn workflow_action_indexes() -> Vec<IndexModel> {
         ),
         named_index("idx_workflow_actions_actor_created", doc! { "actor_id": 1, "created_at": -1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
-}
-
-/// 构建命名部分唯一索引。
-fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(
-            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
-        )
-        .build()
 }
 
 /// 构建命名部分普通索引。

@@ -5,7 +5,7 @@ use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId
 use persistence_core::NoTransaction;
 
 use super::SalesOrderService;
-use super::mapper::{revision_view, working_copy_line_view};
+use super::mapper::revision_view;
 use crate::Result;
 use crate::dto::sales_order::{RevisionView, SalesOrderWorkingCopyLineView, WorkingCopyView};
 use crate::entity::sales_order::{SalesOrderRevision, SalesOrderRevisionLine, SalesOrderWorkingCopy};
@@ -157,7 +157,7 @@ impl SalesOrderService {
             gross_amount: copy.gross_amount,
             net_amount: copy.net_amount,
             tax_amount: copy.tax_amount,
-            lines: lines.into_iter().map(working_copy_line_view).collect(),
+            lines: lines.into_iter().map(SalesOrderWorkingCopyLineView::from_working_copy_line).collect(),
         })
     }
 }

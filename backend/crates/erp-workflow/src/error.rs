@@ -1,20 +1,12 @@
 //! 工作流域应用错误与冻结的审批 `ErrorCode`。
 
-use application_core::{ErrorClass, ValidationIssues};
+use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
+use persistence_core::impl_repository_error;
 
 /// Workflow-domain result alias.
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为工作流领域错误。
-    fn from(error: application_core::Error) -> Self {
-        match error {
-            application_core::Error::Internal(message) => Self::Internal(message),
-            application_core::Error::ValidationError(message) => Self::ValidationError(message),
-            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
-        }
-    }
-}
+impl_application_error_conversions!(Error);
 
 /// Workflow, approval and work-item errors.
 #[derive(Debug, thiserror::Error)]
@@ -155,22 +147,10 @@ impl Error {
     }
 }
 
-impl From<persistence_core::Error> for Error {
-    /// 将仓储错误转换为工作流领域错误。
-    fn from(error: persistence_core::Error) -> Self {
-        match error {
-            error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
-            },
-            persistence_core::Error::OptimisticLockingError => Self::concurrent_modification(),
-            error @ persistence_core::Error::TransientTransactionConflict(_) => {
-                Self::TransientTransaction(error)
-            },
-            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
-            other => Self::RepositoryError(other),
-        }
-    }
-}
+impl_repository_error!(
+    Error,
+    duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
+);
 
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     error
@@ -203,13 +183,6 @@ pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
             Some("该销售单已存在开放客户验收任务，请刷新后重试")
         },
         _ => None,
-    }
-}
-
-impl From<validator::ValidationErrors> for Error {
-    /// 从校验错误构建工作流领域错误。
-    fn from(err: validator::ValidationErrors) -> Self {
-        Error::InvalidInput(err.into())
     }
 }
 

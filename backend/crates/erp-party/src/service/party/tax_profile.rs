@@ -77,10 +77,10 @@ impl PartyTaxProfileService {
         params.validate()?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
         let paging = normalize_paging(
-            params.page,
-            params.page_size,
             &params.sort_by,
             &params.sort_dir,
+            params.page,
+            params.page_size,
             PARTY_TAX_PROFILE_SORT_FIELDS,
         )?;
         let filter = PartyTaxProfileFilter {

@@ -14,6 +14,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::amount_validation::sum_line_amounts;
+use super::stored_line_fields::StoredLineFields;
 use super::types::{GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario, build_line_groups};
 use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode, SalesProcurementPriceBasis};
 
@@ -240,32 +241,7 @@ impl SalesOrderWorkingCopyLine {
         if self.line_type != LineType::GoodsService {
             return Ok(None);
         }
-        Ok(Some(GoodsLineFields {
-            pricing_mode: self.pricing_mode,
-            delivery_allocations: self.delivery_allocations.clone(),
-            sku_id: self
-                .sku_id
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", self.line_no)))?,
-            sku_revision_id: self
-                .sku_revision_id
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
-            welfare_scenario: self.welfare_scenario,
-            procurement_supply_price_gross: self.procurement_supply_price_gross,
-            procurement_price_basis: self.procurement_price_basis,
-            fulfillment_due_at: self
-                .fulfillment_due_at
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
-            quantity: self.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
-            base_unit_code: self
-                .base_unit_code
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", self.line_no)))?,
-            unit_price_gross: self
-                .unit_price_gross
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", self.line_no)))?,
-        }))
+        StoredLineFields::from(self).goods().map(Some)
     }
 
     /// 还原卡券字段组。
@@ -282,30 +258,7 @@ impl SalesOrderWorkingCopyLine {
         if self.line_type != LineType::Voucher {
             return Ok(None);
         }
-        Ok(Some(VoucherLineDraft {
-            face_value: self
-                .face_value
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", self.line_no)))?,
-            card_count: self
-                .card_count
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", self.line_no)))?,
-            unit_price_gross: self
-                .unit_price_gross
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", self.line_no)))?,
-            face_value_total: self
-                .face_value_total
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", self.line_no)))?,
-            transaction_amount: self
-                .transaction_amount
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", self.line_no)))?,
-            gift_amount: self
-                .gift_amount
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", self.line_no)))?,
-            gift_rate: self.gift_rate,
-            card_form: self
-                .card_form
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
-        }))
+        StoredLineFields::from(self).voucher().map(Some)
     }
 
     /// 汇总工作副本行已经舍入的金额三元组。

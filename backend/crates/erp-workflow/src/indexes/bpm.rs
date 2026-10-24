@@ -1,9 +1,9 @@
 //! BPM 目标集合索引。
 
 use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index, unique_partial_index};
 
 use crate::repository::BpmExt;
 
@@ -206,26 +206,6 @@ fn active_or_blocked_filter() -> Document {
             { "status": "BLOCKED" },
         ]
     }
-}
-
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
-}
-
-fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(
-            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
-        )
-        .build()
 }
 
 #[cfg(test)]

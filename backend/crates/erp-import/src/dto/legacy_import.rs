@@ -4,10 +4,7 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；业务日期 `baseline_date`
 //! 为 `YYYY-MM-DD` 字符串；本域无金额字段。
 
-use application_core::{page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
-
-use crate::error::Result;
 
 /// 后台任务状态快照；wire code 与支撑域 `JobStatus` 一致。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,54 +31,13 @@ pub const LEGACY_IMPORT_ROW_SORT_FIELDS: &[&str] = &["created_at", "source_row_k
 /// 导入确认列表允许的排序字段白名单。
 pub const LEGACY_IMPORT_CONFIRMATION_SORT_FIELDS: &[&str] = &["created_at", "trial_version"];
 
-/// 排序方向。
-pub use application_core::SortDir;
-
-/// 归一化后的分页查询参数（Service → Repository 共用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageParams {
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数（已 clamp 到 1–100）。
-    pub page_size: u32,
-    /// 排序字段（已过白名单校验）。
-    pub sort_by: &'static str,
-    /// 排序方向。
-    pub sort_dir: SortDir,
-}
-
-impl PageParams {
-    /// 返回仓储筛选用的排序字段名（白名单已校验）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回归一化后的排序字段。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn sort_field(&self) -> String {
-        self.sort_by.to_owned()
-    }
-
-    /// 判断排序是否为升序。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 升序返回 `true`，降序返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn sort_ascending(&self) -> bool {
-        matches!(self.sort_dir, SortDir::Asc)
-    }
-}
-
+/// 共享的分页与排序参数，领域保留排序白名单。
+pub use application_core::PageParams;
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
+/// 排序方向。
+pub use application_core::SortDir;
+pub(crate) use application_core::normalize_paging;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -95,36 +51,6 @@ pub use application_core::PageView;
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub use application_core::normalize_sort;
-
-/// 归一化分页与排序参数（白名单校验 + 默认值），三类列表查询共用。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `page` - 可选页码；缺省取首页
-/// * `page_size` - 可选单页条数；缺省取默认值
-/// * `allowed_fields` - 排序字段白名单
-///
-/// # 返回
-/// 返回归一化后的分页查询参数。
-///
-/// # 错误
-/// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-pub(crate) fn normalize_paging(
-    sort_by: &Option<String>,
-    sort_dir: &Option<String>,
-    page: Option<u64>,
-    page_size: Option<u32>,
-    allowed_fields: &'static [&'static str],
-) -> Result<PageParams> {
-    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
-    Ok(PageParams {
-        page: page_or_default(page),
-        page_size: page_size_or_default(page_size),
-        sort_by,
-        sort_dir,
-    })
-}
 
 mod apply;
 mod batch;

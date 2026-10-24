@@ -7,6 +7,8 @@
 use std::collections::HashSet;
 use std::hash::Hash;
 
+use application_core::{EmptyScopeVersion, ScopeVersion};
+
 use crate::{Error, Result};
 
 /// 深分页必须携带范围版本，禁止不同授权页拼接。
@@ -21,10 +23,9 @@ use crate::{Error, Result};
 /// # 错误
 /// * `ConflictError` - 后续页缺失范围版本时拒绝，要求从第一页刷新
 pub(crate) fn ensure_deep_page(page: u64, scope_version: Option<&str>) -> Result<()> {
-    if page > 1 && scope_version.is_none_or(str::is_empty) {
-        return Err(data_scope_changed("请从第一页刷新后继续查询"));
-    }
-    Ok(())
+    ScopeVersion::new(scope_version, EmptyScopeVersion::Missing)
+        .require_for_page(page)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 以统一前缀构造范围变化冲突错误。

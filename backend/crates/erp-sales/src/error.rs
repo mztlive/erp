@@ -1,20 +1,12 @@
 //! 销售领域应用错误，保留原有唯一索引冲突映射。
 
-use application_core::{ErrorClass, ValidationIssues};
+use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
+use persistence_core::impl_repository_error;
 
 /// 销售领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为销售领域错误。
-    fn from(error: application_core::Error) -> Self {
-        match error {
-            application_core::Error::Internal(message) => Self::Internal(message),
-            application_core::Error::ValidationError(message) => Self::ValidationError(message),
-            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
-        }
-    }
-}
+impl_application_error_conversions!(Error);
 
 /// Sales order, revision and selection errors.
 #[derive(Debug, thiserror::Error)]
@@ -185,27 +177,10 @@ impl Error {
     }
 }
 
-impl From<persistence_core::Error> for Error {
-    /// 将仓储错误转换为销售领域错误。
-    ///
-    /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
-    /// 其余错误保持内部仓储错误。
-    fn from(error: persistence_core::Error) -> Self {
-        match error {
-            error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
-            },
-            persistence_core::Error::OptimisticLockingError => {
-                Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            },
-            error @ persistence_core::Error::TransientTransactionConflict(_) => {
-                Self::TransientTransaction(error)
-            },
-            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
-            other => Self::RepositoryError(other),
-        }
-    }
-}
+impl_repository_error!(
+    Error,
+    duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
+);
 
 /// 将持久化源错误映射为稳定错误分类（唯一分类入口）。
 ///
@@ -237,13 +212,6 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         Some("uk_sales_selection_idempotency_key") => "相同幂等键的请求载荷不一致".to_string(),
         Some("uk_sales_selection_display_book_combo") => "同一组合已存在，不得重复陈列".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
-    }
-}
-
-impl From<validator::ValidationErrors> for Error {
-    /// 从校验错误构建销售领域错误。
-    fn from(err: validator::ValidationErrors) -> Self {
-        Error::InvalidInput(err.into())
     }
 }
 
@@ -288,6 +256,11 @@ mod tests {
         assert_eq!(Error::RepositoryError(database).class(), ErrorClass::Internal);
         let conflict_source = persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key"));
         assert_eq!(Error::RepositoryError(conflict_source).class(), ErrorClass::Conflict);
+
+        let internal_source = persistence_core::Error::DatabaseError(MongoError::custom("db"));
+        assert_eq!(Error::ReceiptDuplicate(internal_source).class(), ErrorClass::Internal);
+        let conflict_source = persistence_core::Error::OptimisticLockingError;
+        assert_eq!(Error::OutcomeUnknown(conflict_source).class(), ErrorClass::Conflict);
     }
 
     #[test]

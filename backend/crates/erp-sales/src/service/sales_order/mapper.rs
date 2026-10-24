@@ -331,49 +331,7 @@ pub fn submission_view(
         submitted_by: submission.submitted_by,
         submitted_at: submission.submitted_at.unix_secs() as u64,
         created_at: submission.base.created_at,
-        lines: lines.into_iter().map(submission_line_view).collect(),
-    }
-}
-
-/// 构造工作副本行视图。
-///
-/// # 参数
-/// * `line` - 工作副本行实体
-///
-/// # 返回
-/// 返回视图。参考价固定为 `None`，本函数不回查价格。
-///
-/// # 错误
-/// 不返回错误。
-pub fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWorkingCopyLineView {
-    SalesOrderWorkingCopyLineView {
-        pricing_mode: line.pricing_mode,
-        delivery_allocations: line.delivery_allocations.clone(),
-        reference_prices: None,
-        id: line.base.id,
-        sales_order_line_id: line.sales_order_line_id.to_string(),
-        line_no: line.line_no,
-        line_type: line.line_type,
-        gross_amount: line.gross_amount,
-        net_amount: line.net_amount,
-        tax_amount: line.tax_amount,
-        sales_tax_rate: line.sales_tax_rate,
-        item_name_snapshot: line.item_name_snapshot,
-        spec_snapshot: line.spec_snapshot,
-        unit_snapshot: line.unit_snapshot,
-        sku_id: line.sku_id,
-        sku_revision_id: line.sku_revision_id,
-        welfare_scenario: line.welfare_scenario,
-        procurement_supply_price_gross: line.procurement_supply_price_gross,
-        procurement_price_basis: line.procurement_price_basis,
-        fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),
-        quantity: line.quantity,
-        base_unit_code: line.base_unit_code,
-        unit_price_gross: line.unit_price_gross,
-        face_value: line.face_value,
-        card_count: line.card_count,
-        transaction_amount: line.transaction_amount,
-        card_form: line.card_form,
+        lines: lines.into_iter().map(SalesOrderWorkingCopyLineView::from_submission_line).collect(),
     }
 }
 
@@ -473,48 +431,6 @@ fn revision_line_summary(lines: &[SalesOrderRevisionLine]) -> String {
     }
     let names = lines.iter().map(|line| line.item_name_snapshot.as_str()).collect::<Vec<_>>();
     format!("{} 共 {} 项", names.join("、"), lines.len())
-}
-
-/// 构造提交明细行视图（与工作副本行视图同形）。
-///
-/// # 参数
-/// * `line` - 提交行实体
-///
-/// # 返回
-/// 返回视图。
-///
-/// # 错误
-/// 无。
-fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopyLineView {
-    SalesOrderWorkingCopyLineView {
-        pricing_mode: line.pricing_mode,
-        delivery_allocations: line.delivery_allocations.clone(),
-        reference_prices: None,
-        id: line.base.id,
-        sales_order_line_id: line.sales_order_line_id.to_string(),
-        line_no: line.line_no,
-        line_type: line.line_type,
-        gross_amount: line.gross_amount,
-        net_amount: line.net_amount,
-        tax_amount: line.tax_amount,
-        sales_tax_rate: line.sales_tax_rate,
-        item_name_snapshot: line.item_name_snapshot,
-        spec_snapshot: line.spec_snapshot,
-        unit_snapshot: line.unit_snapshot,
-        sku_id: line.sku_id,
-        sku_revision_id: line.sku_revision_id,
-        welfare_scenario: line.welfare_scenario,
-        procurement_supply_price_gross: line.procurement_supply_price_gross,
-        procurement_price_basis: line.procurement_price_basis,
-        fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),
-        quantity: line.quantity,
-        base_unit_code: line.base_unit_code,
-        unit_price_gross: line.unit_price_gross,
-        face_value: line.face_value,
-        card_count: line.card_count,
-        transaction_amount: line.transaction_amount,
-        card_form: line.card_form,
-    }
 }
 
 #[cfg(test)]

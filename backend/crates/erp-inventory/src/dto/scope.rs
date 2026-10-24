@@ -1,6 +1,6 @@
 //! 库存列表范围信封与人员筛选规范化。
 
-use application_core::{PageView, QueryIds};
+use application_core::{EmptyScopeVersion, PageView, QueryIds, ScopeVersion};
 use serde::Serialize;
 
 use crate::error::{Error, Result};
@@ -129,13 +129,11 @@ pub fn normalized_scope_version(value: Option<&str>) -> Result<Option<String>> {
 /// `page` 大于 1 且 `expected` 为 `None`，或 `expected` 为 `Some` 且不等于 `current` 时，
 /// 返回 `Error::ConflictError`，文案带 `DATA_SCOPE_CHANGED`。
 pub fn ensure_scope_version(page: u64, expected: Option<&str>, current: &str) -> Result<()> {
-    if page > 1 && expected.is_none() {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".to_string()));
-    }
-    if expected.is_some_and(|value| value != current) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".to_string()));
-    }
-    Ok(())
+    let version = ScopeVersion::new(expected, EmptyScopeVersion::Provided);
+    version
+        .require_for_page(page)
+        .and_then(|()| version.verify(current))
+        .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
 }
 
 #[cfg(test)]

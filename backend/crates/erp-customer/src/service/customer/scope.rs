@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use application_core::{AuditActor, PageView};
+use application_core::{AuditActor, EmptyScopeVersion, PageView, ScopeVersion};
 use erp_core::common::time::BusinessDate;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -408,10 +408,9 @@ pub(super) fn data_scope_changed(detail: &str) -> Error {
 /// # 关键业务约束
 /// 不得在缺版本时继续查询并默默使用新授权。
 pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(data_scope_changed("请从第一页刷新后继续查询"));
-    }
-    Ok(())
+    ScopeVersion::new(version, EmptyScopeVersion::Missing)
+        .require_for_page(page)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 客户端回传的范围版本必须与当前快照一致。
@@ -429,10 +428,9 @@ pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 /// # 关键业务约束
 /// 不得把新旧授权结果拼接成同一列表。
 pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
-    if expected.is_some_and(|value| value != actual) {
-        return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
-    }
-    Ok(())
+    ScopeVersion::new(expected, EmptyScopeVersion::Provided)
+        .verify(actual)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 同一查询内两次快照的范围版本必须一致。
@@ -450,10 +448,9 @@ pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Resu
 /// # 关键业务约束
 /// 复核失败必须整页拒绝，不得返回半新半旧结果。
 pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
-    if first != second {
-        return Err(data_scope_changed("数据范围或客户资料已变化，请刷新"));
-    }
-    Ok(())
+    ScopeVersion::new(Some(first), EmptyScopeVersion::Provided)
+        .verify(second)
+        .map_err(|_| data_scope_changed("数据范围或客户资料已变化，请刷新"))
 }
 
 /// 将业务筛选与授权集合求交。

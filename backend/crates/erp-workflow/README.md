@@ -35,6 +35,7 @@
 | --- | --- |
 | [src/service/approval/mod.rs](src/service/approval/mod.rs) | 审批定义、运行与政策入口 |
 | [src/service/approval/read.rs](src/service/approval/read.rs) | 冻结定义与有序启动回执读取；收据命中后仍须核验精确命令身份 |
+| [src/service/approval/execution/start_input.rs](src/service/approval/execution/start_input.rs) | 节点绑定与启动输入装配；业务入口须先完成定义版本、命令身份及专属资格检查 |
 | [src/service/approval/execution/cancel_prepare.rs](src/service/approval/execution/cancel_prepare.rs) | 普通单据撤回事实读取与输入构造；全程沿用调用方 Executor |
 | [src/service/work_item/mod.rs](src/service/work_item/mod.rs) | 工作项命令入口 |
 | [src/repository/bpm.rs](src/repository/bpm.rs) | BPM 持久化适配 |

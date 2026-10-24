@@ -2,6 +2,8 @@
 
 mod definition;
 mod dto;
+mod presentation;
+mod summary;
 pub use definition::{DocumentApprovalNodeView, binding_route};
 mod query;
 
@@ -12,7 +14,11 @@ use erp_identity::{Permission, SharedRbacService};
 use erp_workflow::service::approval::execution::RuntimeHistoryPage;
 use mongodb::Database;
 use persistence_core::Executor;
+pub use presentation::{
+    DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalView,
+};
 pub(crate) use query::{load_document_runtime, load_document_runtime_for_instance};
+pub use summary::{DocumentApprovalHistorySummaryItemView, DocumentApprovalInstanceSummaryView};
 
 /// 与同一业务读取快照绑定的实际运行摘要和有界历史。
 pub(crate) struct DocumentRuntime {

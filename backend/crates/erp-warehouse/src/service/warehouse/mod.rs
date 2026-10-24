@@ -534,8 +534,8 @@ impl WarehouseListQuery {
             status: self.status,
             page: self.paging.page,
             page_size: self.paging.page_size,
-            sort_by: Some(self.paging.sort_name()),
-            sort_ascending: self.paging.ascending(),
+            sort_by: Some(self.paging.sort_field()),
+            sort_ascending: self.paging.sort_ascending(),
         }
     }
 }
@@ -557,8 +557,8 @@ impl WarehouseRevisionListQuery {
             name: self.name,
             page: self.paging.page,
             page_size: self.paging.page_size,
-            sort_by: Some(self.paging.sort_name()),
-            sort_ascending: self.paging.ascending(),
+            sort_by: Some(self.paging.sort_field()),
+            sort_ascending: self.paging.sort_ascending(),
         }
     }
 }
@@ -581,8 +581,8 @@ impl WarehouseSkuPolicyListQuery {
             status: self.status,
             page: self.paging.page,
             page_size: self.paging.page_size,
-            sort_by: Some(self.paging.sort_name()),
-            sort_ascending: self.paging.ascending(),
+            sort_by: Some(self.paging.sort_field()),
+            sort_ascending: self.paging.sort_ascending(),
         }
     }
 }

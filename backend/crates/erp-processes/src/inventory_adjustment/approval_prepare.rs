@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
-use bpm::ids::{
-    ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
-};
+use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalProcessInstance, IdempotencyKey, ParticipantId, SubjectRef, Timestamp,
@@ -25,12 +23,14 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
-use erp_workflow::service::approval::execution::authorization::converge_node_eligibility;
 use erp_workflow::service::approval::execution::idempotency::{
     ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
 };
+use erp_workflow::service::approval::execution::start_input::{
+    StartInputContext, assemble_start_input, start_bindings,
+};
 use erp_workflow::service::approval::execution::{
-    ExecutionCommandInput, PreparedExecution, StartExecutionInput, prepare_start_with_identity,
+    PreparedExecution, StartExecutionInput, prepare_start_with_identity,
 };
 use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::approval::process_kind::process_kind_of;
@@ -39,7 +39,6 @@ use erp_workflow::service::approval::{
     approval_participant_permissions_with_executor, read,
 };
 use erp_workflow::{ApprovalIntegrationExt, BpmExt};
-use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -556,32 +555,20 @@ pub async fn build_stock_adjustment_start_input(
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(db, rbac, &graph, actor_id, organization_id, executor).await?;
-    let entry = graph.entry_node().map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
-    let entry_eligibility = bindings
-        .iter()
-        .find(|item| item.node_key == entry.node_key)
-        .map(|item| item.eligibility.clone())
-        .ok_or_else(|| Error::ConflictError("入口节点缺少审批人绑定".to_string()))?;
-    Ok(StartExecutionInput {
-        command: ExecutionCommandInput {
-            graph,
-            current_eligibility: entry_eligibility.clone(),
-            next_eligibility: entry_eligibility,
-            receipt,
+    Ok(assemble_start_input(
+        graph,
+        bindings,
+        StartInputContext {
+            binding,
+            document_type: DocumentType::StockAdjustment,
+            subject,
+            subject_version,
+            actor,
             idempotency_key,
+            receipt,
             now: timestamp,
         },
-        process_kind: process_kind_of(DocumentType::StockAdjustment),
-        subject,
-        subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref().to_string(),
-        definition_version: binding.approval_definition_version,
-        actor,
-        instance_id: ApprovalProcessInstanceId::new(next_id()),
-        entry_execution_id: ApprovalNodeExecutionId::new(next_id()),
-        receipt_id: ApprovalCommandReceiptId::new(next_id()),
-        bindings,
-    })
+    )?)
 }
 
 /// 为定义全部节点冻结启动绑定，并重验候选人账号、权限与职责分离。
@@ -609,16 +596,7 @@ async fn start_bindings_from_graph(
 ) -> Result<Vec<StartAssigneeBinding>> {
     revalidate_stock_adjustment_start_candidates(db, rbac, graph, initiator_id, organization_id, executor)
         .await?;
-    let mut bindings = Vec::with_capacity(graph.nodes.len());
-    for node in &graph.nodes {
-        bindings.push(StartAssigneeBinding {
-            id: ApprovalInstanceAssigneeId::new(next_id()),
-            node_key: node.node_key.clone(),
-            participant: node.assignee().map_err(|e| Error::ValidationError(e.to_string()))?.clone(),
-            eligibility: converge_node_eligibility(node, |_| None)?,
-        });
-    }
-    Ok(bindings)
+    Ok(start_bindings(graph, |_| None, "审批定义没有节点，无法启动库存调整审批")?)
 }
 
 /// 在调用方快照内重验责任组织非空、职责分离，以及候选人是有效后台账号且具备审批读取和决定权限。

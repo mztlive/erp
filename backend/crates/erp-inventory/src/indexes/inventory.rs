@@ -17,9 +17,9 @@
 
 use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index, unique_partial_index};
 
 use crate::repository::StockAdjustmentCancellationExt;
 use crate::repository::extensions::InventoryExt;
@@ -184,29 +184,6 @@ fn stock_adjustment_line_indexes() -> Vec<IndexModel> {
         unique_index("uk_stock_adjustment_lines_id", doc! { "id": 1 }),
         named_index("idx_stock_adjustment_lines_adjustment", doc! { "stock_adjustment_id": 1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
-}
-
-/// 构建命名部分唯一索引。
-fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(
-            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
-        )
-        .build()
 }
 
 #[cfg(test)]

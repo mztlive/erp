@@ -8,6 +8,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::extensions::LegacyImportExt;
 
@@ -115,19 +116,6 @@ fn legacy_import_confirmation_indexes() -> Vec<IndexModel> {
         unique_index("uk_legacy_import_confirmations_work_item", doc! { "work_item_id": 1 }),
         named_index("idx_legacy_import_confirmations_batch_status", doc! { "batch_id": 1, "status": 1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 /// 构建命名 TTL 索引（`expire_after_seconds` 秒后过期）。

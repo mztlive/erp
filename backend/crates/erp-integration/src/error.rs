@@ -1,20 +1,12 @@
 //! 集成领域应用错误，保留原唯一索引冲突文案映射。
 
-use application_core::{ErrorClass, ValidationIssues};
+use application_core::{ValidationIssues, impl_application_error_conversions, impl_domain_error_class};
+use persistence_core::impl_repository_error;
 
 /// 集成领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为集成领域错误。
-    fn from(error: application_core::Error) -> Self {
-        match error {
-            application_core::Error::Internal(message) => Self::Internal(message),
-            application_core::Error::ValidationError(message) => Self::ValidationError(message),
-            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
-        }
-    }
-}
+impl_application_error_conversions!(Error);
 
 /// 集成消息、错误任务与对账决定的应用错误。
 #[derive(Debug, thiserror::Error)]
@@ -60,55 +52,12 @@ pub enum Error {
     RepositoryError(persistence_core::Error),
 }
 
-impl Error {
-    /// 返回 HTTP 映射使用的稳定错误分类；调用方不得解析展示文案。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 为 `ErrorClass::Internal`；
-    /// `ConflictError`、`ReceiptDuplicate` 与 `TransientTransaction` 为 `ErrorClass::Conflict`；
-    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 为 `ErrorClass::BusinessRule`；
-    /// `Forbidden` 与 `Unauthenticated` 为 `ErrorClass::Forbidden`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn class(&self) -> ErrorClass {
-        match self {
-            Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
-            Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
-                ErrorClass::Conflict
-            },
-            Self::BusinessLogicError(_)
-            | Self::ValidationError(_)
-            | Self::InvalidInput(_)
-            | Self::NotFound(_) => ErrorClass::BusinessRule,
-            Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
-            Self::OutcomeUnknown(_) => ErrorClass::Internal,
-        }
-    }
-}
+impl_domain_error_class!(Error);
 
-impl From<persistence_core::Error> for Error {
-    /// 将仓储错误转换为集成领域错误。
-    ///
-    /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
-    /// 其余错误保持内部仓储错误。
-    fn from(error: persistence_core::Error) -> Self {
-        match error {
-            error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
-            },
-            persistence_core::Error::OptimisticLockingError => optimistic_lock_conflict(),
-            error @ persistence_core::Error::TransientTransactionConflict(_) => {
-                Self::TransientTransaction(error)
-            },
-            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
-            other => Self::RepositoryError(other),
-        }
-    }
-}
+impl_repository_error!(
+    Error,
+    duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
+);
 
 /// 乐观锁版本冲突的统一文案（`From<persistence_core::Error>` 与版本校验共用）。
 pub const OPTIMISTIC_LOCK_CONFLICT_MESSAGE: &str = "数据已被其他请求修改，请刷新后重试";
@@ -145,13 +94,6 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         },
         Some("uk_reconciliation_differences_object") => "该对象的对账差异已存在，请勿重复提交".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
-    }
-}
-
-impl From<validator::ValidationErrors> for Error {
-    /// 从校验错误构建集成领域错误。
-    fn from(err: validator::ValidationErrors) -> Self {
-        Error::InvalidInput(err.into())
     }
 }
 

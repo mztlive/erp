@@ -1,20 +1,12 @@
 //! 库存领域应用错误，并保留原有唯一索引冲突映射。
 
-use application_core::{ErrorClass, ValidationIssues};
+use application_core::{ValidationIssues, impl_application_error_conversions, impl_domain_error_class};
+use persistence_core::impl_repository_error;
 
 /// Inventory-domain result alias.
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为库存领域错误。
-    fn from(error: application_core::Error) -> Self {
-        match error {
-            application_core::Error::Internal(message) => Self::Internal(message),
-            application_core::Error::ValidationError(message) => Self::ValidationError(message),
-            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
-        }
-    }
-}
+impl_application_error_conversions!(Error);
 
 /// Inventory balance, movement, reservation and adjustment errors.
 #[derive(Debug, thiserror::Error)]
@@ -60,57 +52,12 @@ pub enum Error {
     RepositoryError(persistence_core::Error),
 }
 
-impl Error {
-    /// 返回供 HTTP 映射使用的稳定错误类别；不要解析展示文案。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 为 `ErrorClass::Internal`；
-    /// `ConflictError`、`ReceiptDuplicate` 与 `TransientTransaction` 为 `ErrorClass::Conflict`；
-    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 为 `ErrorClass::BusinessRule`；
-    /// `Forbidden` 与 `Unauthenticated` 为 `ErrorClass::Forbidden`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn class(&self) -> ErrorClass {
-        match self {
-            Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
-            Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
-                ErrorClass::Conflict
-            },
-            Self::BusinessLogicError(_)
-            | Self::ValidationError(_)
-            | Self::InvalidInput(_)
-            | Self::NotFound(_) => ErrorClass::BusinessRule,
-            Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
-            Self::OutcomeUnknown(_) => ErrorClass::Internal,
-        }
-    }
-}
+impl_domain_error_class!(Error);
 
-impl From<persistence_core::Error> for Error {
-    /// 将仓储错误转换为库存领域错误。
-    ///
-    /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
-    /// 其余错误保持内部仓储错误。
-    fn from(error: persistence_core::Error) -> Self {
-        match error {
-            error @ persistence_core::Error::DuplicateKey(_) => {
-                Self::ConflictError(duplicate_key_conflict_message(&error))
-            },
-            persistence_core::Error::OptimisticLockingError => {
-                Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
-            },
-            error @ persistence_core::Error::TransientTransactionConflict(_) => {
-                Self::TransientTransaction(error)
-            },
-            error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
-            other => Self::RepositoryError(other),
-        }
-    }
-}
+impl_repository_error!(
+    Error,
+    duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
+);
 
 /// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
@@ -129,13 +76,6 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         ) => "库存预占来源重复，请勿重复提交".to_string(),
         Some("uk_stock_adjustments_adjustment_no") => "库存调整单号重复，请勿重复提交".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
-    }
-}
-
-impl From<validator::ValidationErrors> for Error {
-    /// 从校验错误构建库存领域错误。
-    fn from(err: validator::ValidationErrors) -> Self {
-        Error::InvalidInput(err.into())
     }
 }
 

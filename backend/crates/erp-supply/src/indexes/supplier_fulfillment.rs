@@ -10,6 +10,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::SupplierFulfillmentExt;
 
@@ -182,19 +183,6 @@ fn supplier_refund_allocation_indexes() -> Vec<IndexModel> {
             doc! { "allocation_action": { "$eq": "REVERSE" } },
         ),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 /// 构建命名部分唯一索引（仅匹配部分筛选表达式的文档参与唯一约束）。

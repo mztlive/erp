@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::hash::{Hash, Hasher};
 
-use application_core::AuditActor;
+use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::{FundsDataScopePort, FundsResolvedClause, FundsResolvedScope};
 use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
@@ -504,10 +504,9 @@ pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 /// # 错误
 /// `expected` 有值且不等于 `actual` 时返回范围变化冲突错误。
 pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
-    if expected.is_some_and(|version| version != actual) {
-        return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
-    }
-    Ok(())
+    ScopeVersion::new(expected, EmptyScopeVersion::Provided)
+        .verify(actual)
+        .map_err(|error| crate::support::data_scope_changed(error.detail()))
 }
 
 /// 把授权与关联单据版本绑定为跨页凭据；不返回内部授权集合。

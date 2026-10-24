@@ -14,9 +14,9 @@
 //! - 其余为列表/详情查询索引。
 
 use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::extensions::FulfillmentExt;
 
@@ -174,19 +174,6 @@ fn allocation_indexes() -> Vec<IndexModel> {
             doc! { "fulfillment_fact_type": 1, "fulfillment_line_id": 1 },
         ),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 #[cfg(test)]

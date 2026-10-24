@@ -1,9 +1,8 @@
-use application_core::AuditActor;
+use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::{SupplierSettlementService, dto, zero_amount};
-use crate::Result;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::dto::supplier_settlement::{
     StatementListQuery, SupplierSettlementItemView, SupplierSettlementStatementListParams,
@@ -16,6 +15,7 @@ use crate::ports::SettlementResolvedScope;
 use crate::repository::SupplierSettlementExt;
 use crate::repository::prelude::*;
 use crate::repository::supplier_settlement::SupplierSettlementStatementRow;
+use crate::{Error, Result};
 
 /// 结算单列表筛选条件类型（经 `SupplierSettlementExt` 关联类型跨 crate 可达）。
 type StatementFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementStatementFilter;
@@ -94,18 +94,16 @@ impl SupplierSettlementService {
 
 /// 后续页必须携带当前范围版本。
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(crate::Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
-    }
-    Ok(())
+    ScopeVersion::new(version, EmptyScopeVersion::Missing)
+        .require_for_page(page)
+        .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
 }
 
 /// 客户端回传的范围版本必须与当前快照一致。
 fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
-    if expected.is_some_and(|value| value != actual) {
-        return Err(crate::Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
-    }
-    Ok(())
+    ScopeVersion::new(expected, EmptyScopeVersion::Provided)
+        .verify(actual)
+        .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
 }
 
 async fn expand_org_filter(

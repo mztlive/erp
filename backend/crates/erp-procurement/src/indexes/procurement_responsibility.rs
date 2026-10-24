@@ -5,6 +5,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::extensions::ProcurementResponsibilityExt;
 use crate::repository::procurement_responsibility::migration::migrate_pools;
@@ -56,33 +57,6 @@ fn indexes() -> Vec<IndexModel> {
             doc! { "deleted_at": 1, "owner_user_ids": 1, "status": 1 },
         ),
     ]
-}
-
-/// 构造普通命名索引。
-///
-/// # 参数
-/// * `name` - 稳定索引名
-/// * `keys` - 索引键
-///
-/// # 返回
-/// 返回非唯一索引模型。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构造稳定主键唯一索引。
-///
-/// # 参数
-/// * `name` - 稳定索引名
-/// * `keys` - 索引键
-///
-/// # 返回
-/// 返回唯一索引模型。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 #[cfg(test)]

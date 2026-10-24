@@ -1,48 +1,16 @@
 //! 库存列表查询参数与归一化条件。
 
-use application_core::{QueryIds, page_or_default, page_size_or_default};
+use application_core::{QueryIds, normalize_paging};
 use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::{
     PageParams, STOCK_ADJUSTMENT_SORT_FIELDS, STOCK_BALANCE_SORT_FIELDS, STOCK_MOVEMENT_SORT_FIELDS,
-    STOCK_RESERVATION_SORT_FIELDS, normalize_sort,
+    STOCK_RESERVATION_SORT_FIELDS,
 };
 use crate::entity::inventory::{MovementDirection, MovementType, ReservationStatus, StockAdjustmentState};
 use crate::error::{Error, Result};
-
-/// 归一化分页与排序参数（白名单校验 + 默认值）。
-///
-/// 四类列表查询共用：排序字段过白名单，页码与单页条数取默认值。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `page` - 可选页码；缺省取首页
-/// * `page_size` - 可选单页条数；缺省取默认值
-/// * `allowed_fields` - 排序字段白名单
-///
-/// # 返回
-/// 返回归一化后的分页查询参数。
-///
-/// # 错误
-/// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-fn normalize_paging(
-    sort_by: &Option<String>,
-    sort_dir: &Option<String>,
-    page: Option<u64>,
-    page_size: Option<u32>,
-    allowed_fields: &'static [&'static str],
-) -> Result<PageParams> {
-    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, allowed_fields)?;
-    Ok(PageParams {
-        page: page_or_default(page),
-        page_size: page_size_or_default(page_size),
-        sort_by,
-        sort_dir,
-    })
-}
 
 /// 余额可用量筛选；所有条件均在分页前应用。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

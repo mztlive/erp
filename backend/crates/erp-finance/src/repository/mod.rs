@@ -8,6 +8,7 @@ pub mod extensions;
 mod fulfillment_facts;
 mod funds_summary;
 mod invoice_summary_facts;
+mod invoicing;
 pub mod owned;
 pub mod payable;
 pub mod prelude;

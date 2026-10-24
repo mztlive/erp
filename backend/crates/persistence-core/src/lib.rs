@@ -2,8 +2,10 @@
 
 mod connection;
 pub mod dirty_marks;
+mod error_macros;
 mod errors;
 mod executor;
+pub mod indexes;
 pub mod mongo_ops;
 pub mod repository;
 mod reset;

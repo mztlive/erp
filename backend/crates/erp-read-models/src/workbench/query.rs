@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 
-use application_core::AuditActor;
+use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity};
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::repository::prelude::*;
@@ -555,10 +555,11 @@ pub(super) fn queue_scope_version(identity: &str, query: &str, result: &str) -> 
 /// # 错误
 /// `page` 大于 1 且未回传版本，或回传值与 `expected` 不同时，返回 `Error::ConflictError`，详情前缀为 `DATA_SCOPE_CHANGED：`。
 pub(super) fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
-    if (page > 1 && provided.is_none()) || provided.is_some_and(|value| value != expected) {
-        return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
-    }
-    Ok(())
+    let version = ScopeVersion::new(provided, EmptyScopeVersion::Provided);
+    version
+        .require_for_page(page)
+        .and_then(|()| version.verify(expected))
+        .map_err(|_| crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"))
 }
 
 /// 为单条任务详情生成队列上下文标识。

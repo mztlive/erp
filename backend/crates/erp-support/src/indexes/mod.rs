@@ -5,9 +5,9 @@ mod file_asset;
 mod source_registry;
 
 use mongodb::bson::Document;
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 /// 创建支撑领域各集合的幂等命名索引。
 ///
@@ -43,31 +43,4 @@ pub use source_registry::ensure as ensure_source_registry;
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
-}
-
-/// 构建命名普通索引（三集合共用）。
-///
-/// # 参数
-/// * `name` - 索引名
-/// * `keys` - 索引键文档
-///
-/// # 返回
-/// 返回索引模型。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引（三集合共用）。
-///
-/// # 参数
-/// * `name` - 索引名
-/// * `keys` - 索引键文档
-///
-/// # 返回
-/// 返回唯一索引模型。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }

@@ -6,12 +6,12 @@ use mongodb::bson::{Bson, doc};
 use persistence_core::{NoTransaction, QueryFilter, Transactional};
 
 use super::super::sort_doc;
-use super::invoicing::invoicing_guard;
 use super::settlement::settlement_guard;
 use super::write::{amount_bson, progress_pipeline};
 use super::{PayableAccountFilter, PayableAccountInvoicingExt, PayableAccountSettlementExt};
 use crate::entity::payable::{PayableAccount, PayableAccountData, PayableAccountStatus, PayableSourceType};
 use crate::repository::PayableExt;
+use crate::repository::invoicing::invoicing_guard;
 use crate::repository::owned::PayableAccountRepository;
 
 #[test]

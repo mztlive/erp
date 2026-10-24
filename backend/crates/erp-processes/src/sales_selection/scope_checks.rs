@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use application_core::{AuditActor, PageView};
+use application_core::{AuditActor, EmptyScopeVersion, PageView, ScopeVersion};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_sales::dto::sales_selection::{
@@ -484,10 +484,9 @@ async fn named_owner_page<T, R>(
 /// # 错误
 /// 第二页缺版本时返回 `DATA_SCOPE_CHANGED`。
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into()));
-    }
-    Ok(())
+    ScopeVersion::new(version, EmptyScopeVersion::Missing)
+        .require_for_page(page)
+        .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
 }
 
 /// 回传版本必须与当前快照一致。
@@ -502,8 +501,7 @@ fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 /// # 错误
 /// 不一致时返回 `DATA_SCOPE_CHANGED`。
 fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
-    if expected.is_some_and(|value| value != actual) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
-    }
-    Ok(())
+    ScopeVersion::new(expected, EmptyScopeVersion::Provided)
+        .verify(actual)
+        .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
 }

@@ -1,13 +1,12 @@
-//! 应收应付共用的核销/开票进度条件更新 helper。
-//!
-//! `receivable::account` 与 `payable::account::write` 原先各持一份字节一致的
-//! `amount_bson`／`progress_pipeline`；现收敛到本模块唯一实现，两域经
-//! `pub(super) use` 转发，保持原有 `super::account::`／`super::write::`
-//! 引用路径与仓储外可见性不变。
+//! 应收应付共用的金额 BSON、进度管道与条件写入机制。
+
+use std::future::Future;
 
 use erp_core::money::Amount;
 use mongodb::bson::{Bson, Document, doc};
-use persistence_core::Result;
+use persistence_core::{Executor, Repository, Result};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
 ///
@@ -87,4 +86,45 @@ pub(super) fn progress_pipeline(
         );
     }
     vec![doc! { "$set": set }]
+}
+
+/// 财务账户进度的单文档条件写入。
+pub(crate) trait AccountProgressWrite: Sync {
+    /// 沿用调用方执行器执行条件更新，不开启或提交事务。
+    ///
+    /// # 参数
+    /// * `filter` - 账户身份、软删除与额度条件。
+    /// * `pipeline` - 更新进度及派生余额的聚合管道。
+    /// * `executor` - 调用方的数据访问执行器。
+    ///
+    /// # 返回
+    /// 条件匹配一个账户时返回 `true`，未匹配时返回 `false`。
+    ///
+    /// # 错误
+    /// 数据库更新失败时返回原仓储错误。
+    fn conditional_update(
+        &self,
+        filter: Document,
+        pipeline: Vec<Document>,
+        executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<bool>> + Send;
+}
+
+impl<T> AccountProgressWrite for Repository<'_, T>
+where
+    T: Serialize + DeserializeOwned + Send + Sync,
+{
+    async fn conditional_update(
+        &self,
+        filter: Document,
+        pipeline: Vec<Document>,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let collection = self.collection();
+        let result = match executor.session() {
+            Some(session) => collection.update_one(filter, pipeline).session(session).await?,
+            None => collection.update_one(filter, pipeline).await?,
+        };
+        Ok(result.matched_count == 1)
+    }
 }

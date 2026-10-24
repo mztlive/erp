@@ -9,6 +9,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index, unique_partial_index};
 
 use crate::repository::extensions::SalesOrderExt;
 
@@ -245,29 +246,6 @@ fn voucher_line_revision_indexes() -> Vec<IndexModel> {
         unique_index("uk_sales_order_voucher_line_revisions_id", doc! { "id": 1 }),
         unique_index("uk_sales_order_voucher_line_revisions_line", doc! { "revision_line_id": 1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
-}
-
-/// 构建命名部分唯一索引。
-fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(
-            IndexOptions::builder().name(name.into()).unique(true).partial_filter_expression(filter).build(),
-        )
-        .build()
 }
 
 #[cfg(test)]

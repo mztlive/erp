@@ -419,10 +419,10 @@ impl PartyService {
     ) -> Result<PageView<PartyRevisionView>> {
         params.validate()?;
         let paging = crate::dto::party::normalize_paging(
-            params.page,
-            params.page_size,
             &params.sort_by,
             &params.sort_dir,
+            params.page,
+            params.page_size,
             crate::dto::party::PARTY_REVISION_SORT_FIELDS,
         )?;
         let filter = PartyRevisionFilter {

@@ -17,6 +17,7 @@
 
 - MongoDB 连接、事务能力检查、执行器与事务封装。
 - 通用 Repository、分页过滤、正则字面量过滤和 MongoDB 操作辅助。
+- 命名普通、唯一及部分唯一索引的通用构造；领域必须提供索引名称、键顺序与过滤条件，组合根必须保持既定登记顺序。
 - `rotation` 提供调用方集合内游标读取、版本比较写入和标量到数组迁移机制；集合名、匹配与分派策略由拥有领域提供。
 
 ## 使用与边界要求
@@ -35,6 +36,7 @@
 | [src/transaction.rs](src/transaction.rs) | Transactional |
 | [src/repository/mod.rs](src/repository/mod.rs) | Repository、PageResult、Pagination 和 QueryFilter |
 | [src/mongo_ops.rs](src/mongo_ops.rs) | 统一执行器下的 MongoDB 操作 |
+| [src/indexes.rs](src/indexes.rs) | 命名索引构造；不拥有业务索引定义或执行登记 |
 | [src/reset.rs](src/reset.rs) | 显式全库重置机制，按领域提供的物理身份保留文档，须在事务中调用 |
 
 ## 验证要求

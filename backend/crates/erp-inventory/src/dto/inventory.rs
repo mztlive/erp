@@ -27,40 +27,12 @@ pub const STOCK_RESERVATION_SORT_FIELDS: &[&str] = &["created_at", "updated_at"]
 /// 库存调整单列表允许的排序字段白名单。
 pub const STOCK_ADJUSTMENT_SORT_FIELDS: &[&str] = &["created_at", "adjustment_no"];
 
-/// 排序方向。
-pub use application_core::SortDir;
-
-/// 归一化后的分页查询 DTO（Service → Repository 共用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageParams {
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数（已 clamp 到 1–100）。
-    pub page_size: u32,
-    /// 排序字段（已过白名单校验，`&'static str` 保证来源只可能是白名单）。
-    pub sort_by: &'static str,
-    /// 排序方向。
-    pub sort_dir: SortDir,
-}
-
-impl PageParams {
-    /// 返回 Repository 筛选共用的排序字段与方向。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(排序字段, 是否升序)`；字段总是 `Some`，升序仅当方向为 `SortDir::Asc`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(crate) fn sort_selection(&self) -> (Option<String>, bool) {
-        (Some(self.sort_by.to_string()), matches!(self.sort_dir, SortDir::Asc))
-    }
-}
-
+/// 共享的分页与排序参数，领域保留排序白名单。
+pub use application_core::PageParams;
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
+/// 排序方向。
+pub use application_core::SortDir;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数

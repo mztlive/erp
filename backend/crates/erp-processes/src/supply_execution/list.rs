@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use application_core::{AuditActor, OwnershipPage};
+use application_core::{AuditActor, EmptyScopeVersion, OwnershipPage, ScopeVersion};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_supply::dto::supplier_fulfillment::{
@@ -41,9 +41,9 @@ impl SupplierFulfillmentProcess {
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
         let snapshot = self.list_snapshot(&query, actor).await?;
-        if params.scope_version.as_deref().is_some_and(|value| value != snapshot.scope_version) {
-            return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
-        }
+        ScopeVersion::new(params.scope_version.as_deref(), EmptyScopeVersion::Provided)
+            .verify(&snapshot.scope_version)
+            .map_err(|error| data_scope_changed(error.detail()))?;
         Ok(to_list_view(snapshot))
     }
 
@@ -224,10 +224,9 @@ fn data_scope_changed(detail: &str) -> Error {
 }
 
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(data_scope_changed("请从第一页刷新后继续查询"));
-    }
-    Ok(())
+    ScopeVersion::new(version, EmptyScopeVersion::Missing)
+        .require_for_page(page)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 #[cfg(test)]

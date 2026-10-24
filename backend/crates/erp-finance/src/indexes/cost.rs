@@ -5,9 +5,9 @@
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
 use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::extensions::CostExt;
 
@@ -73,19 +73,6 @@ fn cost_allocation_indexes() -> Vec<IndexModel> {
             doc! { "sales_order_id": 1, "sales_order_line_id": 1 },
         ),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 #[cfg(test)]

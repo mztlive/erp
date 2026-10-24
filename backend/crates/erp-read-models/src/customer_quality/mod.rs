@@ -15,7 +15,7 @@ mod source;
 use std::sync::Arc;
 
 pub use access::QualityAccess;
-use application_core::AuditActor;
+use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 pub use dto::{
     CurrentQualityQuery, CurrentQualityView, HistoryQualityQuery, HistoryQualityView, QualityExport,
 };
@@ -185,8 +185,7 @@ impl CustomerQualityReadModel {
 
 /// 跨页与生成返回前必须使用相同授权版本；不拼接撤权前后的结果。
 fn ensure_version(expected: Option<&str>, current: &str) -> Result<()> {
-    if expected.is_some_and(|version| version != current) {
-        return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
-    }
-    Ok(())
+    ScopeVersion::new(expected, EmptyScopeVersion::Provided)
+        .verify(current)
+        .map_err(|error| crate::support::data_scope_changed(error.detail()))
 }

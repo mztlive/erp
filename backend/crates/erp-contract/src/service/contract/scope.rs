@@ -1,6 +1,6 @@
 //! 合同列表与范围指标的一致授权快照；范围与业务版本跨页携带。
 
-use application_core::AuditActor;
+use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use persistence_core::Transactional;
 use serde_json::to_vec;
 
@@ -272,10 +272,9 @@ pub(super) fn data_scope_changed(detail: &str) -> Error {
 /// # 关键业务约束
 /// 不得在缺版本时继续查询并默默使用新授权。
 pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(data_scope_changed("请从第一页刷新后继续查询"));
-    }
-    Ok(())
+    ScopeVersion::new(version, EmptyScopeVersion::Missing)
+        .require_for_page(page)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 客户端回传的范围版本必须与当前快照一致。
@@ -293,10 +292,9 @@ pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 /// # 关键业务约束
 /// 不得把新旧授权结果拼接成同一列表。
 pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
-    if expected.is_some_and(|value| value != actual) {
-        return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
-    }
-    Ok(())
+    ScopeVersion::new(expected, EmptyScopeVersion::Provided)
+        .verify(actual)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 同一查询内两次快照的范围版本必须一致。
@@ -314,10 +312,9 @@ pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Resu
 /// # 关键业务约束
 /// 复核失败必须整页拒绝，不得返回半新半旧结果。
 pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
-    if first != second {
-        return Err(data_scope_changed("数据范围或合同资料已变化，请刷新"));
-    }
-    Ok(())
+    ScopeVersion::new(Some(first), EmptyScopeVersion::Provided)
+        .verify(second)
+        .map_err(|_| data_scope_changed("数据范围或合同资料已变化，请刷新"))
 }
 
 /// 归一化查询与权限客户集合求交后的仓储条件；空集合必须保留。
@@ -490,6 +487,10 @@ mod tests {
     fn mismatched_scope_version_is_data_scope_changed() {
         assert!(ensure_scope_version(None, "v1").is_ok());
         assert!(ensure_scope_version(Some("v1"), "v1").is_ok());
+        assert_eq!(
+            ensure_scope_version(Some(""), "v1").unwrap_err().to_string(),
+            "数据冲突: DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新"
+        );
         match ensure_scope_version(Some("v1"), "v2") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));

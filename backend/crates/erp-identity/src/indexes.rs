@@ -7,6 +7,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::policy_receipt::POLICY_RECEIPTS;
 use crate::repository::portal::PortalIdentityExt;
@@ -264,19 +265,6 @@ fn audit_event_indexes() -> Vec<IndexModel> {
         named_index("idx_audit_events_created", doc! { "created_at": -1 }),
         named_index("idx_audit_events_request_id", doc! { "request_id": 1 }),
     ]
-}
-
-/// 构建命名普通索引。
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构建命名唯一索引。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
-        .build()
 }
 
 /// 组织实体身份、成员有效期与管理范围的索引；跨行约束由全局版本事务防止写偏差。

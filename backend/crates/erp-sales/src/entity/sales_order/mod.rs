@@ -36,6 +36,7 @@ pub mod selection_source;
 pub use pricing_mode::SalesPricingMode;
 pub mod revision;
 pub mod snapshot;
+pub(crate) mod stored_line_fields;
 pub mod submission;
 mod submission_from_working_copy;
 mod submission_line_fields;

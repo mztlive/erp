@@ -6,6 +6,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::{named_index, unique_index};
 use persistence_core::rotation::migrate_scalar_array;
 
 use crate::repository::{WorkItemCommandExt, WorkItemExt};
@@ -392,25 +393,6 @@ fn unique_approval_execution_index() -> IndexModel {
                 })
                 .build(),
         )
-        .build()
-}
-
-fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
-}
-
-/// 构造稳定主键唯一索引。
-///
-/// # 参数
-/// * `name` - 稳定索引名
-/// * `keys` - 索引键
-///
-/// # 返回
-/// 返回唯一索引模型。
-fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
-    IndexModel::builder()
-        .keys(keys)
-        .options(IndexOptions::builder().name(name.into()).unique(true).build())
         .build()
 }
 

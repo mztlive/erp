@@ -1,5 +1,7 @@
 //! 集成列表范围版本与空集口径。
 
+use application_core::{EmptyScopeVersion, ScopeVersion};
+
 use crate::error::{Error, Result};
 use crate::ports::IntegrationResolvedScope;
 use crate::repository::IntegrationReadScope;
@@ -73,10 +75,9 @@ pub fn data_scope_changed(detail: &str) -> Error {
 /// # 错误
 /// 第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
 pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(data_scope_changed("请从第一页刷新后继续查询"));
-    }
-    Ok(())
+    ScopeVersion::new(version, EmptyScopeVersion::Missing)
+        .require_for_page(page)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 客户端回传的范围版本必须与当前快照一致。
@@ -91,11 +92,9 @@ pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 /// # 错误
 /// 版本不一致时返回 `DATA_SCOPE_CHANGED`。
 pub fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
-    match expected {
-        None | Some("") => Ok(()),
-        Some(version) if version == actual => Ok(()),
-        Some(_) => Err(data_scope_changed("数据范围已变化，请从第一页刷新")),
-    }
+    ScopeVersion::new(expected, EmptyScopeVersion::Missing)
+        .verify(actual)
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 列表授权解析结果（两类范围列表共用）。
@@ -202,5 +201,12 @@ mod tests {
         assert_eq!(meta.empty_reason, Some("no_scope"));
         assert!(ensure_page(2, None).unwrap_err().to_string().contains("DATA_SCOPE_CHANGED"));
         assert!(ensure_scope_version(Some("v2"), "v1").is_err());
+        assert!(ensure_scope_version(None, "v1").is_ok());
+        assert!(ensure_scope_version(Some(""), "v1").is_ok());
+        assert!(ensure_scope_version(Some("v1"), "v1").is_ok());
+        assert_eq!(
+            ensure_page(2, Some("")).unwrap_err().to_string(),
+            "数据冲突: DATA_SCOPE_CHANGED：请从第一页刷新后继续查询"
+        );
     }
 }

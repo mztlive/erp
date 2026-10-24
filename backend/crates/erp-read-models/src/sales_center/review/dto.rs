@@ -76,95 +76,11 @@ pub struct SalesChangeProcurementItemView {
     /// 最近一次判定的影响原因。
     pub reasons: Vec<SourceImpactReason>,
 }
-/// 单据详情返回的统一只读审批结构。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalView {
-    /// `PROCESS_REQUIRED` 或 `NO_APPROVAL`。
-    pub requirement: String,
-    /// 创建时冻结的定义摘要；未绑定为空。
-    pub definition: Option<DocumentApprovalDefinitionView>,
-    /// 已启动后的实例摘要；未提交为空。
-    pub instance: Option<DocumentApprovalInstanceView>,
-    /// 有界最近历史。
-    pub recent_history: Vec<DocumentApprovalHistoryItemView>,
-    /// 完整历史分页游标。
-    pub history_page: DocumentApprovalHistoryPageView,
-    /// 服务端允许的动作；不含选择定义或审批人。
-    pub allowed_actions: Vec<String>,
-}
-
-/// 绑定定义只读摘要。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalDefinitionView {
-    /// 定义主键。
-    pub id: String,
-    /// 定义名称。
-    pub name: String,
-    /// 定义业务版本。
-    pub version: u32,
-    /// 节点摘要。单据详情不展开审批人。
-    pub nodes: Vec<DocumentApprovalNodeView>,
-}
-
-impl DocumentApprovalDefinitionView {
-    /// 构造绑定定义只读摘要。
-    ///
-    /// # 参数
-    /// * `id` - 定义主键
-    /// * `name` - 定义名称
-    ///
-    /// # 返回
-    /// 返回版本为零、节点为空的摘要。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn new(id: String, name: String) -> Self {
-        Self { id, name, version: 0, nodes: Vec::new() }
-    }
-
-    /// 设置定义业务版本。
-    ///
-    /// # 参数
-    /// * `version` - 定义业务版本
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_version(mut self, version: u32) -> Self {
-        self.version = version;
-        self
-    }
-
-    /// 设置节点摘要。
-    ///
-    /// # 参数
-    /// * `nodes` - 节点摘要
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_nodes(mut self, nodes: Vec<DocumentApprovalNodeView>) -> Self {
-        self.nodes = nodes;
-        self
-    }
-}
-
-/// 定义节点只读摘要。
-pub use crate::approval_runtime::DocumentApprovalNodeView;
-pub use crate::approval_runtime::{DocumentApprovalHistoryItemView, DocumentApprovalInstanceView};
-
-/// 完整历史分页。
-#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalHistoryPageView {
-    /// 下一页游标。
-    pub next_cursor: Option<String>,
-    /// 是否还有更多。
-    pub has_more: bool,
-}
+/// 单据审批展示合同；实例和历史沿用共用运行态字段。
+pub use crate::approval_runtime::{
+    DocumentApprovalDefinitionView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
+    DocumentApprovalInstanceView, DocumentApprovalNodeView, DocumentApprovalView,
+};
 
 #[cfg(test)]
 mod wire_tests {
