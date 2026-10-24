@@ -34,36 +34,28 @@ impl SalesOrderReadService {
     /// 仓储查询失败时返回错误。
     async fn load_detail_batch_a(
         &self,
-        order_id: SalesOrderId,
+        order_id: &SalesOrderId,
     ) -> Result<(Vec<SalesOrderLine>, Vec<SalesOrderSubmission>, Vec<RevisionView>, u64)> {
-        let lines_db = self.db.clone();
-        let lines_id = order_id.clone();
-        let submissions_db = self.db.clone();
-        let submissions_id = order_id.clone();
-        let revisions_service = self.sales();
-        let revisions_id = order_id.clone();
-        let count_db = self.db.clone();
-        let count_id = order_id;
         tokio::try_join!(
-            async move {
-                lines_db
+            async {
+                self.db
                     .sales_order_lines()
-                    .list_lines_by_order(&lines_id, &mut NoTransaction)
+                    .list_lines_by_order(order_id, &mut NoTransaction)
                     .await
                     .map_err(Error::from)
             },
-            async move {
-                submissions_db
+            async {
+                self.db
                     .sales_order_submissions()
-                    .list_by_order_newest_first(&submissions_id, &mut NoTransaction)
+                    .list_by_order_newest_first(order_id, &mut NoTransaction)
                     .await
                     .map_err(Error::from)
             },
-            async move { revisions_service.load_revision_views(&revisions_id).await.map_err(Error::from) },
-            async move {
-                count_db
+            async { self.sales().load_revision_views(order_id).await.map_err(Error::from) },
+            async {
+                self.db
                     .purchase_orders()
-                    .count_active_by_sales_order(&count_id, &mut NoTransaction)
+                    .count_active_by_sales_order(order_id, &mut NoTransaction)
                     .await
                     .map_err(Error::from)
             },
@@ -83,45 +75,38 @@ impl SalesOrderReadService {
     /// 仓储查询失败时返回错误。
     async fn load_detail_batch_b(
         &self,
-        order_id: SalesOrderId,
-        document_id: String,
+        order_id: &SalesOrderId,
+        document_id: &str,
     ) -> Result<(SalesOrderReceivableAmountSummary, Option<ApprovalDefinitionBinding>, Option<WorkingCopyView>)>
     {
-        let summary_db = self.db.clone();
-        let summary_id = order_id.clone();
-        let binding_db = self.db.clone();
-        let working_db = self.db.clone();
-        let working_id = order_id;
-        let working_sales = self.sales();
         tokio::try_join!(
-            async move {
-                summary_db
+            async {
+                self.db
                     .receivable_accounts()
-                    .sales_order_amount_summary(&summary_id, &mut NoTransaction)
+                    .sales_order_amount_summary(order_id, &mut NoTransaction)
                     .await
                     .map_err(Error::from)
             },
-            async move {
+            async {
                 // 保留原详情对绑定读取错误回退为空的合同。
-                Ok(find_approval_binding(&binding_db, &document_id, &mut NoTransaction).await.ok().flatten())
+                Ok(find_approval_binding(&self.db, document_id, &mut NoTransaction).await.ok().flatten())
             },
-            async move {
-                let working_copy = working_db
+            async {
+                let Some(copy) = self
+                    .db
                     .sales_order_working_copies()
                     .find_active_by_order_and_purpose(
-                        &working_id,
+                        order_id,
                         WorkingPurpose::FirstSubmission,
                         &mut NoTransaction,
                     )
-                    .await?;
-                match working_copy {
-                    Some(copy) => {
-                        let mut view = working_sales.working_copy_view(&copy).await?;
-                        self.enrich_working_copy_prices(&mut view).await?;
-                        Ok(Some(view))
-                    },
-                    None => Ok(None),
-                }
+                    .await?
+                else {
+                    return Ok(None);
+                };
+                let mut view = self.sales().working_copy_view(&copy).await?;
+                self.enrich_working_copy_prices(&mut view).await?;
+                Ok(Some(view))
             },
         )
     }
@@ -141,13 +126,12 @@ impl SalesOrderReadService {
     /// 仅限 `NoTransaction` 展示查询并行；`&mut Executor` 不可并发借用。
     pub(super) async fn load_detail_facts(&self, order: &SalesOrder) -> Result<DetailFacts> {
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let document_id = order.base.id.clone();
         let (
             (stable_lines, submissions, revisions, purchase_order_count),
             (receivable_summary, binding, working_copy_view),
         ) = tokio::try_join!(
-            self.load_detail_batch_a(order_id.clone()),
-            self.load_detail_batch_b(order_id, document_id),
+            self.load_detail_batch_a(&order_id),
+            self.load_detail_batch_b(&order_id, &order.base.id),
         )?;
         let submission_ids = submissions
             .iter()
@@ -215,4 +199,124 @@ fn assemble_submission_views(
             submission_view(submission, lines)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use entity_core::BaseModel;
+    use erp_core::common::stable::StableBase;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderLineId, SalesOrderWorkingCopyId};
+    use erp_sales::entity::sales_order::{
+        BusinessType, CustomerSnapshot, InvoiceRequirementSnapshot, LineType, PaymentTermSnapshot,
+        SalesPricingMode, SubmissionStatus,
+    };
+
+    use super::*;
+
+    fn submission(id: &str, submission_no: u32) -> SalesOrderSubmission {
+        SalesOrderSubmission {
+            base: BaseModel { id: id.into(), ..BaseModel::fake() },
+            stable: StableBase::new(SubmissionStatus::Approved, "sales"),
+            sales_order_id: SalesOrderId::new("order"),
+            submission_no,
+            working_copy_id: SalesOrderWorkingCopyId::new(format!("copy-{id}")),
+            working_copy_version: 1,
+            business_type: BusinessType::GoodsService,
+            customer_id: CustomerAccountId::new("customer"),
+            contract_revision_id: None,
+            settlement_party_id: PartyId::new("party"),
+            customer_snapshot: CustomerSnapshot { customer_name: format!("客户-{id}") },
+            contract_snapshot: None,
+            settlement_party_snapshot: None,
+            payment_term_snapshot: PaymentTermSnapshot {
+                payment_term_code: "NET30".into(),
+                payment_term_name: "月结 30 天".into(),
+            },
+            invoice_requirement_snapshot: InvoiceRequirementSnapshot {
+                invoice_type: "增值税专用发票".into(),
+                tax_point: "6".into(),
+            },
+            project_name: None,
+            business_remark: None,
+            voucher_category_sku_id: None,
+            voucher_expiry_at: None,
+            receivable_due_date: None,
+            gross_amount: "12.34".parse().unwrap(),
+            net_amount: "11.64".parse().unwrap(),
+            tax_amount: "0.70".parse().unwrap(),
+            submitted_at: Instant::from_unix_secs(1_700_000_000),
+            submitted_by: "sales".into(),
+        }
+    }
+
+    fn line(submission_id: &str, id: &str, line_no: u32) -> SalesOrderSubmissionLine {
+        SalesOrderSubmissionLine {
+            base: BaseModel { id: id.into(), ..BaseModel::fake() },
+            submission_id: SalesOrderSubmissionId::new(submission_id),
+            sales_order_line_id: SalesOrderLineId::new(format!("stable-{id}")),
+            line_no,
+            line_type: LineType::GoodsService,
+            gross_amount: "12.34".parse().unwrap(),
+            net_amount: "11.64".parse().unwrap(),
+            tax_amount: "0.70".parse().unwrap(),
+            sales_tax_rate: "0.06".parse().unwrap(),
+            item_name_snapshot: format!("商品-{id}"),
+            spec_snapshot: None,
+            unit_snapshot: None,
+            sku_id: None,
+            sku_revision_id: None,
+            welfare_scenario: None,
+            procurement_supply_price_gross: None,
+            procurement_price_basis: None,
+            fulfillment_due_at: None,
+            quantity: None,
+            base_unit_code: None,
+            unit_price_gross: None,
+            pricing_mode: SalesPricingMode::Manual,
+            delivery_allocations: Vec::new(),
+            face_value: None,
+            card_count: None,
+            face_value_total: None,
+            transaction_amount: None,
+            gift_amount: None,
+            gift_rate: None,
+            card_form: None,
+        }
+    }
+
+    #[test]
+    fn submission_views_preserve_header_order_and_sort_only_their_own_lines() {
+        let views = assemble_submission_views(
+            vec![submission("new", 3), submission("old", 2), submission("empty", 1)],
+            vec![
+                line("old", "old-2", 2),
+                line("new", "new-2a", 2),
+                line("unrelated", "unrelated-1", 1),
+                line("new", "new-1", 1),
+                line("old", "old-1", 1),
+                line("new", "new-2b", 2),
+            ],
+        );
+
+        assert_eq!(views.iter().map(|view| view.id.as_str()).collect::<Vec<_>>(), ["new", "old", "empty"]);
+        assert_eq!(
+            views[0].lines.iter().map(|line| line.id.as_str()).collect::<Vec<_>>(),
+            ["new-1", "new-2a", "new-2b"]
+        );
+        assert_eq!(
+            views[1].lines.iter().map(|line| line.id.as_str()).collect::<Vec<_>>(),
+            ["old-1", "old-2"]
+        );
+        assert!(views[2].lines.is_empty());
+        assert_eq!(views[0].customer_name, "客户-new");
+        assert_eq!(views[0].lines[0].item_name_snapshot, "商品-new-1");
+        assert_eq!(views[0].lines[0].gross_amount.to_string(), "12.34");
+    }
+
+    #[test]
+    fn submission_views_are_empty_without_headers() {
+        assert!(assemble_submission_views(Vec::new(), Vec::new()).is_empty());
+        assert!(assemble_submission_views(Vec::new(), vec![line("unrelated", "line", 1)]).is_empty());
+    }
 }

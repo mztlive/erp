@@ -118,9 +118,12 @@ pub fn normalize_required_text_ref(
     max_len: usize,
     too_long_message: &str,
 ) -> Result<String> {
-    let value = non_empty_trimmed(value, empty_message)?;
-    ensure_max_len(value.as_str(), max_len, too_long_message)?;
-    Ok(value)
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(Error::from(empty_message));
+    }
+    ensure_max_len(value, max_len, too_long_message)?;
+    Ok(value.to_owned())
 }
 
 /// 规范化可选邮箱字段（去空白 + 长度 + 格式）。
@@ -210,14 +213,14 @@ pub fn normalize_optional_text(value: Option<String>, label: &str, max_len: usiz
         return Ok(None);
     };
 
-    let value = value.trim().to_string();
+    let value = value.trim();
     if value.is_empty() {
         return Ok(None);
     }
 
-    ensure_max_len(value.as_str(), max_len, format!("{}长度不符合要求", label).as_str())?;
+    ensure_max_len(value, max_len, &format!("{label}长度不符合要求"))?;
 
-    Ok(Some(value))
+    Ok(Some(value.to_owned()))
 }
 
 /// 规范化可空邮箱字段的更新意图。
@@ -326,6 +329,68 @@ mod tests {
             normalize_required_text(" 商品名 ".into(), "不能为空", 2, "过长").unwrap_err().to_string(),
             "过长"
         );
+        assert!(matches!(
+            normalize_required_text_ref("\u{3000}\t ", "不能为空", 0, "过长"),
+            Err(Error::LogicError(message)) if message == "不能为空"
+        ));
+    }
+
+    #[test]
+    fn optional_text_preserves_blank_and_unicode_character_limits() {
+        assert_eq!(normalize_optional_text(None, "备注", 0).unwrap(), None);
+        assert_eq!(normalize_optional_text(Some("\u{3000}\t ".into()), "备注", 0).unwrap(), None);
+        assert_eq!(
+            normalize_optional_text(Some("\u{3000}商品🙂 \t".into()), "备注", 3).unwrap(),
+            Some("商品🙂".into())
+        );
+        assert!(matches!(
+            normalize_optional_text(Some(" 商品🙂 ".into()), "备注", 2),
+            Err(Error::LogicError(message)) if message == "备注长度不符合要求"
+        ));
+    }
+
+    #[test]
+    fn contact_length_errors_precede_format_errors() {
+        assert!(matches!(
+            normalize_optional_email(Some("invalid".into()), 3),
+            Err(Error::LogicError(message)) if message == "邮箱长度过长：邮箱长度不符合要求"
+        ));
+        assert!(matches!(
+            normalize_optional_phone(Some("12345".into()), 3),
+            Err(Error::LogicError(message)) if message == "手机号长度过长：手机号长度不符合要求"
+        ));
+        assert!(matches!(
+            normalize_optional_email(Some("invalid".into()), 7),
+            Err(Error::LogicError(message)) if message == "邮箱格式不正确"
+        ));
+    }
+
+    #[test]
+    fn contact_updates_preserve_unchanged_clear_and_normalized_set() {
+        for update in [FieldUpdate::Unchanged, FieldUpdate::Clear] {
+            assert_eq!(normalize_optional_email_update(update.clone(), 0).unwrap(), update);
+            assert_eq!(normalize_optional_phone_update(update.clone(), 0).unwrap(), update);
+        }
+        assert_eq!(
+            normalize_optional_email_update(FieldUpdate::Set("\u{3000} ".into()), 0).unwrap(),
+            FieldUpdate::Clear
+        );
+        assert_eq!(
+            normalize_optional_phone_update(FieldUpdate::Set("\u{3000} ".into()), 0).unwrap(),
+            FieldUpdate::Clear
+        );
+        assert_eq!(
+            normalize_optional_email_update(FieldUpdate::Set(" user@example.com ".into()), 16).unwrap(),
+            FieldUpdate::Set("user@example.com".into())
+        );
+        assert_eq!(
+            normalize_optional_phone_update(FieldUpdate::Set(" 13900000000 ".into()), 11).unwrap(),
+            FieldUpdate::Set("13900000000".into())
+        );
+        assert!(matches!(
+            normalize_optional_phone_update(FieldUpdate::Set("12345".into()), 11),
+            Err(Error::LogicError(message)) if message == "手机号格式不正确"
+        ));
     }
 
     /// 校验可选邮箱规范化规则。
