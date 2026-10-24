@@ -4,7 +4,9 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet};
-use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::entity::work_item::{
+    WorkItem, WorkItemActionAccess, WorkItemActionRequirement, WorkItemStatus, WorkItemType,
+};
 use erp_workflow::ports::WorkflowQueueAccessFact;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::{DocumentRegistryExt, WorkflowAuthorizationPort};
@@ -659,41 +661,22 @@ pub(super) fn allowed_actions(
     actor_id: &str,
     access: &ActorAccess,
 ) -> Vec<WorkItemAllowedAction> {
-    let mut actions = vec![WorkItemAllowedAction::View];
-    if item.owner_user_id.as_deref() == Some(actor_id)
-        && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
-    {
-        actions.push(WorkItemAllowedAction::Process);
-    }
-    // 开放的单据审批任务由审批运行时直接指派给责任人（owner_user_id = 指派
-    // 人，owner_role 为语义标签而非角色 ID，无法用责任范围校验）；最终授权由
-    // /admin/approval-decisions 写时重验（账号启用 + approval_instance:decide +
-    // 精确任务责任链）。
-    if item.work_item_type.is_document_approval()
-        && item.status == WorkItemStatus::Open
-        && item.approval_node_execution_id.is_some()
-        && item.owner_user_id.as_deref() == Some(actor_id)
-        && has_permission(access, "approval_instance:decide")
-    {
-        actions.push(WorkItemAllowedAction::Approve);
-        actions.push(WorkItemAllowedAction::Reject);
-    }
-    let is_approval_responsibility =
-        item.work_item_type.is_document_approval() || item.approval_node_execution_id.is_some();
-    if access.can_manage
-        && covers_owner(access, item.owner_user_id.as_deref())
-        && scope == WorkItemScope::Managed
-        && !is_approval_responsibility
-        && item.work_item_type != WorkItemType::SalesInquiryProcessing
-    {
-        if has_permission(access, REASSIGN_PERMISSION) {
-            actions.push(WorkItemAllowedAction::Reassign);
-        }
-        if is_w29_fields_closable(item) && has_permission(access, CLOSE_PERMISSION) {
-            actions.push(WorkItemAllowedAction::Close);
-        }
-    }
-    actions
+    item.action_policy().allowed_actions(
+        WorkItemActionAccess {
+            actor_id,
+            managed_queue: scope == WorkItemScope::Managed,
+            can_manage: access.can_manage,
+            managed_owner_ids: access.managed_owner_ids.as_deref(),
+        },
+        |requirement| match requirement {
+            WorkItemActionRequirement::Execute => {
+                has_execution_permissions(item.work_item_type, &item.business_object_type, access)
+            },
+            WorkItemActionRequirement::Decide => has_permission(access, "approval_instance:decide"),
+            WorkItemActionRequirement::Reassign => has_permission(access, REASSIGN_PERMISSION),
+            WorkItemActionRequirement::Close => has_permission(access, CLOSE_PERMISSION),
+        },
+    )
 }
 
 /// 确认账号具备非空的任务责任管理范围。
@@ -777,20 +760,6 @@ pub(super) fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
         .managed_owner_ids
         .as_ref()
         .is_none_or(|ids| owner.is_some_and(|owner| ids.iter().any(|id| id == owner)))
-}
-
-/// 判断工作项投影是否属于 W29 可受控关闭关系。
-///
-/// # 参数
-/// * `item` - 已授权的工作项投影字段
-///
-/// # 返回
-/// 非审批的集成异常或对账差异任务返回 `true`。
-///
-/// # 错误
-/// 无。
-fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
-    item.work_item_type.is_w29_closable(&item.business_object_type, item.approval_node_execution_id.is_some())
 }
 
 #[cfg(test)]

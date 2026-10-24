@@ -26,7 +26,7 @@ use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
+use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use id_generator::next_id;
 use mongodb::Database;
@@ -50,6 +50,7 @@ use super::start_approval::{
     replay_sales_change_start_with_executor,
 };
 use crate::adapters::workflow::approver_directory::resolve_start_approvers;
+use crate::approval_recovery::recover_approval_command;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -414,40 +415,26 @@ impl SalesChangeProcess {
         actor: &AuditActor,
         original_error: Error,
     ) -> Result<String> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
+        recover_approval_command(original_error, || {
             let db = self.db.clone();
             let change_order_id = change_order_id.to_string();
             let idempotency_key = idempotency_key.to_string();
             let actor_id = actor.id().to_string();
-            let recovered = self
-                .db
-                .client()
-                .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        replay_change_start(
-                            &db,
-                            &change_order_id,
-                            subject_version,
-                            &idempotency_key,
-                            &actor_id,
-                            executor,
-                        )
-                        .await
-                    })
+            self.db.client().with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_change_start(
+                        &db,
+                        &change_order_id,
+                        subject_version,
+                        &idempotency_key,
+                        &actor_id,
+                        executor,
+                    )
+                    .await
                 })
-                .await;
-            match recovered {
-                Ok(Some(instance_id)) => return Ok(instance_id),
-                Ok(None) => {},
-                Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+            })
+        })
+        .await
     }
 }
 

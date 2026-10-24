@@ -11,7 +11,8 @@ use super::order_access::{
     task_read_error,
 };
 use crate::entity::work_item::{
-    AvailableWorkItemAccount, WorkItem, WorkItemBriefRelation, WorkItemStatus, WorkItemType,
+    AvailableWorkItemAccount, WorkItem, WorkItemActionAccess, WorkItemActionRequirement,
+    WorkItemBriefRelation, WorkItemStatus, WorkItemType,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ObjectFact, ObjectFactMap, permission_covers};
@@ -858,41 +859,22 @@ pub fn allowed_actions(
     actor_id: &str,
     access: &ActorAccess,
 ) -> Vec<WorkItemAllowedAction> {
-    let mut actions = vec![WorkItemAllowedAction::View];
-    if item.owner_user_id.as_deref() == Some(actor_id)
-        && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
-    {
-        actions.push(WorkItemAllowedAction::Process);
-    }
-    // 开放的单据审批任务由审批运行时直接指派给责任人（owner_user_id = 指派
-    // 人，owner_role 为语义标签而非角色 ID，无法用责任范围校验）；最终授权由
-    // /admin/approval-decisions 写时重验（账号启用 + approval_instance:decide +
-    // 单据读权）。
-    if item.work_item_type.is_document_approval()
-        && item.status == WorkItemStatus::Open
-        && item.approval_node_execution_id.is_some()
-        && item.owner_user_id.as_deref() == Some(actor_id)
-        && has_permission(access, "approval_instance:decide")
-    {
-        actions.push(WorkItemAllowedAction::Approve);
-        actions.push(WorkItemAllowedAction::Reject);
-    }
-    let is_approval_responsibility =
-        item.work_item_type.is_document_approval() || item.approval_node_execution_id.is_some();
-    if access.can_manage
-        && covers_owner(access, item.owner_user_id.as_deref())
-        && scope == WorkItemScope::Managed
-        && !is_approval_responsibility
-        && item.work_item_type != WorkItemType::SalesInquiryProcessing
-    {
-        if has_permission(access, REASSIGN_PERMISSION) {
-            actions.push(WorkItemAllowedAction::Reassign);
-        }
-        if item.is_w29_closable() && has_permission(access, CLOSE_PERMISSION) {
-            actions.push(WorkItemAllowedAction::Close);
-        }
-    }
-    actions
+    item.action_policy().allowed_actions(
+        WorkItemActionAccess {
+            actor_id,
+            managed_queue: scope == WorkItemScope::Managed,
+            can_manage: access.can_manage,
+            managed_owner_ids: access.managed_owner_ids.as_deref(),
+        },
+        |requirement| match requirement {
+            WorkItemActionRequirement::Execute => {
+                has_execution_permissions(item.work_item_type, &item.business_object_type, access)
+            },
+            WorkItemActionRequirement::Decide => has_permission(access, "approval_instance:decide"),
+            WorkItemActionRequirement::Reassign => has_permission(access, REASSIGN_PERMISSION),
+            WorkItemActionRequirement::Close => has_permission(access, CLOSE_PERMISSION),
+        },
+    )
 }
 
 /// 将实体对审批任务的通用责任变更禁令映射为稳定审批错误码。

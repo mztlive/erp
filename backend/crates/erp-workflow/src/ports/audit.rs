@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use application_core::AuditActor;
+use application_core::{AuditActor, AuditContext};
 use async_trait::async_trait;
 use persistence_core::Executor;
 
@@ -214,17 +214,15 @@ impl PreparedWorkflowAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
-        let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
-        let request_id = actor.request_id().map(str::to_string);
-        let (actor_id, actor_account, actor_type) = actor.into_parts();
+        let context = AuditContext::from(actor);
         Ok(Self {
             id,
-            actor_id,
-            actor_account,
-            actor_type: actor_type.as_str().to_string(),
-            actor_name_snapshot,
-            request_id,
-            event_sequence: NonZeroU32::MIN,
+            actor_id: context.actor_id,
+            actor_account: context.actor_account,
+            actor_type: context.actor_type.as_str().to_string(),
+            actor_name_snapshot: context.actor_name_snapshot,
+            request_id: context.request_id,
+            event_sequence: context.event_sequence,
             action: action.to_string(),
             resource_type: resource_type.to_string(),
             resource_id,

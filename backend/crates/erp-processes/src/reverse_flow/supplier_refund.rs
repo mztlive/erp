@@ -1,5 +1,6 @@
 mod commit;
 
+use crate::approval_recovery::recover_approval_command;
 use crate::audit::persist_log;
 
 mod commit_source;
@@ -30,7 +31,7 @@ use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
+use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -239,22 +240,10 @@ impl ReturnsProcess {
         actor: &AuditActor,
         original_error: Error,
     ) -> Result<String> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
-            let recovered = self
-                .replay_supplier_refund_start_version(refund_id, subject_version, idempotency_key, actor)
-                .await;
-            match recovered {
-                Ok(Some(instance_id)) => return Ok(instance_id),
-                Ok(None) => {},
-                Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+        recover_approval_command(original_error, || {
+            self.replay_supplier_refund_start_version(refund_id, subject_version, idempotency_key, actor)
+        })
+        .await
     }
 
     /// 在任何当前状态/版本门禁前，以当前或下一主题版本精确回放既有启动。

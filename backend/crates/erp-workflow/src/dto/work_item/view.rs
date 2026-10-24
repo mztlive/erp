@@ -1,6 +1,8 @@
 use serde::Serialize;
 
-use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
+use crate::entity::work_item::{
+    AssignmentSource, WorkItem, WorkItemActionPolicy, WorkItemPriority, WorkItemStatus, WorkItemType,
+};
 
 /// 用户或组织安全摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -118,6 +120,26 @@ impl From<WorkItem> for WorkItemFields {
 }
 
 impl WorkItemFields {
+    /// 取得动作策略所需的任务事实，不加载或推导对象权限。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回借用当前任务身份、生命周期与责任事实的策略。
+    ///
+    /// # 错误
+    /// 不返回错误；调用方须先完成对象授权，再提供独立权限事实。
+    pub fn action_policy(&self) -> WorkItemActionPolicy<'_> {
+        WorkItemActionPolicy {
+            work_item_type: self.work_item_type,
+            status: self.status,
+            business_object_type: &self.business_object_type,
+            owner_user_id: self.owner_user_id.as_deref(),
+            has_approval_execution: self.approval_node_execution_id.is_some(),
+        }
+    }
+
     /// 判断工作项投影是否属于 W29 可受控关闭关系。
     ///
     /// # 参数

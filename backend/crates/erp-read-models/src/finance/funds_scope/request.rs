@@ -14,6 +14,7 @@ use erp_sales::repository::prelude::*;
 use persistence_core::{Executor, Transactional};
 
 use super::authorization::*;
+use super::linked::organization_condition;
 use super::rows::*;
 use crate::{Error, Result};
 
@@ -223,16 +224,13 @@ impl FundsAccess {
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
         executor: &mut dyn Executor,
     ) -> Result<FundsLinkedCondition> {
-        let org_unit_ids = match &query.org_unit_ids {
-            Some(ids) => {
-                let list = ids.as_slice().to_vec();
-                let expanded = self
-                    .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
-                    .await?;
-                Some(expanded.into_iter().collect::<Vec<_>>())
-            },
-            None => None,
-        };
+        let org_unit_ids = organization_condition(
+            self.scope.as_ref(),
+            query.org_unit_ids.as_ref(),
+            query.include_descendants,
+            executor,
+        )
+        .await?;
         Ok(FundsLinkedCondition {
             owner_user_ids: query.sales_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             operator_user_ids: query.applicant_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),

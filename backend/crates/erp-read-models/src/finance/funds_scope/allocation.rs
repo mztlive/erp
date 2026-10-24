@@ -18,6 +18,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
+use super::linked::organization_condition;
 use super::payable_source::source_key;
 use super::repository::allocation::{
     AllocationPageRow, AllocationSnapshot, AllocationVersion, allocation_snapshot,
@@ -336,16 +337,13 @@ impl FundsAccess {
         query: &PurchaseInvoiceAllocationListQuery,
         executor: &mut dyn Executor,
     ) -> Result<FundsLinkedCondition> {
-        let org_unit_ids = match &query.org_unit_ids {
-            Some(ids) => {
-                let list = ids.as_slice().to_vec();
-                let expanded = self
-                    .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
-                    .await?;
-                Some(expanded.into_iter().collect::<Vec<_>>())
-            },
-            None => None,
-        };
+        let org_unit_ids = organization_condition(
+            self.scope.as_ref(),
+            query.org_unit_ids.as_ref(),
+            query.include_descendants,
+            executor,
+        )
+        .await?;
         Ok(FundsLinkedCondition {
             owner_user_ids: query.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),

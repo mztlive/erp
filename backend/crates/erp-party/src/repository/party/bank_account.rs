@@ -5,7 +5,10 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{active_fact_filter, default_first_sort, party_default_marks_filter, sort_doc};
+use super::shared::{
+    active_fact_filter, default_first_sort, impl_clear_other_default_marks, party_default_marks_filter,
+    sort_doc,
+};
 use crate::entity::party::{EffectiveRecordStatus, PartyBankAccount};
 
 /// 银行账户列表投影行。
@@ -339,22 +342,7 @@ impl PartyBankAccountRepositoryExt for Repository<'_, PartyBankAccount> {
         self.find_many_sorted(active_fact_filter(party_id, as_of), default_first_sort(), executor).await
     }
 
-    async fn clear_other_default_marks(
-        &self,
-        party_id: &PartyId,
-        exclude_id: Option<&str>,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let rows = self.find_many(party_default_marks_filter(party_id), executor).await?;
-        for mut row in rows {
-            if exclude_id.is_some_and(|id| id == row.base.id) {
-                continue;
-            }
-            row.is_default = false;
-            self.update(&mut row, executor).await?;
-        }
-        Ok(())
-    }
+    impl_clear_other_default_marks!();
 
     async fn list_by_party(
         &self,

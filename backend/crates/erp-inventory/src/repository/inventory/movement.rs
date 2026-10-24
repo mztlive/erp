@@ -4,12 +4,11 @@ use erp_core::ids::{SkuId, WarehouseId};
 use erp_core::money::Quantity;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::repository::find_active_by_field_in;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{
-    entities_by_ids, paged_projection_search, scoped_base_filter, sort_doc, with_id_tie_breaker,
-};
+use super::shared::{paged_projection_search, scoped_base_filter, sort_doc, with_id_tie_breaker};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
 use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
 
@@ -307,7 +306,7 @@ impl<'a> InventoryRepository<'a> {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<StockMovement>> {
-        entities_by_ids(self.db, STOCK_MOVEMENTS, ids, executor).await
+        find_active_by_field_in(&self.db.collection(STOCK_MOVEMENTS), "id", ids, executor).await
     }
 }
 

@@ -16,6 +16,7 @@ pub mod execution;
 pub mod policy;
 pub mod process_kind;
 pub mod read;
+pub mod runtime_summary;
 mod scope;
 pub mod upgrade_subject;
 

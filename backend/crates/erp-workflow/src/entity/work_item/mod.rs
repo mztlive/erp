@@ -3,6 +3,7 @@
 //! `status` 只表达 `OPEN / COMPLETED / CLOSED` 生命周期；开放任务必须有个人责任人。
 //! 审批推进与正式业务结果不由本域决定。
 
+mod action_policy;
 mod due;
 mod entity;
 mod finance_responsibility;
@@ -13,6 +14,9 @@ mod payment_execution_merge;
 mod queue_context;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
+pub use action_policy::{
+    WorkItemActionAccess, WorkItemActionPolicy, WorkItemActionRequirement, WorkItemAllowedAction,
+};
 pub use due::{WorkItemDueFilter, WorkItemDueWindow};
 pub use entity::{
     ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource, AvailableWorkItemAccount,

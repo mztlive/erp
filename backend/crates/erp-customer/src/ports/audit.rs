@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use application_core::AuditActor;
+use application_core::{AuditActor, AuditContext, impl_audit_context};
 use async_trait::async_trait;
 use entity_core::BaseModel;
 use erp_core::AccountKind;
@@ -75,52 +75,9 @@ pub struct PreparedCustomerAudit {
     pub message: Option<String>,
 }
 
+impl_audit_context!(PreparedCustomerAudit);
+
 impl PreparedCustomerAudit {
-    /// 携带构造时已经校验的安全操作人名称，不查询当前账号。
-    ///
-    /// # 参数
-    /// * `name` - 事件发生时名称快照；未知保持 `None`。
-    ///
-    /// # 返回
-    /// 返回包含名称快照的预制审计事实。
-    ///
-    /// # 错误
-    /// 无；持久化适配器重新验证安全快照。
-    pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> Self {
-        self.actor_name_snapshot = name;
-        self
-    }
-
-    /// 携带认证上下文已校验的请求标识，不生成替代标识。
-    ///
-    /// # 参数
-    /// * `request_id` - 当前请求的安全标识；无请求保持 `None`。
-    ///
-    /// # 返回
-    /// 返回包含原请求标识的预制审计事实。
-    ///
-    /// # 错误
-    /// 无；持久化适配器重新验证请求标识。
-    pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
-        self.request_id = request_id;
-        self
-    }
-
-    /// 保留已校验业务事件在命令内的原序号。
-    ///
-    /// # 参数
-    /// * `event_sequence` - 业务事件的正整数序号。
-    ///
-    /// # 返回
-    /// 返回包含原序号的预制审计事实。
-    ///
-    /// # 错误
-    /// 无；类型保证序号大于零。
-    pub fn with_event_sequence(mut self, event_sequence: NonZeroU32) -> Self {
-        self.event_sequence = event_sequence;
-        self
-    }
-
     /// 从已校验的审计实体快照捕获客户侧字段。
     ///
     /// 参数对象 [`ValidatedAuditSnapshot`] 收敛九个调用参数（erp-customer-012），
@@ -223,24 +180,22 @@ impl PreparedCustomerAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
-        let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
-        let request_id = actor.request_id().map(str::to_string);
-        let (actor_id, actor_account, actor_type) = actor.into_parts();
+        let context = AuditContext::from(actor);
         let id = id_generator::next_id();
         let base = BaseModel::new(id);
         Ok(Self::from_snapshot(ValidatedAuditSnapshot {
             base: &base,
-            actor_id,
-            actor_account,
-            actor_type,
+            actor_id: context.actor_id,
+            actor_account: context.actor_account,
+            actor_type: context.actor_type,
             action: action.to_string(),
             resource_type: resource_type.to_string(),
             resource_id: Some(resource_id),
             success: true,
             message: None,
         })
-        .with_actor_name_snapshot(actor_name_snapshot)
-        .with_request_id(request_id))
+        .with_actor_name_snapshot(context.actor_name_snapshot)
+        .with_request_id(context.request_id))
     }
 }
 

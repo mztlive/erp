@@ -1,5 +1,6 @@
 //! 应用合同：分页、命令身份/回执、错误分类与调用人数据。
 
+mod audit_context;
 pub mod command;
 pub mod context;
 mod error;
@@ -10,6 +11,7 @@ pub mod query;
 mod query_ids;
 pub mod scope_version;
 mod structured_receipt;
+pub use audit_context::AuditContext;
 pub use command::{CommandFingerprint, CommandIdentity, CommandReceipt};
 pub use context::AuditActor;
 pub use error::{Error, ErrorClass, Result};

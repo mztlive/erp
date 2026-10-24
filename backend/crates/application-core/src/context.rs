@@ -1,7 +1,11 @@
 //! 调用人身份数据。
 
+use std::num::NonZeroU32;
+
 use erp_core::validation::normalize_optional_text;
 use erp_core::{AccountKind, Error as CoreError, Result as CoreResult};
+
+use crate::AuditContext;
 
 /// 已通过 HTTP 鉴权的审计操作人。
 ///
@@ -144,6 +148,29 @@ impl AuditActor {
     /// 不返回错误。
     pub fn into_parts(self) -> (String, String, AccountKind) {
         (self.actor_id, self.actor_account, self.actor_type)
+    }
+}
+
+impl From<AuditActor> for AuditContext {
+    /// 消费已认证操作人，完整保留本次身份与安全关联。
+    ///
+    /// # 参数
+    /// * `actor` - 已捕获身份、名称和请求号的操作人。
+    ///
+    /// # 返回
+    /// 返回首个事件的上下文；序号为一，缺失的快照保持缺失。
+    ///
+    /// # 错误
+    /// 不返回错误；原字段直接移动，不执行重新查询或规范化。
+    fn from(actor: AuditActor) -> Self {
+        Self {
+            actor_id: actor.actor_id,
+            actor_account: actor.actor_account,
+            actor_type: actor.actor_type,
+            actor_name_snapshot: actor.actor_name_snapshot,
+            request_id: actor.request_id,
+            event_sequence: NonZeroU32::MIN,
+        }
     }
 }
 

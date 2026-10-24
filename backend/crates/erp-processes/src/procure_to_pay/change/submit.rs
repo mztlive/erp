@@ -28,9 +28,7 @@ use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
-use erp_workflow::service::approval::execution::{
-    PreparedExecution, command_recovery_delay, prepare_cancel, prepare_start,
-};
+use erp_workflow::service::approval::execution::{PreparedExecution, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use persistence_core::{Executor, NoTransaction, Transactional};
 use recovery::replay_change_start;
@@ -54,6 +52,7 @@ use super::super::change_start::{
 };
 use super::guard::check_change_inputs;
 use crate::adapters::workflow::approver_directory::resolve_start_approvers;
+use crate::approval_recovery::recover_approval_command;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -526,40 +525,26 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
         original_error: Error,
     ) -> Result<PurchaseChangeSubmitResult> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
+        recover_approval_command(original_error, || {
             let db = self.db.clone();
             let change_order_id = change_order_id.to_string();
             let idempotency_key = idempotency_key.to_string();
             let actor_id = actor.id().to_string();
-            let recovered = self
-                .db
-                .client()
-                .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        replay_change_start(
-                            &db,
-                            &change_order_id,
-                            subject_version,
-                            &idempotency_key,
-                            &actor_id,
-                            executor,
-                        )
-                        .await
-                    })
+            self.db.client().with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_change_start(
+                        &db,
+                        &change_order_id,
+                        subject_version,
+                        &idempotency_key,
+                        &actor_id,
+                        executor,
+                    )
+                    .await
                 })
-                .await;
-            match recovered {
-                Ok(Some(result)) => return Ok(result),
-                Ok(None) => {},
-                Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+            })
+        })
+        .await
     }
 
     /// 加载撤回运行事实并写回草稿。

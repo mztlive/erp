@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub use crate::entity::work_item::WorkItemAllowedAction;
 use crate::entity::work_item::WorkItemType;
 
 pub const WORK_ITEM_TYPES: [WorkItemType; 16] = [
@@ -116,24 +117,6 @@ pub struct ProcessingBlockerView {
     pub code: String,
     /// 面向用户且不泄露内部细节的说明。
     pub message: String,
-}
-
-/// 服务端计算的允许动作。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum WorkItemAllowedAction {
-    /// 查看对象。
-    View,
-    /// 进入固定强类型处理器。
-    Process,
-    /// 审批通过。
-    Approve,
-    /// 审批驳回。
-    Reject,
-    /// 受控转交。
-    Reassign,
-    /// 受控关闭无效任务。
-    Close,
 }
 
 /// 返回任务类型所属的固定任务族。

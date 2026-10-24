@@ -4,12 +4,13 @@ use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
 use erp_core::money::Quantity;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::repository::find_active_by_field_in;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, both_dec, both_inc, cross_inc, find_by_field_in, ids_to_strings,
-    paged_projection_search, scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
+    active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, paged_projection_search,
+    scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_BALANCES};
 use crate::entity::inventory::StockBalance;
@@ -485,7 +486,7 @@ impl<'a> InventoryRepository<'a> {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<StockBalance>> {
-        find_by_field_in(self.db, STOCK_BALANCES, "id", ids, executor).await
+        find_active_by_field_in(&self.db.collection(STOCK_BALANCES), "id", ids, executor).await
     }
 
     /// 按主键读取未删除的库存余额。

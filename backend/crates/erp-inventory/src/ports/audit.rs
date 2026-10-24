@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use application_core::AuditActor;
+use application_core::{AuditActor, AuditContext, impl_audit_context};
 use async_trait::async_trait;
 use entity_core::BaseModel;
 use erp_core::AccountKind;
@@ -49,6 +49,8 @@ pub struct PreparedInventoryAudit {
     /// Optional business message.
     pub message: Option<String>,
 }
+
+impl_audit_context!(PreparedInventoryAudit);
 
 impl PreparedInventoryAudit {
     /// 从已校验的审计实体快照抄录库存侧字段。
@@ -103,51 +105,6 @@ impl PreparedInventoryAudit {
         }
     }
 
-    /// 带上已校验的安全操作者名称，不读取当前账号。
-    ///
-    /// # 参数
-    /// * `name` - 认证时已经校验的安全名称快照；缺失时保持 `None`。
-    ///
-    /// # 返回
-    /// 返回保留原持久化元数据并携带名称快照的审计事实。
-    ///
-    /// # 错误
-    /// 无；组合层在构造结构化事件时再次校验该快照。
-    pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> Self {
-        self.actor_name_snapshot = name;
-        self
-    }
-
-    /// 带上已校验的请求关联，不另行生成。
-    ///
-    /// # 参数
-    /// * `request_id` - 调用时的安全请求编号；缺失时保持 `None`。
-    ///
-    /// # 返回
-    /// 返回保留原持久化元数据并携带请求关联的审计事实。
-    ///
-    /// # 错误
-    /// 无；组合层在构造结构化事件时再次校验编号。
-    pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
-        self.request_id = request_id;
-        self
-    }
-
-    /// 保留已准备事件的正序序号。
-    ///
-    /// # 参数
-    /// * `event_sequence` - 命令内从一开始的非零事件序号。
-    ///
-    /// # 返回
-    /// 返回保留原事件顺序的审计事实。
-    ///
-    /// # 错误
-    /// 无；参数类型保证序号非零。
-    pub fn with_event_sequence(mut self, event_sequence: NonZeroU32) -> Self {
-        self.event_sequence = event_sequence;
-        self
-    }
-
     /// 由已认证操作者构造一条成功的资源审计。
     ///
     /// # 参数
@@ -172,24 +129,22 @@ impl PreparedInventoryAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
-        let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
-        let request_id = actor.request_id().map(str::to_string);
-        let (actor_id, actor_account, actor_type) = actor.into_parts();
+        let context = AuditContext::from(actor);
         let id = id_generator::next_id();
         let base = BaseModel::new(id);
         Ok(Self::from_validated(
             &base,
-            actor_id,
-            actor_account,
-            actor_type,
+            context.actor_id,
+            context.actor_account,
+            context.actor_type,
             action.to_string(),
             resource_type.to_string(),
             Some(resource_id),
             true,
             message,
         )
-        .with_actor_name_snapshot(actor_name_snapshot)
-        .with_request_id(request_id))
+        .with_actor_name_snapshot(context.actor_name_snapshot)
+        .with_request_id(context.request_id))
     }
 }
 

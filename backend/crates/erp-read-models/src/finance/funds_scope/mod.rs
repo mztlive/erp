@@ -5,6 +5,7 @@ mod authorization;
 mod guard;
 mod invoice;
 mod invoice_rows;
+mod linked;
 mod party_names;
 mod payable;
 mod payable_source;

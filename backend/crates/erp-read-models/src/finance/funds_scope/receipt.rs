@@ -15,6 +15,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::authorization::*;
+use super::linked::{linked_order_tuples, organization_condition};
 use super::repository::{flow, receipt as receipt_repository};
 use super::rows::*;
 use crate::finance::search::keyword_ids;
@@ -60,25 +61,9 @@ pub(super) fn receipt_tuples(
     links: &[ReceiptLink],
     facts: &HashMap<String, LinkedSalesFact>,
 ) -> Vec<OrderTuple> {
-    let mut seen = BTreeSet::new();
-    let mut tuples = Vec::new();
-    for link in links {
-        let key = link.order.clone().unwrap_or_default();
-        if !seen.insert(key) {
-            continue;
-        }
-        match link.order.as_ref().and_then(|id| facts.get(id)) {
-            Some(fact) => tuples.push((
-                link.order.clone(),
-                Some(fact.owner_user_id.clone()),
-                Some(fact.business_org_unit_id.clone()),
-                row.id.clone(),
-                row.version,
-            )),
-            None => tuples.push((None, None, None, row.id.clone(), row.version)),
-        }
-    }
-    tuples
+    linked_order_tuples(&row.id, row.version, links.iter().map(|link| &link.order), facts, |fact| {
+        (Some(fact.owner_user_id.clone()), fact.business_org_unit_id.clone())
+    })
 }
 
 /// 授权集合内的归属订单；`None` 表示公司范围不限制关联单。
@@ -477,16 +462,13 @@ impl FundsAccess {
         query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
         executor: &mut dyn Executor,
     ) -> Result<FundsLinkedCondition> {
-        let org_unit_ids = match &query.org_unit_ids {
-            Some(ids) => {
-                let list = ids.as_slice().to_vec();
-                let expanded = self
-                    .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
-                    .await?;
-                Some(expanded.into_iter().collect::<Vec<_>>())
-            },
-            None => None,
-        };
+        let org_unit_ids = organization_condition(
+            self.scope.as_ref(),
+            query.org_unit_ids.as_ref(),
+            query.include_descendants,
+            executor,
+        )
+        .await?;
         Ok(FundsLinkedCondition {
             owner_user_ids: query.sales_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),

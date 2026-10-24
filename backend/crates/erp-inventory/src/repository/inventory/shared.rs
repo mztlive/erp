@@ -38,43 +38,6 @@ where
     .await
 }
 
-/// 按主键集合批量读取未删除实体。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `collection_name` - 集合名
-/// * `ids` - 主键集合
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回全部命中实体；空主键集合直接返回空列表。
-///
-/// # 错误
-/// MongoDB 查询或游标读取失败时返回错误。
-pub(super) async fn entities_by_ids<T>(
-    db: &Database,
-    collection_name: &str,
-    ids: &[String],
-    executor: &mut dyn Executor,
-) -> Result<Vec<T>>
-where
-    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
-{
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    mongo_ops::find_many(
-        &db.collection::<T>(collection_name),
-        doc! {
-            "id": { "$in": ids },
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        },
-        FindOptions::default(),
-        executor,
-    )
-    .await
-}
-
 /// 把已证明可读的仓库范围写入查询过滤（`None` 为公司级不限，空集合保持空 `$in`）。
 ///
 /// 空集合必须解释为空结果，禁止退化为全量查询。
@@ -176,46 +139,6 @@ where
 /// 不返回错误。
 pub(super) fn ids_to_strings<T: AsRef<str>>(ids: &[T]) -> Vec<String> {
     ids.iter().map(|id| id.as_ref().to_string()).collect()
-}
-
-/// 按给定字段 `$in` 批量读取未删除实体。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `collection_name` - 集合名。
-/// * `field` - 参与 `$in` 的字段名。
-/// * `values` - 字段值；空集合直接返回空列表。
-/// * `executor` - 数据访问执行器。
-///
-/// # 返回
-/// 返回命中的未删除实体。
-///
-/// # 错误
-/// MongoDB 查询或游标读取失败时返回错误。
-pub(super) async fn find_by_field_in<T>(
-    db: &Database,
-    collection_name: &str,
-    field: &str,
-    values: &[String],
-    executor: &mut dyn Executor,
-) -> Result<Vec<T>>
-where
-    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
-{
-    if values.is_empty() {
-        return Ok(Vec::new());
-    }
-    let collection = db.collection::<T>(collection_name);
-    mongo_ops::find_many(
-        &collection,
-        doc! {
-            field: { "$in": values },
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        },
-        FindOptions::default(),
-        executor,
-    )
-    .await
 }
 
 /// 把 `Quantity` 转为 BSON `Decimal128`（存储形态由 P0 固化，不做任何舍入/换算）。

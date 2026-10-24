@@ -14,6 +14,7 @@ use validator::Validate;
 
 use super::super::payable::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
 use super::authorization::*;
+use super::linked::organization_condition;
 use super::payable_source::source_key;
 use super::repository::accounts::{AccountPageRow, AccountSummaryRow};
 use super::rows::*;
@@ -243,16 +244,13 @@ impl FundsAccess {
         query: &erp_finance::dto::payable::PayableAccountListQuery,
         executor: &mut dyn Executor,
     ) -> Result<FundsLinkedCondition> {
-        let org_unit_ids = match &query.org_unit_ids {
-            Some(ids) => {
-                let list = ids.as_slice().to_vec();
-                let expanded = self
-                    .expand_org_units(&list, query.include_descendants.unwrap_or(false), executor)
-                    .await?;
-                Some(expanded.into_iter().collect::<Vec<_>>())
-            },
-            None => None,
-        };
+        let org_unit_ids = organization_condition(
+            self.scope.as_ref(),
+            query.org_unit_ids.as_ref(),
+            query.include_descendants,
+            executor,
+        )
+        .await?;
         Ok(FundsLinkedCondition {
             owner_user_ids: query.procurement_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             operator_user_ids: None,

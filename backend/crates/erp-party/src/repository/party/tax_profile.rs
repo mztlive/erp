@@ -6,7 +6,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_fact_filter, active_fact_window_filter, default_first_sort, party_default_marks_filter, sort_doc,
+    active_fact_filter, active_fact_window_filter, default_first_sort, impl_clear_other_default_marks,
+    party_default_marks_filter, sort_doc,
 };
 use crate::entity::party::{EffectiveRecordStatus, PartyTaxProfile};
 
@@ -279,22 +280,7 @@ impl PartyTaxProfileRepositoryExt for Repository<'_, PartyTaxProfile> {
         .await
     }
 
-    async fn clear_other_default_marks(
-        &self,
-        party_id: &PartyId,
-        exclude_id: Option<&str>,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let rows = self.find_many(party_default_marks_filter(party_id), executor).await?;
-        for mut row in rows {
-            if exclude_id.is_some_and(|id| id == row.base.id) {
-                continue;
-            }
-            row.is_default = false;
-            self.update(&mut row, executor).await?;
-        }
-        Ok(())
-    }
+    impl_clear_other_default_marks!();
 
     async fn list_by_party(
         &self,

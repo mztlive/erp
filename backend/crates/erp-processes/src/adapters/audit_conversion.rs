@@ -67,12 +67,13 @@ macro_rules! impl_prepared_audit {
             }
 
             fn to_log(&self) -> AuditResult<AuditLog> {
+                let context = self.audit_context();
                 let mut log = AuditLog::new(
                     self.id.clone(),
                     AuditLogData {
-                        actor_id: self.actor_id.clone(),
-                        actor_account: self.actor_account.clone(),
-                        actor_type: self.actor_type,
+                        actor_id: context.actor_id,
+                        actor_account: context.actor_account,
+                        actor_type: context.actor_type,
                         action: self.action.clone(),
                         resource_type: self.resource_type.clone(),
                         resource_id: self.resource_id.clone(),
@@ -88,9 +89,9 @@ macro_rules! impl_prepared_audit {
                     deleted_at: self.deleted_at,
                 };
                 prepare_business_log(&log)?
-                    .with_actor_name_snapshot(self.actor_name_snapshot.clone())?
-                    .with_request_id(self.request_id.clone())?
-                    .with_event_sequence(self.event_sequence.get())
+                    .with_actor_name_snapshot(context.actor_name_snapshot)?
+                    .with_request_id(context.request_id)?
+                    .with_event_sequence(context.event_sequence.get())
             }
         })+
     };
@@ -154,9 +155,76 @@ pub(super) use map_audit_error;
 
 #[cfg(test)]
 mod tests {
-    use application_core::ValidationIssues;
-    use erp_audit::Error as AuditError;
+    use application_core::{AuditActor, ValidationIssues};
+    use erp_audit::{AuditActorLogs, Error as AuditError};
+    use erp_core::AccountKind;
     use persistence_core::Error as RepositoryError;
+
+    use super::*;
+
+    fn original_log() -> AuditLog {
+        let mut log = AuditActor::new("actor-original".into(), "sales-original".into(), AccountKind::Admin)
+            .with_actor_name_snapshot(Some("发生时名称".into()))
+            .unwrap()
+            .with_request_id(Some("request-original".into()))
+            .unwrap()
+            .resource_log_with_id(
+                "audit-original".into(),
+                "product.update",
+                "product",
+                "product-1".into(),
+                None,
+            )
+            .unwrap()
+            .with_event_sequence(7)
+            .unwrap();
+        log.base = BaseModel {
+            id: "audit-original".into(),
+            version: 7,
+            created_at: 11,
+            updated_at: 19,
+            deleted_at: 23,
+        };
+        log.structured_event.as_mut().unwrap().occurred_at = log.base.created_at;
+        prepare_business_log(&log).unwrap()
+    }
+
+    /// 每个实际消费类型均执行生产转换与共享上下文方法。
+    macro_rules! check_context_round_trip {
+        ($($prepared:ty),+ $(,)?) => {
+            $(
+                let original = original_log();
+                let prepared = <$prepared>::from_log(&original);
+                let context = prepared.audit_context();
+                assert_eq!(context.actor_id, "actor-original");
+                assert_eq!(context.actor_account, "sales-original");
+                assert_eq!(context.actor_type, AccountKind::Admin);
+                assert_eq!(context.actor_name_snapshot.as_deref(), Some("发生时名称"));
+                assert_eq!(context.request_id.as_deref(), Some("request-original"));
+                assert_eq!(context.event_sequence.get(), 7);
+                assert_eq!(prepared.to_log().unwrap(), original);
+
+                let unsafe_name = prepared.clone().with_actor_name_snapshot(Some("unsafe\nname".into()));
+                assert!(unsafe_name.to_log().is_err());
+                let unsafe_request = prepared.with_request_id(Some("unsafe\nrequest".into()));
+                assert!(unsafe_request.to_log().is_err());
+            )+
+        };
+    }
+
+    #[test]
+    fn shared_context_preserves_all_consumer_snapshots_and_adapter_validation() {
+        check_context_round_trip!(
+            PreparedCatalogAudit,
+            PreparedContractAudit,
+            PreparedCustomerAudit,
+            PreparedResourceAudit,
+            PreparedInventoryAudit,
+            PreparedPartyAudit,
+            PreparedSupportAudit,
+            PreparedWarehouseAudit,
+        );
+    }
 
     /// 执行生产映射宏，确认每个消费领域均保留关联恢复所需的具体错误。
     macro_rules! check_error_mapping {

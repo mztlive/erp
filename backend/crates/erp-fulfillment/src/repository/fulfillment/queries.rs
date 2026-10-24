@@ -10,6 +10,7 @@ use erp_core::ids::{
 use mongodb::Database;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
+use persistence_core::repository::find_active_by_field_in;
 use persistence_core::{Executor, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
@@ -280,9 +281,8 @@ impl FulfillmentRepository<'_> {
         receipt_ids: &[PurchaseReceiptId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseReceiptLine>> {
-        let mut lines = find_lines_in(
-            self.db,
-            PURCHASE_RECEIPT_LINES,
+        let mut lines = find_active_by_field_in(
+            &self.db.collection(PURCHASE_RECEIPT_LINES),
             "purchase_receipt_id",
             &ids_to_strings(receipt_ids),
             executor,
@@ -310,9 +310,13 @@ impl FulfillmentRepository<'_> {
         delivery_ids: &[DeliveryId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<DeliveryLine>> {
-        let mut lines =
-            find_lines_in(self.db, DELIVERY_LINES, "delivery_id", &ids_to_strings(delivery_ids), executor)
-                .await?;
+        let mut lines = find_active_by_field_in(
+            &self.db.collection(DELIVERY_LINES),
+            "delivery_id",
+            &ids_to_strings(delivery_ids),
+            executor,
+        )
+        .await?;
         lines.sort_by_key(|line: &DeliveryLine| (line.delivery_id.to_string(), line.line_no));
         Ok(lines)
     }
@@ -335,9 +339,8 @@ impl FulfillmentRepository<'_> {
         acceptance_ids: &[CustomerAcceptanceId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<CustomerAcceptanceLine>> {
-        let mut lines = find_lines_in(
-            self.db,
-            CUSTOMER_ACCEPTANCE_LINES,
+        let mut lines = find_active_by_field_in(
+            &self.db.collection(CUSTOMER_ACCEPTANCE_LINES),
             "customer_acceptance_id",
             &ids_to_strings(acceptance_ids),
             executor,
@@ -367,9 +370,8 @@ impl FulfillmentRepository<'_> {
         acceptance_line_ids: &[CustomerAcceptanceLineId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<AcceptanceFulfillmentAllocation>> {
-        find_lines_in(
-            self.db,
-            ACCEPTANCE_FULFILLMENT_ALLOCATIONS,
+        find_active_by_field_in(
+            &self.db.collection(ACCEPTANCE_FULFILLMENT_ALLOCATIONS),
             "customer_acceptance_line_id",
             &ids_to_strings(acceptance_line_ids),
             executor,
@@ -460,33 +462,6 @@ where
         doc! {
             field: { "$in": values },
             "status": status,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        },
-        FindOptions::default(),
-        executor,
-    )
-    .await
-}
-
-/// 按给定字段 `$in` 批量读取行实体（空集合直接返回空列表）。
-async fn find_lines_in<T>(
-    db: &Database,
-    collection_name: &str,
-    field: &str,
-    values: &[String],
-    executor: &mut dyn Executor,
-) -> Result<Vec<T>>
-where
-    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
-{
-    if values.is_empty() {
-        return Ok(Vec::new());
-    }
-    let collection = db.collection::<T>(collection_name);
-    mongo_ops::find_many(
-        &collection,
-        doc! {
-            field: { "$in": values },
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         },
         FindOptions::default(),

@@ -4,6 +4,7 @@ mod definition;
 mod dto;
 mod presentation;
 mod summary;
+mod summary_query;
 pub use definition::{DocumentApprovalNodeView, binding_route};
 mod query;
 
@@ -19,6 +20,7 @@ pub use presentation::{
 };
 pub(crate) use query::{load_document_runtime, load_document_runtime_for_instance};
 pub use summary::{DocumentApprovalHistorySummaryItemView, DocumentApprovalInstanceSummaryView};
+pub(crate) use summary_query::load_approval_summary;
 
 /// 与同一业务读取快照绑定的实际运行摘要和有界历史。
 pub(crate) struct DocumentRuntime {

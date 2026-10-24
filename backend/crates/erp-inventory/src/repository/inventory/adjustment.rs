@@ -5,12 +5,13 @@ use erp_core::ids::{StockAdjustmentId, WarehouseId};
 use erp_core::money::Quantity;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::repository::find_active_by_field_in;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, entities_by_ids, find_by_field_in, ids_to_strings, paged_projection_search,
-    scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
+    active_entity_by_id, ids_to_strings, paged_projection_search, scoped_base_filter, sort_doc, to_bson,
+    with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_ADJUSTMENTS};
 use crate::entity::inventory::{
@@ -350,7 +351,7 @@ impl<'a> InventoryRepository<'a> {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<StockAdjustment>> {
-        entities_by_ids(self.db, STOCK_ADJUSTMENTS, ids, executor).await
+        find_active_by_field_in(&self.db.collection(STOCK_ADJUSTMENTS), "id", ids, executor).await
     }
 
     /// 批量读取库存调整明细（`$in` 一次取回）。
@@ -371,9 +372,8 @@ impl<'a> InventoryRepository<'a> {
         adjustment_ids: &[StockAdjustmentId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<StockAdjustmentLine>> {
-        find_by_field_in(
-            self.db,
-            STOCK_ADJUSTMENT_LINES,
+        find_active_by_field_in(
+            &self.db.collection(STOCK_ADJUSTMENT_LINES),
             "stock_adjustment_id",
             &ids_to_strings(adjustment_ids),
             executor,

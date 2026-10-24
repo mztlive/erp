@@ -3,6 +3,7 @@ use erp_returns::service::ReturnsService;
 use persistence_core::NoTransaction;
 
 use super::*;
+use crate::approval_recovery::recover_approval_command;
 impl ReturnsProcess {
     /// 从绑定读取定义并持久化启动事实。
     ///
@@ -86,51 +87,36 @@ impl ReturnsProcess {
         actor: &AuditActor,
         original_error: Error,
     ) -> Result<String> {
-        const RECOVERY_ATTEMPTS: usize = 8;
-        for attempt in 0..RECOVERY_ATTEMPTS {
+        recover_approval_command(original_error, || {
             let db = self.db.clone();
             let rbac = self.rbac.clone();
             let refund_id = refund_id.to_string();
             let idempotency_key = idempotency_key.to_string();
             let actor = actor.clone();
-            let recovered = self
-                .db
-                .client()
-                .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        authorized_customer_refund(&db, &rbac, &actor, &refund_id, executor).await?;
-                        let binding = find_approval_binding(&db, &refund_id, executor)
-                            .await
-                            .map_err(crate::Error::from)?;
-                        let binding = require_frozen_binding(binding.as_ref())?;
-                        let subject = customer_refund_subject_ref(&refund_id)?;
-                        replay_return_start_with_executor(
-                            &db,
-                            ReplayReturnStartInput {
-                                document_type: DocumentType::CustomerRefund,
-                                subject: &subject,
-                                subject_version,
-                                idempotency_key: &idempotency_key,
-                                binding,
-                                actor_id: actor.id(),
-                            },
-                            executor,
-                        )
-                        .await
-                    })
+            self.db.client().with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorized_customer_refund(&db, &rbac, &actor, &refund_id, executor).await?;
+                    let binding =
+                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
+                    let binding = require_frozen_binding(binding.as_ref())?;
+                    let subject = customer_refund_subject_ref(&refund_id)?;
+                    replay_return_start_with_executor(
+                        &db,
+                        ReplayReturnStartInput {
+                            document_type: DocumentType::CustomerRefund,
+                            subject: &subject,
+                            subject_version,
+                            idempotency_key: &idempotency_key,
+                            binding,
+                            actor_id: actor.id(),
+                        },
+                        executor,
+                    )
+                    .await
                 })
-                .await;
-            match recovered {
-                Ok(Some(instance_id)) => return Ok(instance_id),
-                Ok(None) => {},
-                Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return Err(error),
-            }
-            if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(command_recovery_delay(attempt)).await;
-            }
-        }
-        Err(original_error)
+            })
+        })
+        .await
     }
     /// 在任何当前状态/版本门禁前，以当前或下一主题版本精确回放既有启动。
     ///

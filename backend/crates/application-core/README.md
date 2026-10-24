@@ -26,6 +26,7 @@
 3. 回执事实的存储由拥有领域提供；本 crate 只保留通用合同与匹配规则。
 4. 新的独立回执嵌入 StructuredCommandReceipt，直接保存版本化指纹、操作人、动作、作用域和幂等键摘要；匹配不得读取审计消息。
 5. 跨页版本校验使用 ScopeVersion，入口显式声明空字符串代表已提供或缺失；领域保留权限解析、错误码和业务错误映射，禁止在共享层读取领域事实。
+6. 预制审计使用 AuditContext 传递操作人、名称、请求关联与事件顺序。共享上下文不生成事件身份或持久化元数据，不替代审计适配器的安全校验；领域保留独立的事件结构与 Port。
 
 ## 代码入口
 
@@ -34,6 +35,7 @@
 | [src/command.rs](src/command.rs) | CommandFingerprint、CommandIdentity 与 CommandReceipt |
 | [src/structured_receipt.rs](src/structured_receipt.rs) | 独立领域回执的共享身份与载荷匹配 |
 | [src/context.rs](src/context.rs) | AuditActor |
+| [src/audit_context.rs](src/audit_context.rs) | AuditContext 与平铺预制审计的上下文方法 |
 | [src/page.rs](src/page.rs) | Page |
 | [src/query.rs](src/query.rs) | PageParams、PageView、分页与排序规范化 |
 | [src/scope_version.rs](src/scope_version.rs) | ScopeVersion、后续页版本要求与版本一致性校验 |

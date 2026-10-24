@@ -1,5 +1,6 @@
 //! 跨域流程：审批分发、带审计的事务和命名用例。
 
+mod approval_recovery;
 mod approval_start;
 mod document_object;
 mod errors;

@@ -24,7 +24,7 @@ use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_cancel, prepare_start};
+use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};

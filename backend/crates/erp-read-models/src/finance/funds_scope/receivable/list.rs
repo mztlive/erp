@@ -7,6 +7,7 @@ use erp_finance::repository::receivable::ReceivableAccountRow;
 use persistence_core::Executor;
 
 use super::super::authorization::*;
+use super::super::linked::organization_condition;
 use super::super::repository::accounts::{AccountPageRow, AccountSummaryRow};
 use super::super::rows::{FundsSummaryView, ScopedReceivableAccountRow, build_summary, zero_amount};
 use super::facts::ReceivableFacts;
@@ -29,15 +30,13 @@ impl FundsAccess {
         query: &ReceivableAccountListQuery,
         executor: &mut dyn Executor,
     ) -> Result<FundsLinkedCondition> {
-        let org_unit_ids = match &query.org_unit_ids {
-            Some(ids) => Some(
-                self.expand_org_units(ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
-                    .await?
-                    .into_iter()
-                    .collect(),
-            ),
-            None => None,
-        };
+        let org_unit_ids = organization_condition(
+            self.scope.as_ref(),
+            query.org_unit_ids.as_ref(),
+            query.include_descendants,
+            executor,
+        )
+        .await?;
         Ok(FundsLinkedCondition {
             owner_user_ids: query.sales_owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
             operator_user_ids: query.operator_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),

@@ -16,8 +16,8 @@ use erp_workflow::service::approval::execution::authorization::converge_eligibil
 use erp_workflow::service::approval::execution::start::map_engine_error;
 use erp_workflow::service::approval::execution::{
     CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof, ExecutionCommandInput,
-    PreparedExecution, claim_and_persist_document_cancel_runtime, command_recovery_delay,
-    normalize_document_cancel_reason, prepare_document_cancel, replay_committed_document_cancel,
+    PreparedExecution, claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason,
+    prepare_document_cancel, replay_committed_document_cancel,
 };
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::find_approval_binding;
@@ -34,6 +34,7 @@ use super::adapter::{
 };
 use super::start_approval::load_bound_definition_graph;
 use crate::adapters::persist_cancel_copies;
+use crate::approval_recovery::recover_approval_command;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -156,8 +157,6 @@ impl PurchaseOrderProcess {
     }
 }
 
-const CANCEL_RECOVERY_ATTEMPTS: usize = 8;
-
 /// 使用独立 snapshot 会话回读采购单撤回 winner；本函数只读。
 async fn replay_purchase_order_cancel(
     db: &Database,
@@ -181,18 +180,8 @@ async fn recover_purchase_order_cancel(
     command: &DocumentCancelCommand,
     original_error: Error,
 ) -> Result<()> {
-    for attempt in 0..CANCEL_RECOVERY_ATTEMPTS {
-        match replay_purchase_order_cancel(db, command).await {
-            Ok(Some(_)) => return Ok(()),
-            Ok(None) => {},
-            Err(error) if error.command_may_have_committed() => {},
-            Err(error) => return Err(error),
-        }
-        if attempt + 1 < CANCEL_RECOVERY_ATTEMPTS {
-            tokio::time::sleep(command_recovery_delay(attempt)).await;
-        }
-    }
-    Err(original_error)
+    recover_approval_command(original_error, || replay_purchase_order_cancel(db, command)).await?;
+    Ok(())
 }
 
 /// 已加载的可撤回运行事实。
