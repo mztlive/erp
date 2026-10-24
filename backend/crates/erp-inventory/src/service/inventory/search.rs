@@ -1,13 +1,11 @@
 //! 在库存分页前解析商品关键词，保留显式 SKU 条件的交集。
 
 use erp_core::ids::SkuId;
-use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::dto::StockAvailability;
 use crate::error::Result;
 use crate::ports::CatalogFactsPort;
-use crate::repository::{InventoryExt, InventorySearch};
+use crate::repository::InventorySearch;
 
 /// 关键词无命中必须形成空集合条件，不能退回不筛选。
 ///
@@ -33,52 +31,6 @@ pub(super) async fn sku_filter(
     };
     let ids = catalog.matching_sku_ids(q, executor).await?;
     Ok(InventorySearch::skus(Some(ids), sku))
-}
-
-/// 余额数量与定位条件由拥有库存集合的仓储解析。
-///
-/// # 参数
-/// * `db` - 库存数据库。
-/// * `search` - 已求交的 SKU 搜索条件。
-/// * `id` - 精确余额主键；`None` 表示不按主键收窄。
-/// * `availability` - 可用量条件。
-/// * `executor` - 调用方选择的数据访问执行器。
-///
-/// # 返回
-/// 返回仓储解析后的余额搜索条件。
-///
-/// # 错误
-/// 读取有效预占维度失败时返回仓储错误。
-pub(super) async fn balance_filter(
-    db: &Database,
-    search: InventorySearch,
-    id: Option<&str>,
-    availability: Option<StockAvailability>,
-    executor: &mut dyn Executor,
-) -> Result<InventorySearch> {
-    Ok(db.inventory().balance_search(search, id, availability, executor).await?)
-}
-
-/// 调整单按全部明细匹配 SKU，不能只检查列表首行。
-///
-/// # 参数
-/// * `db` - 库存数据库。
-/// * `search` - 已求交的 SKU 搜索条件。
-/// * `id` - 精确调整单主键；`None` 表示不按主键收窄。
-/// * `executor` - 调用方选择的数据访问执行器。
-///
-/// # 返回
-/// 返回解析到调整单主键集合后的搜索条件。
-///
-/// # 错误
-/// 读取调整明细失败时返回仓储错误。
-pub(super) async fn adjustment_filter(
-    db: &Database,
-    search: InventorySearch,
-    id: Option<&str>,
-    executor: &mut dyn Executor,
-) -> Result<InventorySearch> {
-    Ok(db.inventory().adjustment_search(search, id, executor).await?)
 }
 
 #[cfg(test)]

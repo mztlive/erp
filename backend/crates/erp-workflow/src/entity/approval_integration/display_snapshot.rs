@@ -43,14 +43,7 @@ impl ApprovalRelatedSalesSnapshot {
         {
             return Err(Error::from("审批关联销售版本身份无效"));
         }
-        ApprovalDisplaySnapshot {
-            root_document_id: self.document_id.clone(),
-            counterparty_label: None,
-            impact_summary: None,
-            source: self.source.clone(),
-            source_sales: Vec::new(),
-        }
-        .validate()
+        validate_display(&self.document_id, &self.source, None, None)
     }
 }
 impl ApprovalDisplaySnapshot {
@@ -168,39 +161,56 @@ impl ApprovalDisplaySnapshot {
         for sales in &self.source_sales {
             sales.validate()?;
         }
-        if self.root_document_id.trim().is_empty()
-            || self.source.extra_sections.len() > 128
-            || self.source.lines.len() > 100
-        {
-            return Err(Error::from("审批展示快照超出允许范围"));
-        }
-        let texts =
-            [&self.root_document_id, &self.source.list_summary]
-                .into_iter()
-                .chain(self.counterparty_label.iter())
-                .chain(self.impact_summary.iter())
-                .chain(self.source.customer.iter())
-                .chain(self.source.amount_label.iter())
-                .chain(self.source.submitter_name.iter())
-                .chain(
-                    self.source
-                        .extra_sections
-                        .iter()
-                        .flat_map(|s| [&s.label, &s.value].into_iter().chain(s.object_id.iter())),
-                )
-                .chain(self.source.lines.iter().flat_map(|l| {
-                    std::iter::once(&l.title).chain(l.quantity.iter()).chain(l.due_label.iter())
-                }));
-        if texts.into_iter().any(|s| s.chars().count() > 8192) {
-            return Err(Error::from("审批展示快照文本过长"));
-        }
-        Ok(())
+        validate_display(
+            &self.root_document_id,
+            &self.source,
+            self.counterparty_label.as_deref(),
+            self.impact_summary.as_deref(),
+        )
     }
+}
+
+fn validate_display(
+    document_id: &str,
+    source: &ApprovalBriefSource,
+    counterparty_label: Option<&str>,
+    impact_summary: Option<&str>,
+) -> Result<()> {
+    if document_id.trim().is_empty() || source.extra_sections.len() > 128 || source.lines.len() > 100 {
+        return Err(Error::from("审批展示快照超出允许范围"));
+    }
+    let texts = [document_id, source.list_summary.as_str()]
+        .into_iter()
+        .chain(counterparty_label)
+        .chain(impact_summary)
+        .chain(source.customer.as_deref())
+        .chain(source.amount_label.as_deref())
+        .chain(source.submitter_name.as_deref())
+        .chain(source.extra_sections.iter().flat_map(|section| {
+            [section.label.as_str(), section.value.as_str()].into_iter().chain(section.object_id.as_deref())
+        }))
+        .chain(source.lines.iter().flat_map(|line| {
+            [line.title.as_str()].into_iter().chain(line.quantity.as_deref()).chain(line.due_label.as_deref())
+        }));
+    if texts.into_iter().any(|text| text.chars().count() > 8192) {
+        return Err(Error::from("审批展示快照文本过长"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn related_sales() -> ApprovalRelatedSalesSnapshot {
+        ApprovalRelatedSalesSnapshot {
+            document_id: "sales-1".into(),
+            document_no: "XS-1".into(),
+            revision_id: "revision-1".into(),
+            revision_no: 1,
+            source: ApprovalBriefSource::default(),
+        }
+    }
 
     #[test]
     fn submitter_name_resolves_legacy_identity_and_preserves_frozen_name() {
@@ -270,18 +280,72 @@ mod tests {
         let legacy = serde_json::to_value(&display).unwrap();
         assert!(legacy.get("source_sales").is_none());
         assert!(serde_json::from_value::<ApprovalDisplaySnapshot>(legacy).unwrap().source_sales.is_empty());
-        let source = ApprovalRelatedSalesSnapshot {
-            document_id: "sales-1".into(),
-            document_no: "XS-1".into(),
-            revision_id: "revision-1".into(),
-            revision_no: 1,
-            source: ApprovalBriefSource::default(),
-        };
+        let source = related_sales();
         display.source_sales.push(source.clone());
         display.validate().unwrap();
         display.source_sales[0].revision_no = 0;
         assert!(display.validate().is_err());
         display.source_sales = vec![source; 101];
         assert!(display.validate().is_err());
+    }
+
+    #[test]
+    fn related_sales_reuse_display_structure_and_nested_text_limits() {
+        let mut sales = related_sales();
+        sales.source.lines = vec![
+            ApprovalBriefLine {
+                title: "商品".into(),
+                quantity: Some("1".into()),
+                due_label: Some("字".repeat(8192)),
+            };
+            100
+        ];
+        sales.source.extra_sections = vec![ApprovalBriefSection::new("字段".into(), "值".into()); 128];
+        sales.validate().unwrap();
+
+        sales.source.lines[0].due_label = Some("字".repeat(8193));
+        assert_eq!(sales.validate().unwrap_err().to_string(), "审批展示快照文本过长");
+        sales.source.lines[0].due_label = None;
+        sales.source.extra_sections[0].object_id = Some("字".repeat(8193));
+        assert_eq!(sales.validate().unwrap_err().to_string(), "审批展示快照文本过长");
+        sales.source.extra_sections[0].object_id = None;
+
+        sales.source.lines.push(sales.source.lines[0].clone());
+        assert_eq!(sales.validate().unwrap_err().to_string(), "审批展示快照超出允许范围");
+        sales.source.lines.pop();
+        sales.source.extra_sections.push(ApprovalBriefSection::new("字段".into(), "值".into()));
+        assert_eq!(sales.validate().unwrap_err().to_string(), "审批展示快照超出允许范围");
+        sales.source.extra_sections.pop();
+        sales.document_id.clear();
+        assert_eq!(sales.validate().unwrap_err().to_string(), "审批展示快照超出允许范围");
+    }
+
+    #[test]
+    fn display_validation_preserves_error_precedence() {
+        let mut display = ApprovalDisplaySnapshot::new(String::new());
+        display.source.list_summary = "字".repeat(8193);
+        let mut invalid_sales = related_sales();
+        invalid_sales.revision_no = 0;
+        display.source_sales = vec![invalid_sales; 101];
+        assert_eq!(display.validate().unwrap_err().to_string(), "审批关联销售资料超过100个版本");
+        display.source_sales.truncate(1);
+        assert_eq!(display.validate().unwrap_err().to_string(), "审批关联销售版本身份无效");
+        display.source_sales[0].revision_no = 1;
+        assert_eq!(display.validate().unwrap_err().to_string(), "审批展示快照超出允许范围");
+        display.root_document_id = "purchase-1".into();
+        assert_eq!(display.validate().unwrap_err().to_string(), "审批展示快照文本过长");
+    }
+
+    #[test]
+    fn display_validation_keeps_optional_root_text_limits() {
+        let mut display = ApprovalDisplaySnapshot::new("purchase-1".into());
+        display.counterparty_label = Some("字".repeat(8192));
+        display.impact_summary = Some("字".repeat(8192));
+        display.validate().unwrap();
+        display.counterparty_label = Some("字".repeat(8193));
+        assert_eq!(display.validate().unwrap_err().to_string(), "审批展示快照文本过长");
+        display.counterparty_label = None;
+        display.impact_summary = Some("字".repeat(8193));
+        assert_eq!(display.validate().unwrap_err().to_string(), "审批展示快照文本过长");
     }
 }

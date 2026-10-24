@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
+use rust_decimal::Decimal;
 
 use super::super::PurchaseDeliveryAllocation;
 use super::super::creation_basis::{
@@ -100,10 +101,8 @@ impl SourcingPlan {
         &self,
         latest_groups: &[StockBasisGroup],
     ) -> std::result::Result<(), SourcingPlanError> {
-        let mut line_totals = HashMap::<String, rust_decimal::Decimal>::new();
-        let mut line_caps = HashMap::<String, rust_decimal::Decimal>::new();
-        let mut balance_totals = HashMap::<String, rust_decimal::Decimal>::new();
-        let mut balance_caps = HashMap::<String, rust_decimal::Decimal>::new();
+        let mut line_totals = HashMap::new();
+        let mut balance_totals = HashMap::new();
         for plan in &self.stock_plans {
             let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
             for requested in &plan.requested_lines {
@@ -112,19 +111,19 @@ impl SourcingPlan {
                 validate_quantity(&line.coverage, requested.quantity)?;
                 add_requested_total(
                     &mut line_totals,
-                    &mut line_caps,
                     &requested.sales_order_line_id,
                     requested.quantity,
-                    line.coverage.summary.remaining_quantity,
+                    line.coverage.summary.remaining_quantity.to_decimal(),
                 );
-                *balance_totals
-                    .entry(latest.balance.base.id.clone())
-                    .or_insert(rust_decimal::Decimal::ZERO) += requested.quantity.to_decimal();
-                balance_caps
-                    .insert(latest.balance.base.id.clone(), latest.balance.available_quantity.to_decimal());
+                add_requested_total(
+                    &mut balance_totals,
+                    &latest.balance.base.id,
+                    requested.quantity,
+                    latest.balance.available_quantity.to_decimal(),
+                );
             }
         }
-        if exceeds_any_cap(&line_totals, &line_caps) || exceeds_any_cap(&balance_totals, &balance_caps) {
+        if exceeds_any_cap(&line_totals) || exceeds_any_cap(&balance_totals) {
             return Err(SourcingPlanError::StaleFacts);
         }
         Ok(())
@@ -150,10 +149,8 @@ impl SourcingPlan {
         &self,
         latest_groups: &[BasisGroup],
     ) -> std::result::Result<(), SourcingPlanError> {
-        let mut line_totals = HashMap::<String, rust_decimal::Decimal>::new();
-        let mut line_caps = HashMap::<String, rust_decimal::Decimal>::new();
-        let mut supply_totals = HashMap::<String, rust_decimal::Decimal>::new();
-        let mut supply_caps = HashMap::<String, rust_decimal::Decimal>::new();
+        let mut line_totals = HashMap::new();
+        let mut supply_totals = HashMap::new();
         for plan in &self.purchase_plans {
             let latest = latest_groups
                 .iter()
@@ -166,28 +163,26 @@ impl SourcingPlan {
                     .find(|line| stable_line_id(line) == requested.sales_order_line_id)
                     .ok_or(SourcingPlanError::StaleFacts)?;
                 validate_quantity(&basis.coverage, requested.quantity)?;
-                *line_totals
-                    .entry(requested.sales_order_line_id.clone())
-                    .or_insert(rust_decimal::Decimal::ZERO) += requested.quantity.to_decimal();
-                line_caps.insert(
-                    requested.sales_order_line_id.clone(),
+                add_requested_total(
+                    &mut line_totals,
+                    &requested.sales_order_line_id,
+                    requested.quantity,
                     basis.coverage.summary.remaining_quantity.to_decimal(),
                 );
-                let supply_key = basis.supply.offering.base.id.clone();
-                *supply_totals.entry(supply_key.clone()).or_insert(rust_decimal::Decimal::ZERO) +=
-                    requested.quantity.to_decimal();
-                supply_caps.insert(
-                    supply_key,
+                add_requested_total(
+                    &mut supply_totals,
+                    &basis.supply.offering.base.id,
+                    requested.quantity,
                     basis
                         .supply
                         .availability
                         .available_quantity
                         .map(Quantity::to_decimal)
-                        .unwrap_or(rust_decimal::Decimal::MAX),
+                        .unwrap_or(Decimal::MAX),
                 );
             }
         }
-        if exceeds_any_cap(&line_totals, &line_caps) || exceeds_any_cap(&supply_totals, &supply_caps) {
+        if exceeds_any_cap(&line_totals) || exceeds_any_cap(&supply_totals) {
             return Err(SourcingPlanError::StaleFacts);
         }
         Ok(())
@@ -378,8 +373,7 @@ fn validate_combined_line_totals(
     purchase_plans: &[SourcingDraftPlan],
     stock_plans: &[StockAllocationPlan],
 ) -> std::result::Result<(), SourcingPlanError> {
-    let mut totals = HashMap::<String, rust_decimal::Decimal>::new();
-    let mut caps = HashMap::<String, rust_decimal::Decimal>::new();
+    let mut totals = HashMap::new();
     for plan in purchase_plans {
         for requested in &plan.requested_lines {
             let line = plan
@@ -391,10 +385,9 @@ fn validate_combined_line_totals(
             validate_quantity(&line.coverage, requested.quantity)?;
             add_requested_total(
                 &mut totals,
-                &mut caps,
                 &requested.sales_order_line_id,
                 requested.quantity,
-                line.coverage.summary.remaining_quantity,
+                line.coverage.summary.remaining_quantity.to_decimal(),
             );
         }
     }
@@ -405,25 +398,29 @@ fn validate_combined_line_totals(
             validate_quantity(&line.coverage, requested.quantity)?;
             add_requested_total(
                 &mut totals,
-                &mut caps,
                 &requested.sales_order_line_id,
                 requested.quantity,
-                line.coverage.summary.remaining_quantity,
+                line.coverage.summary.remaining_quantity.to_decimal(),
             );
         }
     }
-    if exceeds_any_cap(&totals, &caps) {
+    if exceeds_any_cap(&totals) {
         return Err(SourcingPlanError::StaleFacts);
     }
     Ok(())
 }
 
-/// 累加一条请求数量并登记该稳定销售行的统一上限。
+/// 同一稳定身份的累计数量与最新上限。
+struct QuantityTotal {
+    total: Decimal,
+    cap: Decimal,
+}
+
+/// 累加一条请求数量并登记该稳定身份的统一上限。
 ///
 /// # 参数
-/// * `totals` - 稳定销售行到累计数量的映射
-/// * `caps` - 稳定销售行到剩余量上限的映射
-/// * `line_id` - 稳定销售行
+/// * `totals` - 稳定身份到累计数量与上限的映射
+/// * `line_id` - 稳定销售行、库存余额或供给身份
 /// * `quantity` - 本次请求数量
 /// * `cap` - 该行最新剩余量上限
 ///
@@ -434,16 +431,16 @@ fn validate_combined_line_totals(
 /// 无。
 ///
 /// # 关键业务约束
-/// 同一稳定销售行跨采购与库存方案累计，上限取最后登记的最新剩余量。
+/// 同一身份跨方案累计，上限取最后登记值；累计数量与上限始终成对存储。
 fn add_requested_total(
-    totals: &mut HashMap<String, rust_decimal::Decimal>,
-    caps: &mut HashMap<String, rust_decimal::Decimal>,
+    totals: &mut HashMap<String, QuantityTotal>,
     line_id: &str,
     quantity: Quantity,
-    cap: Quantity,
+    cap: Decimal,
 ) {
-    *totals.entry(line_id.to_string()).or_insert(rust_decimal::Decimal::ZERO) += quantity.to_decimal();
-    caps.insert(line_id.to_string(), cap.to_decimal());
+    let entry = totals.entry(line_id.to_string()).or_insert(QuantityTotal { total: Decimal::ZERO, cap });
+    entry.total += quantity.to_decimal();
+    entry.cap = cap;
 }
 
 /// 查找最新库存余额依据。
@@ -496,25 +493,19 @@ fn find_assignment_group<'a>(
         .ok_or(SourcingPlanError::StaleFacts)
 }
 
-/// 判断任一累计数量是否缺少上限或超过上限。
+/// 判断任一累计数量是否超过其对应上限。
 ///
 /// # 参数
-/// * `totals` - 累计数量映射
-/// * `caps` - 上限映射
+/// * `totals` - 稳定身份到累计数量与上限的映射
 ///
 /// # 返回
-/// 任一累计数量缺少上限或超过上限时返回 `true`。
+/// 任一累计数量超过上限时返回 `true`。
 ///
 /// # 错误
 /// 无。
 ///
-/// # 关键业务约束
-/// 缺少上限视为失败关闭，不允许无上限放行。
-fn exceeds_any_cap(
-    totals: &HashMap<String, rust_decimal::Decimal>,
-    caps: &HashMap<String, rust_decimal::Decimal>,
-) -> bool {
-    totals.iter().any(|(key, total)| caps.get(key).is_none_or(|cap| total > cap))
+fn exceeds_any_cap(totals: &HashMap<String, QuantityTotal>) -> bool {
+    totals.values().any(|entry| entry.total > entry.cap)
 }
 
 /// 返回合法分配数量零值。

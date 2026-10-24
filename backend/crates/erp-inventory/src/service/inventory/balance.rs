@@ -71,14 +71,10 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
-                    let search = super::search::balance_filter(
-                        &db,
-                        search,
-                        query.balance_id.as_deref(),
-                        query.availability,
-                        executor,
-                    )
-                    .await?;
+                    let search = db
+                        .inventory()
+                        .balance_search(search, query.balance_id.as_deref(), query.availability, executor)
+                        .await?;
                     let (sort_by, sort_ascending) = query.paging.sort_selection();
                     let filter = StockBalanceFilter {
                         search,

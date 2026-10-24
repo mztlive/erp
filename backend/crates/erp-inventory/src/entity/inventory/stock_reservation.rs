@@ -15,7 +15,7 @@ use erp_core::ids::{
     StockReservationId, WarehouseId,
 };
 use erp_core::money::Quantity;
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::{normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -365,18 +365,17 @@ fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<St
             if data.purchase_line_sales_allocation_id.is_some() || data.source_receipt_line_id.is_some() {
                 return Err(Error::from("现有库存预占不得关联采购销售分配或入库行"));
             }
-            data.source_allocation_id
-                .clone()
-                .map(|value| {
-                    normalize_required_text(
-                        value,
-                        "现有库存分配身份不能为空",
-                        SOURCE_DOCUMENT_MAX_LEN,
-                        "现有库存分配身份过长",
-                    )
-                })
-                .transpose()?
-                .map_or_else(|| Err(Error::from("现有库存预占必须关联分配动作")), |value| Ok(Some(value)))
+            let source_allocation_id = data
+                .source_allocation_id
+                .as_deref()
+                .ok_or_else(|| Error::from("现有库存预占必须关联分配动作"))?;
+            normalize_required_text_ref(
+                source_allocation_id,
+                "现有库存分配身份不能为空",
+                SOURCE_DOCUMENT_MAX_LEN,
+                "现有库存分配身份过长",
+            )
+            .map(Some)
         },
     }
 }
@@ -543,6 +542,54 @@ mod tests {
             ..data()
         };
         assert!(StockReservation::new(StockReservationId::new("direct-2"), invalid).is_err());
+    }
+
+    /// 缺失、空白与超长分配身份保留各自错误；字符长度上限允许中文身份。
+    #[test]
+    fn existing_stock_identity_preserves_validation_boundaries() {
+        for (source_allocation_id, expected) in [
+            (None, "现有库存预占必须关联分配动作"),
+            (Some(" \t ".to_string()), "现有库存分配身份不能为空"),
+            (Some("中".repeat(257)), "现有库存分配身份过长"),
+        ] {
+            let invalid = StockReservationData {
+                source_type: StockReservationSourceType::ExistingStock,
+                purchase_line_sales_allocation_id: None,
+                source_receipt_line_id: None,
+                source_allocation_id,
+                ..data()
+            };
+            assert!(matches!(
+                StockReservation::new(StockReservationId::new("direct-invalid"), invalid),
+                Err(Error::LogicError(message)) if message == expected
+            ));
+        }
+        let identity = "中".repeat(256);
+        let valid = StockReservationData {
+            source_type: StockReservationSourceType::ExistingStock,
+            purchase_line_sales_allocation_id: None,
+            source_receipt_line_id: None,
+            source_allocation_id: Some(format!(" {identity} ")),
+            ..data()
+        };
+        let reservation = StockReservation::new(StockReservationId::new("direct-max"), valid).unwrap();
+        assert_eq!(reservation.source_allocation_id, Some(identity));
+    }
+
+    /// 同时存在采购引用与非法分配身份时，先报告来源互斥错误。
+    #[test]
+    fn existing_stock_source_checks_purchase_references_before_identity() {
+        for source_allocation_id in [None, Some(" ".to_string()), Some("x".repeat(257))] {
+            let invalid = StockReservationData {
+                source_type: StockReservationSourceType::ExistingStock,
+                source_allocation_id,
+                ..data()
+            };
+            assert!(matches!(
+                StockReservation::new(StockReservationId::new("direct-conflict"), invalid),
+                Err(Error::LogicError(message)) if message == "现有库存预占不得关联采购销售分配或入库行"
+            ));
+        }
     }
 
     /// 旧库存预占没有来源字段时必须按采购入库来源读取。

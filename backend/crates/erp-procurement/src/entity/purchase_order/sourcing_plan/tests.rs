@@ -723,6 +723,8 @@ fn plan_without_assignments_is_empty() {
     let plan = SourcingPlan::plan(&order, &[], &[], "wi-1", &assignments).expect("空计划必须成功");
     assert!(plan.purchase_plans().is_empty());
     assert!(plan.stock_plans().is_empty());
+    plan.validate_against_latest_stock(&[]).unwrap();
+    plan.validate_against_latest_sourcing(&[]).unwrap();
 }
 
 /// 最新余额重验接受恰好等于行剩余量与余额可用量的分配。
@@ -869,7 +871,7 @@ fn validate_against_latest_sourcing_rejects_line_excess() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 同一供给跨方案共享可用量，累计超量失败关闭。
+/// 同一供给跨方案累计，采用最后登记的可供量；未知可供量不设置供给上限。
 #[test]
 fn validate_against_latest_sourcing_shares_supply_cap_across_plans() {
     let order = sales_order("so-1");
@@ -896,7 +898,7 @@ fn validate_against_latest_sourcing_shares_supply_cap_across_plans() {
     .expect("合法集合必须成功");
     let plan = SourcingPlan::plan(&order, &[first, second], &[], "wi-1", &assignments).expect("计划必须成功");
 
-    let latest = [
+    let mut latest = [
         basis_group(
             "supplier-1",
             "NET-30",
@@ -912,8 +914,50 @@ fn validate_against_latest_sourcing_shares_supply_cap_across_plans() {
             &[("sol-2", "10", "0")],
         ),
     ];
-    let error = plan.validate_against_latest_sourcing(&latest).expect_err("同一供给跨方案累计超量必须失败");
-    assert_eq!(error, SourcingPlanError::StaleFacts);
+    for (first_cap, last_cap, accepted) in [
+        (Some("8"), Some("8"), false),
+        (Some("1"), Some("10"), true),
+        (Some("10"), Some("1"), false),
+        (Some("1"), None, true),
+        (None, Some("1"), false),
+    ] {
+        latest[0].lines[0].supply.availability.available_quantity =
+            first_cap.map(|value| Quantity::from_str(value).unwrap());
+        latest[1].lines[0].supply.availability.available_quantity =
+            last_cap.map(|value| Quantity::from_str(value).unwrap());
+        let result = plan.validate_against_latest_sourcing(&latest);
+        if accepted {
+            result.expect("合计未超过最后登记上限必须成功");
+        } else {
+            assert_eq!(result.unwrap_err(), SourcingPlanError::StaleFacts);
+        }
+    }
+}
+
+/// 上限统一复核之前仍先校验全部行的单位精度，保留首个错误分类。
+#[test]
+fn latest_sourcing_validates_unit_precision_before_total_limits() {
+    let order = sales_order("so-1");
+    let mut group = basis_group(
+        "supplier-1",
+        "NET-30",
+        FulfillmentResponsibility::SupplierDirect,
+        "10",
+        &[("sol-1", "10", "0"), ("sol-2", "10", "0")],
+    );
+    let basis_id = basis_id_for(&order, &group, "wi-1", None);
+    let assignments = SourcingAssignmentSet::normalize(&[
+        assignment("sol-1", &basis_id, SupplySourceType::Purchase, None, "5"),
+        assignment("sol-2", &basis_id, SupplySourceType::Purchase, None, "5"),
+    ])
+    .unwrap();
+    let plan = SourcingPlan::plan(&order, std::slice::from_ref(&group), &[], "wi-1", &assignments).unwrap();
+
+    group.lines[0].coverage.summary =
+        ProcurementCoverageSummary::new("4".parse().unwrap(), "0".parse().unwrap()).unwrap();
+    group.lines[1].coverage.quantity_scale = None;
+    let error = plan.validate_against_latest_sourcing(&[group]).unwrap_err();
+    assert!(matches!(error, SourcingPlanError::QuantityContract(_)));
 }
 
 /// 相同输入重复构造库存依据 ID 完全一致。

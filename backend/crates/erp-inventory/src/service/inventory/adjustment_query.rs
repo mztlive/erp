@@ -92,13 +92,10 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
-                    let search = super::search::adjustment_filter(
-                        &db,
-                        search,
-                        query.adjustment_id.as_deref(),
-                        executor,
-                    )
-                    .await?;
+                    let search = db
+                        .inventory()
+                        .adjustment_search(search, query.adjustment_id.as_deref(), executor)
+                        .await?;
                     let filter = adjustment_filter(query, &authorization, search, id_in);
                     let page = db.stock_adjustments().search_stock_adjustments(&filter, executor).await?;
                     let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();

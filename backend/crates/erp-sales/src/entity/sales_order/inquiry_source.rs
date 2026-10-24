@@ -520,21 +520,15 @@ impl InquirySalesLineBinding {
             row.delivery.quantity = zero_quantity();
         }
         for allocation in requested {
-            let matching = result
-                .iter_mut()
-                .filter(|binding| same_address(&binding.delivery, allocation))
-                .collect::<Vec<_>>();
-            if matching.len() != 1 {
+            let mut matching =
+                result.iter_mut().filter(|binding| same_address(&binding.delivery, allocation));
+            let (Some(binding), None) = (matching.next(), matching.next()) else {
                 return Err(invalid("询价来源收货地址已变化或身份不明确，请先重新询价"));
-            }
-            let binding = matching.into_iter().next().ok_or_else(|| invalid("询价来源地址不存在"))?;
+            };
             if !binding.delivery.quantity.to_decimal().is_zero() {
                 return Err(invalid("同一询价来源地址不得重复填写"));
             }
             binding.delivery.quantity = allocation.quantity;
-        }
-        if self.allocations.is_empty() && !requested.is_empty() {
-            return Err(invalid("询价来源交付范围已变化，请先重新询价"));
         }
         if !self.allocations.is_empty() && requested.is_empty() {
             return Err(invalid("询价来源商品必须保留收货地址"));
@@ -693,6 +687,71 @@ mod tests {
             assert!(source.reconciled(&source.customer_id, &[line]).is_err());
         }
     }
+
+    #[test]
+    fn address_reconciliation_retains_source_order_and_zeros_omitted_addresses() {
+        let mut source = source();
+        let mut second = source.lines[0].allocations[0].clone();
+        second.allocation_id = "second-address".into();
+        second.delivery.recipient = "李四".into();
+        source.lines[0].allocations.push(second.clone());
+        source.lines[0].quantity = "4".parse().unwrap();
+        let mut line = fact(&source);
+        line.quantity = Some("2".parse().unwrap());
+        line.delivery_allocations = vec![second.delivery];
+
+        let reconciled = source.reconciled(&source.customer_id, &[line]).unwrap();
+
+        assert_eq!(reconciled[0].allocations[0].allocation_id, "address");
+        assert_eq!(reconciled[0].allocations[0].delivery.quantity, zero_quantity());
+        assert_eq!(reconciled[0].allocations[1].allocation_id, "second-address");
+        assert_eq!(reconciled[0].allocations[1].delivery.quantity, "2".parse().unwrap());
+        assert_eq!(source.lines[0].allocations[0].delivery.quantity, "2".parse().unwrap());
+    }
+
+    #[test]
+    fn address_reconciliation_rejects_missing_ambiguous_or_repeated_addresses() {
+        let mut source = source();
+        let original = fact(&source);
+        let mut missing = original.clone();
+        missing.delivery_allocations[0].address = "其他地址".into();
+        assert!(matches!(
+            source.reconciled(&source.customer_id, &[missing]),
+            Err(Error::BusinessLogicError(message))
+                if message == "询价来源收货地址已变化或身份不明确，请先重新询价"
+        ));
+
+        let mut repeated = original.clone();
+        repeated.delivery_allocations.push(original.delivery_allocations[0].clone());
+        assert!(matches!(
+            source.reconciled(&source.customer_id, &[repeated]),
+            Err(Error::BusinessLogicError(message)) if message == "同一询价来源地址不得重复填写"
+        ));
+
+        let mut duplicate = source.lines[0].allocations[0].clone();
+        duplicate.allocation_id = "duplicate-address".into();
+        source.lines[0].allocations.push(duplicate);
+        assert!(matches!(
+            source.reconciled(&source.customer_id, &[original]),
+            Err(Error::BusinessLogicError(message))
+                if message == "询价来源收货地址已变化或身份不明确，请先重新询价"
+        ));
+    }
+
+    #[test]
+    fn address_reconciliation_handles_empty_delivery_scopes() {
+        let mut source = source();
+        let original = fact(&source);
+        source.lines[0].allocations.clear();
+        assert!(matches!(
+            source.reconciled(&source.customer_id, &[original]),
+            Err(Error::BusinessLogicError(message))
+                if message == "询价来源收货地址已变化或身份不明确，请先重新询价"
+        ));
+        let reconciled = source.reconciled(&source.customer_id, &[fact(&source)]).unwrap();
+        assert!(reconciled[0].allocations.is_empty());
+    }
+
     #[test]
     fn price_scope_ignores_legacy_expiry_but_checks_quantity_and_demand_addresses() {
         let demand: InquiryRequirementLine = serde_json::from_value(serde_json::json!({

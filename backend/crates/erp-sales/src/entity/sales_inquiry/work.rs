@@ -67,7 +67,7 @@ impl SalesInquiry {
         let mut fee_ids = HashSet::new();
         for (actor, lines) in responsibilities {
             let expected: HashSet<_> = lines.iter().collect();
-            if expected.len() != lines.len() || lines.iter().any(|id| !covered.insert(id.clone())) {
+            if expected.len() != lines.len() || lines.iter().any(|id| !covered.insert(id.as_str())) {
                 return Err(Error::BusinessLogicError("当前采购责任行重复".into()));
             }
             let work = self
@@ -87,7 +87,7 @@ impl SalesInquiry {
                 return Err(Error::BusinessLogicError("采购工作尚未覆盖全部责任需求".into()));
             }
             for fee in &work.data.fees {
-                if !fee_ids.insert(fee.fee_id.clone()) || fee.line_ids.iter().any(|id| !lines.contains(id)) {
+                if !fee_ids.insert(fee.fee_id.as_str()) || fee.line_ids.iter().any(|id| !lines.contains(id)) {
                     return Err(Error::BusinessLogicError("费用重复或超出当前采购责任".into()));
                 }
                 if fee.line_ids.is_empty() && self.shared_fee_owner_user_id.as_deref() != Some(actor.as_str())
@@ -95,8 +95,8 @@ impl SalesInquiry {
                     return Err(Error::BusinessLogicError("整单费用必须由明确指定的费用责任采购维护".into()));
                 }
             }
-            result.lines.extend(work.data.lines.clone());
-            result.fees.extend(work.data.fees.clone());
+            result.lines.extend_from_slice(&work.data.lines);
+            result.fees.extend_from_slice(&work.data.fees);
         }
         if covered
             != self
@@ -104,7 +104,7 @@ impl SalesInquiry {
                 .data
                 .lines
                 .iter()
-                .map(|line| line.line_id.clone())
+                .map(|line| line.line_id.as_str())
                 .collect::<HashSet<_>>()
         {
             return Err(Error::BusinessLogicError("尚有需求未分派当前责任采购".into()));

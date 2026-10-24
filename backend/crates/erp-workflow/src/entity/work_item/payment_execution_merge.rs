@@ -148,19 +148,13 @@ impl PaymentExecutionMergeSet {
         if allocation_account_ids.is_empty() {
             return Err(Error::from("至少提供一条核销分配"));
         }
-        let allowed: HashSet<&str> =
-            self.members.iter().map(|member| member.payable_account_id.as_str()).collect();
-        for account_id in allocation_account_ids {
-            if !allowed.contains(account_id.as_str()) {
-                return Err(Error::from(self.out_of_scope_message()));
-            }
-        }
         let mut covered: HashMap<&str, bool> =
             self.members.iter().map(|member| (member.payable_account_id.as_str(), false)).collect();
         for account_id in allocation_account_ids {
-            if let Some(flag) = covered.get_mut(account_id.as_str()) {
-                *flag = true;
-            }
+            let flag = covered
+                .get_mut(account_id.as_str())
+                .ok_or_else(|| Error::from(self.out_of_scope_message()))?;
+            *flag = true;
         }
         if covered.values().any(|covered| !*covered) {
             return Err(Error::from(self.uncovered_member_message()));
@@ -290,5 +284,28 @@ mod tests {
             set.ensure_allocations_in_scope(&["pa-1".to_string(), "pa-3".to_string()]).unwrap_err();
         assert!(outsider.to_string().contains("一次付款只能核销已勾选付款任务对应应付中的分录"));
         assert!(set.ensure_allocations_in_scope(&[]).is_err());
+    }
+
+    #[test]
+    fn repeated_allocations_are_allowed_but_do_not_cover_other_members() {
+        let set = PaymentExecutionMergeSet::try_new(vec![
+            member("wi-1", "pa-1", "sup-1"),
+            member("wi-2", "pa-2", "sup-1"),
+        ])
+        .unwrap();
+        set.ensure_allocations_in_scope(&["pa-1".into(), "pa-2".into(), "pa-1".into()]).unwrap();
+        let error = set.ensure_allocations_in_scope(&["pa-1".into(), "pa-1".into()]).unwrap_err();
+        assert_eq!(error.to_string(), "合并付款必须为每条已勾选任务分配付款金额");
+    }
+
+    #[test]
+    fn foreign_allocation_takes_precedence_over_missing_member() {
+        let set = PaymentExecutionMergeSet::try_new(vec![
+            member("wi-1", "pa-1", "sup-1"),
+            member("wi-2", "pa-2", "sup-1"),
+        ])
+        .unwrap();
+        let error = set.ensure_allocations_in_scope(&["pa-1".into(), "pa-3".into()]).unwrap_err();
+        assert_eq!(error.to_string(), "一次付款只能核销已勾选付款任务对应应付中的分录");
     }
 }

@@ -853,6 +853,48 @@ fn two_line_accepted_inquiry() -> (SalesInquiry, InquiryFeedbackData) {
     (inquiry, complete)
 }
 
+#[test]
+fn feedback_work_merge_preserves_responsibility_order_and_rejects_duplicate_sources() {
+    let (mut inquiry, complete) = two_line_accepted_inquiry();
+    for (index, actor) in ["buyer1", "buyer2"].into_iter().enumerate() {
+        inquiry.feedback_work.push(InquiryFeedbackWork {
+            requirement_version: inquiry.requirement_version,
+            actor_id: actor.into(),
+            line_ids: vec![complete.lines[index].line_id.clone()],
+            data: InquiryFeedbackData {
+                lines: vec![complete.lines[index].clone()],
+                fees: vec![complete.fees[index].clone()],
+            },
+            saved_at: now(),
+            frozen: false,
+        });
+    }
+    let responsibilities = [("buyer2".into(), vec!["line-b".into()]), ("buyer1".into(), vec!["line".into()])];
+    let merged = inquiry.merge_feedback_work(&responsibilities).unwrap();
+    assert_eq!(merged.lines, vec![complete.lines[1].clone(), complete.lines[0].clone()]);
+    assert_eq!(merged.fees, vec![complete.fees[1].clone(), complete.fees[0].clone()]);
+    assert_eq!(inquiry.feedback_work[0].data.lines, vec![complete.lines[0].clone()]);
+
+    for duplicate in [
+        vec![("buyer1".into(), vec!["line".into(), "line".into()])],
+        vec![("buyer1".into(), vec!["line".into()]), ("buyer2".into(), vec!["line".into()])],
+    ] {
+        assert!(matches!(
+            inquiry.merge_feedback_work(&duplicate),
+            Err(Error::BusinessLogicError(message)) if message == "当前采购责任行重复"
+        ));
+    }
+    assert!(matches!(
+        inquiry.merge_feedback_work(&[("buyer1".into(), vec!["line".into()])]),
+        Err(Error::BusinessLogicError(message)) if message == "尚有需求未分派当前责任采购"
+    ));
+    inquiry.feedback_work[1].data.fees[0].fee_id = "fee".into();
+    assert!(matches!(
+        inquiry.merge_feedback_work(&responsibilities),
+        Err(Error::BusinessLogicError(message)) if message == "费用重复或超出当前采购责任"
+    ));
+}
+
 fn selected_b(quantity: &str) -> Vec<InquiryQuantitySelection> {
     vec![InquiryQuantitySelection {
         line_id: "line-b".into(),
