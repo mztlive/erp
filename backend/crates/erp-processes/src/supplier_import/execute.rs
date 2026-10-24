@@ -1,7 +1,9 @@
 //! 有界认领、逐行幂等执行与进度原子更新。
+use std::sync::Arc;
 use std::time::Duration;
 
 use application_core::AuditActor;
+use async_trait::async_trait;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult};
@@ -11,10 +13,14 @@ use erp_support::{BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkJobExt,
 use persistence_core::{NoTransaction, Transactional};
 
 use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
+use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, ImportBudget};
 use crate::{Error, Result, SupplierProfileService};
 
+mod rows;
+use rows::{SupplierRowExecution, execute_rows};
+
 impl SupplierImportProcess {
-    /// 处理至多四个未完成任务，恢复超过两分钟未推进的任务。
+    /// 每轮至多处理四个任务，每任务至多十行或一秒软时限；恢复两分钟未推进的任务。
     ///
     /// # 参数
     /// 无。
@@ -28,8 +34,9 @@ impl SupplierImportProcess {
         let jobs = self
             .db
             .background_jobs()
-            .list_open_by_domain_job_type(SUPPLIER_IMPORT_DOMAIN, 4, &mut NoTransaction)
+            .list_open_by_domain_job_type(SUPPLIER_IMPORT_DOMAIN, IMPORT_JOBS_PER_POLL, &mut NoTransaction)
             .await?;
+        self.sources.retain_jobs(&jobs).await;
         let count = jobs.len();
         for mut job in jobs {
             if let Err(error) = self.execute(&mut job).await {
@@ -52,19 +59,38 @@ impl SupplierImportProcess {
         }
         job.last_progress_at = Some(Instant::now());
         self.db.background_jobs().update(job, &mut NoTransaction).await?;
-        let request = match tokio::time::timeout(Duration::from_secs(60), self.source(job)).await {
-            Ok(Ok(request)) => request,
+        let request = match self.execution_source(job).await {
+            Ok(request) => request,
             _ => {
                 job.mark_failed(Some("导入源文件读取失败，请使用原文件重新提交核对".into()), Instant::now())?;
                 self.db.background_jobs().update(job, &mut NoTransaction).await?;
                 return Ok(());
             },
         };
-        self.execute_rows(job, request).await
+        let result = self.execute_rows(job, &request).await;
+        if job.finished_at.is_some() {
+            self.sources.remove(&job.base.id).await;
+        }
+        result
+    }
+
+    /// 仅缓存已完成解密、指纹与任务绑定校验的输入，读取超时仍按原合同失败。
+    async fn execution_source(&self, job: &BackgroundJob) -> Result<Arc<SupplierImportJobRequest>> {
+        self.sources
+            .get_or_load(job, || async {
+                let request = tokio::time::timeout(Duration::from_secs(60), self.source(job))
+                    .await
+                    .map_err(|_| Error::Internal("读取供应商导入源文件超时".into()))??;
+                let bytes = serde_json::to_vec(&request)
+                    .map_err(|_| Error::Internal("导入内容编码失败".into()))?
+                    .len();
+                Ok((request, bytes))
+            })
+            .await
     }
 
     /// 每行最多执行一分钟；异常结果单独标识为待核对，其余行继续处理。
-    async fn execute_rows(&self, job: &mut BackgroundJob, request: SupplierImportJobRequest) -> Result<()> {
+    async fn execute_rows(&self, job: &mut BackgroundJob, request: &SupplierImportJobRequest) -> Result<()> {
         let items = self
             .db
             .background_job_items()
@@ -73,23 +99,8 @@ impl SupplierImportProcess {
         let service =
             SupplierProfileService::new(self.db.clone(), self.codec.clone()).with_rbac(self.rbac.clone());
         let actor = AuditActor::new(job.requested_by.clone(), job.requested_by.clone(), AccountKind::Admin);
-        for mut item in items.into_iter().filter(|item| item.status.is_none()) {
-            if !self.renew(job).await? {
-                return Ok(());
-            }
-            let outcome = self.import_item(&service, &actor, &request, &item).await;
-            record(&mut item, outcome)?;
-            let status = item.status.expect("record always sets status");
-            job.record_import_result_batch(
-                u64::from(status == ItemStatus::Success),
-                u64::from(status == ItemStatus::Skipped),
-                u64::from(status == ItemStatus::Failed),
-                job.processed_count + 1 == job.total_count,
-                Instant::now(),
-            )?;
-            self.persist_progress(job, item).await?;
-        }
-        Ok(())
+        let mut execution = SupplierRows { process: self, service: &service, actor: &actor, request };
+        execute_rows(&mut execution, job, items, ImportBudget::new()).await
     }
 
     /// 逐行开始前重验任务版本和取消状态，再续期认领。
@@ -183,6 +194,29 @@ impl SupplierImportProcess {
         let (proposed, _) = super::submit::build_job(&request, &job.requested_by, source)?;
         super::submit::ensure_replay(job, &proposed)?;
         Ok(request)
+    }
+}
+
+/// 本轮导入依赖；实际业务写入和进度事务沿用既有实现。
+struct SupplierRows<'a> {
+    process: &'a SupplierImportProcess,
+    service: &'a SupplierProfileService,
+    actor: &'a AuditActor,
+    request: &'a SupplierImportJobRequest,
+}
+
+#[async_trait]
+impl SupplierRowExecution for SupplierRows<'_> {
+    async fn renew(&mut self, job: &mut BackgroundJob) -> Result<bool> {
+        self.process.renew(job).await
+    }
+
+    async fn import(&mut self, item: &BackgroundJobItem) -> Option<SupplierImportResult> {
+        self.process.import_item(self.service, self.actor, self.request, item).await
+    }
+
+    async fn persist(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<()> {
+        self.process.persist_progress(job, item).await
     }
 }
 

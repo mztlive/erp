@@ -1,32 +1,28 @@
 use application_core::AuditActor;
-use bpm::engine::{DefinitionGraph, TaskIntent};
-use bpm::ids::ApprovalProcessInstanceId;
+use bpm::engine::DefinitionGraph;
 use bpm::model::SubjectRef;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
-use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_identity::SharedRbacService;
 use erp_returns::entity::returns::SupplierRefund;
-use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
-use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
-use id_generator::next_id;
+use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::super::adapter::supplier_refund_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
-use super::mapping::list_projection_from_execution;
 use super::prepare::load_start_receipt_for_document_type;
-use crate::adapters::workflow::approver_directory::revalidate_approvers;
-use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
+use crate::approval_start::{
+    StartTaskContext, persist_start_runtime, persist_start_snapshot, persist_start_tasks,
+};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -316,29 +312,16 @@ pub async fn persist_supplier_refund_runtime(
     now: Instant,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let first = writes
-        .created_executions
-        .first()
-        .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交供应商退款".to_string()))?;
-    revalidate_approvers(db, writes, executor).await?;
-    db.bpm_workflow()
-        .create_bpm_runtime_after_receipt(
-            &writes.instance,
-            &writes.created_assignees,
-            first,
-            &list_projection_from_execution(first, now),
-            executor,
-        )
-        .await?;
-    let mut snapshot = ApprovalSubjectSnapshot::new(
-        ApprovalSubjectSnapshotId::new(next_id()),
-        ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
+    let mut snapshot = persist_start_runtime(
+        db,
+        writes,
         DocumentType::SupplierRefund,
-        writes.instance.subject.subject_id(),
-        writes.instance.subject_version,
-        snapshot_payload.clone(),
+        snapshot_payload,
+        now,
+        "启动计划缺少入口执行，不得提交供应商退款",
+        executor,
     )
-    .map_err(|error| Error::ValidationError(error.to_string()))?;
+    .await?;
     snapshot.display = Some(
         erp_read_models::workbench::capture_approval_display(
             db,
@@ -348,43 +331,13 @@ pub async fn persist_supplier_refund_runtime(
         )
         .await?,
     );
-    let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    persist_approval_snapshot(db, &snapshot, executor).await?;
-    persist_supplier_refund_open_tasks(db, writes, owner_role, organization_id, now, executor).await
-}
-
-/// 将供应商退款 `HumanTaskRequested` 映射为 `DOCUMENT_APPROVAL` 任务并写入。
-///
-/// # 错误
-/// 责任人为空或仓储失败时返回错误。
-async fn persist_supplier_refund_open_tasks(
-    db: &Database,
-    writes: &PlannedWrites,
-    owner_role: &str,
-    organization_id: &str,
-    now: Instant,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
-            continue;
-        };
-        let item = WorkItem::new_document_approval(
-            WorkItemId::new(next_id()),
-            DocumentApprovalWorkItemData {
-                approval_node_execution_id: execution_id.clone(),
-                business_object_type: DocumentType::SupplierRefund.as_str().to_string(),
-                business_object_id: writes.instance.subject.subject_id().to_string(),
-                subject_version: writes.instance.subject_version.to_string(),
-                owner_role: owner_role.to_string(),
-                owner_organization_id: organization_id.to_string(),
-                owner_user_id: assignee.as_str().to_string(),
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-            },
-            now,
-        )?;
-        db.work_items().create(&item, executor).await?;
-    }
-    Ok(())
+    persist_start_snapshot(db, snapshot, executor).await?;
+    persist_start_tasks(
+        db,
+        writes,
+        StartTaskContext { document_type: DocumentType::SupplierRefund, owner_role, organization_id, now },
+        executor,
+    )
+    .await
+    .map(|_| ())
 }

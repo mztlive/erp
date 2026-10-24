@@ -6,11 +6,12 @@ use erp_inventory::{
     SubmitStockAdjustmentRequest,
 };
 use erp_workflow::entity::approval_integration::ApprovalNotificationEventKind;
+use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::service::approval::execution::idempotency::{ReceiptBranch, legacy_payload_digest};
 
 use super::mapping::{
-    is_supported_start_receipt_identity, list_projection_from_execution, stock_adjustment_start_digest,
-    stock_adjustment_start_identity, stock_adjustment_start_scopes,
+    is_supported_start_receipt_identity, stock_adjustment_start_digest, stock_adjustment_start_identity,
+    stock_adjustment_start_scopes,
 };
 use super::persist::validate_start_notification_identities;
 
@@ -61,7 +62,8 @@ fn submit_request() -> SubmitStockAdjustmentRequest {
 /// 列表投影必须来自入口执行，不得推断未知审批人。
 #[test]
 fn list_projection_copies_entry_assignee() {
-    let projection = list_projection_from_execution(&execution(), Instant::from_unix_secs(10));
+    let projection =
+        ApprovalInstanceListProjection::from_entry_execution(&execution(), Instant::from_unix_secs(10));
     assert_eq!(projection.current_node_key.as_deref(), Some("n1"));
     assert_eq!(projection.current_assignee_participant_id.as_deref(), Some("u1"));
     assert_eq!(projection.current_assignee_name.as_deref(), Some("张三"));

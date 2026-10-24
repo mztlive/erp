@@ -1,6 +1,7 @@
 //! 询价需求、已发布反馈、销售接受及跨版本来源余额。
 
 mod demand;
+mod fee_terms;
 mod feedback;
 mod ledger;
 mod lifecycle;

@@ -36,12 +36,16 @@
 2. 业务事实和权限政策仍由拥有领域维护；本 crate 负责聚合与展示，不执行正式业务命令。
 3. 通过拥有领域 Repository 和窄合同取数；不得绕过其集合边界或复制事实写入规则。
 4. 调整列表或统计时保持同一授权范围，验证过滤、排序、分页、总数和明细口径一致。
+5. 库存调整详情的授权、单据、明细、流水、审批绑定、精确实例与人员身份读取必须沿用同一 Executor；独立详情入口在核心快照成功后补齐可降级的姓名和 SKU 展示名称。原命令结果必须按收据实例及主题版本读取，禁止回落到最新实例。
+6. 商品与供给聚合由 `catalog_supply` 提供。Process 只负责消费方 Port 装配及当日投影追平；必须先读取配送和勾选交集，空交集直接返回，不执行投影写入。ReadModel 不追平或修改投影。
 
 ## 代码入口
 
 | 入口 | 用途 |
 | --- | --- |
 | [src/lib.rs](src/lib.rs) | 中心页与工作台公开模块 |
+| [src/catalog_supply/mod.rs](src/catalog_supply/mod.rs) | 商品、供给与实时可售资格的跨域聚合仓储 |
+| [src/inventory_center/mod.rs](src/inventory_center/mod.rs) | 库存调整详情、actor-aware 审批动作与精确实例投影 |
 | [src/workbench/mod.rs](src/workbench/mod.rs) | WorkbenchReadService 与工作项视图 |
 | [src/customer_center/service.rs](src/customer_center/service.rs) | 客户最近合同、销售单及应收汇总 |
 | [src/customer_center/repository/related.rs](src/customer_center/repository/related.rs) | 客户合同与销售单摘要的聚合查询 |

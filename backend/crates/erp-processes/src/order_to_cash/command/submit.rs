@@ -1,4 +1,5 @@
 use application_core::{AuditActor, CommandFingerprint};
+use bpm::model::SubjectRef;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
@@ -15,9 +16,10 @@ use erp_sales::service::sales_order::command::identity::{
     sales_submission_audit_id, sales_submission_fingerprint,
 };
 use erp_sales::service::sales_order::mapper::{build_submission, build_submission_lines, submission_view};
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
-use erp_workflow::service::approval::execution::{command_recovery_delay, prepare_start};
+use erp_workflow::service::approval::execution::{PreparedExecution, command_recovery_delay, prepare_start};
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
 use mongodb::Database;
@@ -26,12 +28,13 @@ use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
 use super::super::adapter::{
-    RECENT_HISTORY_LIMIT, SalesOrderStartCommand, build_sales_order_snapshot,
+    RECENT_HISTORY_LIMIT, SalesApprovalPorts, SalesOrderStartCommand, build_sales_order_snapshot,
     execute_sales_order_domain_action, reject_legacy_card_sales_decision, reject_legacy_card_sales_work_item,
     require_frozen_binding, sales_approval_ports, sales_order_object_readable,
     sales_order_responsible_org_id, sales_order_start_command, start_approval_command_kind,
 };
 use super::super::adapters::catalog::CatalogQualificationAdapter;
+use super::super::authorization::SalesCommandAccess;
 use super::super::start_approval::{
     ReplaySalesOrderStartInput, SalesOrderStartInput, SalesOrderStartPersistInput,
     SalesOrderWorkingCopyPersistPlan, build_sales_order_start_input, load_bound_definition_graph,
@@ -94,6 +97,24 @@ struct ApprovalSubmissionStart<'a> {
     copy_lines: Vec<SalesOrderWorkingCopyLine>,
     /// 草稿替换与补开副本的事务写入计划。
     working_copy_plan: SalesOrderWorkingCopyPersistPlan,
+}
+
+/// 提交阶段确定的授权、定义、快照和运行时间；不执行写入。
+struct SalesSubmissionApprovalContext {
+    access: SalesCommandAccess,
+    expected_order_version: u64,
+    ports: SalesApprovalPorts,
+    subject: SubjectRef,
+    binding: ApprovalDefinitionBinding,
+    now: Instant,
+    snapshot: ApprovalSubjectSnapshotPayload,
+    organization_id: String,
+}
+
+struct PreparedSalesSubmission {
+    access: SalesCommandAccess,
+    expected_order_version: u64,
+    input: SalesOrderStartPersistInput,
 }
 
 /// 禁止回退 `CARD_SALES_APPROVAL` 或卡券专用工作项。
@@ -285,124 +306,18 @@ impl SalesOrderCommandProcess {
         audit_id: String,
         fingerprint: String,
     ) -> Result<SubmissionView> {
-        let ApprovalSubmissionStart {
-            id,
-            mut order,
-            working_copy,
-            submission,
-            submission_lines,
-            copy_lines,
-            working_copy_plan,
-        } = start;
-        let access = self.command_access(actor, "submit")?;
-        let expected_order_version = order.base.version;
-        let ports = sales_approval_ports(order.business_type)?;
-        let subject = crate::order_to_cash::subject_ref_for_sales_business(order.business_type, id)
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
-        let binding = require_frozen_binding(binding.as_ref())?.clone();
-        execute_sales_order_domain_action(&mut order, ports.on_approval_start, actor.id())?;
-        let now = Instant::now();
-        let snapshot = build_sales_order_snapshot(&order, &submission, &submission_lines, actor.id(), now)?;
-        let start = sales_order_start_command(
-            ports.document_type,
-            id,
-            submission.submission_no,
-            actor.id(),
-            idempotency_key,
-        );
-        ensure_unified_start_command(&start)?;
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
-        let organization_id = sales_order_responsible_org_id(&order)?;
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt = load_start_receipt(
-            &self.db,
-            ports.document_type,
-            &subject,
-            submission.submission_no,
-            idempotency_key,
-        )
-        .await?;
-        let graph = resolve_start_approvers(
-            &self.db,
-            graph,
-            actor.id(),
-            existing_receipt.as_ref(),
-            &mut NoTransaction,
-        )
-        .await?;
-        let start_input = build_sales_order_start_input(SalesOrderStartInput {
-            graph,
-            binding: &binding,
-            document_type: ports.document_type,
-            subject,
-            subject_version: submission.submission_no,
-            actor_id: actor.id(),
-            organization_id: &organization_id,
-            idempotency_key,
-            receipt: existing_receipt,
-            now,
-        })?;
-        let prepared = prepare_start(start_input)?;
-        let workflow_action = WorkflowAction::new(
-            WorkflowActionId::new(next_id()),
-            WorkflowActionData {
-                document_id: BusinessDocumentId::new(id.to_string()),
-                action_type: WorkflowActionType::Submit,
-                from_status: "DRAFT".to_string(),
-                to_status: "PENDING_REVIEW".to_string(),
-                actor_id: actor.id().to_string(),
-                actor_role: "role-sales".to_string(),
-                comment: None,
-            },
-        )?;
-        let audit = submission_event(
-            audit_id.clone(),
-            actor,
-            idempotency_key,
-            fingerprint.clone(),
-            &order,
-            &submission,
-        )?;
-        let sellable_refs = SalesOrderService::sellable_working_copy_refs(&copy_lines)?;
-        SalesOrderService::new(self.db.clone())
-            .ensure_sellable_refs(
-                &sellable_refs,
-                &CatalogQualificationAdapter::new(self.db.clone()),
-                &mut NoTransaction,
-            )
-            .await?;
-        let recovery_subject_version = submission.submission_no;
-        let persisted = persist_sales_order_start(
-            &self.db,
-            access,
-            expected_order_version,
-            SalesOrderStartPersistInput {
-                order,
-                working_copy,
-                submission,
-                submission_lines,
-                workflow_action,
-                document_type: ports.document_type,
-                snapshot_payload: snapshot,
-                prepared,
-                owner_role: ports.owner_role,
-                organization_id,
-                now,
-                audit,
-                working_copy_plan,
-                sellable_refs,
-            },
-        )
-        .await;
-        match persisted {
+        let id = start.id;
+        let PreparedSalesSubmission { access, expected_order_version, input } =
+            self.prepare_sales_submission(start, actor, idempotency_key, &audit_id, &fingerprint).await?;
+        let document_type = input.document_type;
+        let subject_version = input.submission.submission_no;
+        match persist_sales_order_start(&self.db, access, expected_order_version, input).await {
             Ok(view) => Ok(view),
             Err(error) if error.command_may_have_committed() => {
                 self.recover_sales_submission_start(RecoverSalesSubmissionStartInput {
                     sales_order_id: id,
-                    document_type: ports.document_type,
-                    subject_version: recovery_subject_version,
+                    document_type,
+                    subject_version,
                     idempotency_key,
                     actor,
                     audit_id: &audit_id,
@@ -413,6 +328,138 @@ impl SalesOrderCommandProcess {
             },
             Err(error) => Err(error),
         }
+    }
+
+    /// 按既有顺序准备领域状态、审批输入、审计和商品引用，不在此开启事务。
+    async fn prepare_sales_submission(
+        &self,
+        mut start: ApprovalSubmissionStart<'_>,
+        actor: &AuditActor,
+        idempotency_key: &str,
+        audit_id: &str,
+        fingerprint: &str,
+    ) -> Result<PreparedSalesSubmission> {
+        let context = self.prepare_submission_domain(&mut start, actor, idempotency_key).await?;
+        let prepared = self.prepare_submission_runtime(&start, &context, actor, idempotency_key).await?;
+        let workflow_action = submission_workflow_action(start.id, actor)?;
+        let audit = submission_event(
+            audit_id.to_string(),
+            actor,
+            idempotency_key,
+            fingerprint.to_string(),
+            &start.order,
+            &start.submission,
+        )?;
+        let sellable_refs = SalesOrderService::sellable_working_copy_refs(&start.copy_lines)?;
+        SalesOrderService::new(self.db.clone())
+            .ensure_sellable_refs(
+                &sellable_refs,
+                &CatalogQualificationAdapter::new(self.db.clone()),
+                &mut NoTransaction,
+            )
+            .await?;
+        Ok(PreparedSalesSubmission {
+            access: context.access,
+            expected_order_version: context.expected_order_version,
+            input: SalesOrderStartPersistInput {
+                order: start.order,
+                working_copy: start.working_copy,
+                submission: start.submission,
+                submission_lines: start.submission_lines,
+                workflow_action,
+                document_type: context.ports.document_type,
+                snapshot_payload: context.snapshot,
+                prepared,
+                owner_role: context.ports.owner_role,
+                organization_id: context.organization_id,
+                now: context.now,
+                audit,
+                working_copy_plan: start.working_copy_plan,
+                sellable_refs,
+            },
+        })
+    }
+
+    /// 保持授权、绑定、状态迁移、快照和责任组织的首错顺序。
+    async fn prepare_submission_domain(
+        &self,
+        start: &mut ApprovalSubmissionStart<'_>,
+        actor: &AuditActor,
+        idempotency_key: &str,
+    ) -> Result<SalesSubmissionApprovalContext> {
+        let access = self.command_access(actor, "submit")?;
+        let expected_order_version = start.order.base.version;
+        let ports = sales_approval_ports(start.order.business_type)?;
+        let subject =
+            crate::order_to_cash::subject_ref_for_sales_business(start.order.business_type, start.id)
+                .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let binding =
+            find_approval_binding(&self.db, start.id, &mut NoTransaction).await.map_err(Error::from)?;
+        let binding = require_frozen_binding(binding.as_ref())?.clone();
+        execute_sales_order_domain_action(&mut start.order, ports.on_approval_start, actor.id())?;
+        let now = Instant::now();
+        let snapshot = build_sales_order_snapshot(
+            &start.order,
+            &start.submission,
+            &start.submission_lines,
+            actor.id(),
+            now,
+        )?;
+        let command = sales_order_start_command(
+            ports.document_type,
+            start.id,
+            start.submission.submission_no,
+            actor.id(),
+            idempotency_key,
+        );
+        ensure_unified_start_command(&command)?;
+        let _ = (start_approval_command_kind(&command), RECENT_HISTORY_LIMIT);
+        let organization_id = sales_order_responsible_org_id(&start.order)?;
+        Ok(SalesSubmissionApprovalContext {
+            access,
+            expected_order_version,
+            ports,
+            subject,
+            binding,
+            now,
+            snapshot,
+            organization_id,
+        })
+    }
+
+    /// 从绑定定义和原收据解析人员后生成启动计划；重放语义继续由审批引擎负责。
+    async fn prepare_submission_runtime(
+        &self,
+        start: &ApprovalSubmissionStart<'_>,
+        context: &SalesSubmissionApprovalContext,
+        actor: &AuditActor,
+        idempotency_key: &str,
+    ) -> Result<PreparedExecution> {
+        let graph = load_bound_definition_graph(&self.db, &context.binding).await?;
+        let receipt = load_start_receipt(
+            &self.db,
+            context.ports.document_type,
+            &context.subject,
+            start.submission.submission_no,
+            idempotency_key,
+        )
+        .await?;
+        let graph =
+            resolve_start_approvers(&self.db, graph, actor.id(), receipt.as_ref(), &mut NoTransaction)
+                .await?;
+        let input = build_sales_order_start_input(SalesOrderStartInput {
+            graph,
+            binding: &context.binding,
+            document_type: context.ports.document_type,
+            subject: context.subject.clone(),
+            subject_version: start.submission.submission_no,
+            actor_id: actor.id(),
+            organization_id: &context.organization_id,
+            idempotency_key,
+            receipt,
+            now: context.now,
+        })?;
+        prepare_start(input).map_err(Error::from)
     }
 
     /// 从独立回执恢复原提交快照及行，再重验当前提交访问资格。
@@ -570,4 +617,20 @@ fn submission_event(
         },
         order.order_no.clone(),
     )
+}
+
+/// 创建与本次提交同事务保存的状态变更记录。
+fn submission_workflow_action(id: &str, actor: &AuditActor) -> Result<WorkflowAction> {
+    Ok(WorkflowAction::new(
+        WorkflowActionId::new(next_id()),
+        WorkflowActionData {
+            document_id: BusinessDocumentId::new(id.to_string()),
+            action_type: WorkflowActionType::Submit,
+            from_status: "DRAFT".to_string(),
+            to_status: "PENDING_REVIEW".to_string(),
+            actor_id: actor.id().to_string(),
+            actor_role: "role-sales".to_string(),
+            comment: None,
+        },
+    )?)
 }

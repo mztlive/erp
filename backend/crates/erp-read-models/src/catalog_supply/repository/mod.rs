@@ -5,7 +5,7 @@ mod sellable;
 mod sellable_search;
 mod shared;
 
-pub(super) struct CatalogSupplyRepository<'a> {
+pub struct CatalogSupplyRepository<'a> {
     db: &'a mongodb::Database,
 }
 impl<'a> CatalogSupplyRepository<'a> {
@@ -19,7 +19,7 @@ impl<'a> CatalogSupplyRepository<'a> {
     ///
     /// # 错误
     /// 不返回错误。
-    pub(super) fn new(db: &'a mongodb::Database) -> Self {
+    pub fn new(db: &'a mongodb::Database) -> Self {
         Self { db }
     }
 }

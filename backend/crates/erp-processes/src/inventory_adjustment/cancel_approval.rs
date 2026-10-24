@@ -8,6 +8,7 @@ use application_core::AuditActor;
 use bpm::model::IdempotencyKey;
 use erp_core::common::time::Instant;
 use erp_inventory::{CancelStockAdjustmentApprovalRequest, StockAdjustment, StockAdjustmentView};
+use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{PreparedExecution, prepare_document_cancel};
@@ -18,18 +19,16 @@ use super::InventoryAdjustmentService;
 use super::adapter::{
     execute_stock_adjustment_domain_action, require_frozen_binding, stock_adjustment_adapter,
 };
-use super::approval_query::load_approval_binding;
 #[allow(unused_imports)]
 pub(crate) use super::cancel_persist::{
     StockAdjustmentCancelPersistInput, cancel_stock_adjustment_approval_apply,
     persist_stock_adjustment_cancel,
 };
 pub(crate) use super::cancel_runtime::{
-    LoadedCancelRuntime, actor_can_cancel, build_stock_adjustment_cancel_input, committed_cancel_replay,
+    LoadedCancelRuntime, build_stock_adjustment_cancel_input, committed_cancel_replay,
     ensure_cancel_authorized, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
-    ensure_cancel_runtime_versions, ensure_expected_version, ensure_stock_adjustment_open_task_identity,
-    load_cancel_instance, load_cancel_runtime, normalize_cancel_reason,
-    normalize_document_cancel_notification, recover_cancel_replay,
+    ensure_cancel_runtime_versions, ensure_expected_version, load_cancel_instance, load_cancel_runtime,
+    normalize_cancel_reason, normalize_document_cancel_notification, recover_cancel_replay,
 };
 use crate::{Error, Result};
 

@@ -43,6 +43,8 @@ pub mod import_center;
 pub mod integration_center;
 
 pub mod catalog_center;
+pub mod catalog_supply;
+pub mod inventory_center;
 pub mod ports;
 
 #[cfg(test)]

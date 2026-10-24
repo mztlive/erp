@@ -1,0 +1,17 @@
+{
+  "packages": [
+    {
+      "name": "erp-contract-recognition",
+      "deps": [
+        {
+          "name": "erp-processes",
+          "kind": "normal"
+        }
+      ]
+    },
+    {
+      "name": "erp-processes",
+      "deps": []
+    }
+  ]
+}

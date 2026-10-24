@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use application_core::{AuditActor, CommandIdentity};
 use erp_core::common::time::Instant;
 use erp_core::ids::PurchaseOrderId;
 use erp_core::money::{Amount, Rate};
@@ -10,54 +9,20 @@ use erp_finance::dto::inquiry_fee::InquiryFeeReference;
 use erp_finance::entity::cost::CostEntry;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
-use erp_procurement::entity::purchase_order::{
-    InquiryExpenseSource, PurchaseExpenseDetail, PurchaseOrder, PurchaseOrderSubmissionLine,
-};
-use erp_sales::entity::sales_inquiry::{
-    InquiryFee, InquiryFeeReservation, InquiryReservationState, SalesInquiry,
-};
+use erp_procurement::entity::purchase_order::{InquiryExpenseSource, PurchaseExpenseDetail, PurchaseOrder};
+use erp_sales::entity::sales_inquiry::{InquiryFeeReservation, InquiryReservationState, SalesInquiry};
 use erp_sales::service::sales_inquiry::SalesInquiryService;
-use erp_supply::inquiry::{InquiryFeeBasis, InquiryFeeBasisData, InquirySupplyService};
+use erp_supply::inquiry::InquiryFeeBasis;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 核验收款依据后登记采购费用来源占用。
-///
-/// # 参数
-/// `db`、`executor` 为原建单事务；其余参数为已验证采购与费用行。
-/// # 返回
-/// 来源为空时不写入；存在来源时保存跨轮次占用。
-/// # 错误
-/// 来源失效、销售归属、费用条件、收款依据或额度不符时拒绝。
-pub(crate) async fn reserve_purchase(
-    db: &Database,
-    order: &PurchaseOrder,
-    lines: &[PurchaseOrderSubmissionLine],
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let service = SalesInquiryService::new(db.clone());
-    for line in lines {
-        let Some(detail) = line.expense.as_ref() else { continue };
-        let Some(source) = detail.inquiry_source.as_ref() else { continue };
-        let source = source.normalized()?;
-        let mut inquiry = service.require(&source.inquiry_id, executor).await?;
-        require_fee(&inquiry, &source, line.gross_amount, line.input_tax_rate)?;
-        confirm_conversion_payee(db, &inquiry, &source, order, actor.id(), executor).await?;
-        let reservation = reservation(
-            &source,
-            order.sales_order_id.as_ref(),
-            &order.base.id,
-            &detail.expense_line_id,
-            line.gross_amount,
-        );
-        inquiry.reserve_fee(reservation, Instant::now())?;
-        service.save(&mut inquiry, executor).await?;
-    }
-    Ok(())
-}
+mod persistence;
+mod reserve;
+
+use persistence::{MongoExpensePersistence, confirm_payee, validate_payee};
+pub(crate) use reserve::reserve_purchase;
 
 fn reservation(
     source: &InquiryExpenseSource,
@@ -79,50 +44,6 @@ fn reservation(
     }
 }
 
-fn require_fee<'a>(
-    inquiry: &'a SalesInquiry,
-    source: &InquiryExpenseSource,
-    amount: Amount,
-    rate: Option<Rate>,
-) -> Result<&'a InquiryFee> {
-    let feedback = inquiry
-        .feedbacks
-        .iter()
-        .find(|feedback| feedback.round == source.feedback_round)
-        .ok_or_else(|| Error::BusinessLogicError("询价费用反馈不存在".into()))?;
-    let fee = feedback
-        .data
-        .fees
-        .iter()
-        .find(|fee| fee.fee_id == source.fee_id)
-        .ok_or_else(|| Error::BusinessLogicError("询价费用不存在".into()))?;
-    if rate != Some(fee.tax_rate) || amount > fee.amount_gross {
-        return Err(Error::ValidationError("费用税率或金额不符合已接受结果，请先重新询价".into()));
-    }
-    Ok(fee)
-}
-
-async fn validate_payee(
-    db: &Database,
-    inquiry: &SalesInquiry,
-    source: &InquiryExpenseSource,
-    order: &PurchaseOrder,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let feedback = inquiry
-        .feedbacks
-        .iter()
-        .find(|feedback| feedback.round == source.feedback_round)
-        .ok_or_else(|| Error::BusinessLogicError("询价费用反馈不存在".into()))?;
-    let bases = InquirySupplyService::new(db.clone())
-        .fee_bases(&inquiry.base.id, feedback.requirement_version, feedback.round, executor)
-        .await?;
-    if !payee_basis_matches(&bases, &source.fee_id, order.supplier_id.as_ref(), &order.payment_term_code)? {
-        return Err(Error::BusinessLogicError("本轮询价费用缺少已确认的收款依据".into()));
-    }
-    Ok(())
-}
-
 fn payee_basis_matches(
     bases: &[InquiryFeeBasis],
     fee_id: &str,
@@ -140,47 +61,6 @@ fn payee_basis_matches(
         ));
     }
     Ok(true)
-}
-
-async fn confirm_conversion_payee(
-    db: &Database,
-    inquiry: &SalesInquiry,
-    source: &InquiryExpenseSource,
-    order: &PurchaseOrder,
-    actor_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let feedback = inquiry.accepted_feedback(source.feedback_round, Instant::now())?;
-    let service = InquirySupplyService::new(db.clone());
-    let bases =
-        service.fee_bases(&inquiry.base.id, feedback.requirement_version, feedback.round, executor).await?;
-    if !payee_basis_matches(&bases, &source.fee_id, order.supplier_id.as_ref(), &order.payment_term_code)? {
-        let identity = CommandIdentity::new(
-            "inquiry-fee-basis:",
-            [
-                inquiry.base.id.clone(),
-                feedback.requirement_version.to_string(),
-                feedback.round.to_string(),
-                source.fee_id.clone(),
-            ],
-        )?;
-        let basis = InquiryFeeBasis::new(
-            identity.current_id().to_string(),
-            InquiryFeeBasisData {
-                inquiry_id: inquiry.base.id.clone(),
-                requirement_version: feedback.requirement_version,
-                feedback_round: feedback.round,
-                fee_id: source.fee_id.clone(),
-                payee_supplier_id: order.supplier_id.clone(),
-                payment_term_code: order.payment_term_code.clone(),
-                internal_note: "销售生效后的费用采购转换确认".into(),
-                attachment_ids: vec![],
-                recorded_by: actor_id.to_string(),
-            },
-        )?;
-        service.append_fee_basis(&basis, executor).await?;
-    }
-    validate_payee(db, inquiry, source, order, executor).await
 }
 
 /// 目标采购费用的完整采用事实，保留对来源金额和税率的核验依据。
@@ -269,6 +149,7 @@ async fn resize_inquiry(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let persistence = MongoExpensePersistence::new(db);
     let reservations = inquiry
         .fee_ledger
         .iter()
@@ -287,11 +168,11 @@ async fn resize_inquiry(
             .ok_or_else(|| Error::ValidationError("询价费用来源不能移除".into()))?
             .normalized()?;
         validate_target_identity(inquiry, order, &row, &source)?;
-        require_fee(inquiry, &source, target.amount, target.rate)?;
+        inquiry.fee_for_terms(source.feedback_round, &source.fee_id, target.amount, target.rate)?;
         if source.feedback_round != row.feedback_round || target.amount > row.amount {
-            confirm_conversion_payee(db, inquiry, &source, order, actor_id, executor).await?;
+            confirm_payee(&persistence, inquiry, &source, order, actor_id, executor).await?;
         } else {
-            validate_payee(db, inquiry, &source, order, executor).await?;
+            validate_payee(&persistence, inquiry, &source, order, executor).await?;
         }
         inquiry.adjust_fee_for_round(
             &row.reservation_id,
@@ -407,7 +288,12 @@ pub(crate) async fn register_finance(
     .normalized()?;
     let service = SalesInquiryService::new(db.clone());
     let mut inquiry = service.require(&source.inquiry_id, executor).await?;
-    require_fee(&inquiry, &source, entry.gross_amount, Some(entry.input_tax_rate))?;
+    inquiry.fee_for_terms(
+        source.feedback_round,
+        &source.fee_id,
+        entry.gross_amount,
+        Some(entry.input_tax_rate),
+    )?;
     let reserved =
         reservation(&source, &entry.source_document_id, &entry.base.id, &entry.base.id, entry.gross_amount);
     let reservation_id = reserved.reservation_id.clone();
@@ -457,6 +343,7 @@ mod tests {
     use erp_core::ids::SupplierAccountId;
     use erp_procurement::entity::purchase_order::PurchaseExpenseCategory;
     use erp_sales::entity::sales_inquiry::{InquiryCreateData, InquiryRequirementData};
+    use erp_supply::inquiry::InquiryFeeBasisData;
 
     use super::*;
 

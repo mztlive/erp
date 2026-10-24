@@ -1,0 +1,25 @@
+[package]
+name = "erp-contract-recognition"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+aliyun-ocr = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+erp-contract = { workspace = true }
+image = { workspace = true }
+reqwest = { workspace = true }
+rig-agent = { workspace = true }
+rig-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "process", "fs", "io-util", "time"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+rig-core = { workspace = true, features = ["test-utils"] }
+tracing-subscriber = { workspace = true }

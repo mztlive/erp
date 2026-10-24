@@ -48,6 +48,22 @@
     {
       "name": "bpm",
       "deps": [{ "name": "entity-core", "kind": "normal" }]
+    },
+    {
+      "name": "erp-contract",
+      "deps": []
+    },
+    {
+      "name": "erp-contract-recognition",
+      "deps": [
+        { "name": "erp-contract", "kind": "normal" },
+        { "name": "aliyun-ocr", "kind": "normal" },
+        { "name": "rig-agent", "kind": "normal" }
+      ]
+    },
+    {
+      "name": "web-api",
+      "deps": [{ "name": "erp-contract-recognition", "kind": "normal" }]
     }
   ]
 }

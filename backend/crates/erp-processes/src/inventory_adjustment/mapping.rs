@@ -1,10 +1,8 @@
-use bpm::model::{ApprovalNodeExecution, CommandPayloadField};
-use erp_core::common::time::Instant;
+use bpm::model::CommandPayloadField;
 use erp_inventory::{
     StockAdjustmentLineUpdate, StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest,
 };
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::service::approval::execution::idempotency::{
     PreparedCommandIdentity, legacy_payload_digest, legacy_standard_start_receipt_identity,
     legacy_start_receipt_identity, normalize_idempotency_key, specialized_start_identity,
@@ -225,32 +223,6 @@ fn has_versioned_sha256(value: &str, prefix: &str) -> bool {
 
 fn has_bare_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-/// 由入口执行构造有界列表投影。
-///
-/// # 参数
-/// * `execution` - 入口执行
-/// * `now` - 状态变更时间
-///
-/// # 返回
-/// 返回启动时的列表投影。
-///
-/// # 错误
-/// 无。
-pub(super) fn list_projection_from_execution(
-    execution: &ApprovalNodeExecution,
-    now: Instant,
-) -> ApprovalInstanceListProjection {
-    ApprovalInstanceListProjection {
-        current_node_key: Some(execution.node_key.clone()),
-        current_node_name: Some(execution.node_name.clone()),
-        current_assignee_participant_id: Some(execution.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: Some(execution.assignee_display_name()),
-        latest_rejected_execution_id: None,
-        latest_rejection_summary: None,
-        last_status_changed_at: Some(now.unix_secs()),
-    }
 }
 
 /// 把服务输入转换为已解析的调整明细更新值对象。

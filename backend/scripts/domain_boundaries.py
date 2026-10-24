@@ -28,6 +28,7 @@ from cutover_workspace import (
 
 FOUNDATION = {"erp-core", "application-core", "persistence-core"}
 COMPOSITION = {"erp-processes", "erp-read-models"}
+CONTRACT_RECOGNITION = "erp-contract-recognition"
 BUSINESS_DOMAINS = {
     "erp-identity",
     "erp-audit",
@@ -53,6 +54,8 @@ BUSINESS_DOMAINS = {
 OLD_BUSINESS = {"entities", "database", "services"}
 BPM_FORBIDDEN_PACKAGES = {
     "rig-core",
+    "rig-agent",
+    CONTRACT_RECOGNITION,
     "aliyun-ocr",
     "entities",
     "database",
@@ -69,7 +72,7 @@ KINDS = ("normal", "build", "dev")
 CUTOVER_REQUIRED_PACKAGES = (
     FOUNDATION | COMPOSITION | (BUSINESS_DOMAINS - {"erp-commerce"})
     | {"bpm", "cli", "web-api", "config", "entity-core", "entity-macros",
-       "permission-macros", "storage", "aliyun-ocr", "id-generator", "test-support"}
+       "permission-macros", "storage", "aliyun-ocr", CONTRACT_RECOGNITION, "id-generator", "test-support"}
 )
 
 
@@ -324,9 +327,16 @@ def forbidden_graph_errors(graph: Graph) -> list[str]:
         label = f"{src} -[{kind}{f', rename={edge.rename}' if edge.rename else ''}]-> {dst}"
         if src in FOUNDATION | BUSINESS_DOMAINS and dst == "aliyun-ocr":
             errors.append(f"领域和基础 crate 必须通过 Port 使用 OCR，不能依赖供应商客户端: {label}")
-        if src in FOUNDATION | BUSINESS_DOMAINS and dst == "rig-core":
+        if src in FOUNDATION | BUSINESS_DOMAINS and dst in {"rig-core", "rig-agent"}:
             errors.append(f"领域和基础 crate 必须通过 Port 使用 AI，不能依赖供应商 SDK: {label}")
-        if src == "aliyun-ocr" and dst in FOUNDATION | BUSINESS_DOMAINS | COMPOSITION | {"config", "web-api", "cli"}:
+        if src in FOUNDATION | BUSINESS_DOMAINS | COMPOSITION and dst == CONTRACT_RECOGNITION:
+            errors.append(f"合同识别适配器必须由应用装配，领域和流程仅持有 Port: {label}")
+        if src == CONTRACT_RECOGNITION and dst in (
+            FOUNDATION | (BUSINESS_DOMAINS - {"erp-contract"}) | COMPOSITION
+            | {"config", "web-api", "cli", "mongodb", "storage", "test-support"}
+        ):
+            errors.append(f"合同识别适配器只可依赖合同 Port 和技术客户端: {label}")
+        if src == "aliyun-ocr" and dst in FOUNDATION | BUSINESS_DOMAINS | COMPOSITION | {CONTRACT_RECOGNITION, "config", "web-api", "cli"}:
             errors.append(f"OCR 技术客户端不得依赖业务或应用组合层: {label}")
         if src in FOUNDATION | BUSINESS_DOMAINS and dst in OLD_BUSINESS:
             errors.append(f"新领域/基础 crate 不得依赖旧三层: {label}")
@@ -394,8 +404,22 @@ def scan_entity_source(path: str, source: str, *, money_exception: bool) -> list
 def scan_service_mongo(path: str, source: str) -> list[str]:
     """Flag Service/Process modules that assemble raw Mongo/BSON queries."""
     errors: list[str] = []
+    # XML documents are technical input, not Mongo BSON. Only discard the
+    # explicitly aliased XML import; Mongo imports and bare Document stay checked.
+    document_source = re.sub(
+        r"\buse\s+roxmltree::Document\s+as\s+[A-Za-z_][A-Za-z0-9_]*\s*;",
+        "",
+        source,
+    )
+    document_source = re.sub(
+        r"\buse\s+roxmltree::\{[^;]*\};",
+        lambda xml_import: re.sub(
+            r"\bDocument\s+as\s+[A-Za-z_][A-Za-z0-9_]*", "", xml_import.group()
+        ),
+        document_source,
+    )
     for name, pattern in SERVICE_MONGO_RULES.items():
-        if pattern.search(source):
+        if pattern.search(document_source if name == "raw_document" else source):
             errors.append(f"Service/Process 原始 Mongo 操作 {name}: {path}")
     return errors
 
@@ -486,6 +510,10 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
         "graph_negative_foundation_to_business.json",
         "graph_negative_bpm_io.json",
         "graph_negative_services_to_processes.json",
+        "graph_negative_domain_to_recognition.json",
+        "graph_negative_process_to_recognition.json",
+        "graph_negative_recognition_to_process.json",
+        "graph_negative_recognition_to_domain.json",
     ):
         graph = graph_from_packages(json.loads(read_text(fixture_dir / name)))
         require_hit(name, forbidden_graph_errors(graph))
@@ -517,6 +545,14 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
     require_empty(
         "service_positive.rs",
         scan_service_mongo("service_positive.rs", read_text(fixture_dir / "service_positive.rs")),
+    )
+    xml_document = "use roxmltree::Document as XmlDocument; fn parse() -> XmlDocument { todo!() }"
+    require_empty("service_xml_document", scan_service_mongo("service_xml_document.rs", xml_document))
+    grouped_xml = "use roxmltree::{Document as XmlDocument, ParsingOptions}; fn parse() -> XmlDocument { todo!() }"
+    require_empty("service_grouped_xml", scan_service_mongo("service_xml_document.rs", grouped_xml))
+    require_hit(
+        "service_xml_document_with_bson",
+        scan_service_mongo("service_xml_document.rs", xml_document + " fn filter() -> Document { todo!() }"),
     )
     require_hit(
         "service_negative_mongo.rs",

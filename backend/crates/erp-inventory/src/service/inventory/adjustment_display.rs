@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::InventoryService;
 use crate::dto::{StockAdjustmentLineView, StockAdjustmentView};
@@ -11,6 +11,7 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `adjustments` - 已完成对象授权的当前页或详情表头；此方法不授予读取权限。
+    /// * `executor` - 调用方读取快照。
     ///
     /// # 返回
     /// 无返回值；缺失或不可读姓名保持为空。
@@ -20,6 +21,7 @@ impl InventoryService {
     pub async fn enrich_adjustment_people_names(
         &self,
         adjustments: &mut [StockAdjustmentView],
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = adjustments
             .iter()
@@ -37,7 +39,7 @@ impl InventoryService {
         let names = if ids.is_empty() {
             HashMap::new()
         } else {
-            self.people_facts.names_by_ids(&ids, &mut NoTransaction).await?
+            self.people_facts.names_by_ids(&ids, executor).await?
         };
         for adjustment in adjustments {
             adjustment.apply_names(&names);
@@ -49,13 +51,18 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `lines` - 已完成所属调整单授权的明细；此方法不授予读取权限。
+    /// * `executor` - 调用方读取快照。
     ///
     /// # 返回
     /// 无返回值；缺失关联或不可读编码、名称保持为空。
     ///
     /// # 错误
     /// 商品事实端口未接线或查询失败时返回对应错误。
-    pub async fn enrich_adjustment_line_names(&self, lines: &mut [StockAdjustmentLineView]) -> Result<()> {
+    pub async fn enrich_adjustment_line_names(
+        &self,
+        lines: &mut [StockAdjustmentLineView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let ids = lines
             .iter()
             .map(|line| &line.sku_id)
@@ -67,7 +74,7 @@ impl InventoryService {
         let skus = if ids.is_empty() {
             HashMap::new()
         } else {
-            self.catalog_facts.skus_by_ids(&ids, &mut NoTransaction).await?
+            self.catalog_facts.skus_by_ids(&ids, executor).await?
         };
         let revision_ids = skus
             .values()
@@ -80,7 +87,7 @@ impl InventoryService {
         let revisions = if revision_ids.is_empty() {
             HashMap::new()
         } else {
-            self.catalog_facts.sku_revisions_by_ids(&revision_ids, &mut NoTransaction).await?
+            self.catalog_facts.sku_revisions_by_ids(&revision_ids, executor).await?
         };
         for line in lines {
             line.apply_sku_names(&skus, &revisions);

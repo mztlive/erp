@@ -15,6 +15,7 @@ use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
     SubmitStockAdjustmentRequest,
 };
+use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -40,7 +41,6 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::adapter::require_frozen_binding;
-use super::approval_query::load_approval_binding;
 use super::mapping::{
     build_adjustment_line_updates, is_supported_start_receipt_identity, stock_adjustment_start_identity,
     stock_adjustment_start_scopes,
@@ -90,21 +90,7 @@ pub(super) async fn load_bound_definition_graph_with_executor(
         .await?
         .filter(|graph| graph.definition.definition_version == binding.approval_definition_version)
         .ok_or_else(|| Error::ConflictError("库存调整单绑定的审批定义不存在".to_string()))?;
-    Ok(engine_graph(graph))
-}
-
-/// 将仓储定义图转为引擎定义图。字段一一对应，不得在此补默认节点。
-///
-/// # 参数
-/// * `graph` - 仓储一次批量读取结果
-///
-/// # 返回
-/// 返回引擎可消费的定义图。
-///
-/// # 错误
-/// 无。
-fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
+    Ok(graph)
 }
 
 /// 使用完整库存提交身份规划启动；禁止调用方在规划后覆盖 receipt digest。
@@ -474,40 +460,6 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
         return Err(Error::Forbidden("无权提交该仓库的库存调整单".to_string()));
     }
     Ok(())
-}
-
-/// 当前调用人是否可获得库存调整提交命令令牌。
-///
-/// # 参数
-/// * `db` - 授权所在数据库。
-/// * `rbac` - 提交授权使用的 RBAC。
-/// * `adjustment` - 待判断的库存调整单。
-/// * `actor` - 当前认证操作人。
-///
-/// # 返回
-/// 提交授权通过时返回 `true`；明确拒绝时返回 `false`。
-///
-/// # 错误
-/// 授权读取失败且不是 `Forbidden` 时返回对应错误。
-pub async fn actor_can_submit(
-    db: &Database,
-    rbac: &SharedRbacService,
-    adjustment: &StockAdjustment,
-    actor: &AuditActor,
-) -> Result<bool> {
-    match ensure_stock_adjustment_submit_authorized_with_executor(
-        db,
-        rbac,
-        adjustment,
-        actor,
-        &mut NoTransaction,
-    )
-    .await
-    {
-        Ok(()) => Ok(true),
-        Err(Error::Forbidden(_)) => Ok(false),
-        Err(error) => Err(error),
-    }
 }
 
 /// 库存调整启动输入。

@@ -13,6 +13,7 @@ use erp_identity::SharedRbacService;
 use erp_inventory::entity::cancellation::{StockAdjustmentCancellation, StockAdjustmentCancellationData};
 use erp_inventory::repository::StockAdjustmentCancellationExt;
 use erp_inventory::{InventoryExt, StockAdjustment, StockAdjustmentState};
+use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
 };
@@ -26,7 +27,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::adapter::{execute_stock_adjustment_domain_action, require_frozen_binding};
-use super::approval_query::load_approval_binding;
 use super::cancel_facts::{cancellation_identity, historical_task_facts};
 use super::cancel_runtime::{
     CancelAuthority, CancelAuthorization, STOCK_ADJUSTMENT_AUDIT_RESOURCE,

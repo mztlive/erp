@@ -3168,19 +3168,31 @@
     },
     {
       "path": "crates/erp-processes/src/import_apply/create_confirmation.rs",
-      "function": "create_confirmation",
+      "function": "new",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 2,
+      "reason": "确认创建准备步骤固定命令身份、工作项及审计日志；这里只构造审计元数据，不执行数据库写入。create_confirmation 负责根事务，persist 使用该事务的 Executor 保存业务事实和日志。"
+    },
+    {
+      "path": "crates/erp-processes/src/import_apply/create_confirmation.rs",
+      "function": "persist",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
-        ".resource_log",
         "persist_log"
       ],
       "call_counts": {
-        ".resource_log": 1,
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 create_confirmation 在自身事务或已声明 run_audited 边界通过 .resource_log、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "确认创建持久化步骤沿用 create_confirmation 根事务传入的同一 Executor，依次保存确认、工作项、批次及审计；不自行开启事务。命令重放由确认身份核验，不在此登记推断真实回滚或并发结果。"
     },
     {
       "path": "crates/erp-processes/src/import_apply/execution.rs",

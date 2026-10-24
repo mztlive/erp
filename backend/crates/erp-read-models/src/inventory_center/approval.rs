@@ -2,13 +2,14 @@
 
 use application_core::AuditActor;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
+use bpm::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_inventory::{
     CancelStockAdjustmentApprovalTokenView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
     DocumentApprovalInstanceView, DocumentApprovalNodeView, DocumentApprovalView, StockAdjustment,
     StockAdjustmentState, SubmitStockAdjustmentApprovalTokenView,
 };
+use erp_workflow::entity::approval_integration::subject_ref_for;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
@@ -20,18 +21,10 @@ use erp_workflow::service::approval::execution::{
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
-use super::InventoryAdjustmentService;
-use super::adapter::{
-    RECENT_HISTORY_LIMIT, document_approval_view_with_history, require_frozen_binding,
-    stock_adjustment_subject_ref,
-};
-use super::approval_prepare::{actor_can_submit, load_bound_definition_graph};
-use super::cancel_approval::{
-    actor_can_cancel, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
-    ensure_stock_adjustment_open_task_identity,
-};
+use super::InventoryAdjustmentReadService;
+use super::projection::{RECENT_HISTORY_LIMIT, document_approval_view_with_history};
 use crate::{Error, Result};
 
 /// 加载库存调整详情的审批实例、历史与当前调用人撤回令牌。
@@ -48,30 +41,55 @@ use crate::{Error, Result};
 /// # 错误
 /// 主体引用非法、提交令牌授权读取失败、主题版本溢出，或运行事实读取失败时返回对应错误。
 pub(super) async fn load_document_approval(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentReadService,
     adjustment: &StockAdjustment,
     binding: Option<&ApprovalDefinitionBinding>,
     actor: &AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
-    let submit_command = submit_token(service, adjustment, binding, actor).await?;
-    let subject = stock_adjustment_subject_ref(&adjustment.base.id)?;
-    let mut view =
-        match service.db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await? {
-            None => document_approval_view_with_history(
+    let submit_command = submit_token(service, adjustment, binding, actor, executor).await?;
+    let subject = subject_ref_for(DocumentType::StockAdjustment, &adjustment.base.id)
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    let mut view = match service.db.bpm_workflow().find_latest_by_subject(&subject, executor).await? {
+        None => document_approval_view_with_history(
+            binding,
+            None,
+            Vec::new(),
+            empty_history_page(),
+            adjustment.status,
+            submit_command,
+            None,
+        ),
+        Some(instance) => {
+            project_runtime(
+                service,
+                adjustment,
                 binding,
-                None,
-                Vec::new(),
-                empty_history_page(),
-                adjustment.status,
+                instance,
                 submit_command,
-                None,
-            ),
-            Some(instance) => {
-                project_runtime(service, adjustment, binding, instance, submit_command, actor).await?
-            },
-        };
+                ApprovalRead { actor, executor },
+            )
+            .await?
+        },
+    };
+    enrich_bound_definition(service, binding, &mut view, executor).await?;
+    Ok(view)
+}
+
+async fn enrich_bound_definition(
+    service: &InventoryAdjustmentReadService,
+    binding: Option<&ApprovalDefinitionBinding>,
+    view: &mut DocumentApprovalView,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     if let (Some(binding), Some(definition)) = (binding, view.definition.as_mut()) {
-        let graph = load_bound_definition_graph(&service.db, binding).await?;
+        let graph = service
+            .db
+            .bpm_workflow()
+            .load_definition_graph(&binding.approval_process_definition_id, executor)
+            .await?
+            .filter(|graph| graph.definition.definition_version == binding.approval_definition_version)
+            .ok_or_else(|| Error::ConflictError("库存调整单绑定的审批定义不存在".into()))?;
         definition.name = graph.definition.name.clone();
         definition.nodes = graph
             .ordered_nodes()
@@ -89,7 +107,7 @@ pub(super) async fn load_document_approval(
             })
             .collect();
     }
-    Ok(view)
+    Ok(())
 }
 
 /// 按签署收据的 `result_ref` 精确投影审批实例。
@@ -111,58 +129,78 @@ pub(super) async fn load_document_approval(
 /// # 错误
 /// 实例不存在、实例身份与单据或版本不一致、绑定缺失或不匹配，或运行事实读取失败时返回冲突或下层错误。
 pub(super) async fn load_document_approval_for_instance(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentReadService,
     adjustment: &StockAdjustment,
     binding: Option<&ApprovalDefinitionBinding>,
     instance_id: &str,
     expected_subject_version: u32,
     actor: &AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
     let instance = service
         .db
         .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整签署结果引用的审批实例不存在".to_string()))?;
+    ensure_result_instance(&instance, &adjustment.base.id, instance_id, expected_subject_version)?;
+    service.policy.ensure_instance_binding(&instance, require_frozen_binding(binding)?)?;
+    project_runtime(service, adjustment, binding, instance, None, ApprovalRead { actor, executor }).await
+}
+
+fn ensure_result_instance(
+    instance: &ApprovalProcessInstance,
+    adjustment_id: &str,
+    instance_id: &str,
+    expected_subject_version: u32,
+) -> Result<()> {
     if instance.base.id != instance_id
         || instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
         || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
-        || instance.subject.subject_id() != adjustment.base.id
+        || instance.subject.subject_id() != adjustment_id
         || instance.subject_version != expected_subject_version
     {
         return Err(Error::ConflictError("库存调整签署结果与审批实例身份不一致".to_string()));
     }
-    ensure_cancel_instance_binding(&instance, require_frozen_binding(binding)?)?;
-    project_runtime(service, adjustment, binding, instance, None, actor).await
+    Ok(())
+}
+
+struct ApprovalRead<'a> {
+    actor: &'a AuditActor,
+    executor: &'a mut dyn Executor,
 }
 
 async fn project_runtime(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentReadService,
     adjustment: &StockAdjustment,
     binding: Option<&ApprovalDefinitionBinding>,
     instance: ApprovalProcessInstance,
     submit_command: Option<SubmitStockAdjustmentApprovalTokenView>,
-    actor: &AuditActor,
+    read: ApprovalRead<'_>,
 ) -> Result<DocumentApprovalView> {
+    let ApprovalRead { actor, executor } = read;
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
-    let current = service.db.bpm_workflow().find_current_execution(&instance_id, &mut NoTransaction).await?;
-    let open_tasks = load_open_tasks(service, current.as_ref()).await?;
+    let current = service.db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
+    let open_tasks = load_open_tasks(service, current.as_ref(), executor).await?;
     let rows = service
         .db
         .bpm_workflow()
-        .list_execution_history(
-            &instance_id,
-            None,
-            (RECENT_HISTORY_LIMIT as u32).saturating_add(1),
-            &mut NoTransaction,
-        )
+        .list_execution_history(&instance_id, None, (RECENT_HISTORY_LIMIT as u32).saturating_add(1), executor)
         .await?;
     let history = history_page_from(
         rows.iter().map(history_item_from_execution).collect(),
         RECENT_HISTORY_LIMIT as u32,
     );
-    let cancel_command =
-        cancel_token(service, adjustment, &instance, current.as_ref(), &open_tasks, binding, actor).await?;
+    let cancel_command = cancel_token(
+        service,
+        adjustment,
+        &instance,
+        current.as_ref(),
+        &open_tasks,
+        binding,
+        ApprovalRead { actor, executor },
+    )
+    .await?;
     Ok(document_approval_view_with_history(
         binding,
         Some(instance_view(
@@ -180,15 +218,16 @@ async fn project_runtime(
 }
 
 async fn submit_token(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentReadService,
     adjustment: &StockAdjustment,
     binding: Option<&ApprovalDefinitionBinding>,
     actor: &AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<Option<SubmitStockAdjustmentApprovalTokenView>> {
     if adjustment.status != StockAdjustmentState::Draft || binding.is_none() {
         return Ok(None);
     }
-    if !actor_can_submit(&service.db, &service.rbac, adjustment, actor).await? {
+    if !service.policy.actor_can_submit(adjustment, actor, executor).await? {
         return Ok(None);
     }
     let expected_subject_version = adjustment
@@ -202,8 +241,9 @@ async fn submit_token(
 }
 
 async fn load_open_tasks(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentReadService,
     current: Option<&ApprovalNodeExecution>,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<WorkItem>> {
     let Some(current) = current else {
         return Ok(Vec::new());
@@ -211,58 +251,41 @@ async fn load_open_tasks(
     Ok(service
         .db
         .work_items()
-        .open_approval_tasks_for_execution(
-            &ApprovalNodeExecutionId::new(current.base.id.clone()),
-            &mut NoTransaction,
-        )
+        .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor)
         .await?)
 }
 
 async fn cancel_token(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentReadService,
     adjustment: &StockAdjustment,
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
     open_tasks: &[WorkItem],
     binding: Option<&ApprovalDefinitionBinding>,
-    actor: &AuditActor,
+    read: ApprovalRead<'_>,
 ) -> Result<Option<CancelStockAdjustmentApprovalTokenView>> {
+    let ApprovalRead { actor, executor } = read;
     if adjustment.status != StockAdjustmentState::InApproval
         || adjustment.approval_subject_version != instance.subject_version
     {
         return Ok(None);
     }
-    ensure_cancel_instance_subject(instance, &adjustment.base.id, adjustment.approval_subject_version)?;
-    ensure_cancel_instance_binding(instance, require_frozen_binding(binding)?)?;
-    let organization_id = cancel_snapshot_org(service, adjustment, instance).await?;
+    service.policy.ensure_instance_subject(
+        instance,
+        &adjustment.base.id,
+        adjustment.approval_subject_version,
+    )?;
+    service.policy.ensure_instance_binding(instance, require_frozen_binding(binding)?)?;
+    let organization_id = cancel_snapshot_org(service, adjustment, instance, executor).await?;
     let Some(current) = current else {
         return Ok(None);
     };
-    if current.process_instance_id.as_ref() != instance.base.id
-        || current.round_no != instance.current_round_no
-        || instance.current_node_execution_id.as_ref().map(AsRef::as_ref) != Some(current.base.id.as_str())
-    {
-        return Err(Error::ConflictError("库存调整审批当前执行与实例不一致".to_string()));
-    }
-    let expected_task_version = match instance.status {
-        ApprovalProcessInstanceStatus::Running
-            if current.status == ApprovalNodeExecutionStatus::Active
-                && !open_tasks.is_empty()
-                && open_tasks.len() <= 1 + current.additional_assignees.len() =>
-        {
-            ensure_stock_adjustment_open_task_identity(&open_tasks[0], instance, current, &organization_id)?;
-            Some(open_tasks[0].base.version.to_string())
-        },
-        ApprovalProcessInstanceStatus::Blocked
-            if current.status == ApprovalNodeExecutionStatus::Blocked
-                && open_tasks.is_empty()
-                && same_personnel_blocker(instance.blocker_code, current.blocker_code) =>
-        {
-            None
-        },
-        _ => return Ok(None),
+    let Some(expected_task_version) =
+        cancel_task_version(service, instance, current, open_tasks, &organization_id)?
+    else {
+        return Ok(None);
     };
-    if !actor_can_cancel(service, instance, actor).await? {
+    if !service.policy.actor_can_cancel(instance, actor, executor).await? {
         return Ok(None);
     }
     Ok(Some(CancelStockAdjustmentApprovalTokenView {
@@ -275,15 +298,50 @@ async fn cancel_token(
     }))
 }
 
+fn cancel_task_version(
+    service: &InventoryAdjustmentReadService,
+    instance: &ApprovalProcessInstance,
+    current: &ApprovalNodeExecution,
+    open_tasks: &[WorkItem],
+    organization_id: &str,
+) -> Result<Option<Option<String>>> {
+    if current.process_instance_id.as_ref() != instance.base.id
+        || current.round_no != instance.current_round_no
+        || instance.current_node_execution_id.as_ref().map(AsRef::as_ref) != Some(current.base.id.as_str())
+    {
+        return Err(Error::ConflictError("库存调整审批当前执行与实例不一致".to_string()));
+    }
+    let version = match instance.status {
+        ApprovalProcessInstanceStatus::Running
+            if current.status == ApprovalNodeExecutionStatus::Active
+                && !open_tasks.is_empty()
+                && open_tasks.len() <= 1 + current.additional_assignees.len() =>
+        {
+            service.policy.ensure_open_task_identity(&open_tasks[0], instance, current, organization_id)?;
+            Some(open_tasks[0].base.version.to_string())
+        },
+        ApprovalProcessInstanceStatus::Blocked
+            if current.status == ApprovalNodeExecutionStatus::Blocked
+                && open_tasks.is_empty()
+                && same_personnel_blocker(instance.blocker_code, current.blocker_code) =>
+        {
+            None
+        },
+        _ => return Ok(None),
+    };
+    Ok(Some(version))
+}
+
 async fn cancel_snapshot_org(
-    service: &InventoryAdjustmentService,
+    service: &InventoryAdjustmentReadService,
     adjustment: &StockAdjustment,
     instance: &ApprovalProcessInstance,
+    executor: &mut dyn Executor,
 ) -> Result<String> {
     let snapshot = service
         .db
         .approval_subject_snapshots()
-        .find_by_process_instance_id(&instance.base.id, &mut NoTransaction)
+        .find_by_process_instance_id(&instance.base.id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
     snapshot
@@ -298,8 +356,8 @@ async fn cancel_snapshot_org(
 
 /// BLOCKED 普通撤回令牌只接受实例与执行两端完全一致的人员失效 blocker。
 fn same_personnel_blocker(
-    instance: Option<bpm::model::types::ApprovalBlockerCode>,
-    execution: Option<bpm::model::types::ApprovalBlockerCode>,
+    instance: Option<ApprovalBlockerCode>,
+    execution: Option<ApprovalBlockerCode>,
 ) -> bool {
     instance
         .zip(execution)
@@ -355,7 +413,7 @@ fn empty_history_page() -> DocumentApprovalHistoryPageView {
 ///
 /// # 错误
 /// 单据未注册或仓储查询失败时返回错误。
-pub(super) async fn load_approval_binding(
+pub async fn load_approval_binding(
     db: &Database,
     document_id: &str,
     executor: &mut dyn Executor,
@@ -366,6 +424,10 @@ pub(super) async fn load_approval_binding(
         .await?
         .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
     Ok(document.approval_binding)
+}
+
+fn require_frozen_binding(binding: Option<&ApprovalDefinitionBinding>) -> Result<&ApprovalDefinitionBinding> {
+    binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的库存调整单不得提交".into()))
 }
 
 #[cfg(test)]
@@ -389,5 +451,35 @@ mod tests {
             Some(ApprovalBlockerCode::OpenTaskConflict),
             Some(ApprovalBlockerCode::OpenTaskConflict)
         ));
+    }
+    #[test]
+    fn signed_result_requires_exact_instance_subject_and_version() {
+        use bpm::ids::{ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
+        use bpm::model::{NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
+
+        use super::ensure_result_instance;
+        use crate::Error;
+
+        let instance = bpm::model::ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("original-instance"),
+            process_definition_id: ApprovalProcessDefinitionId::new("definition"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adjustment").unwrap(),
+            subject_version: 2,
+            started_by: ParticipantId::new("submitter").unwrap(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
+        .unwrap();
+        assert!(ensure_result_instance(&instance, "adjustment", "original-instance", 2).is_ok());
+        for (adjustment, id, version) in [
+            ("other-adjustment", "original-instance", 2),
+            ("adjustment", "new-instance", 2),
+            ("adjustment", "original-instance", 3),
+        ] {
+            assert!(
+                matches!(ensure_result_instance(&instance, adjustment, id, version), Err(Error::ConflictError(message)) if message == "库存调整签署结果与审批实例身份不一致")
+            );
+        }
     }
 }

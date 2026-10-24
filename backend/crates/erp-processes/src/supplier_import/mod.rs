@@ -7,8 +7,11 @@ use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
 use erp_party::SensitiveDataCodec;
+use erp_supplier::dto::import_job::SupplierImportJobRequest;
 use mongodb::Database;
 use storage::S3Storage;
+
+use crate::background::import_source::ImportSourceCache;
 
 /// 供应商资料后台导入流程。
 pub struct SupplierImportProcess {
@@ -16,6 +19,7 @@ pub struct SupplierImportProcess {
     rbac: SharedRbacService,
     storage: S3Storage,
     codec: Arc<SensitiveDataCodec>,
+    sources: ImportSourceCache<SupplierImportJobRequest>,
 }
 
 /// 稳定的后台任务业务类型。
@@ -41,6 +45,7 @@ impl SupplierImportProcess {
         storage: S3Storage,
         codec: Arc<SensitiveDataCodec>,
     ) -> Self {
-        Self { db, rbac, storage, codec }
+        // 每份供应商输入至多 10 MiB，保留一轮四个任务的完整输入。
+        Self { db, rbac, storage, codec, sources: ImportSourceCache::new(40 * 1024 * 1024) }
     }
 }

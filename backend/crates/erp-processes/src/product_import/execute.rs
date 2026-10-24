@@ -23,13 +23,14 @@ use super::row_manifest::{
     ROW_MANIFEST_INPUT_FORMAT, RowManifest, RowManifestRow, decode_row_manifest, read_row_manifest,
     row_entries_by_number, row_media_from_entry,
 };
+use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, ImportBudget};
 use crate::{Error, Result};
 
 mod rows;
 use rows::{ImportRowExecution, execute_rows};
 
 impl ProductImportProcess {
-    /// 领取待处理的商品导入任务并逐行执行。
+    /// 每轮至多处理四个商品导入任务，每任务至多十行或一秒软时限。
     ///
     /// 仅由统一后台执行器调用；前台提交只投递任务，不直接执行。
     /// 并发认领冲突视为已被其他执行器接管，记 info 后跳过，不记为任务失败。
@@ -46,8 +47,13 @@ impl ProductImportProcess {
         let jobs = self
             .db
             .background_jobs()
-            .list_open_by_domain_job_type(PRODUCT_IMPORT_DOMAIN_JOB_TYPE, 4, &mut NoTransaction)
+            .list_open_by_domain_job_type(
+                PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
+                IMPORT_JOBS_PER_POLL,
+                &mut NoTransaction,
+            )
             .await?;
+        self.sources.retain_jobs(&jobs).await;
         let count = jobs.len();
         for job in jobs {
             if let Err(error) = self.execute_job(&job.base.id).await {
@@ -61,7 +67,7 @@ impl ProductImportProcess {
         Ok(count)
     }
 
-    /// 执行单个导入任务中尚未完成的行。
+    /// 执行单个导入任务的一个切片，剩余行留待后续轮询。
     ///
     /// 认领阶段通过乐观锁保证单执行器推进；`Pending` 转 `Running` 冲突时返回 `Ok` 表示已被接管。
     ///
@@ -74,27 +80,10 @@ impl ProductImportProcess {
     /// # 错误
     /// 源文件不存在、解析失败或状态迁移失败时返回错误。
     pub async fn execute_job(&self, job_id: &str) -> Result<()> {
-        let mut job = self
-            .db
-            .background_jobs()
-            .find_by_id(job_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
-        if job.domain_job_type.as_deref() != Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE) {
+        let Some(mut job) = self.claim_job(job_id).await? else {
+            self.sources.remove(job_id).await;
             return Ok(());
-        }
-        if job.status == JobStatus::Pending {
-            job.start(Instant::now())?;
-            if let Err(error) = self.db.background_jobs().update(&mut job, &mut NoTransaction).await {
-                if matches!(error, persistence_core::Error::OptimisticLockingError) {
-                    return Ok(());
-                }
-                return Err(error.into());
-            }
-        }
-        if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
-            return Ok(());
-        }
+        };
         let items = self
             .db
             .background_job_items()
@@ -104,6 +93,7 @@ impl ProductImportProcess {
         let mut cache = ImportDictionaryCache::default();
         let remaining = items.iter().filter(|item| item.status.is_none()).count();
         if remaining == 0 {
+            self.sources.remove(job_id).await;
             if job.processed_count == job.total_count
                 && matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded)
             {
@@ -112,8 +102,45 @@ impl ProductImportProcess {
             }
             return Ok(());
         }
-        let row_source = self.load_row_source(&job).await?;
-        self.execute_pending_items(&mut job, items, &actor, &mut cache, &row_source).await
+        let row_source = self
+            .sources
+            .get_or_load(&job, || async {
+                let source = self.load_row_source(&job).await?;
+                let bytes = source.input_bytes()?;
+                Ok((source, bytes))
+            })
+            .await?;
+        let result = self.execute_pending_items(&mut job, items, &actor, &mut cache, &row_source).await;
+        if job.finished_at.is_some() {
+            self.sources.remove(job_id).await;
+        }
+        result
+    }
+
+    /// 加载任务并竞争待执行状态；被接管或已终态的任务不执行。
+    async fn claim_job(&self, job_id: &str) -> Result<Option<BackgroundJob>> {
+        let mut job = self
+            .db
+            .background_jobs()
+            .find_by_id(job_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
+        if job.domain_job_type.as_deref() != Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE) {
+            return Ok(None);
+        }
+        if job.status == JobStatus::Pending {
+            job.start(Instant::now())?;
+            if let Err(error) = self.db.background_jobs().update(&mut job, &mut NoTransaction).await {
+                if matches!(error, persistence_core::Error::OptimisticLockingError) {
+                    return Ok(None);
+                }
+                return Err(error.into());
+            }
+        }
+        if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
+            return Ok(None);
+        }
+        Ok(Some(job))
     }
 
     /// 按行执行并立即保存结果；上一行保存完成后才允许执行下一行。
@@ -155,7 +182,7 @@ impl ProductImportProcess {
         });
         let mut execution =
             ProductImportRows { process: self, actor, cache, entries, workbook, legacy_cells };
-        execute_rows(&mut execution, job, items).await
+        execute_rows(&mut execution, job, items, ImportBudget::new()).await
     }
 
     /// 执行单行的业务写入并转为可持久化结果。
@@ -339,7 +366,7 @@ struct RecordedOutcome {
 }
 
 /// 任务行来源：提交时写入的清单，或老任务的源文件。
-enum JobRowSource {
+pub(super) enum JobRowSource {
     /// 行级清单（含单元格与已上传图片引用）。
     Manifest(RowManifest),
     /// 源文件字节与解析结果（老任务回退）。
@@ -349,6 +376,20 @@ enum JobRowSource {
         /// 解析后的工作表。
         parsed: ParsedProductSheet,
     },
+}
+
+impl JobRowSource {
+    /// 清单按 JSON 输入计费；旧工作簿同时计入原文与解析后的单元格字节。
+    fn input_bytes(&self) -> Result<usize> {
+        match self {
+            Self::Manifest(manifest) => serde_json::to_vec(manifest)
+                .map(|bytes| bytes.len())
+                .map_err(|_| Error::Internal("行清单序列化失败".into())),
+            Self::Legacy { bytes, parsed } => Ok(bytes.len()
+                + parsed.rows.iter().flat_map(|row| &row.cells).map(String::len).sum::<usize>()
+                + parsed.image_targets.iter().map(|(key, value)| key.len() + value.len()).sum::<usize>()),
+        }
+    }
 }
 
 /// 并发认领冲突的稳定文案，与持久层乐观锁映射保持一致。
@@ -417,6 +458,17 @@ struct ProductImportRows<'a> {
 
 #[async_trait]
 impl ImportRowExecution for ProductImportRows<'_> {
+    async fn prepare(&mut self, job: &BackgroundJob) -> Result<bool> {
+        let current = self
+            .process
+            .db
+            .background_jobs()
+            .find_by_id(&job.base.id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
+        Ok(current.base.version == job.base.version && current.finished_at.is_none())
+    }
+
     /// 使用本轮行来源与字典缓存执行单行导入。
     ///
     /// # 参数

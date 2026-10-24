@@ -1326,3 +1326,40 @@ fn procurement_renew_rejects_conflict_empty_reason_processing_and_closed_without
     assert!(inquiry.renew_quote(1, "buyer", "再报价".into(), now()).is_err());
     assert_eq!(inquiry, before);
 }
+
+#[test]
+fn fee_terms_preserve_exact_feedback_and_error_order() {
+    let inquiry = accepted();
+    let rate = Some("0.06".parse().unwrap());
+    assert_eq!(inquiry.fee_for_terms(1, "fee", amount("100"), rate).unwrap().name, "运费");
+    assert!(matches!(
+        inquiry.fee_for_terms(2, "missing", amount("101"), None),
+        Err(Error::BusinessLogicError(message)) if message == "询价费用反馈不存在"
+    ));
+    assert!(matches!(
+        inquiry.fee_for_terms(1, "missing", amount("101"), None),
+        Err(Error::BusinessLogicError(message)) if message == "询价费用不存在"
+    ));
+    for (value, rate) in [("101", rate), ("1", None), ("1", Some("0.13".parse().unwrap()))] {
+        assert!(matches!(
+            inquiry.fee_for_terms(1, "fee", amount(value), rate),
+            Err(Error::ValidationError(message))
+                if message == "费用税率或金额不符合已接受结果，请先重新询价"
+        ));
+    }
+}
+
+#[test]
+fn historical_fee_terms_allow_zero_reduction_without_bypassing_new_reservation_guards() {
+    let mut inquiry = accepted();
+    inquiry.allocate_fee("allocation", "sales-order", 1, "fee", amount("100"), now()).unwrap();
+    inquiry.close(1, "sales", "关闭".into(), now()).unwrap();
+    assert_eq!(
+        inquiry.fee_for_terms(1, "fee", Amount::zero(), Some("0.06".parse().unwrap())).unwrap().fee_id,
+        "fee"
+    );
+    assert!(matches!(
+        inquiry.reserve_fee(fee_reservation("new", "1"), now()),
+        Err(Error::BusinessLogicError(message)) if message == "只能引用当前已接受且未关闭的询价结果"
+    ));
+}

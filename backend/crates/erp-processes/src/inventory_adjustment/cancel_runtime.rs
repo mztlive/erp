@@ -710,33 +710,6 @@ pub(crate) async fn ensure_cancel_authorized(
         .await
 }
 
-/// 判断当前调用人是否可获得普通撤回动作投影。
-///
-/// 明确的授权拒绝映射为 `false`；仓储、政策登记或一致性错误继续上抛，禁止
-/// 通过吞错把损坏事实伪装为“无动作”。
-///
-/// # 参数
-/// * `service` - 库存调整流程服务。
-/// * `instance` - 待投影撤回动作的审批实例。
-/// * `actor` - 当前认证操作人。
-///
-/// # 返回
-/// 授权通过时返回 `true`；明确拒绝时返回 `false`。
-///
-/// # 错误
-/// 授权读取失败且不是 `Forbidden` 时返回对应错误。
-pub(crate) async fn actor_can_cancel(
-    service: &InventoryAdjustmentService,
-    instance: &ApprovalProcessInstance,
-    actor: &AuditActor,
-) -> Result<bool> {
-    match ensure_cancel_authorized(service, instance, actor).await {
-        Ok(_) => Ok(true),
-        Err(Error::Forbidden(_)) => Ok(false),
-        Err(error) => Err(error),
-    }
-}
-
 /// 在调用方事务快照内重新校验普通撤回授权。
 ///
 /// # 参数

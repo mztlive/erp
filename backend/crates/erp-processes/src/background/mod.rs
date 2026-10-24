@@ -4,6 +4,8 @@
 
 mod adapter;
 mod delivery_coverage_adapter;
+pub(crate) mod import_budget;
+pub(crate) mod import_source;
 mod product_import_adapter;
 mod sellable_projection_adapter;
 mod supplier_import_adapter;

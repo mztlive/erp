@@ -134,165 +134,8 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
     ) -> EvidenceFuture<'a, VerifiedEvidence> {
         Box::pin(async move {
             let parsed = evidence_reference_grammar(EvidenceRecordRef::parse(&evidence.record_id))?;
-            let canonical_reference = match parsed.kind() {
-                "inbox_message" => {
-                    if evidence.kind != ControlledEvidenceKind::ExternalCaseResult {
-                        return kind_mismatch();
-                    }
-                    let message = self
-                        .db
-                        .inbox_messages()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的入站消息不存在".to_string()))?;
-                    if message.status != InboxMessageStatus::Processed || message.processed_at.is_none() {
-                        return Err(Error::BusinessLogicError(
-                            "证据引用的入站消息尚未形成已处理终态".to_string(),
-                        ));
-                    }
-                    ensure_association(subject, std::slice::from_ref(&message.base.id))?;
-                    canonical_verified(
-                        "inbox_message",
-                        &message.base.id,
-                        Some(message.base.version),
-                        "processed",
-                    )?
-                },
-                "customer_refund" => {
-                    if !matches!(
-                        evidence.kind,
-                        ControlledEvidenceKind::CompensationResult
-                            | ControlledEvidenceKind::FinancialReconciliation
-                            | ControlledEvidenceKind::DistinctReview
-                    ) {
-                        return kind_mismatch();
-                    }
-                    let refund = self
-                        .db
-                        .customer_refunds()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的客户退款不存在".to_string()))?;
-                    if refund.status != CustomerRefundStatus::Posted {
-                        return Err(Error::BusinessLogicError("客户退款尚未过账".to_string()));
-                    }
-                    if evidence.kind == ControlledEvidenceKind::DistinctReview
-                        && refund.reviewed_by == actor_id
-                    {
-                        return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
-                    }
-                    ensure_association(
-                        subject,
-                        &refund_association_ids(
-                            &refund.base.id,
-                            refund.sales_return_case_id.as_ref().map(ToString::to_string),
-                            refund.original_receipt_id.as_ref().map(ToString::to_string),
-                            refund.original_receivable_entry_id.as_ref().map(ToString::to_string),
-                        ),
-                    )?;
-                    canonical_verified(
-                        "customer_refund",
-                        &refund.base.id,
-                        Some(refund.base.version),
-                        "posted",
-                    )?
-                },
-                "supplier_refund" => {
-                    if !matches!(
-                        evidence.kind,
-                        ControlledEvidenceKind::CompensationResult
-                            | ControlledEvidenceKind::FinancialReconciliation
-                            | ControlledEvidenceKind::DistinctReview
-                    ) {
-                        return kind_mismatch();
-                    }
-                    let refund = self
-                        .db
-                        .supplier_refunds()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的供应商退款不存在".to_string()))?;
-                    if refund.status != SupplierRefundStatus::Posted {
-                        return Err(Error::BusinessLogicError("供应商退款尚未过账".to_string()));
-                    }
-                    if evidence.kind == ControlledEvidenceKind::DistinctReview
-                        && refund.reviewed_by == actor_id
-                    {
-                        return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
-                    }
-                    ensure_association(
-                        subject,
-                        &refund_association_ids(
-                            &refund.base.id,
-                            refund.purchase_return_order_id.as_ref().map(ToString::to_string),
-                            refund.original_payment_id.as_ref().map(ToString::to_string),
-                            refund.original_payable_entry_id.as_ref().map(ToString::to_string),
-                        ),
-                    )?;
-                    canonical_verified(
-                        "supplier_refund",
-                        &refund.base.id,
-                        Some(refund.base.version),
-                        "posted",
-                    )?
-                },
-                "supplier_refund_fact" => {
-                    ensure_compensation_kind(evidence.kind)?;
-                    let fact = self
-                        .db
-                        .supplier_refund_facts()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的供应商退款事实不存在".to_string()))?;
-                    ensure_association(
-                        subject,
-                        &[
-                            fact.base.id.clone(),
-                            fact.inbox_message_id.to_string(),
-                            fact.supplier_fulfillment_order_id.to_string(),
-                            fact.source_event_id.clone(),
-                        ],
-                    )?;
-                    canonical_verified(
-                        "supplier_refund_fact",
-                        &fact.base.id,
-                        Some(fact.base.version),
-                        "succeeded",
-                    )?
-                },
-                "reconciliation_difference_resolution" => {
-                    if evidence.kind != ControlledEvidenceKind::DistinctReview {
-                        return kind_mismatch();
-                    }
-                    let record = self
-                        .db
-                        .reconciliation_difference_resolutions()
-                        .find_by_id(parsed.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("证据引用的差异复核记录不存在".to_string()))?;
-                    if record.reconciliation_difference_id.to_string() != subject.item_id
-                        || record.resolution_action != ResolutionAction::AddEvidence
-                        || record.evidence_reference.is_none()
-                        || record.handled_by == actor_id
-                    {
-                        return Err(Error::BusinessLogicError(
-                            "差异复核记录不满足同一差异、已补证且岗位分离要求".to_string(),
-                        ));
-                    }
-                    canonical_verified(
-                        "reconciliation_difference_resolution",
-                        &record.base.id,
-                        None,
-                        "reviewed",
-                    )?
-                },
-                _ => {
-                    return Err(Error::BusinessLogicError(format!(
-                        "证据对象类型 {} 尚未注册权威验证器",
-                        parsed.kind()
-                    )));
-                },
-            };
+            let canonical_reference =
+                self.verify_record(subject, &parsed, evidence.kind, actor_id, executor).await?;
             Ok(VerifiedEvidence {
                 reference: ControlledEvidenceRef {
                     kind: evidence.kind,
@@ -350,6 +193,192 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
             discover_compensation(&self.db, subject, executor, &mut evidence).await?;
             Ok(evidence)
         })
+    }
+}
+
+impl MongoIntegrationEvidenceAuthority {
+    async fn verify_record(
+        &self,
+        subject: &EvidenceSubject,
+        record: &EvidenceRecordRef,
+        kind: ControlledEvidenceKind,
+        actor_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CanonicalEvidenceReference> {
+        match record.kind() {
+            "inbox_message" => self.verify_inbox_message(subject, record.id(), kind, executor).await,
+            "customer_refund" => {
+                self.verify_customer_refund(subject, record.id(), kind, actor_id, executor).await
+            },
+            "supplier_refund" => {
+                self.verify_supplier_refund(subject, record.id(), kind, actor_id, executor).await
+            },
+            "supplier_refund_fact" => {
+                self.verify_supplier_refund_fact(subject, record.id(), kind, executor).await
+            },
+            "reconciliation_difference_resolution" => {
+                self.verify_difference_resolution(subject, record.id(), kind, actor_id, executor).await
+            },
+            _ => Err(Error::BusinessLogicError(format!("证据对象类型 {} 尚未注册权威验证器", record.kind()))),
+        }
+    }
+
+    async fn verify_inbox_message(
+        &self,
+        subject: &EvidenceSubject,
+        record_id: &str,
+        kind: ControlledEvidenceKind,
+        executor: &mut dyn Executor,
+    ) -> Result<CanonicalEvidenceReference> {
+        if kind != ControlledEvidenceKind::ExternalCaseResult {
+            return kind_mismatch();
+        }
+        let message = self
+            .db
+            .inbox_messages()
+            .find_by_id(record_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("证据引用的入站消息不存在".to_string()))?;
+        if message.status != InboxMessageStatus::Processed || message.processed_at.is_none() {
+            return Err(Error::BusinessLogicError("证据引用的入站消息尚未形成已处理终态".to_string()));
+        }
+        ensure_association(subject, std::slice::from_ref(&message.base.id))?;
+        canonical_verified("inbox_message", &message.base.id, Some(message.base.version), "processed")
+    }
+
+    async fn verify_customer_refund(
+        &self,
+        subject: &EvidenceSubject,
+        record_id: &str,
+        kind: ControlledEvidenceKind,
+        actor_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CanonicalEvidenceReference> {
+        if !matches!(
+            kind,
+            ControlledEvidenceKind::CompensationResult
+                | ControlledEvidenceKind::FinancialReconciliation
+                | ControlledEvidenceKind::DistinctReview
+        ) {
+            return kind_mismatch();
+        }
+        let refund = self
+            .db
+            .customer_refunds()
+            .find_by_id(record_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("证据引用的客户退款不存在".to_string()))?;
+        if refund.status != CustomerRefundStatus::Posted {
+            return Err(Error::BusinessLogicError("客户退款尚未过账".to_string()));
+        }
+        if kind == ControlledEvidenceKind::DistinctReview && refund.reviewed_by == actor_id {
+            return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
+        }
+        ensure_association(
+            subject,
+            &refund_association_ids(
+                &refund.base.id,
+                refund.sales_return_case_id.as_ref().map(ToString::to_string),
+                refund.original_receipt_id.as_ref().map(ToString::to_string),
+                refund.original_receivable_entry_id.as_ref().map(ToString::to_string),
+            ),
+        )?;
+        canonical_verified("customer_refund", &refund.base.id, Some(refund.base.version), "posted")
+    }
+
+    async fn verify_supplier_refund(
+        &self,
+        subject: &EvidenceSubject,
+        record_id: &str,
+        kind: ControlledEvidenceKind,
+        actor_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CanonicalEvidenceReference> {
+        if !matches!(
+            kind,
+            ControlledEvidenceKind::CompensationResult
+                | ControlledEvidenceKind::FinancialReconciliation
+                | ControlledEvidenceKind::DistinctReview
+        ) {
+            return kind_mismatch();
+        }
+        let refund = self
+            .db
+            .supplier_refunds()
+            .find_by_id(record_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("证据引用的供应商退款不存在".to_string()))?;
+        if refund.status != SupplierRefundStatus::Posted {
+            return Err(Error::BusinessLogicError("供应商退款尚未过账".to_string()));
+        }
+        if kind == ControlledEvidenceKind::DistinctReview && refund.reviewed_by == actor_id {
+            return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
+        }
+        ensure_association(
+            subject,
+            &refund_association_ids(
+                &refund.base.id,
+                refund.purchase_return_order_id.as_ref().map(ToString::to_string),
+                refund.original_payment_id.as_ref().map(ToString::to_string),
+                refund.original_payable_entry_id.as_ref().map(ToString::to_string),
+            ),
+        )?;
+        canonical_verified("supplier_refund", &refund.base.id, Some(refund.base.version), "posted")
+    }
+
+    async fn verify_supplier_refund_fact(
+        &self,
+        subject: &EvidenceSubject,
+        record_id: &str,
+        kind: ControlledEvidenceKind,
+        executor: &mut dyn Executor,
+    ) -> Result<CanonicalEvidenceReference> {
+        ensure_compensation_kind(kind)?;
+        let fact = self
+            .db
+            .supplier_refund_facts()
+            .find_by_id(record_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("证据引用的供应商退款事实不存在".to_string()))?;
+        ensure_association(
+            subject,
+            &[
+                fact.base.id.clone(),
+                fact.inbox_message_id.to_string(),
+                fact.supplier_fulfillment_order_id.to_string(),
+                fact.source_event_id.clone(),
+            ],
+        )?;
+        canonical_verified("supplier_refund_fact", &fact.base.id, Some(fact.base.version), "succeeded")
+    }
+
+    async fn verify_difference_resolution(
+        &self,
+        subject: &EvidenceSubject,
+        record_id: &str,
+        kind: ControlledEvidenceKind,
+        actor_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CanonicalEvidenceReference> {
+        if kind != ControlledEvidenceKind::DistinctReview {
+            return kind_mismatch();
+        }
+        let record = self
+            .db
+            .reconciliation_difference_resolutions()
+            .find_by_id(record_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("证据引用的差异复核记录不存在".to_string()))?;
+        if record.reconciliation_difference_id.to_string() != subject.item_id
+            || record.resolution_action != ResolutionAction::AddEvidence
+            || record.evidence_reference.is_none()
+            || record.handled_by == actor_id
+        {
+            return Err(Error::BusinessLogicError(
+                "差异复核记录不满足同一差异、已补证且岗位分离要求".to_string(),
+            ));
+        }
+        canonical_verified("reconciliation_difference_resolution", &record.base.id, None, "reviewed")
     }
 }
 
@@ -505,4 +534,41 @@ fn refund_association_ids(
         .chain(original_document_id)
         .chain(original_entry_id)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_integration::Error;
+    use erp_integration::dto::ControlledEvidenceKind;
+    use erp_integration::ports::evidence::EvidenceSubject;
+
+    use super::{canonical_verified, ensure_association, ensure_compensation_kind, refund_association_ids};
+
+    #[test]
+    fn refund_evidence_accepts_formal_link_and_rejects_unrelated_subject() {
+        let ids = refund_association_ids("refund-1", Some("return-1".into()), None, Some("entry-1".into()));
+        assert_eq!(ids, ["refund-1", "return-1", "entry-1"]);
+        let mut subject = EvidenceSubject::new("task-1".into());
+        subject.business_object_id = Some("return-1".into());
+        ensure_association(&subject, &ids).unwrap();
+        subject.business_object_id = Some("unrelated".into());
+        assert!(matches!(
+            ensure_association(&subject, &ids),
+            Err(Error::ConflictError(message)) if message == "证据记录与当前业务项没有可验证的正式关联"
+        ));
+    }
+
+    #[test]
+    fn refund_fact_requires_compensation_kind_and_canonical_terminal_identity() {
+        ensure_compensation_kind(ControlledEvidenceKind::CompensationResult).unwrap();
+        ensure_compensation_kind(ControlledEvidenceKind::FinancialReconciliation).unwrap();
+        assert!(matches!(
+            ensure_compensation_kind(ControlledEvidenceKind::DistinctReview),
+            Err(Error::ValidationError(message)) if message == "证据类型与引用对象类型不匹配"
+        ));
+        let reference = canonical_verified("supplier_refund_fact", "refund-1", Some(3), "succeeded").unwrap();
+        assert_eq!(reference.kind(), "supplier_refund_fact");
+        assert_eq!(reference.id(), "refund-1");
+        assert!(canonical_verified("supplier_refund_fact", "nested:id", Some(3), "succeeded").is_err());
+    }
 }

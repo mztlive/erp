@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::ids::StockAdjustmentId;
 use erp_inventory::{InventoryExt, StockAdjustment, StockAdjustmentView};
+use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use erp_workflow::repository::prelude::*;
@@ -11,7 +12,6 @@ use persistence_core::Executor;
 
 use super::InventoryAdjustmentService;
 use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
-use super::approval_query::load_approval_binding;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 

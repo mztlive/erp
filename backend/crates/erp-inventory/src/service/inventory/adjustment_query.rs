@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::ids::StockAdjustmentId;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
@@ -49,7 +49,7 @@ impl InventoryService {
         ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
         let mut items =
             page.items.into_iter().map(|row| adjustment_row_view(row, &people)).collect::<Vec<_>>();
-        self.enrich_adjustment_people_names(&mut items).await?;
+        self.enrich_adjustment_people_names(&mut items, &mut NoTransaction).await?;
         Ok(InventoryListPage::from_page(
             PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
             meta,
@@ -113,6 +113,7 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `ids` - 调整单主键
+    /// * `executor` - 调用方读取快照。
     ///
     /// # 返回
     /// 返回人员事实映射。
@@ -122,8 +123,9 @@ impl InventoryService {
     pub async fn adjustment_people_by_ids(
         &self,
         ids: &[String],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, AdjustmentPeopleFact>> {
-        self.people_facts.people_by_adjustment_ids(ids, &mut NoTransaction).await
+        self.people_facts.people_by_adjustment_ids(ids, executor).await
     }
 
     /// 在同一快照内加载表头并验证对象读取范围；拒绝结果隐藏资源存在性。
@@ -131,6 +133,7 @@ impl InventoryService {
     /// # 参数
     /// * `id` - 调整单主键。
     /// * `actor` - 当前认证操作人。
+    /// * `executor` - 调用方读取快照，不开启嵌套事务。
     ///
     /// # 返回
     /// 返回未删除且落在读取范围内的调整单。
@@ -138,30 +141,25 @@ impl InventoryService {
     /// # 错误
     /// 调整单不存在、账号未激活或仓库不在读取范围时返回 `Error::NotFound`。
     /// 授权或仓储查询失败时返回对应错误。
-    pub async fn readable_stock_adjustment(&self, id: &str, actor: &AuditActor) -> Result<StockAdjustment> {
-        let db = self.db.clone();
-        let authorization_port = std::sync::Arc::clone(&self.authorization);
-        let id = id.to_string();
-        let actor = actor.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
-                    let adjustment = db
-                        .inventory()
-                        .stock_adjustment(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                    if !authorization.actor_is_active()
-                        || !authorization.read_scope().covers(adjustment.warehouse_id.as_ref())
-                    {
-                        return Err(Error::NotFound("库存调整单不存在".to_string()));
-                    }
-                    Ok::<_, Error>(adjustment)
-                })
-            })
-            .await
+    pub async fn readable_stock_adjustment(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<StockAdjustment> {
+        let authorization = self.authorization.authorize(actor, executor).await?;
+        let adjustment = self
+            .db
+            .inventory()
+            .stock_adjustment(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+        if !authorization.actor_is_active()
+            || !authorization.read_scope().covers(adjustment.warehouse_id.as_ref())
+        {
+            return Err(Error::NotFound("库存调整单不存在".to_string()));
+        }
+        Ok(adjustment)
     }
 
     /// 按主键读取库存调整单，不做仓库范围校验。
@@ -186,18 +184,23 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `adjustment_id` - 调整单主键
+    /// * `executor` - 调用方读取快照。
     ///
     /// # 返回
     /// 返回该调整单的明细集合。
     ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
-    pub async fn load_adjustment_lines(&self, adjustment_id: &str) -> Result<Vec<StockAdjustmentLine>> {
+    pub async fn load_adjustment_lines(
+        &self,
+        adjustment_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockAdjustmentLine>> {
         let id = StockAdjustmentId::new(adjustment_id.to_string());
         Ok(self
             .db
             .inventory()
-            .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&id), &mut NoTransaction)
+            .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&id), executor)
             .await?)
     }
 
@@ -205,14 +208,19 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `document_id` - 来源单据主键
+    /// * `executor` - 调用方读取快照。
     ///
     /// # 返回
     /// 返回该来源单据产生的库存流水。
     ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
-    pub async fn load_movements_for_source_document(&self, document_id: &str) -> Result<Vec<StockMovement>> {
-        Ok(self.db.inventory().movements_for_source_document(document_id, &mut NoTransaction).await?)
+    pub async fn load_movements_for_source_document(
+        &self,
+        document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockMovement>> {
+        Ok(self.db.inventory().movements_for_source_document(document_id, executor).await?)
     }
 }
 

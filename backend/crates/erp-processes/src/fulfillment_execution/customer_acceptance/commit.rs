@@ -1,14 +1,17 @@
 //! 幂等登记根事务：草稿/正式事实、销售进度、任务和命令收据按原顺序组合。
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
 use erp_fulfillment::FulfillmentCommandReceiptService;
 use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
-use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
+use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceLine};
 use erp_fulfillment::repository::extensions::FulfillmentExt;
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::document_number::next_customer_acceptance_no;
 use erp_identity::SharedRbacService;
 use erp_read_models::fulfillment_center::dto::CommitCustomerAcceptanceView;
+use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::ApprovalObjectReadPort;
 use id_generator::next_id;
@@ -52,8 +55,33 @@ impl CustomerAcceptanceProcess {
         req: CommitCustomerAcceptanceRequest,
         actor: &AuditActor,
     ) -> Result<CommitCustomerAcceptanceView> {
+        let command_receipt = self.prepare_commit_request(&req, actor).await?;
+        if let Some(acceptance_id) = FulfillmentCommandReceiptService::new(self.db.clone())
+            .committed_resource_id(&command_receipt, &mut NoTransaction)
+            .await?
+        {
+            return self.committed_view(&acceptance_id, &req.sales_order_id).await;
+        }
+        let command = PreparedAcceptanceCommit::new(self, req, actor, command_receipt.clone()).await?;
+        let sales_order_id = command.req.sales_order_id.clone();
+        let client = self.db.client().clone();
+        let transaction_result =
+            client.with_transaction(move |executor| Box::pin(command.execute(executor))).await;
+        let posted = match transaction_result {
+            Ok(posted) => posted,
+            Err(error) => return self.recover_commit(error, &command_receipt, &sales_order_id).await,
+        };
+        let remaining_eligibility = self.read.acceptance_eligibility(sales_order_id.as_ref()).await?;
+        Ok(CommitCustomerAcceptanceView { acceptance: posted.into(), remaining_eligibility })
+    }
+
+    async fn prepare_commit_request(
+        &self,
+        req: &CommitCustomerAcceptanceRequest,
+        actor: &AuditActor,
+    ) -> Result<CommandReceipt> {
         req.validate()?;
-        erp_read_models::sales_center::access::SalesAccess::new(self.db.clone(), self.rbac.clone())
+        SalesAccess::new(self.db.clone(), self.rbac.clone())
             .detail(actor, req.sales_order_id.as_ref())
             .await?;
         FulfillmentService::validate_customer_acceptance_task_context(
@@ -63,107 +91,7 @@ impl CustomerAcceptanceProcess {
         if req.acceptance_id.is_some() != req.expected_acceptance_version.is_some() {
             return Err(Error::ValidationError("已有草稿必须同时提交草稿主键和期望版本".to_string()));
         }
-        let command_receipt = CommandReceipt::from_payload(
-            "customer-acceptance-commit-",
-            actor.id(),
-            "customer_acceptance.commit",
-            "customer_acceptance",
-            &req.idempotency_key,
-            &req,
-        )?;
-        if let Some(acceptance_id) = FulfillmentCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command_receipt, &mut NoTransaction)
-            .await?
-        {
-            return self.committed_view(&acceptance_id, &req.sales_order_id).await;
-        }
-
-        let generated_acceptance_no = if req.acceptance_id.is_none() {
-            Some(next_customer_acceptance_no(&self.db).await?)
-        } else {
-            None
-        };
-        let acceptance_id = req
-            .acceptance_id
-            .as_ref()
-            .map(|id| CustomerAcceptanceId::new(id.clone()))
-            .unwrap_or_else(|| CustomerAcceptanceId::new(next_id()));
-        let final_lines =
-            FulfillmentService::build_customer_acceptance_lines(acceptance_id.clone(), &req.lines)?;
-        let sales_order_id = req.sales_order_id.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
-        let client = db.client().clone();
-        let command_receipt_for_tx = command_receipt.clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
-                        .require_object(&actor, "detail", &req.sales_order_id, &[], executor)
-                        .await?;
-                    if let Some(persisted) =
-                        replay_commit(&db, &command_receipt_for_tx, &req, executor).await?
-                    {
-                        return Ok::<CustomerAcceptance, crate::Error>(persisted);
-                    }
-                    let existing =
-                        FulfillmentService::load_customer_acceptance_commit_draft(&db, &req, executor)
-                            .await?;
-                    let order = db
-                        .sales_orders()
-                        .find_by_id(req.sales_order_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-                    if order.base.version != req.expected_sales_order_version {
-                        return Err(Error::ConflictError("销售单已变化，请刷新履约事实后重试".to_string()));
-                    }
-                    let task = prepare_customer_acceptance_task_command(
-                        &db,
-                        &req.sales_order_id,
-                        actor.id(),
-                        req.work_item_id.as_deref(),
-                        req.expected_task_version,
-                        executor,
-                    )
-                    .await?;
-                    let (mut acceptance, is_new) = FulfillmentService::prepare_customer_acceptance_commit(
-                        existing,
-                        &acceptance_id,
-                        &req,
-                        generated_acceptance_no.clone(),
-                    )?;
-                    prepare_document(&db, &rbac, object_read.as_ref(), &acceptance, is_new, &actor, executor)
-                        .await?;
-                    FulfillmentService::persist_customer_acceptance_commit(
-                        &db,
-                        &mut acceptance,
-                        is_new,
-                        &final_lines,
-                        &req,
-                        executor,
-                    )
-                    .await?;
-                    complete_acceptance(
-                        &db,
-                        &acceptance,
-                        &actor,
-                        CompletionKind::Commit { task, receipt: Box::new(command_receipt_for_tx) },
-                        executor,
-                    )
-                    .await?;
-                    Ok::<CustomerAcceptance, crate::Error>(acceptance)
-                })
-            })
-            .await;
-
-        let posted = match transaction_result {
-            Ok(posted) => posted,
-            Err(error) => return self.recover_commit(error, &command_receipt, &sales_order_id).await,
-        };
-        let remaining_eligibility = self.read.acceptance_eligibility(sales_order_id.as_ref()).await?;
-        Ok(CommitCustomerAcceptanceView { acceptance: posted.into(), remaining_eligibility })
+        commit_command_receipt(req, actor.id())
     }
 
     /// 只读查询命令收据并返回既有过账视图，未确认结果时保留原错误。
@@ -189,10 +117,135 @@ impl CustomerAcceptanceProcess {
         acceptance_id: &str,
         sales_order_id: &SalesOrderId,
     ) -> Result<CommitCustomerAcceptanceView> {
-        self.read
-            .committed_customer_acceptance_view(acceptance_id, sales_order_id)
-            .await
-            .map_err(crate::Error::from)
+        self.read.committed_customer_acceptance_view(acceptance_id, sales_order_id).await.map_err(Error::from)
+    }
+}
+
+fn commit_command_receipt(req: &CommitCustomerAcceptanceRequest, actor_id: &str) -> Result<CommandReceipt> {
+    Ok(CommandReceipt::from_payload(
+        "customer-acceptance-commit-",
+        actor_id,
+        "customer_acceptance.commit",
+        "customer_acceptance",
+        &req.idempotency_key,
+        req,
+    )?)
+}
+
+/// 根事务开始前固定行身份及命令依赖，恢复查询仍使用原命令收据。
+struct PreparedAcceptanceCommit {
+    db: Database,
+    rbac: SharedRbacService,
+    object_read: Arc<dyn ApprovalObjectReadPort>,
+    req: CommitCustomerAcceptanceRequest,
+    actor: AuditActor,
+    receipt: CommandReceipt,
+    acceptance_id: CustomerAcceptanceId,
+    generated_acceptance_no: Option<String>,
+    final_lines: Vec<CustomerAcceptanceLine>,
+}
+
+impl PreparedAcceptanceCommit {
+    async fn new(
+        process: &CustomerAcceptanceProcess,
+        req: CommitCustomerAcceptanceRequest,
+        actor: &AuditActor,
+        receipt: CommandReceipt,
+    ) -> Result<Self> {
+        let generated_acceptance_no = if req.acceptance_id.is_none() {
+            Some(next_customer_acceptance_no(&process.db).await?)
+        } else {
+            None
+        };
+        let acceptance_id = req
+            .acceptance_id
+            .as_ref()
+            .map(|id| CustomerAcceptanceId::new(id.clone()))
+            .unwrap_or_else(|| CustomerAcceptanceId::new(next_id()));
+        let final_lines =
+            FulfillmentService::build_customer_acceptance_lines(acceptance_id.clone(), &req.lines)?;
+        Ok(Self {
+            db: process.db.clone(),
+            rbac: process.rbac.clone(),
+            object_read: Arc::clone(&process.object_read),
+            req,
+            actor: actor.clone(),
+            receipt,
+            acceptance_id,
+            generated_acceptance_no,
+            final_lines,
+        })
+    }
+
+    async fn execute(self, executor: &mut dyn Executor) -> Result<CustomerAcceptance> {
+        SalesAccess::new(self.db.clone(), self.rbac.clone())
+            .require_object(&self.actor, "detail", &self.req.sales_order_id, &[], executor)
+            .await?;
+        if let Some(persisted) = replay_commit(&self.db, &self.receipt, &self.req, executor).await? {
+            return Ok(persisted);
+        }
+        let existing =
+            FulfillmentService::load_customer_acceptance_commit_draft(&self.db, &self.req, executor).await?;
+        let order = self
+            .db
+            .sales_orders()
+            .find_by_id(self.req.sales_order_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        if order.base.version != self.req.expected_sales_order_version {
+            return Err(Error::ConflictError("销售单已变化，请刷新履约事实后重试".to_string()));
+        }
+        self.persist(existing, executor).await
+    }
+
+    async fn persist(
+        self,
+        existing: Option<CustomerAcceptance>,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerAcceptance> {
+        let task = prepare_customer_acceptance_task_command(
+            &self.db,
+            &self.req.sales_order_id,
+            self.actor.id(),
+            self.req.work_item_id.as_deref(),
+            self.req.expected_task_version,
+            executor,
+        )
+        .await?;
+        let (mut acceptance, is_new) = FulfillmentService::prepare_customer_acceptance_commit(
+            existing,
+            &self.acceptance_id,
+            &self.req,
+            self.generated_acceptance_no,
+        )?;
+        prepare_document(
+            &self.db,
+            &self.rbac,
+            self.object_read.as_ref(),
+            &acceptance,
+            is_new,
+            &self.actor,
+            executor,
+        )
+        .await?;
+        FulfillmentService::persist_customer_acceptance_commit(
+            &self.db,
+            &mut acceptance,
+            is_new,
+            &self.final_lines,
+            &self.req,
+            executor,
+        )
+        .await?;
+        complete_acceptance(
+            &self.db,
+            &acceptance,
+            &self.actor,
+            CompletionKind::Commit { task, receipt: Box::new(self.receipt) },
+            executor,
+        )
+        .await?;
+        Ok(acceptance)
     }
 }
 
@@ -246,10 +299,11 @@ async fn prepare_document(
 
 #[cfg(test)]
 mod tests {
-    use application_core::CommandReceipt;
     use erp_core::ids::FileAssetId;
     use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
     use serde_json::json;
+
+    use super::commit_command_receipt;
 
     #[test]
     fn receipt_conflicts_when_signature_evidence_changes() {
@@ -259,36 +313,14 @@ mod tests {
             "idempotency_key": "signature-command", "evidence_attachment_id": "file-one"
         }))
         .unwrap();
-        let first = CommandReceipt::from_payload(
-            "customer-acceptance-commit-",
-            "actor-1",
-            "customer_acceptance.commit",
-            "customer_acceptance",
-            &request.idempotency_key,
-            &request,
-        )
-        .unwrap();
+        let first = commit_command_receipt(&request, "actor-1").unwrap();
+        let replay = commit_command_receipt(&request, "actor-1").unwrap();
+        assert_eq!(first.fingerprint(), replay.fingerprint());
         request.evidence_attachment_id = Some(FileAssetId::new("file-two"));
-        let changed = CommandReceipt::from_payload(
-            "customer-acceptance-commit-",
-            "actor-1",
-            "customer_acceptance.commit",
-            "customer_acceptance",
-            &request.idempotency_key,
-            &request,
-        )
-        .unwrap();
+        let changed = commit_command_receipt(&request, "actor-1").unwrap();
         assert_ne!(first.fingerprint(), changed.fingerprint());
         request.evidence_attachment_id = None;
-        let missing = CommandReceipt::from_payload(
-            "customer-acceptance-commit-",
-            "actor-1",
-            "customer_acceptance.commit",
-            "customer_acceptance",
-            &request.idempotency_key,
-            &request,
-        )
-        .unwrap();
+        let missing = commit_command_receipt(&request, "actor-1").unwrap();
         assert_ne!(first.fingerprint(), missing.fingerprint());
     }
 }

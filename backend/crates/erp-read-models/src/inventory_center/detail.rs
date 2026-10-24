@@ -2,16 +2,17 @@ use std::future::Future;
 
 use application_core::AuditActor;
 use erp_inventory::{
-    Result as InventoryResult, StockAdjustmentDetailView, StockAdjustmentLineView, StockAdjustmentView,
+    DocumentApprovalView, Result as InventoryResult, StockAdjustment, StockAdjustmentDetailView,
+    StockAdjustmentLineView, StockAdjustmentView,
 };
-use persistence_core::NoTransaction;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
-use super::InventoryAdjustmentService;
-use super::adapter::require_frozen_binding;
-use super::approval_query::{self, load_approval_binding};
-use crate::Result;
+use super::InventoryAdjustmentReadService;
+use super::approval::{self, load_approval_binding};
+use crate::{Error, Result};
 
-impl InventoryAdjustmentService {
+impl InventoryAdjustmentReadService {
     /// 查询库存调整单详情（表头 + 明细 + 过账流水）。
     ///
     /// # 参数
@@ -34,7 +35,7 @@ impl InventoryAdjustmentService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<StockAdjustmentDetailView> {
-        self.stock_adjustment_detail_with_instance(id, actor, None).await
+        self.stock_adjustment_detail_for_instance(id, actor, None).await
     }
 
     /// 构造库存调整详情；签署命令结果必须按收据引用的实例精确投影。
@@ -49,50 +50,121 @@ impl InventoryAdjustmentService {
     ///
     /// # 错误
     /// 调整单不可读、绑定缺失、审批投影失败，或明细、流水、责任人员事实读取失败时返回对应错误。
-    pub(super) async fn stock_adjustment_detail_with_instance(
+    pub async fn stock_adjustment_detail_for_instance(
         &self,
         id: &str,
         actor: &AuditActor,
         approval_instance: Option<(&str, u32)>,
     ) -> Result<StockAdjustmentDetailView> {
-        let inventory = self.inventory();
-        let adjustment = inventory.readable_stock_adjustment(id, actor).await?;
-        let lines = inventory.load_adjustment_lines(&adjustment.base.id).await?;
-        let movements = inventory.load_movements_for_source_document(id).await?;
-        let binding = load_approval_binding(&self.db, id, &mut NoTransaction).await?;
-        let binding = require_frozen_binding(binding.as_ref())?;
-        let approval = match approval_instance {
-            Some((instance_id, expected_subject_version)) => {
-                approval_query::load_document_approval_for_instance(
-                    self,
-                    &adjustment,
-                    Some(binding),
-                    instance_id,
-                    expected_subject_version,
-                    actor,
-                )
-                .await?
-            },
-            None => approval_query::load_document_approval(self, &adjustment, Some(binding), actor).await?,
-        };
+        let service = self.clone();
+        let id = id.to_string();
+        let read_actor = actor.clone();
+        let approval_instance = approval_instance.map(|(id, version)| (id.to_string(), version));
+        let mut view = self
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .detail(
+                            &id,
+                            &read_actor,
+                            approval_instance.as_ref().map(|(id, version)| (id.as_str(), *version)),
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await?;
+        // 纯展示失败可降级；不要让名称查询错误使已完成的核心读取快照失效。
+        self.enrich_display_names(&mut view, actor).await;
+        Ok(view)
+    }
+
+    /// 在调用方读取快照内组装已授权详情，不开启事务。
+    ///
+    /// # 参数
+    /// * `id` - 调整单主键。
+    /// * `actor` - 当前认证操作人。
+    /// * `approval_instance` - 原命令精确实例与主题版本；空时取当前实例。
+    /// * `executor` - 同一授权、业务、审批与人员身份事实读取快照。
+    ///
+    /// # 返回
+    /// 返回核心业务事实、人员身份及当前调用人审批动作；纯展示姓名与 SKU 名称由独立入口在快照成功后补全。
+    ///
+    /// # 错误
+    /// 对象不可读、审批绑定或实例不一致、事实读取失败时返回对应错误。
+    pub async fn detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        approval_instance: Option<(&str, u32)>,
+        executor: &mut dyn Executor,
+    ) -> Result<StockAdjustmentDetailView> {
+        let inventory = &self.inventory;
+        let adjustment = inventory.readable_stock_adjustment(id, actor, executor).await?;
+        let lines = inventory.load_adjustment_lines(&adjustment.base.id, executor).await?;
+        let movements = inventory.load_movements_for_source_document(id, executor).await?;
+        let binding = load_approval_binding(&self.db, id, executor).await?;
+        let binding = binding
+            .as_ref()
+            .ok_or_else(|| Error::ConflictError("无有效审批绑定的库存调整单不得提交".into()))?;
+        let approval = self.approval_view(&adjustment, binding, actor, approval_instance, executor).await?;
         let mut adjustment_view = StockAdjustmentView::from(adjustment);
-        if let Some(fact) = inventory.adjustment_people_by_ids(&[id.to_string()]).await?.remove(id) {
+        if let Some(fact) = inventory.adjustment_people_by_ids(&[id.to_string()], executor).await?.remove(id)
+        {
             adjustment_view.apply_people(&fact);
         }
-        optional_display_names(
-            inventory.enrich_adjustment_people_names(std::slice::from_mut(&mut adjustment_view)),
-            actor,
-            "people",
-        )
-        .await;
-        let mut lines = lines.into_iter().map(Into::into).collect::<Vec<StockAdjustmentLineView>>();
-        optional_display_names(inventory.enrich_adjustment_line_names(&mut lines), actor, "sku").await;
+        let lines = lines.into_iter().map(Into::into).collect::<Vec<StockAdjustmentLineView>>();
         Ok(StockAdjustmentDetailView {
             approval,
             adjustment: adjustment_view,
             lines,
             posted_movements: movements.into_iter().map(Into::into).collect(),
         })
+    }
+    async fn enrich_display_names(&self, view: &mut StockAdjustmentDetailView, actor: &AuditActor) {
+        optional_display_names(
+            self.inventory.enrich_adjustment_people_names(
+                std::slice::from_mut(&mut view.adjustment),
+                &mut NoTransaction,
+            ),
+            actor,
+            "people",
+        )
+        .await;
+        optional_display_names(
+            self.inventory.enrich_adjustment_line_names(&mut view.lines, &mut NoTransaction),
+            actor,
+            "sku",
+        )
+        .await;
+    }
+
+    async fn approval_view(
+        &self,
+        adjustment: &StockAdjustment,
+        binding: &ApprovalDefinitionBinding,
+        actor: &AuditActor,
+        approval_instance: Option<(&str, u32)>,
+        executor: &mut dyn Executor,
+    ) -> Result<DocumentApprovalView> {
+        match approval_instance {
+            Some((instance_id, expected_subject_version)) => {
+                approval::load_document_approval_for_instance(
+                    self,
+                    adjustment,
+                    Some(binding),
+                    instance_id,
+                    expected_subject_version,
+                    actor,
+                    executor,
+                )
+                .await
+            },
+            None => approval::load_document_approval(self, adjustment, Some(binding), actor, executor).await,
+        }
     }
 }
 

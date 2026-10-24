@@ -1793,6 +1793,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-contract-recognition"
+version = "0.1.0"
+dependencies = [
+ "aliyun-ocr",
+ "async-trait",
+ "bytes",
+ "erp-contract",
+ "image",
+ "reqwest",
+ "rig-agent",
+ "rig-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "erp-core"
 version = "0.1.0"
 dependencies = [
@@ -2004,12 +2025,10 @@ dependencies = [
 name = "erp-processes"
 version = "0.1.0"
 dependencies = [
- "aliyun-ocr",
  "application-core",
  "async-trait",
  "base64 0.23.1",
  "bpm",
- "bytes",
  "chrono",
  "config",
  "entity-core",
@@ -2044,8 +2063,7 @@ dependencies = [
  "persistence-core",
  "regex",
  "reqwest",
- "rig-agent",
- "rig-core",
+ "roxmltree 0.21.1",
  "rust_decimal",
  "rust_xlsxwriter",
  "serde",
@@ -2054,7 +2072,6 @@ dependencies = [
  "sha2 0.11.0",
  "storage",
  "subtle",
- "tempfile",
  "test-support",
  "thiserror 2.0.20",
  "tokio",
@@ -6367,6 +6384,7 @@ dependencies = [
  "erp-audit",
  "erp-catalog",
  "erp-contract",
+ "erp-contract-recognition",
  "erp-core",
  "erp-customer",
  "erp-finance",

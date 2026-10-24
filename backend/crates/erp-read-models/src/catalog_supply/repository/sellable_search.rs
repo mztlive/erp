@@ -3,42 +3,44 @@
 use std::collections::BTreeSet;
 
 use erp_catalog::repository::{CatalogExt, SellableSkuFilter, SellableSkuRow};
-use erp_core::common::time::BusinessDate;
 use erp_core::region::RegionCode;
 use erp_supply::repository::SupplierOfferingExt;
 use persistence_core::{Executor, PageResult, Result};
 
 use super::CatalogSupplyRepository;
-use crate::sellable_projection_refresh::SellableProjectionRefresher;
 
 impl CatalogSupplyRepository<'_> {
     /// 分页查询销售可用的公司 SKU。
     ///
     /// 资格业务日为今天且预算投影已就绪时，先追平少量待处理变化再按投影查询；
     /// 否则按实时资格聚合查询。两路筛选、排序与分页口径一致。
+    /// 投影追平由写入编排层在调用前执行，本读取入口不修改投影。
     ///
     /// # 参数
     /// * `filter` - 业务筛选、配送地区、勾选范围、排序与分页
+    /// * `restrict` - 调用方先加载的配送与勾选交集；为空集合时直接返回空页。
+    /// * `projection_ready` - 调用方已确认当日投影就绪并完成追平。
     /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 返回当前页可售行及总数；按配送地区且含运费另计时标出需另付运费的行。
     ///
     /// # 错误
-    /// MongoDB 查询或投影追平失败时返回错误。
+    /// MongoDB 查询失败时返回错误。
     pub async fn search_sellable_skus(
         &self,
         filter: &SellableSkuFilter,
+        restrict: Option<&[String]>,
+        projection_ready: bool,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SellableSkuRow>> {
-        let restrict = self.restricted_sku_ids(filter, executor).await?;
-        if restrict.as_ref().is_some_and(Vec::is_empty) {
+        if restrict.is_some_and(<[String]>::is_empty) {
             return Ok(PageResult { items: Vec::new(), total: 0 });
         }
-        let mut page = if self.projection_serves(filter).await? {
-            self.db.sellable_sku_projections().search(filter, restrict.as_deref(), executor).await?
+        let mut page = if projection_ready {
+            self.db.sellable_sku_projections().search(filter, restrict, executor).await?
         } else {
-            self.search_live(filter, restrict.as_deref(), executor).await?
+            self.search_live(filter, restrict, executor).await?
         };
         if let Some(query) = filter.delivery.as_ref().filter(|query| query.include_freight_extra) {
             self.mark_freight_extra(&mut page.items, &query.region, executor).await?;
@@ -46,8 +48,18 @@ impl CatalogSupplyRepository<'_> {
         Ok(page)
     }
 
-    /// 配送地区命中与勾选范围的交集；都未指定时不限。
-    async fn restricted_sku_ids(
+    /// 读取配送地区命中与勾选范围的交集；保持读取前的短路和错误顺序。
+    ///
+    /// # 参数
+    /// * `filter` - 已规范化的配送与勾选筛选。
+    /// * `executor` - 调用方读取快照。
+    ///
+    /// # 返回
+    /// 两侧都未指定时为 `None`；命中为空时为 `Some(Vec::new())`。
+    ///
+    /// # 错误
+    /// 配送覆盖事实读取失败时返回错误。
+    pub async fn sellable_sku_scope(
         &self,
         filter: &SellableSkuFilter,
         executor: &mut dyn Executor,
@@ -57,14 +69,6 @@ impl CatalogSupplyRepository<'_> {
             None => None,
         };
         Ok(intersect(filter.sku_ids.as_deref(), delivery))
-    }
-
-    /// 资格业务日为今天且投影就绪时按投影查询，查询前追平少量待处理变化。
-    async fn projection_serves(&self, filter: &SellableSkuFilter) -> Result<bool> {
-        if filter.eligibility_as_of != BusinessDate::today() {
-            return Ok(false);
-        }
-        SellableProjectionRefresher::new(self.db.clone()).catch_up().await
     }
 
     /// 标出所选地区内有需另付运费才能送到的地方的当前页商品。

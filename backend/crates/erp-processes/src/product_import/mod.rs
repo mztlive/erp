@@ -15,9 +15,14 @@ mod row_manifest;
 mod submit;
 mod views;
 
+use std::sync::Arc;
+
 use erp_identity::SharedRbacService;
 use mongodb::Database;
 use storage::S3Storage;
+
+use self::execute::JobRowSource;
+use crate::background::import_source::ImportSourceCache;
 
 /// 商品报价表导入流程。
 #[derive(Clone)]
@@ -26,6 +31,7 @@ pub struct ProductImportProcess {
     rbac: SharedRbacService,
     storage: S3Storage,
     secret: Vec<u8>,
+    sources: Arc<ImportSourceCache<JobRowSource>>,
 }
 
 impl ProductImportProcess {
@@ -48,6 +54,13 @@ impl ProductImportProcess {
         storage: S3Storage,
         secret: impl Into<Vec<u8>>,
     ) -> Self {
-        Self { db, rbac, storage, secret: secret.into() }
+        Self {
+            db,
+            rbac,
+            storage,
+            secret: secret.into(),
+            // 单份旧工作簿允许 700 MiB；缓存最多一轮任务，合计输入预算 1 GiB。
+            sources: Arc::new(ImportSourceCache::new(1024 * 1024 * 1024)),
+        }
     }
 }

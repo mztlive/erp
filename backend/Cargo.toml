@@ -18,6 +18,7 @@ members = [
   "crates/erp-catalog",
   "crates/erp-warehouse",
   "crates/erp-contract",
+  "crates/erp-contract-recognition",
   "crates/erp-import",
   "crates/erp-inventory",
   "crates/erp-finance",
@@ -61,6 +62,7 @@ erp-supplier = { path = "crates/erp-supplier" }
 erp-catalog = { path = "crates/erp-catalog" }
 erp-warehouse = { path = "crates/erp-warehouse" }
 erp-contract = { path = "crates/erp-contract" }
+erp-contract-recognition = { path = "crates/erp-contract-recognition" }
 erp-import = { path = "crates/erp-import" }
 erp-inventory = { path = "crates/erp-inventory" }
 erp-finance = { path = "crates/erp-finance" }

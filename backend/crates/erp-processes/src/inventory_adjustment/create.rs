@@ -8,6 +8,7 @@ use erp_inventory::{
     StockAdjustment, StockAdjustmentData, StockAdjustmentDetailView, StockAdjustmentLine,
     StockAdjustmentLineData, StockAdjustmentLineInput, SubmitStockAdjustmentApprovalTokenView,
 };
+use erp_read_models::inventory_center::document_approval_view_with_history;
 use erp_warehouse::WarehouseExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
@@ -19,7 +20,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::adapter::document_approval_view_with_history;
 use super::{InventoryAdjustmentService, approval_prepare as start_approval};
 use crate::adapters::authorize_inventory;
 use crate::audit::persist_log;

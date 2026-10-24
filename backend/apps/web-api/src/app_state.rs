@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use config::{Config, SafeConfig};
 use erp_contract::ContractTemplateService;
+use erp_contract_recognition::{AliyunContractOcr, OpenAiContractExtractor};
 use erp_identity::SharedRbacService;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_party::SensitiveDataCodec;
@@ -15,8 +16,6 @@ use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGa
 use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth, workflow_object_facts};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::connectors::dangaoshushu::DangaoshushuRuntime;
-use erp_processes::contract_import::aliyun::AliyunContractOcr;
-use erp_processes::contract_import::openai::OpenAiContractExtractor;
 use erp_processes::contract_import::{ContractImportProcess, RecognitionProviders};
 use erp_processes::integration_resolution::IntegrationResolutionProcess;
 use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;

@@ -3,21 +3,18 @@
 //! `SalesOrder` 与 `VoucherSalesOrder` 共用本模块，按 `DocumentType` 分派
 //! `ProcessKind`、快照与任务归属，不得回退 `CARD_SALES_APPROVAL`。
 
-use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
+use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
+use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
-use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_sales::dto::sales_order::SubmissionView;
 use erp_sales::entity::command_receipt::SalesCommandReceipt;
 use erp_sales::entity::sales_order::SalesOrder;
-use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
-use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::authorization::{
     AuthorizationFailure, converge_node_eligibility,
@@ -31,7 +28,7 @@ use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
+use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -39,8 +36,9 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_object_readable;
 use super::authorization::SalesCommandAccess;
-use crate::adapters::workflow::approver_directory::revalidate_approvers;
-use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
+use crate::approval_start::{
+    StartTaskContext, persist_start_runtime, persist_start_snapshot, persist_start_tasks,
+};
 use crate::order_to_cash::command_event::{SalesCommandEvent, replay_submission_with_executor};
 use crate::{Error, Result};
 
@@ -84,18 +82,7 @@ pub(super) async fn load_bound_definition_graph_with_executor(
         .load_definition_graph(&binding.approval_process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("销售单绑定的审批定义不存在".to_string()))?;
-    Ok(engine_graph(graph))
-}
-
-/// 将仓储定义图转为引擎定义图。字段一一对应，不得在此补默认节点。
-///
-/// # 参数
-/// * `graph` - 仓储一次批量读取结果
-///
-/// # 返回
-/// 返回引擎可消费的定义图。
-fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
+    Ok(graph)
 }
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -672,101 +659,25 @@ pub(super) async fn persist_runtime_writes(
 ) -> Result<()> {
     let SalesOrderRuntimeWriteInput { document_type, snapshot_payload, owner_role, organization_id, now } =
         input;
-    let first = writes
-        .created_executions
-        .first()
-        .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交销售单".to_string()))?;
-    revalidate_approvers(db, writes, executor).await?;
-    db.bpm_workflow()
-        .create_bpm_runtime_after_receipt(
-            &writes.instance,
-            &writes.created_assignees,
-            first,
-            &list_projection_from_execution(first, now),
-            executor,
-        )
-        .await?;
-    let snapshot = ApprovalSubjectSnapshot::new(
-        ApprovalSubjectSnapshotId::new(next_id()),
-        ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
+    let snapshot = persist_start_runtime(
+        db,
+        writes,
         document_type,
-        writes.instance.subject.subject_id(),
-        writes.instance.subject_version,
-        snapshot_payload.clone(),
+        snapshot_payload,
+        now,
+        "启动计划缺少入口执行，不得提交销售单",
+        executor,
     )
-    .map_err(|error| Error::ValidationError(error.to_string()))?;
-    let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    persist_approval_snapshot(db, &snapshot, executor).await?;
-    persist_open_tasks(db, writes, document_type, owner_role, organization_id, now, executor).await
-}
-
-/// 由入口执行构造有界列表投影。
-///
-/// # 参数
-/// * `execution` - 入口执行
-/// * `now` - 状态变更时间
-///
-/// # 返回
-/// 返回启动时的列表投影。
-fn list_projection_from_execution(
-    execution: &ApprovalNodeExecution,
-    now: Instant,
-) -> ApprovalInstanceListProjection {
-    ApprovalInstanceListProjection {
-        current_node_key: Some(execution.node_key.clone()),
-        current_node_name: Some(execution.node_name.clone()),
-        current_assignee_participant_id: Some(execution.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: Some(execution.assignee_display_name()),
-        latest_rejected_execution_id: None,
-        latest_rejection_summary: None,
-        last_status_changed_at: Some(now.unix_secs()),
-    }
-}
-
-/// 将 `HumanTaskRequested` 映射为 `DOCUMENT_APPROVAL` 任务并写入。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `writes` - 启动写入
-/// * `document_type` - 按业务性质分派的单据类型
-/// * `owner_role` - 责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 创建时间
-/// * `executor` - 当前执行器
-///
-/// # 错误
-/// 责任人为空或仓储失败时返回错误。
-async fn persist_open_tasks(
-    db: &Database,
-    writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
-    document_type: DocumentType,
-    owner_role: &str,
-    organization_id: &str,
-    now: Instant,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    for intent in &writes.create_tasks {
-        let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
-            continue;
-        };
-        let item = WorkItem::new_document_approval(
-            WorkItemId::new(next_id()),
-            DocumentApprovalWorkItemData {
-                approval_node_execution_id: execution_id.clone(),
-                business_object_type: document_type.as_str().to_string(),
-                business_object_id: writes.instance.subject.subject_id().to_string(),
-                subject_version: writes.instance.subject_version.to_string(),
-                owner_role: owner_role.to_string(),
-                owner_organization_id: organization_id.to_string(),
-                owner_user_id: assignee.as_str().to_string(),
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-            },
-            now,
-        )?;
-        db.work_items().create(&item, executor).await?;
-    }
-    Ok(())
+    .await?;
+    persist_start_snapshot(db, snapshot, executor).await?;
+    persist_start_tasks(
+        db,
+        writes,
+        StartTaskContext { document_type, owner_role, organization_id, now },
+        executor,
+    )
+    .await
+    .map(|_| ())
 }
 
 #[cfg(test)]
@@ -774,8 +685,7 @@ mod tests {
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
     use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
     use erp_core::common::time::Instant;
-
-    use super::list_projection_from_execution;
+    use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 
     fn execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -797,7 +707,8 @@ mod tests {
     /// 列表投影必须来自入口执行，不得推断未知审批人。
     #[test]
     fn list_projection_copies_entry_assignee() {
-        let projection = list_projection_from_execution(&execution(), Instant::from_unix_secs(10));
+        let projection =
+            ApprovalInstanceListProjection::from_entry_execution(&execution(), Instant::from_unix_secs(10));
         assert_eq!(projection.current_node_key.as_deref(), Some("n1"));
         assert_eq!(projection.current_assignee_participant_id.as_deref(), Some("u1"));
         assert_eq!(projection.current_assignee_name.as_deref(), Some("张三"));

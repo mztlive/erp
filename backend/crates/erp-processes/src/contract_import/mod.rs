@@ -1,10 +1,8 @@
 //! 合同识别导入：文件任务持久化、事务外识别、事务内重验并原子归档。
-pub mod aliyun;
 mod archive;
 mod audit;
 mod customer;
 mod matching;
-pub mod openai;
 mod pipeline;
 mod progress;
 mod source;

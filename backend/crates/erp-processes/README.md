@@ -73,11 +73,11 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked
 
 代码变更还须执行[统一质量门禁](../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
 
-## 合同 OCR
+## 合同识别
 
-`contract_import::aliyun::AliyunContractOcr` 实现合同领域 `ContractOcr`。PDF 转图使用 Poppler，网络请求使用独立 [aliyun-ocr](../aliyun-ocr/README.md) crate；所有渲染及外部识别必须在数据库事务外执行。配置、资源限制、取消及验收边界按该接入合同执行。
+`contract_import::RecognitionProviders` 只持有合同领域 `ContractOcr` 与 `ContractExtractor` Port。具体 OCR、Poppler 和 OpenAI 适配由 [erp-contract-recognition](../erp-contract-recognition/README.md) 提供，web-api 使用 `SafeConfig` 直接装配。
 
-`contract_import::openai::OpenAiContractExtractor` 使用 `rig-agent` 标准 Extractor 与 `rig-core` OpenAI Responses provider 实现 `ContractExtractor`，通过内置 `submit` 输出函数提取全文字段和证据。模型不得参与主数据匹配或执行动作，配置与失败语义执行 [AI 提取接入合同](../../../docs/contract-ai-contract.md)。
+本 crate 保留识别任务、进度持久化、权限重验、客户匹配、用户确认及归档事务。外部调用必须在数据库事务外执行，模型不得参与主数据匹配或执行业务动作。
 
 ## 蛋糕叔叔
 

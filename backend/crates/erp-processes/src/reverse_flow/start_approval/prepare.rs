@@ -158,18 +158,7 @@ pub async fn load_bound_definition_graph_with_executor(
         .load_definition_graph(&binding.approval_process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("客户退款单绑定的审批定义不存在".to_string()))?;
-    Ok(engine_graph(graph))
-}
-
-/// 将仓储定义图转为引擎定义图。字段一一对应，不得在此补默认节点。
-///
-/// # 参数
-/// * `graph` - 仓储一次批量读取结果
-///
-/// # 返回
-/// 返回引擎可消费的定义图。
-fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph { definition: graph.definition, nodes: graph.nodes, transitions: graph.transitions }
+    Ok(graph)
 }
 
 /// 按精确单据类型依次读取当前 V3 与已知历史 StartApproval 作用域。

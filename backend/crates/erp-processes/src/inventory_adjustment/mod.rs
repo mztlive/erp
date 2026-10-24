@@ -3,12 +3,13 @@
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
+use erp_inventory::InventoryService;
+use erp_read_models::inventory_center::InventoryAdjustmentReadService;
 use erp_workflow::ApprovalObjectReadPort;
 use mongodb::Database;
 
 mod adapter;
 mod approval_prepare;
-mod approval_query;
 pub mod cancel_approval;
 mod cancel_facts;
 pub(super) mod cancel_persist;
@@ -17,7 +18,7 @@ mod create;
 mod mapping;
 mod persist;
 mod post;
-mod query;
+mod read_policy;
 mod submit;
 
 #[cfg(test)]
@@ -66,6 +67,24 @@ impl InventoryAdjustmentService {
         self
     }
 
+    /// 装配库存调整跨域读取与正式命令共用的动作政策。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的读取模型。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn read_model(&self) -> InventoryAdjustmentReadService {
+        InventoryAdjustmentReadService::new(
+            self.db.clone(),
+            Arc::new(self.inventory()),
+            Arc::new(read_policy::StockAdjustmentReadPolicy { db: self.db.clone(), rbac: self.rbac.clone() }),
+        )
+    }
+
     /// 库存领域服务，供流程读取调整单表头、明细与过账流水。
     ///
     /// # 参数
@@ -76,7 +95,7 @@ impl InventoryAdjustmentService {
     ///
     /// # 错误
     /// 不返回错误。
-    pub(super) fn inventory(&self) -> erp_inventory::InventoryService {
+    pub(super) fn inventory(&self) -> InventoryService {
         crate::adapters::inventory_service(self.db.clone(), self.rbac.clone())
     }
 }

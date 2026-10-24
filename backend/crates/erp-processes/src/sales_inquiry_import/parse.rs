@@ -1,54 +1,26 @@
 //! 有界读取客户工作簿；只接受版本化的三个白名单工作表。
 
-use std::collections::{BTreeMap, HashMap};
-use std::io::{Cursor, Read};
-use std::sync::LazyLock;
+use std::collections::HashMap;
 
 use erp_sales::entity::sales_inquiry_import::{
     INQUIRY_IMPORT_MAX_BYTES, INQUIRY_IMPORT_MAX_ROWS, INQUIRY_TEMPLATE_VERSION, InquiryImportIssue,
 };
-use regex::Regex;
-use zip::ZipArchive;
 
 use super::pool::{POOL_SHEET, POOL_VERSION, pool_rows};
 use super::pool_delivery::{self, AUTO_POOL_VERSION};
 use super::pool_delivery_checks::{CHECKED_POOL_VERSION, SCALAR_POOL_VERSION, strip_checks};
 use super::scalar_cells;
+use crate::xlsx::{self, Archive, ArchiveLimits, SheetLimits};
+pub(crate) use crate::xlsx::{Cell, Row};
 use crate::{Error, Result};
 
 pub(super) const PRODUCT_SHEET: &str = "商品清单";
 pub(super) const DELIVERY_SHEET: &str = "配送需求";
 const INSTRUCTIONS: &str = "填写说明";
-const MAX_EXPANDED_BYTES: u64 = 32 * 1024 * 1024;
-const MAX_ENTRY_BYTES: u64 = 16 * 1024 * 1024;
-static CELL_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?s)<c\b([^>]*?)(?:/\s*>|>(.*?)</c>)").expect("static cell regex"));
-static ATTRIBUTE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?:^|\s)([\w:]+)\s*=\s*["']([^"']*)["']"#).expect("static attribute regex")
-});
-static FORMULA_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"<(?:[A-Za-z_][\w.-]*:)?f(?:\s|/|>)").expect("static formula regex"));
-static TEXT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?s)<t\b[^>]*>(.*?)</t>").expect("static text regex"));
 pub(super) const PRODUCT_HEADERS: [&str; 7] =
     ["SKU编码", "商品名称", "规格", "单位", "需求数量", "销售价", "需求备注"];
 pub(super) const DELIVERY_HEADERS: [&str; 10] =
     ["SKU编码", "收件人", "联系电话", "省", "市", "区县", "详细地址", "配送数量", "要求交付日期", "交付条件"];
-
-#[derive(Clone, Default)]
-pub(crate) struct Cell {
-    pub value: String,
-    pub text: bool,
-    pub numeric: bool,
-    pub formula: bool,
-    pub formula_text: Option<String>,
-}
-
-#[derive(Clone)]
-pub(crate) struct Row {
-    pub number: u32,
-    pub cells: Vec<Cell>,
-}
 
 pub(crate) struct Workbook {
     pub product_sheet: &'static str,
@@ -62,19 +34,14 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Workbook> {
     if bytes.is_empty() || bytes.len() > INQUIRY_IMPORT_MAX_BYTES {
         return Err(invalid("工作簿不能为空且不得超过 5 MiB"));
     }
-    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| invalid("请上传有效 .xlsx 工作簿"))?;
-    check_archive(&mut archive)?;
-    let shared = shared_strings(&mut archive)?;
+    let mut archive = Archive::open(bytes, ArchiveLimits::CUSTOMER)?;
+    let shared = archive.shared_strings()?;
     let paths = sheet_paths(&mut archive, false)?;
     let mut sheets = HashMap::new();
     for (name, path) in paths {
-        sheets.insert(name, rows(&read_text(&mut archive, &path)?, &shared)?);
+        sheets.insert(name, rows(&archive.xml(&path)?, &shared)?);
     }
-    let metadata = read_text(&mut archive, "xl/workbook.xml")?;
-    let date1904 = tags(&metadata, "workbookPr")
-        .first()
-        .and_then(|tag| attribute(tag, "date1904"))
-        .is_some_and(|value| value == "1" || value == "true");
+    let date1904 = xlsx::date1904(&archive.xml("xl/workbook.xml")?)?;
     let mut workbook = parse_sheets(sheets)?;
     scalar_cells::normalize(&mut workbook.deliveries, date1904);
     Ok(workbook)
@@ -91,20 +58,20 @@ pub(crate) fn quote_sheets(bytes: &[u8]) -> Result<HashMap<String, Vec<Row>>> {
     if bytes.is_empty() || bytes.len() > 20 * 1024 * 1024 {
         return Err(invalid("报价表须为 1 至 20 MiB 的 XLSX 文件"));
     }
-    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| invalid("无效 XLSX 文件"))?;
-    check_archive(&mut archive)?;
-    let workbook = read_text(&mut archive, "xl/workbook.xml")?;
-    if workbook.contains("date1904=\"1\"") || workbook.contains("date1904=\"true\"") {
+    let mut archive = Archive::open(bytes, ArchiveLimits::CUSTOMER)?;
+    if xlsx::date1904(&archive.xml("xl/workbook.xml")?)? {
         return Err(invalid("报价表不支持 1904 日期系统，请使用原模板"));
     }
-    let shared = shared_strings(&mut archive)?;
+    let shared = archive.shared_strings()?;
     let mut sheets = HashMap::new();
     for (name, path) in sheet_paths(&mut archive, true)? {
-        let xml = read_text(&mut archive, &path)?;
-        if xml.contains("<hyperlink") {
+        let xml = archive.xml(&path)?;
+        let sheet = xlsx::rows(&xml, &shared, SheetLimits::CUSTOMER)?;
+        if sheet.hyperlinks {
             return Err(invalid("报价表不能包含超链接"));
         }
-        let rows = rows(&xml, &shared)?;
+        let mut rows = sheet.rows;
+        trim_rows(&mut rows);
         if rows.iter().flat_map(|r| &r.cells).any(|c| c.formula) {
             return Err(invalid("报价表不能包含公式，请先转换为值"));
         }
@@ -148,64 +115,15 @@ fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
     Ok(Workbook { product_sheet, automatic_delivery: automatic, products, deliveries, errors })
 }
 
-fn check_archive(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<()> {
-    if archive.len() > 4096 {
-        return Err(invalid("工作簿压缩条目过多"));
-    }
-    let mut expanded = 0_u64;
-    let mut names = std::collections::HashSet::new();
-    for index in 0..archive.len() {
-        let file = archive.by_index(index).map_err(|_| invalid("压缩条目无效"))?;
-        expanded = expanded.checked_add(file.size()).ok_or_else(|| invalid("解压大小越限"))?;
-        if file.size() > MAX_ENTRY_BYTES
-            || expanded > MAX_EXPANDED_BYTES
-            || file.enclosed_name().is_none()
-            || !names.insert(file.name().to_string())
-        {
-            return Err(invalid("工作簿路径重复、路径不安全或解压大小超过 32 MiB"));
-        }
-        if file.name().contains("vbaProject") || file.name().starts_with("xl/externalLinks/") {
-            return Err(invalid("客户工作簿不得包含宏或外部链接"));
-        }
-    }
-    Ok(())
-}
-
-fn sheet_paths(archive: &mut ZipArchive<Cursor<&[u8]>>, quote: bool) -> Result<Vec<(String, String)>> {
-    let workbook = read_text(archive, "xl/workbook.xml")?;
-    let relationships = read_text(archive, "xl/_rels/workbook.xml.rels")?;
-    let mut paths = HashMap::new();
-    for tag in tags(&relationships, "Relationship") {
-        if attribute(tag, "TargetMode").is_some_and(|mode| mode == "External") {
-            return Err(invalid("工作簿不得使用外部工作表"));
-        }
-        if let (Some(id), Some(target)) = (attribute(tag, "Id"), attribute(tag, "Target")) {
-            let path = if let Some(path) = target.strip_prefix('/') {
-                path.to_string()
-            } else {
-                format!("xl/{target}")
-            };
-            if path.split('/').any(|part| part == "..") {
-                return Err(invalid("工作表路径不安全"));
-            }
-            paths.insert(id, path);
-        }
-    }
-    let mut result = Vec::new();
-    for tag in tags(&workbook, "sheet") {
-        let name = attribute(tag, "name").ok_or_else(|| invalid("工作表名称无效"))?;
-        let id = attribute(tag, "r:id").ok_or_else(|| invalid("工作表引用无效"))?;
-        if !(if quote {
-            &["报价表", "回导信息", "配送需求"][..]
-        } else {
-            &[PRODUCT_SHEET, POOL_SHEET, DELIVERY_SHEET, INSTRUCTIONS][..]
-        })
-        .contains(&name.as_str())
-            || result.iter().any(|(existing, _)| existing == &name)
-        {
-            return Err(invalid("只接受选品（或商品清单）、配送需求、填写说明三个工作表"));
-        }
-        result.push((name, paths.get(&id).cloned().ok_or_else(|| invalid("工作表路径缺失"))?));
+fn sheet_paths(archive: &mut Archive<'_>, quote: bool) -> Result<Vec<(String, String)>> {
+    let result = xlsx::sheet_paths(archive)?;
+    let allowed = if quote {
+        &["报价表", "回导信息", "配送需求"][..]
+    } else {
+        &[PRODUCT_SHEET, POOL_SHEET, DELIVERY_SHEET, INSTRUCTIONS][..]
+    };
+    if result.iter().any(|(name, _)| !allowed.contains(&name.as_str())) {
+        return Err(invalid("只接受选品（或商品清单）、配送需求、填写说明三个工作表"));
     }
     if !quote
         && (result.len() != 3
@@ -285,141 +203,18 @@ pub(super) fn data_rows(
     rows
 }
 
-fn shared_strings(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<String>> {
-    if archive.index_for_name("xl/sharedStrings.xml").is_none() {
-        return Ok(Vec::new());
-    }
-    let xml = read_text(archive, "xl/sharedStrings.xml")?;
-    let re = Regex::new(r"(?s)<si\b[^>]*>(.*?)</si>").expect("static shared-string regex");
-    re.captures_iter(&xml).map(|capture| text_parts(&capture[1])).collect()
-}
-
 fn rows(xml: &str, shared: &[String]) -> Result<Vec<Row>> {
-    let mut rows: BTreeMap<u32, BTreeMap<usize, Cell>> = BTreeMap::new();
-    for captures in CELL_RE.captures_iter(xml) {
-        let address = attribute(&captures[1], "r").ok_or_else(|| invalid("单元格缺少坐标"))?;
-        let (column, row) = coordinate(&address)?;
-        if column >= 64 || row > 10_000 {
-            return Err(invalid("工作表行列范围超过模板限制"));
-        }
-        let inner = captures.get(2).map_or("", |value| value.as_str());
-        let cell = read_cell(&captures[1], inner, shared)?;
-        if rows.entry(row).or_default().insert(column, cell).is_some() {
-            return Err(invalid("工作表存在重复单元格坐标"));
+    let mut rows = xlsx::rows(xml, shared, SheetLimits::CUSTOMER)?.rows;
+    trim_rows(&mut rows);
+    Ok(rows)
+}
+
+fn trim_rows(rows: &mut [Row]) {
+    for row in rows {
+        for cell in &mut row.cells {
+            cell.value = cell.value.trim().to_string();
         }
     }
-    Ok(rows
-        .into_iter()
-        .map(|(number, cells)| {
-            let width = cells.keys().next_back().map_or(0, |index| index + 1);
-            let cells = (0..width).map(|index| cells.get(&index).cloned().unwrap_or_default()).collect();
-            Row { number, cells }
-        })
-        .collect())
-}
-
-fn read_cell(attrs: &str, inner: &str, shared: &[String]) -> Result<Cell> {
-    let kind = attribute(attrs, "t");
-    let text = matches!(kind.as_deref(), Some("s" | "inlineStr" | "str"));
-    let numeric = matches!(kind.as_deref(), None | Some("n"));
-    let formula = FORMULA_RE.is_match(inner);
-    let value = if kind.as_deref() == Some("inlineStr") {
-        text_parts(inner)?
-    } else {
-        let raw = element_text(inner, "v")?.unwrap_or_default();
-        if kind.as_deref() == Some("s") {
-            let index: usize = raw.parse().map_err(|_| invalid("共享文本索引无效"))?;
-            shared.get(index).cloned().ok_or_else(|| invalid("共享文本索引越界"))?
-        } else {
-            raw
-        }
-    };
-    let formula_text = element_text(inner, "f")?;
-    Ok(Cell { value: value.trim().to_string(), text, numeric, formula, formula_text })
-}
-
-fn coordinate(address: &str) -> Result<(usize, u32)> {
-    let split = address.find(|ch: char| ch.is_ascii_digit()).ok_or_else(|| invalid("单元格坐标无效"))?;
-    let column = address[..split]
-        .bytes()
-        .try_fold(0_usize, |value, byte| {
-            if !byte.is_ascii_uppercase() {
-                return None;
-            }
-            value.checked_mul(26)?.checked_add(usize::from(byte - b'A' + 1))
-        })
-        .and_then(|column| column.checked_sub(1))
-        .ok_or_else(|| invalid("单元格列号无效"))?;
-    let row = address[split..].parse::<u32>().map_err(|_| invalid("单元格行号无效"))?;
-    if row == 0 {
-        return Err(invalid("单元格行号无效"));
-    }
-    Ok((column, row))
-}
-
-fn read_text(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String> {
-    let file = archive.by_name(name).map_err(|_| invalid("工作簿缺少必要 XML 内容"))?;
-    let mut bytes = Vec::new();
-    file.take(MAX_ENTRY_BYTES + 1).read_to_end(&mut bytes).map_err(|_| invalid("工作簿解压失败"))?;
-    if u64::try_from(bytes.len()).map_err(|_| invalid("工作簿过大"))? > MAX_ENTRY_BYTES {
-        return Err(invalid("XML 解压大小越限"));
-    }
-    let xml = String::from_utf8(bytes).map_err(|_| invalid("工作簿编码无效"))?;
-    if xml.contains("<!DOCTYPE") || xml.contains("<!ENTITY") {
-        return Err(invalid("工作簿不得声明外部实体"));
-    }
-    Ok(xml)
-}
-
-fn tags<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
-    let regex = Regex::new(&format!(r"<{name}\b[^>]*>")).expect("static tag-name regex");
-    regex.find_iter(xml).map(|value| value.as_str()).collect()
-}
-
-fn attribute(tag: &str, name: &str) -> Option<String> {
-    ATTRIBUTE_RE.captures_iter(tag).find(|value| &value[1] == name).and_then(|value| decode(&value[2]).ok())
-}
-
-fn text_parts(xml: &str) -> Result<String> {
-    TEXT_RE
-        .captures_iter(xml)
-        .map(|value| decode(&value[1]))
-        .collect::<Result<Vec<_>>>()
-        .map(|parts| parts.concat())
-}
-
-fn element_text(xml: &str, name: &str) -> Result<Option<String>> {
-    let regex = Regex::new(&format!(r"(?s)<{name}\b[^>]*>(.*?)</{name}>")).expect("static element regex");
-    regex.captures(xml).map(|value| decode(&value[1])).transpose()
-}
-
-fn decode(value: &str) -> Result<String> {
-    let mut output = String::new();
-    let mut remaining = value;
-    while let Some(index) = remaining.find('&') {
-        output.push_str(&remaining[..index]);
-        let after = &remaining[index + 1..];
-        let end = after.find(';').ok_or_else(|| invalid("XML 转义无效"))?;
-        let entity = &after[..end];
-        match entity {
-            "amp" => output.push('&'),
-            "lt" => output.push('<'),
-            "gt" => output.push('>'),
-            "quot" => output.push('"'),
-            "apos" => output.push('\''),
-            _ => {
-                let code = if let Some(hex) = entity.strip_prefix("#x") {
-                    u32::from_str_radix(hex, 16).ok()
-                } else {
-                    entity.strip_prefix('#').and_then(|decimal| decimal.parse().ok())
-                };
-                output.push(code.and_then(char::from_u32).ok_or_else(|| invalid("XML 字符实体无效"))?);
-            },
-        }
-        remaining = &after[end + 1..];
-    }
-    output.push_str(remaining);
-    Ok(output)
 }
 
 pub(super) fn issue(
@@ -443,15 +238,17 @@ fn invalid(message: &str) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::io::{Cursor, Read, Write};
 
     use erp_sales::entity::sales_inquiry::{InquiryFulfillmentKind, InquiryRequirementData};
     use erp_sales::entity::sales_inquiry_import::{InquiryImportSku, InquiryImportValidation};
-    use zip::ZipWriter;
+    use regex::Regex;
     use zip::write::SimpleFileOptions;
+    use zip::{ZipArchive, ZipWriter};
 
     use super::*;
     use crate::sales_inquiry_import::preview::{delivery_rows, product_rows};
+    use crate::xlsx::MAX_XML_BYTES;
 
     #[test]
     fn customer_sales_price_header_accepts_legacy_name_but_rejects_extra_column() {
@@ -500,7 +297,7 @@ mod tests {
             let mut xml = String::new();
             entry.read_to_string(&mut xml).unwrap();
             if name == "xl/workbook.xml" {
-                xml = xml.replace("<workbook>", "<workbook><workbookPr date1904='true'/>");
+                xml = xml.replace("<sheets>", "<workbookPr date1904='true'/><sheets>");
             }
             writer.start_file(name, SimpleFileOptions::default()).unwrap();
             writer.write_all(xml.as_bytes()).unwrap();
@@ -559,7 +356,7 @@ mod tests {
     }
 
     fn package_sheet(version: &str, name: &str, product_xml: String, delivery_data: &str) -> Vec<u8> {
-        let workbook = r#"<workbook><sheets><sheet name="商品清单" r:id="r1"/><sheet name="配送需求" r:id="r2"/><sheet name="填写说明" r:id="r3"/></sheets></workbook>"#;
+        let workbook = r#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="商品清单" r:id="r1"/><sheet name="配送需求" r:id="r2"/><sheet name="填写说明" r:id="r3"/></sheets></workbook>"#;
         let rels = r#"<Relationships><Relationship Target="worksheets/sheet1.xml" Id="r1"/><Relationship Id="r2" Target="worksheets/sheet2.xml"/><Relationship Id="r3" Target="worksheets/sheet3.xml"/></Relationships>"#;
         let instructions = format!(
             r#"<worksheet><sheetData><c r="A1" t="inlineStr"><is><t>模板版本</t></is></c><c r="B1" t="inlineStr"><is><t>{version}</t></is></c></sheetData></worksheet>"#
@@ -690,11 +487,11 @@ mod tests {
     #[test]
     fn unused_address_slots_do_not_count_towards_the_delivery_limit() {
         let bytes = include_bytes!("fixtures/pool-v3.xlsx.fixture");
-        let mut archive = ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
-        let shared = shared_strings(&mut archive).unwrap();
+        let mut archive = Archive::open(bytes, ArchiveLimits::CUSTOMER).unwrap();
+        let shared = archive.shared_strings().unwrap();
         let mut sheets = HashMap::new();
         for (name, path) in sheet_paths(&mut archive, false).unwrap() {
-            sheets.insert(name, rows(&read_text(&mut archive, &path).unwrap(), &shared).unwrap());
+            sheets.insert(name, rows(&archive.xml(&path).unwrap(), &shared).unwrap());
         }
         let deliveries = sheets.get_mut(DELIVERY_SHEET).unwrap();
         let mut spare = deliveries.last().unwrap().clone();
@@ -809,7 +606,7 @@ mod tests {
                 SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated),
             )
             .unwrap();
-        writer.write_all(&vec![b'a'; usize::try_from(MAX_ENTRY_BYTES).unwrap() + 1]).unwrap();
+        writer.write_all(&vec![b'a'; usize::try_from(MAX_XML_BYTES).unwrap() + 1]).unwrap();
         let bytes = writer.finish().unwrap().into_inner();
         assert!(bytes.len() < INQUIRY_IMPORT_MAX_BYTES);
         assert!(parse(&bytes).is_err());
@@ -822,20 +619,22 @@ mod tests {
         assert!(rows[0].cells[0].text);
         assert!(rows[0].cells[2].formula);
         assert!(!rows[0].cells[2].text);
-        assert!(read_cell("", "<x:f>1+1</x:f><v>2</v>", &[]).unwrap().formula);
+        assert!(
+            super::rows(
+                r#"<worksheet xmlns:x="urn:formula"><c r="A1"><x:f>1+1</x:f><v>2</v></c></worksheet>"#,
+                &[]
+            )
+            .unwrap()[0]
+                .cells[0]
+                .formula
+        );
     }
 
     #[test]
     fn rejects_duplicate_coordinates_and_out_of_bounds() {
-        assert!(rows(r#"<c r="A2"><v>1</v></c><c r="A2"><v>2</v></c>"#, &[]).is_err());
-        assert!(rows(r#"<c r="A10001"><v>1</v></c>"#, &[]).is_err());
+        assert!(rows(r#"<sheetData><c r="A2"><v>1</v></c><c r="A2"><v>2</v></c></sheetData>"#, &[]).is_err());
+        assert!(rows(r#"<sheetData><c r="A10001"><v>1</v></c></sheetData>"#, &[]).is_err());
         assert!(parse(&[]).is_err());
         assert!(parse(&vec![0; INQUIRY_IMPORT_MAX_BYTES + 1]).is_err());
-    }
-
-    #[test]
-    fn decodes_named_and_numeric_entities_without_double_decoding() {
-        assert_eq!(decode("A&amp;B&#x4e2d;&#25991;&amp;lt;").unwrap(), "A&B中文&lt;");
-        assert!(decode("&bad;").is_err());
     }
 }

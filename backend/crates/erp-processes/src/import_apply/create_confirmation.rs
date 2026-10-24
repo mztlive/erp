@@ -1,5 +1,6 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_audit::entity::AuditLog;
 use erp_core::ids::WorkItemId;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
@@ -12,7 +13,8 @@ use erp_import::{
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::confirmation_query::confirmation_view;
@@ -44,35 +46,110 @@ impl ImportApplyService {
         req: CreateLegacyImportConfirmationRequest,
         actor: &AuditActor,
     ) -> Result<LegacyImportConfirmationView> {
+        let prepared = PreparedConfirmationCreation::new(req, actor)?;
+        let identity = prepared.identity.clone();
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let transaction_result = client
+            .with_transaction(move |executor| Box::pin(async move { prepared.execute(&db, executor).await }))
+            .await;
+        let (confirmation, work_item) = match transaction_result {
+            Ok(result) => result,
+            Err(error) => match identity.existing(&self.db, &mut NoTransaction).await? {
+                Some(result) => result,
+                None => return Err(error),
+            },
+        };
+        Ok(confirmation_view(confirmation, &work_item))
+    }
+}
+
+/// 创建与提交失败恢复共用的精确身份，保留原规范化与首错顺序。
+#[derive(Clone)]
+struct ConfirmationCreationIdentity {
+    req: CreateLegacyImportConfirmationRequest,
+    scope: String,
+    owner_role: String,
+    import_rule_version: String,
+    subject_version: String,
+}
+
+impl ConfirmationCreationIdentity {
+    fn new(req: CreateLegacyImportConfirmationRequest) -> Result<Self> {
         req.validate()?;
-        let confirmation_scope = ConfirmationScope::parse(&req.confirmation_scope)?;
-        let owner_role = confirmation_scope.owner_role().to_string();
-        let confirmation_scope = confirmation_scope.as_str().to_string();
+        let scope = ConfirmationScope::parse(&req.confirmation_scope)?;
+        let owner_role = scope.owner_role().to_string();
+        let scope = scope.as_str().to_string();
         let import_rule_version = required_text(&req.import_rule_version, "导入规则版本不能为空")?;
         let subject_version = LegacyImportConfirmation::subject_version(
             req.batch_version,
             req.trial_version,
             &import_rule_version,
         );
+        Ok(Self { req, scope, owner_role, import_rule_version, subject_version })
+    }
+
+    async fn existing(
+        &self,
+        db: &Database,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<(LegacyImportConfirmation, WorkItem)>> {
+        let Some(confirmation) = db
+            .legacy_import_confirmations()
+            .find_by_batch_scope_trial(&self.req.batch_id, &self.scope, self.req.trial_version, executor)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let work_item = db
+            .work_items()
+            .find_by_id(confirmation.work_item_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::Internal("导入确认任务关联缺失".to_string()))?;
+        validate_confirmation_creation_replay(
+            &confirmation,
+            &work_item,
+            &self.req,
+            &self.scope,
+            &self.owner_role,
+            &self.import_rule_version,
+            &self.subject_version,
+        )?;
+        Ok(Some((confirmation, work_item)))
+    }
+}
+
+/// 事务前准备 ID、任务及审计，事务内只执行原子事实读写。
+struct PreparedConfirmationCreation {
+    identity: ConfirmationCreationIdentity,
+    confirmation: LegacyImportConfirmation,
+    work_item: WorkItem,
+    audit: AuditLog,
+    actor_id: String,
+}
+
+impl PreparedConfirmationCreation {
+    fn new(req: CreateLegacyImportConfirmationRequest, actor: &AuditActor) -> Result<Self> {
+        let identity = ConfirmationCreationIdentity::new(req)?;
         let confirmation_id = LegacyImportConfirmationId::new(next_id());
         let work_item_id = WorkItemId::new(next_id());
         let confirmation = LegacyImportConfirmation::new(
             confirmation_id,
             LegacyImportConfirmationData {
-                batch_id: req.batch_id.clone(),
-                confirmation_scope: confirmation_scope.clone(),
-                owner_role: owner_role.clone(),
-                batch_version: req.batch_version,
-                trial_version: req.trial_version,
-                import_rule_version: import_rule_version.clone(),
+                batch_id: identity.req.batch_id.clone(),
+                confirmation_scope: identity.scope.clone(),
+                owner_role: identity.owner_role.clone(),
+                batch_version: identity.req.batch_version,
+                trial_version: identity.req.trial_version,
+                import_rule_version: identity.import_rule_version.clone(),
                 work_item_id: work_item_id.clone(),
             },
         )?;
         let work_item = super::factories::confirmation_work_item(
             work_item_id,
-            &req.batch_id,
-            subject_version.clone(),
-            &confirmation_scope,
+            &identity.req.batch_id,
+            identity.subject_version.clone(),
+            &identity.scope,
             actor.id(),
         )?;
         let audit = actor.clone().resource_log(
@@ -80,153 +157,74 @@ impl ImportApplyService {
             "legacy_import_confirmation",
             confirmation.base.id.clone(),
         )?;
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let confirmation_for_tx = confirmation.clone();
-        let work_item_for_tx = work_item.clone();
-        let req_for_tx = req.clone();
-        let scope_for_tx = confirmation_scope.clone();
-        let owner_role_for_tx = owner_role.clone();
-        let import_rule_for_tx = import_rule_version.clone();
-        let subject_for_tx = subject_version.clone();
-        let actor_id = actor.id().to_string();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    if let Some(existing) = db
-                        .legacy_import_confirmations()
-                        .find_by_batch_scope_trial(
-                            &req_for_tx.batch_id,
-                            &scope_for_tx,
-                            req_for_tx.trial_version,
-                            executor,
-                        )
-                        .await?
-                    {
-                        let existing_item = db
-                            .work_items()
-                            .find_by_id(existing.work_item_id.as_ref(), executor)
-                            .await?
-                            .ok_or_else(|| Error::Internal("导入确认任务关联缺失".to_string()))?;
-                        validate_confirmation_creation_replay(
-                            &existing,
-                            &existing_item,
-                            &req_for_tx,
-                            &scope_for_tx,
-                            &owner_role_for_tx,
-                            &import_rule_for_tx,
-                            &subject_for_tx,
-                        )?;
-                        return Ok::<(LegacyImportConfirmation, WorkItem), crate::Error>((
-                            existing,
-                            existing_item,
-                        ));
-                    }
-
-                    let mut batch = db
-                        .legacy_import_batches()
-                        .find_by_id(req_for_tx.batch_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
-                    validate_confirmation_creation_batch(&batch, &scope_for_tx, &import_rule_for_tx)?;
-                    batch.prepare_confirmation()?;
-                    let enabled_roles =
-                        db.roles().enabled_roles(std::slice::from_ref(&owner_role_for_tx), executor).await?;
-                    if enabled_roles.len() != 1 {
-                        return Err(Error::BusinessLogicError("导入确认责任角色未注册或已停用".to_string()));
-                    }
-                    let mut confirmations = db
-                        .legacy_import_confirmations()
-                        .list_by_batch(&req_for_tx.batch_id, executor)
-                        .await?;
-                    validate_trial_snapshot(&batch, &confirmations, &req_for_tx, &import_rule_for_tx)?;
-                    super::supersede::invalidate_replaced_confirmation(
-                        &db,
-                        &mut confirmations,
-                        &confirmation_for_tx,
-                        &actor_id,
-                        executor,
-                    )
-                    .await?;
-                    let mut current_matrix = LegacyImportConfirmation::current_matrix(
-                        &confirmations,
-                        req_for_tx.batch_version,
-                        req_for_tx.trial_version,
-                        &import_rule_for_tx,
-                    );
-                    current_matrix.push(confirmation_for_tx.clone());
-                    batch.update_summaries(
-                        batch.failure_code_summary.clone(),
-                        Some(LegacyImportConfirmation::matrix_summary(
-                            req_for_tx.trial_version,
-                            &current_matrix,
-                        )),
-                    )?;
-                    db.legacy_import_confirmations().create(&confirmation_for_tx, executor).await?;
-                    db.work_items().create(&work_item_for_tx, executor).await?;
-                    db.legacy_import_batches().update(&mut batch, executor).await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<(LegacyImportConfirmation, WorkItem), crate::Error>((
-                        confirmation_for_tx,
-                        work_item_for_tx,
-                    ))
-                })
-            })
-            .await;
-        let (confirmation, work_item) = match transaction_result {
-            Ok(result) => result,
-            Err(error) => match self
-                .replay_confirmation_creation(
-                    &req,
-                    &confirmation_scope,
-                    &owner_role,
-                    &import_rule_version,
-                    &subject_version,
-                )
-                .await?
-            {
-                Some(result) => result,
-                None => return Err(error),
-            },
-        };
-
-        Ok(confirmation_view(confirmation, &work_item))
+        Ok(Self { identity, confirmation, work_item, audit, actor_id: actor.id().to_string() })
     }
 
-    /// 读取并严格核对已创建的同一试算确认任务。
-    async fn replay_confirmation_creation(
-        &self,
-        req: &CreateLegacyImportConfirmationRequest,
-        scope: &str,
-        owner_role: &str,
-        import_rule_version: &str,
-        subject_version: &str,
-    ) -> Result<Option<(LegacyImportConfirmation, WorkItem)>> {
-        let Some(confirmation) = self
-            .db
-            .legacy_import_confirmations()
-            .find_by_batch_scope_trial(&req.batch_id, scope, req.trial_version, &mut NoTransaction)
+    async fn execute(
+        self,
+        db: &Database,
+        executor: &mut dyn Executor,
+    ) -> Result<(LegacyImportConfirmation, WorkItem)> {
+        if let Some(existing) = self.identity.existing(db, executor).await? {
+            return Ok(existing);
+        }
+        let mut batch = db
+            .legacy_import_batches()
+            .find_by_id(self.identity.req.batch_id.as_ref(), executor)
             .await?
-        else {
-            return Ok(None);
-        };
-        let work_item = self
-            .db
-            .work_items()
-            .find_by_id(confirmation.work_item_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("导入确认任务关联缺失".to_string()))?;
-        validate_confirmation_creation_replay(
-            &confirmation,
-            &work_item,
-            req,
-            scope,
-            owner_role,
-            import_rule_version,
-            subject_version,
+            .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
+        validate_confirmation_creation_batch(
+            &batch,
+            &self.identity.scope,
+            &self.identity.import_rule_version,
         )?;
-        Ok(Some((confirmation, work_item)))
+        batch.prepare_confirmation()?;
+        let enabled_roles =
+            db.roles().enabled_roles(std::slice::from_ref(&self.identity.owner_role), executor).await?;
+        if enabled_roles.len() != 1 {
+            return Err(Error::BusinessLogicError("导入确认责任角色未注册或已停用".to_string()));
+        }
+        self.persist(db, batch, executor).await
+    }
+
+    async fn persist(
+        self,
+        db: &Database,
+        mut batch: LegacyImportBatch,
+        executor: &mut dyn Executor,
+    ) -> Result<(LegacyImportConfirmation, WorkItem)> {
+        let mut confirmations =
+            db.legacy_import_confirmations().list_by_batch(&self.identity.req.batch_id, executor).await?;
+        validate_trial_snapshot(
+            &batch,
+            &confirmations,
+            &self.identity.req,
+            &self.identity.import_rule_version,
+        )?;
+        super::supersede::invalidate_replaced_confirmation(
+            db,
+            &mut confirmations,
+            &self.confirmation,
+            &self.actor_id,
+            executor,
+        )
+        .await?;
+        let mut current_matrix = LegacyImportConfirmation::current_matrix(
+            &confirmations,
+            self.identity.req.batch_version,
+            self.identity.req.trial_version,
+            &self.identity.import_rule_version,
+        );
+        current_matrix.push(self.confirmation.clone());
+        batch.update_summaries(
+            batch.failure_code_summary.clone(),
+            Some(LegacyImportConfirmation::matrix_summary(self.identity.req.trial_version, &current_matrix)),
+        )?;
+        db.legacy_import_confirmations().create(&self.confirmation, executor).await?;
+        db.work_items().create(&self.work_item, executor).await?;
+        db.legacy_import_batches().update(&mut batch, executor).await?;
+        persist_log(db, &self.audit, executor).await?;
+        Ok((self.confirmation, self.work_item))
     }
 }
 
@@ -334,5 +332,78 @@ pub(super) fn confirmation_next_step(
         },
         ConfirmationMatrixDecision::StartApply => ImportBusinessConfirmationNextStep::StartApply,
         ConfirmationMatrixDecision::FixAndRevalidate => ImportBusinessConfirmationNextStep::FixAndRevalidate,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_core::ids::LegacyImportBatchId;
+    use erp_import::{CreateLegacyImportConfirmationRequest, LegacyImportConfirmation};
+
+    use super::{
+        ConfirmationCreationIdentity, PreparedConfirmationCreation, validate_confirmation_creation_replay,
+    };
+    use crate::Error;
+
+    fn request() -> CreateLegacyImportConfirmationRequest {
+        CreateLegacyImportConfirmationRequest {
+            batch_id: LegacyImportBatchId::new("batch-creation"),
+            confirmation_scope: " sales ".into(),
+            batch_version: 4,
+            trial_version: 2,
+            import_rule_version: " rule-1 ".into(),
+        }
+    }
+
+    #[test]
+    fn prepared_confirmation_links_normalized_identity_task_and_actor() {
+        let actor = AuditActor::new("actor-creation".into(), "sales".into(), AccountKind::Admin);
+        let prepared = PreparedConfirmationCreation::new(request(), &actor).unwrap();
+        let identity = &prepared.identity;
+        assert_eq!(identity.scope, "SALES");
+        assert_eq!(identity.owner_role, "role-sales");
+        assert_eq!(identity.import_rule_version, "rule-1");
+        assert_eq!(identity.subject_version, LegacyImportConfirmation::subject_version(4, 2, "rule-1"));
+        assert_eq!(prepared.confirmation.work_item_id.as_ref(), prepared.work_item.base.id);
+        assert_eq!(prepared.work_item.owner_user_id.as_deref(), Some("actor-creation"));
+        assert_eq!(prepared.audit.resource_id.as_deref(), Some(prepared.confirmation.base.id.as_str()));
+        validate_confirmation_creation_replay(
+            &prepared.confirmation,
+            &prepared.work_item,
+            &identity.req,
+            &identity.scope,
+            &identity.owner_role,
+            &identity.import_rule_version,
+            &identity.subject_version,
+        )
+        .unwrap();
+        let mut changed_task = prepared.work_item.clone();
+        changed_task.subject_version = "foreign-trial".into();
+        let error = validate_confirmation_creation_replay(
+            &prepared.confirmation,
+            &changed_task,
+            &identity.req,
+            &identity.scope,
+            &identity.owner_role,
+            &identity.import_rule_version,
+            &identity.subject_version,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, Error::ConflictError(message) if message == "同一批次、范围与试算版本已用于不同的确认任务")
+        );
+    }
+
+    #[test]
+    fn confirmation_creation_rejects_unregistered_scope_before_building_facts() {
+        let mut req = request();
+        req.confirmation_scope = "UNREGISTERED".into();
+        let error = match ConfirmationCreationIdentity::new(req) {
+            Ok(_) => panic!("unregistered scope must fail"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, Error::Logic(_)));
     }
 }

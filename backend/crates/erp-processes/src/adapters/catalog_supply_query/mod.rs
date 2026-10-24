@@ -3,11 +3,12 @@ use async_trait::async_trait;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 use erp_core::common::time::BusinessDate;
+use erp_read_models::catalog_supply::CatalogSupplyRepository;
 use persistence_core::{Executor, PageResult, Result};
-mod repository;
-use repository::CatalogSupplyRepository;
 
-/// 商品及可售资格的真实 Mongo 聚合查询提供方。
+use crate::sellable_projection_refresh::SellableProjectionRefresher;
+
+/// 把目录消费方 Port 接到跨域读取，并在列表读取前协调投影追平。
 pub struct MongoCatalogSupplyQuery {
     db: mongodb::Database,
 }
@@ -47,7 +48,17 @@ impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
         filter: &SellableSkuFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SellableSkuRow>> {
-        CatalogSupplyRepository::new(&self.db).search_sellable_skus(filter, executor).await
+        let query = CatalogSupplyRepository::new(&self.db);
+        let restrict = query.sellable_sku_scope(filter, executor).await?;
+        if restrict.as_ref().is_some_and(Vec::is_empty) {
+            return Ok(PageResult { items: Vec::new(), total: 0 });
+        }
+        let projection_ready = if filter.eligibility_as_of == BusinessDate::today() {
+            SellableProjectionRefresher::new(self.db.clone()).catch_up().await?
+        } else {
+            false
+        };
+        query.search_sellable_skus(filter, restrict.as_deref(), projection_ready, executor).await
     }
     async fn find_sellable_sku_refs(
         &self,

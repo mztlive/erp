@@ -326,7 +326,7 @@ pub async fn stock_adjustment_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<StockAdjustmentDetailView> {
-    let view = state.inventory_adjustment_service().stock_adjustment_detail(&id, &actor).await?;
+    let view = state.inventory_adjustment_service().read_model().stock_adjustment_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
