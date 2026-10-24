@@ -17,9 +17,8 @@ use id_generator::next_id;
 
 use super::CreationIdentity;
 use crate::order_to_cash::adapter::{
-    RECENT_HISTORY_LIMIT, SalesApprovalPorts, build_sales_order_snapshot, execute_sales_order_domain_action,
-    sales_approval_ports, sales_order_object_readable, sales_order_responsible_org_id,
-    sales_order_start_command, start_approval_command_kind,
+    SalesApprovalPorts, build_sales_order_snapshot, execute_sales_order_domain_action, sales_approval_ports,
+    sales_order_object_readable, sales_order_responsible_org_id, sales_order_start_command,
 };
 use crate::order_to_cash::command::create_prepare::PreparedSalesCreation;
 use crate::order_to_cash::command::submit::ensure_unified_start_command;
@@ -175,7 +174,7 @@ fn prepare_submitted_creation(
         &identity.idempotency_key,
     );
     ensure_unified_start_command(&start)?;
-    let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
+
     let workflow_action = created_submission_action(&creation.order, actor)?;
     let (create_audit, submit_audit) =
         creation_submission_events(identity, actor, &creation.order, &submission)?;

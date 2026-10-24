@@ -45,6 +45,31 @@ fn validates_original_facts_without_defaults() {
     assert_eq!(fields.tax_point, "13");
     assert_eq!(fields.signed_at.to_string(), "2026-10-01");
 }
+
+#[test]
+fn required_fields_and_tax_validation_keep_their_order_and_values() {
+    let (_, extraction) = sample();
+    let mut values = ContractValues::from(&extraction);
+    values.fields.insert(ContractNo, " HT-1 ".into());
+    for tax in ["13", "13%", " 13 % "] {
+        values.fields.insert(TaxPoint, tax.into());
+        let fields = values.validate_values().unwrap();
+        assert_eq!(fields.contract_no, "HT-1");
+        assert_eq!(fields.tax_point, "13");
+    }
+    values.fields.insert(TaxPoint, "13%%".into());
+    let error = values.validate_values().err().unwrap();
+    assert_eq!(error.code, "UNMATCHED_TAX");
+    assert_eq!(error.field, Some(TaxPoint));
+    values.fields.remove(&ContractNo);
+    let error = values.validate_values().err().unwrap();
+    assert_eq!(error.code, "MISSING_FIELD");
+    assert_eq!(error.field, Some(ContractNo));
+    values.fields.insert(ContractNo, "HT-1".into());
+    values.fields.remove(&CustomerName);
+    values.fields.remove(&CompanyName);
+    assert_eq!(values.validate_values().err().unwrap().field, Some(CustomerName));
+}
 #[test]
 fn rejects_missing_pages_unreadable_and_false_blank() {
     let (mut doc, _) = sample();

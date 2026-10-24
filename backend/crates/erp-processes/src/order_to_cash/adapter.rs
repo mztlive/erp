@@ -21,15 +21,11 @@ use erp_workflow::service::approval::business_adapter::{
     AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete,
 };
 use erp_workflow::service::approval::policy::{
-    ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
-    OwnerOrganizationSource, SALES_ORDER_PROCUREMENT_CONFIRMATION,
+    ApprovalDomainAction, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, OwnerOrganizationSource,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 
 use crate::{Error, Result};
-
-/// 详情最近审批历史条数上限。完整历史走分页端点。
-pub const RECENT_HISTORY_LIMIT: usize = 8;
 
 /// 两类销售单共用的已登记审批适配器规格。
 ///
@@ -308,23 +304,6 @@ pub fn sales_order_start_command(
         actor_id: actor_id.to_string(),
         idempotency_key: idempotency_key.to_string(),
     }
-}
-
-/// 证明启动走目标 `START_APPROVAL` 命令种类。
-///
-/// # 参数
-/// * `_command` - 目标启动命令
-///
-/// # 返回
-/// 返回 `START_APPROVAL`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn start_approval_command_kind(
-    _command: &SalesOrderStartCommand,
-) -> bpm::model::types::ApprovalCommandKind {
-    let _ = SALES_ORDER_PROCUREMENT_CONFIRMATION;
-    bpm::model::types::ApprovalCommandKind::StartApproval
 }
 
 /// 执行签署的销售单领域动作。
@@ -770,10 +749,6 @@ mod tests {
         let voucher =
             sales_order_start_command(DocumentType::VoucherSalesOrder, "so-1", 1, "user-1", "key-1");
         assert_eq!(voucher.subject_kind, "voucher_sales_order");
-        assert_eq!(
-            start_approval_command_kind(&command),
-            bpm::model::types::ApprovalCommandKind::StartApproval
-        );
         assert!(require_frozen_binding(None).is_err());
     }
 

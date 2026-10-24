@@ -242,7 +242,7 @@ fn inherit_sources<'a>(
     let mut sources = HashMap::new();
     for line in existing.filter(|line| line.kind == PurchaseLineType::ItemService) {
         let key = source_key(line.stable_line, line.sku, line.revision)?;
-        if sources.insert(key, (line.source.cloned(), line.delivery.to_vec())).is_some() {
+        if sources.insert(key, line).is_some() {
             return Err(Error::from("采购原行身份歧义，不能继承正式选源"));
         }
     }
@@ -256,10 +256,10 @@ fn inherit_sources<'a>(
                     input.sku_id.as_ref(),
                     input.sku_revision_id.as_ref(),
                 )?;
-                sources
+                let source = sources
                     .get(&key)
-                    .ok_or_else(|| Error::from("采购来源行或SKU版本已变化，不能继承正式选源"))?
-                    .clone()
+                    .ok_or_else(|| Error::from("采购来源行或SKU版本已变化，不能继承正式选源"))?;
+                (source.source.cloned(), source.delivery.to_vec())
             };
     }
     Ok(())

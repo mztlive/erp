@@ -90,7 +90,7 @@ pub fn validate_linear_graph(
 ) -> ModelResult<()> {
     for node in nodes {
         node.validate_assignment()?;
-        node.clone().with_additional_assignees(node.additional_assignees.clone())?;
+        node.validate_additional_assignees()?;
     }
     let ordered = ordered_nodes(nodes)?;
     let keys = ordered.into_iter().map(|node| node.node_key.clone()).collect::<Vec<_>>();
@@ -170,10 +170,10 @@ mod tests {
     use super::{ordered_nodes, validate_entry_node, validate_linear_graph, validate_transition};
     use crate::graph::{DefinitionGraph, build_linear_transitions};
     use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
-    use crate::model::types::ApprovalTransitionEvent;
+    use crate::model::types::{ApprovalTransitionEvent, ModelError};
     use crate::model::{
-        ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, NewNodeDefinition,
-        ParticipantId, ProcessKind, Timestamp,
+        ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition, ApprovalTransitionDefinition,
+        NewNodeDefinition, ParticipantId, ProcessKind, Timestamp,
     };
 
     /// 构造最小合法节点。
@@ -256,7 +256,12 @@ mod tests {
         assert!(validate_linear_graph(&wrong_entry, &nodes, &transitions).is_err());
         assert!(validate_linear_graph(&definition, &nodes, &transitions[..3]).is_err());
 
-        let graph = DefinitionGraph { definition, nodes, transitions };
+        let mut graph = DefinitionGraph { definition, nodes, transitions };
         graph.validate_linear().unwrap();
+        let secondary = ApprovalParticipant::new(ParticipantId::new("secondary").unwrap(), "会签人").unwrap();
+        graph.nodes[0].additional_assignees = vec![secondary.clone()];
+        graph.validate_linear().unwrap();
+        graph.nodes[0].additional_assignees.push(secondary);
+        assert_eq!(graph.validate_linear(), Err(ModelError::InvalidField("同一节点审批人不能重复")));
     }
 }

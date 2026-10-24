@@ -12,43 +12,12 @@ use super::party_bank_account::{PartyBankAccount, PartyBankAccountUpdate};
 use super::party_contact::{PartyContact, PartyContactUpdate};
 use super::status::EffectiveRecordStatus;
 
-/// 关闭日期相对生效开始日的生命周期计划。
-enum ClosePlan {
-    /// 同日关闭：只停用并取消默认，不写 `valid_to`。
-    SameDay,
-    /// 晚于开始日：写入结束日期后再停用。
-    After { valid_to: BusinessDate },
-}
-
-impl ClosePlan {
-    /// 按关闭日与开始日计算生命周期计划。
-    ///
-    /// # 参数
-    /// * `valid_from` - 既有事实生效开始日期
-    /// * `close_at` - 请求关闭日期
-    ///
-    /// # 返回
-    /// 同日或晚于开始日的关闭计划。
-    ///
-    /// # 错误
-    /// `close_at` 早于 `valid_from` 时返回 [`Error::LogicError`]。
-    fn from_dates(valid_from: BusinessDate, close_at: BusinessDate) -> Result<Self> {
-        if close_at < valid_from {
-            return Err(Error::from("关闭日期不能早于生效开始日期"));
-        }
-        if close_at == valid_from { Ok(Self::SameDay) } else { Ok(Self::After { valid_to: close_at }) }
+/// 计算关闭时的结束日期更新；同日保留原值，倒序日期拒绝。
+fn closing_valid_to(valid_from: BusinessDate, close_at: BusinessDate) -> Result<FieldUpdate<BusinessDate>> {
+    if close_at < valid_from {
+        return Err(Error::from("关闭日期不能早于生效开始日期"));
     }
-
-    /// 转换为实体更新使用的结束日期意图。
-    ///
-    /// # 返回
-    /// 同日返回 `Unchanged`，否则返回 `Set(close_at)`。
-    fn valid_to_update(self) -> FieldUpdate<BusinessDate> {
-        match self {
-            Self::SameDay => FieldUpdate::Unchanged,
-            Self::After { valid_to } => FieldUpdate::Set(valid_to),
-        }
-    }
+    Ok(if close_at == valid_from { FieldUpdate::Unchanged } else { FieldUpdate::Set(close_at) })
 }
 
 impl PartyContact {
@@ -70,11 +39,11 @@ impl PartyContact {
     /// # 关键业务约束
     /// 不得把倒序日期静默当成 `Unchanged` 后继续停用。
     pub fn close_at(&mut self, close_at: BusinessDate, updated_by: impl Into<String>) -> Result<()> {
-        let plan = ClosePlan::from_dates(self.valid_from, close_at)?;
+        let valid_to = closing_valid_to(self.valid_from, close_at)?;
         self.update(
             PartyContactUpdate {
                 status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: plan.valid_to_update(),
+                valid_to,
                 is_default: Some(false),
             },
             updated_by,
@@ -98,11 +67,11 @@ impl PartyAddress {
     /// # 关键业务约束
     /// 同日关闭不写零长度 `valid_to`；倒序日期零 mutation。
     pub fn close_at(&mut self, close_at: BusinessDate, updated_by: impl Into<String>) -> Result<()> {
-        let plan = ClosePlan::from_dates(self.valid_from, close_at)?;
+        let valid_to = closing_valid_to(self.valid_from, close_at)?;
         self.update(
             PartyAddressUpdate {
                 status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: plan.valid_to_update(),
+                valid_to,
                 is_default: Some(false),
             },
             updated_by,
@@ -126,11 +95,11 @@ impl PartyBankAccount {
     /// # 关键业务约束
     /// 同日关闭不写零长度 `valid_to`；倒序日期零 mutation。
     pub fn close_at(&mut self, close_at: BusinessDate, updated_by: impl Into<String>) -> Result<()> {
-        let plan = ClosePlan::from_dates(self.valid_from, close_at)?;
+        let valid_to = closing_valid_to(self.valid_from, close_at)?;
         self.update(
             PartyBankAccountUpdate {
                 status: Some(EffectiveRecordStatus::Disabled),
-                valid_to: plan.valid_to_update(),
+                valid_to,
                 is_default: Some(false),
             },
             updated_by,

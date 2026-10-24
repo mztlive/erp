@@ -266,6 +266,26 @@ mod tests {
         assert!(first.events.iter().any(|event| event.kind.as_str() == "INSTANCE_STARTED"));
     }
 
+    #[test]
+    fn frozen_assignees_require_unique_binding_per_node_and_preserve_node_order() {
+        let started = start_two_node(eligible("u1", "张三"));
+        let graph = two_node_graph();
+        let mut bindings = started.created_assignees;
+        bindings.reverse();
+        assert_eq!(graph.clone().with_frozen_assignees(&started.instance, &bindings).unwrap(), graph);
+
+        let duplicate = vec![bindings[1].clone(), bindings[1].clone()];
+        assert_eq!(
+            graph.clone().with_frozen_assignees(&started.instance, &duplicate),
+            Err(ModelError::InvalidField("实例节点指派缺失或重复"))
+        );
+        bindings[0].node_key = "missing-node".into();
+        assert_eq!(
+            graph.with_frozen_assignees(&started.instance, &bindings),
+            Err(ModelError::InvalidField("实例节点指派缺失或重复"))
+        );
+    }
+
     /// 即使入口合格，任一非入口审批人失效时也必须拒绝启动。
     #[test]
     fn engine_start_rejects_ineligible_non_entry_assignee() {

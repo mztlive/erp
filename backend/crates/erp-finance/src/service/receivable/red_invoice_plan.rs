@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use erp_core::money::Amount;
 
-use crate::entity::payable::PurchaseInvoiceAllocation;
+use crate::entity::payable::{AllocationAction as PayableAllocationAction, PurchaseInvoiceAllocation};
 use crate::entity::receivable::{
     AllocationAction, InvoiceDirection, RedInvoiceAllocationBasis, RedInvoiceAllocationLine,
     RedInvoiceAllocationPlan, RedInvoiceAllocationPlanError, RedInvoiceAllocationReversal,
@@ -36,45 +36,6 @@ pub fn sales_red_invoice_allocation_plan(
     let reversals = sales_red_invoice_allocation_reversals(related)?;
     RedInvoiceAllocationPlan::build(InvoiceDirection::Sales, basis, &reversals, requested)
         .map_err(map_red_invoice_allocation_plan_error)
-}
-
-/// 将持久化分配事实批量转为领域原始基数输入（销项/进项共用）。
-///
-/// 只做字段复制与顺序保持，不扣减历史红冲、不执行金额计算；
-/// 动作判定与字段投影由调用方闭包提供，两方向语义逐行对等。
-///
-/// # 参数
-/// * `lines` - 原蓝票查询得到的全部某方向分配事实
-/// * `is_apply` - 正向分配判定
-/// * `to_basis` - 单行到基数的字段投影
-///
-/// # 返回
-/// 返回保持查询顺序的正向分配基数，非 `APPLY` 事实被忽略。
-fn allocation_bases<T>(
-    lines: &[T],
-    is_apply: impl Fn(&T) -> bool,
-    to_basis: impl Fn(&T) -> RedInvoiceAllocationBasis,
-) -> Vec<RedInvoiceAllocationBasis> {
-    lines.iter().filter(|line| is_apply(line)).map(to_basis).collect()
-}
-
-/// 将持久化反向分配事实批量转为领域红冲输入（销项/进项共用）。
-///
-/// 缺少反向引用的损坏事实沿用旧逻辑忽略，由领域计划只匹配原分配身份。
-///
-/// # 参数
-/// * `lines` - 同一批账户下的全部某方向相关分配事实
-/// * `is_reverse` - 反向分配判定
-/// * `to_reversal` - 单行到红冲事实的投影，无引用时返回 `None` 跳过
-///
-/// # 返回
-/// 返回所有携带原分配引用的 `REVERSE` 事实，保持查询顺序。
-fn allocation_reversals<T>(
-    lines: &[T],
-    is_reverse: impl Fn(&T) -> bool,
-    to_reversal: impl Fn(&T) -> Option<RedInvoiceAllocationReversal>,
-) -> Vec<RedInvoiceAllocationReversal> {
-    lines.iter().filter(|line| is_reverse(line)).filter_map(to_reversal).collect()
 }
 
 /// 将销项蓝票正向分配转换为领域原始基数输入。
@@ -213,18 +174,17 @@ pub fn purchase_red_invoice_allocation_plan(
 fn purchase_red_invoice_allocation_bases(
     blue: &[PurchaseInvoiceAllocation],
 ) -> Vec<RedInvoiceAllocationBasis> {
-    allocation_bases(
-        blue,
-        |line| line.allocation_action == crate::entity::payable::AllocationAction::Apply,
-        |line| RedInvoiceAllocationBasis {
+    blue.iter()
+        .filter(|line| line.allocation_action == PayableAllocationAction::Apply)
+        .map(|line| RedInvoiceAllocationBasis {
             original_allocation_id: line.base.id.clone(),
             account_id: line.payable_account_id.to_string(),
             allocation_seq: line.allocation_seq,
             gross: line.allocated_gross_amount,
             net: line.allocated_net_amount,
             tax: line.allocated_tax_amount,
-        },
-    )
+        })
+        .collect()
 }
 
 /// 将进项历史反向分配转换为领域红冲事实输入。
@@ -243,18 +203,18 @@ fn purchase_red_invoice_allocation_bases(
 fn purchase_red_invoice_allocation_reversals(
     related: &[PurchaseInvoiceAllocation],
 ) -> Vec<RedInvoiceAllocationReversal> {
-    allocation_reversals(
-        related,
-        |line| line.allocation_action == crate::entity::payable::AllocationAction::Reverse,
-        |line| {
+    related
+        .iter()
+        .filter(|line| line.allocation_action == PayableAllocationAction::Reverse)
+        .filter_map(|line| {
             line.reverses_allocation_id.as_ref().map(|original_id| RedInvoiceAllocationReversal {
                 original_allocation_id: original_id.to_string(),
                 gross: line.allocated_gross_amount,
                 net: line.allocated_net_amount,
                 tax: line.allocated_tax_amount,
             })
-        },
-    )
+        })
+        .collect()
 }
 
 /// 将领域红票规划错误映射回冻结的服务错误分类和文案。
@@ -315,11 +275,37 @@ mod red_invoice_reversal_tests {
     use std::str::FromStr;
 
     use application_core::ErrorClass;
+    use entity_core::BaseModel;
+    use erp_core::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
     use erp_core::money::Amount;
 
-    use super::{aggregate_reversal_deltas, map_red_invoice_allocation_plan_error};
+    use super::{
+        aggregate_reversal_deltas, map_red_invoice_allocation_plan_error,
+        purchase_red_invoice_allocation_plan,
+    };
     use crate::Error;
+    use crate::entity::payable::{AllocationAction as PayableAllocationAction, PurchaseInvoiceAllocation};
     use crate::entity::receivable::{RedInvoiceAllocationLine, RedInvoiceAllocationPlanError};
+
+    fn purchase_allocation(
+        id: &str,
+        seq: u32,
+        action: PayableAllocationAction,
+        original: Option<&str>,
+        amounts: (&str, &str, &str),
+    ) -> PurchaseInvoiceAllocation {
+        PurchaseInvoiceAllocation {
+            base: BaseModel { id: id.into(), ..BaseModel::fake() },
+            invoice_id: InvoiceId::new("invoice"),
+            payable_account_id: PayableAccountId::new(format!("account-{id}")),
+            allocation_seq: seq,
+            allocation_action: action,
+            allocated_gross_amount: amounts.0.parse().unwrap(),
+            allocated_net_amount: amounts.1.parse().unwrap(),
+            allocated_tax_amount: amounts.2.parse().unwrap(),
+            reverses_allocation_id: original.map(PurchaseInvoiceAllocationId::new),
+        }
+    }
 
     fn line(account: &str, gross: &str) -> RedInvoiceAllocationLine {
         RedInvoiceAllocationLine {
@@ -352,6 +338,78 @@ mod red_invoice_reversal_tests {
     #[test]
     fn empty_plan_aggregates_to_empty() {
         assert!(aggregate_reversal_deltas(&[]).is_empty());
+    }
+
+    /// 进项规划保留动作和原分配引用筛选，再按原序号消费实际剩余金额。
+    #[test]
+    fn purchase_plan_filters_actions_and_unrelated_reversals_before_ordered_consumption() {
+        let blue = [
+            purchase_allocation("later", 2, PayableAllocationAction::Apply, None, ("100", "80", "20")),
+            purchase_allocation("first", 1, PayableAllocationAction::Apply, None, ("50", "40", "10")),
+            purchase_allocation(
+                "ignored",
+                3,
+                PayableAllocationAction::Reverse,
+                Some("later"),
+                ("999", "0", "999"),
+            ),
+        ];
+        let related = [
+            purchase_allocation(
+                "posted",
+                1,
+                PayableAllocationAction::Reverse,
+                Some("later"),
+                ("25", "20", "5"),
+            ),
+            purchase_allocation(
+                "apply",
+                2,
+                PayableAllocationAction::Apply,
+                Some("first"),
+                ("999", "0", "999"),
+            ),
+            purchase_allocation("missing", 3, PayableAllocationAction::Reverse, None, ("999", "0", "999")),
+            purchase_allocation(
+                "other",
+                4,
+                PayableAllocationAction::Reverse,
+                Some("unrelated"),
+                ("999", "0", "999"),
+            ),
+        ];
+        let plan =
+            purchase_red_invoice_allocation_plan(&blue, &related, Some("60".parse().unwrap())).unwrap();
+        assert_eq!(
+            plan.lines().iter().map(|line| line.original_allocation_id.as_str()).collect::<Vec<_>>(),
+            ["first", "later"]
+        );
+        assert_eq!(plan.lines()[0].gross, "50".parse().unwrap());
+        assert_eq!(plan.lines()[1].gross, "10".parse().unwrap());
+        assert_eq!(plan.totals(), ("60".parse().unwrap(), "48".parse().unwrap(), "12".parse().unwrap()));
+        assert!(!plan.is_full_reversal());
+    }
+
+    /// 历史超冲先于本次金额错误返回；空基数仍明确拒绝。
+    #[test]
+    fn purchase_plan_preserves_historical_and_empty_basis_errors() {
+        let blue =
+            [purchase_allocation("base", 1, PayableAllocationAction::Apply, None, ("100", "80", "20"))];
+        let related = [purchase_allocation(
+            "posted",
+            1,
+            PayableAllocationAction::Reverse,
+            Some("base"),
+            ("125", "100", "25"),
+        )];
+        assert!(matches!(
+            purchase_red_invoice_allocation_plan(&blue, &related, Some(Amount::zero())),
+            Err(Error::BusinessLogicError(message)) if message == "进项发票历史红冲累计超过原分配"
+        ));
+        assert!(matches!(
+            purchase_red_invoice_allocation_plan(&[], &[], None),
+            Err(Error::BusinessLogicError(message)) if message == "原蓝票没有可红冲的有效分配"
+        ));
     }
 
     /// 领域红票规划错误到服务错误的分类与文案对照表（转译集中前先锁定）。

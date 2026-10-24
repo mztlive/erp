@@ -50,25 +50,12 @@ impl CatalogSupplyRepository<'_> {
     ) -> Result<Vec<String>> {
         let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
         let pipeline = product_candidate_pipeline(filter);
+        let query = collection.aggregate(pipeline).with_type::<ProductCandidate>();
         let rows = match executor.session() {
             Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<ProductCandidate>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
+                query.session(&mut *session).await?.stream(session).try_collect::<Vec<_>>().await?
             },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<ProductCandidate>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
+            None => query.await?.try_collect::<Vec<_>>().await?,
         };
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
@@ -121,25 +108,12 @@ impl CatalogSupplyRepository<'_> {
         executor: &mut dyn Executor,
     ) -> Result<ProductFacet> {
         let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
+        let query = collection.aggregate(pipeline).with_type::<ProductFacet>();
         let rows = match executor.session() {
             Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<ProductFacet>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
+                query.session(&mut *session).await?.stream(session).try_collect::<Vec<_>>().await?
             },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<ProductFacet>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
+            None => query.await?.try_collect::<Vec<_>>().await?,
         };
         Ok(rows.into_iter().next().unwrap_or_default())
     }

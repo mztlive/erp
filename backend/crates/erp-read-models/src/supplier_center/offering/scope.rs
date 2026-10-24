@@ -108,7 +108,7 @@ async fn build_snapshot(
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     bundle.page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-    let mut view = super::page_view(bundle, &query)?;
+    let mut view = super::page_view(bundle, &query);
     let ids = view.items.iter().map(|row| row.maintainer_user_id.clone()).collect::<Vec<_>>();
     let names = db.accounts().names_by_ids(&ids, executor).await?;
     for row in &mut view.items {

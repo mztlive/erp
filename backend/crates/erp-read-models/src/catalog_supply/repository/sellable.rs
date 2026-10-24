@@ -1,5 +1,5 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_catalog::entity::catalog::{EnableStatus, ListingStatus, ProductKind, SellablePriceKind, Sku};
+use erp_catalog::entity::catalog::{EnableStatus, ListingStatus, SellablePriceKind, Sku};
 use erp_catalog::repository::{
     CatalogExt, SellableSkuFilter, SellableSkuRow, SellableSort, SellableSortField,
 };
@@ -61,7 +61,7 @@ impl CatalogSupplyRepository<'_> {
         restrict: Option<&[String]>,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SellableSkuRow>> {
-        let mut match_doc = sellable_sku_match(None, None, &[]);
+        let mut match_doc = sellable_sku_match(&[]);
         if let Some(sku_ids) = restrict {
             match_doc.insert("id", doc! { "$in": sku_ids });
         }
@@ -91,7 +91,7 @@ impl CatalogSupplyRepository<'_> {
         if refs.is_empty() {
             return Ok(Vec::new());
         }
-        let match_doc = sellable_sku_match(None, None, refs);
+        let match_doc = sellable_sku_match(refs);
         let filter = SellableSkuFilter::as_of(eligibility_as_of);
         let pipeline = sellable_sku_pipeline(match_doc, &filter, None);
         Ok(self.aggregate_sellable_skus(pipeline, executor).await?.items)
@@ -118,7 +118,7 @@ impl CatalogSupplyRepository<'_> {
         if sku_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut match_doc = sellable_sku_match(None, None, &[]);
+        let mut match_doc = sellable_sku_match(&[]);
         match_doc.insert("id", doc! { "$in": sku_ids });
         let filter = SellableSkuFilter::as_of(eligibility_as_of);
         let pipeline = sellable_sku_pipeline(match_doc, &filter, None);
@@ -132,35 +132,18 @@ impl CatalogSupplyRepository<'_> {
         executor: &mut dyn Executor,
     ) -> Result<SellableSkuFacet> {
         let collection = self.db.collection::<Sku>(SKUS);
+        let query = collection.aggregate(pipeline).with_type::<SellableSkuFacet>();
         let rows = match executor.session() {
             Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<SellableSkuFacet>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
+                query.session(&mut *session).await?.stream(session).try_collect::<Vec<_>>().await?
             },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<SellableSkuFacet>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
+            None => query.await?.try_collect::<Vec<_>>().await?,
         };
         Ok(rows.into_iter().next().unwrap_or_default())
     }
 }
 
-fn sellable_sku_match(
-    _keyword: Option<&str>,
-    _product_kind: Option<ProductKind>,
-    refs: &[(String, String)],
-) -> Document {
+fn sellable_sku_match(refs: &[(String, String)]) -> Document {
     let mut filter = doc! {
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         "status": EnableStatus::Active.as_str(),
@@ -666,6 +649,8 @@ mod tests {
     use erp_catalog::entity::catalog::ProductKind;
     use erp_core::common::time::BusinessDate;
     use erp_core::money::Amount;
+    use serde_json::json;
+    use test_support::matches_filter;
 
     use super::*;
 
@@ -720,7 +705,7 @@ mod tests {
             page: 2,
             page_size: 20,
         };
-        let match_doc = sellable_sku_match(None, None, &[]);
+        let match_doc = sellable_sku_match(&[]);
         let pipeline = sellable_sku_pipeline(match_doc, &filter, Some((2, 20)));
         let json = format!("{pipeline:?}");
 
@@ -764,12 +749,40 @@ mod tests {
     /// 销售单资格复核按稳定 SKU 与当前修订成对匹配，禁止只按 SKU 猜修订。
     #[test]
     fn sellable_sku_reference_filter_matches_exact_pair() {
-        let refs = vec![("sku-1".to_string(), "sku-rev-2".to_string())];
-        let filter = sellable_sku_match(None, None, &refs);
-        let serialized = format!("{filter:?}");
+        let refs = vec![
+            ("sku-1".to_string(), "sku-rev-2".to_string()),
+            ("sku-3".to_string(), "sku-rev-4".to_string()),
+        ];
+        let filter = sellable_sku_match(&refs);
+        let base = doc! {
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            "status": EnableStatus::Active.as_str(),
+            "listing_status": { "$in": [ListingStatus::Listed.as_str(), null] },
+            "current_revision_id": { "$ne": null },
+        };
+        assert_eq!(sellable_sku_match(&[]), base);
+        let mut expected = base;
+        expected.insert(
+            "$or",
+            vec![
+                doc! { "id": "sku-1", "current_revision_id": "sku-rev-2" },
+                doc! { "id": "sku-3", "current_revision_id": "sku-rev-4" },
+            ],
+        );
+        assert_eq!(filter, expected);
 
-        assert!(serialized.contains("sku-1"));
-        assert!(serialized.contains("sku-rev-2"));
-        assert!(serialized.contains("current_revision_id"));
+        // 内存工具只解释已支持的成对匹配；完整资格条件由上面的 BSON 断言验证。
+        let pairs = doc! { "$or": filter.get_array("$or").unwrap().clone() };
+        for (sku, revision, accepted) in [
+            ("sku-1", Some("sku-rev-2"), true),
+            ("sku-3", Some("sku-rev-4"), true),
+            ("sku-1", Some("sku-rev-4"), false),
+            ("sku-3", Some("sku-rev-2"), false),
+            ("another-sku", Some("sku-rev-2"), false),
+            ("sku-1", None, false),
+        ] {
+            let candidate = json!({ "id": sku, "current_revision_id": revision });
+            assert_eq!(matches_filter(&pairs, &candidate), accepted, "{candidate}");
+        }
     }
 }

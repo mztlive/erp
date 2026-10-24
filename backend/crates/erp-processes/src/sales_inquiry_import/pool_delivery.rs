@@ -45,7 +45,12 @@ pub(super) fn delivery_rows(
         .into_iter()
         .map(|row| Row {
             number: row.number,
-            cells: [1, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(|index| row.cells[index].clone()).to_vec(),
+            cells: row
+                .cells
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, cell)| matches!(index, 1 | 3..=11).then_some(cell))
+                .collect(),
         })
         .collect())
 }
@@ -63,15 +68,15 @@ fn source_products(rows: &[Row]) -> Result<BTreeMap<String, SourceProduct>> {
         }
         let values = columns
             .iter()
-            .map(|index| row.cells.get(*index).map(|cell| cell.value.clone()).unwrap_or_default())
+            .map(|index| row.cells.get(*index).map_or("", |cell| cell.value.as_str()))
             .collect::<Vec<_>>();
         let product = SourceProduct {
-            name: values[1].clone(),
-            sku: values[2].clone(),
-            spu: values[3].clone(),
-            quantity: values[4].clone(),
+            name: values[1].to_owned(),
+            sku: values[2].to_owned(),
+            spu: values[3].to_owned(),
+            quantity: values[4].to_owned(),
         };
-        if values[0].is_empty() || sources.insert(values[0].clone(), product).is_some() {
+        if values[0].is_empty() || sources.insert(values[0].to_owned(), product).is_some() {
             return Err(Error::ValidationError(format!(
                 "{POOL_SHEET}第 {} 行配送关联缺失或重复，请保留原导出的隐藏关联列",
                 row.number
@@ -241,5 +246,59 @@ mod tests {
         products.push(source("line-1", "002", "3", 4));
         assert!(delivery_rows(&products, vec![], &mut vec![]).is_err());
         assert!(delivery_rows(&[], vec![], &mut vec![]).is_err());
+    }
+
+    #[test]
+    fn delivery_projection_keeps_column_order_and_formula_metadata() {
+        let mut row = Row {
+            number: 8,
+            cells: [
+                "商品名称",
+                "00123",
+                "000-SPU",
+                "张三",
+                "0013800000000",
+                "上海市",
+                "上海市",
+                "浦东新区",
+                "测试路",
+                "2",
+                "2026-11-01",
+                "送到门",
+            ]
+            .map(text)
+            .to_vec(),
+        };
+        row.cells[9] = Cell {
+            value: "2".into(),
+            numeric: true,
+            formula: true,
+            formula_text: Some("1+1".into()),
+            ..Default::default()
+        };
+        let mut errors = Vec::new();
+        let rows = parse_row(&sources("2"), row, &mut errors);
+        assert_eq!(rows[0].number, 8);
+        assert_eq!(
+            rows[0].cells.iter().map(|cell| cell.value.as_str()).collect::<Vec<_>>(),
+            [
+                "00123",
+                "张三",
+                "0013800000000",
+                "上海市",
+                "上海市",
+                "浦东新区",
+                "测试路",
+                "2",
+                "2026-11-01",
+                "送到门",
+            ]
+        );
+        assert!(rows[0].cells[2].text);
+        let quantity = &rows[0].cells[7];
+        assert!(!quantity.text && quantity.numeric && quantity.formula);
+        assert_eq!(quantity.formula_text.as_deref(), Some("1+1"));
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].column, "配送数量");
     }
 }

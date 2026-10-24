@@ -532,15 +532,14 @@ impl LegacyImportConfirmation {
         {
             return Err(Error::from("新试算版本不得低于已有确认版本"));
         }
-        let same_trial =
-            confirmations.iter().filter(|item| item.trial_version == trial_version).collect::<Vec<_>>();
-        if same_trial
-            .iter()
-            .any(|item| item.batch_version != batch_version || item.import_rule_version != rule_version)
-        {
-            return Err(Error::from("同一试算矩阵的批次或规则版本不一致"));
+        let mut rejected = false;
+        for item in confirmations.iter().filter(|item| item.trial_version == trial_version) {
+            if item.batch_version != batch_version || item.import_rule_version != rule_version {
+                return Err(Error::from("同一试算矩阵的批次或规则版本不一致"));
+            }
+            rejected |= item.status == ConfirmationStatus::Rejected;
         }
-        if same_trial.iter().any(|item| item.status == ConfirmationStatus::Rejected) {
+        if rejected {
             return Err(Error::from("当前试算已被退回，必须修复并生成新试算版本"));
         }
         Ok(())
@@ -986,6 +985,41 @@ mod tests {
         assert!(LegacyImportConfirmation::is_trial_confirmed(&[sales.clone()], 2, "v1", &required,));
         assert!(LegacyImportConfirmation::matrix_summary(2, &[sales]).contains("SALES=CONFIRMED"));
         assert!(LegacyImportConfirmation::ensure_trial_snapshot(&[], u32::MAX, u32::MAX, "v1").is_err());
+    }
+
+    #[test]
+    fn trial_snapshot_preserves_consistency_error_before_rejection() {
+        let pending =
+            LegacyImportConfirmation::new(LegacyImportConfirmationId::new("c-snapshot"), confirmation_data())
+                .unwrap();
+        LegacyImportConfirmation::ensure_trial_snapshot(&[], 1, 2, "v1").unwrap();
+        LegacyImportConfirmation::ensure_trial_snapshot(std::slice::from_ref(&pending), 1, 2, "v1").unwrap();
+        let mut rejected = pending.clone();
+        rejected
+            .decide(
+                ConfirmationDecision::ReturnForFix,
+                "sales-user",
+                Instant::from_unix_secs(1_700_000_000),
+                Some("DATA_MISMATCH".into()),
+                None,
+            )
+            .unwrap();
+        assert!(matches!(
+            LegacyImportConfirmation::ensure_trial_snapshot(std::slice::from_ref(&rejected), 1, 2, "v1"),
+            Err(Error::LogicError(message)) if message == "当前试算已被退回，必须修复并生成新试算版本"
+        ));
+        for inconsistent in [
+            LegacyImportConfirmation { batch_version: 2, ..pending.clone() },
+            LegacyImportConfirmation { import_rule_version: "v2".into(), ..pending },
+        ] {
+            for items in [[rejected.clone(), inconsistent.clone()], [inconsistent.clone(), rejected.clone()]]
+            {
+                assert!(matches!(
+                    LegacyImportConfirmation::ensure_trial_snapshot(&items, 1, 2, "v1"),
+                    Err(Error::LogicError(message)) if message == "同一试算矩阵的批次或规则版本不一致"
+                ));
+            }
+        }
     }
 
     #[test]

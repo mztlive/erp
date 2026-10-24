@@ -22,8 +22,8 @@ impl DefinitionGraph {
             return Err(ModelError::InvalidField("实例指派与定义不匹配"));
         }
         for node in &mut self.nodes {
-            let matches = bindings.iter().filter(|b| b.node_key == node.node_key).collect::<Vec<_>>();
-            let [binding] = matches.as_slice() else {
+            let mut matches = bindings.iter().filter(|binding| binding.node_key == node.node_key);
+            let (Some(binding), None) = (matches.next(), matches.next()) else {
                 return Err(ModelError::InvalidField("实例节点指派缺失或重复"));
             };
             binding.ensure_unchanged_from_definition()?;

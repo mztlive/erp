@@ -39,7 +39,7 @@ impl SupplierOfferingReadService {
                         ..Default::default()
                     };
                     let bundle = repository_page(&db, &query, executor).await?;
-                    let mut view = page_view(bundle, &query)?
+                    let mut view = page_view(bundle, &query)
                         .items
                         .into_iter()
                         .next()

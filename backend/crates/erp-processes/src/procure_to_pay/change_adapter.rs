@@ -34,9 +34,6 @@ use erp_workflow::service::approval::process_kind::process_kind_of;
 
 use crate::{Error, Result};
 
-/// 详情最近审批历史条数上限。完整历史走分页端点。
-pub const RECENT_HISTORY_LIMIT: usize = 8;
-
 /// 已注册的采购变更单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PurchaseChangeOrderAdapter {
@@ -146,68 +143,6 @@ pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
     binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的采购变更单不得提交".to_string()))
-}
-
-/// 采购变更单调用统一 `start_approval` 的目标命令。
-///
-/// 字段与合同 §14.2 对齐；不得包含定义 ID 或审批人。
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct PurchaseChangeOrderStartCommand {
-    /// 业务对象种类。
-    pub subject_kind: String,
-    /// 业务对象 ID。
-    pub subject_id: String,
-    /// 冻结提交版本，取 `approval_subject_version`。
-    pub subject_version: u32,
-    /// 启动人。
-    #[serde(skip)]
-    pub actor_id: String,
-    /// 幂等键。
-    pub idempotency_key: String,
-}
-
-/// 由冻结提交构造目标启动命令。客户端不得提交定义或审批人。
-///
-/// # 参数
-/// * `change_order_id` - 变更单主键
-/// * `subject_version` - `approval_subject_version`
-/// * `actor_id` - 提交人
-/// * `idempotency_key` - 幂等键
-///
-/// # 返回
-/// 返回不含定义 ID 或审批人的目标启动命令。
-///
-/// # 错误
-/// 不返回错误。
-pub fn purchase_change_start_command(
-    change_order_id: &str,
-    subject_version: u32,
-    actor_id: &str,
-    idempotency_key: &str,
-) -> PurchaseChangeOrderStartCommand {
-    PurchaseChangeOrderStartCommand {
-        subject_kind: process_kind_of(DocumentType::PurchaseChangeOrder).as_str().to_string(),
-        subject_id: change_order_id.to_string(),
-        subject_version,
-        actor_id: actor_id.to_string(),
-        idempotency_key: idempotency_key.to_string(),
-    }
-}
-
-/// 证明启动走目标 `START_APPROVAL` 命令种类。
-///
-/// # 参数
-/// * `_command` - 目标启动命令
-///
-/// # 返回
-/// 返回 `START_APPROVAL`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn start_approval_command_kind(
-    _command: &PurchaseChangeOrderStartCommand,
-) -> bpm::model::types::ApprovalCommandKind {
-    bpm::model::types::ApprovalCommandKind::StartApproval
 }
 
 /// 执行签署的采购变更单领域动作。
@@ -547,20 +482,9 @@ mod tests {
         assert!(reject_legacy_change_review_node().is_err());
     }
 
-    /// 启动命令不含定义 ID 或审批人。
+    /// 缺少冻结审批定义时拒绝提交。
     #[test]
-    fn start_command_omits_definition_and_assignee() {
-        let command = purchase_change_start_command("pco-1", 1, "user-1", "key-1");
-        let encoded = serde_json::to_value(&command).unwrap();
-        assert!(encoded.get("definition_id").is_none());
-        assert!(encoded.get("definition_key").is_none());
-        assert!(encoded.get("assignee").is_none());
-        assert_eq!(command.subject_kind, "purchase_change_order");
-        assert_eq!(command.subject_version, 1);
-        assert_eq!(
-            start_approval_command_kind(&command),
-            bpm::model::types::ApprovalCommandKind::StartApproval
-        );
+    fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 

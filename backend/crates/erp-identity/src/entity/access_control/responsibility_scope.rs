@@ -194,27 +194,16 @@ impl ResponsibilityScopeSet {
     /// # 错误
     /// 不返回错误。
     pub fn intersect(&self, other: &Self) -> Self {
-        let roles = self
-            .0
-            .iter()
-            .map(|(role, _)| role)
-            .chain(other.0.iter().map(|(role, _)| role))
-            .collect::<BTreeSet<_>>();
-        let values = roles.into_iter().flat_map(|role| {
-            let left = organizations_for_role(&self.0, role);
-            let right = organizations_for_role(&other.0, role);
-            match (left, right) {
-                (Some(None), Some(organizations)) | (Some(organizations), Some(None)) => organizations
-                    .map(|targets| {
-                        targets.into_iter().map(|target| (role.clone(), Some(target))).collect::<Vec<_>>()
-                    })
-                    .unwrap_or_else(|| vec![(role.clone(), None)]),
-                (Some(Some(left)), Some(Some(right))) => {
-                    left.intersection(&right).cloned().map(|target| (role.clone(), Some(target))).collect()
+        let mut values = Vec::new();
+        for (role, organization) in &self.0 {
+            match organization {
+                Some(organization) if other.covers(role, organization) => {
+                    values.push((role.clone(), Some(organization.clone())));
                 },
-                (None, _) | (_, None) => Vec::new(),
+                None => values.extend(other.0.iter().filter(|(other_role, _)| other_role == role).cloned()),
+                Some(_) => {},
             }
-        });
+        }
         Self::new(values)
     }
 
@@ -248,23 +237,6 @@ impl ResponsibilityScopeSet {
     pub fn as_slice(&self) -> &[(String, Option<String>)] {
         &self.0
     }
-}
-
-/// 返回指定角色的覆盖；外层 `None` 表示角色不存在，内层 `None` 表示全部组织。
-fn organizations_for_role(
-    values: &[(String, Option<String>)],
-    role_id: &str,
-) -> Option<Option<BTreeSet<String>>> {
-    let mut found = false;
-    let mut targets = BTreeSet::new();
-    for (_, organization_id) in values.iter().filter(|(role, _)| role == role_id) {
-        found = true;
-        let Some(organization_id) = organization_id else {
-            return Some(None);
-        };
-        targets.insert(organization_id.clone());
-    }
-    found.then_some(Some(targets))
 }
 
 #[cfg(test)]
@@ -322,5 +294,38 @@ mod tests {
             ]
         );
         assert!(ResponsibilityScopeSet::default().intersect(&left).as_slice().is_empty());
+    }
+
+    #[test]
+    fn responsibility_intersection_matches_coverage_for_all_normalized_scope_pairs() {
+        let sets = [
+            ResponsibilityScopeSet::default(),
+            ResponsibilityScopeSet::new([("buyer".into(), None)]),
+            ResponsibilityScopeSet::new([("buyer".into(), Some("org-a".into()))]),
+            ResponsibilityScopeSet::new([("buyer".into(), Some("org-b".into()))]),
+            ResponsibilityScopeSet::new([
+                ("buyer".into(), Some("org-b".into())),
+                ("buyer".into(), Some("org-a".into())),
+                ("buyer".into(), Some("org-a".into())),
+            ]),
+            ResponsibilityScopeSet::new([("finance".into(), Some("org-b".into())), ("buyer".into(), None)]),
+            ResponsibilityScopeSet::new([("finance".into(), None)]),
+        ];
+        for left in &sets {
+            for right in &sets {
+                let intersection = left.intersect(right);
+                assert_eq!(intersection, right.intersect(left));
+                assert!(intersection.as_slice().windows(2).all(|pair| pair[0] < pair[1]));
+                for role in ["buyer", "finance", "missing-role"] {
+                    for organization in ["org-a", "org-b", "outside"] {
+                        assert_eq!(
+                            intersection.covers(role, organization),
+                            left.covers(role, organization) && right.covers(role, organization),
+                            "{left:?} intersect {right:?}, role {role}, organization {organization}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

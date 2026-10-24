@@ -96,7 +96,7 @@ impl PortalOfferingReadService {
     ) -> Result<PageView<PortalOfferingView>> {
         let query = portal_query(&actor.supplier_id, params)?;
         let bundle = repository_page(&self.db, &query, &mut NoTransaction).await?;
-        let page = page_view(bundle, &query)?;
+        let page = page_view(bundle, &query);
         let mut items = Vec::with_capacity(page.items.len());
         for view in page.items {
             items.push(self.external_view(view, &mut NoTransaction).await?);
@@ -119,7 +119,7 @@ impl PortalOfferingReadService {
             page_size: 1,
             ..Default::default()
         };
-        let page = page_view(repository_page(&self.db, &query, &mut NoTransaction).await?, &query)?;
+        let page = page_view(repository_page(&self.db, &query, &mut NoTransaction).await?, &query);
         let view = page.items.into_iter().next().ok_or_else(hidden_target)?;
         self.external_view(view, &mut NoTransaction).await
     }

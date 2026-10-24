@@ -34,11 +34,7 @@ impl ReplayOriginalReference {
     pub fn new(inbox_id: &str, version: u64, business_fact_key: &str) -> Result<Self> {
         let inbox =
             CanonicalEvidenceReference::verified("inbox_message", inbox_id, Some(version), "requeued")?;
-        let business_fact_key = business_fact_key.trim();
-        if business_fact_key.is_empty() {
-            return Err(Error::from("业务事实键不能为空"));
-        }
-        Ok(Self { inbox, business_fact_key: business_fact_key.to_string() })
+        Self::from_parts(inbox, business_fact_key)
     }
 
     /// 解析重放引用的持久化形态。
@@ -163,5 +159,36 @@ mod tests {
         assert_eq!(parsed.inbox().version(), Some(2));
         assert!(ReplayOriginalReference::parse("inbox_message:msg-1:v2:requeued").is_err());
         assert!(ReplayOriginalReference::new("msg-1", 2, "  ").is_err());
+    }
+
+    #[test]
+    fn construction_and_parsing_share_fact_key_normalization_and_rejection() {
+        for key in ["  fact-1  ", "a|b;c:d;business_fact_key:e"] {
+            let reference = ReplayOriginalReference::new("msg-1", 2, key).unwrap();
+            let expected = reference.clone();
+            let parsed = ReplayOriginalReference::parse(&reference.into_wire()).unwrap();
+            assert_eq!(parsed, expected);
+            assert_eq!(parsed.business_fact_key(), key.trim());
+        }
+        for key in ["", " \t "] {
+            assert_eq!(
+                ReplayOriginalReference::new("msg-1", 2, key).unwrap_err().to_string(),
+                "业务事实键不能为空"
+            );
+            assert_eq!(
+                ReplayOriginalReference::parse(&format!(
+                    "inbox_message:msg-1:v2:requeued;business_fact_key:{key}"
+                ))
+                .unwrap_err()
+                .to_string(),
+                "业务事实键不能为空"
+            );
+        }
+    }
+
+    #[test]
+    fn construction_checks_inbox_before_empty_fact_key() {
+        let error = ReplayOriginalReference::new("invalid|id", 2, " ").unwrap_err();
+        assert_eq!(error.to_string(), "证据记录 ID 必须使用唯一的 type:id 格式");
     }
 }

@@ -86,7 +86,7 @@ fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
     let product_sheet = if sheets.contains_key(POOL_SHEET) { POOL_SHEET } else { PRODUCT_SHEET };
     let product_rows = sheets.remove(product_sheet).unwrap_or_default();
     let products = if product_sheet == POOL_SHEET {
-        pool_rows(product_rows.clone(), &mut errors)?
+        pool_rows(&product_rows, &mut errors)?
     } else {
         data_rows(product_rows.clone(), PRODUCT_SHEET, &PRODUCT_HEADERS, &mut errors)
     };

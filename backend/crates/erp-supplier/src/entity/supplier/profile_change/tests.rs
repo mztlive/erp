@@ -22,6 +22,46 @@ fn business_date(y: i32, m: u32, d: u32) -> BusinessDate {
     BusinessDate::from_ymd(y, m, d).unwrap()
 }
 
+#[test]
+fn capability_plan_preserves_fact_order_and_deduplicates_requested_creates() {
+    use super::SupplierProfileChangePlan;
+    use crate::entity::supplier::CapabilityStatus;
+
+    let (mut physical, _) = new_capability(
+        &SupplierAccountId::new("supplier"),
+        CapabilityCode::Physical,
+        business_date(2026, 1, 1),
+        "owner",
+        "actor",
+        SupplierCapabilityId::new("physical"),
+        SupplierCapabilityRevisionId::new("physical-revision"),
+    )
+    .unwrap();
+    physical.stable.status = CapabilityStatus::Disabled;
+    let mut duplicate = physical.clone();
+    duplicate.base.id = "duplicate-physical".into();
+    let plan = SupplierProfileChangePlan::from_loaded(
+        &[physical, duplicate],
+        &[],
+        &HashMap::new(),
+        &HashMap::new(),
+        &[
+            CapabilityCode::Printing,
+            CapabilityCode::Physical,
+            CapabilityCode::Virtual,
+            CapabilityCode::Printing,
+        ],
+        &[],
+    )
+    .unwrap();
+    assert_eq!(plan.capability_creates, vec![CapabilityCode::Printing, CapabilityCode::Virtual]);
+    assert_eq!(
+        plan.capability_toggles.iter().map(|toggle| toggle.capability_id.as_ref()).collect::<Vec<&str>>(),
+        vec!["physical", "duplicate-physical"]
+    );
+    assert!(plan.capability_toggles.iter().all(|toggle| toggle.target_status == CapabilityStatus::Active));
+}
+
 /// 根资料移除日期不完整的启用合同仍须停用；不能用采购资格替代生命周期。
 #[test]
 fn omitted_unverified_contracts_are_disabled_once() {

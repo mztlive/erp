@@ -69,7 +69,8 @@ impl ContractValues {
     /// # 错误
     /// 必填缺失、开票类型或税率不在允许集合、日期无效，或有效期止早于生效日时返回 `ImportFailure`。
     pub(super) fn validate_values(&self) -> Result<ValidatedFields> {
-        for field in [ContractNo, CustomerName, CompanyName] {
+        let contract_no = self.required(ContractNo)?;
+        for field in [CustomerName, CompanyName] {
             self.required(field)?;
         }
         let (payment_code, payment_name) = self.payment()?;
@@ -77,7 +78,8 @@ impl ContractValues {
         if !["增值税专用发票", "增值税普通发票", "不开发票"].contains(&invoice_type) {
             return Err(self.failure(InvoiceType, "UNMATCHED_TERMS", "请选择支持的开票类型"));
         }
-        let tax_point = self.required(TaxPoint)?.strip_suffix('%').unwrap_or(self.required(TaxPoint)?).trim();
+        let tax_point = self.required(TaxPoint)?;
+        let tax_point = tax_point.strip_suffix('%').unwrap_or(tax_point).trim();
         if !["0", "1", "3", "6", "9", "13"].contains(&tax_point) {
             return Err(self.failure(TaxPoint, "UNMATCHED_TAX", "请选择支持的税率"));
         }
@@ -88,7 +90,7 @@ impl ContractValues {
             return Err(self.failure(ValidTo, "INVALID_DATES", "有效期止不能早于生效日期"));
         }
         Ok(ValidatedFields {
-            contract_no: self.required(ContractNo)?.into(),
+            contract_no: contract_no.into(),
             payment_code,
             payment_name,
             invoice_type: invoice_type.into(),

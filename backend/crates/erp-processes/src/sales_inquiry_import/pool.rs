@@ -13,7 +13,7 @@ use crate::{Error, Result};
 /// 返回固定白名单顺序的需求行，不包含原导出的内部展示列。
 /// # 错误
 /// 表头非法或商品数量超限时拒绝。
-pub(super) fn pool_rows(rows: Vec<Row>, errors: &mut Vec<InquiryImportIssue>) -> Result<Vec<Row>> {
+pub(super) fn pool_rows(rows: &[Row], errors: &mut Vec<InquiryImportIssue>) -> Result<Vec<Row>> {
     if rows.iter().filter(|row| row.number > 2).count() > INQUIRY_IMPORT_MAX_ROWS {
         return Err(Error::ValidationError("选品页每次不得超过 2000 个商品，请减少后重新导入".into()));
     }
@@ -84,7 +84,7 @@ mod tests {
             Row { number: 4, cells: cells(&unselected) },
         ];
         let mut errors = vec![];
-        let products = pool_rows(rows, &mut errors).unwrap();
+        let products = pool_rows(&rows, &mut errors).unwrap();
         assert!(errors.is_empty());
         assert_eq!(products.len(), 1);
         assert_eq!(products[0].number, 3);
@@ -104,7 +104,7 @@ mod tests {
             },
             Row { number: 8, cells: cells(&["PCS", "0001", "客户备注", "3", "12.50"]) },
         ];
-        let products = pool_rows(rows, &mut vec![]).unwrap();
+        let products = pool_rows(&rows, &mut vec![]).unwrap();
         assert_eq!(products[0].number, 8);
         assert_eq!(products[0].cells[0].value, "0001");
         assert_eq!(products[0].cells[5].value, "12.50");
@@ -122,7 +122,7 @@ mod tests {
                 Row { number: 3, cells: cells(&["0001", "PCS", "3", "12.5001", ""]) },
             ];
             let mut errors = Vec::new();
-            let products = pool_rows(rows, &mut errors).unwrap();
+            let products = pool_rows(&rows, &mut errors).unwrap();
             assert!(errors.is_empty());
             assert_eq!(products[0].cells[5].value, "12.5001");
         }
@@ -136,7 +136,7 @@ mod tests {
             [REQUIRED.as_slice(), &["需求数量"]].concat(),
             [REQUIRED.as_slice(), &["销售参考价"]].concat(),
         ] {
-            assert!(pool_rows(vec![Row { number: 2, cells: cells(&headers) }], &mut vec![]).is_err());
+            assert!(pool_rows(&[Row { number: 2, cells: cells(&headers) }], &mut vec![]).is_err());
         }
     }
 
@@ -146,7 +146,7 @@ mod tests {
         formula[2].formula = true;
         let mut errors = vec![];
         let products = pool_rows(
-            vec![Row { number: 2, cells: cells(&REQUIRED) }, Row { number: 9, cells: formula }],
+            &[Row { number: 2, cells: cells(&REQUIRED) }, Row { number: 9, cells: formula }],
             &mut errors,
         )
         .unwrap();

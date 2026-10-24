@@ -37,8 +37,7 @@ use super::SalesChangeProcess;
 use super::adapter::{
     SalesChangeOrderAdapter, build_sales_change_snapshot, execute_sales_change_domain_action,
     require_frozen_binding, sales_change_order_adapter, sales_change_order_object_readable,
-    sales_change_order_subject_ref, sales_change_responsible_org_id, sales_change_start_command,
-    start_approval_command_kind,
+    sales_change_order_subject_ref, sales_change_responsible_org_id,
 };
 use super::cancel_approval::{
     SalesChangeCancelPersistInput, build_sales_change_cancel_input, load_cancel_runtime,
@@ -301,7 +300,7 @@ impl SalesChangeProcess {
         actor: &AuditActor,
         adapter: SalesChangeOrderAdapter,
     ) -> Result<SalesChangeOrderDetailView> {
-        let context = self.prepare_change_context(id, change_order, &idempotency_key, actor).await?;
+        let context = self.prepare_change_context(id, change_order, actor).await?;
         let recovery_subject_version = context.sales_write.submission().submission_no;
         let input = self.prepare_change_start(id, context, &idempotency_key, actor, adapter).await?;
         let persisted = persist_sales_change_start(&self.db, input).await;
@@ -323,7 +322,6 @@ impl SalesChangeProcess {
         &self,
         id: &str,
         change_order: SalesChangeOrder,
-        idempotency_key: &str,
         actor: &AuditActor,
     ) -> Result<SalesChangeApprovalContext> {
         let sales_order = self
@@ -348,8 +346,6 @@ impl SalesChangeProcess {
             actor.id(),
             now,
         )?;
-        let start = sales_change_start_command(id, submission.submission_no, actor.id(), idempotency_key);
-        let _ = start_approval_command_kind(&start);
         let organization_id = sales_change_responsible_org_id(&sales_order.settlement_party_id)?;
         Ok(SalesChangeApprovalContext { sales_write, subject, binding, now, snapshot, organization_id })
     }

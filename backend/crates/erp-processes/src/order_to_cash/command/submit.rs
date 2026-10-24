@@ -31,10 +31,10 @@ use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
 use super::super::adapter::{
-    RECENT_HISTORY_LIMIT, SalesApprovalPorts, SalesOrderStartCommand, build_sales_order_snapshot,
+    SalesApprovalPorts, SalesOrderStartCommand, build_sales_order_snapshot,
     execute_sales_order_domain_action, reject_legacy_card_sales_decision, reject_legacy_card_sales_work_item,
     require_frozen_binding, sales_approval_ports, sales_order_object_readable,
-    sales_order_responsible_org_id, sales_order_start_command, start_approval_command_kind,
+    sales_order_responsible_org_id, sales_order_start_command,
 };
 use super::super::adapters::catalog::CatalogQualificationAdapter;
 use super::super::authorization::SalesCommandAccess;
@@ -435,7 +435,7 @@ impl SalesOrderCommandProcess {
             idempotency_key,
         );
         ensure_unified_start_command(&command)?;
-        let _ = (start_approval_command_kind(&command), RECENT_HISTORY_LIMIT);
+
         let organization_id = sales_order_responsible_org_id(&start.order)?;
         Ok(SalesSubmissionApprovalContext {
             access,

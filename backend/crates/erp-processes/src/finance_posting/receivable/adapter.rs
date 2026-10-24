@@ -25,9 +25,6 @@ use erp_workflow::service::approval::process_kind::process_kind_of;
 
 use crate::{Error, Result};
 
-/// 详情最近审批历史条数上限。完整历史走分页端点。
-pub const RECENT_HISTORY_LIMIT: usize = 8;
-
 /// 已注册的客户回款单适配器规格。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomerReceiptAdapter {
@@ -185,68 +182,6 @@ pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
     binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的客户回款单不得提交".to_string()))
-}
-
-/// 客户回款单调用统一 `start_approval` 的目标命令。
-///
-/// 字段与合同 §14.2 对齐；不得包含定义 ID 或审批人。
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct CustomerReceiptStartCommand {
-    /// 业务对象种类。
-    pub subject_kind: String,
-    /// 业务对象 ID。
-    pub subject_id: String,
-    /// 冻结提交版本，取 `approval_subject_version`。
-    pub subject_version: u32,
-    /// 启动人。
-    #[serde(skip)]
-    pub actor_id: String,
-    /// 幂等键。
-    pub idempotency_key: String,
-}
-
-/// 由冻结提交构造目标启动命令。客户端不得提交定义或审批人。
-///
-/// # 参数
-/// * `receipt_id` - 回款单主键
-/// * `subject_version` - `approval_subject_version`
-/// * `actor_id` - 提交人
-/// * `idempotency_key` - 幂等键
-///
-/// # 返回
-/// 返回不含定义 ID 或审批人的目标启动命令。
-///
-/// # 错误
-/// 不返回错误。
-pub fn customer_receipt_start_command(
-    receipt_id: &str,
-    subject_version: u32,
-    actor_id: &str,
-    idempotency_key: &str,
-) -> CustomerReceiptStartCommand {
-    CustomerReceiptStartCommand {
-        subject_kind: process_kind_of(DocumentType::CustomerReceipt).as_str().to_string(),
-        subject_id: receipt_id.to_string(),
-        subject_version,
-        actor_id: actor_id.to_string(),
-        idempotency_key: idempotency_key.to_string(),
-    }
-}
-
-/// 证明启动走目标 `START_APPROVAL` 命令种类。
-///
-/// # 参数
-/// * `_command` - 目标启动命令
-///
-/// # 返回
-/// 返回 `START_APPROVAL`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn start_approval_command_kind(
-    _command: &CustomerReceiptStartCommand,
-) -> bpm::model::types::ApprovalCommandKind {
-    bpm::model::types::ApprovalCommandKind::StartApproval
 }
 
 /// 执行签署的客户回款单领域动作。
@@ -440,20 +375,9 @@ mod tests {
         assert!(ensure_final_approve_posting(&receipt).is_ok());
     }
 
-    /// 启动命令不含定义 ID 或审批人。
+    /// 缺少冻结审批定义时拒绝提交。
     #[test]
-    fn start_command_omits_definition_and_assignee() {
-        let command = customer_receipt_start_command("cr-1", 1, "user-1", "key-1");
-        let encoded = serde_json::to_value(&command).unwrap();
-        assert!(encoded.get("definition_id").is_none());
-        assert!(encoded.get("definition_key").is_none());
-        assert!(encoded.get("assignee").is_none());
-        assert_eq!(command.subject_kind, "customer_receipt");
-        assert_eq!(command.subject_version, 1);
-        assert_eq!(
-            start_approval_command_kind(&command),
-            bpm::model::types::ApprovalCommandKind::StartApproval
-        );
+    fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 
@@ -475,9 +399,9 @@ mod tests {
         assert!(build_customer_receipt_snapshot(&empty, "user-1", Instant::from_unix_secs(10)).is_err());
     }
 
-    /// 详情只读审批结构；允许动作不含选择定义或审批人。
+    /// 详情只读审批结构；未加载历史时为空，允许动作不含选择定义或审批人。
     #[test]
-    fn detail_approval_is_read_only_and_has_history_cap() {
+    fn detail_approval_is_read_only_without_loaded_history() {
         let binding =
             binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 2, Instant::from_unix_secs(1))
                 .unwrap();
@@ -485,7 +409,7 @@ mod tests {
         assert_eq!(view.requirement, "PROCESS_REQUIRED");
         assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
         assert!(view.instance.is_none());
-        assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
+        assert!(view.recent_history.is_empty());
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
         assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
         let running = document_approval_view(Some(&binding), None, CustomerReceiptStatus::InApproval);

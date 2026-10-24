@@ -95,7 +95,7 @@ pub(crate) fn digest_parts(parts: &[String]) -> String {
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
+    hex::encode(digest.finalize())
 }
 
 /// 规范化服务端生成的 SHA-256 十六进制摘要。
@@ -115,4 +115,22 @@ pub(crate) fn normalize_sha256(value: String, field: &str) -> Result<String> {
         return Err(Error::from(format!("{field}必须是64位SHA-256十六进制摘要")));
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::digest_parts;
+
+    #[test]
+    fn digest_preserves_empty_utf8_and_field_boundary_vectors() {
+        for (parts, expected) in [
+            (vec![], "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+            (vec!["ab", "c"], "601d5476e2ccfe2c87a2bba7a322659734a05749d5b5aa781f513e4912db0d5f"),
+            (vec!["a", "bc"], "3fafa1cf2f19a7c1129beb20cf0983f73a489a221fc0dd2f16d1be292d089205"),
+            (vec!["中文", ""], "0e78fcaa67497226d0a650d0e6bde3489bdbb2ef210329f987235b0a334dad17"),
+        ] {
+            let parts = parts.into_iter().map(str::to_owned).collect::<Vec<_>>();
+            assert_eq!(digest_parts(&parts), expected);
+        }
+    }
 }

@@ -36,10 +36,9 @@ use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
 use super::super::change_adapter::{
-    RECENT_HISTORY_LIMIT, build_purchase_change_snapshot, execute_purchase_change_domain_action,
-    purchase_change_order_adapter, purchase_change_order_object_readable, purchase_change_order_subject_ref,
-    purchase_change_responsible_org_id, purchase_change_start_command, require_frozen_binding,
-    start_approval_command_kind,
+    build_purchase_change_snapshot, execute_purchase_change_domain_action, purchase_change_order_adapter,
+    purchase_change_order_object_readable, purchase_change_order_subject_ref,
+    purchase_change_responsible_org_id, require_frozen_binding,
 };
 use super::super::change_cancel::{
     PurchaseChangeCancelPersistInput, build_purchase_change_cancel_input, load_cancel_runtime,
@@ -409,13 +408,6 @@ impl PurchaseOrderProcess {
             actor.id(),
             now,
         )?;
-        let start = purchase_change_start_command(
-            dispatch.id,
-            dispatch.change.approval_subject_version,
-            actor.id(),
-            &dispatch.prepared.idempotency_key,
-        );
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let organization_id = purchase_change_responsible_org_id(&dispatch.sales_order)?;
         let _ = purchase_change_order_object_readable(&organization_id, actor.id())?;
         Ok(PurchaseChangeApprovalContext { subject, binding, now, snapshot, organization_id })

@@ -35,8 +35,8 @@ use validator::Validate;
 use super::ReturnsProcess;
 use super::adapter::{
     build_payment_reversal_snapshot, execute_payment_reversal_domain_action, payment_reversal_adapter,
-    payment_reversal_object_readable, payment_reversal_responsible_org_id, payment_reversal_start_command,
-    payment_reversal_start_command_kind, payment_reversal_subject_ref, require_payment_reversal_binding,
+    payment_reversal_object_readable, payment_reversal_responsible_org_id, payment_reversal_subject_ref,
+    require_payment_reversal_binding,
 };
 use super::cancel_approval::{
     PaymentReversalCancelPersistInput, build_payment_reversal_cancel_input, load_cancel_runtime,
@@ -200,13 +200,6 @@ impl ReturnsProcess {
             self.payment_reversal_context(&reversal.original_supplier_payment_id).await?;
         let snapshot =
             build_payment_reversal_snapshot(&reversal, &organization_id, &supplier_id, actor.id(), now)?;
-        let start = payment_reversal_start_command(
-            id,
-            reversal.approval_subject_version,
-            actor.id(),
-            &idempotency_key,
-        );
-        let _ = payment_reversal_start_command_kind(&start);
         let _ = payment_reversal_object_readable(&organization_id, actor.id())?;
         let version = reversal.approval_subject_version;
         let existing_receipt =

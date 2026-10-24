@@ -282,7 +282,6 @@ impl CommandReceipt {
     ) -> Result<Self> {
         let key = require_non_blank(idempotency_key, "操作号不能为空")?;
         require_non_blank(resource_id, "命令资源 ID 不能为空")?;
-        let fingerprint_parts = fingerprint_parts.into_iter().collect::<Vec<_>>();
         assemble(
             prefix,
             [actor_id, action, resource_type, resource_id, key].into_iter().map(str::to_string),
@@ -514,5 +513,21 @@ mod tests {
         }
         assert!(CommandReceipt::from_resource_parts("c-", "actor", "a", "r", " ", "key", []).is_err());
         assert!(CommandReceipt::from_payload("c-", "actor", "a", "r", " ", &1).is_err());
+    }
+
+    #[test]
+    fn resource_receipt_consumes_fingerprint_parts_in_order() {
+        let receipt = CommandReceipt::from_resource_parts(
+            "c-",
+            "actor",
+            "update",
+            "object",
+            "target",
+            "key",
+            ["a", "bc"].into_iter().map(str::to_owned),
+        )
+        .unwrap();
+        assert_eq!(receipt.fingerprint(), &CommandFingerprint::from_parts(["a".into(), "bc".into()]));
+        assert_ne!(receipt.fingerprint(), &CommandFingerprint::from_parts(["ab".into(), "c".into()]));
     }
 }

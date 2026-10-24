@@ -82,9 +82,9 @@ pub(crate) fn rows(xml: &str, shared: &[String], limits: SheetLimits) -> Result<
     let hyperlinks = doc.descendants().any(|node| node.is_element() && node.tag_name().name() == "hyperlink");
     let rows = rows
         .into_iter()
-        .map(|(number, cells)| {
+        .map(|(number, mut cells)| {
             let width = cells.keys().next_back().map_or(0, |index| index + 1).min(limits.retained_columns);
-            let cells = (0..width).map(|index| cells.get(&index).cloned().unwrap_or_default()).collect();
+            let cells = (0..width).map(|index| cells.remove(&index).unwrap_or_default()).collect();
             Row { number, cells }
         })
         .collect();

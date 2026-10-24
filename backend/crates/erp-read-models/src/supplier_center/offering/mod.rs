@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
+use entity_core::HasBaseModel;
 use erp_catalog::{Product, Sku, SkuRevision};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
@@ -135,7 +136,7 @@ pub(super) async fn repository_page(
 pub(super) fn page_view(
     bundle: SupplierOfferingListBundle,
     query: &OfferingListQuery,
-) -> Result<PageView<SupplierOfferingView>> {
+) -> PageView<SupplierOfferingView> {
     let context = OfferingListContext {
         skus: by_id(bundle.skus),
         sku_revisions: by_id(bundle.sku_revisions),
@@ -165,7 +166,7 @@ pub(super) fn page_view(
             view
         })
         .collect();
-    Ok(PageView { items, total: bundle.page.total, page: query.page, page_size: query.page_size })
+    PageView { items, total: bundle.page.total, page: query.page, page_size: query.page_size }
 }
 /// 装配当前指针下的名称、商业条款和实时可供情况，缺失关联保留空值。
 fn build_view(
@@ -204,59 +205,32 @@ fn build_view(
     view
 }
 
-trait HasId {
-    fn id(&self) -> &str;
-}
-
-impl HasId for Sku {
-    fn id(&self) -> &str {
-        &self.base.id
-    }
-}
-impl HasId for SkuRevision {
-    fn id(&self) -> &str {
-        &self.base.id
-    }
-}
-impl HasId for Product {
-    fn id(&self) -> &str {
-        &self.base.id
-    }
-}
-impl HasId for SupplierAccount {
-    fn id(&self) -> &str {
-        &self.base.id
-    }
-}
-impl HasId for Party {
-    fn id(&self) -> &str {
-        &self.base.id
-    }
-}
-impl HasId for PartyRevision {
-    fn id(&self) -> &str {
-        &self.base.id
-    }
-}
-
-fn by_id<T: HasId>(values: Vec<T>) -> HashMap<String, T> {
+fn by_id<T: HasBaseModel>(values: Vec<T>) -> HashMap<String, T> {
     values.into_iter().map(|value| (value.id().to_string(), value)).collect()
 }
 
 #[cfg(test)]
 mod tests {
+    use entity_core::BaseModel;
+    use erp_core::common::revision::RevisionBase;
+    use erp_core::ids::PartyId;
+    use persistence_core::PageResult;
+
     use super::*;
 
-    #[test]
-    fn detail_and_list_mapping_preserve_identity_when_related_records_are_missing() {
-        let row: SupplierOfferingRow = serde_json::from_value(serde_json::json!({
-            "id": "offering-a", "sku_id": "sku-a", "supplier_id": "supplier-a",
+    fn row(id: &str) -> SupplierOfferingRow {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "sku_id": "sku-a", "supplier_id": "supplier-a",
             "supplier_sku_code": "0000123", "source_type": "MANUAL", "status": "PAUSED",
             "current_revision_id": "revision-a", "version": 3, "created_at": 1,
             "maintainer_user_id": "owner-a", "business_org_unit_id": "org-a"
         }))
-        .unwrap();
-        let view = build_view(row, None, None, &OfferingListContext::default());
+        .unwrap()
+    }
+
+    #[test]
+    fn detail_and_list_mapping_preserve_identity_when_related_records_are_missing() {
+        let view = build_view(row("offering-a"), None, None, &OfferingListContext::default());
         assert_eq!(view.id, "offering-a");
         assert_eq!(view.supplier_sku_code, "0000123");
         assert_eq!(view.maintainer_user_id, "owner-a");
@@ -267,6 +241,49 @@ mod tests {
         assert!(view.current_revision_no.is_none());
         assert!(view.available_quantity.is_none());
         assert!(view.dropship_supply_price_gross.is_none());
+    }
+
+    #[test]
+    fn page_mapping_preserves_row_order_totals_and_missing_display_facts() {
+        for rows in [vec![row("offering-b"), row("offering-a")], vec![]] {
+            let expected_ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+            let bundle = SupplierOfferingListBundle {
+                page: PageResult { items: rows, total: 37 },
+                revisions: HashMap::new(),
+                availabilities: HashMap::new(),
+                skus: vec![],
+                sku_revisions: vec![],
+                products: vec![],
+                suppliers: vec![],
+                parties: vec![],
+                party_revisions: vec![],
+                delivery_templates: vec![],
+            };
+            let query = OfferingListQuery { page: 3, page_size: 15, ..Default::default() };
+            let page = page_view(bundle, &query);
+            assert_eq!((page.total, page.page, page.page_size), (37, 3, 15));
+            assert_eq!(page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>(), expected_ids);
+            assert!(page.items.iter().all(|row| {
+                row.sku_name.is_none() && row.supplier_name.is_none() && row.delivery_template.is_some()
+            }));
+        }
+    }
+
+    #[test]
+    fn entity_maps_keep_last_duplicate_and_accept_empty_input() {
+        let first = PartyRevision {
+            base: BaseModel { id: "revision-a".into(), ..BaseModel::fake() },
+            revision: RevisionBase { revision_no: 1 },
+            party_id: PartyId::new("party-a"),
+            legal_name: "原名称".into(),
+            short_name: None,
+            change_reason: "初始建档".into(),
+        };
+        let last = PartyRevision { legal_name: "新名称".into(), ..first.clone() };
+        let mapped = by_id(vec![first, last.clone()]);
+        assert_eq!(mapped.len(), 1);
+        assert_eq!(mapped.get("revision-a"), Some(&last));
+        assert!(by_id(Vec::<PartyRevision>::new()).is_empty());
     }
 
     #[test]

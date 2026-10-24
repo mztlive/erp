@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::{Duration, Instant as Clock};
 
 use async_trait::async_trait;
@@ -62,7 +61,7 @@ pub(super) trait Transport: Send + Sync {
 pub(super) struct HttpTransport {
     settings: DangaoshushuConfig,
     client: Client,
-    quota: Arc<Mutex<(Clock, u32)>>,
+    quota: Mutex<(Clock, u32)>,
 }
 
 impl HttpTransport {
@@ -76,7 +75,7 @@ impl HttpTransport {
             .map_err(|_| {
                 error(SupplierFailureClass::MappingError, "DGSS_HTTP_CONFIG", "供应商 HTTP 客户端配置无效")
             })?;
-        Ok(Self { settings: settings.clone(), client, quota: Arc::new(Mutex::new((Clock::now(), 0))) })
+        Ok(Self { settings: settings.clone(), client, quota: Mutex::new((Clock::now(), 0)) })
     }
 
     async fn admission(&self) -> ConnectorResult<()> {
@@ -225,6 +224,8 @@ pub(super) fn decode(body: &[u8], write: bool) -> ConnectorResult<Value> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     #[test]
     fn expired_delivery_after_quota_wait_is_rejected_before_http_send() {
@@ -246,6 +247,15 @@ mod tests {
             transport.admission().await.unwrap();
         }
         assert_eq!(transport.quota.lock().await.1, 1);
+    }
+    #[tokio::test]
+    async fn shared_transport_references_use_the_same_quota() {
+        let transport = Arc::new(HttpTransport::new(&super::super::test_support::settings()).unwrap());
+        let shared = transport.clone();
+        let (first, second) = tokio::join!(transport.admission(), shared.admission());
+        first.unwrap();
+        second.unwrap();
+        assert_eq!(transport.quota.lock().await.1, 2);
     }
     #[test]
     fn business_errors_and_malformed_write_results_are_distinct() {

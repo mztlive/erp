@@ -482,11 +482,12 @@ impl BusinessEventContext {
     }
 
     /// 同一事件里每个字段代码只能出现一次。
-    fn checked_field<'a>(&'a self, code: &str, used: &mut HashSet<String>) -> Result<&'a AuditField> {
-        if !used.insert(code.to_string()) {
+    fn checked_field<'a>(&'a self, code: &str, used: &mut HashSet<&'static str>) -> Result<&'a AuditField> {
+        let field = self.action.field(code)?;
+        if !used.insert(field.code) {
             return Err(validation_error("审计投影字段重复"));
         }
-        self.action.field(code)
+        Ok(field)
     }
 }
 
@@ -847,6 +848,24 @@ mod tests {
         data.facts.push(data.facts[0].clone());
         assert!(context.log(data).is_err());
         assert!(context.with_request_id(Some("request\nforged".to_string())).is_err());
+    }
+
+    #[test]
+    fn projection_keeps_duplicate_unknown_and_value_error_order() {
+        let context = BusinessEventContext::new(actor(), ACTION).unwrap();
+        let duplicate = AuditFact { field: "confirmation_status".into(), value: AuditValue::Changed };
+        let unknown = AuditFact { field: "unregistered".into(), value: AuditValue::Changed };
+        for (facts, expected) in [
+            (vec![duplicate.clone(), unknown.clone()], "审计投影字段重复"),
+            (vec![unknown, duplicate], "业务字段未登记在审计白名单中"),
+        ] {
+            let mut data = content();
+            data.facts = facts;
+            assert!(matches!(
+                context.log(data),
+                Err(Error::ValidationError(message)) if message == expected
+            ));
+        }
     }
 
     #[test]

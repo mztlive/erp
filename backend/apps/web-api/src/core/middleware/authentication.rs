@@ -54,11 +54,9 @@ async fn validate_current_identity(
     state: &AppState,
     payload: &TokenPayload,
 ) -> Result<BackofficeAuthResult, ApiResponse<()>> {
-    if payload.subject_kind != SubjectKind::Backoffice || payload.account_kind != Some(AccountKind::Admin) {
-        return Err(ApiResponse::unauthorized());
-    }
-    let Some(account_kind) = payload.account_kind else {
-        warn!("Authorization failed: missing account kind for backoffice token");
+    let (SubjectKind::Backoffice, Some(account_kind @ AccountKind::Admin)) =
+        (payload.subject_kind, payload.account_kind)
+    else {
         return Err(ApiResponse::unauthorized());
     };
     let Some(account_version) = payload.account_version else {
@@ -99,11 +97,8 @@ fn attach_identity(
     actor_name_snapshot: Option<String>,
 ) -> Result<(), ApiResponse<()>> {
     let TokenPayload { id: user_id, account, subject_kind, account_kind, .. } = payload;
-    if subject_kind != SubjectKind::Backoffice || account_kind != Some(AccountKind::Admin) {
-        return Err(ApiResponse::unauthorized());
-    }
-    let Some(account_kind) = account_kind else {
-        warn!("Authorization failed: missing account kind for backoffice token");
+    let (SubjectKind::Backoffice, Some(account_kind @ AccountKind::Admin)) = (subject_kind, account_kind)
+    else {
         return Err(ApiResponse::unauthorized());
     };
     let actor = AuditActor::new(user_id.clone(), account.clone(), account_kind)
@@ -193,6 +188,26 @@ mod tests {
         assert!(attach_identity(&mut request, payload, None).is_err());
         assert!(request.extensions().get::<UserID>().is_none());
         assert!(request.extensions().get::<Account>().is_none());
+    }
+
+    #[test]
+    fn attach_identity_rejects_mixed_subject_and_account_kinds() {
+        for (subject_kind, account_kind) in [
+            (SubjectKind::Backoffice, AccountKind::Supplier),
+            (SubjectKind::SupplierPortal, AccountKind::Admin),
+        ] {
+            let mut request = Request::builder().uri("/admin/roles").body(Body::empty()).unwrap();
+            let mut payload = TokenPayload::backoffice("account-1".into(), "account".into(), account_kind, 1);
+            payload.subject_kind = subject_kind;
+
+            let response = attach_identity(&mut request, payload, None).unwrap_err();
+
+            assert_eq!(response.status, 401);
+            assert_eq!(response.code.as_deref(), Some("UNAUTHENTICATED"));
+            assert!(request.extensions().get::<RbacSubject>().is_none());
+            assert!(request.extensions().get::<AuditActor>().is_none());
+            assert!(request.extensions().get::<UserID>().is_none());
+        }
     }
 
     /// 本次会话名称进入真实工厂并冻结，不依赖后续账号查询或名称变化。

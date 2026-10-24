@@ -230,8 +230,8 @@ fn background_job_fingerprint(job: &BackgroundJob, items: &[BackgroundJobItem]) 
     ];
     push_optional(&mut parts, job.domain_job_type.as_deref());
     push_optional(&mut parts, job.domain_job_id.as_deref());
-    push_optional(&mut parts, job.selection_snapshot_id.as_ref().map(ToString::to_string).as_deref());
-    push_optional(&mut parts, job.input_file_asset_id.as_ref().map(ToString::to_string).as_deref());
+    push_optional(&mut parts, job.selection_snapshot_id.as_ref().map(AsRef::as_ref));
+    push_optional(&mut parts, job.input_file_asset_id.as_ref().map(AsRef::as_ref));
     for item in items {
         parts.push("item".to_string());
         parts.push(item.item_no.to_string());
@@ -260,7 +260,9 @@ fn push_optional(parts: &mut Vec<String>, value: Option<&str>) {
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::Instant;
-    use erp_core::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};
+    use erp_core::ids::{
+        BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId, FileAssetId,
+    };
 
     use super::{
         BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobItemDraft, BulkSelectionItemDraft,
@@ -341,7 +343,7 @@ mod tests {
         );
         let aggregate = BackgroundJobAggregate::new(
             BackgroundJobId::new("job-1"),
-            data,
+            data.clone(),
             vec![draft("item-1"), draft("item-2")],
         )
         .unwrap();
@@ -352,23 +354,40 @@ mod tests {
         let first_fingerprint = job.request_fingerprint.clone();
         let again = BackgroundJobAggregate::new(
             BackgroundJobId::new("job-2"),
-            BackgroundJobAggregateData {
-                job_no: "JOB-1".to_string(),
-                job_type: JobType::Batch,
-                domain_job_type: None,
-                domain_job_id: None,
-                selection_snapshot_id: None,
-                requested_by: "actor-1".to_string(),
-                request_id: "request-1".to_string(),
-                input_file_asset_id: None,
-                result_file_asset_id: None,
-                declared_total_count: 2,
-            },
+            data.clone(),
             vec![draft("item-3"), draft("item-4")],
         )
         .unwrap();
         let (again_job, _) = again.into_parts();
         assert_eq!(first_fingerprint, again_job.request_fingerprint);
         assert_ne!(first_fingerprint, None);
+
+        let mut with_sources = data;
+        with_sources.selection_snapshot_id = Some(BulkSelectionSnapshotId::new("snapshot-1"));
+        let (selection_job, _) = BackgroundJobAggregate::new(
+            BackgroundJobId::new("job-3"),
+            with_sources.clone(),
+            vec![draft("item-5"), draft("item-6")],
+        )
+        .unwrap()
+        .into_parts();
+        assert_ne!(first_fingerprint, selection_job.request_fingerprint);
+        with_sources.input_file_asset_id = Some(FileAssetId::new("file-1"));
+        let (input_job, _) = BackgroundJobAggregate::new(
+            BackgroundJobId::new("job-4"),
+            with_sources.clone(),
+            vec![draft("item-7"), draft("item-8")],
+        )
+        .unwrap()
+        .into_parts();
+        assert_ne!(selection_job.request_fingerprint, input_job.request_fingerprint);
+        let (same_sources_job, _) = BackgroundJobAggregate::new(
+            BackgroundJobId::new("job-5"),
+            with_sources,
+            vec![draft("item-9"), draft("item-10")],
+        )
+        .unwrap()
+        .into_parts();
+        assert_eq!(input_job.request_fingerprint, same_sources_job.request_fingerprint);
     }
 }

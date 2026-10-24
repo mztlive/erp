@@ -16,9 +16,8 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::ReceivableProcess;
 use super::adapter::{
-    self, RECENT_HISTORY_LIMIT, build_customer_receipt_snapshot, customer_receipt_object_readable,
-    customer_receipt_responsible_org_id, customer_receipt_start_command, customer_receipt_subject_ref,
-    require_frozen_binding, start_approval_command_kind,
+    self, build_customer_receipt_snapshot, customer_receipt_object_readable,
+    customer_receipt_responsible_org_id, customer_receipt_subject_ref, require_frozen_binding,
 };
 use super::customer_receipt_command::{
     MongoReceiptCommandWrites, ReceiptReplayPort, ensure_committed_resource, persist_receipt_command_success,
@@ -85,9 +84,6 @@ impl ReceivableProcess {
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = erp_core::common::time::Instant::now();
         let snapshot_payload = build_customer_receipt_snapshot(&receipt, actor.id(), now)?;
-        let start =
-            customer_receipt_start_command(id, receipt.approval_subject_version, actor.id(), idempotency_key);
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let organization_id = customer_receipt_responsible_org_id(&receipt)?;
         let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
         let prepared = prepare_dispatch_start(

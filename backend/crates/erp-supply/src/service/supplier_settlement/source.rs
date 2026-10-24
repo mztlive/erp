@@ -442,7 +442,7 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
             .get(item.supplier_fulfillment_order_id.as_ref())
             .ok_or_else(|| Error::BusinessLogicError("履约明细缺少供应商订单头".to_string()))?;
         if order.confirmed_completed_at()?.is_some_and(|at| period.contains(at)) {
-            required_item_ids.insert(item.base.id.clone());
+            required_item_ids.insert(item.base.id.as_str());
         }
     }
     for allocation in refund_allocations {
@@ -450,13 +450,16 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
             .get(allocation.supplier_refund_fact_id.as_ref())
             .ok_or_else(|| Error::BusinessLogicError("退款分配缺少正式退款头".to_string()))?;
         if period.contains(fact.refunded_at) {
-            required_item_ids.insert(allocation.supplier_fulfillment_item_id.to_string());
+            required_item_ids.insert(allocation.supplier_fulfillment_item_id.as_ref());
         }
     }
     for input in inputs.iter().filter(|input| input.cancel_occurred_at.is_some()) {
-        required_item_ids.insert(input.supplier_fulfillment_item_id.to_string());
+        required_item_ids.insert(input.supplier_fulfillment_item_id.as_ref());
     }
-    let mut missing = required_item_ids.difference(input_item_ids).cloned().collect::<Vec<_>>();
+    let mut missing = required_item_ids
+        .into_iter()
+        .filter(|item_id| !input_item_ids.contains(*item_id))
+        .collect::<Vec<_>>();
     missing.sort();
     if !missing.is_empty() {
         return Err(Error::BusinessLogicError(format!(
@@ -848,6 +851,30 @@ mod tests {
             message.contains("SOURCE_EVIDENCE_INCOMPLETE") && message.contains("item-2"),
             "错误必须 fail-closed 并列出遗漏明细: {message}"
         );
+    }
+
+    #[test]
+    fn complete_scope_lists_first_twenty_missing_items_in_stable_order() {
+        let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
+        let items = (0..25)
+            .rev()
+            .map(|index| {
+                fulfillment_item(&format!("item-{index:02}"), &SupplierFulfillmentOrderId::new("order-1"))
+            })
+            .collect();
+        let error = ensure_scope(vec![], vec![order], items, vec![], vec![]).unwrap_err();
+        let expected_ids = (0..20).map(|index| format!("item-{index:02}")).collect::<Vec<_>>().join(",");
+        assert_eq!(
+            business_logic_message(error),
+            format!("SOURCE_EVIDENCE_INCOMPLETE: 来源证据遗漏周期内完成或退款明细 {expected_ids}")
+        );
+    }
+
+    #[test]
+    fn complete_scope_does_not_require_out_of_period_completions() {
+        let order = completed_order("order-1", instant("2026-08-01T00:00:00+08:00"));
+        let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        ensure_scope(vec![], vec![order], vec![item], vec![], vec![]).unwrap();
     }
 
     #[test]

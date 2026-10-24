@@ -348,23 +348,16 @@ pub(crate) fn validate_bank_receipt_upload(
     req: &CommitSupplierPaymentRequest,
     files: &[PendingAssetFile],
 ) -> std::result::Result<(), Error> {
-    let mut expected = Vec::new();
     let reference = req.payment.bank_receipt_asset_id.to_string();
-    if reference.starts_with("pending-file:") {
-        expected.push(reference);
-    }
-    if expected.len() != files.len() {
-        return Err(Error::BadRequest("银行回单图片与付款命令不匹配".to_string()));
-    }
-    expected.sort();
-    let mut actual = files.iter().map(|pending| pending.reference.clone()).collect::<Vec<_>>();
-    actual.sort();
-    if actual != expected {
+    let file = match (reference.starts_with("pending-file:"), files) {
+        (false, []) => return Ok(()),
+        (true, [file]) => file,
+        _ => return Err(Error::BadRequest("银行回单图片与付款命令不匹配".to_string())),
+    };
+    if file.reference != reference {
         return Err(Error::BadRequest("银行回单图片临时引用无效".to_string()));
     }
-    if files.iter().any(|pending| {
-        !matches!(pending.file.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp")
-    }) {
+    if !matches!(file.file.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp") {
         return Err(Error::BadRequest("银行回单仅支持 JPG、PNG 或 WebP 图片".to_string()));
     }
     Ok(())
@@ -438,12 +431,11 @@ pub async fn purchase_invoice_allocation_list(
 mod tests {
     use erp_finance::dto::payable::CommitSupplierPaymentRequest;
 
-    use super::validate_bank_receipt_upload;
+    use super::{Error, validate_bank_receipt_upload};
     use crate::core::handler::file_asset::{AssetFile, PendingAssetFile};
 
-    #[test]
-    fn bank_receipt_file_must_match_pending_image_reference() {
-        let request = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
+    fn payment_request(asset_id: &str) -> CommitSupplierPaymentRequest {
+        serde_json::from_value(serde_json::json!({
             "payment_request_id": "ppr-1",
             "expected_request_version": 1,
             "work_item_id": "wi-1",
@@ -456,31 +448,65 @@ mod tests {
                 "paid_at": 1,
                 "amount": "10.00",
                 "bank_reference": null,
-                "bank_receipt_asset_id": "pending-file:bank-receipt"
+                "bank_receipt_asset_id": asset_id
             },
             "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10.00"}],
             "idempotency_key": "commit-1"
         }))
-        .expect("付款命令必须可反序列化");
-        let image = PendingAssetFile {
-            reference: "pending-file:bank-receipt".to_string(),
+        .expect("付款命令必须可反序列化")
+    }
+
+    fn pending_file(reference: &str, content_type: &str) -> PendingAssetFile {
+        PendingAssetFile {
+            reference: reference.into(),
             file: AssetFile {
                 file_name: "receipt.png".to_string(),
-                content_type: "image/png".to_string(),
+                content_type: content_type.into(),
                 content: vec![1],
             },
-        };
-        assert!(validate_bank_receipt_upload(&request, &[image]).is_ok());
+        }
+    }
 
-        let pdf = PendingAssetFile {
-            reference: "pending-file:bank-receipt".to_string(),
-            file: AssetFile {
-                file_name: "receipt.pdf".to_string(),
-                content_type: "application/pdf".to_string(),
-                content: vec![1],
-            },
-        };
-        assert!(validate_bank_receipt_upload(&request, &[pdf]).is_err());
+    #[test]
+    fn bank_receipt_file_must_match_pending_image_reference() {
+        let request = payment_request("pending-file:bank-receipt");
+        for content_type in ["image/jpeg", "image/png", "image/webp"] {
+            let image = pending_file("pending-file:bank-receipt", content_type);
+            assert!(validate_bank_receipt_upload(&request, &[image]).is_ok());
+        }
+        let pdf = pending_file("pending-file:bank-receipt", "application/pdf");
+        assert!(matches!(
+            validate_bank_receipt_upload(&request, &[pdf]),
+            Err(Error::BadRequest(message)) if message == "银行回单仅支持 JPG、PNG 或 WebP 图片"
+        ));
         assert!(validate_bank_receipt_upload(&request, &[]).is_err());
+    }
+
+    #[test]
+    fn bank_receipt_count_is_checked_before_reference_and_type() {
+        assert!(validate_bank_receipt_upload(&payment_request("asset-1"), &[]).is_ok());
+        for (asset_id, files) in [
+            ("pending-file:bank-receipt", vec![]),
+            ("asset-1", vec![pending_file("wrong", "application/pdf")]),
+            (
+                "pending-file:bank-receipt",
+                vec![pending_file("wrong-1", "application/pdf"), pending_file("wrong-2", "application/pdf")],
+            ),
+        ] {
+            assert!(matches!(
+                validate_bank_receipt_upload(&payment_request(asset_id), &files),
+                Err(Error::BadRequest(message)) if message == "银行回单图片与付款命令不匹配"
+            ));
+        }
+    }
+
+    #[test]
+    fn bank_receipt_reference_is_checked_before_content_type() {
+        let request = payment_request("pending-file:bank-receipt");
+        let file = pending_file("pending-file:other", "application/pdf");
+        assert!(matches!(
+            validate_bank_receipt_upload(&request, &[file]),
+            Err(Error::BadRequest(message)) if message == "银行回单图片临时引用无效"
+        ));
     }
 }

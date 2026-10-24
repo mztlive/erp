@@ -20,8 +20,7 @@ use validator::Validate;
 use super::super::ReturnsProcess;
 use super::super::adapter::{
     build_receipt_reversal_snapshot, execute_receipt_reversal_domain_action, receipt_reversal_adapter,
-    receipt_reversal_object_readable, receipt_reversal_start_command, receipt_reversal_start_command_kind,
-    receipt_reversal_subject_ref, require_receipt_reversal_binding,
+    receipt_reversal_object_readable, receipt_reversal_subject_ref, require_receipt_reversal_binding,
 };
 use super::super::cancel_approval::{
     ReceiptReversalCancelPersistInput, build_receipt_reversal_cancel_input, load_cancel_runtime,
@@ -122,13 +121,6 @@ impl ReturnsProcess {
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let (organization_id, snapshot) = self.receipt_reversal_start_snapshot(&reversal, actor, now).await?;
-        let start = receipt_reversal_start_command(
-            id,
-            reversal.approval_subject_version,
-            actor.id(),
-            &idempotency_key,
-        );
-        let _ = receipt_reversal_start_command_kind(&start);
         let _ = receipt_reversal_object_readable(&organization_id, actor.id())?;
         let version = reversal.approval_subject_version;
         let existing_receipt =

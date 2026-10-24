@@ -31,12 +31,7 @@ impl WorkItem {
         if self.work_item_type != WorkItemType::ProcurementOrderCreation {
             return Err(Error::from("只有供给分配任务可以按需求归零自动完成"));
         }
-        self.ensure_open()?;
-        self.status = WorkItemStatus::Completed;
-        self.completed_at = Some(at);
-        self.completed_by = Some("__system__".to_string());
-        self.last_activity_at = Some(at);
-        Ok(())
+        self.complete_open_by_system(at)
     }
 
     /// 在采购不再受销售变更影响时自动完成采购依据更新任务。
@@ -54,12 +49,7 @@ impl WorkItem {
         if self.work_item_type != WorkItemType::PurchaseSourceUpdate {
             return Err(Error::from("只有采购依据更新任务可以按采购处理完成自动完成"));
         }
-        self.ensure_open()?;
-        self.status = WorkItemStatus::Completed;
-        self.completed_at = Some(at);
-        self.completed_by = Some("__system__".to_string());
-        self.last_activity_at = Some(at);
-        Ok(())
+        self.complete_open_by_system(at)
     }
 
     /// 按实际退款或红票归零结果完成退货财务任务。
@@ -77,12 +67,7 @@ impl WorkItem {
         ) {
             return Err(Error::from("只有退货财务任务可以按款票差额归零自动完成"));
         }
-        self.ensure_open()?;
-        self.status = WorkItemStatus::Completed;
-        self.completed_at = Some(at);
-        self.completed_by = Some("__system__".to_string());
-        self.last_activity_at = Some(at);
-        Ok(())
+        self.complete_open_by_system(at)
     }
 
     /// 在应付开放余额归零时自动完成付款执行任务。
@@ -100,12 +85,7 @@ impl WorkItem {
         if self.work_item_type != WorkItemType::SupplierPaymentExecution {
             return Err(Error::from("只有付款执行任务可以按应付结清自动完成"));
         }
-        self.ensure_open()?;
-        self.status = WorkItemStatus::Completed;
-        self.completed_at = Some(at);
-        self.completed_by = Some("__system__".to_string());
-        self.last_activity_at = Some(at);
-        Ok(())
+        self.complete_open_by_system(at)
     }
 
     /// 在本申请批准未付额度归零时完成申请付款任务。
@@ -138,12 +118,7 @@ impl WorkItem {
         if self.work_item_type != WorkItemType::SalesInvoiceExecution {
             return Err(Error::from("只有销项开票执行任务可以按可开票额度归零自动完成"));
         }
-        self.ensure_open()?;
-        self.status = WorkItemStatus::Completed;
-        self.completed_at = Some(at);
-        self.completed_by = Some("__system__".to_string());
-        self.last_activity_at = Some(at);
-        Ok(())
+        self.complete_open_by_system(at)
     }
 
     /// 记录当前责任人的首次处理或后续非终结活动。
@@ -343,6 +318,25 @@ impl WorkItem {
         Ok(())
     }
 
+    /// 由已完成类型与审批保护校验的系统入口结束开放任务。
+    ///
+    /// # 参数
+    /// * `at` - 业务事实满足时的系统确认时间。
+    ///
+    /// # 返回
+    /// 写入完成状态、系统处理人和活动时间，保留首次处理与责任事实。
+    ///
+    /// # 错误
+    /// 任务非开放时返回错误，不修改任何字段。
+    pub(super) fn complete_open_by_system(&mut self, at: Instant) -> Result<()> {
+        self.ensure_open()?;
+        self.status = WorkItemStatus::Completed;
+        self.completed_at = Some(at);
+        self.completed_by = Some("__system__".to_string());
+        self.last_activity_at = Some(at);
+        Ok(())
+    }
+
     pub(super) fn ensure_generic_mutation(&self) -> Result<()> {
         self.ensure_generic_responsibility_mutation()
     }
@@ -404,10 +398,78 @@ impl WorkItem {
 
 #[cfg(test)]
 mod tests {
+    use bpm::ApprovalNodeExecutionId;
+    use erp_core::Result;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
 
-    use super::super::{AssignmentSource, WorkItem, WorkItemData, WorkItemStatus, WorkItemType, direct_data};
+    use super::super::{
+        AssignmentSource, WorkItem, WorkItemData, WorkItemStatus, WorkItemType, approval_item, direct_data,
+    };
+
+    #[test]
+    fn system_completion_keeps_first_activity_and_responsibility() {
+        for started in [false, true] {
+            let mut task = WorkItem::new_with_responsibility_key(
+                WorkItemId::new("payment"),
+                WorkItemData {
+                    work_item_type: WorkItemType::SupplierPaymentExecution,
+                    business_object_type: "payable_account".into(),
+                    owner_role: "role-finance".into(),
+                    ..direct_data()
+                },
+                "finance:SUPPLIER_PAYMENT:rule-1",
+            )
+            .unwrap();
+            if started {
+                task.record_activity("alice", Instant::from_unix_secs(110)).unwrap();
+            }
+            let before = task.clone();
+            let completed_at = Instant::from_unix_secs(120);
+            task.complete_when_payable_settled(completed_at).unwrap();
+            assert_eq!(task.status, WorkItemStatus::Completed);
+            assert_eq!(task.completed_by.as_deref(), Some("__system__"));
+            assert_eq!(task.completed_at, Some(completed_at));
+            assert_eq!(task.last_activity_at, Some(completed_at));
+            assert_eq!(task.started_at, before.started_at);
+            assert_eq!(task.assigned_at, before.assigned_at);
+            assert_eq!(task.current_assignment_at, before.current_assignment_at);
+            assert_eq!(task.owner_user_id, before.owner_user_id);
+            assert_eq!(task.responsibility_actor_ids, before.responsibility_actor_ids);
+            assert_eq!(task.responsibility_key(), before.responsibility_key());
+            let completed = task.clone();
+            assert_eq!(
+                task.complete_when_payable_settled(Instant::from_unix_secs(130)).unwrap_err().to_string(),
+                "只有开放任务可以执行责任动作"
+            );
+            assert_eq!(task, completed);
+        }
+    }
+
+    #[test]
+    fn system_completion_rejects_approval_references_before_type_or_status() {
+        let completions: [fn(&mut WorkItem, Instant) -> Result<()>; 6] = [
+            WorkItem::complete_when_requirement_satisfied,
+            WorkItem::complete_when_source_updated,
+            WorkItem::complete_when_return_settled,
+            WorkItem::complete_when_payable_settled,
+            WorkItem::complete_when_fully_invoiced,
+            WorkItem::complete_payment_arrangement,
+        ];
+        for complete in completions {
+            let mut ordinary =
+                WorkItem::new_at(WorkItemId::new("ordinary"), direct_data(), Instant::from_unix_secs(1))
+                    .unwrap();
+            ordinary.approval_node_execution_id = Some(ApprovalNodeExecutionId::new("execution"));
+            for mut task in [ordinary, approval_item("approval")] {
+                task.status = WorkItemStatus::Closed;
+                let before = task.clone();
+                let error = complete(&mut task, Instant::from_unix_secs(120)).unwrap_err();
+                assert_eq!(error.to_string(), "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN");
+                assert_eq!(task, before);
+            }
+        }
+    }
 
     #[test]
     fn return_tasks_require_explicit_owner_and_only_complete_once() {

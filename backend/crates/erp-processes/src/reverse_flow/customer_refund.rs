@@ -33,8 +33,8 @@ use validator::Validate;
 use super::ReturnsProcess;
 use super::adapter::{
     build_customer_refund_snapshot, customer_refund_adapter, customer_refund_object_readable,
-    customer_refund_responsible_org_id, customer_refund_start_command, customer_refund_subject_ref,
-    execute_customer_refund_domain_action, require_frozen_binding, start_approval_command_kind,
+    customer_refund_responsible_org_id, customer_refund_subject_ref, execute_customer_refund_domain_action,
+    require_frozen_binding,
 };
 use super::cancel_approval::{
     CustomerRefundCancelPersistInput, build_customer_refund_cancel_input, load_cancel_runtime,

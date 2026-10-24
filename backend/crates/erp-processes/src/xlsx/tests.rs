@@ -109,3 +109,32 @@ fn invalid_shared_index_and_duplicate_coordinates_are_rejected() {
         assert!(rows(xml, &[], SheetLimits::CUSTOMER).is_err());
     }
 }
+
+#[test]
+fn sparse_rows_keep_sorted_coordinates_metadata_and_retained_column_limit() {
+    let limits = SheetLimits { columns: 5, rows: 10, retained_columns: 3 };
+    let xml = r#"<worksheet>
+        <c r="E3" t="str"><v>outside retained columns</v></c>
+        <c r="C3" t="str"><f>A3&amp;B3</f><v>cached</v></c>
+        <c r="B1" t="s"><v>0</v></c>
+        <c r="A3" t="n"><v>2</v></c>
+    </worksheet>"#;
+    let sheet = rows(xml, &["00123".into()], limits).unwrap();
+    assert_eq!(sheet.rows.iter().map(|row| row.number).collect::<Vec<_>>(), [1, 3]);
+    let first = &sheet.rows[0].cells;
+    assert_eq!(first.len(), 2);
+    assert!(first[0].value.is_empty());
+    assert!(!first[0].text && !first[0].numeric && !first[0].formula);
+    assert!(first[0].formula_text.is_none());
+    assert_eq!(first[1].value, "00123");
+    assert!(first[1].text);
+    let second = &sheet.rows[1].cells;
+    assert_eq!(second.len(), 3);
+    assert_eq!(second[0].value, "2");
+    assert!(second[0].numeric);
+    assert!(second[1].value.is_empty());
+    assert_eq!(second[2].value, "cached");
+    assert!(second[2].text && second[2].formula);
+    assert_eq!(second[2].formula_text.as_deref(), Some("A3&B3"));
+    assert!(rows(r#"<worksheet><c r="E1"/><c r="E1"/></worksheet>"#, &[], limits).is_err());
+}

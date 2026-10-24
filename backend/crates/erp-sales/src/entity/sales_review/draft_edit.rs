@@ -107,13 +107,9 @@ impl SalesOrderWorkingCopy {
             return Err(Error::ConflictError("变更内容已变化，请刷新后重试".into()));
         }
         let mut copy = self.clone();
-        match self.stable.status {
-            WorkingCopyStatus::Editing => {},
-            WorkingCopyStatus::Submitted => {
-                copy.base = BaseModel::new(new_id.to_string());
-                copy.stable = StableBase::new(WorkingCopyStatus::Editing, actor_id);
-            },
-            _ => return Err(Error::ConflictError("当前变更内容不可编辑".into())),
+        if self.stable.status == WorkingCopyStatus::Submitted {
+            copy.base = BaseModel::new(new_id.to_string());
+            copy.stable = StableBase::new(WorkingCopyStatus::Editing, actor_id);
         }
         Ok(copy)
     }
@@ -691,6 +687,55 @@ mod tests {
         copy.base_revision_id = Some(SalesOrderRevisionId::new("revision-1"));
         copy.stable.status = WorkingCopyStatus::Conflict;
         assert!(copy.ensure_change_editable(&change).is_err());
+    }
+
+    #[test]
+    fn editable_change_copy_preserves_state_contract_and_error_precedence() {
+        let (change, original, _) = fixture();
+        for status in [
+            WorkingCopyStatus::Editing,
+            WorkingCopyStatus::Submitted,
+            WorkingCopyStatus::Abandoned,
+            WorkingCopyStatus::Conflict,
+        ] {
+            let mut source = original.clone();
+            source.stable.status = status;
+            let result = source.editable_change_copy(
+                &change,
+                source.base.version,
+                SalesOrderWorkingCopyId::new("new-copy"),
+                "sales-2",
+            );
+            match status {
+                WorkingCopyStatus::Editing => assert_eq!(result.unwrap(), source),
+                WorkingCopyStatus::Submitted => {
+                    let mut actual = result.unwrap();
+                    assert_eq!(actual.base.id, "new-copy");
+                    assert_eq!(actual.base.version, 1);
+                    assert_eq!(actual.stable.status, WorkingCopyStatus::Editing);
+                    assert_eq!(actual.stable.created_by, "sales-2");
+                    assert_eq!(actual.stable.updated_by, "sales-2");
+                    assert_eq!(actual.stable.current_revision_id, None);
+                    actual.base = source.base.clone();
+                    actual.stable = source.stable.clone();
+                    assert_eq!(actual, source);
+                },
+                WorkingCopyStatus::Abandoned | WorkingCopyStatus::Conflict => {
+                    assert!(matches!(result, Err(Error::ConflictError(message))
+                        if message == "销售变更工作副本与原单或状态不一致"));
+                    assert!(matches!(
+                        source.editable_change_copy(
+                            &change,
+                            source.base.version + 1,
+                            SalesOrderWorkingCopyId::new("new-copy"),
+                            "sales-2",
+                        ),
+                        Err(Error::ConflictError(message))
+                            if message == "销售变更工作副本与原单或状态不一致"
+                    ));
+                },
+            }
+        }
     }
 
     #[test]

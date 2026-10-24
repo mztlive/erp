@@ -89,12 +89,10 @@ impl SupplierProfileChangePlan {
         requested_qualifications: &[PlannedQualificationInput],
     ) -> erp_core::Result<Self> {
         use std::collections::{HashMap, HashSet};
-        let requested_set: HashSet<String> =
-            requested_capability_codes.iter().map(|code| code.as_str().to_string()).collect();
-        let capability_index: HashMap<String, &SupplierCapability> =
-            capabilities.iter().map(|cap| (cap.capability_code.as_str().to_string(), cap)).collect();
+        let requested_set = requested_capability_codes.iter().copied().collect();
+        let existing_codes = capabilities.iter().map(|cap| cap.capability_code).collect();
         let capability_toggles = plan_capability_toggles(capabilities, &requested_set);
-        let capability_creates = plan_capability_creates(requested_capability_codes, &capability_index);
+        let capability_creates = plan_capability_creates(requested_capability_codes, &existing_codes);
         let requested_map: HashMap<String, &PlannedQualificationInput> = requested_qualifications
             .iter()
             .map(|input| (qualification_identity_key(input.qualification_type, &input.certificate_no), input))
@@ -123,11 +121,11 @@ impl SupplierProfileChangePlan {
 /// 返回需切换状态的既有能力。
 fn plan_capability_toggles(
     capabilities: &[SupplierCapability],
-    requested_set: &std::collections::HashSet<String>,
+    requested_set: &std::collections::HashSet<CapabilityCode>,
 ) -> Vec<CapabilityToggle> {
     let mut toggles = Vec::new();
     for cap in capabilities {
-        let wanted = requested_set.contains(cap.capability_code.as_str());
+        let wanted = requested_set.contains(&cap.capability_code);
         if wanted == cap.is_active() {
             continue;
         }
@@ -145,17 +143,17 @@ fn plan_capability_toggles(
 ///
 /// # 参数
 /// * `requested_capability_codes` - 根资料请求中的能力代码集合
-/// * `capability_index` - 既有能力按代码的索引
+/// * `existing_codes` - 既有能力代码集合
 ///
 /// # 返回
 /// 返回需新建的能力代码。
 fn plan_capability_creates(
     requested_capability_codes: &[CapabilityCode],
-    capability_index: &std::collections::HashMap<String, &SupplierCapability>,
+    existing_codes: &std::collections::HashSet<CapabilityCode>,
 ) -> Vec<CapabilityCode> {
     let mut creates = Vec::new();
     for code in requested_capability_codes {
-        if !capability_index.contains_key(code.as_str()) && !creates.contains(code) {
+        if !existing_codes.contains(code) && !creates.contains(code) {
             creates.push(*code);
         }
     }

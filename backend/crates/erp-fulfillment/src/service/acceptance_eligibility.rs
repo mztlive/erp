@@ -54,7 +54,7 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
     let mut facts_by_line = group_facts_by_line(sources)?;
     let line_inputs = group_revision_quantities(sources);
     let mut lines = Vec::with_capacity(line_inputs.len());
-    for (sales_order_line_id, required_quantity, _) in line_inputs {
+    for (sales_order_line_id, required_quantity) in line_inputs {
         let facts = facts_by_line.remove(&sales_order_line_id).unwrap_or_default();
         lines.push(AcceptanceLineEligibility::from_facts(sales_order_line_id, required_quantity, facts)?);
     }
@@ -82,7 +82,7 @@ fn group_facts_by_line(
         facts_by_line.insert(revision_line.sales_order_line_id.to_string(), Vec::new());
     }
     for line in sources.delivery_lines {
-        if let Some(facts) = facts_by_line.get_mut(&line.sales_order_line_id.to_string()) {
+        if let Some(facts) = facts_by_line.get_mut(line.sales_order_line_id.as_ref()) {
             facts.push(delivery_allocations.fact(&line.base.id, line.quantity)?);
         }
     }
@@ -91,12 +91,12 @@ fn group_facts_by_line(
         if record.acceptance_quantity(&record.sales_order_line_id).is_err() {
             continue;
         }
-        if let Some(facts) = facts_by_line.get_mut(&record.sales_order_line_id.to_string()) {
+        if let Some(facts) = facts_by_line.get_mut(record.sales_order_line_id.as_ref()) {
             facts.push(electronic_allocations.fact(&record.base.id, record.quantity)?);
         }
     }
     for record in sources.service {
-        if let Some(facts) = facts_by_line.get_mut(&record.sales_order_line_id.to_string()) {
+        if let Some(facts) = facts_by_line.get_mut(record.sales_order_line_id.as_ref()) {
             facts.push(service_allocations.fact(&record.base.id, record.quantity)?);
         }
     }
@@ -111,13 +111,11 @@ fn group_facts_by_line(
 /// * `sources` - 版本行与数量快照
 ///
 /// # 返回
-/// 返回按首次出现顺序的（稳定明细、应履约数量、空事实）三元组。
+/// 返回按首次出现顺序的（稳定明细、应履约数量）二元组。
 ///
 /// # Panics
 /// `Quantity::from_str("0")` 对字面量 `0` 必然合法；解析失败时 panic，避免把非法零数量传入资格计算。
-fn group_revision_quantities(
-    sources: &EligibilitySources<'_>,
-) -> Vec<(String, Quantity, Vec<AcceptanceFactEligibility>)> {
+fn group_revision_quantities(sources: &EligibilitySources<'_>) -> Vec<(String, Quantity)> {
     let quantity_by_revision: HashMap<&str, Quantity> = sources
         .goods_service_lines
         .iter()
@@ -125,7 +123,7 @@ fn group_revision_quantities(
         .collect();
     let zero = Quantity::from_str("0").expect("字面量 0 必然合法");
     let mut line_index: HashMap<&str, usize> = HashMap::new();
-    let mut line_inputs: Vec<(String, Quantity, Vec<AcceptanceFactEligibility>)> = Vec::new();
+    let mut line_inputs: Vec<(String, Quantity)> = Vec::new();
     for revision_line in sources.revision_lines {
         let key = revision_line.sales_order_line_id.as_ref();
         let required_quantity = quantity_by_revision.get(revision_line.id.as_str()).copied().unwrap_or(zero);
@@ -133,7 +131,7 @@ fn group_revision_quantities(
             line_inputs[index].1 = required_quantity;
         } else {
             line_index.insert(key, line_inputs.len());
-            line_inputs.push((key.to_string(), required_quantity, Vec::new()));
+            line_inputs.push((key.to_string(), required_quantity));
         }
     }
     line_inputs

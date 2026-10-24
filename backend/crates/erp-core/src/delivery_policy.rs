@@ -131,7 +131,7 @@ impl DeliveryRuleSet {
         for rule in &self.rules {
             RegionCode::parse(rule.region_code.as_str())?;
             ensure_term_allowed(mode, rule.term)?;
-            if !seen.insert(rule.region_code.clone()) {
+            if !seen.insert(&rule.region_code) {
                 return Err(Error::from(format!(
                     "{}规则中地区 {} 重复",
                     mode.label(),

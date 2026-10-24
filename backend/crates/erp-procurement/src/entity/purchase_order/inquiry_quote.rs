@@ -48,15 +48,12 @@ impl PurchaseInquiryAddress {
             .map(|row| {
                 let fingerprint =
                     Self::fingerprint(&row.recipient, &row.phone, row.region_code.as_str(), &row.address);
-                let matches = limits
-                    .iter()
-                    .filter(|limit| limit.address_fingerprint == fingerprint)
-                    .collect::<Vec<_>>();
-                if matches.len() != 1 {
+                let mut matches = limits.iter().filter(|limit| limit.address_fingerprint == fingerprint);
+                let (Some(limit), None) = (matches.next(), matches.next()) else {
                     return Err(Error::from("采购收件地址不属于专项报价范围或身份不唯一"));
-                }
+                };
                 Ok(Self {
-                    allocation_id: matches[0].allocation_id.clone(),
+                    allocation_id: limit.allocation_id.clone(),
                     address_fingerprint: fingerprint,
                     quantity: row.quantity,
                 })
@@ -197,7 +194,63 @@ fn validate_addresses(addresses: &[PurchaseInquiryAddress], quantity: Quantity) 
 mod tests {
     use std::slice::from_ref;
 
+    use erp_core::region::RegionCode;
+
     use super::*;
+
+    fn delivery(recipient: &str, quantity: &str) -> PurchaseDeliveryAllocation {
+        PurchaseDeliveryAllocation {
+            recipient: recipient.into(),
+            phone: "13800000000".into(),
+            region_code: RegionCode::parse("310115").unwrap(),
+            region_name: "上海市浦东新区".into(),
+            address: "客户地址".into(),
+            quantity: quantity.parse().unwrap(),
+        }
+    }
+
+    fn address_limit(id: &str, row: &PurchaseDeliveryAllocation) -> PurchaseInquiryAddress {
+        PurchaseInquiryAddress {
+            allocation_id: id.into(),
+            address_fingerprint: PurchaseInquiryAddress::fingerprint(
+                &row.recipient,
+                &row.phone,
+                row.region_code.as_str(),
+                &row.address,
+            ),
+            quantity: "20".parse().unwrap(),
+        }
+    }
+
+    #[test]
+    fn delivery_mapping_keeps_request_order_and_quantity() {
+        let rows = [delivery("张三", "2"), delivery("李四", "3")];
+        let limits = [address_limit("second", &rows[1]), address_limit("first", &rows[0])];
+
+        let mapped = PurchaseInquiryAddress::from_delivery(&rows, &limits).unwrap();
+
+        assert_eq!(mapped[0].allocation_id, "first");
+        assert_eq!(mapped[1].allocation_id, "second");
+        assert_eq!(mapped[0].quantity, rows[0].quantity);
+        assert_eq!(mapped[1].quantity, rows[1].quantity);
+        assert!(PurchaseInquiryAddress::from_delivery(&[], &limits).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delivery_mapping_rejects_missing_and_ambiguous_addresses() {
+        let row = delivery("张三", "2");
+        let limit = address_limit("address-1", &row);
+        let mut duplicate = limit.clone();
+        duplicate.allocation_id = "address-2".into();
+        for limits in [vec![], vec![address_limit("other", &delivery("李四", "2"))], vec![limit, duplicate]]
+        {
+            assert!(matches!(
+                PurchaseInquiryAddress::from_delivery(from_ref(&row), &limits),
+                Err(Error::LogicError(message)) if message == "采购收件地址不属于专项报价范围或身份不唯一"
+            ));
+        }
+    }
+
     fn source() -> PurchaseInquiryQuoteSource {
         PurchaseInquiryQuoteSource {
             inquiry_id: "iq".into(),

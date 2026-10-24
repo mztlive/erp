@@ -153,68 +153,6 @@ pub fn require_frozen_binding(
     binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的库存调整单不得提交".to_string()))
 }
 
-/// 库存调整单调用统一 `start_approval` 的目标命令。
-///
-/// 字段与合同 §14.2 / `ApprovalStartCommand` 对齐；不得包含定义 ID 或审批人。
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct StockAdjustmentStartCommand {
-    /// 业务对象种类。
-    pub subject_kind: String,
-    /// 业务对象 ID。
-    pub subject_id: String,
-    /// 冻结提交版本。
-    pub subject_version: u32,
-    /// 启动人。
-    #[serde(skip)]
-    pub actor_id: String,
-    /// 幂等键。
-    pub idempotency_key: String,
-}
-
-/// 由冻结绑定构造目标启动命令。客户端不得提交定义或审批人。
-///
-/// # 参数
-/// * `adjustment_id` - 调整单主键
-/// * `subject_version` - 已冻结提交版本
-/// * `actor_id` - 提交人
-/// * `idempotency_key` - 幂等键
-///
-/// # 返回
-/// 返回不含定义 ID 或审批人的目标启动命令。
-///
-/// # 错误
-/// 不返回错误。
-pub fn stock_adjustment_start_command(
-    adjustment_id: &str,
-    subject_version: u32,
-    actor_id: &str,
-    idempotency_key: &str,
-) -> StockAdjustmentStartCommand {
-    StockAdjustmentStartCommand {
-        subject_kind: process_kind_of(DocumentType::StockAdjustment).as_str().to_string(),
-        subject_id: adjustment_id.to_string(),
-        subject_version,
-        actor_id: actor_id.to_string(),
-        idempotency_key: idempotency_key.to_string(),
-    }
-}
-
-/// 证明启动走目标 `START_APPROVAL` 命令种类。
-///
-/// # 参数
-/// * `_command` - 目标启动命令
-///
-/// # 返回
-/// 返回 `START_APPROVAL`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn start_approval_command_kind(
-    _command: &StockAdjustmentStartCommand,
-) -> bpm::model::types::ApprovalCommandKind {
-    bpm::model::types::ApprovalCommandKind::StartApproval
-}
-
 /// 执行签署的库存调整领域动作。
 ///
 /// # 参数
@@ -422,20 +360,9 @@ mod tests {
         );
     }
 
-    /// 启动命令不含定义 ID 或审批人。
+    /// 缺少冻结审批定义时拒绝提交。
     #[test]
-    fn start_command_omits_definition_and_assignee() {
-        let command = stock_adjustment_start_command("adj-1", 1, "user-1", "key-1");
-        let encoded = serde_json::to_value(&command).unwrap();
-        assert!(encoded.get("definition_id").is_none());
-        assert!(encoded.get("definition_key").is_none());
-        assert!(encoded.get("assignee").is_none());
-        assert!(encoded.get("reviewed_by").is_none());
-        assert_eq!(command.subject_kind, "stock_adjustment");
-        assert_eq!(
-            start_approval_command_kind(&command),
-            bpm::model::types::ApprovalCommandKind::StartApproval
-        );
+    fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 

@@ -134,13 +134,25 @@ impl ApprovalNodeDefinition {
     /// # 错误
     /// 人员重复、超限或显示名非法时失败。
     pub fn with_additional_assignees(mut self, assignees: Vec<ApprovalParticipant>) -> ModelResult<Self> {
+        self.additional_assignees = assignees;
+        self.validate_additional_assignees()?;
+        Ok(self)
+    }
+
+    /// 校验当前节点的其他或签审批人，不复制节点快照。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 成员身份与显示名有效时成功。
+    /// # 错误
+    /// 人员重复、超限、显示名非法或动态节点混用指定人员时失败。
+    pub(crate) fn validate_additional_assignees(&self) -> ModelResult<()> {
         if let Some(id) = &self.assignee_participant_id {
-            validate_additional(id, &assignees)?;
-        } else if !assignees.is_empty() {
+            validate_additional(id, &self.additional_assignees)?;
+        } else if !self.additional_assignees.is_empty() {
             return Err(ModelError::InvalidField("动态节点不得混合指定人员"));
         }
-        self.additional_assignees = assignees;
-        Ok(self)
+        Ok(())
     }
 
     /// 返回冻结的全部参与人。

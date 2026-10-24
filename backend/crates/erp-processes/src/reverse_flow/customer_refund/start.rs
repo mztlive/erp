@@ -34,9 +34,6 @@ impl ReturnsProcess {
         let now = Instant::now();
         let organization_id = self.customer_responsible_org_id(&refund.customer_id).await?;
         let snapshot = build_customer_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
-        let start =
-            customer_refund_start_command(id, refund.approval_subject_version, actor.id(), &idempotency_key);
-        let _ = start_approval_command_kind(&start);
         let _ = customer_refund_object_readable(&organization_id, actor.id())?;
         let existing_receipt =
             load_start_receipt(&self.db, &subject, refund.approval_subject_version, &idempotency_key).await?;

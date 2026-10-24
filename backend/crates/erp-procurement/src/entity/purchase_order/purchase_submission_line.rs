@@ -377,6 +377,7 @@ fn ensure_line_no(line_no: u32) -> Result<()> {
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::Error;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
@@ -503,6 +504,24 @@ mod tests {
         inherit_submission_sources(&mut inputs, std::slice::from_ref(&draft)).unwrap();
         assert_eq!(inputs[0].delivery_allocations, requested);
         inherit_revision_sources(&mut inputs, std::slice::from_ref(&revision)).unwrap();
+
+        let before = inputs.clone();
+        assert!(matches!(
+            inherit_submission_sources(&mut inputs, &[draft.clone(), draft.clone()]),
+            Err(Error::LogicError(message)) if message == "采购原行身份歧义，不能继承正式选源"
+        ));
+        assert_eq!(inputs, before);
+        let mut incomplete = draft.clone();
+        incomplete.sku_id = None;
+        assert!(matches!(
+            inherit_submission_sources(&mut inputs, &[draft.clone(), incomplete]),
+            Err(Error::LogicError(message)) if message == "采购来源缺少SKU"
+        ));
+        assert_eq!(inputs, before);
+        let mut repeated = vec![inputs[0].clone(), inputs[0].clone()];
+        inherit_submission_sources(&mut repeated, std::slice::from_ref(&draft)).unwrap();
+        assert_eq!(repeated, vec![before[0].clone(), before[0].clone()]);
+
         let mut wrong_revision = inputs.clone();
         wrong_revision[0].sku_revision_id = Some(erp_core::ids::SkuRevisionId::new("foreign-version"));
         assert!(inherit_revision_sources(&mut wrong_revision, std::slice::from_ref(&revision)).is_err());

@@ -17,10 +17,9 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::adapter::{
-    RECENT_HISTORY_LIMIT, build_purchase_order_snapshot, execute_purchase_order_domain_action,
-    purchase_order_adapter, purchase_order_object_readable, purchase_order_responsible_org_id,
-    purchase_order_start_command, purchase_order_subject_ref, require_frozen_binding,
-    start_approval_command_kind,
+    build_purchase_order_snapshot, execute_purchase_order_domain_action, purchase_order_adapter,
+    purchase_order_object_readable, purchase_order_responsible_org_id, purchase_order_subject_ref,
+    require_frozen_binding,
 };
 use super::sourcing_create::sequence::PurchaseCreationEventSequence;
 use super::start_approval::{
@@ -285,13 +284,6 @@ async fn prepare_created_order_start(
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
-    let start = purchase_order_start_command(
-        &order.base.id,
-        order.approval_subject_version,
-        actor.id(),
-        idempotency_key,
-    );
-    let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
     let start_input = build_purchase_order_start_input(PurchaseOrderStartInput {
         graph,
         binding: &binding,

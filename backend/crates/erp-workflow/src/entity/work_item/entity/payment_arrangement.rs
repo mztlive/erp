@@ -2,7 +2,7 @@
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::{Error, Result};
 
-use super::{WorkItem, WorkItemStatus, WorkItemType};
+use super::{WorkItem, WorkItemType};
 use crate::entity::work_item::payment_due_at;
 impl WorkItem {
     /// 当前负责人登记下一次付款跟进日，保留开放责任。
@@ -36,12 +36,7 @@ impl WorkItem {
     /// 非开放付款安排任务时拒绝。
     pub fn complete_payment_arrangement(&mut self, now: Instant) -> Result<()> {
         self.ensure_payment_arrangement()?;
-        self.ensure_open()?;
-        self.status = WorkItemStatus::Completed;
-        self.completed_by = Some("__system__".into());
-        self.completed_at = Some(now);
-        self.last_activity_at = Some(now);
-        Ok(())
+        self.complete_open_by_system(now)
     }
     /// 防止一般任务或审批任务使用付款安排命令。
     fn ensure_payment_arrangement(&self) -> Result<()> {
@@ -59,7 +54,7 @@ impl WorkItem {
 mod tests {
     use erp_core::ids::WorkItemId;
 
-    use super::super::{WorkItemData, direct_data};
+    use super::super::{WorkItemData, WorkItemStatus, direct_data};
     use super::*;
 
     /// 使用正式构造器生成采购经办人任务。
@@ -94,6 +89,9 @@ mod tests {
         item.complete_payment_arrangement(now).unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert_eq!(item.completed_by.as_deref(), Some("__system__"));
+        assert_eq!(item.completed_at, Some(now));
+        assert_eq!(item.last_activity_at, Some(now));
+        assert_eq!(item.started_at, Some(now));
         assert!(item.schedule_payment_follow_up("alice", today, today, now).is_err());
         assert!(item.complete_payment_arrangement(now).is_err());
     }

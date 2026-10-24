@@ -6,7 +6,7 @@ use erp_inventory::{
     StockAdjustment, StockAdjustmentApprovalSnapshot, StockAdjustmentDetailView, StockAdjustmentLine,
     StockAdjustmentSubmitResultQuery, StockAdjustmentUpdate, SubmitStockAdjustmentRequest,
 };
-use erp_read_models::inventory_center::{RECENT_HISTORY_LIMIT, load_approval_binding};
+use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::{PlannedWrites, PreparedExecution};
@@ -15,8 +15,7 @@ use validator::Validate;
 
 use super::adapter::{
     StockAdjustmentAdapter, execute_stock_adjustment_domain_action, require_frozen_binding,
-    start_approval_command_kind, stock_adjustment_adapter, stock_adjustment_start_command,
-    stock_adjustment_subject_ref, workflow_snapshot_from_inventory,
+    stock_adjustment_adapter, stock_adjustment_subject_ref, workflow_snapshot_from_inventory,
 };
 use super::mapping::build_adjustment_line_updates;
 use super::{InventoryAdjustmentProcess, approval_prepare as start_approval, persist as start_persist};
@@ -134,13 +133,6 @@ impl InventoryAdjustmentProcess {
             actor.id(),
             now,
         )?);
-        let start = stock_adjustment_start_command(
-            id,
-            adjustment.approval_subject_version,
-            actor.id(),
-            &req.idempotency_key,
-        );
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let organization_id = adjustment.warehouse_id.to_string();
         Ok(StockAdjustmentSubmission {
             adjustment,

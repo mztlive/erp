@@ -24,10 +24,9 @@ use persistence_core::NoTransaction;
 use super::{PurchaseOrderProcess, PurchaseSubmitCommand};
 use crate::adapters::workflow::approver_directory::resolve_start_approvers;
 use crate::procure_to_pay::adapter::{
-    RECENT_HISTORY_LIMIT, build_purchase_order_snapshot, execute_purchase_order_domain_action,
-    purchase_order_adapter, purchase_order_object_readable, purchase_order_responsible_org_id,
-    purchase_order_start_command, purchase_order_subject_ref, require_frozen_binding,
-    start_approval_command_kind,
+    build_purchase_order_snapshot, execute_purchase_order_domain_action, purchase_order_adapter,
+    purchase_order_object_readable, purchase_order_responsible_org_id, purchase_order_subject_ref,
+    require_frozen_binding,
 };
 use crate::procure_to_pay::start_approval::{
     PurchaseOrderStartInput, PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard,
@@ -221,13 +220,6 @@ impl PurchaseOrderProcess {
             command.actor.id(),
             context.now,
         )?;
-        let start = purchase_order_start_command(
-            command.purchase_order_id,
-            draft.order.approval_subject_version,
-            command.actor.id(),
-            &command.request.idempotency_key,
-        );
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let graph = load_bound_definition_graph(&self.db, &draft.binding).await?;
         let receipt = load_start_receipt(
             &self.db,

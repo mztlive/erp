@@ -69,7 +69,8 @@ impl StructuredCommandReceipt {
     /// 合法时无返回值。
     ///
     /// # 错误
-    /// `schema_version` 不是 1、`command_id` / `actor_id` / `action` / `resource_type` 去空白后为空、`scope_id` 为空白，或 `fingerprint` / `idempotency_key_hash` 不是合法 v1 指纹时返回错误。
+    /// `schema_version` 不是 1、`command_id` / `actor_id` / `action` / `resource_type` 去空白后为空，或 `scope_id` 为空白时返回错误。
+    /// 指纹格式由 `CommandFingerprint` 在构造和反序列化时保证。
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
             || [&self.command_id, &self.actor_id, &self.action, &self.resource_type]
@@ -79,8 +80,6 @@ impl StructuredCommandReceipt {
         {
             return Err(Error::from("结构化命令回执身份无效"));
         }
-        CommandFingerprint::parse(self.fingerprint.as_str())?;
-        CommandFingerprint::parse(self.idempotency_key_hash.as_str())?;
         Ok(())
     }
 }
@@ -174,6 +173,27 @@ mod tests {
         cases.push(changed);
         for changed in cases {
             assert_eq!(original.match_structured(&changed), StructuredReceiptMatch::Corrupted);
+        }
+    }
+
+    #[test]
+    fn fingerprint_fields_validate_and_normalize_at_deserialization() {
+        let original = command(10);
+        let fact = StructuredCommandReceipt::from_command(&original).unwrap();
+        let encoded = serde_json::to_value(&fact).unwrap();
+        for field in ["fingerprint", "idempotency_key_hash"] {
+            for invalid in ["broken".to_string(), format!("sha256-v1:{}", "g".repeat(64))] {
+                let mut value = encoded.clone();
+                value[field] = invalid.into();
+                assert!(serde_json::from_value::<StructuredCommandReceipt>(value).is_err());
+            }
+            let mut value = encoded.clone();
+            let fingerprint = value[field].as_str().unwrap();
+            value[field] = format!("sha256-v1:{}", fingerprint[10..].to_ascii_uppercase()).into();
+            let restored: StructuredCommandReceipt = serde_json::from_value(value).unwrap();
+            restored.validate().unwrap();
+            assert_eq!(restored, fact);
+            assert_eq!(original.match_structured(&restored), StructuredReceiptMatch::SamePayload);
         }
     }
 }
