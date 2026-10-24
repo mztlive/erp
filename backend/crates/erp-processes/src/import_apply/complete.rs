@@ -8,13 +8,13 @@ use erp_import::entity::command_receipt::{
 use erp_import::repository::ImportCommandReceiptExt;
 use erp_import::repository::prelude::*;
 use erp_import::{
-    CompleteImportBusinessConfirmationCommand, ConfirmationDecision, ConfirmationScope, ConfirmationStatus,
+    CompleteImportBusinessConfirmationCommand, ConfirmationDecision, ConfirmationScope,
     ImportBusinessConfirmationNextStep, ImportBusinessConfirmationResultStatus, LegacyImportBatch,
     LegacyImportBatchStatus, LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportExt,
     PreparedConfirmationCompletion,
 };
 use erp_workflow::entity::document_registry::WorkflowActionId;
-use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
+use erp_workflow::entity::work_item::{ImportConfirmationTaskIdentity, WorkItem};
 use erp_workflow::{DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use persistence_core::{Executor, Transactional};
@@ -337,50 +337,12 @@ pub(super) fn validate_confirmation_replay(
     actor_id: &str,
 ) -> Result<()> {
     let scope = ConfirmationScope::parse(&prepared.confirmation_scope)?;
-    if !confirmation_replay_fact_matches(outcome, confirmation, prepared, actor_id, scope.owner_role())
+    if !confirmation.matches_completed_decision(outcome, prepared, actor_id, scope)
         || !confirmation_replay_task_matches(outcome, task, prepared, actor_id, scope.owner_role())
     {
         return Err(Error::ConflictError("导入确认回执与正式确认或任务终态不一致".into()));
     }
     Ok(())
-}
-
-/// 核对原确认决定和不可变回执，不依赖后续批次推进状态。
-fn confirmation_replay_fact_matches(
-    outcome: &ImportConfirmationOutcome,
-    confirmation: &LegacyImportConfirmation,
-    prepared: &PreparedConfirmationCompletion,
-    actor_id: &str,
-    owner_role: &str,
-) -> bool {
-    let expected_status = match prepared.decision {
-        ConfirmationDecision::ConfirmScope => ConfirmationStatus::Confirmed,
-        ConfirmationDecision::ReturnForFix => ConfirmationStatus::Rejected,
-    };
-    outcome.confirmation_id == confirmation.base.id
-        && outcome.confirmation_version == confirmation.base.version
-        && outcome.batch_id == prepared.batch_id.as_ref()
-        && confirmation.batch_id == prepared.batch_id
-        && !confirmation.base.is_deleted()
-        && confirmation.trial_version == prepared.expected_trial_version
-        && confirmation.owner_role == owner_role
-        && LegacyImportConfirmation::subject_version(
-            confirmation.batch_version,
-            confirmation.trial_version,
-            &confirmation.import_rule_version,
-        ) == outcome.subject_version
-        && confirmation.work_item_id == prepared.work_item_id
-        && outcome.subject_version == prepared.expected_subject_version
-        && outcome.confirmation_scope == prepared.confirmation_scope
-        && confirmation.confirmation_scope == prepared.confirmation_scope
-        && outcome.decision == prepared.decision
-        && confirmation.decision == Some(prepared.decision)
-        && confirmation.status == expected_status
-        && confirmation.decided_by.as_deref() == Some(actor_id)
-        && confirmation.decided_at == Some(outcome.decided_at)
-        && confirmation.reason_code == prepared.reason_code
-        && confirmation.comment == prepared.comment
-        && Some(outcome.receipt.batch_version) == prepared.expected_batch_version.checked_add(1)
 }
 
 /// 完成后的任务仍须保留原责任人；开放任务资格不适用于终态重放。
@@ -391,22 +353,19 @@ fn confirmation_replay_task_matches(
     actor_id: &str,
     owner_role: &str,
 ) -> bool {
-    !task.base.is_deleted()
-        && outcome.work_item_id == task.base.id
+    let identity = ImportConfirmationTaskIdentity {
+        business_object_type: IMPORT_CONFIRMATION_OBJECT_TYPE,
+        batch_id: &outcome.batch_id,
+        confirmation_scope: &prepared.confirmation_scope,
+        owner_role,
+        owner_organization_id: IMPORT_CONFIRMATION_ORGANIZATION,
+    };
+    outcome.work_item_id == task.base.id
         && task.base.id == prepared.work_item_id.as_ref()
         && task.subject_version == outcome.subject_version
-        && task.status == WorkItemStatus::Completed
         && task.base.version == outcome.receipt.task_version
         && Some(outcome.receipt.task_version) == prepared.expected_task_version.checked_add(1)
-        && task.completed_by.as_deref() == Some(actor_id)
-        && task.completed_at == Some(outcome.decided_at)
-        && task.work_item_type == WorkItemType::ImportBusinessConfirmation
-        && task.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
-        && task.business_object_id == outcome.batch_id
-        && task.responsibility_key() == Some(prepared.confirmation_scope.as_str())
-        && task.owner_role == owner_role
-        && task.owner_organization_id == IMPORT_CONFIRMATION_ORGANIZATION
-        && task.owner_user_id.as_deref() == Some(actor_id)
+        && task.matches_completed_import_confirmation(identity, actor_id, outcome.decided_at)
 }
 
 struct ConfirmationCompletionTransactionResult {
@@ -452,25 +411,21 @@ pub(super) fn validate_confirmation_completion(
     {
         return Err(Error::ConflictError("导入确认的批次或试算快照已变化".to_string()));
     }
-    let owner_role = ConfirmationScope::parse(&command.confirmation_scope)?.owner_role();
-    let task_matches = work_item.work_item_type == WorkItemType::ImportBusinessConfirmation
-        && work_item.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
-        && work_item.business_object_id == confirmation.batch_id.to_string()
-        && work_item.responsibility_key() == Some(command.confirmation_scope.as_str())
-        && work_item.owner_role == owner_role
-        && work_item.owner_organization_id == IMPORT_CONFIRMATION_ORGANIZATION;
-    let fact_matches = confirmation.work_item_id == command.work_item_id
-        && confirmation.batch_id == command.batch_id
-        && confirmation.confirmation_scope == command.confirmation_scope
-        && confirmation.owner_role == owner_role
-        && confirmation.is_pending()
+    let command_scope = ConfirmationScope::parse(&command.confirmation_scope)?;
+    let task_matches = work_item.matches_import_confirmation(ImportConfirmationTaskIdentity {
+        business_object_type: IMPORT_CONFIRMATION_OBJECT_TYPE,
+        batch_id: confirmation.batch_id.as_ref(),
+        confirmation_scope: &command.confirmation_scope,
+        owner_role: command_scope.owner_role(),
+        owner_organization_id: IMPORT_CONFIRMATION_ORGANIZATION,
+    });
+    let fact_matches = confirmation.matches_pending_completion(command, command_scope)
         && batch.base.id == confirmation.batch_id.to_string()
         && batch.accepts_confirmation_decision()
         && batch.import_rule_version == confirmation.import_rule_version;
     if !task_matches || !fact_matches {
         return Err(Error::BusinessLogicError("导入确认任务、责任范围或批次不匹配".to_string()));
     }
-    let command_scope = ConfirmationScope::parse(&command.confirmation_scope)?;
     if !batch.required_confirmation_scopes()?.contains(&command_scope) {
         return Err(Error::BusinessLogicError("当前确认范围已不属于批次必要矩阵".to_string()));
     }

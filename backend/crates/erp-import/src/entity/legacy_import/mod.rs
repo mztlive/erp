@@ -16,6 +16,7 @@
 use sha2::{Digest, Sha256};
 
 pub mod apply_result_set;
+mod confirmation_completion;
 pub mod import_row_factory;
 pub mod legacy_import_batch;
 pub mod legacy_import_confirmation;

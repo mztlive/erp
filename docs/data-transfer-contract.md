@@ -7,7 +7,7 @@
 | 任务类型 | 业务入口 | 产物或执行效果 |
 | --- | --- | --- |
 | `product_pool_excel` | 公司商品池 Excel 导出 | 带图片的 v4 选品、配送需求、填写说明工作簿 |
-| `supplier_quote_archive` | 采购询价供应商报价表 | 按供应商分组的 v3 XLSX ZIP；配送信息仅包含地区汇总 |
+| `supplier_quote_archive` | 采购询价供应商报价表 | 按供应商分组的 v4 XLSX ZIP；配送信息仅包含地区汇总 |
 | `sales_orders`、`purchase_orders`、`contracts`、`customers` | 对应业务列表导出 | 当前筛选及授权范围内的 CSV |
 | `inventory_balance`、`inventory_movement`、`inventory_adjustment`、`inventory_reservation` | 库存四类列表导出 | 当前筛选及授权范围内的 CSV |
 | `supplier_orders` | 供应商履约订单导出 | 实际订单 CSV，不生成模拟任务号 |
@@ -99,6 +99,8 @@
 | 私有资产 | 输入和结果加密保存，HMAC 校验；七天保留级别，过期禁止读取 |
 
 商品池继续使用 v4 表结构及配送核对公式，公式中的 SKU 匹配必须转义通配符。服务器导入以业务列和服务端规则为准，不信任 Excel 辅助公式缓存。
+
+供应商报价新导出模板固定为 `supplier-inquiry-quote-v4`。`supplier_quote_preview` 在服务端后台任务中解析原 XLSX，继续接受 `supplier-inquiry-quote-v2`、`supplier-inquiry-quote-v3` 和 v4；v2 保留回填承诺交付日，v3、v4 沿用已核验需求行的要求交付日。v2、v3 的旧报价失效日只按原布局定位，不解析或参与报价资格判断。客户端展示任务生成的逐行预览；报价确认继续调用原 `ImportInquiryQuotesCommand` 原子保存接口，文件任务成功不等于报价已登记。
 
 部署时必须为配置的对象存储前缀下 `data-transfer/` 配置过期清理及历史版本清理策略，以清理到期密文和提交失败产生的孤立对象。应用中的七天有效期只负责访问拒绝，不能代替对象存储物理清理。修改桶生命周期属于部署配置操作，应在目标环境单独执行并核验。
 

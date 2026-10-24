@@ -1,6 +1,7 @@
 //! `work_item`：审批与独立人工任务的当前责任事实。
 
 mod approval;
+mod import_confirmation;
 mod payment_arrangement;
 mod permissions;
 mod procurement_access;
@@ -19,6 +20,7 @@ use erp_core::common::time::Instant;
 #[cfg(test)]
 use erp_core::ids::WorkItemId;
 use erp_core::{Error, Result};
+pub use import_confirmation::ImportConfirmationTaskIdentity;
 pub use permissions::{AvailableWorkItemAccount, WorkflowAccountFact, casbin_subject};
 use serde::{Deserialize, Serialize};
 pub use status::WorkItemCloseData;

@@ -126,11 +126,6 @@ fn tasks_match(fact: &StockAdjustmentCancellation, tasks: &[WorkItem]) -> bool {
             task.base.id == id
                 && Some(task.base.version) == version.checked_add(1)
                 && task.status == WorkItemStatus::Closed
-                && task.approval_node_execution_id.as_ref().map(AsRef::as_ref)
-                    == Some(data.execution_id.as_str())
-                && task.business_object_type == "stock_adjustment"
-                && task.business_object_id == data.stock_adjustment_id
-                && task.subject_version == data.subject_version.to_string()
                 && task.closed_by.as_deref() == Some(data.actor_id.as_str())
                 && task.close_reason.as_deref() == Some(data.reason.as_str())
                 && task.closed_at == Some(data.cancelled_at)
@@ -344,5 +339,33 @@ mod tests {
         assert!(ensure_terminal(&fact, &instance, &execution, std::slice::from_ref(&task)).is_ok());
         assert!(ensure_terminal(&fact, &instance, &execution, &[]).is_err());
         assert!(ensure_terminal(&fact, &instance, &execution, &[task.clone(), task]).is_err());
+    }
+
+    #[test]
+    fn stock_cancel_checks_identity_of_every_historical_task() {
+        let (mut fact, instance, execution, original, _) = fixture();
+        let mut historical = original.clone();
+        historical.base.id = "previously_closed_task".into();
+        historical.closed_by = Some("previous_actor".into());
+        historical.close_reason = Some("之前已关闭".into());
+        historical.closed_at = Some(Instant::from_unix_secs(15));
+        fact.data.historical_tasks = historical_task_facts(&[original.clone(), historical.clone()]).unwrap();
+        assert!(
+            ensure_terminal(&fact, &instance, &execution, &[original.clone(), historical.clone()]).is_ok()
+        );
+        for case in 0..4 {
+            let mut wrong = historical.clone();
+            match case {
+                0 => wrong.approval_node_execution_id = Some(ApprovalNodeExecutionId::new("foreign")),
+                1 => wrong.business_object_type = "sales_order".into(),
+                2 => wrong.business_object_id = "foreign".into(),
+                _ => wrong.subject_version = "2".into(),
+            }
+            assert!(matches!(
+                ensure_terminal(&fact, &instance, &execution, &[original.clone(), wrong]),
+                Err(Error::ConflictError(message))
+                    if message == "库存调整撤回收据与终态事实不一致"
+            ));
+        }
     }
 }

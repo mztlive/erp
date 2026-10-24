@@ -1,21 +1,23 @@
-use std::collections::{HashMap, HashSet};
+mod layout;
+mod reply;
+
+use std::collections::HashSet;
 
 use application_core::AuditActor;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use chrono::{Duration, NaiveDate};
-use id_generator::next_id;
-use rust_decimal::Decimal;
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 use tokio::task::spawn_blocking;
 
+use self::layout::metadata;
+use self::reply::{QuotePreview, parse_row};
 use super::BusinessTransfers;
 use super::imports::required;
-use super::quotes::{HEADERS, date};
-use super::workbook::text;
 use crate::sales_inquiry::read::InquiryReadService;
-use crate::sales_inquiry_import::parse::{Row, quote_sheets};
+use crate::sales_inquiry_import::parse::quote_sheets;
 use crate::{Error, Result};
+
 impl BusinessTransfers {
     pub(super) async fn quote_preview(&self, input: &Value, actor: &AuditActor) -> Result<Value> {
         let source = self.quote_source(input, actor).await?;
@@ -32,12 +34,56 @@ impl BusinessTransfers {
             .map_err(|_| Error::Internal("报价解析中断".into()))?
     }
 }
+
+#[derive(Default, Serialize)]
+struct Preview {
+    rows: Vec<LocatedQuote>,
+    issues: Vec<String>,
+    skipped: usize,
+    #[serde(skip)]
+    seen: HashSet<String>,
+}
+
+#[derive(Serialize)]
+struct LocatedQuote {
+    source: String,
+    #[serde(flatten)]
+    preview: QuotePreview,
+}
+
+struct ParsedFile {
+    supplier: String,
+    rows: Vec<ParsedFileRow>,
+}
+
+enum ParsedFileRow {
+    Blank,
+    Reply(Box<LocatedQuote>),
+    Invalid(String),
+}
+
+impl Preview {
+    fn extend(&mut self, file: ParsedFile) {
+        for row in file.rows {
+            match row {
+                ParsedFileRow::Blank => self.skipped += 1,
+                ParsedFileRow::Invalid(issue) => self.issues.push(issue),
+                ParsedFileRow::Reply(row) => {
+                    let key = format!("{}:{}", file.supplier, row.preview.quote.line_id);
+                    if self.seen.insert(key) {
+                        self.rows.push(*row);
+                    } else {
+                        self.issues.push(format!("{}：同一供应商商品有多份回复，请保留一份", row.source));
+                    }
+                },
+            }
+        }
+    }
+}
+
 pub(super) fn parse_files(files: &[Value], source: &Value, prior: &Value) -> Result<Value> {
-    let mut rows = Vec::new();
-    let mut issues = Vec::new();
-    let mut skipped = 0;
+    let mut preview = Preview::default();
     let mut total = 0;
-    let mut seen = HashSet::new();
     for file in files {
         let name = required(file, "file_name")?;
         let bytes =
@@ -46,208 +92,42 @@ pub(super) fn parse_files(files: &[Value], source: &Value, prior: &Value) -> Res
         if total > 50 * 1024 * 1024 {
             return Err(invalid("报价文件合计不得超过 50 MiB"));
         }
-        let parsed = (|| {
-            if !name.to_ascii_lowercase().ends_with(".xlsx") {
-                return Err(invalid("请选择 XLSX 文件"));
-            }
-            let sheets = quote_sheets(&bytes)?;
-            let (supplier, version) = metadata(&sheets, &source["inquiry"])?;
-            let sheet = sheets.get("报价表").ok_or_else(|| invalid("缺少报价表"))?;
-            check_headers(sheet, version)?;
-            for row in sheet.iter().filter(|r| r.number >= 5) {
-                let source_label = format!("{name} 第 {} 行", row.number);
-                match parse_row(row, &supplier, version, source, prior) {
-                    Ok(Some(mut value)) => {
-                        let key = format!("{}:{}", supplier, value["quote"]["line_id"]);
-                        if !seen.insert(key) {
-                            issues.push(format!("{source_label}：同一供应商商品有多份回复，请保留一份"));
-                            continue;
-                        }
-                        value["source"] = json!(source_label);
-                        rows.push(value);
-                    },
-                    Ok(None) => skipped += 1,
-                    Err(error) => issues.push(format!("{source_label}：{error}")),
-                }
-            }
-            Ok(())
-        })();
-        if let Err(error) = parsed {
-            issues.push(format!("{name}：{error}"));
+        match parse_file(name, &bytes, source, prior) {
+            Ok(file) => preview.extend(file),
+            Err(error) => preview.issues.push(format!("{name}：{error}")),
         }
     }
-    if rows.len() > 1000 {
+    if preview.rows.len() > 1000 {
         return Err(invalid("每次最多导入 1000 条回复"));
     }
-    Ok(json!({"rows":rows,"issues":issues,"skipped":skipped}))
+    serde_json::to_value(preview).map_err(|_| Error::Internal("报价数据格式无效".into()))
 }
-fn cell(row: &Row, index: usize) -> &str {
-    row.cells.get(index).map_or("", |c| c.value.as_str())
-}
-fn metadata(sheets: &HashMap<String, Vec<Row>>, inquiry: &Value) -> Result<(String, u8)> {
-    let rows = sheets.get("回导信息").ok_or_else(|| invalid("缺少回导信息，请重新生成报价表"))?;
-    let at = |number| rows.iter().find(|r| r.number == number).map_or("", |r| cell(r, 0));
-    let version = match at(1) {
-        "supplier-inquiry-quote-v2" => 2,
-        "supplier-inquiry-quote-v3" => 3,
-        "supplier-inquiry-quote-v4" => 4,
-        _ => return Err(invalid("报价表版本不支持，请重新生成")),
-    };
-    if at(2) != text(inquiry, "id")
-        || at(3).parse::<u64>().ok() != inquiry["requirement_version"].as_u64()
-        || at(4) != (inquiry["feedback_round"].as_u64().unwrap_or_default() + 1).to_string()
-    {
-        return Err(invalid("报价表不属于当前询价、需求版本或反馈轮次"));
+
+fn parse_file(name: &str, bytes: &[u8], source: &Value, prior: &Value) -> Result<ParsedFile> {
+    if !name.to_ascii_lowercase().ends_with(".xlsx") {
+        return Err(invalid("请选择 XLSX 文件"));
     }
-    if at(5).is_empty() {
-        return Err(invalid("缺少供应商标识"));
-    }
-    Ok((at(5).into(), version))
-}
-fn check_headers(rows: &[Row], version: u8) -> Result<()> {
-    if rows.iter().any(|r| r.number > 204) {
-        return Err(invalid("报价表超过 200 条商品"));
-    }
-    let mut headers = HEADERS.to_vec();
-    if version < 4 {
-        headers.insert(14, "报价失效日");
-    }
-    if version == 2 {
-        headers.insert(13, "承诺交付日");
-    }
-    let row = rows.iter().find(|r| r.number == 4).ok_or_else(|| invalid("报价表缺少表头"))?;
-    if headers.iter().enumerate().any(|(i, h)| cell(row, i) != *h) {
-        return Err(invalid("报价表列已变化，请保留原模板"));
-    }
-    Ok(())
-}
-fn parse_row(row: &Row, supplier: &str, version: u8, source: &Value, prior: &Value) -> Result<Option<Value>> {
-    let len = match version {
-        2 => 17,
-        3 => 16,
-        _ => 15,
-    };
-    if (10..len).all(|i| cell(row, i).is_empty()) {
-        return Ok(None);
-    }
-    let line = original_line(row, len, source)?;
-    let previous = prior
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|q| q["line_id"] == line["line_id"] && q["supplier_id"] == supplier)
-        .max_by_key(|q| (q["feedback_round"].as_u64(), q["revision_no"].as_u64()));
-    let candidates: Vec<_> = source["offerings"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|o| o["supplier_id"] == supplier && o["sku_id"] == line["sku_id"] && o["status"] == "ACTIVE")
+    let sheets = quote_sheets(bytes)?;
+    let metadata = metadata(&sheets, &source["inquiry"])?;
+    let sheet = sheets.get("报价表").ok_or_else(|| invalid("缺少报价表"))?;
+    metadata.layout.check_headers(sheet)?;
+    let rows = sheet
+        .iter()
+        .filter(|row| row.number >= 5)
+        .map(|row| {
+            let source_label = format!("{name} 第 {} 行", row.number);
+            match parse_row(row, &metadata.supplier, metadata.layout, source, prior) {
+                Ok(Some(preview)) => {
+                    ParsedFileRow::Reply(Box::new(LocatedQuote { source: source_label, preview }))
+                },
+                Ok(None) => ParsedFileRow::Blank,
+                Err(error) => ParsedFileRow::Invalid(format!("{source_label}：{error}")),
+            }
+        })
         .collect();
-    let offering = previous
-        .and_then(|p| candidates.iter().copied().find(|o| o["id"] == p["supplier_offering_id"]))
-        .or_else(|| if candidates.len() == 1 { candidates.first().copied() } else { None })
-        .ok_or_else(|| invalid("可用供给缺失或存在多个供给，请先手工登记以确定供给关系"))?;
-    let terms = terms(row, line, version == 2)?;
-    let note = cell(row, len - 1);
-    if note.chars().count() > 4000 || (terms["unavailable"] == true && note.is_empty()) {
-        return Err(invalid("报价备注最多 4000 字；无法供货须填写原因"));
-    }
-    let duplicate = prior.as_array().into_iter().flatten().any(|q| {
-        q["line_id"] == line["line_id"]
-            && q["supplier_id"] == supplier
-            && q["supplier_offering_id"] == offering["id"]
-            && q["feedback_round"].as_u64() == source["inquiry"]["feedback_round"].as_u64().map(|n| n + 1)
-            && same_terms(&q["terms"], &terms)
-            && q["internal_note"] == note
-    });
-    let revision = previous.filter(|p| p["supplier_offering_id"] == offering["id"]);
-    Ok(Some(
-        json!({"sku_id":line["sku_id"],"product":line["product_name"],"supplier":offering["supplier_name"],"status":if duplicate{"已导入"}else if previous.is_some(){"新版本"}else{"新增"},"previous":previous,"quote":{"quote_id":revision.map(|p|text(p,"quote_id")).unwrap_or_else(next_id),"revision_no":revision.and_then(|p|p["revision_no"].as_u64()).unwrap_or(0)+1,"line_id":line["line_id"],"supplier_id":supplier,"supplier_offering_id":offering["id"],"terms":terms,"internal_note":note}}),
-    ))
+    Ok(ParsedFile { supplier: metadata.supplier, rows })
 }
-fn original_line<'a>(row: &Row, len: usize, source: &'a Value) -> Result<&'a Value> {
-    let identity: Value = serde_json::from_str(cell(row, len)).map_err(|_| invalid("商品行标识无效"))?;
-    let line = source["lines"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|l| l["line_id"] == identity["lineId"] && l["sku_id"] == identity["skuId"])
-        .ok_or_else(|| invalid("商品行与当前责任需求不匹配"))?;
-    let product = source["products"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|p| p["sku_id"] == line["sku_id"])
-        .ok_or_else(|| invalid("商品单位资料不可用"))?;
-    if cell(row, 3) != text(line, "sku_code")
-        || cell(row, 5) != text(product, "base_unit_name")
-        || decimal(cell(row, 6), 6, "需求数量")? != decimal(required(line, "quantity")?, 6, "需求数量")?
-        || parse_date(cell(row, 7))? != date(&line["delivery_due_at"])
-        || cell(row, 8) != text(line, "delivery_terms").trim()
-    {
-        return Err(invalid("原商品、单位、需求数量或交付要求已被修改，请保留原需求列"));
-    }
-    Ok(line)
-}
-fn terms(row: &Row, line: &Value, legacy: bool) -> Result<Value> {
-    let scale =
-        u32::try_from(line["quantity_scale"].as_u64().unwrap_or(6)).map_err(|_| invalid("数量精度无效"))?;
-    let quantity = decimal(cell(row, 12), scale, "可供数量")?;
-    if quantity > decimal(required(line, "quantity")?, 6, "需求数量")? {
-        return Err(invalid("可供数量不得超过本行需求数量"));
-    }
-    let due = date(&line["delivery_due_at"]);
-    if quantity.is_zero() {
-        return Ok(
-            json!({"unavailable":true,"unit_cost_gross":"0","input_tax_rate":"0","available_quantity":"0","expected_delivery_date":due,"freight_gross":null}),
-        );
-    }
-    let price = decimal(cell(row, 10), 4, "含税单价")?;
-    if price.is_zero() {
-        return Err(invalid("含税单价须为正数"));
-    }
-    let tax = decimal(cell(row, 11), 4, "税率")?;
-    if tax > Decimal::from(100) {
-        return Err(invalid("税率不得超过 100%"));
-    }
-    let freight_index = if legacy { 14 } else { 13 };
-    Ok(
-        json!({"unavailable":false,"unit_cost_gross":price.normalize().to_string(),"input_tax_rate":(tax/Decimal::from(100)).normalize().to_string(),"available_quantity":quantity.normalize().to_string(),"expected_delivery_date":if legacy{parse_date(cell(row,13))?}else{due},"freight_gross":decimal(cell(row,freight_index),2,"运费（已含运费填 0）")?.normalize().to_string()}),
-    )
-}
-fn decimal(value: &str, scale: u32, label: &str) -> Result<Decimal> {
-    let amount =
-        value.parse::<Decimal>().map_err(|_| invalid(&format!("{label}须为非负数，最多 {scale} 位小数")))?;
-    if amount.is_sign_negative() || amount.scale() > scale {
-        return Err(invalid(&format!("{label}须为非负数，最多 {scale} 位小数")));
-    }
-    Ok(amount)
-}
-fn parse_date(value: &str) -> Result<String> {
-    if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d")
-        && date.format("%Y-%m-%d").to_string() == value
-    {
-        return Ok(value.into());
-    }
-    if let Ok(days) = value.parse::<i64>()
-        && (61..=2_958_465).contains(&days)
-        && let Some(date) =
-            NaiveDate::from_ymd_opt(1899, 12, 30).and_then(|d| d.checked_add_signed(Duration::days(days)))
-    {
-        return Ok(date.format("%Y-%m-%d").to_string());
-    }
-    Err(invalid("日期须为有效的 YYYY-MM-DD"))
-}
-fn same_terms(a: &Value, b: &Value) -> bool {
-    ["unit_cost_gross", "input_tax_rate", "available_quantity", "freight_gross"].iter().all(|k| {
-        if a[k].is_null() || b[k].is_null() {
-            a[k] == b[k]
-        } else {
-            a[k].as_str().and_then(|s| s.parse::<Decimal>().ok())
-                == b[k].as_str().and_then(|s| s.parse::<Decimal>().ok())
-        }
-    }) && ["unavailable", "expected_delivery_date"].iter().all(|k| a[k] == b[k])
-}
+
 fn invalid(message: &str) -> Error {
     Error::ValidationError(message.into())
 }
@@ -255,9 +135,13 @@ fn invalid(message: &str) -> Error {
 #[cfg(test)]
 mod tests {
     use rust_xlsxwriter::Workbook;
+    use serde_json::json;
 
+    use super::layout::Template;
+    use super::reply::{decimal, parse_date, terms};
     use super::*;
-    use crate::sales_inquiry_import::parse::Cell;
+    use crate::data_transfer::quotes::{HEADERS, date};
+    use crate::sales_inquiry_import::parse::{Cell, Row};
     fn row(values: &[&str]) -> Row {
         Row {
             number: 5,
@@ -271,23 +155,29 @@ mod tests {
     fn exact_decimal_quote_requires_freight_and_limits_supply() {
         let line = json!({"quantity":"2","quantity_scale":2,"delivery_due_at":1792627200});
         let mut row = row(&["", "", "", "", "", "", "", "", "", "", "1.2345", "13", "2", "0", "", "备注"]);
-        let value = terms(&row, &line, false).unwrap();
+        let value = serde_json::to_value(terms(&row, &line, Template::V4.layout()).unwrap()).unwrap();
         assert_eq!(value["unit_cost_gross"], "1.2345");
         assert_eq!(value["input_tax_rate"], "0.13");
         row.cells[13].value.clear();
-        assert!(terms(&row, &line, false).is_err());
+        assert!(terms(&row, &line, Template::V4.layout()).is_err());
         row.cells[13].value = "0".into();
         row.cells[12].value = "2.01".into();
-        assert!(terms(&row, &line, false).is_err());
+        assert!(terms(&row, &line, Template::V4.layout()).is_err());
         assert!(decimal("-1", 4, "单价").is_err());
         assert!(decimal("1.23456", 4, "单价").is_err());
     }
     #[test]
     fn unavailable_quote_ignores_price_but_sets_zero_supply() {
         let row = row(&["", "", "", "", "", "", "", "", "", "", "", "", "0"]);
-        let value =
-            terms(&row, &json!({"quantity":"2","quantity_scale":0,"delivery_due_at":1792627200}), false)
-                .unwrap();
+        let value = serde_json::to_value(
+            terms(
+                &row,
+                &json!({"quantity":"2","quantity_scale":0,"delivery_due_at":1792627200}),
+                Template::V4.layout(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(value["unavailable"], true);
         assert_eq!(value["available_quantity"], "0");
         assert!(parse_date("2026-02-30").is_err());
@@ -373,5 +263,211 @@ mod tests {
                 if version == 2 { "2026-10-25".into() } else { date(&line["delivery_due_at"]) }
             );
         }
+    }
+    fn source() -> Value {
+        json!({"inquiry":{"id":"I1","requirement_version":1,"feedback_round":0},
+            "lines":[{"line_id":"L1","sku_id":"SKU","sku_code":"001","product_name":"商品",
+                "quantity":"2","quantity_scale":6,"delivery_due_at":1792627200,"delivery_terms":"按期交付"}],
+            "products":[{"sku_id":"SKU","base_unit_name":"盒"}],
+            "offerings":[{"id":"O1","sku_id":"SKU","supplier_id":"S1","supplier_name":"供应商","status":"ACTIVE"}]})
+    }
+
+    fn filled_row() -> Row {
+        let mut reply = row(&[
+            "",
+            "商品",
+            "",
+            "001",
+            "",
+            "盒",
+            "2",
+            "",
+            "按期交付",
+            "",
+            "10.25",
+            "13",
+            "2",
+            "0",
+            "备注",
+            "",
+        ]);
+        reply.cells[7].value = date(&source()["lines"][0]["delivery_due_at"]);
+        reply.cells[15].value = json!({"lineId":"L1","skuId":"SKU"}).to_string();
+        reply
+    }
+
+    fn preview(row: &Row, source: &Value, prior: &Value) -> Value {
+        serde_json::to_value(parse_row(row, "S1", Template::V4.layout(), source, prior).unwrap().unwrap())
+            .unwrap()
+    }
+
+    #[test]
+    fn blank_reply_skips_identity_but_zero_supply_is_an_unavailable_reply() {
+        let source = source();
+        let mut reply = filled_row();
+        for cell in reply.cells.iter_mut().skip(10) {
+            cell.value.clear();
+        }
+        assert!(parse_row(&reply, "S1", Template::V4.layout(), &source, &json!([])).unwrap().is_none());
+        reply.cells[15].value = filled_row().cells[15].value.clone();
+        reply.cells[12].value = "0".into();
+        assert!(matches!(parse_row(&reply, "S1", Template::V4.layout(), &source, &json!([])),
+            Err(Error::ValidationError(message)) if message == "报价备注最多 4000 字；无法供货须填写原因"));
+        reply.cells[14].value = "无法按期供货".into();
+        reply.cells[10].value = "无须解析的价格".into();
+        let value = preview(&reply, &source, &json!([]));
+        assert_eq!(value["quote"]["terms"]["unavailable"], true);
+        assert_eq!(value["quote"]["terms"]["available_quantity"], "0");
+        assert_eq!(value["quote"]["terms"]["freight_gross"], Value::Null);
+    }
+
+    #[test]
+    fn history_selects_its_active_offering_and_only_one_candidate_can_fallback() {
+        let mut source = source();
+        let mut alternative = source["offerings"][0].clone();
+        alternative["id"] = json!("O2");
+        source["offerings"].as_array_mut().unwrap().push(alternative);
+        let reply = filled_row();
+        assert!(matches!(parse_row(&reply, "S1", Template::V4.layout(), &source, &json!([])),
+            Err(Error::ValidationError(message)) if message == "可用供给缺失或存在多个供给，请先手工登记以确定供给关系"));
+        let prior = json!([
+            {"line_id":"L1","supplier_id":"S1","supplier_offering_id":"O1","feedback_round":1,"revision_no":9,"quote_id":"Q1"},
+            {"line_id":"L1","supplier_id":"S1","supplier_offering_id":"O2","feedback_round":2,"revision_no":3,"quote_id":"Q2"}
+        ]);
+        let value = preview(&reply, &source, &prior);
+        assert_eq!(value["status"], "新版本");
+        assert_eq!(value["quote"]["supplier_offering_id"], "O2");
+        assert_eq!(value["quote"]["quote_id"], "Q2");
+        assert_eq!(value["quote"]["revision_no"], 4);
+        source["offerings"].as_array_mut().unwrap().pop();
+        let value = preview(&reply, &source, &prior);
+        assert_eq!(value["quote"]["supplier_offering_id"], "O1");
+        assert_eq!(value["quote"]["revision_no"], 1);
+        assert_ne!(value["quote"]["quote_id"], "Q2");
+    }
+
+    #[test]
+    fn duplicate_reply_ignores_numeric_formatting_and_historical_expiry() {
+        let source = source();
+        let reply = filled_row();
+        let first = preview(&reply, &source, &json!([]));
+        let mut old = first["quote"].clone();
+        old["feedback_round"] = json!(1);
+        old["terms"]["unit_cost_gross"] = json!("10.2500");
+        old["terms"]["input_tax_rate"] = json!("0.1300");
+        old["terms"]["valid_to"] = json!("2020-01-01");
+        old["terms"]["address_limits"] = json!([{"legacy":"not compared by preview"}]);
+        let value = preview(&reply, &source, &json!([old.clone()]));
+        assert_eq!(value["status"], "已导入");
+        assert_eq!(value["previous"], old);
+        assert_eq!(value["quote"]["quote_id"], first["quote"]["quote_id"]);
+        assert_eq!(value["quote"]["revision_no"], 2);
+    }
+
+    #[test]
+    fn supplier_error_precedes_terms_and_terms_keep_original_first_error() {
+        let mut source = source();
+        source["offerings"] = json!([]);
+        let mut reply = filled_row();
+        reply.cells[10].value = "0".into();
+        reply.cells[11].value = "not a tax".into();
+        assert!(matches!(parse_row(&reply, "S1", Template::V4.layout(), &source, &json!([])),
+            Err(Error::ValidationError(message)) if message == "可用供给缺失或存在多个供给，请先手工登记以确定供给关系"));
+        assert!(matches!(terms(&reply, &source["lines"][0], Template::V4.layout()),
+            Err(Error::ValidationError(message)) if message == "含税单价须为正数"));
+        reply.cells[10].value = "1".into();
+        reply.cells[11].value = "101".into();
+        reply.cells[13].value.clear();
+        assert!(matches!(terms(&reply, &source["lines"][0], Template::V4.layout()),
+            Err(Error::ValidationError(message)) if message == "税率不得超过 100%"));
+    }
+
+    #[test]
+    fn unavailable_v2_reply_ignores_invalid_legacy_delivery_and_freight() {
+        let mut reply = row(&[
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "bad price",
+            "bad tax",
+            "0",
+            "bad date",
+            "bad freight",
+        ]);
+        let line = json!({"quantity":"2","quantity_scale":0,"delivery_due_at":null});
+        let value = serde_json::to_value(terms(&reply, &line, Template::V2.layout()).unwrap()).unwrap();
+        assert_eq!(value["expected_delivery_date"], "");
+        assert_eq!(value["freight_gross"], Value::Null);
+        // 列解释只按冻结需求精度约束，预览不新增另一套 Quantity 精度拒绝。
+        reply.cells[12].value = "0.1234567".into();
+        reply.cells[10].value = "1".into();
+        reply.cells[11].value = "0".into();
+        reply.cells[13].value = "0".into();
+        let value = serde_json::to_value(
+            terms(&reply, &json!({"quantity":"2","quantity_scale":7}), Template::V4.layout()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(value["available_quantity"], "0.1234567");
+    }
+
+    fn workbook(rows: &[Row]) -> Vec<u8> {
+        let mut book = Workbook::new();
+        let sheet = book.add_worksheet();
+        sheet.set_name("报价表").unwrap();
+        for (index, header) in HEADERS.iter().enumerate() {
+            sheet.write_string(3, u16::try_from(index).unwrap(), *header).unwrap();
+        }
+        for (index, row) in rows.iter().enumerate() {
+            for (column, cell) in row.cells.iter().enumerate() {
+                sheet
+                    .write_string(
+                        u32::try_from(index + 4).unwrap(),
+                        u16::try_from(column).unwrap(),
+                        &cell.value,
+                    )
+                    .unwrap();
+            }
+        }
+        let meta = book.add_worksheet();
+        meta.set_name("回导信息").unwrap();
+        for (index, value) in ["supplier-inquiry-quote-v4", "I1", "1", "1", "S1"].iter().enumerate() {
+            meta.write_string(u32::try_from(index).unwrap(), 0, *value).unwrap();
+        }
+        book.save_to_buffer().unwrap()
+    }
+
+    #[test]
+    fn file_and_row_failures_preserve_usable_rows_and_issue_order() {
+        let mut invalid_row = filled_row();
+        invalid_row.cells[12].value = "too much".into();
+        let bytes = workbook(&[filled_row(), invalid_row, filled_row()]);
+        let files = json!([
+            {"file_name":"wrong.csv","content_base64":STANDARD.encode(b"ignored")},
+            {"file_name":"valid.xlsx","content_base64":STANDARD.encode(bytes)},
+            {"file_name":"again.xlsx","content_base64":STANDARD.encode(workbook(&[filled_row()]))}
+        ]);
+        let result = parse_files(files.as_array().unwrap(), &source(), &json!([])).unwrap();
+        assert_eq!(result["rows"].as_array().unwrap().len(), 1);
+        assert_eq!(result["rows"][0]["source"], "valid.xlsx 第 5 行");
+        let issues = result["issues"].as_array().unwrap();
+        assert_eq!(issues.len(), 4);
+        assert_eq!(issues[0], format!("wrong.csv：{}", invalid("请选择 XLSX 文件")));
+        assert_eq!(
+            issues[1],
+            format!("valid.xlsx 第 6 行：{}", invalid("可供数量须为非负数，最多 6 位小数"))
+        );
+        assert_eq!(issues[2], "valid.xlsx 第 7 行：同一供应商商品有多份回复，请保留一份");
+        assert_eq!(issues[3], "again.xlsx 第 5 行：同一供应商商品有多份回复，请保留一份");
+        assert!(
+            matches!(parse_files(&[json!({"file_name":"bad.xlsx","content_base64":"!"})], &source(), &json!([])),
+            Err(Error::ValidationError(message)) if message == "报价文件编码无效")
+        );
     }
 }

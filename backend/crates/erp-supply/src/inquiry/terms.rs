@@ -63,20 +63,38 @@ impl QuoteTerms {
     /// # 错误
     /// 非正价格/数量、非法税率、重复地址或地址额度不足时拒绝。
     pub fn validated(self) -> Result<Self> {
-        if (!self.unavailable
-            && (self.unit_cost_gross.to_decimal() <= Decimal::ZERO
-                || self.available_quantity.to_decimal() <= Decimal::ZERO))
-            || (self.unavailable
-                && (self.available_quantity.to_decimal() != Decimal::ZERO
-                    || self.unit_cost_gross.to_decimal() != Decimal::ZERO))
+        if !Self::unit_cost_is_valid(self.unit_cost_gross.to_decimal(), self.unavailable)
+            || (!self.unavailable && self.available_quantity.to_decimal() <= Decimal::ZERO)
+            || (self.unavailable && self.available_quantity.to_decimal() != Decimal::ZERO)
             || self.freight_gross.is_some_and(|value| value.to_decimal() < Decimal::ZERO)
-            || self.input_tax_rate.to_decimal() < Decimal::ZERO
-            || self.input_tax_rate.to_decimal() > Decimal::ONE
+            || !Self::tax_rate_is_valid(self.input_tax_rate.to_decimal())
         {
             return Err(Error::ValidationError("专项报价价格、税率或数量非法".into()));
         }
         validate_addresses(&self.address_limits, self.available_quantity, false)?;
         Ok(self)
+    }
+
+    /// 核对回复价格是否符合正常报价或无法供货的价格规则。
+    /// # 参数
+    /// `unit_cost` 为含税单价；`unavailable` 表示无法供货。
+    /// # 返回
+    /// 正常报价单价为正、无法供货单价为零时返回真。
+    /// # 错误
+    /// 无。
+    pub fn unit_cost_is_valid(unit_cost: Decimal, unavailable: bool) -> bool {
+        if unavailable { unit_cost == Decimal::ZERO } else { unit_cost > Decimal::ZERO }
+    }
+
+    /// 核对内部报价税率的合法区间。
+    /// # 参数
+    /// `tax_rate` 为小数税率，百分数须先由输入适配层换算。
+    /// # 返回
+    /// 税率位于闭区间零至一时返回真。
+    /// # 错误
+    /// 无。
+    pub fn tax_rate_is_valid(tax_rate: Decimal) -> bool {
+        (Decimal::ZERO..=Decimal::ONE).contains(&tax_rate)
     }
 
     /// 核对本次采用的数量、地址、交期；禁止静默切换价格。
@@ -158,4 +176,28 @@ fn validate_addresses(rows: &[QuoteAddressLimit], quantity: Quantity, exact: boo
         return Err(Error::ValidationError("专项报价配送数量不足或与本次采用数量不匹配".into()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reply_price_rule_distinguishes_normal_and_unavailable() {
+        for (price, normal, unavailable) in
+            [(Decimal::NEGATIVE_ONE, false, false), (Decimal::ZERO, false, true), (Decimal::ONE, true, false)]
+        {
+            assert_eq!(QuoteTerms::unit_cost_is_valid(price, false), normal);
+            assert_eq!(QuoteTerms::unit_cost_is_valid(price, true), unavailable);
+        }
+    }
+
+    #[test]
+    fn reply_tax_rate_accepts_both_bounds_and_rejects_outside() {
+        for (rate, expected) in
+            [("-0.0001", false), ("0", true), ("0.13", true), ("1", true), ("1.0001", false)]
+        {
+            assert_eq!(QuoteTerms::tax_rate_is_valid(rate.parse().unwrap()), expected);
+        }
+    }
 }

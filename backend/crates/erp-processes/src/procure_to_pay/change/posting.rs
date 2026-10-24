@@ -1,7 +1,7 @@
 //! 采购变更生效真实步骤，统一使用调用方执行器；失败不得推进后继写入。
 use async_trait::async_trait;
 use erp_audit::AuditLog;
-use erp_finance::service::payable::purchase_change::sync_purchase_subject;
+use erp_finance::service::payable::purchase_change::{PurchaseChangePayableWrite, sync_purchase_subject};
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::service::purchase_order::allocation_maintenance::{
     PreparedSalesAllocations, persist_current_sales_allocations,
@@ -32,12 +32,9 @@ use crate::{Error, Result};
 enum EffectStep {
     QuantityGuard,
     SalesGuard,
-    PrepareAllocations,
     Revision,
-    Allocations,
     CurrentOrder,
     ProcurementTasks,
-    Payable,
     Submission,
     Change,
     Audit,
@@ -46,8 +43,24 @@ enum EffectStep {
 /// 生产适配器与失败替身共用的真实写步骤合同。
 #[async_trait]
 trait EffectSteps: Send {
-    /// 非零差额才需要写入应付。
-    fn has_payable_change(&self) -> bool;
+    type Allocations: Send;
+    type Payable: Send;
+
+    /// 取出可选应付计划，由编排层唯一决定是否执行差额写入。
+    fn take_payable(&mut self) -> Option<Self::Payable>;
+
+    /// 在来源销售校验后生成本次分配，交给后续持久化步骤。
+    async fn prepare_allocations(&mut self, executor: &mut dyn Executor) -> Result<Self::Allocations>;
+
+    /// 写入本次已准备的分配，不依赖适配器内部中间状态。
+    async fn persist_allocations(
+        &mut self,
+        allocations: Self::Allocations,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 写入已有的应付差额计划。
+    async fn persist_payable(&mut self, payable: Self::Payable, executor: &mut dyn Executor) -> Result<()>;
 
     /// 执行单步并直接传播原错误，执行器必须保持调用方的同一借用。
     async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()>;
@@ -56,40 +69,59 @@ trait EffectSteps: Send {
 /// 逐步执行原持久化次序；每一步完成后才进入下一步。
 async fn execute(steps: &mut impl EffectSteps, executor: &mut dyn Executor) -> Result<()> {
     use EffectStep::*;
-    for step in [
-        QuantityGuard,
-        SalesGuard,
-        PrepareAllocations,
-        Revision,
-        Allocations,
-        CurrentOrder,
-        ProcurementTasks,
-        Payable,
-        Submission,
-        Change,
-        Audit,
-    ] {
-        if matches!(step, Payable) && !steps.has_payable_change() {
-            continue;
-        }
+    for step in [QuantityGuard, SalesGuard] {
+        steps.apply(step, executor).await?;
+    }
+    let allocations = steps.prepare_allocations(executor).await?;
+    steps.apply(Revision, executor).await?;
+    steps.persist_allocations(allocations, executor).await?;
+    for step in [CurrentOrder, ProcurementTasks] {
+        steps.apply(step, executor).await?;
+    }
+    if let Some(payable) = steps.take_payable() {
+        steps.persist_payable(payable, executor).await?;
+    }
+    for step in [Submission, Change, Audit] {
         steps.apply(step, executor).await?;
     }
     Ok(())
 }
 
-/// 持有独立采购/财务计划及本次生成的分配；不获取独立事务。
+/// 持有独立采购/财务计划；分配由编排显式传递，不获取独立事务。
 struct MongoEffect<'a> {
     db: &'a Database,
     write: EffectiveChangePosting,
     audit: AuditLog,
     actor_id: &'a str,
-    allocations: Option<PreparedSalesAllocations>,
 }
 
 #[async_trait]
 impl EffectSteps for MongoEffect<'_> {
-    fn has_payable_change(&self) -> bool {
-        self.write.payable.is_some()
+    type Allocations = PreparedSalesAllocations;
+    type Payable = PurchaseChangePayableWrite;
+
+    fn take_payable(&mut self) -> Option<Self::Payable> {
+        self.write.payable.take()
+    }
+
+    async fn prepare_allocations(&mut self, executor: &mut dyn Executor) -> Result<Self::Allocations> {
+        let purchase = &mut self.write.purchase;
+        prepare_current_sales_allocations(self.db, &purchase.order, &mut purchase.revision_lines, executor)
+            .await
+    }
+
+    async fn persist_allocations(
+        &mut self,
+        allocations: Self::Allocations,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        persist_current_sales_allocations(self.db, &allocations, executor).await?;
+        Ok(())
+    }
+
+    async fn persist_payable(&mut self, payable: Self::Payable, executor: &mut dyn Executor) -> Result<()> {
+        payable.persist(self.db, executor).await?;
+        Ok(())
     }
 
     async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()> {
@@ -100,25 +132,7 @@ impl EffectSteps for MongoEffect<'_> {
             SalesGuard => {
                 guard_sales(self.db, purchase, self.actor_id, executor).await?;
             },
-            PrepareAllocations => {
-                self.allocations = Some(
-                    prepare_current_sales_allocations(
-                        self.db,
-                        &purchase.order,
-                        &mut purchase.revision_lines,
-                        executor,
-                    )
-                    .await?,
-                );
-            },
             Revision => purchase.persist_revision(self.db, executor).await?,
-            Allocations => {
-                let allocations = self
-                    .allocations
-                    .as_ref()
-                    .ok_or_else(|| Error::Internal("采购变更生效步骤缺少已准备分配".into()))?;
-                persist_current_sales_allocations(self.db, allocations, executor).await?;
-            },
             CurrentOrder => {
                 persist_current_purchase(self.db, purchase, self.actor_id, executor).await?;
             },
@@ -126,11 +140,6 @@ impl EffectSteps for MongoEffect<'_> {
                 sync_procurement_tasks_for_sales_order(self.db, &purchase.order.sales_order_id, executor)
                     .await?;
                 ensure_source_unaffected(self.db, &purchase.order, CHANGE_SOURCE_AFFECTED, executor).await?
-            },
-            Payable => {
-                if let Some(payable) = self.write.payable.as_ref() {
-                    payable.persist(self.db, executor).await?;
-                }
             },
             Submission => purchase.persist_approved_submission(self.db, executor).await?,
             Change => purchase.persist_change(self.db, executor).await?,
@@ -237,7 +246,7 @@ pub(super) async fn persist_effective_writes(
         .collect::<Vec<_>>();
     crate::sales_inquiry_expense::resize_purchase(db, &write.purchase.order, &fees, actor_id, executor)
         .await?;
-    let mut steps = MongoEffect { db, write, audit, actor_id, allocations: None };
+    let mut steps = MongoEffect { db, write, audit, actor_id };
     execute(&mut steps, executor).await?;
     Ok(steps.write.purchase.order.base.version)
 }
@@ -276,41 +285,80 @@ mod tests {
             None
         }
     }
-    struct RecordingSteps {
-        calls: Vec<EffectStep>,
-        identity: usize,
-        fail_at: Option<EffectStep>,
-        has_payable_change: bool,
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Call {
+        Apply(EffectStep),
+        PrepareAllocations,
+        Allocations,
+        Payable,
     }
-    #[async_trait]
-    impl EffectSteps for RecordingSteps {
-        fn has_payable_change(&self) -> bool {
-            self.has_payable_change
-        }
-
-        async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()> {
+    struct RecordingSteps {
+        calls: Vec<Call>,
+        identity: usize,
+        fail_at: Option<Call>,
+        payable: Option<&'static str>,
+    }
+    impl RecordingSteps {
+        fn record(&mut self, call: Call, executor: &mut dyn Executor) -> Result<()> {
             assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.identity);
-            self.calls.push(step);
-            if Some(step) == self.fail_at {
+            self.calls.push(call);
+            if Some(call) == self.fail_at {
                 return Err(Error::ConflictError("original purchase change conflict".into()));
             }
             Ok(())
         }
     }
-    fn expected() -> Vec<EffectStep> {
+    #[async_trait]
+    impl EffectSteps for RecordingSteps {
+        type Allocations = u8;
+        type Payable = &'static str;
+
+        fn take_payable(&mut self) -> Option<Self::Payable> {
+            self.payable.take()
+        }
+
+        async fn prepare_allocations(&mut self, executor: &mut dyn Executor) -> Result<Self::Allocations> {
+            self.record(Call::PrepareAllocations, executor)?;
+            Ok(42)
+        }
+
+        async fn persist_allocations(
+            &mut self,
+            allocations: Self::Allocations,
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            assert_eq!(allocations, 42);
+            self.record(Call::Allocations, executor)
+        }
+
+        async fn persist_payable(
+            &mut self,
+            payable: Self::Payable,
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            assert_eq!(payable, "payable-1");
+            self.record(Call::Payable, executor)
+        }
+
+        async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()> {
+            self.record(Call::Apply(step), executor)
+        }
+    }
+    fn expected() -> Vec<Call> {
+        use Call::{Allocations, Apply, Payable, PrepareAllocations};
         use EffectStep::*;
         vec![
-            QuantityGuard,
-            SalesGuard,
+            Apply(QuantityGuard),
+            Apply(SalesGuard),
             PrepareAllocations,
-            Revision,
+            Apply(Revision),
             Allocations,
-            CurrentOrder,
-            ProcurementTasks,
+            Apply(CurrentOrder),
+            Apply(ProcurementTasks),
             Payable,
-            Submission,
-            Change,
-            Audit,
+            Apply(Submission),
+            Apply(Change),
+            Apply(Audit),
         ]
     }
     #[tokio::test]
@@ -319,17 +367,22 @@ mod tests {
         assert_eq!(executor.identity, 1);
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut steps =
-            RecordingSteps { calls: Vec::new(), identity, fail_at: None, has_payable_change: true };
+            RecordingSteps { calls: Vec::new(), identity, fail_at: None, payable: Some("payable-1") };
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.calls, expected());
+        assert!(steps.payable.is_none());
     }
     #[tokio::test]
     async fn every_failure_stops_later_effects_and_preserves_original_error() {
         for (index, step) in expected().into_iter().enumerate() {
             let mut executor = TestExecutor { identity: 1 };
             let identity = &mut executor as *mut TestExecutor as usize;
-            let mut steps =
-                RecordingSteps { calls: Vec::new(), identity, fail_at: Some(step), has_payable_change: true };
+            let mut steps = RecordingSteps {
+                calls: Vec::new(),
+                identity,
+                fail_at: Some(step),
+                payable: Some("payable-1"),
+            };
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, Error::ConflictError(message) if message == "original purchase change conflict")
@@ -343,11 +396,10 @@ mod tests {
     async fn zero_delta_skips_delta_without_skipping_current_subject_effects() {
         let mut executor = TestExecutor { identity: 1 };
         let identity = &mut executor as *mut TestExecutor as usize;
-        let mut steps =
-            RecordingSteps { calls: Vec::new(), identity, fail_at: None, has_payable_change: false };
+        let mut steps = RecordingSteps { calls: Vec::new(), identity, fail_at: None, payable: None };
         execute(&mut steps, &mut executor).await.unwrap();
         let expected =
-            expected().into_iter().filter(|step| !matches!(step, EffectStep::Payable)).collect::<Vec<_>>();
+            expected().into_iter().filter(|step| !matches!(step, Call::Payable)).collect::<Vec<_>>();
         assert_eq!(steps.calls, expected);
     }
 }

@@ -1,20 +1,20 @@
 use application_core::AuditActor;
 use bpm::engine::DefinitionGraph;
-use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalCommandReceipt, SubjectRef};
 use erp_identity::SharedRbacService;
 use erp_workflow::BpmExt;
+use erp_workflow::entity::approval_integration::ApprovalStartIdentity;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::idempotency::{
-    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
-    start_scope_candidates,
+    normalize_idempotency_key, start_scope_candidates,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use crate::adapters::workflow::approver_directory::resolve_start_approvers;
+use crate::approval_start::{StartReplayErrors, replay_start};
 use crate::{Error, Result};
 
 /// 在读取具体退款/冲正资源前先重验认证主体仍有效。
@@ -243,53 +243,21 @@ pub async fn replay_return_start_with_executor(
     input: ReplayReturnStartInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    let key = normalize_idempotency_key(input.idempotency_key)?;
-    let process_kind = process_kind_of(input.document_type);
-    let identity = start_identity(StartIdentityParams {
-        idempotency_key: key,
-        process_kind: process_kind.as_str(),
-        subject_kind: input.subject.subject_kind(),
-        subject_id: input.subject.subject_id(),
-        subject_version: input.subject_version,
-        binding_id: input.binding.approval_process_definition_id.as_ref(),
-        definition_version: input.binding.approval_definition_version,
-        actor_participant_id: input.actor_id,
-    })?;
-    let mut receipt = None;
-    for scope in identity.scope_candidates() {
-        receipt = db
-            .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                scope,
-                identity.idempotency_key(),
-                executor,
-            )
-            .await?;
-        if receipt.is_some() {
-            break;
-        }
-    }
-    let receipt = match identity.classify(receipt.as_ref()) {
-        ReceiptBranch::Fresh => return Ok(None),
-        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error().into()),
-        ReceiptBranch::SamePayload(receipt) => receipt,
-    };
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("退款/冲正启动收据引用的审批实例不存在".to_string()))?;
-    if instance.base.id != receipt.result_ref
-        || instance.process_kind != process_kind
-        || instance.subject.subject_kind() != input.subject.subject_kind()
-        || instance.subject.subject_id() != input.subject.subject_id()
-        || instance.subject_version != input.subject_version
-        || instance.started_by.as_str() != input.actor_id
-        || instance.process_definition_id != input.binding.approval_process_definition_id
-        || instance.definition_version != input.binding.approval_definition_version
-    {
-        return Err(Error::ConflictError("退款/冲正启动收据与冻结运行事实不一致".to_string()));
-    }
-    Ok(Some(instance.base.id))
+    replay_start(
+        db,
+        ApprovalStartIdentity {
+            process_kind: process_kind_of(input.document_type),
+            subject: input.subject,
+            subject_version: input.subject_version,
+            binding: input.binding,
+            actor_id: input.actor_id,
+        },
+        input.idempotency_key,
+        StartReplayErrors {
+            missing_instance: "退款/冲正启动收据引用的审批实例不存在",
+            identity_mismatch: "退款/冲正启动收据与冻结运行事实不一致",
+        },
+        executor,
+    )
+    .await
 }

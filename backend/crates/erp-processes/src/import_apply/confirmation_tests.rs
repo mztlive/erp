@@ -148,6 +148,52 @@ fn completion_requires_exact_task_subject_batch_and_current_owner() {
 }
 
 #[test]
+fn completion_preserves_version_snapshot_scope_identity_matrix_and_owner_error_order() {
+    use crate::Error;
+
+    let mut command = completion_command();
+    let mut task = work_item();
+    let fact = confirmation();
+    let mut batch = batch();
+    command.expected_task_version += 1;
+    command.expected_subject_version = "stale-subject".into();
+    command.confirmation_scope = "UNKNOWN".into();
+    assert!(matches!(
+        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        Err(Error::ConflictError(message))
+            if message == "导入确认任务或批次版本已变化，请刷新后重试"
+    ));
+    command.expected_task_version = task.base.version;
+    assert!(matches!(
+        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        Err(Error::ConflictError(message)) if message == "导入确认的批次或试算快照已变化"
+    ));
+    command.expected_subject_version = task.subject_version.clone();
+    task.owner_role = "foreign".into();
+    assert!(matches!(
+        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        Err(Error::Logic(_))
+    ));
+    command.confirmation_scope = "SALES".into();
+    batch.source_object_set = "SUPPLIER".into();
+    assert!(matches!(
+        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        Err(Error::BusinessLogicError(message)) if message == "导入确认任务、责任范围或批次不匹配"
+    ));
+    task.owner_role = "role-sales".into();
+    assert!(matches!(
+        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        Err(Error::BusinessLogicError(message)) if message == "当前确认范围已不属于批次必要矩阵"
+    ));
+    batch.source_object_set = "CUSTOMER".into();
+    assert!(matches!(
+        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        Err(Error::Forbidden(message)) if message == "当前账号不是该导入确认的当前责任人"
+    ));
+    validate_confirmation_completion(&command, &task, &fact, &batch, "user-1").unwrap();
+}
+
+#[test]
 fn domain_actions_require_pending_fact_and_process_responsibility() {
     let mut mine = vec!["VIEW".to_string(), "PROCESS".to_string()];
     append_confirmation_actions(

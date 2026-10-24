@@ -4,19 +4,19 @@
 //! 创建并提交路径与单纯提交路径共享同一启动装配，不得各自复制收据读取。
 
 use bpm::engine::DefinitionGraph;
-use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::SubjectRef;
 use erp_workflow::BpmExt;
+use erp_workflow::entity::approval_integration::ApprovalStartIdentity;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::idempotency::{
-    ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
-    start_scope_candidates,
+    normalize_idempotency_key, start_scope_candidates,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
+use crate::approval_start::{StartReplayErrors, replay_start};
 use crate::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -134,53 +134,21 @@ pub(crate) async fn replay_purchase_order_start_with_executor(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::PurchaseOrder);
-    let identity = start_identity(StartIdentityParams {
-        idempotency_key: key,
-        process_kind: process_kind.as_str(),
-        subject_kind: subject.subject_kind(),
-        subject_id: subject.subject_id(),
-        subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref(),
-        definition_version: binding.approval_definition_version,
-        actor_participant_id: actor_id,
-    })?;
-    let mut receipt = None;
-    for scope in identity.scope_candidates() {
-        receipt = db
-            .bpm_workflow()
-            .find_command_receipt(
-                bpm::model::types::ApprovalCommandKind::StartApproval,
-                scope,
-                identity.idempotency_key(),
-                executor,
-            )
-            .await?;
-        if receipt.is_some() {
-            break;
-        }
-    }
-    let receipt = match identity.classify(receipt.as_ref()) {
-        ReceiptBranch::Fresh => return Ok(None),
-        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error().into()),
-        ReceiptBranch::SamePayload(receipt) => receipt,
-    };
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("采购启动收据引用的审批实例不存在".to_string()))?;
-    if instance.base.id != receipt.result_ref
-        || instance.process_kind != process_kind
-        || instance.subject.subject_kind() != subject.subject_kind()
-        || instance.subject.subject_id() != subject.subject_id()
-        || instance.subject_version != subject_version
-        || instance.started_by.as_str() != actor_id
-        || instance.process_definition_id != binding.approval_process_definition_id
-        || instance.definition_version != binding.approval_definition_version
-    {
-        return Err(Error::ConflictError("采购启动收据与冻结运行事实不一致".to_string()));
-    }
-    Ok(Some(instance.base.id))
+    replay_start(
+        db,
+        ApprovalStartIdentity {
+            process_kind: process_kind_of(DocumentType::PurchaseOrder),
+            subject,
+            subject_version,
+            binding,
+            actor_id,
+        },
+        idempotency_key,
+        StartReplayErrors {
+            missing_instance: "采购启动收据引用的审批实例不存在",
+            identity_mismatch: "采购启动收据与冻结运行事实不一致",
+        },
+        executor,
+    )
+    .await
 }

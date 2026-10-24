@@ -1,4 +1,6 @@
-//! 审批启动的共有写入阶段。入口保留领域提交、展示快照和恢复策略。
+//! 审批启动的共有回放与写入阶段。入口保留授权、领域提交、展示快照和恢复策略。
+
+mod replay;
 
 use async_trait::async_trait;
 use bpm::engine::TaskIntent;
@@ -15,6 +17,7 @@ use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
+pub(crate) use replay::{StartReplayErrors, replay_start};
 
 use crate::adapters::workflow::approver_directory::revalidate_approvers;
 use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
