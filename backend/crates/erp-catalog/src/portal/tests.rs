@@ -39,6 +39,20 @@ fn input() -> NewProductInput {
 }
 
 #[test]
+fn required_text_trims_unicode_whitespace_and_counts_characters() {
+    let original = "\u{3000}中 文\u{3000}";
+    assert_eq!(required(original, "商品名称", 3).unwrap(), "中 文");
+    assert!(matches!(
+        required("\u{3000}\t", "商品名称", 0),
+        Err(Error::ValidationError(message)) if message == "商品名称不能为空"
+    ));
+    assert!(matches!(
+        required(original, "商品名称", 2),
+        Err(Error::ValidationError(message)) if message == "商品名称过长"
+    ));
+}
+
+#[test]
 fn final_submission_images_support_common_fallback_and_require_each_sku_source() {
     let mut input = input();
     input.skus.push(DraftSku { row_id: "row-2".into(), image_asset_id: None, ..input.skus[0].clone() });
@@ -701,7 +715,9 @@ fn effective_records_supplier_and_internal_facts_separately_and_keeps_new_sku_un
     let raw = serde_json::to_value(draft.submitted().unwrap()).unwrap();
     let reported_at = draft.submitted().unwrap().skus[0].reported_at;
     let at = Instant::from_unix_secs(1_700_000_100);
-    draft.mark_effective("submission-1", effective_command(1, normalized(), result()), at).unwrap();
+    let mut command = effective_command(1, normalized(), result());
+    command.reason = format!("\u{3000}{}\u{3000}", command.reason);
+    draft.mark_effective("submission-1", command, at).unwrap();
     assert_eq!(draft.status, DraftStatus::Effective);
     assert!(draft.task_id.is_none());
     assert_eq!(serde_json::to_value(draft.frozen_input.as_ref().unwrap()).unwrap(), raw);

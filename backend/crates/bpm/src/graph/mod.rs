@@ -526,29 +526,10 @@ pub(crate) fn ordered_by_display_order<T>(
     }
     let mut ordered = items.iter().collect::<Vec<_>>();
     ordered.sort_by_key(|item| display_order(item));
-    let orders = ordered.iter().map(|item| display_order(item)).collect::<Vec<_>>();
-    ensure_continuous_display_orders(&orders)?;
-    Ok(ordered)
-}
-
-/// 校验展示顺序从 1 连续无重复（节点与替换草稿共用同一顺序规则）。
-///
-/// # 参数
-/// * `orders` - 已按展示顺序取出的顺序值，必须依次等于 1、2、3…
-///
-/// # 返回
-/// 顺序合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 下标加一无法表示为 `u32`，或任一顺序不等于其位置时返回 [`ModelError::InvalidField`]。
-pub(crate) fn ensure_continuous_display_orders(orders: &[u32]) -> ModelResult<()> {
-    for (index, order) in orders.iter().enumerate() {
-        let expected = u32::try_from(index + 1).map_err(|_| ModelError::InvalidField("节点顺序溢出"))?;
-        if *order != expected {
-            return Err(ModelError::InvalidField("节点顺序必须从 1 连续且无重复"));
-        }
+    if ordered.iter().zip(1_u32..).any(|(item, expected)| display_order(item) != expected) {
+        return Err(ModelError::InvalidField("节点顺序必须从 1 连续且无重复"));
     }
-    Ok(())
+    Ok(ordered)
 }
 
 /// 解析替换输入应使用的节点身份。

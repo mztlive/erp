@@ -406,7 +406,7 @@ impl NewProductDraft {
         self.ensure_version(expected_version)?;
         let index = self.pending_index(submission_id)?;
         let reason = required(&reason, "退回原因", 2_000)?;
-        let decision = decision(DraftStatus::Returned, Some(reason), actor_id, at)?;
+        let decision = decision(DraftStatus::Returned, Some(reason.to_owned()), actor_id, at)?;
         self.finish(index, decision);
         Ok(())
     }
@@ -431,12 +431,11 @@ impl NewProductDraft {
             return Err(validation("建档决定与新品提报身份不一致"));
         }
         self.ensure_version(command.expected_version)?;
-        required(&command.reason, "匹配与建档核对说明", 500)?;
+        let reason = required(&command.reason, "匹配与建档核对说明", 500)?;
         let index = self.pending_index(submission_id)?;
         self.submitted()?.ensure_normalized(&command.normalized)?;
         ensure_result(&command.normalized, &command.result)?;
-        let mut decision =
-            decision(DraftStatus::Effective, Some(command.reason.trim().into()), &command.actor_id, at)?;
+        let mut decision = decision(DraftStatus::Effective, Some(reason.to_owned()), &command.actor_id, at)?;
         decision.normalized_product = Some(command.normalized.clone());
         decision.result = Some(command.result.clone());
         self.normalized_product = Some(command.normalized);

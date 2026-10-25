@@ -109,11 +109,11 @@ impl PurchaseInvoiceAllocationPlan {
         }
         let mut allocations = Vec::with_capacity(lines.len());
         let mut account_deltas: Vec<(PayableAccountId, Amount)> = Vec::new();
-        let mut account_delta_index: HashMap<String, usize> = HashMap::new();
-        for (index, line) in lines.iter().enumerate() {
+        let mut account_delta_index: HashMap<&str, usize> = HashMap::new();
+        for (index, (line, allocation_id)) in lines.iter().zip(allocation_ids).enumerate() {
             let seq = u32::try_from(index + 1).map_err(|_| Error::from("分配行数超过序号上限"))?;
             allocations.push(PurchaseInvoiceAllocation::new(
-                allocation_ids[index].clone(),
+                allocation_id.clone(),
                 PurchaseInvoiceAllocationData {
                     invoice_id: invoice_id.clone(),
                     payable_account_id: line.payable_account_id.clone(),
@@ -135,7 +135,7 @@ impl PurchaseInvoiceAllocationPlan {
                     )?;
                 },
                 None => {
-                    account_delta_index.insert(line.payable_account_id.to_string(), account_deltas.len());
+                    account_delta_index.insert(line.payable_account_id.as_ref(), account_deltas.len());
                     account_deltas.push((line.payable_account_id.clone(), line.allocated_gross_amount));
                 },
             }
@@ -278,6 +278,8 @@ mod tests {
         let plan = build("100.00", "94.00", "6.00", &lines).unwrap();
         let seqs: Vec<u32> = plan.new_allocations().iter().map(|a| a.allocation_seq).collect();
         assert_eq!(seqs, vec![1, 2, 3]);
+        let allocation_ids: Vec<&str> = plan.new_allocations().iter().map(|a| a.base.id.as_str()).collect();
+        assert_eq!(allocation_ids, vec!["alloc-0", "alloc-1", "alloc-2"]);
         assert_eq!(plan.new_allocations()[0].allocated_gross_amount, Amount::from_str("50.00").unwrap());
         assert_eq!(plan.new_allocations()[2].allocated_gross_amount, Amount::from_str("20.00").unwrap());
     }
@@ -334,16 +336,18 @@ mod tests {
     fn empty_lines_and_id_mismatch_rejected() {
         assert!(build("100.00", "94.00", "6.00", &[]).is_err(), "空行必须拒绝");
         let lines = [line("acct-1", "100.00", "94.00", "6.00")];
-        let err = PurchaseInvoiceAllocationPlan::new(
-            InvoiceId::new("invoice-1"),
-            Amount::from_str("100.00").unwrap(),
-            Amount::from_str("94.00").unwrap(),
-            Amount::from_str("6.00").unwrap(),
-            &lines,
-            &[],
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("分配 ID 数量必须与分配行数一致"));
+        for allocation_ids in [ids(0), ids(2)] {
+            let err = PurchaseInvoiceAllocationPlan::new(
+                InvoiceId::new("invoice-1"),
+                Amount::from_str("100.00").unwrap(),
+                Amount::from_str("94.00").unwrap(),
+                Amount::from_str("6.00").unwrap(),
+                &lines,
+                &allocation_ids,
+            )
+            .unwrap_err();
+            assert_eq!(err.to_string(), "分配 ID 数量必须与分配行数一致");
+        }
     }
 
     #[test]

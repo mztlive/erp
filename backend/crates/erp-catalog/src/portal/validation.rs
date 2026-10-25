@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 
 use erp_core::common::time::Instant;
-use erp_core::validation::non_empty_trimmed;
 
 use super::{
     CatalogDraftResult, CatalogDraftSkuResult, CategoryHierarchyNode, DictionaryInput, DraftDecision,
@@ -427,14 +426,16 @@ fn ensure_name(raw: &str, normalized: &str) -> Result<()> {
 /// * `max_len` - 按字符计的最大长度
 ///
 /// # 返回
-/// 返回去掉首尾空白后的非空文本。
+/// 返回去掉首尾空白后的非空文本借用，不分配或改写原稿。
 ///
 /// # 错误
 /// 去掉空白后为空或超过 `max_len` 时返回 `ValidationError`。
-pub(super) fn required(value: &str, field: &str, max_len: usize) -> Result<String> {
-    let normalized = non_empty_trimmed(value, &format!("{field}不能为空"))
-        .map_err(|error| validation(&error.to_string()))?;
-    bounded(&normalized, field, max_len)?;
+pub(super) fn required<'a>(value: &'a str, field: &str, max_len: usize) -> Result<&'a str> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(validation(&format!("{field}不能为空")));
+    }
+    bounded(normalized, field, max_len)?;
     Ok(normalized)
 }
 

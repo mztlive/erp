@@ -9,7 +9,7 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    ids_to_strings, negate_bson, paged_projection_search, scoped_base_filter, sort_doc, to_bson,
+    ids_to_strings, negate_decimal128, paged_projection_search, scoped_base_filter, sort_doc, to_decimal128,
     with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_RESERVATIONS};
@@ -256,19 +256,19 @@ impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity_bson = to_bson(quantity)?;
+        let quantity_bson = to_decimal128(quantity)?;
         let active_statuses =
             [ReservationStatus::Active.as_str(), ReservationStatus::PartiallyConsumed.as_str()];
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "reserved_quantity": { "$gte": &quantity_bson },
+            "reserved_quantity": { "$gte": quantity_bson },
             "status": { "$in": active_statuses.as_slice() },
         };
         let update = doc! {
             "$inc": {
-                "reserved_quantity": negate_bson(&quantity_bson),
-                "consumed_quantity": &quantity_bson,
+                "reserved_quantity": negate_decimal128(quantity_bson),
+                "consumed_quantity": quantity_bson,
                 "version": 1,
             },
             "$set": { "updated_at": Local::now().timestamp() },
@@ -315,24 +315,24 @@ impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity = to_bson(quantity)?;
-        let zero = to_bson(zero_quantity())?;
+        let quantity = to_decimal128(quantity)?;
+        let zero = to_decimal128(zero_quantity())?;
         let active_statuses =
             [ReservationStatus::Active.as_str(), ReservationStatus::PartiallyConsumed.as_str()];
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "reserved_quantity": { "$eq": &quantity },
+            "reserved_quantity": { "$eq": quantity },
             "status": { "$in": active_statuses.as_slice() },
         };
         let update = doc! {
             "$set": {
-                "reserved_quantity": &zero,
+                "reserved_quantity": zero,
                 "status": ReservationStatus::Released.as_str(),
                 "updated_at": Local::now().timestamp(),
             },
             "$inc": {
-                "released_quantity": &quantity,
+                "released_quantity": quantity,
                 "version": 1,
             },
         };

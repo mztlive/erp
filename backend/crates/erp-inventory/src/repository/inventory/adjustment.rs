@@ -10,8 +10,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, ids_to_strings, paged_projection_search, scoped_base_filter, sort_doc, to_bson,
-    with_id_tie_breaker,
+    active_entity_by_id, ids_to_strings, paged_projection_search, scoped_base_filter, sort_doc,
+    to_decimal128, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_ADJUSTMENTS};
 use crate::entity::inventory::{
@@ -453,7 +453,7 @@ impl<'a> InventoryRepository<'a> {
         direction: Option<MovementDirection>,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity = to_bson(quantity)?;
+        let quantity = to_decimal128(quantity)?;
         let mut set = doc! {
             "quantity": quantity,
             "updated_at": Local::now().timestamp(),

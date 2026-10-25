@@ -60,7 +60,7 @@ pub fn validate_entry_node(entry_node_key: &str, node_keys: &[String]) -> ModelR
 /// 返回从 `display_order = 1` 开始连续排列的节点引用。
 ///
 /// # 错误
-/// 节点数量不在 `1..=20`、顺序溢出或不连续时返回模型错误。
+/// 节点数量不在 `1..=20` 或顺序不连续时返回模型错误。
 ///
 /// # 关键业务约束
 /// 存储返回顺序不参与流程语义，展示顺序是唯一权威顺序。
@@ -226,6 +226,21 @@ mod tests {
             .map(|index| node(&format!("id{index}"), &format!("n{index}"), index))
             .collect::<Vec<_>>();
         assert!(ordered_nodes(&too_many).is_err());
+    }
+
+    #[test]
+    fn ordered_nodes_reject_duplicates_gaps_and_large_orders() {
+        for second_order in [1, 3, u32::MAX] {
+            let nodes = [node("id1", "n1", 1), node("id2", "n2", second_order)];
+            assert_eq!(ordered_nodes(&nodes), Err(ModelError::InvalidField("节点顺序必须从 1 连续且无重复")));
+        }
+        let nodes = (1..=20)
+            .rev()
+            .map(|order| node(&format!("id{order}"), &format!("n{order}"), order))
+            .collect::<Vec<_>>();
+        let orders =
+            ordered_nodes(&nodes).unwrap().into_iter().map(|node| node.display_order).collect::<Vec<_>>();
+        assert_eq!(orders, (1..=20).collect::<Vec<_>>());
     }
 
     /// 完整线性图必须入口正确且连线与生成器一致。

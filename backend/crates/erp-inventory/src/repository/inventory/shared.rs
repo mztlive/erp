@@ -2,7 +2,7 @@ use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
-use mongodb::bson::{Bson, Document, doc};
+use mongodb::bson::{Decimal128, Document, doc};
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
 use persistence_core::{Executor, PageResult, Result, mongo_ops};
@@ -154,52 +154,37 @@ pub(super) fn ids_to_strings<T: AsRef<str>>(ids: &[T]) -> Vec<String> {
 ///
 /// # 错误
 /// 数量无法表示为 Decimal128 时返回错误。
-pub(super) fn to_bson(quantity: Quantity) -> Result<Bson> {
-    Ok(Bson::Decimal128(quantity.to_string().parse()?))
+pub(super) fn to_decimal128(quantity: Quantity) -> Result<Decimal128> {
+    Ok(quantity.to_string().parse()?)
 }
 
-/// 对 `Quantity` 取相反数并转为 Decimal128 BSON（符号翻转，不改变精度与数值语义）。
-///
-/// 仅用于 `$inc` 的负方向累加；数量类型构造与 BSON 序列化不做任何舍入。
+/// 翻转 Decimal128 符号位，保留数量精度、幅值及零值的符号语义。
 ///
 /// # 参数
-/// * `quantity` - 定点数量
+/// * `quantity` - 已由数量转换得到的 Decimal128。
 ///
 /// # 返回
-/// `Decimal128` 返回符号位翻转后的值；其他 BSON 值原样克隆返回。
+/// 返回符号位翻转后的值。
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn negate_bson(quantity: &Bson) -> Bson {
-    let Bson::Decimal128(decimal) = quantity else {
-        return quantity.clone();
-    };
-    let mut bytes = decimal.bytes();
+pub(super) fn negate_decimal128(quantity: Decimal128) -> Decimal128 {
+    let mut bytes = quantity.bytes();
     bytes[15] ^= 0x80;
-    Bson::Decimal128(mongodb::bson::Decimal128::from_bytes(bytes))
+    Decimal128::from_bytes(bytes)
 }
 
-/// 构建原子 `$inc` 更新的公共原语（含 `updated_at`，不含 `version`）。
-///
-/// 数量按原值写入 `$inc`，不翻转符号；减少由调用方先取相反数。
-///
-/// # 参数
-/// * `fields` - 字段名与要写入 `$inc` 的数量。
-///
-/// # 返回
-/// 返回更新条件文档。
-///
-/// # 错误
-/// 数量无法表示为 Decimal128 时返回错误。
-pub(super) fn inc_update(fields: &[(&str, Quantity)]) -> Result<Document> {
+/// 用已确定方向的数量构造原子更新，统一追加版本与更新时间。
+fn quantity_update(fields: &[(&str, Decimal128)]) -> Document {
     let mut inc = Document::new();
     for (field, quantity) in fields {
-        inc.insert(*field, to_bson(*quantity)?);
+        inc.insert(*field, *quantity);
     }
-    Ok(doc! {
+    inc.insert("version", 1);
+    doc! {
         "$inc": inc,
         "$set": { "updated_at": Local::now().timestamp() },
-    })
+    }
 }
 
 /// 构建两个字段同向增加的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
@@ -214,13 +199,9 @@ pub(super) fn inc_update(fields: &[(&str, Quantity)]) -> Result<Document> {
 ///
 /// # 错误
 /// 数量无法表示为 Decimal128 时返回错误。
-///
-/// # Panics
-/// `inc_update` 的成功结果恒含 `$inc`；缺失时 panic。
 pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
-    let mut update = inc_update(&[(field_a, quantity), (field_b, quantity)])?;
-    update.get_document_mut("$inc").expect("inc_update 恒含 $inc").insert("version", 1);
-    Ok(update)
+    let quantity = to_decimal128(quantity)?;
+    Ok(quantity_update(&[(field_a, quantity), (field_b, quantity)]))
 }
 
 /// 构建两个字段同向减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
@@ -235,18 +216,9 @@ pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Resu
 ///
 /// # 错误
 /// 数量无法表示为 Decimal128 时返回错误。
-///
-/// # Panics
-/// `inc_update` 的成功结果恒含 `$inc` 与两个声明字段；缺失时 panic。
 pub(super) fn both_dec(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
-    let mut update = inc_update(&[(field_a, quantity), (field_b, quantity)])?;
-    let inc = update.get_document_mut("$inc").expect("inc_update 恒含 $inc");
-    for field in [field_a, field_b] {
-        let value = inc.remove(field).expect("inc_update 恒含声明字段");
-        inc.insert(field, negate_bson(&value));
-    }
-    inc.insert("version", 1);
-    Ok(update)
+    let quantity = negate_decimal128(to_decimal128(quantity)?);
+    Ok(quantity_update(&[(field_a, quantity), (field_b, quantity)]))
 }
 
 /// 构建一个字段增加、另一个字段减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
@@ -261,16 +233,9 @@ pub(super) fn both_dec(quantity: Quantity, field_a: &str, field_b: &str) -> Resu
 ///
 /// # 错误
 /// 数量无法表示为 Decimal128 时返回错误。
-///
-/// # Panics
-/// `inc_update` 的成功结果恒含 `$inc` 与 `decrease_field`；缺失时 panic。
 pub(super) fn cross_inc(quantity: Quantity, increase_field: &str, decrease_field: &str) -> Result<Document> {
-    let mut update = inc_update(&[(increase_field, quantity), (decrease_field, quantity)])?;
-    let inc = update.get_document_mut("$inc").expect("inc_update 恒含 $inc");
-    let value = inc.remove(decrease_field).expect("inc_update 恒含声明字段");
-    inc.insert(decrease_field, negate_bson(&value));
-    inc.insert("version", 1);
-    Ok(update)
+    let quantity = to_decimal128(quantity)?;
+    Ok(quantity_update(&[(increase_field, quantity), (decrease_field, negate_decimal128(quantity))]))
 }
 
 /// 构建排序文档（字段名白名单映射）。
@@ -296,9 +261,10 @@ mod tests {
     use std::str::FromStr;
 
     use erp_core::ids::WarehouseId;
-    use mongodb::bson::{Bson, doc};
+    use erp_core::money::Quantity;
+    use mongodb::bson::{Decimal128, doc};
 
-    use super::{ids_to_strings, negate_bson, sort_doc};
+    use super::{both_dec, both_inc, cross_inc, ids_to_strings, negate_decimal128, sort_doc};
 
     #[test]
     fn sort_doc_maps_whitelisted_fields_and_defaults_otherwise() {
@@ -313,11 +279,47 @@ mod tests {
     }
 
     #[test]
-    fn negate_bson_flips_sign_without_touching_magnitude() {
-        let positive = Bson::Decimal128(mongodb::bson::Decimal128::from_str("12.345").unwrap());
-        let negative = negate_bson(&positive);
-        assert_eq!(negative, Bson::Decimal128(mongodb::bson::Decimal128::from_str("-12.345").unwrap()));
-        assert_eq!(negate_bson(&negative), positive, "两次取反恢复原值");
+    fn negate_decimal128_flips_sign_without_touching_magnitude() {
+        for (value, opposite) in [("12.345678", "-12.345678"), ("0", "-0"), ("0.000000", "-0.000000")] {
+            let original = Decimal128::from_str(value).unwrap();
+            let negated = negate_decimal128(original);
+            assert_eq!(negated, Decimal128::from_str(opposite).unwrap());
+            assert_eq!(negate_decimal128(negated), original, "两次取反恢复全部原始字节");
+        }
+    }
+
+    #[test]
+    fn quantity_updates_keep_directions_precision_and_metadata() {
+        for (value, opposite) in [
+            ("12.345678", "-12.345678"),
+            ("-12.345678", "12.345678"),
+            ("0.000000", "-0.000000"),
+            ("79228162514264337593543950335", "-79228162514264337593543950335"),
+        ] {
+            let quantity = Quantity::from_str(value).unwrap();
+            let original = Decimal128::from_str(value).unwrap();
+            let negated = Decimal128::from_str(opposite).unwrap();
+            for (update, expected) in [
+                (
+                    both_inc(quantity, "on_hand_quantity", "available_quantity").unwrap(),
+                    doc! { "on_hand_quantity": original, "available_quantity": original, "version": 1 },
+                ),
+                (
+                    both_dec(quantity, "on_hand_quantity", "available_quantity").unwrap(),
+                    doc! { "on_hand_quantity": negated, "available_quantity": negated, "version": 1 },
+                ),
+                (
+                    cross_inc(quantity, "reserved_quantity", "available_quantity").unwrap(),
+                    doc! { "reserved_quantity": original, "available_quantity": negated, "version": 1 },
+                ),
+            ] {
+                assert_eq!(update.get_document("$inc").unwrap(), &expected);
+                let set = update.get_document("$set").unwrap();
+                assert!(set.get_i64("updated_at").is_ok());
+                assert_eq!(set.len(), 1);
+                assert_eq!(update.len(), 2);
+            }
+        }
     }
 
     #[test]

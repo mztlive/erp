@@ -171,13 +171,9 @@ impl Eligibility {
     /// 不返回错误。
     pub fn blocked_code(&self) -> Option<ApprovalBlockerCode> {
         match self {
-            Self::AnyOf { .. } => {
-                let members = self.members();
-                if members.iter().any(|item| item.blocked_code().is_none()) {
-                    None
-                } else {
-                    members[0].blocked_code()
-                }
+            Self::AnyOf { primary, additional } => {
+                let code = primary.blocked_code()?;
+                additional.iter().all(|member| member.blocked_code().is_some()).then_some(code)
             },
             Self::Eligible { .. } => None,
             Self::Blocked { code, .. } => Some(*code),
@@ -1266,6 +1262,28 @@ mod or_sign_tests {
             );
             assert_eq!(plan.task_intents.len(), if all_blocked { 1 } else { 2 });
         }
+    }
+
+    #[test]
+    fn group_blocker_requires_all_members_and_uses_primary_code() {
+        let primary_code = ApprovalBlockerCode::ApproverAccountInactive;
+        let secondary_code = ApprovalBlockerCode::ApproverNotEligible;
+        let all_blocked = Eligibility::any_of(vec![
+            blocked("u1", "张三", primary_code),
+            blocked("u2", "李四", secondary_code),
+        ])
+        .unwrap();
+        assert_eq!(all_blocked.blocked_code(), Some(primary_code));
+
+        for members in [
+            vec![eligible("u1", "张三"), blocked("u2", "李四", secondary_code)],
+            vec![blocked("u1", "张三", primary_code), eligible("u2", "李四")],
+            vec![eligible("u1", "张三"), eligible("u2", "李四")],
+        ] {
+            assert_eq!(Eligibility::any_of(members).unwrap().blocked_code(), None);
+        }
+        let single = Eligibility::any_of(vec![blocked("u1", "张三", primary_code)]).unwrap();
+        assert_eq!(single.blocked_code(), Some(primary_code));
     }
 
     #[test]

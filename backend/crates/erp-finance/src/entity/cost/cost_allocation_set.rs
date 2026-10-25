@@ -90,21 +90,12 @@ impl CostAllocationSet {
         for line in &lines {
             let line_gross = line.allocated_gross_amount.to_decimal();
             let line_net = line.allocated_net_amount.to_decimal();
-            if line_gross.is_sign_negative()
-                || line_gross.is_zero()
-                || line_net.is_sign_negative()
-                || line_net.is_zero()
-            {
+            if line_gross <= Decimal::ZERO || line_net <= Decimal::ZERO {
                 return Err(Error::from("分配金额必须为正数"));
             }
-            let Some(next_gross) = gross_sum.checked_add(line_gross) else {
-                return Err(Error::from("成本分配金额合计溢出"));
-            };
-            gross_sum = next_gross;
-            let Some(next_net) = net_sum.checked_add(line_net) else {
-                return Err(Error::from("成本分配金额合计溢出"));
-            };
-            net_sum = next_net;
+            gross_sum =
+                gross_sum.checked_add(line_gross).ok_or_else(|| Error::from("成本分配金额合计溢出"))?;
+            net_sum = net_sum.checked_add(line_net).ok_or_else(|| Error::from("成本分配金额合计溢出"))?;
         }
         if gross_sum != gross_amount.to_decimal() || net_sum != net_amount.to_decimal() {
             return Err(Error::from("成本分配合计必须等于成本事实金额"));
@@ -321,6 +312,13 @@ mod tests {
             vec![line("so-1", "100.00", "100.00", None), line("so-2", "0.00", "0.00", None)],
         );
         assert_eq!(zero_gross.unwrap_err().to_string(), "分配金额必须为正数");
+
+        let zero_net = CostAllocationSet::new(
+            Amount::from_str("100.00").unwrap(),
+            Amount::from_str("50.00").unwrap(),
+            vec![line("so-1", "50.00", "50.00", None), line("so-2", "50.00", "0.00", None)],
+        );
+        assert_eq!(zero_net.unwrap_err().to_string(), "分配金额必须为正数");
 
         // 负含税行即使守恒可通过（100.00 = 150.00 + (-50.00)）也必须被拒绝。
         let negative_gross = CostAllocationSet::new(

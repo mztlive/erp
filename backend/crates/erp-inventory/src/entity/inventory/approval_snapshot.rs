@@ -54,9 +54,9 @@ impl StockAdjustmentApprovalSnapshot {
         submitted_by: &str,
         submitted_at: Instant,
     ) -> Result<StockAdjustmentSnapshotFact> {
-        if lines.is_empty() {
+        let Some((first, remaining)) = lines.split_first() else {
             return Err(Error::from("库存调整单没有明细，无法启动审批"));
-        }
+        };
         if adjustment.warehouse_id.as_ref().trim().is_empty() {
             return Err(Error::from("库存调整单缺少仓库，无法冻结快照"));
         }
@@ -68,8 +68,8 @@ impl StockAdjustmentApprovalSnapshot {
             responsible_org_id: adjustment.warehouse_id.to_string(),
             submitted_by: submitted_by.to_string(),
             submitted_at,
-            warehouse_id: WarehouseId::new(adjustment.warehouse_id.to_string()),
-            total_quantity: sum_line_quantity(lines)?,
+            warehouse_id: adjustment.warehouse_id.clone(),
+            total_quantity: sum_line_quantity(first, remaining)?,
             line_count: u32::try_from(lines.len()).map_err(|_| Error::from("调整明细行数溢出"))?,
         })
     }
@@ -78,19 +78,17 @@ impl StockAdjustmentApprovalSnapshot {
 /// 受检数量合计（十进制累加后一次性转 `Quantity`）。
 ///
 /// # 参数
-/// * `lines` - 调整明细
+/// * `first` - 首条明细，调用方已检查非空。
+/// * `remaining` - 其余明细。
 ///
 /// # 返回
 /// 返回合计数量。
 ///
 /// # 错误
-/// 空行、十进制累加溢出或合计超出数量标度时返回错误。
-fn sum_line_quantity(lines: &[StockAdjustmentLine]) -> Result<Quantity> {
-    let Some(first) = lines.first() else {
-        return Err(Error::from("库存调整单没有明细，无法启动审批"));
-    };
+/// 十进制累加溢出或合计超出数量标度时返回错误。
+fn sum_line_quantity(first: &StockAdjustmentLine, remaining: &[StockAdjustmentLine]) -> Result<Quantity> {
     let mut total = first.quantity.to_decimal();
-    for line in &lines[1..] {
+    for line in remaining {
         total = total
             .checked_add(line.quantity.to_decimal())
             .ok_or_else(|| Error::from("库存调整数量合计溢出"))?;
@@ -152,6 +150,32 @@ mod tests {
         assert_eq!(payload.line_count, 2);
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.warehouse_id.to_string(), "wh-1");
+    }
+
+    #[test]
+    fn snapshot_keeps_single_line_precision_and_validation_order() {
+        let payload = StockAdjustmentApprovalSnapshot::build(
+            &adjustment(),
+            &[line("only", "1.000001")],
+            "user-1",
+            Instant::from_unix_secs(10),
+        )
+        .unwrap();
+        assert_eq!(payload.total_quantity.to_string(), "1.000001");
+        assert_eq!(payload.line_count, 1);
+
+        let mut missing_warehouse = adjustment();
+        missing_warehouse.warehouse_id = WarehouseId::new("");
+        for (adjustment, lines, expected) in [
+            (&missing_warehouse, vec![], "库存调整单没有明细，无法启动审批"),
+            (&missing_warehouse, vec![line("one", "1")], "库存调整单缺少仓库，无法冻结快照"),
+            (&adjustment(), vec![line("one", "1")], "提交人不能为空"),
+        ] {
+            let error =
+                StockAdjustmentApprovalSnapshot::build(adjustment, &lines, " ", Instant::from_unix_secs(10))
+                    .unwrap_err();
+            assert!(matches!(error, Error::LogicError(message) if message == expected));
+        }
     }
 
     /// 空行失败；数量合计溢出失败。

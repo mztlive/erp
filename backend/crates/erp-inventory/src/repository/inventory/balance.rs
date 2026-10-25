@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::shared::{
     active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, paged_projection_search,
-    scoped_base_filter, sort_doc, to_bson, with_id_tie_breaker,
+    scoped_base_filter, sort_doc, to_decimal128, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_BALANCES};
 use crate::entity::inventory::StockBalance;
@@ -359,11 +359,11 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity_bson = to_bson(quantity)?;
+        let quantity_bson = to_decimal128(quantity)?;
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "available_quantity": { "$gte": &quantity_bson },
+            "available_quantity": { "$gte": quantity_bson },
         };
         let update = cross_inc(quantity, "reserved_quantity", "available_quantity")?;
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
@@ -387,11 +387,11 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity_bson = to_bson(quantity)?;
+        let quantity_bson = to_decimal128(quantity)?;
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "available_quantity": { "$gte": &quantity_bson },
+            "available_quantity": { "$gte": quantity_bson },
         };
         let update = both_dec(quantity, "on_hand_quantity", "available_quantity")?;
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
@@ -415,11 +415,11 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let quantity_bson = to_bson(quantity)?;
+        let quantity_bson = to_decimal128(quantity)?;
         let filter = doc! {
             "id": id,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "reserved_quantity": { "$gte": &quantity_bson },
+            "reserved_quantity": { "$gte": quantity_bson },
         };
         let update = cross_inc(quantity, "available_quantity", "reserved_quantity")?;
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
