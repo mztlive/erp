@@ -18,8 +18,8 @@ fn is_valid_query_id(id: &str) -> bool {
 
 /// 解析逗号分隔的 ID 集合：限项、去首尾空白、去重排序。
 fn parse_query_ids(raw: &str) -> Result<BTreeSet<String>, &'static str> {
-    let parts = raw.split(',').collect::<Vec<_>>();
-    if parts.len() > MAX_QUERY_IDS {
+    let parts = raw.split(',');
+    if parts.clone().count() > MAX_QUERY_IDS {
         return Err("单次人员条件最多 100 个 ID");
     }
     let mut ids = BTreeSet::new();
@@ -111,6 +111,15 @@ mod tests {
         assert!(parse_query_ids(&"a".repeat(129)).is_err());
         assert!(!is_valid_query_id("user@1"));
         assert!(is_valid_query_id("user-1_x"));
+    }
+
+    #[test]
+    fn segment_limit_is_checked_before_individual_ids() {
+        let mut parts = vec!["u"; 100];
+        parts[0] = "";
+        assert_eq!(parse_query_ids(&parts.join(",")), Err("人员筛选必须为非空的稳定 ID"));
+        parts.push("u");
+        assert_eq!(parse_query_ids(&parts.join(",")), Err("单次人员条件最多 100 个 ID"));
     }
 }
 

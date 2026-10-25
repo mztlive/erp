@@ -116,10 +116,10 @@ impl ProductImportProcess {
         let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         let carousel_media = media
             .carousel
-            .iter()
+            .into_iter()
             .map(|(id, sort_order)| ProductMediaInput {
-                file_asset_id: id.clone(),
-                sort_order: *sort_order,
+                file_asset_id: id,
+                sort_order,
                 alt_text: Some(row.name.clone()),
             })
             .collect();

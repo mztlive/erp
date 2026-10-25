@@ -120,14 +120,15 @@ impl SalesInquiry {
     /// # 错误
     /// 无有效责任人或明确指定账号不在责任组内时拒绝。
     pub fn assign_shared_fee_owner(&mut self, requested: Option<String>, owners: &[String]) -> Result<()> {
-        let unique: HashSet<_> = owners.iter().filter(|owner| !owner.trim().is_empty()).cloned().collect();
+        let unique: HashSet<_> =
+            owners.iter().map(String::as_str).filter(|owner| !owner.trim().is_empty()).collect();
         let owner = match requested {
-            Some(owner) if unique.contains(&owner) => owner,
+            Some(owner) if unique.contains(owner.as_str()) => owner,
             None => self
                 .shared_fee_owner_user_id
                 .as_ref()
-                .filter(|owner| unique.contains(*owner))
-                .or_else(|| owners.iter().find(|owner| unique.contains(*owner)))
+                .filter(|owner| unique.contains(owner.as_str()))
+                .or_else(|| owners.iter().find(|owner| unique.contains(owner.as_str())))
                 .cloned()
                 .ok_or_else(|| {
                     Error::ValidationError("未能确定整单费用责任采购，请检查采购责任配置".into())

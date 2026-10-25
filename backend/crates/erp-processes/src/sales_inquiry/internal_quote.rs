@@ -57,8 +57,9 @@ pub struct InquiryQuoteTermsInput {
 
 impl InquiryQuoteTermsInput {
     pub(super) fn for_requirement(&self, line: &InquiryRequirementLine) -> Result<QuoteTerms> {
-        let allocation_ids = line.allocations.iter().map(|row| row.allocation_id.clone()).collect::<Vec<_>>();
         if !self.unavailable {
+            let allocation_ids =
+                line.allocations.iter().map(|row| row.allocation_id.clone()).collect::<Vec<_>>();
             line.validate_quote_scope(self.available_quantity, &allocation_ids)?;
         }
         let terms = QuoteTerms {
@@ -154,37 +155,46 @@ impl SalesInquiryProcess {
         self.execute(actor, id, InquiryCommand::FeeBasis(req)).await
     }
 
+    /// 保存已授权任务的一条内部报价，单条录入与批量导入共用相同校验和写入。
+    ///
+    /// # 参数
+    /// `actor` 为采购，`inquiry` 与 `task` 为已授权事实，`expected_version` 为请求版本，
+    /// `input` 为当前报价，`executor` 沿用调用方事务。
+    /// # 返回
+    /// 报价已通过供应资格校验并追加保存。
+    /// # 错误
+    /// 版本、责任范围、供应商权限、报价条件或持久化失败时返回对应错误。
     pub(super) async fn append_internal_quote(
         &self,
         actor: &AuditActor,
         inquiry: &SalesInquiry,
         task: &WorkItem,
-        req: &SaveInquiryQuoteCommand,
+        expected_version: u64,
+        input: &InquiryQuoteInput,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        inquiry.ensure_processing(req.expected_version)?;
-        let line = inquiry.responsibility_line(task.responsibility_scope_ids(), &req.quote.line_id)?;
+        inquiry.ensure_processing(expected_version)?;
+        let line = inquiry.responsibility_line(task.responsibility_scope_ids(), &input.line_id)?;
         supplier_access(self.db.clone(), self.rbac.clone())
-            .require_with(actor, "detail", req.quote.supplier_id.as_ref(), executor)
+            .require_with(actor, "detail", input.supplier_id.as_ref(), executor)
             .await?;
-        let terms = req.quote.terms.for_requirement(line)?;
-        let id = next_id();
+        let terms = input.terms.for_requirement(line)?;
         let quote = InquiryQuote::new(
-            id.clone(),
+            next_id(),
             InquiryQuoteData {
-                quote_id: req.quote.quote_id.clone().unwrap_or_else(next_id),
-                revision_no: req.quote.revision_no,
+                quote_id: input.quote_id.clone().unwrap_or_else(next_id),
+                revision_no: input.revision_no,
                 feedback_round: next_round(inquiry)?,
                 scope: InquiryQuoteScope {
                     inquiry_id: inquiry.base.id.clone(),
                     requirement_version: inquiry.requirement_version,
                     line_id: line.line_id.clone(),
                 },
-                supplier_id: req.quote.supplier_id.clone(),
-                supplier_offering_id: req.quote.supplier_offering_id.clone(),
+                supplier_id: input.supplier_id.clone(),
+                supplier_offering_id: input.supplier_offering_id.clone(),
                 sku_id: SkuId::new(line.sku_id.clone()),
                 terms,
-                internal_note: req.quote.internal_note.clone(),
+                internal_note: input.internal_note.clone(),
                 recorded_by: actor.id().to_string(),
             },
         )?;

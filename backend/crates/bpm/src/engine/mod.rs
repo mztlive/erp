@@ -259,7 +259,10 @@ mod tests {
         assert_eq!(first.instance.status, ApprovalProcessInstanceStatus::Running);
         assert_eq!(first.created_assignees.len(), 2);
         assert!(matches!(first.task_intents.first(), Some(TaskIntent::HumanTaskRequested { .. })));
-        assert!(first.events.iter().any(|event| event.kind.as_str() == "INSTANCE_STARTED"));
+        assert_eq!(
+            first.events.iter().map(|event| event.kind.as_str()).collect::<Vec<_>>(),
+            ["INSTANCE_STARTED", "NODE_ENTERED"]
+        );
     }
 
     #[test]
@@ -358,8 +361,24 @@ mod tests {
         assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Approved);
         assert_eq!(plan.created_executions[0].status, ApprovalNodeExecutionStatus::Blocked);
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Blocked);
-        assert!(
-            !plan.task_intents.iter().any(|intent| matches!(intent, TaskIntent::HumanTaskRequested { .. }))
+        assert!(matches!(
+            plan.task_intents.as_slice(),
+            [TaskIntent::CompleteTask { execution_id }] if execution_id.as_ref() == "e1"
+        ));
+        assert_eq!(
+            plan.events
+                .iter()
+                .map(|event| (
+                    event.kind.as_str(),
+                    event.execution_id.as_ref().map(AsRef::as_ref),
+                    event.node_key.as_deref(),
+                    event.blocker_code,
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("NODE_APPROVED", Some("e1"), Some("n1"), None),
+                ("INSTANCE_BLOCKED", Some("e2"), Some("n2"), Some(ApprovalBlockerCode::ApproverNotEligible),),
+            ]
         );
     }
 
@@ -656,6 +675,10 @@ mod tests {
         assert!(assignee.ensure_unchanged_from_definition().is_ok());
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Running);
         assert!(matches!(plan.task_intents.first(), Some(TaskIntent::HumanTaskRequested { .. })));
+        assert_eq!(
+            plan.events.iter().map(|event| event.kind.as_str()).collect::<Vec<_>>(),
+            ["EXECUTION_SUPERSEDED", "NODE_ENTERED", "ASSIGNEE_RECOVERED"]
+        );
     }
 
     /// 结构性 blocker 不得进入原审批人恢复。
@@ -822,23 +845,75 @@ mod tests {
     /// 缺失节点不得构造缺字段执行。
     #[test]
     fn engine_enter_missing_node_is_uncommittable() {
-        let instance = running_instance();
         let graph = two_node_graph();
-        let error = plan_enter_node(EnterNodeInput {
-            instance,
-            graph: &graph,
-            node_key: "missing",
-            round_no: 1,
-            participant: participant("u1"),
-            eligibility: eligible("u1", "张三"),
-            execution_id: ApprovalNodeExecutionId::new("e9"),
-            execution_no: 1,
-            assignment_source: ApprovalExecutionAssignmentSource::Definition,
-            replaces_execution_id: None,
-            now: at(30),
-        })
-        .unwrap_err();
-        assert!(matches!(error, EngineError::Uncommittable(_)));
+        for (node_key, message) in [
+            ("missing", "定义图缺少目标节点，无法形成合法阻塞快照"),
+            (" \t", "缺失节点键，无法形成合法阻塞快照"),
+        ] {
+            let error = plan_enter_node(EnterNodeInput {
+                instance: running_instance(),
+                graph: &graph,
+                node_key,
+                round_no: 1,
+                participant: participant("u1"),
+                eligibility: eligible("u1", "张三"),
+                execution_id: ApprovalNodeExecutionId::new("e9"),
+                execution_no: 1,
+                assignment_source: ApprovalExecutionAssignmentSource::Definition,
+                replaces_execution_id: None,
+                now: at(30),
+            })
+            .unwrap_err();
+            assert_eq!(error, EngineError::Uncommittable(message));
+        }
+    }
+
+    #[test]
+    fn engine_enter_checks_resolved_assignee_then_identity_then_group_before_execution() {
+        let graph = two_node_graph();
+        let mut unresolved = graph.clone();
+        unresolved.nodes[0].assignee_participant_id = None;
+        let duplicate_group = Eligibility::AnyOf {
+            primary: Box::new(eligible("u1", "张三")),
+            additional: vec![eligible("u1", "张三")],
+        };
+        for (graph, user, eligibility, expected) in [
+            (
+                unresolved,
+                "u9",
+                eligible("u9", ""),
+                EngineError::Model(ModelError::InvalidField("审批人来源尚未解析")),
+            ),
+            (
+                graph.clone(),
+                "u9",
+                eligible("u1", ""),
+                EngineError::InvalidCommand("节点责任人必须匹配定义审批人"),
+            ),
+            (
+                graph.clone(),
+                "u1",
+                eligible("u9", ""),
+                EngineError::InvalidCommand("节点责任人必须匹配定义审批人"),
+            ),
+            (graph, "u1", duplicate_group, EngineError::InvalidCommand("资格结果必须属于定义审批人")),
+        ] {
+            let error = plan_enter_node(EnterNodeInput {
+                instance: running_instance(),
+                graph: &graph,
+                node_key: "n1",
+                round_no: 1,
+                participant: participant(user),
+                eligibility,
+                execution_id: ApprovalNodeExecutionId::new("e9"),
+                execution_no: 0,
+                assignment_source: ApprovalExecutionAssignmentSource::Definition,
+                replaces_execution_id: None,
+                now: at(30),
+            })
+            .unwrap_err();
+            assert_eq!(error, expected);
+        }
     }
 
     /// 计划不得包含 ERP 语义字段名。

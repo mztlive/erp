@@ -135,36 +135,25 @@ impl ResponsibilityScopeSet {
     pub fn new(values: impl IntoIterator<Item = (String, Option<String>)>) -> Self {
         let mut normalized = BTreeMap::<String, Option<BTreeSet<String>>>::new();
         for (role_id, organization_id) in values {
-            match normalized.entry(role_id) {
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    entry.insert(organization_id.map(|value| BTreeSet::from([value])));
+            let targets = normalized.entry(role_id).or_insert_with(|| Some(BTreeSet::new()));
+            match (targets, organization_id) {
+                (targets, None) => *targets = None,
+                (Some(targets), Some(value)) => {
+                    targets.insert(value);
                 },
-                std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    let Some(targets) = entry.get_mut() else {
-                        continue;
-                    };
-                    match organization_id {
-                        Some(value) => {
-                            targets.insert(value);
-                        },
-                        None => {
-                            entry.insert(None);
-                        },
-                    }
-                },
+                (None, Some(_)) => {},
             }
         }
-        Self(
-            normalized
-                .into_iter()
-                .flat_map(|(role_id, targets)| match targets {
-                    Some(targets) => {
-                        targets.into_iter().map(|target| (role_id.clone(), Some(target))).collect::<Vec<_>>()
-                    },
-                    None => vec![(role_id, None)],
-                })
-                .collect(),
-        )
+        let mut values = Vec::new();
+        for (role_id, targets) in normalized {
+            match targets {
+                Some(targets) => {
+                    values.extend(targets.into_iter().map(|target| (role_id.clone(), Some(target))));
+                },
+                None => values.push((role_id, None)),
+            }
+        }
+        Self(values)
     }
 
     /// 合并责任范围集合。
@@ -262,6 +251,32 @@ mod tests {
         assert_eq!(set.as_slice(), &[("role".to_string(), None)]);
         assert!(set.covers("role", "other"));
         assert!(!set.covers("other-role", "org"));
+    }
+
+    #[test]
+    fn responsibility_scope_wildcard_absorbs_targets_in_any_input_order() {
+        for organizations in [
+            [None, Some("org-b"), Some("org-a"), None],
+            [Some("org-b"), None, Some("org-a"), None],
+            [Some("org-b"), Some("org-a"), None, None],
+        ] {
+            let values = organizations
+                .into_iter()
+                .map(|organization| ("buyer".into(), organization.map(str::to_string)));
+            let set = ResponsibilityScopeSet::new(values.chain([
+                ("finance".into(), Some("org-b".into())),
+                ("finance".into(), Some("org-a".into())),
+                ("finance".into(), Some("org-b".into())),
+            ]));
+            assert_eq!(
+                set.as_slice(),
+                &[
+                    ("buyer".into(), None),
+                    ("finance".into(), Some("org-a".into())),
+                    ("finance".into(), Some("org-b".into())),
+                ]
+            );
+        }
     }
 
     #[test]

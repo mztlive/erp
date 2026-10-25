@@ -206,7 +206,7 @@ fn http_failure(status: u16, write: bool) -> ConnectorError {
 }
 
 pub(super) fn decode(body: &[u8], write: bool) -> ConnectorResult<Value> {
-    let envelope = wire::parse(body).map_err(|_| invalid_response(write))?;
+    let mut envelope = wire::parse(body).map_err(|_| invalid_response(write))?;
     let code = envelope
         .get("code")
         .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok()))
@@ -219,12 +219,14 @@ pub(super) fn decode(body: &[u8], write: bool) -> ConnectorResult<Value> {
         // msg 可能含地址、手机号或供应商回显的请求，不向日志/错误转发。
         return Err(error(class, &format!("DGSS_{code}"), "供应商明确拒绝请求"));
     }
-    envelope.get("data").cloned().ok_or_else(|| invalid_response(write))
+    envelope.get_mut("data").map(Value::take).ok_or_else(|| invalid_response(write))
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use serde_json::json;
 
     use super::*;
     #[test]
@@ -257,6 +259,25 @@ mod tests {
         second.unwrap();
         assert_eq!(transport.quota.lock().await.1, 2);
     }
+    #[test]
+    fn successful_envelope_preserves_payload_and_distinguishes_null_from_missing() {
+        for write in [false, true] {
+            let payload = decode(
+                br#"{"code":"200","data":{"id":"00023","price":0.10000000000000000001,"items":[null,true,{"id":123}]}}"#,
+                write,
+            )
+            .unwrap();
+            assert_eq!(payload["id"], "00023");
+            assert_eq!(payload["price"], "0.10000000000000000001");
+            assert_eq!(payload["items"], json!([null, true, {"id":123}]));
+            assert_eq!(decode(br#"{"code":200,"data":null}"#, write).unwrap(), Value::Null);
+            assert_eq!(
+                decode(br#"{"code":200}"#, write).unwrap_err().class,
+                if write { SupplierFailureClass::ResultUnknown } else { SupplierFailureClass::MappingError }
+            );
+        }
+    }
+
     #[test]
     fn business_errors_and_malformed_write_results_are_distinct() {
         assert_eq!(

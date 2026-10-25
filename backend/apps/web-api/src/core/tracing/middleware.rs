@@ -36,10 +36,9 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
     let (trace_id, trace_value) = prepare_trace(&mut request)?;
 
     let method = request.method().clone();
-    let uri = request.uri().clone();
-    let path = redacted_path(uri.path());
-    let matched_route = request.extensions().get::<MatchedPath>().map(|matched| matched.as_str().to_string());
-    let span_name = http_span_name(&method, matched_route.as_deref());
+    let path = redacted_path(request.uri().path());
+    let matched_route = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+    let span_name = http_span_name(&method, matched_route);
 
     let start_time = Instant::now();
 
@@ -59,7 +58,7 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
         status_code = tracing::field::Empty,
         latency_ms = tracing::field::Empty,
     );
-    if let Some(route) = matched_route.as_deref() {
+    if let Some(route) = matched_route {
         span.record("http.route", route);
     }
     if parent_context.span().span_context().is_valid() {

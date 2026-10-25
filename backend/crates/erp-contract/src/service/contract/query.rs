@@ -69,26 +69,25 @@ impl ContractService {
 /// 未分配主责时显示破折号，不得回填创建人或签约人。
 pub(super) async fn list_customer_facts_with(
     customers: &dyn CustomerFactsPort,
-    assignments: &dyn CustomerAssignmentFactsPort,
-    accounts: &dyn AccountNamePort,
+    _assignments: &dyn CustomerAssignmentFactsPort,
+    _accounts: &dyn AccountNamePort,
     ids: &[String],
-    as_of: BusinessDate,
+    _as_of: BusinessDate,
     executor: &mut dyn Executor,
 ) -> Result<Vec<ContractCustomer>> {
     let customer_ids = ids.iter().cloned().map(CustomerAccountId::new).collect::<Vec<_>>();
     let facts = customers.find_by_ids(&customer_ids, executor).await?;
-    let _ = (assignments, accounts, as_of);
-    let owners = HashMap::<String, String>::new();
     let names = HashMap::new();
     let numbers = facts.into_iter().map(|c| (c.id, c.customer_no)).collect::<HashMap<_, _>>();
     Ok(ids
         .iter()
-        .filter(|id| numbers.contains_key(*id))
-        .map(|id| ContractCustomer {
-            id: id.clone(),
-            number: numbers.get(id).cloned().unwrap_or_default(),
-            owner_id: owners.get(id).cloned(),
-            owner: ContractCustomer::resolve_owner_label(owners.get(id), &names),
+        .filter_map(|id| {
+            numbers.get(id).map(|number| ContractCustomer {
+                id: id.clone(),
+                number: number.clone(),
+                owner_id: None,
+                owner: ContractCustomer::resolve_owner_label(None, &names),
+            })
         })
         .collect())
 }
@@ -135,8 +134,97 @@ pub(super) async fn contract_rows(
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{CustomerAccountId, PartyId};
+    use persistence_core::{Executor, NoTransaction};
+
     use super::super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot};
-    use crate::error::Error;
+    use super::list_customer_facts_with;
+    use crate::error::{Error, Result};
+    use crate::ports::{
+        CustomerAccountFact, CustomerFactsPort, FailClosedAccountNamePort, FailClosedAssignmentFactsPort,
+        FailClosedCustomerFactsPort,
+    };
+
+    struct Customers {
+        expected_ids: Vec<CustomerAccountId>,
+        facts: Vec<CustomerAccountFact>,
+    }
+
+    #[async_trait]
+    impl CustomerFactsPort for Customers {
+        async fn find_by_id(&self, _: &CustomerAccountId) -> Result<Option<CustomerAccountFact>> {
+            panic!("列表应批量读取客户事实");
+        }
+
+        async fn find_by_ids(
+            &self,
+            ids: &[CustomerAccountId],
+            _: &mut dyn Executor,
+        ) -> Result<Vec<CustomerAccountFact>> {
+            assert_eq!(ids, self.expected_ids);
+            Ok(self.facts.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn customer_facts_keep_request_order_missing_ids_and_unassigned_owner() {
+        let ids = ["customer-2", "missing", "customer-1", "customer-2"].map(str::to_owned);
+        let fact = |id: &str, number: &str| CustomerAccountFact {
+            id: id.into(),
+            customer_no: number.into(),
+            party_id: PartyId::new("party-1"),
+            is_active: true,
+        };
+        let customers = Customers {
+            expected_ids: ids.iter().map(CustomerAccountId::new).collect(),
+            facts: vec![fact("customer-1", "C-1"), fact("customer-2", "C-2")],
+        };
+        let rows = list_customer_facts_with(
+            &customers,
+            &FailClosedAssignmentFactsPort,
+            &FailClosedAccountNamePort,
+            &ids,
+            BusinessDate::from_ymd(2026, 10, 25).unwrap(),
+            &mut NoTransaction,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            rows.iter().map(|row| (row.id.as_str(), row.number.as_str())).collect::<Vec<_>>(),
+            [("customer-2", "C-2"), ("customer-1", "C-1"), ("customer-2", "C-2")],
+        );
+        assert!(rows.iter().all(|row| row.owner_id.is_none() && row.owner == "—"));
+    }
+
+    #[tokio::test]
+    async fn customer_facts_keep_empty_result_and_propagate_port_failure() {
+        let date = BusinessDate::from_ymd(2026, 10, 25).unwrap();
+        let customers = Customers { expected_ids: vec![], facts: vec![] };
+        let rows = list_customer_facts_with(
+            &customers,
+            &FailClosedAssignmentFactsPort,
+            &FailClosedAccountNamePort,
+            &[],
+            date,
+            &mut NoTransaction,
+        )
+        .await
+        .unwrap();
+        assert!(rows.is_empty());
+        let error = list_customer_facts_with(
+            &FailClosedCustomerFactsPort,
+            &FailClosedAssignmentFactsPort,
+            &FailClosedAccountNamePort,
+            &[],
+            date,
+            &mut NoTransaction,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "客户端口未接线"));
+    }
 
     #[test]
     fn later_page_and_version_drift_are_data_scope_changed() {

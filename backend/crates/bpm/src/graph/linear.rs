@@ -38,24 +38,15 @@ pub struct LinearTransitionDraft {
 pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<LinearTransitionDraft>> {
     let keys = normalize_keys(node_keys)?;
     let entry = keys[0];
-    let last = keys.len() - 1;
     let mut drafts = Vec::with_capacity(keys.len() * 2);
     for (index, from) in keys.iter().enumerate() {
-        if index == last {
-            drafts.push(LinearTransitionDraft {
-                from_node_key: (*from).to_string(),
-                event: ApprovalTransitionEvent::Approve,
-                to_node_key: None,
-                terminal_result: Some(ApprovalTerminalResult::Approved),
-            });
-        } else {
-            drafts.push(LinearTransitionDraft {
-                from_node_key: (*from).to_string(),
-                event: ApprovalTransitionEvent::Approve,
-                to_node_key: Some(keys[index + 1].to_string()),
-                terminal_result: None,
-            });
-        }
+        let next = keys.get(index + 1);
+        drafts.push(LinearTransitionDraft {
+            from_node_key: (*from).to_string(),
+            event: ApprovalTransitionEvent::Approve,
+            to_node_key: next.map(|key| (*key).to_string()),
+            terminal_result: next.is_none().then_some(ApprovalTerminalResult::Approved),
+        });
         drafts.push(LinearTransitionDraft {
             from_node_key: (*from).to_string(),
             event: ApprovalTransitionEvent::Reject,

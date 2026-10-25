@@ -55,35 +55,17 @@ pub(crate) struct EnterNodeInput<'a> {
 ///
 /// # 约束
 /// 启动、通过、驳回与恢复必须复用本函数。
-pub(crate) fn plan_enter_node(input: EnterNodeInput<'_>) -> EngineResult<TransitionPlan> {
-    let node = match input.graph.node(input.node_key) {
-        Some(node) => node,
-        None => {
-            return structural_enter_without_node(input.node_key);
-        },
+pub(crate) fn plan_enter_node(mut input: EnterNodeInput<'_>) -> EngineResult<TransitionPlan> {
+    let Some(node) = input.graph.node(input.node_key) else {
+        let message = if input.node_key.trim().is_empty() {
+            "缺失节点键，无法形成合法阻塞快照"
+        } else {
+            "定义图缺少目标节点，无法形成合法阻塞快照"
+        };
+        return Err(EngineError::Uncommittable(message));
     };
-    build_enter_plan(input, node)
-}
-
-/// 在已解析节点上构造进入计划。
-///
-/// # 参数
-/// * `input` - 与 [`plan_enter_node`] 相同的进入快照
-/// * `node` - 已从图中解析的目标节点
-///
-/// # 返回
-/// 返回进入计划。
-///
-/// # 错误
-/// 模型不变式失败时返回错误。
-///
-/// # 约束
-/// 不得绕过 [`plan_enter_node`] 直接构造进入事实。
-fn build_enter_plan(
-    mut input: EnterNodeInput<'_>,
-    node: &ApprovalNodeDefinition,
-) -> EngineResult<TransitionPlan> {
-    if input.participant != *node.assignee()? || input.eligibility.participant_ref() != node.assignee()? {
+    let assignee = node.assignee()?;
+    if input.participant != *assignee || input.eligibility.participant_ref() != assignee {
         return Err(EngineError::InvalidCommand("节点责任人必须匹配定义审批人"));
     }
     input.eligibility.validate_node(node)?;
@@ -160,14 +142,6 @@ fn blocked_enter(
     );
     plan.created_executions.push(execution);
     Ok(plan)
-}
-
-/// 节点定义缺失时，若缺少构造执行所需字段则拒绝提交半结构实体。
-fn structural_enter_without_node(node_key: &str) -> EngineResult<TransitionPlan> {
-    if node_key.trim().is_empty() {
-        return Err(EngineError::Uncommittable("缺失节点键，无法形成合法阻塞快照"));
-    }
-    Err(EngineError::Uncommittable("定义图缺少目标节点，无法形成合法阻塞快照"))
 }
 
 /// 读取当前节点的通过与驳回连线，必须各恰好一条。

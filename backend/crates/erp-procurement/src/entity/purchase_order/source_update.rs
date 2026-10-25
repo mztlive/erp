@@ -197,17 +197,18 @@ impl PurchaseSourceUpdate {
         trigger: Option<&str>,
     ) -> Result<bool> {
         self.ensure_open()?;
-        let trigger = trigger.map(str::to_string).or_else(|| self.trigger_sales_change_order_id.clone());
         let changed = self.reasons != impact.reasons
             || self.blocks_payment != impact.blocks_payment()
             || self.awaiting_submission
             || self.sales_order_revision_id != sales_order_revision_id
-            || self.trigger_sales_change_order_id != trigger;
+            || trigger.is_some_and(|value| self.trigger_sales_change_order_id.as_deref() != Some(value));
         self.reasons = impact.reasons.clone();
         self.blocks_payment = impact.blocks_payment();
         self.awaiting_submission = false;
         self.sales_order_revision_id = sales_order_revision_id.to_string();
-        self.trigger_sales_change_order_id = trigger;
+        if let Some(trigger) = trigger {
+            self.trigger_sales_change_order_id = Some(trigger.to_string());
+        }
         Ok(changed)
     }
 
@@ -522,6 +523,23 @@ mod tests {
         assert!(!update.blocks_payment);
         assert_eq!(update.trigger_sales_change_order_id.as_deref(), Some("sco-1"));
         assert!(update.impact_summary("SO-9").contains("履约期限提前到 2026-10-10，早于预计交付 2026-10-15"));
+    }
+
+    /// 明确传入原触发单号不算变化；新触发单号生效后省略仍保留。
+    #[test]
+    fn refresh_distinguishes_unchanged_and_replaced_triggers() {
+        let mut update = opened();
+        let impact = impact(reduced());
+        assert!(!update.refresh(&impact, "rev-2", Some("sco-1")).unwrap());
+        assert!(update.refresh(&impact, "rev-2", Some("sco-2")).unwrap());
+        assert_eq!(update.trigger_sales_change_order_id.as_deref(), Some("sco-2"));
+        assert!(!update.refresh(&impact, "rev-2", None).unwrap());
+        assert_eq!(update.trigger_sales_change_order_id.as_deref(), Some("sco-2"));
+        update.trigger_sales_change_order_id = None;
+        assert!(!update.refresh(&impact, "rev-2", None).unwrap());
+        assert_eq!(update.trigger_sales_change_order_id, None);
+        assert!(update.refresh(&impact, "rev-2", Some("sco-3")).unwrap());
+        assert_eq!(update.trigger_sales_change_order_id.as_deref(), Some("sco-3"));
     }
 
     /// 草稿修改后转为等待提交：解除付款暂停、拒绝维持登记；再次受影响时恢复待处理。

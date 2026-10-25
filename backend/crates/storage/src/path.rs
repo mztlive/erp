@@ -21,11 +21,9 @@ pub(super) fn object_key_path(path: &Path) -> Result<String> {
     }
 
     let mut key = String::new();
-    let mut has_normal_component = false;
     for component in path.components() {
         match component {
             Component::Normal(value) => {
-                has_normal_component = true;
                 let text =
                     value.to_str().ok_or_else(|| Error::PathError("存储路径必须是 UTF-8".to_string()))?;
                 if text.contains('\\') {
@@ -43,7 +41,7 @@ pub(super) fn object_key_path(path: &Path) -> Result<String> {
         }
     }
 
-    if !has_normal_component {
+    if key.is_empty() {
         return Err(Error::PathError("存储路径不能为空".to_string()));
     }
 
@@ -107,6 +105,7 @@ mod tests {
         assert!(matches!(object_key_path(Path::new("/a.png")), Err(Error::PathError(_))));
         assert!(matches!(object_key_path(Path::new("")), Err(Error::PathError(_))));
         assert!(matches!(object_key_path(Path::new(".")), Err(Error::PathError(_))));
+        assert!(matches!(object_key_path(Path::new("././")), Err(Error::PathError(_))));
     }
 
     /// 父目录分量不得越过基础目录。

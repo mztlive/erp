@@ -51,11 +51,11 @@ impl RecognitionProviders {
                 elapsed_ms = u64::try_from(stage_start.elapsed().as_millis()).unwrap_or(u64::MAX),
                 "合同逐页 OCR 完成"
             );
-            attempt.ocr = Some(document.clone());
+            let document = attempt.ocr.insert(document);
             stage = ImportStage::AiExtract;
             stage_start = Instant::now();
             progress.advance(stage).await.map_err(StageFailure::Progress)?;
-            let extraction = self.extractor.extract(&document).await?;
+            let extraction = self.extractor.extract(document).await?;
             stage = ImportStage::PreparingReview;
             stage_start = Instant::now();
             progress.advance(stage).await.map_err(StageFailure::Progress)?;
@@ -65,7 +65,7 @@ impl RecognitionProviders {
                     ImportFailure::new("EXTRACTION_TOO_LARGE", "字段提取结果异常，请联系管理员").into()
                 );
             }
-            attempt.extraction = Some(extraction.clone());
+            attempt.extraction = Some(extraction);
             // 识别只生成待确认草稿；缺失、冲突和未匹配字段不阻断任务。
             Ok::<(), StageFailure>(())
         })

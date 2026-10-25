@@ -101,7 +101,7 @@ pub(crate) fn dedup_trimmed_nonempty<'a>(values: impl IntoIterator<Item = &'a st
     let mut unique = Vec::new();
     for value in values {
         let trimmed = value.trim();
-        if trimmed.is_empty() || !seen.insert(trimmed.to_string()) {
+        if trimmed.is_empty() || !seen.insert(trimmed) {
             continue;
         }
         unique.push(trimmed.to_string());

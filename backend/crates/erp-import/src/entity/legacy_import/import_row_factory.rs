@@ -44,10 +44,8 @@ pub fn build_import_rows(
     batch_id: &LegacyImportBatchId,
     specs: Vec<ImportRowSpec>,
 ) -> Result<Vec<LegacyImportRow>> {
-    if first_duplicate_key(&specs, |spec| {
-        (spec.source_object_type.trim().to_string(), spec.source_row_key.trim().to_string())
-    })
-    .is_some()
+    if first_duplicate_key(&specs, |spec| (spec.source_object_type.trim(), spec.source_row_key.trim()))
+        .is_some()
     {
         return Err(Error::from("同一批次内来源行身份重复"));
     }
@@ -68,6 +66,7 @@ pub fn build_import_rows(
 
 #[cfg(test)]
 mod tests {
+    use erp_core::Error;
     use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
 
     use super::{ImportRowSpec, build_import_rows};
@@ -108,5 +107,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn normalized_duplicate_check_precedes_individual_row_validation() {
+        let mut invalid = spec("row-1", " CUSTOMER ", " key-1 ");
+        invalid.normalized_payload_reference.clear();
+        let error = build_import_rows(
+            &LegacyImportBatchId::new("batch-1"),
+            vec![invalid, spec("row-2", "CUSTOMER", "key-1")],
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), Error::from("同一批次内来源行身份重复").to_string());
     }
 }

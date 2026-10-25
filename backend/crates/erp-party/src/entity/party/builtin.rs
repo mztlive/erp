@@ -66,22 +66,30 @@ impl BuiltinCompany {
     }
 
     /// 税号与完整名称必须收敛到同一可维护企业。
-    pub(crate) fn identity(&self, mut candidates: Vec<Party>) -> Result<Option<Party>> {
-        candidates.sort_by(|a, b| a.base.id.cmp(&b.base.id));
-        candidates.dedup_by(|a, b| a.base.id == b.base.id);
-        if candidates.len() > 1 {
+    ///
+    /// # 参数
+    /// * `candidates` - 按税号与名称读取的主体；同一 ID 重复时采用首条事实
+    ///
+    /// # 返回
+    /// 无候选时返回 `None`，唯一身份且未删除时返回主体。
+    ///
+    /// # 错误
+    /// 命中多个身份或唯一主体已删除时返回原有冲突错误。
+    pub(crate) fn identity(&self, candidates: Vec<Party>) -> Result<Option<Party>> {
+        let mut candidates = candidates.into_iter();
+        let Some(candidate) = candidates.next() else {
+            return Ok(None);
+        };
+        if candidates.any(|party| party.base.id != candidate.base.id) {
             return Err(Error::ConflictError(format!(
                 "内建公司 {} 的税号与名称指向不同主体",
                 self.legal_name
             )));
         }
-        let candidate = candidates.pop();
-        if let Some(party) = &candidate
-            && (party.base.deleted_at != 0 || party.party_kind != PartyKind::Enterprise)
-        {
+        if candidate.base.deleted_at != 0 {
             return Err(Error::ConflictError(format!("内建公司 {} 命中已删除或非企业主体", self.legal_name)));
         }
-        Ok(candidate)
+        Ok(Some(candidate))
     }
 }
 
@@ -131,6 +139,21 @@ mod tests {
         let mut deleted = p;
         deleted.base.deleted_at = 1;
         assert!(seed.identity(vec![deleted]).is_err());
+    }
+
+    #[test]
+    fn identity_keeps_first_duplicate_and_checks_ambiguity_before_record_status() {
+        let seed = &BuiltinCompany::all().unwrap()[0];
+        let first = party("same-id");
+        let mut duplicate = first.clone();
+        duplicate.party_no = "later-snapshot".into();
+        assert_eq!(seed.identity(vec![first.clone(), duplicate]).unwrap().unwrap().party_no, first.party_no);
+        let mut deleted = first;
+        deleted.base.deleted_at = 1;
+        assert!(matches!(
+            seed.identity(vec![deleted, party("other-id")]),
+            Err(Error::ConflictError(message)) if message.contains("税号与名称指向不同主体")
+        ));
     }
 
     #[test]

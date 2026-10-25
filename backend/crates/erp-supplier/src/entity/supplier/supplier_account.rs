@@ -482,8 +482,8 @@ pub(crate) fn intersect_supplier_ids(
         (None, Some(matched)) => return Some(matched),
         (None, None) => return None,
     };
-    let matched: HashSet<String> = matched.into_iter().map(|id| id.to_string()).collect();
-    Some(current.into_iter().filter(|id| matched.contains(&id.to_string())).collect())
+    let matched: HashSet<SupplierAccountId> = matched.into_iter().collect();
+    Some(current.into_iter().filter(|id| matched.contains(id)).collect())
 }
 
 #[cfg(test)]
@@ -539,6 +539,17 @@ mod intersect_tests {
             .len(),
             0
         );
+    }
+
+    #[test]
+    fn candidate_intersection_preserves_current_duplicates_and_matches_exact_ids() {
+        let current = ["s-2", "s-1", "s-2", "S-2"].map(SupplierAccountId::new).to_vec();
+        let matched = ["s-2", "s-2"].map(SupplierAccountId::new).to_vec();
+        assert_eq!(
+            intersect_supplier_ids(Some(current), Some(matched)),
+            Some(["s-2", "s-2"].map(SupplierAccountId::new).to_vec())
+        );
+        assert_eq!(intersect_supplier_ids(Some(vec![]), Some(vec![])), Some(vec![]));
     }
 }
 

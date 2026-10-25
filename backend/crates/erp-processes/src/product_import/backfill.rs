@@ -102,7 +102,7 @@ impl ProductImportProcess {
             .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
             .await?;
         let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
-        let sku_inputs = sku_inputs_with_main_image(&skus, &revisions, media.main_image.clone())?;
+        let sku_inputs = sku_inputs_with_main_image(&skus, &revisions, media.main_image)?;
         Ok(UpdateProductRequest {
             version: product.base.version,
             change_reason: Some("产品报价表导入补齐图片".into()),
@@ -116,12 +116,8 @@ impl ProductImportProcess {
             effective_to: revision.effective_to,
             carousel_media: media
                 .carousel
-                .iter()
-                .map(|(id, sort_order)| ProductMediaInput {
-                    file_asset_id: id.clone(),
-                    sort_order: *sort_order,
-                    alt_text: None,
-                })
+                .into_iter()
+                .map(|(id, sort_order)| ProductMediaInput { file_asset_id: id, sort_order, alt_text: None })
                 .collect(),
             detail_media: Vec::new(),
             skus: sku_inputs,

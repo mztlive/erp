@@ -96,10 +96,10 @@ pub fn dispimg_id(value: &str) -> Option<&str> {
     let trimmed = value.trim();
     let marker = "DISPIMG(";
     let start = trimmed.find(marker)? + marker.len();
-    let rest = trimmed.get(start..)?.trim_start();
+    let rest = trimmed[start..].trim_start();
     let rest = rest.strip_prefix("&quot;").or_else(|| rest.strip_prefix('"'))?;
     let end = rest.find("&quot;").or_else(|| rest.find('"'))?;
-    let id = rest.get(..end)?.trim();
+    let id = rest[..end].trim();
     if id.is_empty() { None } else { Some(id) }
 }
 
@@ -167,6 +167,14 @@ mod tests {
             Some("ID_FBA686C3A81D4BF282FEBA3925300F24")
         );
         assert_eq!(dispimg_id("普通快递"), None);
+    }
+
+    #[test]
+    fn dispimg_handles_utf8_and_rejects_missing_or_empty_quoted_ids() {
+        assert_eq!(dispimg_id("说明：DISPIMG(\" 图片身份 \",1)"), Some("图片身份"));
+        for value in ["DISPIMG(", "DISPIMG(ID)", "DISPIMG(\"ID", "DISPIMG(\"  \",1)"] {
+            assert_eq!(dispimg_id(value), None);
+        }
     }
 
     #[test]

@@ -101,6 +101,18 @@ async fn executes_real_pipeline_and_stops_before_ai_on_missing_page() {
         assert_eq!(calls.load(Ordering::SeqCst), if missing_page { 1 } else { 2 });
         assert_eq!(result.failure.is_some(), missing_page);
         assert_eq!(result.extraction.is_some(), !missing_page);
+        if missing_page {
+            assert!(result.ocr.is_none());
+        } else {
+            let document = result.ocr.unwrap();
+            assert_eq!(document.provider, "unit-test");
+            assert_eq!(document.pages[0].number, 1);
+            assert_eq!(
+                document.pages[0].text,
+                fields().values().map(|field| field.value.as_str()).collect::<Vec<_>>().join("\n")
+            );
+            assert_eq!(result.extraction.unwrap().fields, fields());
+        }
     }
 }
 #[tokio::test]
@@ -188,7 +200,9 @@ async fn failed_extraction_keeps_ocr_and_does_not_report_preparing_review() {
         .await
         .unwrap();
     assert_eq!(stages, vec![ImportStage::Ocr, ImportStage::AiExtract]);
-    assert!(attempt.ocr.is_some());
+    let document = attempt.ocr.unwrap();
+    assert_eq!(document.provider, "unit-test");
+    assert_eq!(document.pages[0].number, 1);
     assert!(attempt.extraction.is_none());
     assert_eq!(attempt.failure.unwrap().code, "AI_NOT_CONFIGURED");
 }

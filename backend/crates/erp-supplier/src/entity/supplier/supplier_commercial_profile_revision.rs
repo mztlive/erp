@@ -334,15 +334,13 @@ impl SupplierCommercialProfileRevision {
 /// # 错误
 /// 无。
 pub(crate) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
-    let mut ids: Vec<String> = profiles
+    let mut ids: Vec<&PartyId> = profiles
         .iter()
-        .flat_map(|profile| {
-            [profile.signing_entity_party_id.to_string(), profile.payment_entity_party_id.to_string()]
-        })
+        .flat_map(|profile| [&profile.signing_entity_party_id, &profile.payment_entity_party_id])
         .collect();
-    ids.sort();
+    ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
     ids.dedup();
-    ids.into_iter().map(|id| PartyId::new(&id)).collect()
+    ids.into_iter().cloned().collect()
 }
 
 /// 把付款条件快照与经营类目规范成两个独立字段。
@@ -454,6 +452,33 @@ mod tests {
             payment_entity_party_id: PartyId::new("party-internal-2"),
             change_reason: " 首次建档 ".to_string(),
         }
+    }
+
+    #[test]
+    fn commercial_parties_are_sorted_and_deduplicated_across_profiles_and_roles() {
+        let first = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("first"),
+            SupplierCommercialProfileRevisionData {
+                signing_entity_party_id: PartyId::new("party-z"),
+                payment_entity_party_id: PartyId::new("party-a"),
+                ..profile_data()
+            },
+        )
+        .unwrap();
+        let second = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("second"),
+            SupplierCommercialProfileRevisionData {
+                signing_entity_party_id: PartyId::new("party-a"),
+                payment_entity_party_id: PartyId::new("party-a"),
+                ..profile_data()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            super::commercial_party_ids(&[first, second]),
+            ["party-a", "party-z"].map(PartyId::new).to_vec()
+        );
+        assert!(super::commercial_party_ids(&[]).is_empty());
     }
 
     /// happy path：快照与原因去空白，受控代码与税点落库。

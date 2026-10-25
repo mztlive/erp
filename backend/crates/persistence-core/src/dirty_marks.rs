@@ -65,7 +65,7 @@ pub async fn mark_ids(
     pending: impl Fn(&str) -> Document,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let unique = ids.iter().cloned().collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
+    let unique = ids.iter().map(String::as_str).collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
     for chunk in unique.chunks(MARK_CHUNK) {
         let filter = doc! { "_id": { "$in": chunk } };
         mongo_ops::update_many(collection, filter.clone(), mark_update(), executor).await?;
@@ -73,7 +73,7 @@ pub async fn mark_ids(
         let options = FindOptions::builder().projection(doc! { "_id": 1 }).build();
         let existing = mongo_ops::find_many(&rows, filter, options, executor).await?;
         let existing = existing.into_iter().map(|row| row.id).collect::<BTreeSet<_>>();
-        let missing = chunk.iter().filter(|id| !existing.contains(*id)).collect::<Vec<_>>();
+        let missing = chunk.iter().copied().filter(|id| !existing.contains(*id)).collect::<Vec<_>>();
         insert_pending(collection, &missing, &pending, executor).await?;
     }
     Ok(())
@@ -82,7 +82,7 @@ pub async fn mark_ids(
 /// 批量插入占位；并发插入导致主键冲突时逐条按 upsert 补标记。
 async fn insert_pending(
     collection: &Collection<Document>,
-    ids: &[&String],
+    ids: &[&str],
     pending: &impl Fn(&str) -> Document,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -90,7 +90,7 @@ async fn insert_pending(
         .iter()
         .map(|id| {
             let mut document = pending(id);
-            document.insert("_id", id.as_str());
+            document.insert("_id", *id);
             document.insert("dirty", true);
             document.insert("dirty_token", 1_i64);
             document
@@ -103,7 +103,7 @@ async fn insert_pending(
     for id in ids {
         let mut update = mark_update();
         update.insert("$setOnInsert", pending(id));
-        mongo_ops::update_one(collection, doc! { "_id": id.as_str() }, update, true, executor).await?;
+        mongo_ops::update_one(collection, doc! { "_id": *id }, update, true, executor).await?;
     }
     Ok(())
 }
@@ -195,8 +195,37 @@ pub async fn save_clean(
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
+    use mongodb::options::{ClientOptions, ServerAddress};
+    use mongodb::{Client, ClientSession};
 
-    use super::mark_update;
+    use super::{mark_ids, mark_update};
+    use crate::Executor;
+
+    struct UnusedExecutor;
+
+    impl Executor for UnusedExecutor {
+        fn session(&mut self) -> Option<&mut ClientSession> {
+            panic!("empty IDs must not access an executor session")
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_ids_do_not_build_pending_documents_or_access_database() {
+        let options = ClientOptions::builder()
+            .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])
+            .build();
+        let client = Client::with_options(options).unwrap();
+        let collection = client.database("unit_test").collection("dirty_marks");
+
+        mark_ids(
+            &collection,
+            &[],
+            |_| panic!("empty IDs must not build pending documents"),
+            &mut UnusedExecutor,
+        )
+        .await
+        .unwrap();
+    }
 
     #[test]
     fn mark_sets_dirty_and_advances_token() {

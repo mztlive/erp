@@ -125,7 +125,7 @@ async fn scope(
         ));
     }
     let tasks = port.open_tasks(&responsibility_key, executor).await?;
-    if tasks.is_empty() || !tasks.iter().any(|task| task.base.id == selected.base.id) {
+    if !tasks.iter().any(|task| task.base.id == selected.base.id) {
         return Err(WorkflowError::ConflictError("采购单开放履约任务已变化，请刷新后重试".to_string()));
     }
     Ok((original_owner, tasks))

@@ -65,7 +65,6 @@ impl BusinessTransfers {
             .ok_or_else(|| Error::Internal("询价商品缺失".into()))?
             .iter()
             .filter(|l| ids.contains(&l["line_id"]))
-            .cloned()
             .collect();
         if lines.is_empty() || lines.len() > 200 {
             return Err(Error::ValidationError("每次生成 1 至 200 条商品".into()));
@@ -74,7 +73,7 @@ impl BusinessTransfers {
         let mut offerings = Vec::new();
         let mut seen = HashSet::new();
         for line in &lines {
-            if !seen.insert(line["sku_id"].clone().to_string()) {
+            if !seen.insert(line["sku_id"].to_string()) {
                 continue;
             }
             let product = self
@@ -347,10 +346,8 @@ fn check_coverage(
     selected_lines: &[Value],
     selected_suppliers: &[Value],
 ) -> Result<()> {
-    let covered: HashSet<_> = groups
-        .values()
-        .flat_map(|(_, rows)| rows.iter().map(|r| r["line"]["line_id"].clone().to_string()))
-        .collect();
+    let covered: HashSet<_> =
+        groups.values().flat_map(|(_, rows)| rows.iter().map(|r| r["line"]["line_id"].to_string())).collect();
     if selected_lines.is_empty()
         || covered.len() != selected_lines.len()
         || selected_lines.iter().any(|id| !covered.contains(&id.to_string()))

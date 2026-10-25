@@ -83,11 +83,7 @@ fn latest_per_difference(
     let mut latest: HashMap<String, ReconciliationDifferenceResolution> = HashMap::new();
     for record in records {
         let key = record.reconciliation_difference_id.to_string();
-        let replace = match latest.get(&key) {
-            None => true,
-            Some(current) => record.resolution_no > current.resolution_no,
-        };
-        if replace {
+        if latest.get(&key).is_none_or(|current| record.resolution_no > current.resolution_no) {
             latest.insert(key, record);
         }
     }

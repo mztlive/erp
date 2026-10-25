@@ -170,7 +170,15 @@ impl SupplierService {
     /// 供应商或关联主体缺失时返回 `NotFound`，其余事实读取或令牌签发错误向上传播。
     pub async fn load_supplier_detail(&self, id: &str) -> Result<SupplierDetailView> {
         let loaded = self.load_detail_facts(id).await?;
-        let current_profiles = current_profile_subset(&loaded.bundle);
+        let current_id = loaded.bundle.supplier.current_commercial_profile_revision_id.as_deref();
+        let current_profiles = loaded
+            .bundle
+            .commercial_profiles
+            .iter()
+            .find(|profile| Some(profile.base.id.as_str()) == current_id)
+            .cloned()
+            .into_iter()
+            .collect();
         let account = self.assemble_detail_account(&loaded, current_profiles).await?;
         self.finish_detail_view(loaded, account).await
     }
@@ -289,7 +297,9 @@ impl SupplierService {
         let ratings = bundle.ratings.into_iter().map(Into::into).collect();
         let mut commercial_profiles: Vec<CommercialProfileView> =
             bundle.commercial_profiles.into_iter().map(Into::into).collect();
-        fill_commercial_names(&mut commercial_profiles, &commercial_party_names);
+        for profile in &mut commercial_profiles {
+            profile.fill_entity_names(&commercial_party_names);
+        }
         if let Some(current_id) = account.current_commercial_profile_revision_id.as_deref() {
             account.current_profile =
                 commercial_profiles.iter().find(|profile| profile.id == current_id).cloned();
@@ -337,44 +347,6 @@ struct LoadedSupplierDetail {
     bank_accounts: Vec<PartyBankAccountFact>,
     /// 商务签约/付款主体名称。
     commercial_party_names: HashMap<String, String>,
-}
-
-/// 取出当前商务版本子集（erp-supplier-003）。
-///
-/// 只克隆命中的单个版本，避免整束 `commercial_profiles` 克隆。
-///
-/// # 参数
-/// * `bundle` - 详情事实束
-///
-/// # 返回
-/// 返回当前版本（命中时单个元素），未命中时为空。
-fn current_profile_subset(bundle: &SupplierDetailBundle) -> Vec<SupplierCommercialProfileRevision> {
-    bundle
-        .commercial_profiles
-        .iter()
-        .find(|profile| {
-            Some(profile.base.id.as_str())
-                == bundle
-                    .supplier
-                    .current_commercial_profile_revision_id
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .as_deref()
-        })
-        .cloned()
-        .into_iter()
-        .collect()
-}
-
-/// 回填商务版本的签约/付款主体名称（erp-supplier-003）。
-///
-/// # 参数
-/// * `profiles` - 已映射的商务视图
-/// * `names` - 主体名称映射
-fn fill_commercial_names(profiles: &mut [CommercialProfileView], names: &HashMap<String, String>) {
-    for profile in profiles {
-        profile.fill_entity_names(names);
-    }
 }
 
 impl SupplierService {
@@ -466,9 +438,8 @@ fn assemble_qualification_views(
     qualifications
         .into_iter()
         .map(|qualification| {
-            let id = qualification.base.id.clone();
             let mut view: SupplierQualificationView = qualification.into();
-            view.capability_ids = links_by_qualification.remove(&id).unwrap_or_default();
+            view.capability_ids = links_by_qualification.remove(&view.id).unwrap_or_default();
             view
         })
         .collect()

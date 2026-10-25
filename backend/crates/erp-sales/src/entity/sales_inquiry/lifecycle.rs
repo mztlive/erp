@@ -210,14 +210,13 @@ impl SalesInquiry {
         self.ensure_state(&[InquiryStatus::AwaitingSales, InquiryStatus::Confirmed])?;
         validate_text(&data.reason, "重询原因", 2000)?;
         self.validate_reinquiry_scope(&data)?;
-        if let Some(mut requirement) = data.requirement.clone() {
+        if let Some(requirement) = &mut data.requirement {
             requirement.normalize(true)?;
-            self.validate_requirement_history(&requirement)?;
-            if requirement != self.current_requirement()?.data {
+            self.validate_requirement_history(requirement)?;
+            if *requirement != self.current_requirement()?.data {
                 self.append_requirement(actor, data.reason.clone(), requirement.clone(), now)?;
             }
             self.draft = requirement.clone();
-            data.requirement = Some(requirement);
         }
         self.reinquiries.push(InquiryReinquiry {
             initiated_by_procurement: false,

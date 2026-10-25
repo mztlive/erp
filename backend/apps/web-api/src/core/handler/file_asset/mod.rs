@@ -522,17 +522,13 @@ pub(crate) async fn extract_asset_file_with_limit(
     multipart: &mut Multipart,
     max_file_bytes: usize,
 ) -> std::result::Result<AssetFile, Error> {
-    let mut selected = None;
     while let Some(mut field) =
         multipart.next_field().await.map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
     {
-        let Some(file_name) = field.file_name().map(ToString::to_string) else {
+        let Some(file_name) = field.file_name().map(str::trim).filter(|name| !name.is_empty()) else {
             continue;
         };
-        let file_name = file_name.trim().to_string();
-        if file_name.is_empty() {
-            continue;
-        }
+        let file_name = file_name.to_string();
         let content_type = field
             .content_type()
             .map(ToString::to_string)
@@ -549,10 +545,9 @@ pub(crate) async fn extract_asset_file_with_limit(
             }
             content.extend_from_slice(&chunk);
         }
-        selected = Some(validate_asset_file(AssetFile { file_name, content_type, content })?);
-        break;
+        return validate_asset_file(AssetFile { file_name, content_type, content });
     }
-    selected.ok_or_else(|| Error::BadRequest("未上传文件".to_string()))
+    Err(Error::BadRequest("未上传文件".to_string()))
 }
 
 /// 把已校验文件写入对象存储并构造尚未落库的文件资产登记命令。
@@ -729,9 +724,70 @@ fn storage_key_with_extension(id: String, file_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use axum::body::Body;
+    use axum::extract::{FromRequest, Multipart};
+    use axum::http::Request;
+
     use super::{
-        AssetFile, should_compensate_pending_assets, storage_key_with_extension, validate_asset_file,
+        AssetFile, Error, extract_asset_file_with_limit, should_compensate_pending_assets,
+        storage_key_with_extension, validate_asset_file,
     };
+
+    async fn multipart(fields: &str) -> Multipart {
+        let request = Request::builder()
+            .header("content-type", "multipart/form-data; boundary=x")
+            .body(Body::from(format!("{fields}--x--\r\n")))
+            .unwrap();
+        Multipart::from_request(request, &()).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn extracts_first_named_file_and_leaves_later_fields_unread() {
+        let mut multipart = multipart(concat!(
+            "--x\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nskip\r\n",
+            "--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"  \"\r\n\r\nskip\r\n",
+            "--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\" contract.pdf \"\r\n",
+            "Content-Type: application/pdf\r\n\r\n%PDF-1.7\n\r\n",
+            "--x\r\nContent-Disposition: form-data; name=\"sensitivity_class\"\r\n\r\nSENSITIVE\r\n",
+            "--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"spoofed.pdf\"\r\n",
+            "Content-Type: text/html\r\n\r\ninvalid\r\n",
+        ))
+        .await;
+
+        let file = extract_asset_file_with_limit(&mut multipart, 9).await.unwrap();
+        assert_eq!(file.file_name, "contract.pdf");
+        assert_eq!(file.content_type, "application/pdf");
+        assert_eq!(file.content, b"%PDF-1.7\n");
+        let next = multipart.next_field().await.unwrap().unwrap();
+        assert_eq!(next.name(), Some("sensitivity_class"));
+        assert_eq!(next.text().await.unwrap(), "SENSITIVE");
+        assert_eq!(multipart.next_field().await.unwrap().unwrap().file_name(), Some("spoofed.pdf"));
+    }
+
+    #[tokio::test]
+    async fn file_extraction_preserves_missing_mime_size_and_content_errors() {
+        for (fields, limit, expected) in [
+            ("", 9, "未上传文件"),
+            (
+                "--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.pdf\"\r\n\r\n%PDF-1.7\n\r\n",
+                9,
+                "缺少文件 MIME 类型",
+            ),
+            (
+                "--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.7\n\r\n",
+                8,
+                "上传文件大小不能超过 0 MiB",
+            ),
+            (
+                "--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"contract.pdf\"\r\nContent-Type: application/pdf\r\n\r\ninvalid\r\n",
+                9,
+                "附件真实内容与声明类型不一致",
+            ),
+        ] {
+            let error = extract_asset_file_with_limit(&mut multipart(fields).await, limit).await.unwrap_err();
+            assert!(matches!(error, Error::BadRequest(message) if message == expected));
+        }
+    }
 
     #[test]
     fn supported_image_names_keep_normalized_extension() {

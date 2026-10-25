@@ -234,6 +234,42 @@ fn three_feedback_rounds_preserve_accepted_and_submitted_history() {
 }
 
 #[test]
+fn reinquiry_keeps_normalized_requirement_in_draft_and_history() {
+    for quantity in ["10", "12"] {
+        let mut inquiry = accepted();
+        let original = inquiry.requirements[0].clone();
+        let mut requirement = original.data.clone();
+        requirement.lines[0].quantity = qty(quantity);
+        requirement.lines[0].allocations[0].quantity = qty(quantity);
+        let expected = requirement.clone();
+        requirement.lines[0].allocations[0].recipient = " 张三 ".into();
+        requirement.lines[0].allocations[0].phone = " 0013800000000 ".into();
+        requirement.lines[0].allocations[0].address = " 测试路1号 ".into();
+        requirement.lines[0].allocations[0].region_name = "客户端地区名称".into();
+        inquiry
+            .reinquire(
+                1,
+                "sales",
+                InquiryReinquiryData {
+                    reason: "复核需求".into(),
+                    line_ids: vec!["line".into()],
+                    fee_ids: vec![],
+                    concerns: String::new(),
+                    requirement: Some(requirement),
+                },
+                now(),
+            )
+            .unwrap();
+        assert_eq!(inquiry.requirements[0], original);
+        assert_eq!(inquiry.draft, expected);
+        assert_eq!(inquiry.reinquiries[0].data.requirement.as_ref(), Some(&expected));
+        assert_eq!(inquiry.requirements.last().unwrap().data, expected);
+        assert_eq!(inquiry.requirement_version, if quantity == "10" { 1 } else { 2 });
+        assert_eq!(inquiry.status, InquiryStatus::ProcurementProcessing);
+    }
+}
+
+#[test]
 fn only_final_complete_feedback_can_be_published() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
@@ -682,6 +718,20 @@ fn shared_fee_owner_is_explicit_and_moves_with_responsibility() {
             now(),
         )
         .unwrap();
+    assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer2"));
+}
+
+#[test]
+fn shared_fee_owner_ignores_blank_candidates_and_preserves_exact_identity() {
+    let mut inquiry = inquiry();
+    let owners = [" ".into(), "buyer1".into(), "buyer1".into(), "buyer2".into()];
+    inquiry.assign_shared_fee_owner(None, &owners).unwrap();
+    assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer1"));
+    inquiry.assign_shared_fee_owner(Some("buyer2".into()), &owners).unwrap();
+    inquiry.assign_shared_fee_owner(None, &owners).unwrap();
+    assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer2"));
+    assert!(inquiry.assign_shared_fee_owner(Some(" buyer2 ".into()), &owners).is_err());
+    assert!(inquiry.assign_shared_fee_owner(None, &["".into(), " \t ".into()]).is_err());
     assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer2"));
 }
 

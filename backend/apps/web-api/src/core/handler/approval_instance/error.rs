@@ -241,13 +241,7 @@ pub fn parse_version(value: &str, _label: &str, headers: &HeaderMap) -> Result<u
     if bytes.is_empty() || !matches!(bytes[0], b'1'..=b'9') || !bytes[1..].iter().all(u8::is_ascii_digit) {
         return Err(ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers));
     }
-    let version = value
-        .parse::<u64>()
-        .map_err(|_| ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers))?;
-    if version == 0 {
-        return Err(ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers));
-    }
-    Ok(version)
+    value.parse::<u64>().map_err(|_| ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers))
 }
 
 /// 解析可选版本。

@@ -1,6 +1,7 @@
 //! 红字发票冲减计划，以及按账户稳定聚合的差额。
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use erp_core::money::Amount;
 
@@ -111,25 +112,23 @@ fn allocation_tax(line: &SalesInvoiceAllocation) -> Result<(Amount, Amount)> {
 /// 不返回错误。
 ///
 /// # Panics
-/// 首次出现顺序中的账户在合计表缺失时 `expect` 会 panic；该分支只表示内部聚合不变量被破坏。
+/// 同一账户合计超出 `Decimal` 可表示范围时，沿用 [`Amount::checked_add`] 的 panic 语义。
 pub fn aggregate_reversal_deltas(lines: &[RedInvoiceAllocationLine]) -> Vec<(String, Amount)> {
-    let mut order = Vec::new();
-    let mut sums: HashMap<String, Amount> = HashMap::new();
+    let mut deltas: Vec<(String, Amount)> = Vec::new();
+    let mut indices: HashMap<&str, usize> = HashMap::new();
     for line in lines {
-        sums.entry(line.account_id.clone())
-            .and_modify(|total| *total = total.checked_add(line.gross))
-            .or_insert_with(|| {
-                order.push(line.account_id.clone());
-                line.gross
-            });
+        match indices.entry(line.account_id.as_str()) {
+            Entry::Occupied(index) => {
+                let total = &mut deltas[*index.get()].1;
+                *total = total.checked_add(line.gross);
+            },
+            Entry::Vacant(index) => {
+                index.insert(deltas.len());
+                deltas.push((line.account_id.clone(), line.gross));
+            },
+        }
     }
-    order
-        .into_iter()
-        .map(|account_id| {
-            let total = sums.remove(&account_id).expect("聚合账户必须存在");
-            (account_id, total)
-        })
-        .collect()
+    deltas
 }
 
 /// 将进项分配事实适配为领域红票规划输入并构建计划。
@@ -338,6 +337,24 @@ mod red_invoice_reversal_tests {
     #[test]
     fn empty_plan_aggregates_to_empty() {
         assert!(aggregate_reversal_deltas(&[]).is_empty());
+    }
+
+    /// 正反金额抵消后仍保留首次账户位置及零金额，不丢弃账户事实。
+    #[test]
+    fn aggregate_keeps_zero_totals_and_first_seen_order() {
+        let lines = [line("b", "4.00"), line("a", "0.00"), line("b", "-4.00")];
+        assert_eq!(
+            aggregate_reversal_deltas(&lines),
+            vec![("b".to_string(), Amount::zero()), ("a".to_string(), Amount::zero())]
+        );
+    }
+
+    /// 聚合溢出沿用金额类型的显式失败，不改成截断或零值。
+    #[test]
+    #[should_panic(expected = "Addition overflowed")]
+    fn aggregate_preserves_amount_overflow() {
+        let lines = [line("a", "79228162514264337593543950335"), line("a", "1")];
+        aggregate_reversal_deltas(&lines);
     }
 
     /// 进项规划保留动作和原分配引用筛选，再按原序号消费实际剩余金额。

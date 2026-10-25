@@ -52,18 +52,14 @@ pub struct ProcurementCatalogBundle {
 /// # 错误
 /// 任一商品缺少 `current_revision_id` 时返回 `LogicError`。
 ///
-/// # Panics
-/// 排序键在同一 `HashMap` 中丢失时 panic；键来自 `products.keys()`，正常不可达。
-///
 /// # 约束
 /// 去重后按 ID 字符串字典序稳定排序，满足确定性顺序；不依赖 HashMap 迭代随机性。
 pub fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<ProductRevisionId>> {
-    let mut sorted_keys: Vec<&String> = products.keys().collect();
-    sorted_keys.sort();
-    let ids = sorted_keys
+    let mut products: Vec<_> = products.iter().collect();
+    products.sort_by_key(|(key, _)| *key);
+    let ids = products
         .into_iter()
-        .map(|key| {
-            let product = products.get(key).expect("sorted key present");
+        .map(|(_, product)| {
             product
                 .stable
                 .current_revision_id
@@ -72,7 +68,7 @@ pub fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<P
                 .ok_or_else(|| Error::from(format!("商品 {} 没有当前修订", product.base.id)))
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(unique_values(ids.into_iter()))
+    Ok(dedup_sorted_ids(ids.into_iter()))
 }
 
 /// 由批量目录映射构造每行解析事实。
@@ -158,7 +154,7 @@ pub fn category_chain(
     Ok(chain)
 }
 
-/// 对强类型目录 ID 去重并按字典序稳定排序。
+/// 对强类型目录 ID 去重并按字典序稳定排序，供目录查询与仓储复用。
 ///
 /// # 参数
 /// * `values` - 待去重的强类型 ID 迭代器
@@ -171,7 +167,7 @@ pub fn category_chain(
 ///
 /// # 约束
 /// 去重后按字符串字典序排序，避免 HashMap 随机迭代导致结果不确定。
-fn unique_values<T>(values: impl Iterator<Item = T>) -> Vec<T>
+pub fn dedup_sorted_ids<T>(values: impl Iterator<Item = T>) -> Vec<T>
 where
     T: PartialEq + ToString,
 {
@@ -183,26 +179,6 @@ where
     }
     unique.sort_by_key(|a| a.to_string());
     unique
-}
-
-/// 对强类型目录 ID 去重并按字典序稳定排序的公开复用入口。
-///
-/// # 参数
-/// * `values` - 待去重的强类型 ID 迭代器
-///
-/// # 返回
-/// 返回按字符串字典序稳定排序的唯一值集合，供 Repository 复用单一去重实现。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 与 `current_revision_ids` 共用同一去重与排序实现，保证单一规则源。
-pub fn dedup_sorted_ids<T>(values: impl Iterator<Item = T>) -> Vec<T>
-where
-    T: PartialEq + ToString,
-{
-    unique_values(values)
 }
 
 #[cfg(test)]
@@ -294,6 +270,22 @@ mod tests {
         products.insert("product-1".to_string(), test_product(None));
         let err = current_revision_ids(&products).unwrap_err();
         assert!(err.to_string().contains("没有当前修订"));
+    }
+
+    #[test]
+    fn missing_current_revision_reports_first_map_key_before_entity_id() {
+        for order in [["z-key", "a-key"], ["a-key", "z-key"]] {
+            let mut products = HashMap::new();
+            for key in order {
+                let mut product = test_product(None);
+                product.base.id = if key == "a-key" { "z-product" } else { "a-product" }.into();
+                products.insert(key.into(), product);
+            }
+            assert_eq!(
+                current_revision_ids(&products).unwrap_err().to_string(),
+                "商品 z-product 没有当前修订"
+            );
+        }
     }
 
     #[test]

@@ -57,11 +57,11 @@ pub fn electronic_delivery_draft_from_request(
             sales_order_line_id: req.sales_order_line_id,
             purchase_order_id: req.purchase_order_id,
             purchase_line_sales_allocation_id: req.purchase_line_sales_allocation_id,
-            recipient_snapshot: req.recipient_snapshot.clone(),
             recipient_snapshot_fingerprint: electronic_recipient_fingerprint(
                 &req.recipient_snapshot,
                 fingerprint_key,
             )?,
+            recipient_snapshot: req.recipient_snapshot,
             quantity: req.quantity,
             result: req.result,
             evidence_attachment_id: req.evidence_attachment_id,

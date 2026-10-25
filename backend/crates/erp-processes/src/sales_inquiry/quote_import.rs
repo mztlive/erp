@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::SalesInquiryProcess;
 use super::dto::InquiryMutationView;
 use super::execution::InquiryCommand;
-use super::internal_quote::{InquiryQuoteInput, SaveInquiryQuoteCommand};
+use super::internal_quote::InquiryQuoteInput;
 use crate::{Error, Result};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -117,14 +117,7 @@ impl SalesInquiryProcess {
             }) {
                 continue;
             }
-            let command = SaveInquiryQuoteCommand {
-                command_key: request.command_key.clone(),
-                expected_version: request.expected_version,
-                task_id: request.task_id.clone(),
-                task_version: request.task_version,
-                quote: row.quote.clone(),
-            };
-            self.append_internal_quote(actor, inquiry, task, &command, executor)
+            self.append_internal_quote(actor, inquiry, task, request.expected_version, &row.quote, executor)
                 .await
                 .map_err(|error| row_error(&row.source, error))?;
         }

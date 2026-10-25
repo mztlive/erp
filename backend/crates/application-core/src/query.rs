@@ -116,7 +116,7 @@ fn is_blank(value: &str) -> bool {
 
 /// 去首尾空白的可选查询条件，三处查询规范化入口共用。
 fn trimmed_query(value: Option<&str>) -> Option<&str> {
-    value.filter(|value| !is_blank(value)).map(str::trim)
+    value.map(str::trim).filter(|value| !value.is_empty())
 }
 
 /// 按领域白名单归一化排序字段，未提供时回退默认字段。
@@ -262,8 +262,15 @@ pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
 mod tests {
     use super::{
         DEFAULT_SORT_DIR, DEFAULT_SORT_FIELD, PageView, SortDir, normalize_paging, normalize_sort,
-        page_size_or_default,
+        normalized_text, page_size_or_default,
     };
+
+    #[test]
+    fn optional_query_text_trims_unicode_whitespace_and_keeps_absence() {
+        assert_eq!(normalized_text(None), None);
+        assert_eq!(normalized_text(Some("\u{3000}\t ")), None);
+        assert_eq!(normalized_text(Some("\u{3000}商品 🙂 \t")), Some("商品 🙂".into()));
+    }
 
     #[test]
     fn sort_normalization_accepts_allowlisted_field_and_direction() {

@@ -29,7 +29,7 @@ pub(super) fn inspect(bytes: Vec<u8>) -> Result<RenderedPage, ImportFailure> {
     let image = reader
         .decode()
         .map_err(|_| ImportFailure::new("OCR_RENDER_FAILED", "页面图片无法完整解码，请检查 PDF 后重试"))?;
-    let blank = image.to_rgba8().pixels().all(|pixel| pixel.0 == [255, 255, 255, 255]);
+    let blank = image.into_rgba8().pixels().all(|pixel| pixel.0 == [255, 255, 255, 255]);
     Ok(RenderedPage { bytes, blank })
 }
 

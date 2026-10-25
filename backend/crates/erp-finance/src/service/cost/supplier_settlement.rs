@@ -14,9 +14,6 @@ pub struct SettlementCostDeltaFact {
     pub net: Amount,
     pub tax: Amount,
 }
-fn zero_amount() -> Amount {
-    Amount::zero()
-}
 /// 仅全零三元组返回空计划，其余保持原业务错误；不得伪造 CostEntry。
 ///
 /// # 参数
@@ -28,7 +25,7 @@ fn zero_amount() -> Amount {
 /// # 错误
 /// 任一金额非零时返回 `BusinessLogicError`，不构造 `CostEntry`。
 pub fn build_settlement_cost_delta(delta: &SettlementCostDeltaFact) -> Result<Vec<CostEntry>> {
-    if delta.gross == zero_amount() && delta.net == zero_amount() && delta.tax == zero_amount() {
+    if delta.gross == Amount::zero() && delta.net == Amount::zero() && delta.tax == Amount::zero() {
         return Ok(Vec::new());
     }
     Err(Error::BusinessLogicError(
@@ -76,9 +73,9 @@ mod tests {
     fn cost_delta_writer_skips_zero_delta() {
         assert!(
             build_settlement_cost_delta(&SettlementCostDeltaFact {
-                gross: zero_amount(),
-                net: zero_amount(),
-                tax: zero_amount()
+                gross: Amount::zero(),
+                net: Amount::zero(),
+                tax: Amount::zero()
             })
             .unwrap()
             .is_empty()

@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::iter;
 
 use persistence_core::Executor;
 
@@ -26,15 +27,14 @@ impl InventoryService {
         let ids = adjustments
             .iter()
             .flat_map(|adjustment| {
-                Some(&adjustment.prepared_by)
-                    .into_iter()
+                iter::once(&adjustment.prepared_by)
                     .chain(adjustment.submitted_by.as_ref())
                     .chain(adjustment.current_assignee.as_ref())
             })
             .filter(|id| !id.trim().is_empty())
-            .cloned()
             .collect::<BTreeSet<_>>()
             .into_iter()
+            .cloned()
             .collect::<Vec<_>>();
         let names = if ids.is_empty() {
             HashMap::new()
@@ -67,9 +67,9 @@ impl InventoryService {
             .iter()
             .map(|line| &line.sku_id)
             .filter(|id| !id.trim().is_empty())
-            .cloned()
             .collect::<BTreeSet<_>>()
             .into_iter()
+            .cloned()
             .collect::<Vec<_>>();
         let skus = if ids.is_empty() {
             HashMap::new()
@@ -80,9 +80,9 @@ impl InventoryService {
             .values()
             .filter_map(|sku| sku.current_revision_id.as_ref())
             .filter(|id| !id.trim().is_empty())
-            .cloned()
             .collect::<BTreeSet<_>>()
             .into_iter()
+            .cloned()
             .collect::<Vec<_>>();
         let revisions = if revision_ids.is_empty() {
             HashMap::new()

@@ -58,8 +58,8 @@ impl CustomerAcceptanceLineBatch {
             return Err(Error::from("验收行数必须在1-200之间"));
         }
         let mut lines = Vec::with_capacity(specs.len());
-        for (index, spec) in specs.into_iter().enumerate() {
-            let line_no = u32::try_from(index + 1).map_err(|_| Error::from("验收行号溢出"))?;
+        // 行数已限制为 200，连续 u32 行号不会溢出。
+        for (line_no, spec) in (1u32..).zip(specs) {
             lines.push(CustomerAcceptanceLine::new(
                 spec.line_id,
                 CustomerAcceptanceLineData {
@@ -106,6 +106,17 @@ mod tests {
         assert_eq!(lines[0].line_no, 1);
         assert_eq!(lines[1].line_no, 2);
         assert!(lines[0].evidence_attachment_id.is_none());
+    }
+
+    /// 最大合法批次完整保留输入顺序及 1 到 200 的连续行号。
+    #[test]
+    fn maximum_batch_numbers_every_input_line() {
+        let specs = (1..=ACCEPTANCE_LINE_BATCH_MAX).map(|index| spec(&format!("line-{index}"))).collect();
+        let lines = CustomerAcceptanceLineBatch::build(CustomerAcceptanceId::new("a-1"), specs).unwrap();
+        assert_eq!(lines.len(), ACCEPTANCE_LINE_BATCH_MAX);
+        assert_eq!(lines[0].line_no, 1);
+        assert_eq!(lines[199].line_no, 200);
+        assert_eq!(lines[199].base.id, "line-200");
     }
 
     /// 数量约束由实体直接覆盖：负数量失败。

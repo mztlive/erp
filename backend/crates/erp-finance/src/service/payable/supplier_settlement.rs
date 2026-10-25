@@ -20,9 +20,6 @@ pub struct SettlementPayableSource {
     pub subject_hash: String,
     pub period_end: BusinessDate,
 }
-fn zero_amount() -> Amount {
-    Amount::zero()
-}
 /// 按原 Account ID/new、Entry ID/new 时点构造结算应付；posted_at 复用调用者冻结时间。
 ///
 /// # 参数
@@ -49,9 +46,9 @@ pub fn build_settlement_payable(
             supplier_id: source.supplier_id.clone(),
             source_type: PayableSourceType::SupplierSettlement,
             gross_total: amount,
-            settled_total: zero_amount(),
+            settled_total: Amount::zero(),
             invoiceable_total: amount,
-            invoiced_total: zero_amount(),
+            invoiced_total: Amount::zero(),
         },
         actor_id,
     )?;
@@ -117,8 +114,8 @@ mod tests {
         assert_eq!(account.supplier_id, source.supplier_id);
         assert_eq!(account.gross_total, amount);
         assert_eq!(account.invoiceable_total, amount);
-        assert_eq!(account.settled_total, zero_amount());
-        assert_eq!(account.invoiced_total, zero_amount());
+        assert_eq!(account.settled_total, Amount::zero());
+        assert_eq!(account.invoiced_total, Amount::zero());
         assert_eq!(entry.payable_account_id.as_ref(), account.base.id.as_str());
         assert_eq!(entry.entry_type, PayableEntryType::Original);
         assert_eq!(entry.direction, EntryDirection::Increase);
