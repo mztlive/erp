@@ -52,9 +52,6 @@ impl EvidenceRecordRef {
         let value = value.trim();
         let (kind, id) =
             value.split_once(':').ok_or_else(|| Error::from("证据记录 ID 必须使用 type:id 格式"))?;
-        if id.contains(':') {
-            return Err(Error::from("证据记录 ID 必须使用唯一的 type:id 格式"));
-        }
         Self::new(kind, id)
     }
 

@@ -129,11 +129,12 @@ impl Eligibility {
 
     pub(crate) fn validate_node(&self, node: &ApprovalNodeDefinition) -> EngineResult<()> {
         let members = self.members();
-        let people = node.participants();
-        if members.len() != people.len()
-            || members.iter().zip(&people).any(|(member, person)| {
-                matches!(member, Self::AnyOf { .. }) || member.participant_ref() != &person.participant_id
-            })
+        let people = node
+            .assignee_participant_id
+            .iter()
+            .chain(node.additional_assignees.iter().map(|person| &person.participant_id));
+        if members.iter().any(|member| matches!(member, Self::AnyOf { .. }))
+            || !members.into_iter().map(Self::participant_ref).eq(people)
         {
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
@@ -1165,6 +1166,36 @@ mod or_sign_tests {
     fn group() -> Eligibility {
         Eligibility::any_of(vec![eligible("u1", "张三"), eligible("u2", "李四")]).unwrap()
     }
+
+    #[test]
+    fn node_eligibility_keeps_exact_member_order_and_rejects_nested_groups() {
+        let graph = graph();
+        let node = &graph.nodes[0];
+        group().validate_node(node).unwrap();
+        Eligibility::any_of(vec![eligible("u1", "更新姓名"), eligible("u2", "另一姓名")])
+            .unwrap()
+            .validate_node(node)
+            .unwrap();
+        let invalid = [
+            eligible("u1", "张三"),
+            Eligibility::any_of(vec![
+                eligible("u1", "张三"),
+                eligible("u2", "李四"),
+                eligible("u3", "额外人员"),
+            ])
+            .unwrap(),
+            Eligibility::any_of(vec![eligible("u2", "李四"), eligible("u1", "张三")]).unwrap(),
+            Eligibility::any_of(vec![eligible("u1", "张三"), eligible("u3", "错误人员")]).unwrap(),
+            Eligibility::AnyOf { primary: Box::new(group()), additional: vec![eligible("u2", "李四")] },
+        ];
+        for eligibility in invalid {
+            assert_eq!(
+                eligibility.validate_node(node),
+                Err(super::EngineError::InvalidCommand("资格结果必须属于定义审批人"))
+            );
+        }
+    }
+
     fn started(graph: &DefinitionGraph) -> super::TransitionPlan {
         start(
             StartCommand {

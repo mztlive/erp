@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{Error, QueryIds, Result};
+use crate::{Error, QueryIds, Result, normalized_text};
 
 /// 目录有界快照上限；超出时整体拒绝。
 pub const DIRECTORY_LIMIT: usize = 10_000;
@@ -43,17 +43,18 @@ impl DirectoryQuery {
     /// # 错误
     /// 返回 `Error::ValidationError`：搜索词超过 200 个字符、`page` 为 0、显式 `page_size` 不在 1 到 100、范围版本超过 256 字节、第 2 页及以后没有范围版本，或 `ids` 与搜索词或非首页同时出现。
     pub fn normalized(mut self) -> Result<Self> {
-        self.q = self.q.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
-        self.scope_version = self.scope_version.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
+        self.q = normalized_text(self.q.as_deref());
+        self.scope_version = normalized_text(self.scope_version.as_deref());
+        let page = self.page.unwrap_or(1);
         if self.q.as_ref().is_some_and(|q| q.chars().count() > 200)
-            || self.page.unwrap_or(1) == 0
+            || page == 0
             || !(1..=100).contains(&self.page_size.unwrap_or(20))
             || self.scope_version.as_ref().is_some_and(|v| v.len() > 256)
-            || (self.page.unwrap_or(1) > 1 && self.scope_version.is_none())
+            || (page > 1 && self.scope_version.is_none())
         {
             return Err(Error::ValidationError("目录搜索、分页或范围版本不合法".into()));
         }
-        if self.ids.is_some() && (self.q.is_some() || self.page.unwrap_or(1) != 1) {
+        if self.ids.is_some() && (self.q.is_some() || page != 1) {
             return Err(Error::ValidationError("已选回显不能混用搜索和后续页".into()));
         }
         Ok(self)
@@ -204,6 +205,37 @@ mod tests {
     fn item(id: &str, name: &str) -> DirectoryItem {
         DirectoryItem { id: id.into(), code: id.into(), name: name.into(), status: "active".into() }
     }
+
+    #[test]
+    fn normalization_trims_before_limits_and_preserves_validation_priority() {
+        let query = DirectoryQuery {
+            q: Some(format!("\u{3000}{}\t", "甲".repeat(200))),
+            scope_version: Some(format!("\u{3000}{}\t", "v".repeat(256))),
+            ..Default::default()
+        }
+        .normalized()
+        .unwrap();
+        assert_eq!(query.q.as_deref(), Some("甲".repeat(200).as_str()));
+        assert_eq!(query.scope_version.as_deref(), Some("v".repeat(256).as_str()));
+
+        let blank = DirectoryQuery {
+            q: Some("\u{3000}\t".into()),
+            scope_version: Some("\u{3000}\t".into()),
+            ..Default::default()
+        }
+        .normalized()
+        .unwrap();
+        assert!(blank.q.is_none());
+        assert!(blank.scope_version.is_none());
+
+        let ids = serde_json::from_value(serde_json::json!("a")).unwrap();
+        let invalid = DirectoryQuery { ids: Some(ids), page: Some(0), ..query }.normalized();
+        assert!(matches!(
+            invalid,
+            Err(Error::ValidationError(message)) if message == "目录搜索、分页或范围版本不合法"
+        ));
+    }
+
     #[test]
     fn later_pages_require_nonblank_version_and_selected_rejects_mixed_search() {
         for version in [None, Some(" ".into())] {

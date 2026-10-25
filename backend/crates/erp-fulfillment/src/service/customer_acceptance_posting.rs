@@ -78,20 +78,16 @@ impl super::FulfillmentService {
         req: &CommitCustomerAcceptanceRequest,
         session: &mut dyn persistence_core::Executor,
     ) -> Result<Option<CustomerAcceptance>> {
-        let existing = if let Some(id) = req.acceptance_id.as_deref() {
-            Some(
-                db.customer_acceptances()
-                    .find_by_id(id, session)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("客户验收草稿不存在".to_string()))?,
-            )
-        } else {
-            None
+        let Some(id) = req.acceptance_id.as_deref() else {
+            return Ok(None);
         };
-        if let Some(existing) = existing.as_ref() {
-            ensure_existing_acceptance_draft(existing, &req.sales_order_id, req.expected_acceptance_version)?;
-        }
-        Ok(existing)
+        let existing = db
+            .customer_acceptances()
+            .find_by_id(id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("客户验收草稿不存在".to_string()))?;
+        ensure_existing_acceptance_draft(&existing, &req.sales_order_id, req.expected_acceptance_version)?;
+        Ok(Some(existing))
     }
 
     /// 任务身份准备成功后构造或更新验收表头；返回是否需先注册新的业务单据。

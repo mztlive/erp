@@ -38,11 +38,8 @@ pub(super) fn encode_set(
     let mut encoded = members.into_iter().collect::<Vec<_>>();
     encoded.sort();
     encoded.dedup();
-    if encoded.is_empty() {
-        if reject_empty {
-            return Err(Error::from(length_message));
-        }
-        return Ok(String::new());
+    if reject_empty && encoded.is_empty() {
+        return Err(Error::from(length_message));
     }
     let value = encoded.join(&separator.to_string());
     if value.len() > ENCODED_MAX_LEN {
@@ -122,21 +119,15 @@ pub(super) fn parse_status(value: &str) -> Result<String> {
 /// # 约束
 /// 首字符必须是 ASCII 字母。
 fn parse_identifier(value: &str, max_len: usize, message: &str) -> Result<String> {
-    if value.is_empty() || value.len() > max_len {
+    let mut characters = value.chars();
+    if value.len() > max_len
+        || !characters.next().is_some_and(|first| first.is_ascii_alphabetic())
+        || !characters
+            .all(|character| character.is_ascii_alphanumeric() || character == '_' || character == '-')
+    {
         return Err(Error::from(message));
     }
-    let mut characters = value.chars();
-    if let Some(first) = characters.next() {
-        if !first.is_ascii_alphabetic()
-            || !characters
-                .all(|character| character.is_ascii_alphanumeric() || character == '_' || character == '-')
-        {
-            return Err(Error::from(message));
-        }
-        Ok(value.to_string())
-    } else {
-        Err(Error::from(message))
-    }
+    Ok(value.to_string())
 }
 
 /// 解析身份 ID。
@@ -200,4 +191,34 @@ pub(super) fn parse_version_token(value: &str) -> Result<u64> {
 /// 与历史 substring 拆分字符对齐，但只用于拒绝而不是命中。
 fn is_delimiter(character: char) -> bool {
     character.is_whitespace() || DELIMITERS.contains(&character)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{encode_set, parse_kind, parse_status};
+
+    #[test]
+    fn identifiers_preserve_ascii_grammar_and_length_limits() {
+        for value in ["a", "A_0-z", &"a".repeat(64)] {
+            assert_eq!(parse_kind(value, "类型非法").unwrap(), value);
+            assert_eq!(parse_status(value).unwrap(), value);
+        }
+        for value in ["", "0kind", "_kind", "a b", "a:kind", "é", "a中", &"a".repeat(65)] {
+            assert_eq!(parse_kind(value, "类型非法").unwrap_err().to_string(), "类型非法");
+            assert_eq!(
+                parse_status(value).unwrap_err().to_string(),
+                "证据记录 ID 必须使用唯一的 type:id 格式",
+            );
+        }
+    }
+
+    #[test]
+    fn encoded_sets_preserve_empty_policy_order_deduplication_and_byte_limit() {
+        assert_eq!(encode_set([], ',', false, "集合非法").unwrap(), "");
+        assert_eq!(encode_set([], ';', true, "集合非法").unwrap_err().to_string(), "集合非法");
+        assert_eq!(encode_set(["b".into(), "a".into(), "b".into()], ';', true, "集合非法").unwrap(), "a;b",);
+        assert_eq!(encode_set(["a".repeat(512)], ';', true, "集合非法").unwrap().len(), 512);
+        assert_eq!(encode_set(["a".repeat(513)], ';', true, "集合非法").unwrap_err().to_string(), "集合非法",);
+        assert!(encode_set(["中".repeat(171)], ';', true, "集合非法").is_err());
+    }
 }

@@ -54,37 +54,42 @@ impl SupplierSettlementProcess {
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.create", &statement_no, &req.idempotency_key);
         let audit = create_statement_audit(actor, audit_id, &statement)?;
+        let item_count = snapshot.items.len();
+        let difference_count = snapshot.differences.len();
         let input = CreateWrite {
             context: self.write_context(actor),
-            statement: statement.clone(),
-            items: snapshot.items.clone(),
-            differences: snapshot.differences.clone(),
+            statement,
+            items: snapshot.items,
+            differences: snapshot.differences,
             audit,
         };
         let transaction_result =
             self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
-        if let Err(error) = transaction_result {
-            return recover_command(
-                error,
-                self.domain()
-                    .replay_statement_create(
-                        &req,
-                        &statement_no,
-                        period_start,
-                        period_end,
-                        &mut NoTransaction,
-                    )
-                    .await
-                    .map_err(Error::from),
-            );
-        }
+        let statement = match transaction_result {
+            Ok(statement) => statement,
+            Err(error) => {
+                return recover_command(
+                    error,
+                    self.domain()
+                        .replay_statement_create(
+                            &req,
+                            &statement_no,
+                            period_start,
+                            period_end,
+                            &mut NoTransaction,
+                        )
+                        .await
+                        .map_err(Error::from),
+                );
+            },
+        };
         Ok(SettlementDraftCommandResult {
             result_status: "CREATED".to_string(),
             message: "结算草稿已从服务端权威来源快照创建".to_string(),
             request_id: req.request_id,
             statement: statement.into(),
-            item_count: snapshot.items.len(),
-            difference_count: snapshot.differences.len(),
+            item_count,
+            difference_count,
         })
     }
 
@@ -385,7 +390,7 @@ struct CreateWrite {
 
 impl CreateWrite {
     /// 沿入口执行器按范围、草稿明细、审计的原顺序写入。
-    async fn persist(self, executor: &mut dyn Executor) -> Result<()> {
+    async fn persist(self, executor: &mut dyn Executor) -> Result<SupplierSettlementStatement> {
         let context = self.context;
         SettlementAccess::new(context.db.clone(), context.data_scope)
             .require_create(&context.actor, context.actor.id(), executor)
@@ -394,7 +399,7 @@ impl CreateWrite {
             .persist_statement_with_items(&self.statement, &self.items, &self.differences, executor)
             .await?;
         persist_log(&context.db, &self.audit, executor).await?;
-        Ok(())
+        Ok(self.statement)
     }
 }
 

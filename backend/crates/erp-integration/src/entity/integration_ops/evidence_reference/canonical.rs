@@ -71,28 +71,18 @@ impl CanonicalEvidenceReference {
             });
         }
         let parts = value.split(':').collect::<Vec<_>>();
-        let reference = match parts.as_slice() {
-            [kind, id] => Self {
-                kind: parse_kind(kind, "证据记录 ID 必须使用唯一的 type:id 格式")?,
-                id: parse_id(id, "证据记录 ID 必须使用唯一的 type:id 格式")?,
-                version: None,
-                status: None,
-            },
-            [kind, id, status] => Self {
-                kind: parse_kind(kind, "证据记录 ID 必须使用唯一的 type:id 格式")?,
-                id: parse_id(id, "证据记录 ID 必须使用唯一的 type:id 格式")?,
-                version: None,
-                status: Some(parse_status(status)?),
-            },
-            [kind, id, version, status] => Self {
-                kind: parse_kind(kind, "证据记录 ID 必须使用唯一的 type:id 格式")?,
-                id: parse_id(id, "证据记录 ID 必须使用唯一的 type:id 格式")?,
-                version: Some(parse_version_token(version)?),
-                status: Some(parse_status(status)?),
-            },
+        let (kind, id, version, status) = match parts.as_slice() {
+            [kind, id] => (*kind, *id, None, None),
+            [kind, id, status] => (*kind, *id, None, Some(*status)),
+            [kind, id, version, status] => (*kind, *id, Some(*version), Some(*status)),
             _ => return Err(Error::from("证据记录 ID 必须使用唯一的 type:id 格式")),
         };
-        Ok(reference)
+        Ok(Self {
+            kind: parse_kind(kind, "证据记录 ID 必须使用唯一的 type:id 格式")?,
+            id: parse_id(id, "证据记录 ID 必须使用唯一的 type:id 格式")?,
+            version: version.map(parse_version_token).transpose()?,
+            status: status.map(parse_status).transpose()?,
+        })
     }
 
     /// 返回对象类型。
@@ -246,5 +236,36 @@ mod tests {
         assert!(CanonicalEvidenceReference::parse_stored("mall_order_fact://f-1001:v1:attributed").is_err());
         assert!(CanonicalEvidenceReference::parse_stored("inbox_message:message-1:v01:processed").is_err());
         assert!(CanonicalEvidenceReference::parse_stored("").is_err());
+    }
+
+    #[test]
+    fn stored_reference_preserves_optional_segments_and_validates_each_present_segment() {
+        for (wire, version, status) in [
+            ("invoice:中文单据", None, None),
+            ("invoice:中文单据:reviewed", None, Some("reviewed")),
+            ("invoice:中文单据:v0:reviewed", Some(0), Some("reviewed")),
+            ("invoice:中文单据:v18446744073709551615:reviewed", Some(u64::MAX), Some("reviewed")),
+        ] {
+            let reference = CanonicalEvidenceReference::parse_stored(wire).unwrap();
+            assert_eq!(reference.kind(), "invoice");
+            assert_eq!(reference.id(), "中文单据");
+            assert_eq!(reference.version(), version);
+            assert_eq!(reference.status(), status);
+            assert_eq!(reference.to_string(), wire);
+        }
+        for wire in [
+            "0invoice:document",
+            "invoice:",
+            "invoice:document:",
+            "invoice:document:v:reviewed",
+            "invoice:document:v18446744073709551616:reviewed",
+            "invoice:document:v1:0reviewed",
+        ] {
+            assert_eq!(
+                CanonicalEvidenceReference::parse_stored(wire).unwrap_err().to_string(),
+                "证据记录 ID 必须使用唯一的 type:id 格式",
+                "{wire}",
+            );
+        }
     }
 }

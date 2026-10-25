@@ -6,7 +6,7 @@
 //! `version=0` 与 `disabled` 起始状态散落在持久化循环里。本 VO 独占这组集合规则，
 //! Service 只把已校验变更集、实时版本与采购确认送入编排。
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -179,10 +179,8 @@ impl CapabilityChangeSet {
                 expected_version: expected,
             });
         }
-        let change_codes: BTreeSet<String> =
-            changes.iter().map(|change| change.code.as_str().to_string()).collect();
         for key in expected_versions.keys() {
-            if !change_codes.contains(key) {
+            if !changes.iter().any(|change| change.code.as_str() == key) {
                 return Err(CapabilityChangeSetRejection::UnexpectedExpectedVersion(key.clone()));
             }
         }
@@ -210,12 +208,10 @@ impl CapabilityChangeSet {
         self,
         existing: &[SupplierApiCapability],
     ) -> Result<ClassifiedCapabilityChangeSet, CapabilityChangeSetRejection> {
-        let existing_codes: HashSet<SupplierApiCapabilityCode> =
-            existing.iter().map(|capability| capability.capability_code).collect();
         let mut changes = Vec::with_capacity(self.changes.len());
         for pending in self.changes {
             let key = pending.code.as_str();
-            let is_new = !existing_codes.contains(&pending.code);
+            let is_new = !existing.iter().any(|capability| capability.capability_code == pending.code);
             if is_new {
                 if pending.expected_version != 0 {
                     return Err(CapabilityChangeSetRejection::NewCapabilityVersionMustBeZero(key));
@@ -414,6 +410,47 @@ mod tests {
             unexpected,
             CapabilityChangeSetRejection::UnexpectedExpectedVersion("product".to_string())
         );
+    }
+
+    /// 缺失版本按输入顺序优先；多余版本按映射键顺序返回首个错误。
+    #[test]
+    fn version_key_errors_keep_input_and_map_order() {
+        let missing = CapabilityChangeSet::new(
+            vec![
+                change(SupplierApiCapabilityCode::Product, false),
+                change(SupplierApiCapabilityCode::Order, false),
+            ],
+            &versions(vec![("extra", 1)]),
+        )
+        .unwrap_err();
+        assert_eq!(missing, CapabilityChangeSetRejection::MissingExpectedVersion("product"));
+
+        let unexpected = CapabilityChangeSet::new(
+            vec![change(SupplierApiCapabilityCode::Order, false)],
+            &versions(vec![("z-extra", 1), ("order", 1), ("a-extra", 1)]),
+        )
+        .unwrap_err();
+        assert_eq!(unexpected, CapabilityChangeSetRejection::UnexpectedExpectedVersion("a-extra".into()));
+    }
+
+    /// 重复的既有事实仍只代表能力已存在，分类不得依赖集合是否已去重。
+    #[test]
+    fn classification_accepts_duplicate_existing_capability_facts() {
+        let existing = vec![
+            existing_capability(SupplierApiCapabilityCode::Order),
+            existing_capability(SupplierApiCapabilityCode::Order),
+        ];
+        let set = CapabilityChangeSet::new(
+            vec![change(SupplierApiCapabilityCode::Order, true)],
+            &versions(vec![("order", 4)]),
+        )
+        .unwrap()
+        .classify(&existing)
+        .unwrap();
+
+        assert!(!set.changes()[0].is_new);
+        assert_eq!(set.changes()[0].expected_version, 4);
+        assert!(set.changes()[0].enabled);
     }
 
     #[test]

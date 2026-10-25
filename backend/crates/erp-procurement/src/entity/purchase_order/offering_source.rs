@@ -266,15 +266,15 @@ fn inherit_sources<'a>(
 }
 
 /// 构造原行精确身份，不使用供应商和SKU作为供给关联。
-fn source_key(
-    stable: Option<&str>,
-    sku: Option<&SkuId>,
-    revision: Option<&SkuRevisionId>,
-) -> Result<(String, String, String)> {
+fn source_key<'a>(
+    stable: Option<&'a str>,
+    sku: Option<&'a SkuId>,
+    revision: Option<&'a SkuRevisionId>,
+) -> Result<(&'a str, &'a str, &'a str)> {
     Ok((
-        stable.ok_or("采购来源缺少销售稳定行")?.into(),
-        sku.ok_or("采购来源缺少SKU")?.to_string(),
-        revision.ok_or("采购来源缺少SKU版本")?.to_string(),
+        stable.ok_or("采购来源缺少销售稳定行")?,
+        sku.ok_or("采购来源缺少SKU")?.as_ref(),
+        revision.ok_or("采购来源缺少SKU版本")?.as_ref(),
     ))
 }
 

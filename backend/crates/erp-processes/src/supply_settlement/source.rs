@@ -8,8 +8,8 @@ use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierSettlementProcess;
-use crate::Result;
 use crate::audit::persist_log;
+use crate::{Error, Result};
 impl SupplierSettlementProcess {
     /// 录入一个经服务端逐行核验、不可变且可幂等恢复的来源证据批次。
     ///
@@ -49,26 +49,28 @@ impl SupplierSettlementProcess {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let evidence_for_tx = evidence.clone();
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     SupplierSettlementService::new(db.clone())
-                        .persist_source_evidence(&evidence_for_tx, executor)
+                        .persist_source_evidence(&evidence, executor)
                         .await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    Ok::<_, Error>(evidence)
                 })
             })
             .await;
-        if let Err(error) = transaction_result {
-            if let Some(existing) =
-                self.domain().replay_source(&req.request_id, &request_hash, &mut NoTransaction).await?
-            {
-                return Ok(existing);
-            }
-            return Err(error);
-        }
+        let evidence = match transaction_result {
+            Ok(evidence) => evidence,
+            Err(error) => {
+                if let Some(existing) =
+                    self.domain().replay_source(&req.request_id, &request_hash, &mut NoTransaction).await?
+                {
+                    return Ok(existing);
+                }
+                return Err(error);
+            },
+        };
         Ok(evidence.into())
     }
 }

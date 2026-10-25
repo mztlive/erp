@@ -194,17 +194,17 @@ async fn post_with_store(
     if let Some(entry) = decrease_entry {
         store.decrease_entry(&entry, session).await?;
     }
-    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
+    for (reverse, seq) in reverse_rows.into_iter().zip(seqs) {
         let allocation = ReceiptAllocation::new(
             ReceiptAllocationId::new(next_id()),
             ReceiptAllocationData {
                 customer_receipt_id: receipt.base.id.clone().into(),
-                receivable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: *seq,
+                receivable_entry_id: reverse.entry_id,
+                allocation_seq: seq,
                 allocation_action: ReceivableAllocationAction::Reverse,
                 allocated_amount: reverse.amount,
                 allocated_at: refund.occurred_at,
-                reverses_allocation_id: Some(reverse.original_id.clone()),
+                reverses_allocation_id: Some(reverse.original_id),
             },
         )?;
         store.reverse_allocation(&allocation, session).await?;

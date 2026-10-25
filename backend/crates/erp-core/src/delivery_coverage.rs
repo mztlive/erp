@@ -182,15 +182,14 @@ impl DeliveryCoverage {
             return Self::none();
         }
         let indexed = policies.iter().map(|policy| IndexedPolicy::new(policy)).collect::<Vec<_>>();
-        let reaches = TREE
+        let (included, reachable): (Vec<_>, Vec<_>) = TREE
             .leaf_chains
             .iter()
-            .map(|chain| merge_reach(indexed.iter().map(|policy| policy.judge(chain))))
-            .collect::<Vec<_>>();
-        let included =
-            reaches.iter().map(|reach| *reach == DeliveryReach::FreightIncluded).collect::<Vec<_>>();
-        let reachable =
-            reaches.iter().map(|reach| *reach != DeliveryReach::NotDeliverable).collect::<Vec<_>>();
+            .map(|chain| {
+                let reach = merge_reach(indexed.iter().map(|policy| policy.judge(chain)));
+                (reach == DeliveryReach::FreightIncluded, reach != DeliveryReach::NotDeliverable)
+            })
+            .unzip();
         Self { included: TREE.summarize(&included), reachable: TREE.summarize(&reachable) }
     }
 

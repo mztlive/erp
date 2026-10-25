@@ -1,11 +1,11 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
-use persistence_core::Transactional;
+use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::{SupplierSettlementProcess, SupplierSettlementStatementView, VoidSettlementRequest};
-use crate::Result;
 use crate::audit::persist_log;
+use crate::{Error, Result};
 
 impl SupplierSettlementProcess {
     /// 作废尚未提交复核的结算草稿。
@@ -27,12 +27,9 @@ impl SupplierSettlementProcess {
         req: VoidSettlementRequest,
         actor: &AuditActor,
     ) -> Result<SupplierSettlementStatementView> {
-        self.domain()
-            .access()
-            .require_statement(actor, "update", id, &mut persistence_core::NoTransaction)
-            .await?;
+        self.domain().access().require_statement(actor, "update", id, &mut NoTransaction).await?;
         let (mut statement, replayed) =
-            self.domain().prepare_void(id, &req, actor.id(), &mut persistence_core::NoTransaction).await?;
+            self.domain().prepare_void(id, &req, actor.id(), &mut NoTransaction).await?;
         if replayed {
             return Ok(statement.into());
         }
@@ -41,39 +38,19 @@ impl SupplierSettlementProcess {
             "supplier_settlement_statement",
             id.to_string(),
         )?;
-        self.update_statement_with_audit(&mut statement, &audit).await?;
-        Ok(statement.into())
-    }
-
-    /// 在同一事务更新结算单并写审计。
-    ///
-    /// # 参数
-    /// * `statement` - 结算单实体（就地更新）
-    /// * `audit` - 审计日志
-    ///
-    /// # 错误
-    /// 乐观锁冲突透出 `ConflictError`，提交结果未知透出 `OutcomeUnknown`。
-    async fn update_statement_with_audit(
-        &self,
-        statement: &mut SupplierSettlementStatement,
-        audit: &erp_audit::AuditLog,
-    ) -> Result<()> {
         let db = self.db.clone();
         let client = db.client().clone();
-        let mut statement_for_tx = statement.clone();
-        let audit_for_tx = audit.clone();
-        let updated = client
+        let statement = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    erp_supply::service::supplier_settlement::SupplierSettlementService::new(db.clone())
-                        .persist_statement(&mut statement_for_tx, executor)
+                    SupplierSettlementService::new(db.clone())
+                        .persist_statement(&mut statement, executor)
                         .await?;
-                    persist_log(&db, &audit_for_tx, executor).await?;
-                    Ok::<SupplierSettlementStatement, crate::Error>(statement_for_tx)
+                    persist_log(&db, &audit, executor).await?;
+                    Ok::<_, Error>(statement)
                 })
             })
             .await?;
-        *statement = updated;
-        Ok(())
+        Ok(statement.into())
     }
 }

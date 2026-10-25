@@ -92,17 +92,17 @@ async fn persist_refund<P: RefundPostingPort>(
     let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&scoped, refund.amount)?;
     let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
     revert_settlements(port, payment, actor_id, &chunks, session).await?;
-    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
+    for (reverse, seq) in reverse_rows.into_iter().zip(seqs) {
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new(port.next_id()),
             PaymentAllocationData {
                 supplier_payment_id: payment.base.id.clone().into(),
-                payable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: *seq,
+                payable_entry_id: reverse.entry_id,
+                allocation_seq: seq,
                 allocation_action: PayableAllocationAction::Reverse,
                 allocated_amount: reverse.amount,
                 allocated_at: refund.occurred_at,
-                reverses_allocation_id: Some(reverse.original_id.clone()),
+                reverses_allocation_id: Some(reverse.original_id),
             },
         )?;
         port.allocation(&allocation, session).await?;

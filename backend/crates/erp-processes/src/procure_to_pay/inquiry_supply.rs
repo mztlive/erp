@@ -255,12 +255,11 @@ fn purchase_address(row: &QuoteAddressLimit) -> PurchaseInquiryAddress {
     }
 }
 fn ensure_same_addresses(left: &[QuoteAddressLimit], right: &[QuoteAddressLimit]) -> Result<()> {
-    let ordered = |rows: &[QuoteAddressLimit]| {
-        let mut rows = rows.to_vec();
-        rows.sort_by(|a, b| a.allocation_id.cmp(&b.allocation_id));
-        rows
-    };
-    if ordered(left) != ordered(right) {
+    let mut left = left.iter().collect::<Vec<_>>();
+    let mut right = right.iter().collect::<Vec<_>>();
+    left.sort_by(|a, b| a.allocation_id.cmp(&b.allocation_id));
+    right.sort_by(|a, b| a.allocation_id.cmp(&b.allocation_id));
+    if left != right {
         return Err(changed());
     }
     Ok(())
@@ -291,4 +290,54 @@ async fn ensure_source_binding<L: InquiryPurchaseLine>(
 }
 fn changed() -> Error {
     Error::ConflictError("专项报价采用范围、原价或数量已变化，请重新确认选源".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::slice;
+
+    use super::*;
+
+    fn address(id: &str, fingerprint: &str, quantity: i64) -> QuoteAddressLimit {
+        QuoteAddressLimit {
+            allocation_id: id.into(),
+            address_fingerprint: fingerprint.into(),
+            quantity: Quantity::try_from(Decimal::from(quantity)).unwrap(),
+        }
+    }
+
+    #[test]
+    fn address_comparison_accepts_reordered_allocations_and_empty_sets() {
+        let first = address("a", "address-a", 1);
+        let second = address("b", "address-b", 2);
+        assert!(ensure_same_addresses(&[first.clone(), second.clone()], &[second, first]).is_ok());
+        assert!(ensure_same_addresses(&[], &[]).is_ok());
+    }
+
+    #[test]
+    fn address_comparison_rejects_missing_or_changed_allocation_facts() {
+        let original = address("a", "address-a", 1);
+        for replacement in [
+            vec![],
+            vec![address("b", "address-a", 1)],
+            vec![address("a", "address-b", 1)],
+            vec![address("a", "address-a", 2)],
+            vec![original.clone(), original.clone()],
+        ] {
+            assert!(matches!(
+                ensure_same_addresses(slice::from_ref(&original), &replacement),
+                Err(Error::ConflictError(message))
+                    if message == "专项报价采用范围、原价或数量已变化，请重新确认选源"
+            ));
+        }
+    }
+
+    #[test]
+    fn address_comparison_preserves_duplicate_allocation_order() {
+        let first = address("a", "address-a", 1);
+        let second = address("a", "address-b", 2);
+        let original = [first.clone(), second.clone()];
+        assert!(ensure_same_addresses(&original, &original).is_ok());
+        assert!(ensure_same_addresses(&original, &[second, first]).is_err());
+    }
 }

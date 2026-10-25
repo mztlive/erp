@@ -190,7 +190,8 @@ impl CustomerAssignmentService {
         new_assignment: &CustomerAssignment,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CustomerAssignment>> {
-        persist_assign(&self.db, customer_id, new_assignment, executor).await
+        persist_assign(&self.db, customer_id, new_assignment, executor).await?;
+        Ok(vec![new_assignment.clone()])
     }
 
     /// 建立新归属（拒绝同人重叠区间）。
@@ -219,21 +220,20 @@ impl CustomerAssignmentService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let customer_id_for_tx = customer_id.to_string();
-        let new_for_tx = new_assignment;
         let access = self.access();
         let actor_for_tx = actor.clone();
-        let changed = client
+        let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require_with(actor_for_tx, "update", &customer_id_for_tx, executor).await?;
-                    let changed = persist_assign(&db, &customer_id_for_tx, &new_for_tx, executor).await?;
+                    persist_assign(&db, &customer_id_for_tx, &new_assignment, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<Vec<CustomerAssignment>, crate::error::Error>(changed)
+                    Ok::<CustomerAssignment, crate::error::Error>(new_assignment)
                 })
             })
             .await?;
 
-        Ok(changed.into_iter().map(Into::into).collect())
+        Ok(vec![created.into()])
     }
 
     /// 提前结束既有归属的有效期。
@@ -277,7 +277,7 @@ async fn persist_assign(
     customer_id: &str,
     new_assignment: &CustomerAssignment,
     executor: &mut dyn Executor,
-) -> Result<Vec<CustomerAssignment>> {
+) -> Result<()> {
     let customer_id = CustomerAccountId::new(customer_id);
     let mut customer = db
         .customer_accounts()
@@ -288,7 +288,7 @@ async fn persist_assign(
     new_assignment.ensure_no_overlap(&existing).map_err(|error| Error::ConflictError(error.to_string()))?;
     db.customer_accounts().update(&mut customer, executor).await?;
     db.customer_assignments().create(new_assignment, executor).await?;
-    Ok(vec![new_assignment.clone()])
+    Ok(())
 }
 
 /// 在原事务校验目标版本与区间覆盖，串行化同一客户的全部人员调整。

@@ -8,7 +8,7 @@ use super::approval_participant::validate_additional;
 use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use crate::model::types::{
     ApprovalNodeType, LABEL_MAX_LEN, ModelError, ModelResult, NAME_MAX_LEN, NODE_KEY_MAX_LEN,
-    PURPOSE_MAX_LEN, base_model_at, normalize_optional, normalize_required,
+    PURPOSE_MAX_LEN, base_model_at, normalize_optional, normalize_required, trim_required,
 };
 use crate::model::{ApprovalParticipant, AssigneeResolution, ParticipantId, Timestamp};
 
@@ -88,8 +88,8 @@ impl ApprovalNodeDefinition {
     /// # 错误
     /// 缺少规则或人员、动态规则混合或签时拒绝。
     pub fn validate_assignment(&self) -> ModelResult<()> {
-        normalize_required(
-            self.assignee_label_snapshot.clone(),
+        trim_required(
+            &self.assignee_label_snapshot,
             "审批人显示名不能为空",
             LABEL_MAX_LEN,
             "审批人显示名过长",

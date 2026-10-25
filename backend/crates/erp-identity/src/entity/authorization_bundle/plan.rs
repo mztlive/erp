@@ -128,7 +128,7 @@ impl PolicyPlan {
             return Err(Error::ValidationError("新角色ID必须以 policy- 开头".into()));
         }
         let before_permissions =
-            merge(PolicyMode::Replace, &[], &current.map(|r| r.permissions.clone()).unwrap_or_default());
+            merge(PolicyMode::Replace, &[], current.map_or(&[], |role| role.permissions.as_slice()));
         let permissions = merge(requested.mode, &before_permissions, &requested.permissions);
         ensure_subset(actor, &permissions)?;
         let before = current
@@ -171,7 +171,7 @@ impl PolicyPlan {
             let requested = binding.role_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
             let role_ids = merge(binding.mode, &user.role_ids, &requested);
             for id in &role_ids {
-                ensure_subset(actor, &self.role_permissions(id, facts)?)?;
+                ensure_subset(actor, self.role_permissions(id, facts)?)?;
             }
             if role_ids != user.role_ids {
                 self.preview.changes.push(PolicyChange {
@@ -198,7 +198,7 @@ impl PolicyPlan {
             .unwrap_or(&user.role_ids);
         let mut permissions = vec![];
         for id in role_ids {
-            permissions.extend(self.role_permissions(id, facts)?);
+            permissions.extend_from_slice(self.role_permissions(id, facts)?);
         }
         let permissions = PermissionSet::new(permissions);
         let request = scope.request(self.preview.policy_version)?;
@@ -240,13 +240,13 @@ impl PolicyPlan {
     }
 
     /// 取得最终权限；所有引用均须有当前角色或同批新建角色。
-    fn role_permissions(&self, id: &str, facts: &PolicyFacts) -> Result<Vec<Permission>> {
+    fn role_permissions<'a>(&'a self, id: &str, facts: &'a PolicyFacts) -> Result<&'a [Permission]> {
         if let Some(role) = self.roles.iter().find(|r| r.declaration.id.as_str() == id) {
-            return Ok(role.permissions.clone());
+            return Ok(&role.permissions);
         }
         let role = facts.roles.get(id).ok_or_else(|| Error::ValidationError(format!("角色不存在：{id}")))?;
         ensure_role(&role.role)?;
-        Ok(role.permissions.clone())
+        Ok(&role.permissions)
     }
 }
 
@@ -293,7 +293,7 @@ pub(crate) fn ensure_role(role: &Role) -> Result<()> {
 
 /// 复用 PermissionSet 的真实覆盖规则。
 fn ensure_subset(actor: &PermissionSet, required: &[Permission]) -> Result<()> {
-    if !actor.covers(&PermissionSet::new(required.to_vec())) {
+    if !required.iter().all(|permission| actor.covers_one(permission)) {
         return Err(Error::Forbidden("不能管理或授予超出自身权限的角色".into()));
     }
     Ok(())
@@ -351,6 +351,21 @@ mod tests {
             4,
             "organization-v1",
         )
+    }
+
+    #[test]
+    fn permission_ceiling_keeps_empty_duplicate_and_wildcard_semantics() {
+        let actor = PermissionSet::new([Permission::parse("sales_order:*").unwrap()]);
+        ensure_subset(&actor, &[]).unwrap();
+        let read = Permission::parse("sales_order:list").unwrap();
+        ensure_subset(&actor, &[read.clone(), read]).unwrap();
+        ensure_subset(&actor, &[Permission::parse("sales_order:*").unwrap()]).unwrap();
+        for required in ["*:list", "customer:list"] {
+            assert!(matches!(
+                ensure_subset(&actor, &[Permission::parse(required).unwrap()]),
+                Err(Error::Forbidden(message)) if message == "不能管理或授予超出自身权限的角色"
+            ));
+        }
     }
 
     #[test]

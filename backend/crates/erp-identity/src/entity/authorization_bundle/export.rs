@@ -55,7 +55,10 @@ impl PolicyFacts {
     fn export_default_scopes(&self, document: &mut PolicyDocument) -> Result<()> {
         for (user_id, user) in &self.users {
             let permissions = PermissionSet::new(
-                user.role_ids.iter().filter_map(|id| self.roles.get(id)).flat_map(|r| r.permissions.clone()),
+                user.role_ids
+                    .iter()
+                    .filter_map(|id| self.roles.get(id))
+                    .flat_map(|role| role.permissions.iter().cloned()),
             );
             for (resource, actions, _) in WIRED_CONSUMERS {
                 let mut missing = Vec::new();

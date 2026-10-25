@@ -19,7 +19,7 @@ fn is_valid_query_id(id: &str) -> bool {
 /// 解析逗号分隔的 ID 集合：限项、去首尾空白、去重排序。
 fn parse_query_ids(raw: &str) -> Result<BTreeSet<String>, &'static str> {
     let parts = raw.split(',');
-    if parts.clone().count() > MAX_QUERY_IDS {
+    if parts.clone().nth(MAX_QUERY_IDS).is_some() {
         return Err("单次人员条件最多 100 个 ID");
     }
     let mut ids = BTreeSet::new();

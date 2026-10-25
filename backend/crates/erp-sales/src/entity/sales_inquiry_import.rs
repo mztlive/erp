@@ -106,7 +106,7 @@ struct ValidatedProduct<'a> {
     price: Option<UnitPrice>,
 }
 
-type DeliveryGroup = (String, String, String);
+type DeliveryGroup<'a> = (&'a str, &'a str, &'a str);
 
 impl InquiryImportValidation {
     /// 按精确编码、交期和交付条件建立需求，并显式记录重复配送行合并。
@@ -128,15 +128,15 @@ impl InquiryImportValidation {
         let products = validate_products(products, skus, &mut result.errors);
         let groups = group_deliveries(deliveries, &products, &mut result.errors);
         for ((code, due, terms), rows) in groups {
-            let Some(product) = products.get(&code) else {
+            let Some(product) = products.get(code) else {
                 continue;
             };
             let old = current.lines.iter().find(|line| {
                 line.sku_id == product.sku.sku_id
-                    && line.delivery_due_at == due_instant(&due).unwrap_or(line.delivery_due_at)
+                    && line.delivery_due_at == due_instant(due).unwrap_or(line.delivery_due_at)
                     && line.delivery_terms == terms
             });
-            if let Some(line) = build_line(product, &due, &terms, &rows, old, &mut result, &mut new_id) {
+            if let Some(line) = build_line(product, due, terms, &rows, old, &mut result, &mut new_id) {
                 result.data.lines.push(line);
             }
         }
@@ -203,8 +203,8 @@ fn group_deliveries<'a>(
     rows: &'a [InquiryImportDelivery],
     products: &BTreeMap<String, ValidatedProduct<'_>>,
     errors: &mut Vec<InquiryImportIssue>,
-) -> BTreeMap<DeliveryGroup, Vec<&'a InquiryImportDelivery>> {
-    let mut groups: BTreeMap<DeliveryGroup, Vec<&InquiryImportDelivery>> = BTreeMap::new();
+) -> BTreeMap<DeliveryGroup<'a>, Vec<&'a InquiryImportDelivery>> {
+    let mut groups: BTreeMap<DeliveryGroup<'_>, Vec<&InquiryImportDelivery>> = BTreeMap::new();
     for row in rows {
         if !row.sku_is_text {
             push_issue(errors, "配送需求", row.row_number, "SKU编码", "SKU 编码必须为文本，保留前导零");
@@ -237,7 +237,7 @@ fn group_deliveries<'a>(
             );
             continue;
         }
-        groups.entry((row.sku_code.clone(), row.due_date.clone(), row.terms.clone())).or_default().push(row);
+        groups.entry((&row.sku_code, &row.due_date, &row.terms)).or_default().push(row);
     }
     groups
 }
@@ -497,7 +497,7 @@ fn due_instant(value: &str) -> Option<Instant> {
 
 fn resolve_region(province: &str, city: &str, district: &str) -> std::result::Result<RegionCode, String> {
     let nodes = all_regions();
-    let candidates = nodes
+    let mut candidates = nodes
         .iter()
         .filter(|node| node.name == district || node.code == district)
         .filter(|node| {
@@ -514,12 +514,11 @@ fn resolve_region(province: &str, city: &str, district: &str) -> std::result::Re
                 || (parent.name == "市辖区" && grandparent.name == city);
             province_matches && city_matches
         })
-        .filter_map(|node| RegionCode::parse_leaf(node.code).ok())
-        .collect::<Vec<_>>();
-    if candidates.len() != 1 {
-        return Err("省、市、区县无法唯一匹配，请填写完整标准名称或地区代码".into());
+        .filter_map(|node| RegionCode::parse_leaf(node.code).ok());
+    match (candidates.next(), candidates.next()) {
+        (Some(region), None) => Ok(region),
+        _ => Err("省、市、区县无法唯一匹配，请填写完整标准名称或地区代码".into()),
     }
-    Ok(candidates[0].clone())
 }
 
 fn push_issue(
@@ -776,6 +775,17 @@ mod tests {
         assert!(!result.errors.iter().any(|error| error.column == "需求数量"));
         assert!(resolve_region("", "", "鼓楼区").is_err());
         assert!(resolve_region("北京市", "北京市", "黄浦区").is_err());
+    }
+
+    #[test]
+    fn region_resolution_accepts_names_and_codes_and_reports_missing_matches() {
+        let expected = RegionCode::parse_leaf("310115").unwrap();
+        assert_eq!(resolve_region("上海市", "上海市", "浦东新区").unwrap(), expected);
+        assert_eq!(resolve_region("310000", "310100", "310115").unwrap(), expected);
+        assert_eq!(
+            resolve_region("北京市", "北京市", "浦东新区").unwrap_err(),
+            "省、市、区县无法唯一匹配，请填写完整标准名称或地区代码"
+        );
     }
 
     #[test]
