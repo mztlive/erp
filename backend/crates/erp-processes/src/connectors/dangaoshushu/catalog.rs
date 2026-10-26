@@ -4,22 +4,22 @@ use std::num::NonZeroU32;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use erp_core::common::time::{BUSINESS_TZ_OFFSET_SECS, Instant};
-use erp_core::money::{Quantity, UnitPrice};
+use erp_core::money::Quantity;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{
     ConnectorResult, Lookup, Page, Scan, ScanWindow, Snapshot, SupplierSku,
 };
 use erp_supply::ports::connector::offer::{
     Availability, AvailabilityBlock, AvailabilityQuery, AvailabilitySource, AvailabilityState,
-    AvailableQuantity, IncrementalSupport, Offer, OfferChange, OfferSource, PriceTier, RegionCoverage,
-    ServiceAreas, SupplyQuote,
+    AvailableQuantity, IncrementalSupport, Offer, OfferChange, OfferSource, RegionCoverage, ServiceAreas,
 };
+use erp_supply::ports::connector::transform::OfferTransform;
 use rust_decimal::Decimal;
 use serde_json::Value;
 
-use super::parsing::{field, fixed, flag, id, mapping, snapshot, source_time, valid_id};
+use super::parsing::{fixed, flag, id, mapping, snapshot, source_time, valid_id};
 use super::transport::Request;
-use super::{DangaoshushuConnector, error};
+use super::{DangaoshushuConnector, DangaoshushuOffer, error};
 
 type Parameters = Vec<(String, String)>;
 
@@ -80,43 +80,6 @@ impl DangaoshushuConnector {
         Ok(product)
     }
 
-    /// 严格映射单个列表或详情规格。
-    /// # 参数
-    /// `product`、`spec` 为供应商资料，`detail` 指定身份字段来源。
-    /// # 返回
-    /// 不含伪造价格和单位的标准商品来源。
-    /// # 错误
-    /// 必填字段缺失、金额或名称无效时返回映射错误。
-    pub(super) fn offer_value(&self, product: &Value, spec: &Value, detail: bool) -> ConnectorResult<Offer> {
-        let spec_id = id(&spec[if detail { "id" } else { "spec_id" }])?;
-        let unit = self.settings.spec_units.get(&spec_id).cloned();
-        let quote = if !spec["clearing_price"].is_null() {
-            let unit_price: UnitPrice = fixed(&spec["clearing_price"])?;
-            if unit_price.to_decimal() < Decimal::ZERO {
-                return Err(mapping());
-            }
-            Some(SupplyQuote {
-                dropship: Some(PriceTier {
-                    unit_price,
-                    minimum_quantity: "1".parse().map_err(|_| mapping())?,
-                }),
-                bulk: None,
-                tax_rate: None,
-                valid_until: None,
-            })
-        } else {
-            None
-        };
-        Ok(Offer {
-            sku: SupplierSku { product_id: Some(id(&product["id"])?), spec_id },
-            name: display_field(product, "title")?,
-            specification: display_field(spec, "name")?,
-            unit,
-            quote,
-            details: super::catalog_details::details(product, spec, None)?,
-        })
-    }
-
     fn query_city(&self, region: Option<&String>) -> ConnectorResult<Option<&str>> {
         region
             .map(|region| {
@@ -129,18 +92,6 @@ impl DangaoshushuConnector {
             })
             .transpose()
     }
-}
-
-/// 展示名称允许供应商附带首尾空白，身份和金额继续使用严格解析。
-fn display_field(value: &Value, key: &str) -> ConnectorResult<String> {
-    let result = match value[key].as_str() {
-        Some(value) if !value.trim().is_empty() => Ok(value.trim().to_owned()),
-        _ => field(value, key),
-    };
-    result.map_err(|mut failure| {
-        failure.summary = format!("供应商名称字段 {key} 缺失、为空或类型无效");
-        failure
-    })
 }
 
 /// 构造冻结窗口及有界分页参数。
@@ -272,15 +223,16 @@ impl OfferSource for DangaoshushuConnector {
         let mut items = Vec::new();
         for (product_index, product) in products.iter().enumerate() {
             for (spec_index, spec) in product["specs"].as_array().ok_or_else(mapping)?.iter().enumerate() {
-                let offer = self.offer_value(product, spec, false).map_err(|mut failure| {
-                    failure.summary = format!(
-                        "第 {page} 页第 {} 个商品第 {} 个规格：{}",
-                        product_index + 1,
-                        spec_index + 1,
-                        failure.summary
-                    );
-                    failure
-                })?;
+                let offer =
+                    self.transform(DangaoshushuOffer::List { product, spec }).map_err(|mut failure| {
+                        failure.summary = format!(
+                            "第 {page} 页第 {} 个商品第 {} 个规格：{}",
+                            product_index + 1,
+                            spec_index + 1,
+                            failure.summary
+                        );
+                        failure
+                    })?;
                 items.push(snapshot(OfferChange::Upsert(Box::new(offer)), None));
             }
         }
@@ -298,8 +250,7 @@ impl OfferSource for DangaoshushuConnector {
         let Some(spec) = spec_value(&value, sku)? else {
             return Ok(Lookup::NotVisible);
         };
-        let mut offer = self.offer_value(&value["product"], spec, true)?;
-        offer.details = super::catalog_details::details(&value["product"], spec, Some(&value))?;
+        let mut offer = self.transform(DangaoshushuOffer::Detail { root: &value, spec })?;
         if let Some(category_id) = &offer.details.category_id {
             offer.details.category_name = self.category_names().await?.get(category_id).cloned();
         }
@@ -456,7 +407,13 @@ mod tests {
         let connector = connector(vec![]);
         let product = json!({"id": "product-1", "title": " 蛋糕  礼盒 "});
         let spec = json!({"id": "spec-1", "name": " 6寸 ", "clearing_price": "100.25"});
-        assert_eq!(connector.offer_value(&product, &spec, true).unwrap().name, "蛋糕  礼盒");
+        assert_eq!(
+            connector
+                .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+                .unwrap()
+                .name,
+            "蛋糕  礼盒"
+        );
         for (target, key, invalid) in [
             ("product", "id", " product-1 "),
             ("spec", "id", " spec-1 "),
@@ -468,7 +425,13 @@ mod tests {
             } else {
                 spec[key] = json!(invalid);
             }
-            assert_eq!(connector.offer_value(&product, &spec, true).unwrap_err().code, "DGSS_MAPPING");
+            assert_eq!(
+                connector
+                    .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+                    .unwrap_err()
+                    .code,
+                "DGSS_MAPPING"
+            );
         }
     }
 
@@ -588,11 +551,17 @@ mod tests {
         let product = json!({"id": "product-1", "title": "蛋糕"});
         let spec = json!({"id": "spec-1", "name": "6寸", "clearing_price": "100.25"});
         connector.settings.spec_units.clear();
-        let offer = connector.offer_value(&product, &spec, true).unwrap();
+        let offer = connector
+            .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+            .unwrap();
         assert_eq!(offer.unit, None);
         assert_eq!(offer.quote.as_ref().unwrap().dropship.as_ref().unwrap().unit_price.to_string(), "100.25");
         connector.settings.spec_units.insert("spec-1".into(), "个".into());
-        let quote = connector.offer_value(&product, &spec, true).unwrap().quote.unwrap();
+        let quote = connector
+            .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+            .unwrap()
+            .quote
+            .unwrap();
         assert_eq!(quote.dropship.unwrap().unit_price.to_string(), "100.25");
         assert_eq!(quote.bulk, None);
         assert_eq!(quote.tax_rate, None);
@@ -603,19 +572,40 @@ mod tests {
         let connector = connector(vec![]);
         let product = json!({"id":"p1","title":"商品"});
         let mut spec = json!({"id":"s1","name":"6寸","price":"100","market_price":"200"});
-        assert!(connector.offer_value(&product, &spec, true).unwrap().quote.is_none());
+        assert!(
+            connector
+                .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+                .unwrap()
+                .quote
+                .is_none()
+        );
         spec["clearing_price"] = Value::Null;
-        assert!(connector.offer_value(&product, &spec, true).unwrap().quote.is_none());
+        assert!(
+            connector
+                .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+                .unwrap()
+                .quote
+                .is_none()
+        );
         for value in ["0", "123.4567"] {
             spec["clearing_price"] = json!(value);
-            let quote = connector.offer_value(&product, &spec, true).unwrap().quote.unwrap();
+            let quote = connector
+                .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+                .unwrap()
+                .quote
+                .unwrap();
             assert_eq!(quote.dropship.unwrap().unit_price.to_string(), value);
             assert!(quote.bulk.is_none());
             assert!(quote.tax_rate.is_none());
         }
         for invalid in ["-1", "invalid", "", "1.12345"] {
             spec["clearing_price"] = json!(invalid);
-            assert!(connector.offer_value(&product, &spec, true).is_err(), "{invalid}");
+            assert!(
+                connector
+                    .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
+                    .is_err(),
+                "{invalid}"
+            );
         }
     }
 }

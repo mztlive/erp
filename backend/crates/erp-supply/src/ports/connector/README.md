@@ -13,6 +13,7 @@
 | --- | --- |
 | [mod.rs](mod.rs) | `SupplierConnector` 绑定连接；各能力独立可选；未提供的能力返回 `None` |
 | [offer.rs](offer.rs) | 商品分页、增量覆盖、两种供货报价、可供数量、完整可售地区、地址准备与配送分组 |
+| [transform.rs](transform.rs) | `OfferTransform<Source>::transform`：供应商原始商品转换为标准 `Offer` |
 | [order.rs](order.rs) | 单组创建、我方单号查单、独立支付确认、取消、单笔退款及正交状态 |
 | [callback.rs](callback.rs) | 原始报文验签、正文保护范围、刷新线索与完整观察事实、持久化后应答 |
 | [common.rs](common.rs) | 来源版本、时间、分页、动作身份、供应商幂等保证及分类失败 |
@@ -27,6 +28,15 @@
 5. 外部 ID 按字符串保存，不转整数。`SupplierSku.spec_id` 表示实际订货规格号，`product_id` 仅承载供应商商品分组。已有公司 SKU 与外部身份必须明确绑定，不自动建品或模糊匹配。
 6. 公共合同使用人民币定点值。供应商报价无法确认币种、含税口径、计量单位或费用构成时必须拒绝映射；不得舍入后静默接受。数量必须满足非负/正值及单位精度约束。
 7. 收件资料、配送上下文、回调正文及订单物流资料不派生 `Debug`。原始证据由接收层按敏感数据政策保存，普通日志只写脱敏摘要及业务关联号。
+
+## 商品转换接入要求
+
+1. 提供商品读取能力的适配器必须实现 `OfferTransform<Source>`，统一通过 `transform(source)` 将一个来源规格转换为 `Offer`。`Source` 由供应商适配器定义，可使用原始 DTO 引用或包含商品、规格及详情上下文的借用结构。
+2. 转换方法只处理已取得的数据及适配器配置，不执行 HTTP、数据库访问或公司商品建档。列表、定向查询和后台目录采集必须复用此入口；分类名称等需要另行请求的资料由读取流程补齐。
+3. 必填身份、名称和金额校验失败必须返回原有分类错误；缺失的可选字段保留未知，不得伪造价格、单位或库存。各供应商必须覆盖正常转换、缺失字段和非法输入的库单元测试。
+4. `OfferSource` 继续提供供应商无关的读取接口。`OfferTransform` 不加入 `SupplierConnector` 的可选能力表；原始数据类型只由具体适配器使用，公共业务流程仅消费标准 `Offer`。
+5. 新供应商先对照 [offer.rs](offer.rs) 确定目标字段，再实现 [transform.rs](transform.rs) 的接口。参考实现为 `erp-processes/src/connectors/dangaoshushu/transform.rs`；其列表和详情输入分别为 `DangaoshushuOffer::List` 与 `DangaoshushuOffer::Detail`。
+6. 标准来源由公共目录流程保存为供应商品库记录；采购明确选品后，由公共选品流程创建或关联公司商品/SKU。执行[供应商 API 商品与自动履约执行合同](../../../../../../docs/supplier-api-product-contract.md)，不得在转换方法内直接建立公司商品。
 
 ## 查询与同步
 

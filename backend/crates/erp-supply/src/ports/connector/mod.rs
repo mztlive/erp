@@ -11,6 +11,7 @@ pub mod common;
 pub mod offer;
 pub mod order;
 pub mod settlement;
+pub mod transform;
 
 use callback::Callbacks;
 use erp_core::ids::SupplierApiConnectionId;

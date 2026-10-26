@@ -4,13 +4,14 @@ use std::collections::BTreeMap;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{ConnectorResult, Scan, Snapshot};
 use erp_supply::ports::connector::offer::{Offer, OfferChange};
+use erp_supply::ports::connector::transform::OfferTransform;
 use erp_supply::ports::supplier_api_gateway::CatalogPage;
 use serde_json::Value;
 
-use super::DangaoshushuConnector;
 use super::catalog::{scan_parameters, spec_value};
 use super::parsing::{mapping, snapshot, source_time};
 use super::transport::Request;
+use super::{DangaoshushuConnector, DangaoshushuOffer};
 
 impl DangaoshushuConnector {
     /// 按商品补查详情，记录单项映射异常并继续读取有效规格。
@@ -55,7 +56,9 @@ impl DangaoshushuConnector {
         };
         for (index, spec) in specs.iter().enumerate() {
             let position = format!("{position}第 {} 个规格", index + 1);
-            let Some(offer) = collect_item(self.offer_value(product, spec, false), &position, page)? else {
+            let Some(offer) =
+                collect_item(self.transform(DangaoshushuOffer::List { product, spec }), &position, page)?
+            else {
                 continue;
             };
             // 同一商品详情只请求一次，映射失败也复用结果；网络失败不缓存为跳过。
@@ -75,8 +78,7 @@ impl DangaoshushuConnector {
 
     fn detail_observation(&self, offer: Offer, root: &Value) -> ConnectorResult<Snapshot<OfferChange>> {
         let spec = spec_value(root, &offer.sku)?.ok_or_else(mapping)?;
-        let mut offer = self.offer_value(&root["product"], spec, true)?;
-        offer.details = super::catalog_details::details(&root["product"], spec, Some(root))?;
+        let offer = self.transform(DangaoshushuOffer::Detail { root, spec })?;
         Ok(snapshot(OfferChange::Upsert(Box::new(offer)), source_time(&spec["updated_at"])?))
     }
 }
