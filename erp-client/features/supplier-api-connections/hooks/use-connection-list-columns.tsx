@@ -45,33 +45,6 @@ export function useConnectionListColumns(
                 },
             },
             {
-                id: "environment",
-                accessorFn: (row) => row.environmentLabel,
-                header: "环境",
-                meta: { label: "环境", width: "status" },
-                cell: ({ row }) => {
-                    const env = row.original.environment
-                    const isProd = env === "PRODUCTION"
-                    return (
-                        <span
-                            className={
-                                isProd
-                                    ? "text-sm font-medium text-destructive"
-                                    : "text-sm text-muted-foreground"
-                            }
-                            aria-label={`环境：${row.original.environmentLabel}${
-                                isProd ? "（生产环境）" : ""
-                            }`}
-                        >
-                            {row.original.environmentLabel}
-                            {isProd ? (
-                                <span className="sr-only">生产环境</span>
-                            ) : null}
-                        </span>
-                    )
-                },
-            },
-            {
                 id: "status",
                 accessorFn: (row) => row.statusLabel,
                 header: "状态",

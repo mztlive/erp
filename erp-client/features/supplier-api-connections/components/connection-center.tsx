@@ -143,8 +143,6 @@ export function ConnectionCenter({
             </PageScaffold>
         )
     }
-
-    const isProd = conn.environment === "PRODUCTION"
     const actionBlocker = (action: string) =>
         conn.actionBlockers.find((blocker) => blocker.action === action)
     const canRunHealth = conn.allowedActions.includes("RUN_HEALTH_CHECK")
@@ -336,7 +334,6 @@ export function ConnectionCenter({
             <RunHealthCheckDialog
                 open={confirmHealthOpen}
                 onOpenChange={setConfirmHealthOpen}
-                isProd={isProd}
                 canRunHealth={canRunHealth}
                 pending={runHealth.isPending}
                 onSubmit={async () => {
@@ -354,7 +351,6 @@ export function ConnectionCenter({
             <EnableConnectionDialog
                 open={confirmEnableOpen}
                 onOpenChange={setConfirmEnableOpen}
-                isProd={isProd}
                 canEnable={canEnable}
                 pending={enableMut.isPending}
                 onSubmit={async () => {

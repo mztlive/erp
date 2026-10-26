@@ -39,7 +39,6 @@ export function CenterHeader({
     onEnable: () => void
     onDisable: () => void
 }) {
-    const isProd = conn.environment === "PRODUCTION"
     return (
         <>
             <DetailPageHeader
@@ -81,14 +80,6 @@ export function CenterHeader({
                     </span>
                 }
                 statuses={[
-                    {
-                        id: "env",
-                        label: "环境",
-                        status: {
-                            label: conn.environmentLabel,
-                            tone: isProd ? "destructive" : "neutral",
-                        },
-                    },
                     {
                         id: "health",
                         label: "最近健康",

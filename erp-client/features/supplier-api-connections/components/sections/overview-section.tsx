@@ -33,23 +33,6 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                     <Row label="连接代码" value={conn.connectionCode} mono />
                     <Row label="供应商" value={conn.supplier.name} />
                     <Row
-                        label="环境"
-                        value={
-                            <span
-                                className={
-                                    conn.environment === "PRODUCTION"
-                                        ? "font-medium text-destructive"
-                                        : undefined
-                                }
-                            >
-                                {conn.environmentLabel}
-                                {conn.environment === "PRODUCTION"
-                                    ? "（生产）"
-                                    : ""}
-                            </span>
-                        }
-                    />
-                    <Row
                         label="业务负责人"
                         value={conn.businessOwner?.label ?? "—"}
                     />

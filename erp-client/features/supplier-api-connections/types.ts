@@ -4,8 +4,6 @@
 
 import type { StatusTone } from "@/components/ui/status-badge"
 
-export type ConnectionEnvironment = "DEVELOPMENT" | "STAGING" | "PRODUCTION"
-
 export type ConnectionStatus =
     | "ENABLED"
     | "DISABLED"
@@ -145,8 +143,6 @@ export type ConnectionListItem = {
     connectionId: string
     connectionCode: string
     supplier: { id: string; name: string }
-    environment: ConnectionEnvironment
-    environmentLabel: string
     status: ConnectionStatus
     statusLabel: string
     statusTone: StatusTone
@@ -168,8 +164,6 @@ export type ConnectionCenterView = {
     connectionId: string
     connectionCode: string
     supplier: { id: string; name: string }
-    environment: ConnectionEnvironment
-    environmentLabel: string
     status: ConnectionStatus
     statusLabel: string
     statusTone: StatusTone
@@ -268,12 +262,6 @@ export type FormalOutcome =
           jobId: string
           jobNo: string
       }
-
-export const ENVIRONMENT_LABEL: Record<ConnectionEnvironment, string> = {
-    DEVELOPMENT: "开发",
-    STAGING: "测试",
-    PRODUCTION: "生产",
-}
 
 export const STATUS_LABEL: Record<ConnectionStatus, string> = {
     ENABLED: "启用",

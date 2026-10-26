@@ -9,7 +9,6 @@ import {
     HEALTH_LABEL,
     type CapabilityCode,
     type CatalogFreshnessState,
-    type ConnectionEnvironment,
     type ConnectionStatus,
     type HealthResult,
 } from "@/features/supplier-api-connections/types"
@@ -100,8 +99,7 @@ export function parseConnectionAppliedFilters(
 
 /**
  * 连接列表筛选状态：Applied 由 URL 派生，Draft 本地受控，面板展开属于 UI 态
- * （docs/ui-filter-design.md §5）。environment 属视图类参数（W20 §6），
- * 由主行快捷筛选直接写 URL，不被「清除全部」清除。
+ * （docs/ui-filter-design.md §5）。
  */
 export function useConnectionListFilters(
     urlState: ConnectionsUrlState,
@@ -161,14 +159,6 @@ export function useConnectionListFilters(
         supplierIdDraft,
     ])
 
-    /** 环境是视图类参数：主行快捷筛选直接写 URL（W20 §6）。 */
-    const applyEnvironment = React.useCallback(
-        (next: ConnectionEnvironment | "ALL") => {
-            patchUrl({ environment: next, page: 1 })
-        },
-        [patchUrl],
-    )
-
     /** 移除单个已生效条件；chip 的 × 只移除自己的条件（§8.1）。 */
     const removeFilter = React.useCallback(
         (key: ConnectionFilterKey) => {
@@ -198,7 +188,7 @@ export function useConnectionListFilters(
         [patchUrl],
     )
 
-    /** 只清低频草稿；保留关键词、供应商、状态、环境与已生效结果。 */
+    /** 只清低频草稿；保留关键词、供应商、状态与已生效结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setHealthDraft([])
         setCapabilityDraft("")
@@ -214,7 +204,7 @@ export function useConnectionListFilters(
     }, [applied])
 
     /**
-     * 清空关键词与全部筛选参数并收起面板；environment 属视图类参数保留
+     * 清空关键词与全部筛选参数并收起面板
      * （W20 §6），pageSize 与连接/导航上下文一并保留（§5.6）。
      */
     const clearFilters = React.useCallback(() => {
@@ -319,7 +309,6 @@ export function useConnectionListFilters(
         filterPanelOpen,
         setFilterPanelOpen,
         applyFilters,
-        applyEnvironment,
         removeFilter,
         resetMoreFilters,
         cancelMoreFilters,

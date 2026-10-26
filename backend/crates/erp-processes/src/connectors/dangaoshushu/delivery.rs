@@ -400,7 +400,7 @@ impl DeliverySource for DangaoshushuConnector {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use erp_supply::entity::supplier_api::ConnectionEnvironment;
+    use erp_core::ids::SupplierApiConnectionId;
     use erp_supply::ports::connector::common::SupplierSku;
     use serde_json::json;
 
@@ -469,7 +469,6 @@ mod tests {
         json!({"is_distribution": "1", "can_take": "0", "can_ship": "0", "can_same": "1",
             "validate_same_row": {"delivery_amount": "8"}, "delivery_text": "快递配送"})
     }
-
     #[test]
     fn rejects_missing_address_geocode_before_side_effects() {
         let connector = connector(vec![]);
@@ -502,7 +501,6 @@ mod tests {
             "date":"2026-10-10","delivery_amount":"0","validate_delivery_times":[""]}]});
         assert!(connector.delivery_choices(&value).is_err());
     }
-
     #[test]
     fn local_and_merged_delivery_choices_share_bounded_cartesian_limit() {
         let connector = connector(vec![]);
@@ -521,17 +519,16 @@ mod tests {
         append_choices(&mut choices, vec![choice; MAX_DELIVERY_CHOICES - 1]).unwrap();
         assert_eq!(choices.len(), MAX_DELIVERY_CHOICES);
     }
-
     #[test]
-    fn old_address_context_is_rejected_after_host_or_backend_environment_change() {
+    fn old_address_context_is_rejected_after_host_or_connection_change() {
         let context = context();
-        for changed in ["host", "environment"] {
+        for changed in ["host", "connection"] {
             let mut changed_target = super::super::test_support::target();
             let mut changed_settings = settings();
             if changed == "host" {
                 changed_settings.base_url = "https://other.dangaoss.cn".into();
             } else {
-                changed_target.environment = ConnectionEnvironment::Production;
+                changed_target.connection_id = SupplierApiConnectionId::new("other-connection");
             }
             let connector = DangaoshushuConnector::bind(
                 changed_settings,
@@ -586,7 +583,6 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert!(matches!(&requests[0], Request::Form { write: true, .. }));
     }
-
     #[test]
     fn validates_whole_units_unique_specs_and_product_rule_priority() {
         for quantity in ["0", "-1", "1.5"] {

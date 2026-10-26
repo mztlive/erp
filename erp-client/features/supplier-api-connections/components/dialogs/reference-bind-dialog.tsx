@@ -66,7 +66,6 @@ export function ReferenceBindDialog({
         await onSubmit()
     }
     const optionsError = optionsQuery.isError ? optionsQuery.error : undefined
-    const isProd = conn.environment === "PRODUCTION"
     const kindLabel = kind === "credential" ? "密钥配置" : "地址配置"
     const ref =
         kind === "credential"
@@ -87,7 +86,7 @@ export function ReferenceBindDialog({
             >
                 <DialogHeader>
                     <DialogTitle>
-                        {`${ref.state === "MISSING" ? "绑定" : "更换"}${isProd ? "生产环境" : ""}${kindLabel}`}
+                        {`${ref.state === "MISSING" ? "绑定" : "更换"}${kindLabel}`}
                     </DialogTitle>
                     <DialogDescription>
                         {kind === "credential"
@@ -119,7 +118,7 @@ export function ReferenceBindDialog({
                             optionsQuery.refetch({ throwOnError: true })
                         }
                         loading={optionsQuery.isFetching}
-                        emptyLabel="当前环境没有可选择的配置，请先登记对应的供应商技术参数。"
+                        emptyLabel="没有可选择的配置，请先登记对应的供应商技术参数。"
                         id={inputId}
                         value={value || null}
                         onValueChange={(v) => {

@@ -191,8 +191,8 @@ mod tests {
 
     use erp_core::ids::{BackgroundJobId, SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{
-        ConnectionEnvironment, SupplierApiConnectionData, SupplierApiConnectionStatus,
-        SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
+        SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierHealthCheckRunData,
+        SupplierHealthCheckStatus, SupplierHealthCheckType,
     };
     use erp_support::{SupplierGovernanceJobKind, SupplierGovernanceJobSpec};
 
@@ -227,7 +227,6 @@ mod tests {
             SupplierApiConnectionData {
                 supplier_id: SupplierAccountId::new("supplier-1"),
                 connection_code: "dgss-test".into(),
-                environment: ConnectionEnvironment::Testing,
                 endpoint_reference: "unbound".into(),
                 credential_reference: None,
                 rate_limit_policy: None,

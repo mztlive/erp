@@ -61,8 +61,8 @@ fn supplier_api_connection_indexes() -> Vec<IndexModel> {
         unique_index("uk_supplier_api_connections_connection_code", doc! { "connection_code": 1 }),
         named_index("idx_supplier_api_connections_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
-            "idx_supplier_api_connections_environment_status_health",
-            doc! { "environment": 1, "status": 1, "last_health_result": 1, "updated_at": -1 },
+            "idx_supplier_api_connections_status_health",
+            doc! { "status": 1, "last_health_result": 1, "updated_at": -1 },
         ),
     ]
 }

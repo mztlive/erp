@@ -6,7 +6,7 @@ use config::DangaoshushuConfig;
 use erp_core::common::time::Instant;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
-    ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionStatus, SupplierHealthCheckType,
+    SupplierApiConnection, SupplierApiConnectionStatus, SupplierHealthCheckType,
 };
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
@@ -14,7 +14,6 @@ use erp_supply::ports::supplier_reference_registry::{
     ResolvedSupplierReference, SupplierReferenceKind, SupplierReferenceOption, SupplierReferenceRegistry,
     SupplierReferenceTarget,
 };
-use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -38,7 +37,6 @@ pub struct SupplierReferenceTickets {
 struct ReferenceTicket {
     connection_id: String,
     supplier_id: String,
-    environment: String,
     kind: String,
     fingerprint: String,
     expires_at: i64,
@@ -67,13 +65,13 @@ impl DangaoshushuRuntime {
         Ok(Self { settings, transport })
     }
 
-    /// 为已启用的后台连接取得协议客户端；连接身份、供应商与环境均来自记录。
+    /// 为已启用的后台连接取得协议客户端；连接身份、供应商均来自记录。
     /// # 参数
     /// `connection` 为本次从后台连接仓储读取的记录。
     /// # 返回
     /// 与该记录及已绑定技术引用一致的客户端，共享渠道限流。
     /// # 错误
-    /// 停用、删除、环境或技术绑定不符时拒绝业务调用。
+    /// 停用、删除或技术绑定不符时拒绝业务调用。
     pub fn connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<DangaoshushuConnector> {
         if connection.stable.status != SupplierApiConnectionStatus::Active {
             return Err(error(
@@ -115,7 +113,7 @@ impl DangaoshushuRuntime {
     /// # 返回
     /// 当前记录与所选技术配置一致时返回 Ok。
     /// # 错误
-    /// 删除、环境不适用或引用陈旧、跨连接复制时返回绑定错误。
+    /// 删除或引用陈旧、跨连接复制时返回绑定错误。
     pub fn validate_binding(
         &self,
         connection: &SupplierApiConnection,
@@ -137,12 +135,7 @@ impl DangaoshushuRuntime {
     }
 
     fn validate_target(&self, target: &SupplierReferenceTarget) -> ConnectorResult<()> {
-        let url = Url::parse(&self.settings.base_url).map_err(|_| mapping())?;
-        if target.connection_id.as_ref().is_empty()
-            || target.supplier_id.as_ref().is_empty()
-            || (target.environment == ConnectionEnvironment::Production
-                && url.host_str() == Some("dev.dangaoss.cn"))
-        {
+        if target.connection_id.as_ref().is_empty() || target.supplier_id.as_ref().is_empty() {
             return Err(binding_error());
         }
         Ok(())
@@ -152,9 +145,9 @@ impl DangaoshushuRuntime {
     /// # 参数
     /// `connection` 为授权连接记录，`now` 为签发时间。
     /// # 返回
-    /// 绑定连接、供应商、环境及当前配置的两个票据。
+    /// 绑定连接、供应商及当前配置的两个票据。
     /// # 错误
-    /// 连接不可用、环境不符或编码失败时返回分类错误。
+    /// 连接不可用或编码失败时返回分类错误。
     pub fn reference_tickets(
         &self,
         connection: &SupplierApiConnection,
@@ -177,7 +170,6 @@ impl DangaoshushuRuntime {
                 &ReferenceTicket {
                     connection_id: target.connection_id.to_string(),
                     supplier_id: target.supplier_id.to_string(),
-                    environment: target.environment.as_str().into(),
                     kind: kind.into(),
                     fingerprint: proof::binding_hash(&self.settings, target)?,
                     expires_at,
@@ -205,7 +197,6 @@ impl DangaoshushuRuntime {
         let expected = reference_kind(kind)?;
         let ticket: ReferenceTicket = proof::decode(&self.settings.private_key, payload)?;
         if ticket.kind != expected
-            || ticket.environment != target.environment.as_str()
             || ticket.connection_id != target.connection_id.as_ref()
             || ticket.supplier_id != target.supplier_id.as_ref()
             || ticket.fingerprint != proof::binding_hash(&self.settings, target)?
@@ -238,14 +229,11 @@ impl DangaoshushuRuntime {
             SupplierReferenceKind::Credential => (tickets.credential_ticket, "蛋糕叔叔渠道凭据"),
             SupplierReferenceKind::BusinessProfile => return Err(mapping()),
         };
-        let version = match target.environment {
-            ConnectionEnvironment::Testing => "测试环境",
-            ConnectionEnvironment::Production => "生产环境",
-        };
+        let version = "当前部署配置".into();
         Ok(vec![SupplierReferenceOption {
             reference_id,
             alias: alias.into(),
-            version: version.into(),
+            version,
             expires_at: tickets.expires_at,
         }])
     }
@@ -255,7 +243,7 @@ fn binding_error() -> ConnectorError {
     error(
         SupplierFailureClass::AuthSignature,
         "DGSS_CONNECTION_BINDING",
-        "供应商连接环境或已绑定的技术配置不一致，请在后台重新选择配置",
+        "供应商连接与已绑定的技术配置不一致，请在后台重新选择配置",
     )
 }
 fn reference_kind(kind: SupplierReferenceKind) -> ConnectorResult<&'static str> {
@@ -332,9 +320,7 @@ fn classified(error: ConnectorError) -> ClassifiedError {
 #[cfg(test)]
 mod tests {
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
-    use erp_supply::entity::supplier_api::{
-        ConnectionEnvironment, SupplierApiConnectionData, SupplierApiConnectionStatus,
-    };
+    use erp_supply::entity::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
 
     use super::super::test_support::{recording_connector, settings};
     use super::*;
@@ -345,7 +331,6 @@ mod tests {
             SupplierApiConnectionData {
                 supplier_id: SupplierAccountId::new("supplier-1"),
                 connection_code: "dgss-test".into(),
-                environment: ConnectionEnvironment::Testing,
                 endpoint_reference: "unbound".into(),
                 credential_reference: None,
                 rate_limit_policy: None,
@@ -356,7 +341,7 @@ mod tests {
         .unwrap()
     }
     #[test]
-    fn tickets_are_kind_environment_connection_and_expiry_bound() {
+    fn tickets_are_kind_configuration_connection_and_expiry_bound() {
         let runtime = DangaoshushuRuntime::new(settings()).unwrap();
         let connection = connection();
         let target = SupplierReferenceTarget::from(&connection);
@@ -372,17 +357,12 @@ mod tests {
                 .resolve_ticket(SupplierReferenceKind::Credential, &tickets.endpoint_ticket, &target, now)
                 .is_err()
         );
+        let mut changed_settings = settings();
+        changed_settings.base_url = "https://other.dangaoss.cn".into();
+        let changed = DangaoshushuRuntime::new(changed_settings).unwrap();
         assert!(
-            runtime
-                .resolve_ticket(
-                    SupplierReferenceKind::Endpoint,
-                    &tickets.endpoint_ticket,
-                    &SupplierReferenceTarget {
-                        environment: ConnectionEnvironment::Production,
-                        ..target.clone()
-                    },
-                    now
-                )
+            changed
+                .resolve_ticket(SupplierReferenceKind::Endpoint, &tickets.endpoint_ticket, &target, now)
                 .is_err()
         );
         assert!(
@@ -521,16 +501,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn testing_endpoint_is_not_offered_or_callable_for_production_connection() {
-        let runtime = DangaoshushuRuntime::new(settings()).unwrap();
-        let mut connection = connection();
-        connection.environment = ConnectionEnvironment::Production;
-        let options = runtime
-            .options(SupplierReferenceKind::Endpoint, &SupplierReferenceTarget::from(&connection))
-            .await
-            .unwrap();
-        assert!(options.is_empty());
-        assert!(runtime.reference_tickets(&connection, Instant::now()).is_err());
-        assert!(runtime.health_check(&connection, SupplierHealthCheckType::Authentication).await.is_err());
+    async fn configured_endpoint_is_available_without_connection_environment() {
+        for endpoint in ["https://dev.dangaoss.cn", "https://other.dangaoss.cn"] {
+            let mut config = settings();
+            config.base_url = endpoint.into();
+            let runtime = DangaoshushuRuntime::new(config).unwrap();
+            let mut connection = connection();
+            bind_from_options(&runtime, &mut connection).await;
+            assert!(runtime.bound_connector(&connection).is_ok());
+        }
     }
 }

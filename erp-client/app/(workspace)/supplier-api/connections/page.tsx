@@ -19,7 +19,7 @@ function ConnectionsFallback() {
 }
 
 /**
- * SPA 壳：URL 恢复 environment / status / health / connectionId / section / role。
+ * SPA 壳：URL 恢复 status / health / connectionId / section。
  * 业务数据不在服务端 fetch。
  */
 export default function Page() {

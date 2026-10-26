@@ -28,7 +28,6 @@ export function DisableConnectionDialog({
     pending: boolean
     onSubmit: () => Promise<void>
 }) {
-    const isProd = conn.environment === "PRODUCTION"
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -36,16 +35,13 @@ export function DisableConnectionDialog({
                 className="sm:max-w-lg"
             >
                 <DialogHeader>
-                    <DialogTitle>
-                        {isProd ? "停用生产环境连接" : "停用连接"}
-                    </DialogTitle>
+                    <DialogTitle>停用连接</DialogTitle>
                     <DialogDescription>
                         停用后暂停此连接的接口请求，历史记录保留。
                     </DialogDescription>
                 </DialogHeader>
                 <p className="text-sm font-medium">
-                    {conn.supplier.name} · {conn.connectionCode} ·{" "}
-                    {conn.environmentLabel}
+                    {conn.supplier.name} · {conn.connectionCode}
                 </p>
                 <dl className="grid gap-2 text-sm sm:grid-cols-3">
                     <div className="rounded-lg border p-3">

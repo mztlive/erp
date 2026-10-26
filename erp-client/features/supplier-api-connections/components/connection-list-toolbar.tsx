@@ -10,7 +10,6 @@ import {
     ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
 import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
@@ -21,26 +20,13 @@ import type {
 import {
     CAPABILITY_LABEL,
     CATALOG_LABEL,
-    ENVIRONMENT_LABEL,
     HEALTH_LABEL,
     type CapabilityCode,
     type CatalogFreshnessState,
-    type ConnectionEnvironment,
     type HealthResult,
 } from "@/features/supplier-api-connections/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
-
-const ENVIRONMENT_FILTER_OPTIONS: ReadonlyArray<{
-    value: ConnectionEnvironment | "ALL"
-    label: string
-}> = [
-    { value: "ALL", label: "全部" },
-    { value: "PRODUCTION", label: ENVIRONMENT_LABEL.PRODUCTION },
-    { value: "STAGING", label: ENVIRONMENT_LABEL.STAGING },
-    { value: "DEVELOPMENT", label: ENVIRONMENT_LABEL.DEVELOPMENT },
-]
 
 const CAPABILITY_FILTER_OPTIONS: ReadonlyArray<{
     value: CapabilityCode
@@ -138,8 +124,6 @@ export type ConnectionListToolbarProps = {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     onSearchDraftChange: SetState<string>
-    environment: ConnectionEnvironment | "ALL"
-    onEnvironmentChange: (value: ConnectionEnvironment | "ALL") => void
     filterPanelOpen: boolean
     onFilterPanelOpenChange: SetState<boolean>
     appliedChips: readonly ConnectionAppliedChip[]
@@ -166,8 +150,6 @@ export function ConnectionListToolbar({
     searchInputRef,
     searchDraft,
     onSearchDraftChange,
-    environment,
-    onEnvironmentChange,
     filterPanelOpen,
     onFilterPanelOpenChange,
     appliedChips,
@@ -230,32 +212,6 @@ export function ConnectionListToolbar({
                     value={supplierIdDraft}
                     onValueChange={onSupplierIdDraftChange}
                 />
-            }
-            commonFilters={
-                <div
-                    role="group"
-                    aria-label="环境快捷筛选"
-                    className="flex min-w-0 flex-wrap items-center gap-1"
-                >
-                    {ENVIRONMENT_FILTER_OPTIONS.map((option) => {
-                        const active = environment === option.value
-                        return (
-                            <Button
-                                key={option.value}
-                                id={`supplier-api-connections-toolbar-environment-${toAutomationIdSegment(option.value)}`}
-                                type="button"
-                                variant={active ? "secondary" : "ghost"}
-                                size="sm"
-                                aria-pressed={active}
-                                onClick={() =>
-                                    onEnvironmentChange(option.value)
-                                }
-                            >
-                                {option.label}
-                            </Button>
-                        )
-                    })}
-                </div>
             }
             morePanel={
                 <div className="grid min-w-0 gap-3">

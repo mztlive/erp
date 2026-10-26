@@ -31,7 +31,6 @@ impl SupplierApiService {
             SupplierApiConnectionData {
                 supplier_id: req.supplier_id,
                 connection_code: req.connection_code,
-                environment: req.environment,
                 endpoint_reference: String::new(),
                 credential_reference: None,
                 rate_limit_policy: req

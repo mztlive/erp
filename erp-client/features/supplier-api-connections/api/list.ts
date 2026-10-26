@@ -11,7 +11,6 @@ import {
 } from "@/features/supplier-api-connections/api/mapping"
 
 export type ListQueryInput = {
-    environment: string
     status?: string
     health?: string
     capability?: string
@@ -27,7 +26,6 @@ export async function fetchConnectionList(
 ): Promise<ConnectionListView> {
     const page = Math.max(1, input.page)
     const pageSize = input.pageSize ?? 20
-    const environment = input.environment.toUpperCase()
     const query: Record<string, unknown> = {
         page,
         page_size: pageSize,
@@ -36,9 +34,6 @@ export async function fetchConnectionList(
     }
     if (input.supplierId) query.supplier_id = input.supplierId
     if (input.q?.trim()) query.q = input.q.trim()
-    if (environment !== "ALL")
-        query.environment =
-            environment === "PRODUCTION" ? "production" : "testing"
     if (input.status) {
         const status = input.status.split(",")[0]?.trim().toUpperCase()
         if (status === "ENABLED") query.status = "active"

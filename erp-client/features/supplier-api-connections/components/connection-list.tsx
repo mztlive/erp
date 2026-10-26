@@ -45,7 +45,6 @@ export function ConnectionList({
 
     // 查询只消费 Applied（URL 派生且已降级非法枚举值），Draft 变化不请求（§5、§6.3）
     const listQuery = useConnectionListQuery({
-        environment: urlState.environment,
         status: filters.applied.status,
         health:
             filters.applied.health.length > 0
@@ -192,8 +191,6 @@ export function ConnectionList({
                         searchInputRef={filters.searchInputRef}
                         searchDraft={filters.searchDraft}
                         onSearchDraftChange={filters.setSearchDraft}
-                        environment={urlState.environment}
-                        onEnvironmentChange={filters.applyEnvironment}
                         filterPanelOpen={filters.filterPanelOpen}
                         onFilterPanelOpenChange={filters.setFilterPanelOpen}
                         appliedChips={appliedChips}

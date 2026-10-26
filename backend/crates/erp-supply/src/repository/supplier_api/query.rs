@@ -9,10 +9,9 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use crate::entity::supplier_api::{
-    BusinessCapabilityConfirmation, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
-    SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnectionId,
-    SupplierApiConnectionStatus, SupplierConnectionAction, SupplierConnectionCommandReceipt,
-    SupplierHealthCheckRun,
+    BusinessCapabilityConfirmation, HealthCheckResult, SupplierApiCapability, SupplierApiCapabilityCode,
+    SupplierApiCapabilityStatus, SupplierApiConnectionId, SupplierApiConnectionStatus,
+    SupplierConnectionAction, SupplierConnectionCommandReceipt, SupplierHealthCheckRun,
 };
 use crate::repository::owned::{
     BusinessCapabilityConfirmationRepository, SupplierApiCapabilityRepository,
@@ -30,8 +29,6 @@ pub struct SupplierApiConnectionRow {
     pub supplier_id: String,
     /// ERP 内稳定连接代码。
     pub connection_code: String,
-    /// 连接环境。
-    pub environment: ConnectionEnvironment,
     /// 启停/故障状态。
     pub status: SupplierApiConnectionStatus,
     /// 最近健康检查时间。
@@ -63,8 +60,6 @@ pub struct SupplierApiConnectionFilter {
     pub supplier_id: Option<String>,
     /// 连接代码（字面量、忽略大小写的子串匹配）；`None` 表示不筛选。
     pub connection_code: Option<String>,
-    /// 连接环境；`None` 表示不筛选。
-    pub environment: Option<ConnectionEnvironment>,
     /// 启停/故障状态；`None` 表示不筛选。
     pub status: Option<SupplierApiConnectionStatus>,
     /// 页码（1 起）。
@@ -84,7 +79,6 @@ impl Default for SupplierApiConnectionFilter {
             keyword_supplier_ids: Vec::new(),
             supplier_id: None,
             connection_code: None,
-            environment: None,
             status: None,
             page: 1,
             page_size: 20,
@@ -97,7 +91,7 @@ impl Default for SupplierApiConnectionFilter {
 impl QueryFilter for SupplierApiConnectionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
-    /// `supplier_id`、`environment`、`status` 按等值写入；`connection_code` 按字面量正则匹配。
+    /// `supplier_id`、`status` 按等值写入；`connection_code` 按字面量正则匹配。
     /// `q` 为 `Some` 时再以 `$and` 追加 `connection_code` 与 `keyword_supplier_ids` 的 `$or`。
     ///
     /// # 参数
@@ -114,9 +108,6 @@ impl QueryFilter for SupplierApiConnectionFilter {
             filter.insert("supplier_id", supplier_id);
         }
         insert_literal_regex_filter(&mut filter, "connection_code", self.connection_code.as_deref());
-        if let Some(environment) = self.environment {
-            filter.insert("environment", environment.as_str());
-        }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
@@ -629,7 +620,6 @@ fn supplier_api_connection_projection() -> Document {
         "id": 1,
         "supplier_id": 1,
         "connection_code": 1,
-        "environment": 1,
         "status": 1,
         "last_health_at": 1,
         "last_health_result": 1,
@@ -664,8 +654,7 @@ mod tests {
 
     use super::{SupplierApiCapabilityFilter, SupplierApiConnectionFilter, sort_doc};
     use crate::entity::supplier_api::{
-        ConnectionEnvironment, SupplierApiCapabilityCode, SupplierApiCapabilityStatus,
-        SupplierApiConnectionStatus,
+        SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnectionStatus,
     };
 
     #[test]
@@ -682,7 +671,6 @@ mod tests {
             keyword_supplier_ids: Vec::new(),
             supplier_id: Some("sup-1".to_string()),
             connection_code: Some("CN-1".to_string()),
-            environment: Some(ConnectionEnvironment::Production),
             status: Some(SupplierApiConnectionStatus::Active),
             page: 1,
             page_size: 20,
@@ -693,7 +681,6 @@ mod tests {
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("supplier_id").unwrap(), "sup-1");
-        assert_eq!(document.get_str("environment").unwrap(), "production");
         assert_eq!(document.get_str("status").unwrap(), "active");
         let regex = document.get_document("connection_code").unwrap();
         assert_eq!(regex.get_str("$regex").unwrap(), "CN\\-1");
@@ -741,7 +728,6 @@ mod keyword_regression_tests {
             keyword_supplier_ids: Vec::new(),
             supplier_id: None,
             connection_code: None,
-            environment: None,
             status: None,
             page: 1,
             page_size: 20,

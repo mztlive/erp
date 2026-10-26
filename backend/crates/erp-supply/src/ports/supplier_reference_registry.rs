@@ -6,14 +6,13 @@ use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 use serde::{Deserialize, Serialize};
 
 use super::supplier_api_gateway::ClassifiedError;
-use crate::entity::supplier_api::{ConnectionEnvironment, SupplierApiConnection};
+use crate::entity::supplier_api::SupplierApiConnection;
 
 /// 本次绑定命令预检的目标身份；禁止以票据携带的身份替代目标连接。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupplierReferenceTarget {
     pub connection_id: SupplierApiConnectionId,
     pub supplier_id: SupplierAccountId,
-    pub environment: ConnectionEnvironment,
 }
 
 impl From<&SupplierApiConnection> for SupplierReferenceTarget {
@@ -21,7 +20,6 @@ impl From<&SupplierApiConnection> for SupplierReferenceTarget {
         Self {
             connection_id: SupplierApiConnectionId::new(connection.base.id.clone()),
             supplier_id: connection.supplier_id.clone(),
-            environment: connection.environment,
         }
     }
 }
@@ -94,7 +92,7 @@ pub trait SupplierReferenceRegistry: Send + Sync {
     /// # 参数
     /// * `kind` - 引用种类。
     /// * `payload_reference` - 服务端签发的短时引用。
-    /// * `target` - 本次命令预检的目标连接、供应商及环境。
+    /// * `target` - 本次命令预检的目标连接及供应商。
     ///
     /// # 返回
     /// 校验通过时返回仅供后端配置写入的 `ResolvedSupplierReference`。

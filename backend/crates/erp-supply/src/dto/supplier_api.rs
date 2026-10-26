@@ -15,10 +15,9 @@ use validator::Validate;
 
 use crate::Result;
 use crate::entity::supplier_api::{
-    BusinessCapabilityRequirement, ConnectionEnvironment, HealthCheckResult, RateLimitPolicy,
-    SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnection,
-    SupplierApiConnectionStatus, SupplierCommandOutcome, SupplierConnectionAction, SupplierHealthCheckStatus,
-    SupplierHealthCheckType,
+    BusinessCapabilityRequirement, HealthCheckResult, RateLimitPolicy, SupplierApiCapabilityCode,
+    SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionStatus, SupplierCommandOutcome,
+    SupplierConnectionAction, SupplierHealthCheckStatus, SupplierHealthCheckType,
 };
 
 /// 连接列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
@@ -96,8 +95,6 @@ pub struct CreateSupplierApiConnectionRequest {
     /// ERP 内稳定连接代码（全局唯一）。
     #[validate(custom(function = "non_blank", message = "连接代码不能为空"))]
     pub connection_code: String,
-    /// 连接环境。
-    pub environment: ConnectionEnvironment,
     /// 地址配置引用。
     pub endpoint_reference: Option<String>,
     /// 密钥管理系统引用（不保存明文密钥）。
@@ -117,8 +114,6 @@ pub struct UpdateSupplierApiConnectionRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,
-    /// 连接环境；缺省表示不修改。
-    pub environment: Option<ConnectionEnvironment>,
     /// 地址配置引用；缺省表示不修改。
     pub endpoint_reference: Option<String>,
     /// 密钥管理系统引用；缺省表示不修改。
@@ -153,8 +148,6 @@ pub struct SupplierApiConnectionListParams {
     pub supplier_id: Option<String>,
     /// 连接代码子串筛选（忽略大小写）。
     pub connection_code: Option<String>,
-    /// 连接环境筛选。
-    pub environment: Option<ConnectionEnvironment>,
     /// 启停/故障状态筛选。
     pub status: Option<SupplierApiConnectionStatus>,
     /// 页码（1 起）。
@@ -178,8 +171,6 @@ pub(crate) struct SupplierApiConnectionListQuery {
     pub supplier_id: Option<String>,
     /// 连接代码子串筛选。
     pub connection_code: Option<String>,
-    /// 连接环境筛选。
-    pub environment: Option<ConnectionEnvironment>,
     /// 启停/故障状态筛选。
     pub status: Option<SupplierApiConnectionStatus>,
     /// 分页与排序参数。
@@ -206,7 +197,6 @@ impl SupplierApiConnectionListParams {
             q: normalized_text(self.q.as_deref()),
             supplier_id: normalized_text(self.supplier_id.as_deref()),
             connection_code: normalized_text(self.connection_code.as_deref()),
-            environment: self.environment,
             status: self.status,
             paging: PageParams {
                 page: page_or_default(self.page),
@@ -411,8 +401,6 @@ pub struct SupplierApiConnectionView {
     pub supplier_id: String,
     /// ERP 内稳定连接代码。
     pub connection_code: String,
-    /// 连接环境。
-    pub environment: ConnectionEnvironment,
     /// 启停/故障状态。
     pub status: SupplierApiConnectionStatus,
     /// 限流策略。
@@ -596,7 +584,6 @@ impl From<SupplierApiConnection> for SupplierApiConnectionView {
             id: connection.base.id,
             supplier_id: connection.supplier_id.to_string(),
             connection_code: connection.connection_code,
-            environment: connection.environment,
             status: connection.stable.status,
             rate_limit_policy: connection.rate_limit_policy.map(|policy| RateLimitPolicyView {
                 max_requests: policy.max_requests(),
@@ -649,7 +636,29 @@ mod tests {
     use validator::Validate;
 
     use super::{SortDir, SupplierApiConnectionListParams, normalize_sort};
-    use crate::entity::supplier_api::{ConnectionEnvironment, SupplierApiConnectionStatus};
+    use crate::entity::supplier_api::SupplierApiConnectionStatus;
+
+    /// 创建请求不要求环境；旧调用方的环境参数不改变当前部署的连接身份。
+    #[test]
+    fn create_request_uses_supplier_and_code_without_environment() {
+        let payload = serde_json::json!({
+            "supplier_id": "sup-1", "connection_code": "CONN-1", "capabilities": []
+        });
+        let request: super::CreateSupplierApiConnectionRequest =
+            serde_json::from_value(payload.clone()).unwrap();
+        request.validate().unwrap();
+        let expected = serde_json::to_value(request).unwrap();
+        assert!(expected.get("environment").is_none());
+        let mut legacy = payload.clone();
+        legacy["environment"] = "production".into();
+        let request: super::CreateSupplierApiConnectionRequest = serde_json::from_value(legacy).unwrap();
+        assert_eq!(serde_json::to_value(request).unwrap(), expected);
+        let mut missing_supplier = payload;
+        missing_supplier.as_object_mut().unwrap().remove("supplier_id");
+        assert!(
+            serde_json::from_value::<super::CreateSupplierApiConnectionRequest>(missing_supplier).is_err()
+        );
+    }
 
     #[test]
     fn safe_reference_view_new_defaults_to_hidden() {
@@ -681,7 +690,6 @@ mod tests {
             q: None,
             supplier_id: Some(" sup-1 ".to_string()),
             connection_code: Some(" CN-1 ".to_string()),
-            environment: Some(ConnectionEnvironment::Production),
             status: Some(SupplierApiConnectionStatus::Active),
             page: None,
             page_size: None,
@@ -691,7 +699,6 @@ mod tests {
         let query = params.normalized().unwrap();
         assert_eq!(query.supplier_id.as_deref(), Some("sup-1"));
         assert_eq!(query.connection_code.as_deref(), Some("CN-1"));
-        assert_eq!(query.environment, Some(ConnectionEnvironment::Production));
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
@@ -704,7 +711,6 @@ mod tests {
             q: None,
             supplier_id: None,
             connection_code: None,
-            environment: None,
             status: None,
             page: Some(0),
             page_size: Some(u32::MAX),
@@ -727,7 +733,6 @@ mod tests {
             id: "conn-1".to_string(),
             supplier_id: "sup-1".to_string(),
             connection_code: "CN-1".to_string(),
-            environment: ConnectionEnvironment::Production,
             status: SupplierApiConnectionStatus::Active,
             rate_limit_policy: None,
             last_health_at: None,
@@ -754,6 +759,7 @@ mod tests {
         })
         .unwrap();
         assert!(view.get("credential_reference").is_none());
+        assert!(view.get("environment").is_none());
         assert_eq!(view["safe_references"]["credential"]["state"], "BOUND");
         assert_eq!(view["connection_code"], "CN-1");
     }

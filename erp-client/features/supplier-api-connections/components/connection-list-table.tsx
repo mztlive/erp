@@ -85,7 +85,7 @@ export function ConnectionListTable({
                         kind="filter"
                         className={listWorkspaceEmptyStateClassName}
                         title="当前筛选无结果"
-                        description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
+                        description="没有连接符合当前状态/能力/健康条件，可清除筛选。"
                         action={
                             <Button
                                 id="supplier-api-connections-list-clear-filters"
@@ -103,7 +103,7 @@ export function ConnectionListTable({
                         kind="no-data"
                         className={listWorkspaceEmptyStateClassName}
                         title="尚未接入供应商连接"
-                        description="当前环境还没有连接身份。有权限时可新建连接。"
+                        description="还没有连接。有权限时可新建连接。"
                         action={
                             data?.hasModulePermission ? (
                                 <Button

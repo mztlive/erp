@@ -299,7 +299,7 @@ export function sourcingProductColumns({
                     调整
                 </Button>
             ),
-            meta: { width: "status", align: "end" },
+            meta: { width: "status", align: "center" },
         },
     ]
 }

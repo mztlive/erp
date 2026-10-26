@@ -9,8 +9,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::supplier_api::{
-    ConnectionEnvironment, SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection,
-    SupplierApiConnectionStatus,
+    SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection, SupplierApiConnectionStatus,
 };
 
 mod confirmation;
@@ -342,16 +341,14 @@ impl SupplierConnectionGovernance<'_> {
                 None,
             )];
         }
-        if self.connection.environment == ConnectionEnvironment::Production
-            && active.iter().any(|capability| {
-                self.latest_confirmation(capability.capability_code)
-                    .is_some_and(|confirmation| confirmation.confirmed_by == health.requested_by)
-            })
-        {
+        if active.iter().any(|capability| {
+            self.latest_confirmation(capability.capability_code)
+                .is_some_and(|confirmation| confirmation.confirmed_by == health.requested_by)
+        }) {
             return vec![governance_blocker(
                 action,
-                "PRODUCTION_DUAL_ROLE_REQUIRED",
-                "生产环境必须由不同人员完成采购业务确认与技术健康检查",
+                "DUAL_ROLE_REQUIRED",
+                "必须由不同人员完成采购业务确认与技术健康检查",
                 None,
             )];
         }
@@ -448,16 +445,12 @@ mod tests {
     use crate::entity::supplier_api::HealthCheckResult;
 
     /// 构造已绑定技术引用的连接治理测试夹具。
-    fn governance_connection(
-        status: SupplierApiConnectionStatus,
-        environment: ConnectionEnvironment,
-    ) -> SupplierApiConnection {
+    fn governance_connection(status: SupplierApiConnectionStatus) -> SupplierApiConnection {
         SupplierApiConnection::new(
             SupplierApiConnectionId::new("conn-1"),
             crate::entity::supplier_api::SupplierApiConnectionData {
                 supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 connection_code: "CONN-1".to_string(),
-                environment,
                 endpoint_reference: "endpoint://supplier-1".to_string(),
                 credential_reference: Some("credential://supplier-1".to_string()),
                 rate_limit_policy: None,
@@ -611,7 +604,6 @@ mod tests {
             crate::entity::supplier_api::SupplierApiConnectionData {
                 supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 connection_code: "CONN-1".to_string(),
-                environment: ConnectionEnvironment::Testing,
                 endpoint_reference: String::new(),
                 credential_reference: None,
                 rate_limit_policy: None,
@@ -695,16 +687,15 @@ mod tests {
         assert!(!run.verifies(&changed));
     }
 
-    /// 启用连接要求当前业务确认与健康证据，生产环境还要求双人职责。
+    /// 启用连接要求当前业务确认、健康证据及双人职责。
     #[test]
-    fn enable_governance_requires_current_evidence_and_production_dual_roles() {
+    fn enable_governance_requires_current_evidence_and_distinct_actors() {
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
         let confirmation = governance_confirmation(&capability, "operator-1");
-        let testing =
-            governance_connection(SupplierApiConnectionStatus::Disabled, ConnectionEnvironment::Testing);
-        let health = governance_health(&testing, &capability, "operator-1");
+        let connection = governance_connection(SupplierApiConnectionStatus::Disabled);
+        let health = governance_health(&connection, &capability, "technician-1");
         let governance = SupplierConnectionGovernance {
-            connection: &testing,
+            connection: &connection,
             capabilities: std::slice::from_ref(&capability),
             confirmations: std::slice::from_ref(&confirmation),
             health_runs: std::slice::from_ref(&health),
@@ -717,10 +708,9 @@ mod tests {
             )
             .is_empty());
 
-        let production =
-            governance_connection(SupplierApiConnectionStatus::Disabled, ConnectionEnvironment::Production);
+        let health = governance_health(&connection, &capability, "operator-1");
         let governance = SupplierConnectionGovernance {
-            connection: &production,
+            connection: &connection,
             capabilities: std::slice::from_ref(&capability),
             confirmations: std::slice::from_ref(&confirmation),
             health_runs: std::slice::from_ref(&health),
@@ -732,7 +722,7 @@ mod tests {
                 true,
             )[0]
             .code,
-            "PRODUCTION_DUAL_ROLE_REQUIRED"
+            "DUAL_ROLE_REQUIRED"
         );
     }
 
@@ -740,8 +730,7 @@ mod tests {
     #[test]
     fn disable_and_catalog_governance_use_current_business_facts() {
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
-        let mut connection =
-            governance_connection(SupplierApiConnectionStatus::Active, ConnectionEnvironment::Testing);
+        let mut connection = governance_connection(SupplierApiConnectionStatus::Active);
         connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(4));
         let governance = SupplierConnectionGovernance {
             connection: &connection,

@@ -11,18 +11,16 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 
-/** 启用连接确认（生产环境二次确认）。 */
+/** 启用连接确认。 */
 export function EnableConnectionDialog({
     open,
     onOpenChange,
-    isProd,
     canEnable,
     pending,
     onSubmit,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    isProd: boolean
     canEnable: boolean
     pending: boolean
     onSubmit: () => Promise<void>
@@ -34,12 +32,9 @@ export function EnableConnectionDialog({
                 className="sm:max-w-md"
             >
                 <DialogHeader>
-                    <DialogTitle>
-                        {isProd ? "启用生产环境连接" : "启用连接"}
-                    </DialogTitle>
+                    <DialogTitle>启用连接</DialogTitle>
                     <DialogDescription>
                         启用后恢复此连接的接口请求。
-                        {isProd ? " 请核对生产环境连接。" : ""}
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>

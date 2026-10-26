@@ -6,7 +6,6 @@ import { apiGet } from "@/lib/api"
 import type {
     CapabilityCode,
     ConnectionCenterView,
-    ConnectionEnvironment,
     ConnectionListItem,
     ConnectionStatus,
     HealthResult,
@@ -15,7 +14,6 @@ import type {
 import {
     CAPABILITY_LABEL,
     CATALOG_LABEL,
-    ENVIRONMENT_LABEL,
     HEALTH_LABEL,
     HEALTH_TONE,
     STATUS_LABEL,
@@ -40,7 +38,6 @@ export type BackendConnection = {
     id: string
     supplier_id: string
     connection_code: string
-    environment: "production" | "testing" | string
     status: "active" | "disabled" | "fault" | string
     rate_limit_policy?: { max_requests: number; window_secs: number } | null
     last_health_at?: number | null
@@ -129,23 +126,6 @@ export type BackendCapabilityUpdateResult = {
 export function secsToIso(secs?: number | null): string | undefined {
     if (secs == null || secs <= 0) return undefined
     return new Date(secs * 1000).toISOString()
-}
-
-function mapEnvironment(raw: string): ConnectionEnvironment {
-    if (raw === "production") return "PRODUCTION"
-    if (raw === "testing") return "STAGING"
-    const upper = raw.toUpperCase()
-    return upper === "DEVELOPMENT" ||
-        upper === "STAGING" ||
-        upper === "PRODUCTION"
-        ? upper
-        : "STAGING"
-}
-
-export function toBackendEnvironment(
-    env: ConnectionEnvironment,
-): "production" | "testing" {
-    return env === "PRODUCTION" ? "production" : "testing"
 }
 
 function mapStatus(raw: string): ConnectionStatus {
@@ -243,7 +223,6 @@ export function toListItem(
     supplierName?: string,
 ): ConnectionListItem {
     const status = mapStatus(connection.status)
-    const environment = mapEnvironment(connection.environment)
     const health = mapHealth(connection.last_health_result)
     const enabledCapabilities = capabilities.filter(
         (item) => item.status === "active",
@@ -255,8 +234,6 @@ export function toListItem(
             id: connection.supplier_id,
             name: supplierName ?? connection.supplier_id,
         },
-        environment,
-        environmentLabel: ENVIRONMENT_LABEL[environment],
         status,
         statusLabel: STATUS_LABEL[status],
         statusTone: STATUS_TONE[status],
@@ -306,7 +283,6 @@ export function toCenter(
     supplierName?: string,
 ): ConnectionCenterView {
     const status = mapStatus(detail.status)
-    const environment = mapEnvironment(detail.environment)
     const records = detail.health_records.map((run) => {
         const result = healthResult(run)
         return {
@@ -340,8 +316,6 @@ export function toCenter(
             id: detail.supplier_id,
             name: supplierName ?? detail.supplier_id,
         },
-        environment,
-        environmentLabel: ENVIRONMENT_LABEL[environment],
         status,
         statusLabel: STATUS_LABEL[status],
         statusTone: STATUS_TONE[status],

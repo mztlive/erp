@@ -5,23 +5,12 @@ import { ShieldAlertIcon, TriangleAlertIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
 
-/** 连接中心告警区：生产提示、服务端告警、鉴权失败与结果待确认。 */
+/** 连接中心告警区：服务端告警、鉴权失败与结果待确认。 */
 export function CenterAlerts({ conn }: { conn: ConnectionCenterView }) {
-    const isProd = conn.environment === "PRODUCTION"
     const authFailed = conn.lastHealth?.result === "AUTH_FAILED"
     const resultUnknown = conn.lastHealth?.result === "UNKNOWN"
     return (
         <>
-            {isProd ? (
-                <Alert variant="warning" role="status">
-                    <TriangleAlertIcon aria-hidden="true" />
-                    <AlertTitle>生产环境</AlertTitle>
-                    <AlertDescription>
-                        当前连接运行在生产环境。启停、密钥轮换与全能力检查均需二次确认；检查不会创建真实业务订单。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
             {conn.alerts.map((al) => (
                 <Alert
                     key={al.id}

@@ -1,4 +1,4 @@
-//! 蛋糕叔叔技术配置；ERP 连接身份与环境由后台连接记录提供。
+//! 蛋糕叔叔技术配置；ERP 连接身份由后台记录提供，接口环境由部署地址与凭据决定。
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 

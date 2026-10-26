@@ -74,7 +74,11 @@ export function SourcingProductList({
     )
     return (
         <TableToolbarScope>
-            <TableToolbar className="shrink-0 px-4 py-2" actions={toolbar}>
+            <TableToolbar
+                className="shrink-0 px-4 py-2"
+                actions={toolbar}
+                isFrameToolbar
+            >
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                     <label
                         htmlFor="sourcing-list-select-all"
@@ -151,7 +155,8 @@ export function SourcingProductList({
                     }
                     density="compact"
                     scrollable
-                    className="gap-0"
+                    showToolbarSummary={false}
+                    className="gap-0 [--spacing-table-column-selection:4rem]"
                     emptyTitle="没有符合条件的商品"
                     emptyDescription="请调整搜索条件或切换到全部商品。"
                 />

@@ -152,7 +152,7 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{
-        ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
+        SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
     };
     use erp_supply::entity::supplier_fulfillment::{
         CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentOrder,
@@ -168,7 +168,6 @@ mod tests {
             SupplierApiConnectionData {
                 supplier_id: SupplierAccountId::new("supplier-1"),
                 connection_code: "SUP-1".to_string(),
-                environment: ConnectionEnvironment::Production,
                 endpoint_reference: endpoint_reference.to_string(),
                 credential_reference: None,
                 rate_limit_policy: None,

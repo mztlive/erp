@@ -1,12 +1,8 @@
-import type {
-    ConnectionEnvironment,
-    ConnectionSection,
-} from "@/features/supplier-api-connections/types"
+import type { ConnectionSection } from "@/features/supplier-api-connections/types"
 import { SECTIONS } from "@/features/supplier-api-connections/types"
 import { createUrlStateCodec } from "@/lib/url-state"
 
 export type ConnectionsUrlState = {
-    environment: ConnectionEnvironment | "ALL"
     status?: string
     health?: string
     capability?: string
@@ -19,16 +15,7 @@ export type ConnectionsUrlState = {
     section: ConnectionSection
 }
 
-const ENV_VALUES = ["DEVELOPMENT", "STAGING", "PRODUCTION", "ALL"] as const
-
 const codec = createUrlStateCodec<ConnectionsUrlState>([
-    {
-        key: "environment",
-        type: "enum",
-        values: ENV_VALUES,
-        defaultValue: "PRODUCTION",
-        normalize: (raw) => raw.toUpperCase(),
-    },
     { key: "status", type: "string" },
     { key: "health", type: "string" },
     { key: "capability", type: "string" },

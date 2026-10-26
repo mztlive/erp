@@ -36,8 +36,8 @@ pub use capability_change_set::{
     PendingCapabilityChange, ValidatedCapabilityChange,
 };
 pub use connection::{
-    ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiConnection,
-    SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
+    HealthCheckResult, RateLimitPolicy, SupplierApiConnection, SupplierApiConnectionData,
+    SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
 };
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};

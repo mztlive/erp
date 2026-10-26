@@ -19,52 +19,6 @@ const ENDPOINT_REFERENCE_MAX_LEN: usize = 512;
 /// 密钥管理系统引用最大长度。
 const CREDENTIAL_REFERENCE_MAX_LEN: usize = 256;
 
-/// 连接环境（数据模型 §6.14：连接环境）。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum ConnectionEnvironment {
-    /// 生产环境。
-    Production,
-    /// 测试环境。
-    Testing,
-}
-
-impl ConnectionEnvironment {
-    /// 返回环境的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Production => "生产",
-            Self::Testing => "测试",
-        }
-    }
-
-    /// 返回环境的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Production => "production",
-            Self::Testing => "testing",
-        }
-    }
-}
-
 /// 连接启停/故障状态（数据模型 §6.14：启用、停用、故障；固定枚举，无文档状态机）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -243,8 +197,6 @@ pub struct SupplierApiConnectionData {
     pub supplier_id: SupplierAccountId,
     /// ERP 内稳定连接代码（唯一）。
     pub connection_code: String,
-    /// 连接环境。
-    pub environment: ConnectionEnvironment,
     /// 地址配置引用。
     pub endpoint_reference: String,
     /// 密钥管理系统引用（不保存明文密钥）。
@@ -258,8 +210,6 @@ pub struct SupplierApiConnectionData {
 /// 供应商 API 连接更新数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct SupplierApiConnectionUpdate {
-    /// 连接环境；`None` 表示不修改。
-    pub environment: Option<ConnectionEnvironment>,
     /// 地址配置引用；`None` 表示不修改。
     pub endpoint_reference: Option<String>,
     /// 密钥管理系统引用；`None` 表示不修改。
@@ -288,8 +238,6 @@ pub struct SupplierApiConnection {
     pub supplier_id: SupplierAccountId,
     /// ERP 内稳定连接代码（创建后不可修改）。
     pub connection_code: String,
-    /// 连接环境。
-    pub environment: ConnectionEnvironment,
     /// 地址配置引用。
     pub endpoint_reference: String,
     /// 地址配置引用是否已由权威引用注册表确认绑定。
@@ -304,7 +252,7 @@ pub struct SupplierApiConnection {
     pub business_owner_id: Option<String>,
     /// 技术负责人账号。
     pub technical_owner_id: Option<String>,
-    /// 技术配置版本；环境、引用或能力配置变更时递增。
+    /// 技术配置版本；引用或能力配置变更时递增。
     pub technical_config_version: u64,
     /// 最近成功健康证据所验证的技术配置版本。
     pub last_healthy_technical_config_version: Option<u64>,
@@ -326,7 +274,6 @@ impl PartialEq for SupplierApiConnection {
             && self.stable.updated_by == other.stable.updated_by
             && self.supplier_id == other.supplier_id
             && self.connection_code == other.connection_code
-            && self.environment == other.environment
             && self.endpoint_reference == other.endpoint_reference
             && self.endpoint_reference_bound == other.endpoint_reference_bound
             && self.credential_reference == other.credential_reference
@@ -381,7 +328,6 @@ impl SupplierApiConnection {
             stable: StableBase::new(data.status, created_by),
             supplier_id: data.supplier_id,
             connection_code,
-            environment: data.environment,
             endpoint_reference_bound: !endpoint_reference.is_empty(),
             endpoint_reference,
             credential_reference_bound: credential_reference.is_some(),
@@ -416,13 +362,12 @@ impl SupplierApiConnection {
         update: SupplierApiConnectionUpdate,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        let environment_changed = self.apply_environment(update.environment);
         let endpoint_changed = self.apply_endpoint_reference(update.endpoint_reference)?;
         let credential_changed = self.apply_credential_reference(update.credential_reference)?;
         self.apply_rate_limit_policy(update.rate_limit_policy);
         self.apply_health(update.last_health_at, update.last_health_result)?;
         self.apply_status(update.status);
-        if environment_changed || endpoint_changed || credential_changed {
+        if endpoint_changed || credential_changed {
             self.bump_technical_config_version()?;
         }
         self.stable.touch(updated_by);
@@ -625,19 +570,6 @@ impl SupplierApiConnection {
         self.stable.status().is_active()
     }
 
-    /// 应用连接环境更新。
-    ///
-    /// # 参数
-    /// * `environment` - 可选连接环境
-    fn apply_environment(&mut self, environment: Option<ConnectionEnvironment>) -> bool {
-        if let Some(environment) = environment {
-            let changed = self.environment != environment;
-            self.environment = environment;
-            return changed;
-        }
-        false
-    }
-
     /// 应用地址配置引用更新。
     ///
     /// # 参数
@@ -743,15 +675,14 @@ mod tests {
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 
     use super::{
-        ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiConnection,
-        SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
+        HealthCheckResult, RateLimitPolicy, SupplierApiConnection, SupplierApiConnectionData,
+        SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
     };
 
     fn connection_data() -> SupplierApiConnectionData {
         SupplierApiConnectionData {
             supplier_id: SupplierAccountId::new("sup-1"),
             connection_code: " SUP-CN-001 ".to_string(),
-            environment: ConnectionEnvironment::Production,
             endpoint_reference: " config://supplier/001 ".to_string(),
             credential_reference: Some(" kms://prod/erp/sup-001 ".to_string()),
             rate_limit_policy: None,
@@ -769,11 +700,25 @@ mod tests {
         assert_eq!(connection.endpoint_reference, "config://supplier/001");
         assert_eq!(connection.credential_reference.as_deref(), Some("kms://prod/erp/sup-001"));
         assert_eq!(connection.supplier_id, SupplierAccountId::new("sup-1"));
-        assert_eq!(connection.environment, ConnectionEnvironment::Production);
         assert_eq!(connection.stable.status(), SupplierApiConnectionStatus::Active);
         assert_eq!(connection.stable.created_by, "admin-1");
         assert!(connection.last_health_at.is_none());
         assert!(connection.is_active());
+    }
+
+    /// 旧连接的环境字段不再影响读取，新保存内容不再携带该字段。
+    #[test]
+    fn legacy_environment_is_ignored_without_changing_connection_identity() {
+        let connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
+                .unwrap();
+        for environment in ["production", "testing"] {
+            let mut stored = serde_json::to_value(&connection).unwrap();
+            stored["environment"] = environment.into();
+            let restored: SupplierApiConnection = serde_json::from_value(stored).unwrap();
+            assert_eq!(restored, connection);
+            assert!(serde_json::to_value(restored).unwrap().get("environment").is_none());
+        }
     }
 
     #[test]
@@ -824,7 +769,6 @@ mod tests {
         connection
             .update(
                 SupplierApiConnectionUpdate {
-                    environment: Some(ConnectionEnvironment::Testing),
                     status: Some(SupplierApiConnectionStatus::Disabled),
                     rate_limit_policy: Some(RateLimitPolicy::new(100, 60).unwrap()),
                     last_health_at: Some(Instant::from_unix_secs(1_700_000_000)),
@@ -835,7 +779,6 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(connection.environment, ConnectionEnvironment::Testing);
         assert_eq!(connection.stable.status(), SupplierApiConnectionStatus::Disabled);
         assert!(!connection.is_active());
         assert_eq!(connection.rate_limit_policy.unwrap().max_requests(), 100);
@@ -902,11 +845,9 @@ mod tests {
 
     #[test]
     fn connection_enums_serialize_with_stable_codes_and_expose_labels() {
-        assert_eq!(serde_json::to_string(&ConnectionEnvironment::Testing).unwrap(), "\"testing\"");
         assert_eq!(serde_json::to_string(&SupplierApiConnectionStatus::Fault).unwrap(), "\"fault\"");
         assert_eq!(serde_json::to_string(&HealthCheckResult::Healthy).unwrap(), "\"healthy\"");
 
-        assert_eq!(ConnectionEnvironment::Production.label(), "生产");
         assert_eq!(SupplierApiConnectionStatus::Disabled.label(), "停用");
         assert_eq!(HealthCheckResult::Failed.label(), "故障");
         assert_eq!(HealthCheckResult::Healthy.as_str(), "healthy");

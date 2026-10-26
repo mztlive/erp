@@ -3,7 +3,6 @@
 import * as React from "react"
 import { z } from "zod"
 
-import { OptionCombobox } from "@/components/business"
 import type { ResultState } from "@/components/business/feedback"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -16,7 +15,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
-import { Label } from "@/components/ui/label"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { useCreateConnectionMutation } from "@/features/supplier-api-connections/hooks/queries"
 import {
@@ -28,7 +26,6 @@ const createSchema = z.object({
     connectionCode: z.string().trim().min(3, "请填写连接代码"),
     supplierId: z.string().trim().min(1, "请选择供应商"),
     supplierName: z.string().trim().min(2, "请选择供应商"),
-    environment: z.enum(["DEVELOPMENT", "STAGING", "PRODUCTION"]),
 })
 
 export function ConnectionCreateDialog({
@@ -51,10 +48,6 @@ export function ConnectionCreateDialog({
             connectionCode: "",
             supplierId: "",
             supplierName: "",
-            environment: "PRODUCTION" as
-                | "DEVELOPMENT"
-                | "STAGING"
-                | "PRODUCTION",
         },
         validators: { onChange: createSchema },
         onSubmit: async ({ value }) => {
@@ -62,7 +55,6 @@ export function ConnectionCreateDialog({
                 connectionCode: value.connectionCode,
                 supplierId: value.supplierId,
                 supplierName: value.supplierName,
-                environment: value.environment,
                 idempotencyKey: newIdempotencyKey("create"),
             })
             const mapped = outcomeToResult(outcome)
@@ -100,7 +92,7 @@ export function ConnectionCreateDialog({
                 <DialogHeader>
                     <DialogTitle>新建连接</DialogTitle>
                     <DialogDescription>
-                        连接代码不可重复，不同环境请使用不同代码。
+                        选择供应商并填写唯一的连接代码，创建后绑定接口配置。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -117,7 +109,7 @@ export function ConnectionCreateDialog({
                                 id="supplier-api-connections-create-connection-code"
                                 label="连接代码"
                                 required
-                                placeholder="CONN-XXX-PROD"
+                                placeholder="CONN-XXX"
                             />
                         )}
                     />
@@ -158,47 +150,6 @@ export function ConnectionCreateDialog({
                                 </Field>
                             )
                         }}
-                    />
-                    <form.AppField
-                        name="environment"
-                        children={(field) => (
-                            <div className="space-y-1.5">
-                                <Label htmlFor="supplier-api-connections-create-environment">
-                                    环境
-                                    <span className="text-destructive">*</span>
-                                </Label>
-                                <OptionCombobox
-                                    id="supplier-api-connections-create-environment"
-                                    value={field.state.value}
-                                    onValueChange={(v) => {
-                                        if (v)
-                                            field.handleChange(
-                                                v as typeof field.state.value,
-                                            )
-                                    }}
-                                    options={[
-                                        {
-                                            value: "PRODUCTION",
-                                            label: "生产",
-                                        },
-                                        { value: "STAGING", label: "测试" },
-                                        {
-                                            value: "DEVELOPMENT",
-                                            label: "开发",
-                                        },
-                                    ]}
-                                    allowClear={false}
-                                />
-                                {field.state.value === "PRODUCTION" ? (
-                                    <p
-                                        className="text-xs text-muted-foreground"
-                                        role="status"
-                                    >
-                                        当前环境：生产
-                                    </p>
-                                ) : null}
-                            </div>
-                        )}
                     />
                     <DialogFooter>
                         <Button

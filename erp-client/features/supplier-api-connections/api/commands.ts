@@ -6,13 +6,9 @@
 import { apiPost, apiPut } from "@/lib/api"
 import type {
     CapabilityCode,
-    ConnectionEnvironment,
     FormalOutcome,
 } from "@/features/supplier-api-connections/types"
-import {
-    CAPABILITY_LABEL,
-    ENVIRONMENT_LABEL,
-} from "@/features/supplier-api-connections/types"
+import { CAPABILITY_LABEL } from "@/features/supplier-api-connections/types"
 import {
     type BackendCapabilityUpdateResult,
     type BackendCommandResult,
@@ -20,14 +16,12 @@ import {
     type BackendHealthCheckType,
     mapCapabilityCode,
     toBackendCapabilityCode,
-    toBackendEnvironment,
 } from "@/features/supplier-api-connections/api/mapping"
 
 export async function createConnection(input: {
     connectionCode: string
     supplierId: string
     supplierName: string
-    environment: ConnectionEnvironment
     idempotencyKey: string
 }): Promise<FormalOutcome> {
     const code = input.connectionCode.trim().toUpperCase()
@@ -36,7 +30,7 @@ export async function createConnection(input: {
             status: "failed",
             code: "CODE_REQUIRED",
             title: "连接代码必填",
-            message: "请填写全局唯一的连接代码，不可与环境组合复用",
+            message: "请填写唯一的连接代码",
         }
     }
     const created = await apiPost<BackendConnection>(
@@ -44,7 +38,6 @@ export async function createConnection(input: {
         {
             supplier_id: input.supplierId,
             connection_code: code,
-            environment: toBackendEnvironment(input.environment),
             rate_limit_policy: null,
             status: "disabled",
             capabilities: [],
@@ -60,7 +53,6 @@ export async function createConnection(input: {
         facts: [
             { label: "连接代码", value: code },
             { label: "供应商", value: input.supplierName },
-            { label: "环境", value: ENVIRONMENT_LABEL[input.environment] },
         ],
     }
 }
