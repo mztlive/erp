@@ -381,6 +381,11 @@ pub struct SupplierCatalogRun {
     pub cursor: Option<String>,
     pub pages: u32,
     pub observed_count: u64,
+    #[serde(default)]
+    pub skipped_count: u64,
+    /// 最近一百条脱敏异常；总数单独累计，避免检查点无限增长。
+    #[serde(default)]
+    pub skipped_samples: Vec<String>,
     pub finished: bool,
     #[serde(default)]
     pub sync_mode: CatalogSyncMode,
@@ -417,11 +422,32 @@ impl SupplierCatalogRun {
             cursor: None,
             pages: 0,
             observed_count: 0,
+            skipped_count: 0,
+            skipped_samples: Vec::new(),
             finished: false,
             sync_mode: CatalogSyncMode::Full,
             scan_since: None,
             scan_through: Instant::now(),
         }
+    }
+    /// 累计跳过数量并保留最近一百条原因，与页面推进同事务保存。
+    /// # 参数
+    /// `skipped` 为本页单项异常，不能包含鉴权、网络或存储错误。
+    /// # 返回
+    /// 更新异常总数和有界样本。
+    /// # 错误
+    /// 数量转换或累计溢出时拒绝。
+    pub fn record_skipped(&mut self, skipped: Vec<String>) -> Result<()> {
+        let count =
+            u64::try_from(skipped.len()).map_err(|_| Error::ValidationError("异常数量超限".into()))?;
+        self.skipped_count = self
+            .skipped_count
+            .checked_add(count)
+            .ok_or_else(|| Error::ValidationError("异常数量超限".into()))?;
+        self.skipped_samples.extend(skipped);
+        let excess = self.skipped_samples.len().saturating_sub(100);
+        self.skipped_samples.drain(..excess);
+        Ok(())
     }
     /// 仅在一页全部保存后推进检查点；限制扫描次数并拒绝自循环游标。
     /// # 参数
@@ -545,6 +571,28 @@ mod tests {
         let item = SupplierCatalogItem::observed("c", "s", "j", source).unwrap();
         assert_eq!(item.source_revision, SourceRevision::EqualityToken("v1".into()));
     }
+    #[test]
+    fn skipped_observations_are_counted_bounded_and_old_checkpoints_default_to_empty() {
+        let mut run = SupplierCatalogRun::new("job", &connection());
+        run.record_skipped((0..105).map(|n| format!("异常 {n}")).collect()).unwrap();
+        assert_eq!(run.skipped_count, 105);
+        assert_eq!(run.skipped_samples.len(), 100);
+        assert_eq!(run.skipped_samples[0], "异常 5");
+        run.record_skipped(vec!["后续异常".into()]).unwrap();
+        assert_eq!(run.skipped_count, 106);
+        assert_eq!(run.skipped_samples.last().unwrap(), "后续异常");
+        let mut legacy = serde_json::to_value(&run).unwrap();
+        legacy.as_object_mut().unwrap().remove("skipped_count");
+        legacy.as_object_mut().unwrap().remove("skipped_samples");
+        let restored: SupplierCatalogRun = serde_json::from_value(legacy).unwrap();
+        assert_eq!(restored.skipped_count, 0);
+        assert!(restored.skipped_samples.is_empty());
+        run.skipped_count = u64::MAX;
+        let samples = run.skipped_samples.clone();
+        assert!(run.record_skipped(vec!["overflow".into()]).is_err());
+        assert_eq!(run.skipped_samples, samples);
+    }
+
     #[test]
     fn page_checkpoint_counts_empty_pages_and_rejects_repeat_cursor() {
         let mut run = SupplierCatalogRun::new("job", &connection());

@@ -2,12 +2,18 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use super::connector::common::{Page, Scan, Snapshot};
+use super::connector::common::{Scan, Snapshot};
 use super::connector::offer::{IncrementalSupport, OfferChange};
 use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckType};
 /// 一页标准商品来源记录。
-pub type CatalogPage = Page<Snapshot<OfferChange>>;
+#[derive(Debug)]
+pub struct CatalogPage {
+    pub items: Vec<Snapshot<OfferChange>>,
+    pub next: Option<String>,
+    /// 本页跳过的商品或规格及脱敏原因；与有效来源及游标同事务保存。
+    pub skipped: Vec<String>,
+}
 /// 事务外目录读取 Future。
 pub type CatalogRead<'a> = Pin<Box<dyn Future<Output = Result<CatalogPage, ClassifiedError>> + Send + 'a>>;
 

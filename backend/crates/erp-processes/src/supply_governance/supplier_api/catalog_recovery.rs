@@ -63,6 +63,8 @@ pub(super) async fn next_run(
         next.cursor = run.cursor;
         next.pages = run.pages;
         next.observed_count = run.observed_count;
+        next.skipped_count = run.skipped_count;
+        next.skipped_samples = run.skipped_samples;
     }
     Ok(next)
 }

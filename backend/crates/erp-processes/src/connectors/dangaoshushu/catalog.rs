@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
 use async_trait::async_trait;
@@ -80,7 +80,14 @@ impl DangaoshushuConnector {
         Ok(product)
     }
 
-    fn offer_value(&self, product: &Value, spec: &Value, detail: bool) -> ConnectorResult<Offer> {
+    /// 严格映射单个列表或详情规格。
+    /// # 参数
+    /// `product`、`spec` 为供应商资料，`detail` 指定身份字段来源。
+    /// # 返回
+    /// 不含伪造价格和单位的标准商品来源。
+    /// # 错误
+    /// 必填字段缺失、金额或名称无效时返回映射错误。
+    pub(super) fn offer_value(&self, product: &Value, spec: &Value, detail: bool) -> ConnectorResult<Offer> {
         let spec_id = id(&spec[if detail { "id" } else { "spec_id" }])?;
         let unit = self.settings.spec_units.get(&spec_id).cloned();
         let quote = if self.settings.clearing_price_is_tax_inclusive_cny && !spec["clearing_price"].is_null()
@@ -111,35 +118,6 @@ impl DangaoshushuConnector {
         })
     }
 
-    /// 读取一页并按商品补齐轮播、详情图和实际可供；同页同商品只查一次详情。
-    /// # 参数
-    /// 固定窗口、游标与页大小来自持久化检查点。
-    /// # 返回
-    /// 完整来源资料；部分接口未提供字段保持未知。
-    /// # 错误
-    /// 任一详情失败则当前页不提交，保留此前检查点。
-    pub(super) async fn scan_with_details(
-        &self,
-        scan: &Scan,
-    ) -> ConnectorResult<Page<Snapshot<OfferChange>>> {
-        let mut page = self.scan(scan).await?;
-        let mut products = BTreeMap::new();
-        for snapshot in &mut page.items {
-            let OfferChange::Upsert(offer) = &mut snapshot.value else { continue };
-            let product_id = offer.sku.product_id.clone().ok_or_else(mapping)?;
-            if !products.contains_key(&product_id) {
-                products.insert(product_id.clone(), self.product(&offer.sku, None).await?);
-            }
-            let root = products.get(&product_id).expect("当前商品已读取详情");
-            if let Some(spec) = spec_value(root, &offer.sku)? {
-                **offer = self.offer_value(&root["product"], spec, true)?;
-                offer.details = super::catalog_details::details(&root["product"], spec, Some(root))?;
-                snapshot.stamp.changed_at = source_time(&spec["updated_at"])?;
-            }
-        }
-        Ok(page)
-    }
-
     fn query_city(&self, region: Option<&String>) -> ConnectorResult<Option<&str>> {
         region
             .map(|region| {
@@ -166,7 +144,14 @@ fn display_field(value: &Value, key: &str) -> ConnectorResult<String> {
     })
 }
 
-fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)> {
+/// 构造冻结窗口及有界分页参数。
+/// # 参数
+/// `scan` 为扫描窗口、游标及页大小。
+/// # 返回
+/// 当前页码和供应商请求参数。
+/// # 错误
+/// 非法页码、页大小或时间窗口返回映射错误。
+pub(super) fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)> {
     if scan.limit.get() > 50 {
         return Err(mapping());
     }

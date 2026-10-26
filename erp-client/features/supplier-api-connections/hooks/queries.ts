@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
@@ -167,7 +168,8 @@ export function useCatalogQuery(
     page: number,
     filters: CatalogFilters = {},
 ) {
-    return useQuery({
+    const queryClient = useQueryClient()
+    const query = useQuery({
         queryKey: [
             ...supplierConnectionKeys.all,
             "catalog",
@@ -180,6 +182,16 @@ export function useCatalogQuery(
         refetchInterval: (query) =>
             catalogRunning(query.state.data?.jobs[0]) ? 2000 : false,
     })
+    const latest = query.data?.jobs[0]
+    const jobId = latest?.job_id
+    useEffect(() => {
+        if (jobId) {
+            void queryClient.invalidateQueries({
+                queryKey: supplierConnectionKeys.center(connectionId),
+            })
+        }
+    }, [connectionId, jobId, latest?.status, latest?.stalled, queryClient])
+    return query
 }
 export function useMatchCatalogMutation() {
     const invalidate = useInvalidateAll()

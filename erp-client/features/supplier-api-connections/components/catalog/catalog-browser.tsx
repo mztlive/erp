@@ -38,12 +38,16 @@ const availabilityLabels: Record<CatalogAvailability, string> = {
 
 export function CatalogBrowser({
     connectionId,
+    supplierName,
+    supplierFilter,
     supplierId,
     canAdopt,
     canReadCost,
     canReview,
 }: {
     connectionId: string
+    supplierName: string
+    supplierFilter?: React.ReactNode
     supplierId: string
     canAdopt: boolean
     canReadCost: boolean
@@ -248,9 +252,10 @@ export function CatalogBrowser({
     return (
         <>
             <BusinessTableFrame
-                title="供应商品库"
+                title={`${supplierName} · 商品库`}
                 toolbar={
                     <CatalogFilterForm
+                        supplierFilter={supplierFilter}
                         value={filters}
                         options={query.data?.filters}
                         loading={query.isFetching}

@@ -8,9 +8,9 @@ use erp_supply::dto::supplier_catalog::CatalogSyncMode;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_catalog::{SupplierCatalogItem, SupplierCatalogRun};
-use erp_supply::ports::connector::common::{Page, Scan, ScanWindow, Snapshot, SourceStamp, SupplierSku};
+use erp_supply::ports::connector::common::{Scan, ScanWindow, Snapshot, SourceStamp, SupplierSku};
 use erp_supply::ports::connector::offer::{IncrementalSupport, Offer, OfferChange};
-use erp_supply::ports::supplier_api_gateway::ClassifiedError;
+use erp_supply::ports::supplier_api_gateway::{CatalogPage, ClassifiedError};
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_support::repository::prelude::*;
@@ -35,6 +35,7 @@ struct PreparedPage {
     withdrawn: Vec<Withdrawal>,
     next: Option<String>,
     count: u64,
+    skipped: Vec<String>,
 }
 
 impl SupplierConnectionExecutionProcess {
@@ -113,6 +114,9 @@ impl SupplierConnectionExecutionProcess {
             else {
                 continue;
             };
+            if prior.skipped_count > 0 {
+                return Ok(());
+            }
             if prior.finished && prior.technical_config_version == connection.technical_config_version {
                 // 日粒度来源保留一天重叠；适配器继续向外扩展 through 当日。
                 run.scan_since =
@@ -139,6 +143,7 @@ impl SupplierConnectionExecutionProcess {
             if let Some(prior) =
                 self.db.supplier_catalog_runs().find_by_id(&prior_job.base.id, &mut NoTransaction).await?
                 && prior.finished
+                && prior.skipped_count == 0
                 && prior.sync_mode == CatalogSyncMode::Full
                 && prior.technical_config_version == connection.technical_config_version
                 && prior.scan_through.unix_secs() >= since
@@ -153,12 +158,13 @@ impl SupplierConnectionExecutionProcess {
         &self,
         connection: &SupplierApiConnection,
         job: &str,
-        page: Page<Snapshot<OfferChange>>,
+        page: CatalogPage,
         actor: &AuditActor,
     ) -> Result<PreparedPage> {
         let count =
             u64::try_from(page.items.len()).map_err(|_| Error::ValidationError("来源商品数量超限".into()))?;
-        let mut prepared = PreparedPage { items: vec![], withdrawn: vec![], next: page.next, count };
+        let mut prepared =
+            PreparedPage { items: vec![], withdrawn: vec![], next: page.next, count, skipped: page.skipped };
         if let Err(error) = self.prepare_page_items(connection, job, page.items, actor, &mut prepared).await {
             for observation in &prepared.items {
                 observation.media.cleanup_handle().discard_uncommitted().await;
@@ -296,23 +302,7 @@ impl SupplierConnectionExecutionProcess {
                     if job.status != JobStatus::Running {
                         return Err(Error::ConflictError("同步任务已停止".into()));
                     }
-                    checkpoint.advance(page.next, page.count)?;
-                    for observation in page.items {
-                        observation.media.pending_assets.persist(&db, executor).await?;
-                        save_observation(&db, observation.item, &actor, executor).await?;
-                    }
-                    for withdrawal in page.withdrawn {
-                        apply_withdrawal(
-                            &db,
-                            &connection.base.id,
-                            &run.base.id,
-                            withdrawal,
-                            &actor,
-                            executor,
-                        )
-                        .await?;
-                    }
-                    db.supplier_catalog_runs().update(&mut checkpoint, executor).await?;
+                    save_page_items(&db, &mut checkpoint, page, &actor, executor).await?;
                     job.record_progress(0, 0, 0, Instant::now())?;
                     db.background_jobs().update(&mut job, executor).await?;
                     Ok(())
@@ -320,6 +310,28 @@ impl SupplierConnectionExecutionProcess {
             })
             .await
     }
+}
+
+/// 在当前页面事务中保存有效来源、异常和检查点。
+async fn save_page_items(
+    db: &Database,
+    checkpoint: &mut SupplierCatalogRun,
+    page: PreparedPage,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    checkpoint.advance(page.next, page.count)?;
+    checkpoint.record_skipped(page.skipped)?;
+    for observation in page.items {
+        observation.media.pending_assets.persist(db, executor).await?;
+        save_observation(db, observation.item, actor, executor).await?;
+    }
+    for withdrawal in page.withdrawn {
+        apply_withdrawal(db, &checkpoint.connection_id, &checkpoint.base.id, withdrawal, actor, executor)
+            .await?;
+    }
+    db.supplier_catalog_runs().update(checkpoint, executor).await?;
+    Ok(())
 }
 
 fn verify_connection(connection: &SupplierApiConnection, run: &SupplierCatalogRun) -> Result<()> {

@@ -21,6 +21,7 @@ import {
 import { catalogRunning } from "../api/catalog"
 import { newIdempotencyKey, outcomeToResult } from "../lib/operations"
 import { CatalogSection } from "../components/sections/catalog-section"
+import type { ConnectionCenterView } from "../types"
 import type { ResultState } from "@/components/business/feedback"
 
 export function SupplierCatalogPage() {
@@ -34,9 +35,6 @@ export function SupplierCatalogPage() {
         pageSize: 100,
     })
     const center = useConnectionCenterQuery(connectionId || undefined)
-    const catalog = useCatalogQuery(connectionId, 1)
-    const sync = useStartCatalogSyncMutation()
-    const [result, setResult] = React.useState<ResultState>(null)
     const selectConnection = React.useCallback(
         (id: string) => {
             const next = new URLSearchParams()
@@ -44,14 +42,15 @@ export function SupplierCatalogPage() {
             router.replace(`/supplier-api/catalog?${next.toString()}`, {
                 scroll: false,
             })
-            setResult(null)
+            setSearch("")
         },
         [router],
     )
     React.useEffect(() => {
         const first = connections.data?.items[0]
-        if (!connectionId && first) selectConnection(first.connectionId)
-    }, [connectionId, connections.data?.items, selectConnection])
+        if (!connectionId && !search && first)
+            selectConnection(first.connectionId)
+    }, [connectionId, connections.data?.items, search, selectConnection])
     const conn = center.data
     const options = (connections.data?.items ?? []).map((item) => ({
         value: item.connectionId,
@@ -62,6 +61,42 @@ export function SupplierCatalogPage() {
             value: conn.connectionId,
             label: `${conn.supplier.name} · ${conn.connectionCode}`,
         })
+    const supplierFilter = (
+        <div className="space-y-2">
+            <label
+                htmlFor="supplier-catalog-connection"
+                className="text-sm font-medium"
+            >
+                供应商筛选
+            </label>
+            <OptionCombobox
+                id="supplier-catalog-connection"
+                value={connectionId || undefined}
+                options={options}
+                onValueChange={(id) => {
+                    if (id) selectConnection(id)
+                }}
+                onSearchChange={setSearch}
+                searchPlaceholder="搜索供应商名称或接口编号"
+                filterMode="remote"
+                retainMissingSelection={false}
+                loading={connections.isFetching}
+                onRefresh={() => connections.refetch({ throwOnError: true })}
+                allowClear={false}
+                placeholder="搜索并选择供应商"
+                emptyLabel={
+                    connections.isError
+                        ? "供应商读取失败，请重试"
+                        : "没有匹配的供应商连接"
+                }
+            />
+            {connections.isError ? (
+                <p role="alert" className="text-sm text-destructive">
+                    {connections.error.message}
+                </p>
+            ) : null}
+        </div>
+    )
     return (
         <PageScaffold density="compact" className="gap-5">
             <ListWorkspaceHeader
@@ -77,57 +112,7 @@ export function SupplierCatalogPage() {
                     管理接口连接
                 </Button>
             </ListWorkspaceHeader>
-            <div className="max-w-xl space-y-2">
-                <label
-                    htmlFor="supplier-catalog-connection"
-                    className="text-sm font-medium"
-                >
-                    供应商
-                </label>
-                <OptionCombobox
-                    id="supplier-catalog-connection"
-                    value={connectionId || undefined}
-                    options={options}
-                    onValueChange={(id) => {
-                        if (id) selectConnection(id)
-                    }}
-                    onSearchChange={setSearch}
-                    filterMode="remote"
-                    retainMissingSelection={false}
-                    loading={connections.isFetching}
-                    onRefresh={() =>
-                        connections.refetch({ throwOnError: true })
-                    }
-                    allowClear={false}
-                    placeholder="搜索并选择供应商"
-                    emptyLabel={
-                        connections.isError
-                            ? "供应商读取失败，请重试"
-                            : "没有匹配的供应商连接"
-                    }
-                />
-                {connections.isError ? (
-                    <p role="alert" className="text-sm text-destructive">
-                        {connections.error.message}
-                    </p>
-                ) : null}
-            </div>
-            {result && result.status !== "processing" ? (
-                <FormalActionResult
-                    status={
-                        result.status === "failed" ? "rejected" : result.status
-                    }
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={result.facts}
-                />
-            ) : null}
-            {sync.error ? (
-                <p role="alert" className="text-sm text-destructive">
-                    {sync.error.message}
-                </p>
-            ) : null}
+            {!conn ? supplierFilter : null}
             {!connectionId && connections.isPending ? (
                 <p role="status" className="text-sm text-muted-foreground">
                     正在读取供应商…
@@ -153,38 +138,78 @@ export function SupplierCatalogPage() {
                 />
             ) : null}
             {conn ? (
-                <CatalogSection
+                <SupplierCatalogContent
                     key={conn.connectionId}
                     conn={conn}
-                    query={catalog}
-                    syncing={
-                        sync.isPending || catalogRunning(catalog.data?.jobs[0])
-                    }
-                    canSync={
-                        conn.allowedActions.includes("START_CATALOG_SYNC") &&
-                        !catalogRunning(catalog.data?.jobs[0])
-                    }
-                    blocker={
-                        conn.actionBlockers.find(
-                            (blocker) =>
-                                blocker.action === "START_CATALOG_SYNC",
-                        )?.message
-                    }
-                    onSettings={() =>
-                        router.push(
-                            `/supplier-api/connections/${encodeURIComponent(conn.connectionId)}?section=settings`,
-                        )
-                    }
-                    onSync={async () => {
-                        const outcome = await sync.mutateAsync({
-                            connectionId: conn.connectionId,
-                            expectedVersion: conn.version,
-                            idempotencyKey: newIdempotencyKey("catalog"),
-                        })
-                        setResult(outcomeToResult(outcome))
-                    }}
+                    supplierFilter={supplierFilter}
                 />
             ) : null}
         </PageScaffold>
+    )
+}
+
+function SupplierCatalogContent({
+    conn,
+    supplierFilter,
+}: {
+    conn: ConnectionCenterView
+    supplierFilter: React.ReactNode
+}) {
+    const router = useRouter()
+    const catalog = useCatalogQuery(conn.connectionId, 1)
+    const sync = useStartCatalogSyncMutation()
+    const [result, setResult] = React.useState<ResultState>(null)
+    return (
+        <CatalogSection
+            conn={conn}
+            query={catalog}
+            supplierFilter={supplierFilter}
+            feedback={
+                <>
+                    {result && result.status !== "processing" ? (
+                        <FormalActionResult
+                            status={
+                                result.status === "failed"
+                                    ? "rejected"
+                                    : result.status
+                            }
+                            title={result.title}
+                            description={result.description}
+                            reference={result.reference}
+                            facts={result.facts}
+                        />
+                    ) : null}
+                    {sync.error ? (
+                        <p role="alert" className="text-sm text-destructive">
+                            {sync.error.message}
+                        </p>
+                    ) : null}
+                </>
+            }
+            syncing={sync.isPending || catalogRunning(catalog.data?.jobs[0])}
+            canSync={
+                conn.allowedActions.includes("START_CATALOG_SYNC") &&
+                !catalogRunning(catalog.data?.jobs[0])
+            }
+            blocker={
+                conn.actionBlockers.find(
+                    (blocker) => blocker.action === "START_CATALOG_SYNC",
+                )?.message
+            }
+            onSettings={() =>
+                router.push(
+                    `/supplier-api/connections/${encodeURIComponent(conn.connectionId)}?section=settings`,
+                )
+            }
+            onSync={async () => {
+                setResult(null)
+                const outcome = await sync.mutateAsync({
+                    connectionId: conn.connectionId,
+                    expectedVersion: conn.version,
+                    idempotencyKey: newIdempotencyKey("catalog"),
+                })
+                setResult(outcomeToResult(outcome))
+            }}
+        />
     )
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -55,12 +56,14 @@ const schema = z
     })
 
 export function CatalogFilterForm({
+    supplierFilter,
     value,
     options,
     loading,
     canReadCost,
     onApply,
 }: {
+    supplierFilter?: ReactNode
     value: CatalogFilters
     options?: CatalogFilterOptions
     loading: boolean
@@ -105,11 +108,12 @@ export function CatalogFilterForm({
                 void form.handleSubmit()
             }}
         >
+            {supplierFilter}
             <form.AppField name="keyword">
                 {(field) => (
                     <Field>
                         <FieldLabel htmlFor="supplier-catalog-keyword">
-                            商品搜索
+                            当前供应商商品搜索
                         </FieldLabel>
                         <Input
                             id="supplier-catalog-keyword"

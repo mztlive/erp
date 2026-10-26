@@ -63,6 +63,8 @@ export type CatalogJob = {
         | "failed"
         | "cancelled"
     observed_count: number
+    skipped_count: number
+    skipped_samples: string[]
     pages: number
     created_at: number
     finished_at: number | null

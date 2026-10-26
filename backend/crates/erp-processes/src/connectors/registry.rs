@@ -139,7 +139,8 @@ mod tests {
 
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
-    use erp_supply::ports::connector::common::{Page, ScanWindow};
+    use erp_supply::ports::connector::common::ScanWindow;
+    use erp_supply::ports::supplier_api_gateway::CatalogPage;
 
     use super::*;
 
@@ -160,7 +161,7 @@ mod tests {
         fn catalog_page<'a>(&'a self, _: &'a SupplierApiConnection, _: &'a Scan) -> CatalogRead<'a> {
             Box::pin(async move {
                 self.0.lock().unwrap().push("catalog");
-                Ok(Page { items: vec![], next: None })
+                Ok(CatalogPage { items: vec![], next: None, skipped: vec![] })
             })
         }
     }
