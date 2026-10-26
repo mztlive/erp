@@ -1,11 +1,16 @@
 "use client"
 
-import { BanIcon, RefreshCwIcon } from "lucide-react"
+import { BanIcon, ChevronDownIcon, PlayIcon, RefreshCwIcon } from "lucide-react"
 
 import { DetailPageHeader } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
-import { formatDateTime } from "@/lib/datetime"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 /** 连接中心页头：文档头与启停/健康动作。 */
 export function CenterHeader({
@@ -39,122 +44,88 @@ export function CenterHeader({
     onEnable: () => void
     onDisable: () => void
 }) {
+    const showMore = canEnable || enableBlocker || canDisable || disableBlocker
+
     return (
-        <>
-            <DetailPageHeader
-                back={{
-                    id: "supplier-api-connections-center-back",
-                    label: "连接列表",
-                    onClick: onBack,
-                }}
-                title={`${conn.connectionCode} · ${conn.supplier.name}`}
-                documentNumber={conn.connectionCode}
-                primaryStatus={{
-                    label: conn.statusLabel,
-                    tone: conn.statusTone,
-                }}
-                version={conn.version}
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <span>
-                            业务{" "}
-                            <span className="font-medium text-foreground">
-                                {conn.businessOwner?.label ?? "—"}
-                            </span>
-                        </span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span>
-                            技术{" "}
-                            <span className="font-medium text-foreground">
-                                {conn.technicalOwner?.label ?? "—"}
-                            </span>
-                        </span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span className="text-muted-foreground">
-                            配置 {formatDateTime(conn.updatedAt, "default")}
-                        </span>
-                    </span>
-                }
-                statuses={[
-                    {
-                        id: "connector-type",
-                        label: "接口类型",
-                        status: {
-                            label: conn.connectorTypeLabel,
-                            tone: "neutral",
-                        },
-                    },
-                    {
-                        id: "health",
-                        label: "最近健康",
-                        status: {
-                            label: conn.lastHealth?.resultLabel ?? "未检查",
-                            tone:
-                                conn.lastHealth?.result === "SUCCESS"
-                                    ? "success"
-                                    : conn.lastHealth?.result ===
-                                            "AUTH_FAILED" ||
-                                        conn.lastHealth?.result === "FAILED"
-                                      ? "destructive"
-                                      : "warning",
-                        },
-                    },
-                ]}
-                primaryAction={
-                    <div className="flex flex-wrap gap-2">
-                        {canRunHealth || healthBlocker ? (
-                            <Button
-                                id="supplier-api-connections-center-run-health"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={!canRunHealth || healthPending}
-                                title={healthBlocker?.message}
-                                onClick={onRunHealth}
+        <DetailPageHeader
+            back={{
+                id: "supplier-api-connections-center-back",
+                label: "连接列表",
+                onClick: onBack,
+            }}
+            title={conn.supplier.name}
+            headingProps={{ className: "text-2xl md:text-3xl" }}
+            documentNumber={conn.connectionCode}
+            numberLabel="连接代码"
+            primaryStatus={{ label: conn.statusLabel, tone: conn.statusTone }}
+            meta={conn.connectorTypeLabel}
+            primaryAction={
+                <div className="flex flex-wrap items-center gap-2">
+                    {canRunHealth || healthBlocker ? (
+                        <Button
+                            id="supplier-api-connections-center-run-health"
+                            type="button"
+                            disabled={!canRunHealth || healthPending}
+                            title={healthBlocker?.message}
+                            onClick={onRunHealth}
+                        >
+                            <RefreshCwIcon aria-hidden="true" />
+                            {healthPending ? "正在提交" : "健康检查"}
+                        </Button>
+                    ) : null}
+                    {showMore ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                id="supplier-api-connections-center-more"
+                                render={<Button variant="outline" />}
                             >
-                                <RefreshCwIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                健康检查
-                            </Button>
-                        ) : null}
-                        {canDisable || disableBlocker ? (
-                            <Button
-                                id="supplier-api-connections-center-disable"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={!canDisable || disablePending}
-                                title={disableBlocker?.message}
-                                onClick={onDisable}
+                                更多
+                                <ChevronDownIcon aria-hidden="true" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                className="min-w-56"
                             >
-                                <BanIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                停用连接
-                            </Button>
-                        ) : null}
-                        {canEnable || enableBlocker ? (
-                            <Button
-                                id="supplier-api-connections-center-enable"
-                                type="button"
-                                size="sm"
-                                disabled={!canEnable || enablePending}
-                                title={enableBlocker?.message}
-                                onClick={onEnable}
-                            >
-                                启用连接
-                            </Button>
-                        ) : null}
-                    </div>
-                }
-            />
-        </>
+                                {canEnable || enableBlocker ? (
+                                    <DropdownMenuItem
+                                        id="supplier-api-connections-center-enable"
+                                        disabled={!canEnable || enablePending}
+                                        onClick={onEnable}
+                                    >
+                                        <PlayIcon aria-hidden="true" />
+                                        <span>
+                                            启用连接
+                                            {enableBlocker ? (
+                                                <span className="mt-1 block text-xs text-muted-foreground">
+                                                    {enableBlocker.message}
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    </DropdownMenuItem>
+                                ) : null}
+                                {canDisable || disableBlocker ? (
+                                    <DropdownMenuItem
+                                        id="supplier-api-connections-center-disable"
+                                        variant="destructive"
+                                        disabled={!canDisable || disablePending}
+                                        onClick={onDisable}
+                                    >
+                                        <BanIcon aria-hidden="true" />
+                                        <span>
+                                            停用连接
+                                            {disableBlocker ? (
+                                                <span className="mt-1 block text-xs text-muted-foreground">
+                                                    {disableBlocker.message}
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    </DropdownMenuItem>
+                                ) : null}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : null}
+                </div>
+            }
+        />
     )
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { SupplierApiConnectionsPage } from "@/features/supplier-api-connections/pages/supplier-api-connections-page"
+import { SupplierApiConnectionDetailPage } from "@/features/supplier-api-connections/pages/supplier-api-connection-detail-page"
 
 export const metadata: Metadata = {
     title: "供应商连接详情",
@@ -18,13 +18,12 @@ function CenterFallback() {
 }
 
 /**
- * 路径 `/supplier-api/connections/:connectionId` 与列表查询参数 connectionId 等价。
- * 页签身份：supplier-connection:{connectionId}，同连接不复制。
+ * 独立连接详情页；路径决定连接身份，section 只切换当前页签内的分区。
  */
 export default function Page() {
     return (
         <Suspense fallback={<CenterFallback />}>
-            <SupplierApiConnectionsPage />
+            <SupplierApiConnectionDetailPage />
         </Suspense>
     )
 }

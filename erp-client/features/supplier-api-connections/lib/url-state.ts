@@ -11,8 +11,6 @@ export type ConnectionsUrlState = {
     q?: string
     page: number
     pageSize: number
-    connectionId?: string
-    section: ConnectionSection
 }
 
 const codec = createUrlStateCodec<ConnectionsUrlState>([
@@ -24,16 +22,30 @@ const codec = createUrlStateCodec<ConnectionsUrlState>([
     { key: "q", type: "string", trim: true },
     { key: "page", type: "number", defaultValue: 1 },
     { key: "pageSize", type: "number", defaultValue: 20, min: 20, max: 100 },
-    { key: "connectionId", type: "string", aliases: ["id"] },
-    {
-        key: "section",
-        type: "enum",
-        values: SECTIONS,
-        defaultValue: "overview",
-        buildWhen: (value, state) =>
-            value !== "overview" && Boolean(state.connectionId),
-    },
 ])
 
 export const parseConnectionsSearchParams = codec.parse
 export const buildConnectionsSearchParams = codec.build
+
+const detailCodec = createUrlStateCodec<{ section: ConnectionSection }>([
+    {
+        key: "section",
+        type: "enum",
+        values: SECTIONS,
+        defaultValue: "health",
+    },
+])
+
+export const parseConnectionDetailSearchParams = detailCodec.parse
+
+export function buildConnectionDetailHref(
+    connectionId: string,
+    listState: ConnectionsUrlState,
+    section: ConnectionSection = "health",
+): string {
+    const params = new URLSearchParams(buildConnectionsSearchParams(listState))
+    if (section !== "health") params.set("section", section)
+    const query = params.toString()
+    const path = `/supplier-api/connections/${encodeURIComponent(connectionId)}`
+    return query ? `${path}?${query}` : path
+}

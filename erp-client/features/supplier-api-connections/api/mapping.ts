@@ -295,7 +295,11 @@ export function toCenter(
                 secsToIso(run.finished_at ?? run.started_at) ??
                 secsToIso(detail.created_at) ??
                 new Date(0).toISOString(),
-            checkType: run.check_type,
+            checkType: {
+                CONNECTIVITY: "连通性检查",
+                AUTHENTICATION: "身份验证",
+                CAPABILITY_METADATA: "能力配置检查",
+            }[run.check_type],
             result,
             resultLabel: HEALTH_LABEL[result],
             resultTone: HEALTH_TONE[result],
@@ -377,9 +381,17 @@ export async function resolveSupplierName(supplierId: string): Promise<string> {
             id: string
             name?: string
             supplier_name?: string
+            short_name?: string | null
+            legal_name?: string | null
         }>(`/admin/suppliers/${encodeURIComponent(supplierId)}`)
-        return row.name ?? row.supplier_name ?? supplierId
+        return (
+            row.short_name?.trim() ||
+            row.legal_name?.trim() ||
+            row.name ||
+            row.supplier_name ||
+            "未命名供应商"
+        )
     } catch {
-        return supplierId
+        return "供应商名称暂不可用"
     }
 }

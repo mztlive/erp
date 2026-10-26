@@ -8,11 +8,10 @@ import {
     BusinessFailureState,
     FormalActionResult,
     PageScaffold,
-    surfacePanelClassName,
-    objectSectionPanelClassName,
+    ObjectSectionTabs,
+    ObjectSectionTabsPanel,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CenterAlerts } from "@/features/supplier-api-connections/components/center-alerts"
 import { CenterHeader } from "@/features/supplier-api-connections/components/center-header"
 import {
@@ -43,26 +42,23 @@ import {
     newIdempotencyKey,
     outcomeToResult,
 } from "@/features/supplier-api-connections/lib/operations"
-import type { ConnectionsUrlState } from "@/features/supplier-api-connections/lib/url-state"
 import {
     SECTION_LABEL,
     SECTIONS,
     type ConnectionSection,
     type FormalOutcome,
 } from "@/features/supplier-api-connections/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 import { type ResultState } from "@/components/business/feedback"
 
 export function ConnectionCenter({
     connectionId,
-    urlState,
-    patchUrl,
+    section,
+    onSectionChange,
     onBack,
 }: {
     connectionId: string
-    urlState: ConnectionsUrlState
-    patchUrl: (patch: Partial<ConnectionsUrlState>) => void
+    section: ConnectionSection
+    onSectionChange: (section: ConnectionSection) => void
     onBack: () => void
 }) {
     const centerQuery = useConnectionCenterQuery(connectionId)
@@ -86,7 +82,6 @@ export function ConnectionCenter({
     const enableMut = useEnableConnectionMutation()
 
     const conn = centerQuery.data
-    const section = urlState.section
 
     const applyOutcome = (outcome: FormalOutcome) =>
         setResult(outcomeToResult(outcome))
@@ -153,7 +148,7 @@ export function ConnectionCenter({
     const disableBlocker = actionBlocker("DISABLE")
 
     return (
-        <PageScaffold density="compact">
+        <PageScaffold className="gap-6">
             <CenterHeader
                 conn={conn}
                 onBack={onBack}
@@ -190,33 +185,16 @@ export function ConnectionCenter({
                     />
                 </div>
             ) : null}
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            <ObjectSectionTabs
+                idPrefix="supplier-api-connections-center"
+                value={section}
+                onValueChange={(value) =>
+                    onSectionChange(value as ConnectionSection)
+                }
+                items={SECTIONS.map((id) => ({ id, label: SECTION_LABEL[id] }))}
+                listLabel="连接详情分区"
             >
-                <Tabs
-                    value={section}
-                    onValueChange={(v) => {
-                        if (v) patchUrl({ section: v as ConnectionSection })
-                    }}
-                >
-                    <TabsList
-                        variant="line"
-                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-6 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0"
-                    >
-                        {SECTIONS.map((s) => (
-                            <TabsTrigger
-                                key={s}
-                                id={`supplier-api-connections-center-tab-${toAutomationIdSegment(s)}`}
-                                value={s}
-                                className="text-xs sm:text-sm"
-                            >
-                                {SECTION_LABEL[s]}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
-
-                <div className={objectSectionPanelClassName}>
+                <ObjectSectionTabsPanel value={section}>
                     {section === "overview" ? (
                         <OverviewSection conn={conn} />
                     ) : null}
@@ -241,8 +219,9 @@ export function ConnectionCenter({
                     ) : null}
                     {section === "health" ? (
                         <HealthSection
-                            records={conn.healthRecords}
-                            last={conn.lastHealth}
+                            conn={conn}
+                            onSectionChange={onSectionChange}
+                            onRefresh={() => void centerQuery.refetch()}
                         />
                     ) : null}
                     {section === "catalog" ? (
@@ -264,8 +243,8 @@ export function ConnectionCenter({
                         <RelatedSection conn={conn} />
                     ) : null}
                     {section === "audit" ? <AuditSection conn={conn} /> : null}
-                </div>
-            </div>
+                </ObjectSectionTabsPanel>
+            </ObjectSectionTabs>
 
             <DisableConnectionDialog
                 open={disableOpen}

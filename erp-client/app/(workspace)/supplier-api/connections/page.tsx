@@ -19,7 +19,7 @@ function ConnectionsFallback() {
 }
 
 /**
- * SPA 壳：URL 恢复 status / health / connectionId / section。
+ * 列表 SPA 壳：URL 恢复筛选和分页；旧查询参数详情地址跳转到独立路由。
  * 业务数据不在服务端 fetch。
  */
 export default function Page() {
