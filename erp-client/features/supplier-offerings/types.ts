@@ -76,8 +76,6 @@ export type SupplierOfferingListQuery = Readonly<{
     availabilityStatus?: AvailabilityStatus
     ownerUserIds?: string
     procurementOwnerUserIds?: string
-    orgUnitIds?: string
-    includeDescendants?: boolean
     scopeVersion?: string
     page?: number
     pageSize?: number

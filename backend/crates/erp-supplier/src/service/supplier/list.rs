@@ -46,7 +46,6 @@ pub(super) fn supplier_list_search_input(
         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         authorized_scope: crate::repository::scope::SupplierReadScope::default(),
         maintainer_user_ids: query.owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
-        business_org_unit_ids: None,
         capability_owner_user_ids: query
             .capability_owner_user_ids
             .as_ref()

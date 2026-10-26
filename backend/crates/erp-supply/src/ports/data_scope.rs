@@ -133,28 +133,6 @@ pub trait OfferingDataScopePort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<OfferingResolvedScope>;
 
-    /// 展开请求中的组织及其可选下级。
-    ///
-    /// # 参数
-    /// * `org_unit_ids` - 请求中的组织 ID
-    /// * `include_descendants` - 是否包含有效下级
-    /// * `executor` - 与授权相同的执行器
-    ///
-    /// # 返回
-    /// 返回启用节点的组织 ID 集合。
-    ///
-    /// # 错误
-    /// 未知组织拒绝，不得忽略后查询全部组织。
-    ///
-    /// # 关键业务约束
-    /// 筛选只能收窄授权结果；不得把完整组织树交给供给域自行重建。
-    async fn expand_org_units(
-        &self,
-        org_unit_ids: &[String],
-        include_descendants: bool,
-        executor: &mut dyn Executor,
-    ) -> Result<BTreeSet<String>>;
-
     /// 读取指定内部组织在给定时点的有效主属成员。
     ///
     /// # 参数
@@ -231,15 +209,6 @@ impl OfferingDataScopePort for FailClosedOfferingDataScopePort {
         _action: &str,
         _executor: &mut dyn Executor,
     ) -> Result<OfferingResolvedScope> {
-        Err(unwired())
-    }
-
-    async fn expand_org_units(
-        &self,
-        _org_unit_ids: &[String],
-        _include_descendants: bool,
-        _executor: &mut dyn Executor,
-    ) -> Result<BTreeSet<String>> {
         Err(unwired())
     }
 

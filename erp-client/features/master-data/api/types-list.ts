@@ -158,8 +158,6 @@ export type MasterDataListQuery = Readonly<{
     supplierQualificationHealth?: SupplierQualificationHealth
     owner_user_ids?: string
     capability_owner_user_ids?: string
-    org_unit_ids?: string
-    include_descendants?: boolean
 }>
 
 export type SellableSupplyPreset = "single-supplier"

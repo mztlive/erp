@@ -103,7 +103,6 @@ impl SupplierService {
     ) -> Result<SupplierSnapshot> {
         let db = self.db.clone();
         let access = self.access();
-        let data_scope = self.data_scope.clone();
         let party = self.party.clone();
         let accounts = self.accounts.clone();
         let query = query.clone();
@@ -115,9 +114,7 @@ impl SupplierService {
                 Box::pin(async move {
                     let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
                     let no_scope = !context.has_scope_rules();
-                    let input =
-                        build_list_input(&query, &scope, data_scope.as_ref(), party.as_ref(), executor)
-                            .await?;
+                    let input = build_list_input(&query, &scope, party.as_ref(), executor).await?;
                     fingerprint_scope(&db, &mut context, &input, executor).await?;
                     if !hydrate {
                         return Ok(SupplierSnapshot {
@@ -220,7 +217,7 @@ fn to_list_view(snapshot: SupplierSnapshot) -> SupplierListView {
         organization_version: snapshot.context.organization_version,
         as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
         empty_reason: snapshot.no_scope.then_some("no_scope"),
-        scope_summary: "供应商整体维护人及其业务组织范围",
+        scope_summary: "供应商按岗位权限共享；维护人及能力负责人筛选为额外收窄",
 
         data: OwnershipPage {
             ownership_basis: "supplier_maintainer",
@@ -234,21 +231,13 @@ fn to_list_view(snapshot: SupplierSnapshot) -> SupplierListView {
     }
 }
 
-/// 展开组织筛选并按名称关键词解析主体；业务日取当天。
+/// 按名称关键词解析主体；业务日取当天。
 async fn build_list_input(
     query: &SupplierListQuery,
     scope: &SupplierReadScope,
-    data_scope: &dyn crate::ports::SupplierDataScopePort,
     party: &dyn crate::ports::PartyFactsPort,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<SupplierListSearchInput> {
-    let org_ids = expand_org_filter(
-        data_scope,
-        query.org_unit_ids.as_ref().map(|ids| ids.as_slice()),
-        query.include_descendants,
-        executor,
-    )
-    .await?;
     let keyword_party_ids = match query.keyword.as_deref() {
         Some(keyword) => Some(party.matching_current_party_ids_by_name(keyword, executor).await?),
         None => None,
@@ -259,7 +248,6 @@ async fn build_list_input(
         keyword_party_ids,
     );
     input.authorized_scope = scope.clone();
-    input.business_org_unit_ids = org_ids;
     Ok(input)
 }
 
@@ -272,7 +260,7 @@ async fn fingerprint_scope(
 ) -> Result<()> {
     let versions = db.supplier_accounts().query_versions(&account_filter(input), executor).await?;
     if versions.len() > 10_000 {
-        return Err(Error::ValidationError("供应商查询超过上限，请收窄组织或负责人条件".into()));
+        return Err(Error::ValidationError("供应商查询超过上限，请收窄搜索或负责人条件".into()));
     }
     context.scope_version = fingerprint_versions(&context.scope_version, &versions);
     Ok(())
@@ -314,7 +302,6 @@ fn account_filter(input: &SupplierListSearchInput) -> crate::repository::Supplie
         excluded_supplier_ids: None,
         authorized_scope: input.authorized_scope.clone(),
         maintainer_user_ids: input.maintainer_user_ids.clone(),
-        business_org_unit_ids: input.business_org_unit_ids.clone(),
         page: input.page,
         page_size: input.page_size,
         sort_by: input.sort_by.clone(),
@@ -355,27 +342,6 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
     Ok(SupplierSnapshot { no_scope, items, total, page, page_size, context })
 }
 
-/// 要求包含下级时必须给出组织；展开失败沿用端口错误。
-async fn expand_org_filter(
-    data_scope: &dyn crate::ports::SupplierDataScopePort,
-    org_ids: Option<&[String]>,
-    include_descendants: Option<bool>,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<Option<Vec<String>>> {
-    let Some(org_ids) = org_ids else {
-        if include_descendants == Some(true) {
-            return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
-        }
-        return Ok(None);
-    };
-    if include_descendants == Some(true) && org_ids.is_empty() {
-        return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
-    }
-    let expanded =
-        data_scope.expand_org_units(org_ids, include_descendants.unwrap_or(false), executor).await?;
-    Ok(Some(expanded.into_iter().collect()))
-}
-
 fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut values: Vec<String> = ids.into_iter().filter(|id| !id.is_empty()).collect();
     values.sort();
@@ -405,13 +371,11 @@ mod tests {
         let query: SupplierListParams = serde_json::from_value(serde_json::json!({
             "owner_user_ids": "buyer-a",
             "capability_owner_user_ids": "cap-b",
-            "org_unit_ids": "org-1"
         }))
         .unwrap();
         let normalized = query.normalized().unwrap();
         assert_eq!(normalized.owner_user_ids.unwrap().as_slice(), &["buyer-a".to_string()]);
         assert_eq!(normalized.capability_owner_user_ids.unwrap().as_slice(), &["cap-b".to_string()]);
-        assert_eq!(normalized.org_unit_ids.unwrap().as_slice(), &["org-1".to_string()]);
         assert!(serde_json::from_value::<SupplierListParams>(serde_json::json!({"owner": "张三"})).is_err());
     }
 }

@@ -53,8 +53,6 @@ export function masterTransferQuery(query: MasterDataListQuery) {
             owner_user_ids: query.owner_user_ids || undefined,
             capability_owner_user_ids:
                 query.capability_owner_user_ids || undefined,
-            org_unit_ids: query.org_unit_ids || undefined,
-            include_descendants: query.include_descendants || undefined,
             _filters: filters,
         }
     return null

@@ -29,7 +29,6 @@ export type SupplierOfferingFilterKey =
     | "availabilityStatus"
     | "ownerUserIds"
     | "procurementOwnerUserIds"
-    | "orgUnitIds"
 
 export type SupplierOfferingAppliedChip = Readonly<{
     key: SupplierOfferingFilterKey
@@ -101,12 +100,6 @@ export function buildSupplierOfferingAppliedChips(
             label: `采购负责人：已选 ${selectedCount(urlState.procurementOwnerUserIds)} 人`,
         })
     }
-    if (urlState.orgUnitIds) {
-        chips.push({
-            key: "orgUnitIds",
-            label: `业务组织：已选 ${selectedCount(urlState.orgUnitIds)} 个${urlState.includeDescendants ? "（含下级）" : ""}`,
-        })
-    }
     return chips
 }
 
@@ -142,9 +135,7 @@ export function useSupplierOfferingsPageState() {
         urlState.sourceType ||
         urlState.availabilityStatus ||
         urlState.ownerUserIds ||
-        urlState.procurementOwnerUserIds ||
-        urlState.orgUnitIds ||
-        urlState.includeDescendants,
+        urlState.procurementOwnerUserIds,
     )
     /** 已生效筛选包含来源锁定条件：查询消费的全部参数都计入（§12.6）。 */
     const hasFilters = Boolean(
@@ -157,9 +148,7 @@ export function useSupplierOfferingsPageState() {
         urlState.sourceType ||
         urlState.availabilityStatus ||
         urlState.ownerUserIds ||
-        urlState.procurementOwnerUserIds ||
-        urlState.orgUnitIds ||
-        urlState.includeDescendants,
+        urlState.procurementOwnerUserIds,
     )
     const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
     const [skuIdDraft, setSkuIdDraft] = React.useState<string | null>(
@@ -183,11 +172,6 @@ export function useSupplierOfferingsPageState() {
     )
     const [procurementOwnerUserIdsDraft, setProcurementOwnerUserIdsDraft] =
         React.useState(urlState.procurementOwnerUserIds ?? "")
-    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(
-        urlState.orgUnitIds ?? "",
-    )
-    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
-        React.useState(Boolean(urlState.includeDescendants))
     /** 深链条件显示为已生效标签，不自动打开浮层。 */
     const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
 
@@ -205,8 +189,6 @@ export function useSupplierOfferingsPageState() {
 
     /** 一次提交关键词与全部结构化筛选草稿；成功后收起面板（§8.1）。 */
     const applyFilters = React.useCallback(() => {
-        const orgUnitIds = orgUnitIdsDraft.trim()
-        if (!orgUnitIds) setIncludeDescendantsDraft(false)
         patchUrl({
             q: searchDraft.trim() || undefined,
             skuId: skuIdDraft || undefined,
@@ -221,17 +203,12 @@ export function useSupplierOfferingsPageState() {
             ownerUserIds: ownerUserIdsDraft.trim() || undefined,
             procurementOwnerUserIds:
                 procurementOwnerUserIdsDraft.trim() || undefined,
-            orgUnitIds: orgUnitIds || undefined,
-            includeDescendants:
-                orgUnitIds && includeDescendantsDraft ? true : undefined,
             scopeVersion: undefined,
             page: 1,
         })
         setFilterPanelOpen(false)
     }, [
         availabilityStatusDraft,
-        includeDescendantsDraft,
-        orgUnitIdsDraft,
         ownerUserIdsDraft,
         patchUrl,
         procurementOwnerUserIdsDraft,
@@ -303,17 +280,6 @@ export function useSupplierOfferingsPageState() {
                 })
                 return
             }
-            if (key === "orgUnitIds") {
-                setOrgUnitIdsDraft("")
-                setIncludeDescendantsDraft(false)
-                patchUrl({
-                    orgUnitIds: undefined,
-                    includeDescendants: undefined,
-                    page: 1,
-                    scopeVersion: undefined,
-                })
-                return
-            }
             setAvailabilityStatusDraft("all")
             patchUrl({
                 availabilityStatus: undefined,
@@ -334,8 +300,6 @@ export function useSupplierOfferingsPageState() {
         setSourceTypeDraft("all")
         setOwnerUserIdsDraft("")
         setProcurementOwnerUserIdsDraft("")
-        setOrgUnitIdsDraft("")
-        setIncludeDescendantsDraft(false)
         if (!skuLocked) setSkuIdDraft(null)
     }, [skuLocked])
 
@@ -347,12 +311,8 @@ export function useSupplierOfferingsPageState() {
         setSourceTypeDraft(urlState.sourceType ?? "all")
         setOwnerUserIdsDraft(urlState.ownerUserIds ?? "")
         setProcurementOwnerUserIdsDraft(urlState.procurementOwnerUserIds ?? "")
-        setOrgUnitIdsDraft(urlState.orgUnitIds ?? "")
-        setIncludeDescendantsDraft(Boolean(urlState.includeDescendants))
         setFilterPanelOpen(false)
     }, [
-        urlState.includeDescendants,
-        urlState.orgUnitIds,
         urlState.ownerUserIds,
         urlState.procurementOwnerUserIds,
         urlState.productNo,
@@ -374,8 +334,6 @@ export function useSupplierOfferingsPageState() {
         setAvailabilityStatusDraft("all")
         setOwnerUserIdsDraft("")
         setProcurementOwnerUserIdsDraft("")
-        setOrgUnitIdsDraft("")
-        setIncludeDescendantsDraft(false)
         setFilterPanelOpen(false)
         if (!skuLocked) setSkuIdDraft(null)
         patchUrl({
@@ -389,8 +347,6 @@ export function useSupplierOfferingsPageState() {
             availabilityStatus: undefined,
             ownerUserIds: undefined,
             procurementOwnerUserIds: undefined,
-            orgUnitIds: undefined,
-            includeDescendants: undefined,
             scopeVersion: undefined,
             page: 1,
         })
@@ -436,8 +392,6 @@ export function useSupplierOfferingsPageState() {
         setAvailabilityStatusDraft(urlState.availabilityStatus ?? "all")
         setOwnerUserIdsDraft(urlState.ownerUserIds ?? "")
         setProcurementOwnerUserIdsDraft(urlState.procurementOwnerUserIds ?? "")
-        setOrgUnitIdsDraft(urlState.orgUnitIds ?? "")
-        setIncludeDescendantsDraft(Boolean(urlState.includeDescendants))
     }, [urlState])
 
     const appliedFilterLabels = [
@@ -458,9 +412,6 @@ export function useSupplierOfferingsPageState() {
         urlState.procurementOwnerUserIds
             ? `采购负责人：已选 ${selectedCount(urlState.procurementOwnerUserIds)} 人`
             : null,
-        urlState.orgUnitIds
-            ? `业务组织：已选 ${selectedCount(urlState.orgUnitIds)} 个${urlState.includeDescendants ? "（含下级）" : ""}`
-            : null,
     ].filter(Boolean)
 
     const hasPendingChanges =
@@ -473,9 +424,7 @@ export function useSupplierOfferingsPageState() {
         availabilityStatusDraft !== (urlState.availabilityStatus ?? "all") ||
         ownerUserIdsDraft !== (urlState.ownerUserIds ?? "") ||
         procurementOwnerUserIdsDraft !==
-            (urlState.procurementOwnerUserIds ?? "") ||
-        orgUnitIdsDraft !== (urlState.orgUnitIds ?? "") ||
-        includeDescendantsDraft !== Boolean(urlState.includeDescendants)
+            (urlState.procurementOwnerUserIds ?? "")
 
     return {
         urlState,
@@ -502,10 +451,6 @@ export function useSupplierOfferingsPageState() {
         setOwnerUserIdsDraft,
         procurementOwnerUserIdsDraft,
         setProcurementOwnerUserIdsDraft,
-        orgUnitIdsDraft,
-        setOrgUnitIdsDraft,
-        includeDescendantsDraft,
-        setIncludeDescendantsDraft,
         filterPanelOpen,
         setFilterPanelOpen,
         patchUrl,

@@ -150,7 +150,6 @@ impl<'a> SupplierRepository<'a> {
             excluded_supplier_ids,
             authorized_scope: input.authorized_scope.clone(),
             maintainer_user_ids: input.maintainer_user_ids.clone(),
-            business_org_unit_ids: input.business_org_unit_ids.clone(),
             page: input.page,
             page_size: input.page_size,
             sort_by: input.sort_by.clone(),

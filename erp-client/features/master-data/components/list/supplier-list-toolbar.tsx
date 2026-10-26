@@ -24,13 +24,11 @@ import type {
     SupplierFilterKey,
     useSupplierListFilters,
 } from "@/features/master-data/hooks/use-supplier-list-filters"
-import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 
 const MORE_CHIP_KEYS = [
     "supplierQualificationTypes",
     "owner_user_ids",
     "capability_owner_user_ids",
-    "org_unit_ids",
 ] as const
 const QUALIFICATION_HEALTH_OPTIONS =
     SUPPLIER_QUALIFICATION_HEALTH_OPTIONS.filter(
@@ -162,19 +160,6 @@ export function SupplierListToolbar({
                                 category="business"
                             />
                         </div>
-                    </fieldset>
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            范围
-                        </legend>
-                        <OrganizationUnitFilter
-                            id={`${prefix}-filter-org`}
-                            label="业务组织"
-                            value={f.orgUnitIdsDraft}
-                            onChange={f.setOrgUnitIdsDraft}
-                            includeDescendants={f.includeDescendantsDraft}
-                            onDescendantsChange={f.setIncludeDescendantsDraft}
-                        />
                     </fieldset>
                 </div>
             }

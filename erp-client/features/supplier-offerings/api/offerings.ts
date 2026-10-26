@@ -92,8 +92,6 @@ export function fetchSupplierOfferings(
         availability_status: query.availabilityStatus || undefined,
         owner_user_ids: query.ownerUserIds || undefined,
         procurement_owner_user_ids: query.procurementOwnerUserIds || undefined,
-        org_unit_ids: query.orgUnitIds || undefined,
-        include_descendants: query.includeDescendants || undefined,
         scope_version: query.scopeVersion || undefined,
         page: query.page ?? 1,
         page_size: query.pageSize ?? 50,

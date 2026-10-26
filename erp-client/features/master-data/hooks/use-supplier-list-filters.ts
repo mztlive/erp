@@ -24,7 +24,6 @@ export type SupplierFilterKey =
     | "supplierQualificationTypes"
     | "owner_user_ids"
     | "capability_owner_user_ids"
-    | "org_unit_ids"
 
 /** 供应商列表：搜索 + 启停 + 资质状态 / 类型 + 供应能力。 */
 export function useSupplierListFilters(
@@ -77,17 +76,13 @@ export function useSupplierListFilters(
     const ownerUserIds = searchParams.get("owner_user_ids") ?? ""
     const capabilityOwnerUserIds =
         searchParams.get("capability_owner_user_ids") ?? ""
-    const orgUnitIds = searchParams.get("org_unit_ids") ?? ""
-    const includeDescendants =
-        searchParams.get("include_descendants") === "true"
     const hasStructuredSupplierFilters = Boolean(
         lifecycleStatus !== "all" ||
         supplierQualificationHealth ||
         supplierCapabilityCodes.length ||
         supplierQualificationTypes.length ||
         ownerUserIds ||
-        capabilityOwnerUserIds ||
-        orgUnitIds,
+        capabilityOwnerUserIds,
     )
 
     // 深链只显示已生效标签，不自动打开筛选浮层。
@@ -109,9 +104,6 @@ export function useSupplierListFilters(
         React.useState(ownerUserIds)
     const [capabilityOwnerUserIdsDraft, setCapabilityOwnerUserIdsDraft] =
         React.useState(capabilityOwnerUserIds)
-    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(orgUnitIds)
-    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
-        React.useState(includeDescendants)
 
     const changeLifecycle = React.useCallback(
         (next: "enabled" | "disabled" | "all") => {
@@ -148,11 +140,6 @@ export function useSupplierListFilters(
                     : supplierQualificationHealthDraft,
             owner_user_ids: ownerUserIdsDraft || null,
             capability_owner_user_ids: capabilityOwnerUserIdsDraft || null,
-            org_unit_ids: orgUnitIdsDraft.trim() || null,
-            include_descendants:
-                orgUnitIdsDraft.trim() && includeDescendantsDraft
-                    ? "true"
-                    : null,
             page: null,
         })
         resetPagination()
@@ -166,8 +153,6 @@ export function useSupplierListFilters(
         supplierQualificationTypesDraft,
         ownerUserIdsDraft,
         capabilityOwnerUserIdsDraft,
-        orgUnitIdsDraft,
-        includeDescendantsDraft,
     ])
 
     /** 移除单个普通筛选条件，保留当前启停 Tab。 */
@@ -186,17 +171,6 @@ export function useSupplierListFilters(
             if (key === "owner_user_ids") setOwnerUserIdsDraft("")
             if (key === "capability_owner_user_ids")
                 setCapabilityOwnerUserIdsDraft("")
-            if (key === "org_unit_ids") {
-                setOrgUnitIdsDraft("")
-                setIncludeDescendantsDraft(false)
-                patchUrl({
-                    org_unit_ids: null,
-                    include_descendants: null,
-                    page: null,
-                })
-                resetPagination()
-                return
-            }
             patchUrl({ [key]: null, page: null })
             resetPagination()
         },
@@ -208,8 +182,6 @@ export function useSupplierListFilters(
         setSupplierQualificationTypesDraft([])
         setOwnerUserIdsDraft("")
         setCapabilityOwnerUserIdsDraft("")
-        setOrgUnitIdsDraft("")
-        setIncludeDescendantsDraft(false)
     }, [])
 
     /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、资质状态和供应能力。 */
@@ -217,16 +189,8 @@ export function useSupplierListFilters(
         setSupplierQualificationTypesDraft(supplierQualificationTypes)
         setOwnerUserIdsDraft(ownerUserIds)
         setCapabilityOwnerUserIdsDraft(capabilityOwnerUserIds)
-        setOrgUnitIdsDraft(orgUnitIds)
-        setIncludeDescendantsDraft(includeDescendants)
         setSupplierFilterPanelOpen(false)
-    }, [
-        capabilityOwnerUserIds,
-        includeDescendants,
-        orgUnitIds,
-        ownerUserIds,
-        supplierQualificationTypes,
-    ])
+    }, [capabilityOwnerUserIds, ownerUserIds, supplierQualificationTypes])
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
@@ -237,9 +201,7 @@ export function useSupplierListFilters(
         [...supplierQualificationTypesDraft].sort().join(",") !==
             [...supplierQualificationTypes].sort().join(",") ||
         ownerUserIdsDraft !== ownerUserIds ||
-        capabilityOwnerUserIdsDraft !== capabilityOwnerUserIds ||
-        orgUnitIdsDraft.trim() !== orgUnitIds.trim() ||
-        includeDescendantsDraft !== includeDescendants
+        capabilityOwnerUserIdsDraft !== capabilityOwnerUserIds
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -248,8 +210,6 @@ export function useSupplierListFilters(
         setSupplierQualificationHealthDraft("all")
         setOwnerUserIdsDraft("")
         setCapabilityOwnerUserIdsDraft("")
-        setOrgUnitIdsDraft("")
-        setIncludeDescendantsDraft(false)
         setSupplierFilterPanelOpen(false)
         patchUrl({
             q: null,
@@ -260,8 +220,6 @@ export function useSupplierListFilters(
             supplierQualificationHealth: null,
             owner_user_ids: null,
             capability_owner_user_ids: null,
-            org_unit_ids: null,
-            include_descendants: null,
             page: null,
         })
         resetPagination()
@@ -275,8 +233,6 @@ export function useSupplierListFilters(
         )
         setOwnerUserIdsDraft(ownerUserIds)
         setCapabilityOwnerUserIdsDraft(capabilityOwnerUserIds)
-        setOrgUnitIdsDraft(orgUnitIds)
-        setIncludeDescendantsDraft(includeDescendants)
     }, [
         lifecycleStatus,
         supplierCapabilityCodes,
@@ -284,8 +240,6 @@ export function useSupplierListFilters(
         supplierQualificationTypes,
         ownerUserIds,
         capabilityOwnerUserIds,
-        orgUnitIds,
-        includeDescendants,
     ])
 
     return {
@@ -296,8 +250,6 @@ export function useSupplierListFilters(
         supplierQualificationHealth,
         ownerUserIds,
         capabilityOwnerUserIds,
-        orgUnitIds,
-        includeDescendants,
         metricKey,
         hasStructuredSupplierFilters,
         searchDraft,
@@ -314,10 +266,6 @@ export function useSupplierListFilters(
         setOwnerUserIdsDraft,
         capabilityOwnerUserIdsDraft,
         setCapabilityOwnerUserIdsDraft,
-        orgUnitIdsDraft,
-        setOrgUnitIdsDraft,
-        includeDescendantsDraft,
-        setIncludeDescendantsDraft,
         hasPendingChanges,
         pagination,
         setPagination,

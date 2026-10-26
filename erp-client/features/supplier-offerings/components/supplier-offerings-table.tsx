@@ -330,6 +330,7 @@ export function SupplierOfferingsTable({
             loading={isPending}
             layout="flush"
             showPagination={false}
+            showToolbarSummary={false}
             enableRowSelection={Boolean(onSelectionChange)}
             rowSelection={Object.fromEntries(
                 selectedIds.map((id) => [id, true]),

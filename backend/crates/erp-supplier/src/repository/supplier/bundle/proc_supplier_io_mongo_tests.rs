@@ -345,7 +345,6 @@ fn list_input(build: impl FnOnce(&mut SupplierListSearchInput)) -> SupplierListS
             user_limit: None,
         },
         maintainer_user_ids: None,
-        business_org_unit_ids: None,
         capability_owner_user_ids: Vec::new(),
     };
     build(&mut input);
@@ -715,7 +714,6 @@ async fn supplier_bundles_see_same_session_writes() {
                                     user_limit: None,
                                 },
                                 maintainer_user_ids: None,
-                                business_org_unit_ids: None,
                                 capability_owner_user_ids: Vec::new(),
                             },
                             executor,

@@ -7,7 +7,6 @@ import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
@@ -15,7 +14,6 @@ import {
     CompanySkuSearchCombobox,
     SupplierSearchCombobox,
 } from "@/features/entity-selectors"
-import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type {
     AvailabilityStatusFilter,
     OfferingSourceFilter,
@@ -47,7 +45,6 @@ const MORE_CHIP_KEYS: readonly SupplierOfferingFilterKey[] = [
     "productNo",
     "ownerUserIds",
     "procurementOwnerUserIds",
-    "orgUnitIds",
 ]
 
 export type SupplierOfferingsToolbarProps = {
@@ -81,14 +78,7 @@ export type SupplierOfferingsToolbarProps = {
     procurementOwnerUserIdsDraft: string
     onProcurementOwnerUserIdsDraftChange: (value: string) => void
 
-    orgUnitIdsDraft: string
-    onOrgUnitIdsDraftChange: (value: string) => void
-    includeDescendantsDraft: boolean
-    onIncludeDescendantsDraftChange: (value: boolean) => void
     hasPendingChanges?: boolean
-    resultCount?: number
-    loading?: boolean
-    failed?: boolean
 }
 
 export function SupplierOfferingsToolbar({
@@ -122,14 +112,7 @@ export function SupplierOfferingsToolbar({
     procurementOwnerUserIdsDraft,
     onProcurementOwnerUserIdsDraftChange,
 
-    orgUnitIdsDraft,
-    onOrgUnitIdsDraftChange,
-    includeDescendantsDraft,
-    onIncludeDescendantsDraftChange,
     hasPendingChanges = false,
-    resultCount,
-    loading,
-    failed,
 }: SupplierOfferingsToolbarProps) {
     const moreCount = appliedChips.filter(({ key }) =>
         MORE_CHIP_KEYS.includes(key),
@@ -322,28 +305,9 @@ export function SupplierOfferingsToolbar({
                             />
                         </div>
                     </fieldset>
-                    <fieldset className="min-w-0 border-t pt-4">
-                        <legend className="sr-only">业务组织</legend>
-                        <OrganizationUnitFilter
-                            id="supplier-offerings-toolbar-org"
-                            label="业务组织"
-                            value={orgUnitIdsDraft}
-                            onChange={onOrgUnitIdsDraftChange}
-                            includeDescendants={includeDescendantsDraft}
-                            onDescendantsChange={
-                                onIncludeDescendantsDraftChange
-                            }
-                        />
-                    </fieldset>
                 </div>
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条供给",
-                loadingLabel: "正在加载供给…",
-            })}
+            resultStatus={null}
             chips={appliedChips}
             onClearChip={(key) =>
                 removeFilter(key as SupplierOfferingFilterKey)

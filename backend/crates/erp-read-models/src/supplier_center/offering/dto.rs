@@ -21,10 +21,6 @@ pub struct SupplierOfferingListParams {
     pub owner_user_ids: Option<application_core::QueryIds>,
     /// 规则解析出的采购负责人，逗号分隔，最多 100 项；额外 AND。
     pub procurement_owner_user_ids: Option<application_core::QueryIds>,
-    /// 当前业务组织，逗号分隔，最多 100 项；只收窄授权结果。
-    pub org_unit_ids: Option<application_core::QueryIds>,
-    /// 组织筛选是否包含有效下级；缺省为 false。
-    pub include_descendants: Option<bool>,
     /// 关键字：供应商订货编码、公司 SKU 编号或 SKU 名称。
     pub q: Option<String>,
     /// 公司 SKU。
@@ -328,8 +324,6 @@ mod tests {
         let params: SupplierOfferingListParams = serde_json::from_value(serde_json::json!({
             "owner_user_ids": "user-2,user-1,user-2",
             "procurement_owner_user_ids": "buyer-1",
-            "org_unit_ids": "org-1",
-            "include_descendants": true,
             "scope_version": "v1"
         }))
         .unwrap();
@@ -338,8 +332,6 @@ mod tests {
             &["user-1".to_string(), "user-2".to_string()]
         );
         assert_eq!(params.procurement_owner_user_ids.as_ref().unwrap().as_slice(), &["buyer-1".to_string()]);
-        assert_eq!(params.org_unit_ids.as_ref().unwrap().as_slice(), &["org-1".to_string()]);
-        assert_eq!(params.include_descendants, Some(true));
         assert_eq!(params.scope_version.as_deref(), Some("v1"));
         assert!(
             serde_json::from_value::<SupplierOfferingListParams>(serde_json::json!({

@@ -93,23 +93,6 @@ impl SupplierDataScopePort for MongoSupplierDataScope {
         })
     }
 
-    async fn expand_org_units(
-        &self,
-        org_unit_ids: &[String],
-        include_descendants: bool,
-        executor: &mut dyn Executor,
-    ) -> erp_supplier::Result<BTreeSet<String>> {
-        scope_support::expand_org_units(
-            &self.db,
-            org_unit_ids,
-            include_descendants,
-            executor,
-            Into::into,
-            map_identity_error,
-        )
-        .await
-    }
-
     async fn org_member_ids(
         &self,
         org_unit_ids: &BTreeSet<String>,

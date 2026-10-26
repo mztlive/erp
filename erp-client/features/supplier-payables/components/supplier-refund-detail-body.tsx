@@ -35,7 +35,7 @@ export function SupplierRefundDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm">
+        <div className="space-y-6 text-sm">
             <PreviewAmount
                 label={
                     row.settlementMethod === "SUPPLIER_CREDIT"

@@ -1,10 +1,14 @@
 "use client"
 
+import { listWorkspaceFilterStatusText } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 
 export type SupplierOfferingsPaginationProps = {
     page: number
     totalPages: number
+    resultCount?: number
+    loading: boolean
+    failed: boolean
     disabled: boolean
     onPageChange: (page: number) => void
 }
@@ -13,14 +17,28 @@ export type SupplierOfferingsPaginationProps = {
 export function SupplierOfferingsPagination({
     page,
     totalPages,
+    resultCount,
+    loading,
+    failed,
     disabled,
     onPageChange,
 }: SupplierOfferingsPaginationProps) {
     return (
-        <div className="flex items-center justify-between pt-1 text-sm">
-            <span className="text-xs text-muted-foreground">
-                第 {page} / {totalPages} 页
-            </span>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span aria-live="polite">
+                    {listWorkspaceFilterStatusText({
+                        loading,
+                        failed,
+                        resultCount,
+                        noun: "条供给",
+                        loadingLabel: "正在加载供给…",
+                    })}
+                </span>
+                <span>
+                    第 {page} / {totalPages} 页
+                </span>
+            </div>
             <div className="flex items-center gap-2">
                 <Button
                     id="supplier-offerings-pagination-prev"

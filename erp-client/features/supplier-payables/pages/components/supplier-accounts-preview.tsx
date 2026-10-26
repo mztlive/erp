@@ -128,7 +128,7 @@ export function SupplierAccountsPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open) onClosed?.()
                 }}
-                size="detail"
+                size="preview"
                 title="付款冲正"
                 identity={
                     reversalQuery.data
@@ -177,7 +177,7 @@ export function SupplierAccountsPreview({
                         onDecisionApplied={onDecisionApplied}
                     />
                 ) : reversalQuery.isError ? (
-                    <div className="space-y-3 px-7 py-6">
+                    <div className="space-y-3">
                         <p className="text-sm text-muted-foreground">
                             {getErrorMessage(
                                 reversalQuery.error,
@@ -195,7 +195,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="px-7 py-6 text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                         未找到冲正详情
                     </p>
                 )}
@@ -221,7 +221,7 @@ export function SupplierAccountsPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open) onClosed?.()
                 }}
-                size="detail"
+                size="preview"
                 title="供应商退款"
                 identity={
                     refundQuery.data
@@ -270,7 +270,7 @@ export function SupplierAccountsPreview({
                         onDecisionApplied={onDecisionApplied}
                     />
                 ) : refundQuery.isError ? (
-                    <div className="space-y-3 px-7 py-6">
+                    <div className="space-y-3">
                         <p className="text-sm text-muted-foreground">
                             {getErrorMessage(
                                 refundQuery.error,
@@ -288,7 +288,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="px-7 py-6 text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                         未找到退款详情
                     </p>
                 )}
@@ -395,7 +395,7 @@ export function SupplierAccountsPreview({
             onOpenChangeComplete={(open) => {
                 if (!open) onClosed?.()
             }}
-            size="detail"
+            size="preview"
             title={payable?.supplierName ?? "应付详情"}
             identity={
                 payable
@@ -499,9 +499,7 @@ export function SupplierAccountsPreview({
                     </Button>
                 </div>
             ) : (
-                <p className="px-7 py-6 text-sm text-muted-foreground">
-                    未找到应付详情
-                </p>
+                <p className="text-sm text-muted-foreground">未找到应付详情</p>
             )}
         </QuickPreviewSheet>
     )

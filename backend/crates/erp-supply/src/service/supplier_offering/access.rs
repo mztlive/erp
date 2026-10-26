@@ -125,27 +125,6 @@ impl OfferingAccess {
         )
     }
 
-    /// 展开请求组织及其可选下级，与授权用同一执行器。
-    ///
-    /// # 参数
-    /// * `org_unit_ids` - 请求中的组织 ID
-    /// * `include_descendants` - 是否包含有效下级
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回启用节点的组织 ID 集合。
-    ///
-    /// # 错误
-    /// 未知组织拒绝。
-    pub async fn expand_org_units(
-        &self,
-        org_unit_ids: &[String],
-        include_descendants: bool,
-        executor: &mut dyn Executor,
-    ) -> Result<std::collections::BTreeSet<String>> {
-        self.scope.expand_org_units(org_unit_ids, include_descendants, executor).await
-    }
-
     /// 查询账号在解析时点的唯一主属组织。
     ///
     /// # 参数

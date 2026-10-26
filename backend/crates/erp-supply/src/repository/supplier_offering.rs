@@ -133,8 +133,6 @@ pub struct SupplierOfferingFilter {
     pub scope: Option<OfferingReadScope>,
     /// 维护人筛选，只收窄授权结果。
     pub maintainer_user_ids: Option<Vec<String>>,
-    /// 业务组织筛选，只收窄授权结果。
-    pub business_org_unit_ids: Option<Vec<String>>,
     /// 页码。
     pub page: u64,
     /// 每页数量。
@@ -159,7 +157,6 @@ impl Default for SupplierOfferingFilter {
             sku_ids: None,
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -194,9 +191,6 @@ impl QueryFilter for SupplierOfferingFilter {
         }
         if let Some(ids) = &self.maintainer_user_ids {
             filter.extend(in_filter("maintainer_user_id", ids.iter().cloned()));
-        }
-        if let Some(ids) = &self.business_org_unit_ids {
-            filter.extend(in_filter("business_org_unit_id", ids.iter().cloned()));
         }
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
@@ -802,7 +796,6 @@ mod tests {
                 sku_ids: Some(candidates.clone()),
                 scope: None,
                 maintainer_user_ids: None,
-                business_org_unit_ids: None,
                 page: 1,
                 page_size: 20,
                 sort_by: None,
@@ -830,7 +823,6 @@ mod tests {
             sku_ids: None,
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -853,7 +845,6 @@ mod tests {
             sku_ids: None,
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -877,7 +868,6 @@ mod tests {
             sku_ids: None,
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -909,7 +899,6 @@ mod tests {
             sku_ids: Some(vec![]),
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             page: 999,
             page_size: 100,
             sort_by: Some("created_at".to_string()),
@@ -943,7 +932,6 @@ mod tests {
                 user_limit: None,
             }),
             maintainer_user_ids: Some(vec!["user-2".into()]),
-            business_org_unit_ids: Some(vec!["org-b".into()]),
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -953,7 +941,7 @@ mod tests {
         let encoded = filter.to_string();
         assert!(!encoded.contains("created_by"));
         assert_eq!(filter.get_document("maintainer_user_id").unwrap(), &doc! { "$in": ["user-2"] });
-        assert_eq!(filter.get_document("business_org_unit_id").unwrap(), &doc! { "$in": ["org-b"] });
+        assert!(!filter.contains_key("business_org_unit_id"));
         assert!(filter.contains_key("$and"));
     }
 
@@ -970,7 +958,6 @@ mod tests {
             sku_ids: None,
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,

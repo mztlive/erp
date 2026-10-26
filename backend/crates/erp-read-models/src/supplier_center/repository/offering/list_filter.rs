@@ -55,8 +55,6 @@ pub struct SupplierOfferingListQuery {
     pub scope: Option<erp_supply::OfferingReadScope>,
     /// 维护人筛选，只收窄授权结果。
     pub maintainer_user_ids: Option<Vec<String>>,
-    /// 业务组织筛选，只收窄授权结果。
-    pub business_org_unit_ids: Option<Vec<String>>,
     /// 采购负责人命中的供给主键；与可供状态求交。
     pub offering_ids: Option<Vec<SupplierOfferingId>>,
 }
@@ -88,7 +86,6 @@ impl Default for SupplierOfferingListQuery {
             sort_ascending: false,
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             offering_ids: None,
         }
     }
@@ -174,7 +171,6 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             sku_ids,
             scope: query.scope.clone(),
             maintainer_user_ids: query.maintainer_user_ids.clone(),
-            business_org_unit_ids: query.business_org_unit_ids.clone(),
             page: query.page,
             page_size: query.page_size,
             sort_by: query.sort_by.clone(),
@@ -351,7 +347,6 @@ mod tests {
             sort_ascending: true,
             scope: None,
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             offering_ids: None,
         };
         assert_eq!(
@@ -490,7 +485,6 @@ mod isolation_tests {
                 sort_ascending: false,
                 scope: None,
                 maintainer_user_ids: None,
-                business_org_unit_ids: None,
                 offering_ids: None,
             };
             let bundle = super::SupplierOfferingReadRepository::new(fixture.db())
@@ -552,7 +546,6 @@ mod isolation_tests {
                 sort_ascending: false,
                 scope: None,
                 maintainer_user_ids: None,
-                business_org_unit_ids: None,
                 offering_ids: None,
             };
             let bundle = super::SupplierOfferingReadRepository::new(fixture.db())

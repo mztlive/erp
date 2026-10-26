@@ -118,8 +118,6 @@ pub struct SupplierAccountFilter {
     pub authorized_scope: crate::repository::scope::SupplierReadScope,
     /// 维护人筛选；`None` 表示不筛选。
     pub maintainer_user_ids: Option<Vec<String>>,
-    /// 业务组织筛选；`None` 表示不筛选。
-    pub business_org_unit_ids: Option<Vec<String>>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -141,7 +139,6 @@ impl Default for SupplierAccountFilter {
             excluded_supplier_ids: None,
             authorized_scope: crate::repository::scope::SupplierReadScope::default(),
             maintainer_user_ids: None,
-            business_org_unit_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -164,7 +161,7 @@ impl QueryFilter for SupplierAccountFilter {
     /// 没有 `keyword` 时不使用 `party_ids`。
     /// `supplier_ids` 为 `Some` 时写入 `id` 的 `$in`（空集合即无命中），
     /// `excluded_supplier_ids` 为 `Some` 时再写入 `$nin`；只排除时只写 `$nin`。
-    /// `maintainer_user_ids`、`business_org_unit_ids` 为 `Some` 时按 `$in` 过滤。
+    /// `maintainer_user_ids` 为 `Some` 时按 `$in` 过滤。
     /// `authorized_scope` 为空时在已有条件上写入 `$expr: false` 并返回；
     /// 范围文档为空时不再追加条件，否则与前述条件做 `$and`。
     /// 分页与排序字段不进入条件。
@@ -202,9 +199,6 @@ impl QueryFilter for SupplierAccountFilter {
         );
         if let Some(owners) = &self.maintainer_user_ids {
             filter.insert("maintainer_user_id", doc! { "$in": owners });
-        }
-        if let Some(orgs) = &self.business_org_unit_ids {
-            filter.insert("business_org_unit_id", doc! { "$in": orgs });
         }
         if self.authorized_scope.is_empty() {
             filter.insert("$expr", false);

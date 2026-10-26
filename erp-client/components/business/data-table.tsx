@@ -128,6 +128,7 @@ function DataTable<TData>({
     refreshingLabel = "正在刷新，当前内容会保留",
     emptyState,
     renderToolbar,
+    showToolbarSummary = true,
     showColumnVisibility = true,
     showPagination = true,
     pageSizeOptions = [20, 50, 100],
@@ -383,6 +384,7 @@ function DataTable<TData>({
 
     const selectedCount = Object.values(rowSelection).filter(Boolean).length
     const summary =
+        showToolbarSummary &&
         hasColumnSettings &&
         (selectedCount > 0 || !toolbarHost.hasFilterStatus) ? (
             <span className="num text-muted-foreground">

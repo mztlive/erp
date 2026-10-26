@@ -17,8 +17,6 @@ export type SupplierOfferingsUrlState = Readonly<{
     availabilityStatus?: AvailabilityStatus
     ownerUserIds?: string
     procurementOwnerUserIds?: string
-    orgUnitIds?: string
-    includeDescendants?: boolean
     scopeVersion?: string
     page: number
     returnTo?: string
@@ -54,13 +52,6 @@ const codec = createUrlStateCodec<SupplierOfferingsUrlState>([
         name: "procurementOwnerUserIds",
         type: "string",
         trim: true,
-    },
-    { key: "org_unit_ids", name: "orgUnitIds", type: "string", trim: true },
-    {
-        key: "include_descendants",
-        name: "includeDescendants",
-        type: "boolean",
-        defaultValue: false,
     },
     { key: "scope_version", name: "scopeVersion", type: "string", trim: true },
     { key: "page", type: "number", defaultValue: 1, min: 1 },

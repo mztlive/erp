@@ -97,6 +97,8 @@ export type DataTableProps<TData> = {
     refreshingLabel?: React.ReactNode
     emptyState?: React.ReactNode
     renderToolbar?: (table: TanStackTable<TData>) => React.ReactNode
+    /** 工具栏是否展示总数与已选数量；页面在分页区承载统计时可关闭。 */
+    showToolbarSummary?: boolean
     showColumnVisibility?: boolean
     showPagination?: boolean
     pageSizeOptions?: readonly number[]

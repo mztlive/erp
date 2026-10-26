@@ -15,7 +15,7 @@ use persistence_core::Transactional;
 
 use super::procurement::{OfferingProcurementOwners, ensure_authorized_count};
 use super::{SupplierOfferingListParams, SupplierOfferingListView, SupplierOfferingReadService};
-use crate::{Error, Result};
+use crate::Result;
 
 impl SupplierOfferingReadService {
     /// 分页查询授权范围内的供给列表。
@@ -47,7 +47,7 @@ impl SupplierOfferingReadService {
             organization_version: snapshot.organization_version,
             as_of: snapshot.as_of,
             empty_reason: snapshot.no_scope.then_some("no_scope"),
-            scope_summary: "供给维护人及其业务组织范围；采购负责人筛选为额外收窄",
+            scope_summary: "供给按岗位权限共享；维护人及采购负责人筛选为额外收窄",
         })
     }
 
@@ -90,12 +90,11 @@ async fn build_snapshot(
     actor: AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<OfferingSnapshot> {
-    let access = OfferingAccess::new(db.clone(), data_scope.clone());
+    let access = OfferingAccess::new(db.clone(), data_scope);
     let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
     let no_scope = !context.has_scope_rules();
     let mut query = super::prepare_list_query(&params)?;
     query.scope = Some(scope.clone());
-    apply_org_filter(&mut query, data_scope.as_ref(), &params, executor).await?;
     let filter = apply_procurement_filter(&db, &query, procurement.as_ref(), &params, executor).await?;
     let bundle = match filter {
         Some(filter) => {
@@ -123,33 +122,6 @@ async fn build_snapshot(
         organization_version: context.organization_version,
         as_of: context.as_of.as_utc().to_rfc3339(),
     })
-}
-
-async fn apply_org_filter(
-    query: &mut crate::supplier_center::repository::offering::SupplierOfferingListQuery,
-    data_scope: &dyn OfferingDataScopePort,
-    params: &SupplierOfferingListParams,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<()> {
-    let Some((org_ids, include_descendants)) = requested_org_expansion(params)? else {
-        return Ok(());
-    };
-    let expanded = data_scope.expand_org_units(&org_ids, include_descendants, executor).await?;
-    query.business_org_unit_ids = Some(expanded.into_iter().collect());
-    Ok(())
-}
-
-/// 解析组织筛选；包含下级时必须提供组织 ID，只收窄授权结果。
-fn requested_org_expansion(params: &SupplierOfferingListParams) -> Result<Option<(Vec<String>, bool)>> {
-    let include = params.include_descendants.unwrap_or(false);
-    match &params.org_unit_ids {
-        None if include => Err(Error::ValidationError("包含下级时必须提供组织筛选".into())),
-        None => Ok(None),
-        Some(ids) if include && ids.as_slice().is_empty() => {
-            Err(Error::ValidationError("包含下级时必须提供组织筛选".into()))
-        },
-        Some(ids) => Ok(Some((ids.as_slice().to_vec(), include))),
-    }
 }
 
 /// 先用完整查询条件读取身份，再解析负责人，禁止对页面先切片后过滤。
@@ -233,7 +205,6 @@ mod tests {
             status: Some(OfferingStatus::Active),
             scope: Some(OfferingReadScope::default()),
             maintainer_user_ids: Some(vec!["maintainer".into()]),
-            business_org_unit_ids: Some(vec!["org".into()]),
             page: 7,
             page_size: 1,
             sort_by: Some("supplier_sku_code".into()),
@@ -308,22 +279,14 @@ mod tests {
     }
 
     #[test]
-    fn include_descendants_requires_org_units() {
-        let missing = SupplierOfferingListParams {
-            include_descendants: Some(true),
-            ..SupplierOfferingListParams::default()
-        };
-        match requested_org_expansion(&missing) {
-            Err(Error::ValidationError(message)) => assert!(message.contains("组织筛选")),
-            other => panic!("expected org filter, got {other:?}"),
+    fn offering_list_rejects_removed_organization_filters() {
+        for value in [
+            serde_json::json!({"org_unit_ids": "org-a"}),
+            serde_json::json!({"include_descendants": true}),
+            serde_json::json!({"include_descendants": false}),
+        ] {
+            let error = serde_json::from_value::<SupplierOfferingListParams>(value).unwrap_err();
+            assert!(error.to_string().contains("unknown field"));
         }
-        let params: SupplierOfferingListParams = serde_json::from_value(serde_json::json!({
-            "org_unit_ids": "org-a",
-            "include_descendants": true
-        }))
-        .unwrap();
-        let (ids, include) = requested_org_expansion(&params).unwrap().unwrap();
-        assert_eq!(ids, vec!["org-a".to_string()]);
-        assert!(include);
     }
 }

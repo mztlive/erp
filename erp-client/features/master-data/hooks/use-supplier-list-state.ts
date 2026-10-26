@@ -41,8 +41,6 @@ export function useSupplierListState(
         supplierQualificationHealth: filters.supplierQualificationHealth,
         owner_user_ids: filters.ownerUserIds || undefined,
         capability_owner_user_ids: filters.capabilityOwnerUserIds || undefined,
-        org_unit_ids: filters.orgUnitIds || undefined,
-        include_descendants: filters.includeDescendants || undefined,
     })
     const { exportMeta, handleExport } = useMasterDataListExport()
 
@@ -101,12 +99,6 @@ export function useSupplierListState(
                 label: `能力负责人 ${filters.capabilityOwnerUserIds}`,
             })
         }
-        if (filters.orgUnitIds) {
-            chips.push({
-                key: "org_unit_ids",
-                label: `组织 ${filters.orgUnitIds}${filters.includeDescendants ? "（含下级）" : ""}`,
-            })
-        }
         return chips
     }, [
         filters.q,
@@ -115,8 +107,6 @@ export function useSupplierListState(
         filters.supplierQualificationTypes,
         filters.ownerUserIds,
         filters.capabilityOwnerUserIds,
-        filters.orgUnitIds,
-        filters.includeDescendants,
     ])
     const listTableDescription = React.useMemo(
         () =>
@@ -169,8 +159,6 @@ export function useSupplierListState(
                 owner_user_ids: filters.ownerUserIds || undefined,
                 capability_owner_user_ids:
                     filters.capabilityOwnerUserIds || undefined,
-                org_unit_ids: filters.orgUnitIds || undefined,
-                include_descendants: filters.includeDescendants || undefined,
             },
             filterSnapshotLabel,
             resourceLabel("suppliers"),

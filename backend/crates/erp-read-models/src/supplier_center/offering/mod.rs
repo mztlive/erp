@@ -97,7 +97,6 @@ pub(super) fn prepare_list_query(params: &SupplierOfferingListParams) -> Result<
         sort_ascending: sort_dir == SortDir::Asc,
         scope: None,
         maintainer_user_ids: params.owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
-        business_org_unit_ids: params.org_unit_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
         offering_ids: None,
     })
 }
@@ -291,12 +290,10 @@ mod tests {
         let params: SupplierOfferingListParams = serde_json::from_value(serde_json::json!({
             "owner_user_ids": "user-1",
             "procurement_owner_user_ids": "buyer-1",
-            "org_unit_ids": "org-1"
         }))
         .unwrap();
         let query = prepare_list_query(&params).unwrap();
         assert_eq!(query.maintainer_user_ids.as_deref(), Some(["user-1".to_string()].as_slice()));
-        assert_eq!(query.business_org_unit_ids.as_deref(), Some(["org-1".to_string()].as_slice()));
         assert!(query.offering_ids.is_none());
         assert!(query.scope.is_none());
     }

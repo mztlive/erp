@@ -28,7 +28,7 @@ export interface PayablePreviewBodyProps {
 /** 应付详情抽屉加载占位。 */
 export function PayablePreviewSkeleton() {
     return (
-        <div className="flex flex-col gap-6 px-7 py-6">
+        <div className="flex flex-col gap-6">
             <Skeleton className="h-28 w-full" />
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-32 w-full" />
@@ -57,7 +57,7 @@ export function PayablePreviewBody({
     const showGate = gate?.state === "BLOCKED"
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto px-7 py-6">
+        <div className="flex flex-col gap-6">
             <PreviewAmount label="待付金额（含税）" value={payable.openTotal}>
                 <span>
                     应付总额 <MoneyValue value={payable.grossTotal} />

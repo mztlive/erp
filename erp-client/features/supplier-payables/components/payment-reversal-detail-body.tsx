@@ -39,7 +39,7 @@ export function PaymentReversalDetailBody({
     const originalPaymentQuery = useSupplierPaymentQuery(row.originalPaymentId)
     const originalPayment = originalPaymentQuery.data
     return (
-        <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm">
+        <div className="space-y-6 text-sm">
             <PreviewAmount label="冲正金额" value={row.amount} />
             <PreviewSection title="原因说明">
                 <p className="leading-6">{row.reasonText || "未填写原因"}</p>

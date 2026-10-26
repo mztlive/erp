@@ -22,10 +22,6 @@ pub struct SupplierListParams {
     pub owner_user_ids: Option<application_core::QueryIds>,
     /// 供给能力负责人 ID，逗号分隔，最多 100 项。
     pub capability_owner_user_ids: Option<application_core::QueryIds>,
-    /// 当前业务组织，逗号分隔，最多 100 项。
-    pub org_unit_ids: Option<application_core::QueryIds>,
-    /// 组织筛选是否包含有效下级；缺省为 false。
-    pub include_descendants: Option<bool>,
     /// 供应商编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID（精确匹配）。
@@ -57,10 +53,6 @@ pub(crate) struct SupplierListQuery {
     pub owner_user_ids: Option<application_core::QueryIds>,
     /// 供给能力负责人。
     pub capability_owner_user_ids: Option<application_core::QueryIds>,
-    /// 当前业务组织。
-    pub org_unit_ids: Option<application_core::QueryIds>,
-    /// 是否包含下级组织。
-    pub include_descendants: Option<bool>,
     /// 供应商编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID。
@@ -94,8 +86,6 @@ impl SupplierListParams {
         Ok(SupplierListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
             capability_owner_user_ids: self.capability_owner_user_ids.clone(),
-            org_unit_ids: self.org_unit_ids.clone(),
-            include_descendants: self.include_descendants,
             keyword: normalized_text(self.keyword.as_deref()),
             party_id: self.party_id.clone(),
             status: self.status,

@@ -108,8 +108,6 @@ export const SupplierOfferingsPage = () => {
         availabilityStatus: state.urlState.availabilityStatus,
         ownerUserIds: state.urlState.ownerUserIds,
         procurementOwnerUserIds: state.urlState.procurementOwnerUserIds,
-        orgUnitIds: state.urlState.orgUnitIds,
-        includeDescendants: state.urlState.includeDescendants,
         scopeVersion:
             state.urlState.page > 1 ? state.urlState.scopeVersion : undefined,
         page: state.urlState.page,
@@ -313,38 +311,12 @@ export const SupplierOfferingsPage = () => {
                                 state.setProcurementOwnerUserIdsDraft
                             }
 
-                            orgUnitIdsDraft={state.orgUnitIdsDraft}
-                            onOrgUnitIdsDraftChange={state.setOrgUnitIdsDraft}
-                            includeDescendantsDraft={
-                                state.includeDescendantsDraft
-                            }
-                            onIncludeDescendantsDraftChange={
-                                state.setIncludeDescendantsDraft
-                            }
                             hasPendingChanges={state.hasPendingChanges}
-                            resultCount={query.data?.total}
-                            loading={query.isFetching}
-                            failed={query.isError}
                         />
                     }
                     selectionBar={
                         !state.taskMode && canSelect ? (
                             <div className="flex flex-wrap items-center gap-2 text-sm">
-                                <span>本页已选 {selectedItems.length} 行</span>
-                                <Button
-                                    id="supplier-offerings-batch-select-page"
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                        setSelection({
-                                            scope: selectionScope,
-                                            ids: items.map((item) => item.id),
-                                        })
-                                    }
-                                >
-                                    选择本页
-                                </Button>
                                 <Button
                                     id="supplier-offerings-batch-clear"
                                     type="button"
@@ -467,6 +439,9 @@ export const SupplierOfferingsPage = () => {
                             </div>
                             <div className="shrink-0 border-t border-border py-3">
                                 <SupplierOfferingsPagination
+                                    resultCount={query.data?.total}
+                                    loading={query.isFetching}
+                                    failed={query.isError}
                                     page={state.urlState.page}
                                     totalPages={totalPages}
                                     disabled={query.isPending}

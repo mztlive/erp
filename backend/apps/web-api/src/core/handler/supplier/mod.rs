@@ -342,3 +342,23 @@ pub async fn supplier_capability_handover(
     let view = state.supplier_profile_process().handover_capability(&id, &capability_id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
+
+#[cfg(test)]
+mod list_query_tests {
+    use axum::http::{StatusCode, Uri};
+
+    use super::*;
+
+    #[test]
+    fn list_query_preserves_people_filters_and_rejects_organization_filters() {
+        let uri: Uri = "/?owner_user_ids=user-1&capability_owner_user_ids=buyer-1&page=1".parse().unwrap();
+        let Query(params) = Query::<SupplierListParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(params.owner_user_ids.unwrap().as_slice(), &["user-1".to_string()]);
+        assert_eq!(params.capability_owner_user_ids.unwrap().as_slice(), &["buyer-1".to_string()]);
+        for query in ["org_unit_ids=org-a", "include_descendants=true", "include_descendants=false"] {
+            let uri: Uri = format!("/?{query}").parse().unwrap();
+            let error = Query::<SupplierListParams>::try_from_uri(&uri).unwrap_err();
+            assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+        }
+    }
+}

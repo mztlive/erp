@@ -228,3 +228,23 @@ async fn can_view_costs(state: &AppState, subject: &RbacSubject) -> std::result:
     let permission = Permission::parse("supplier_offering_cost:detail")?;
     state.rbac().enforce(&subject.0, &permission).await.map_err(Into::into)
 }
+
+#[cfg(test)]
+mod list_query_tests {
+    use axum::http::{StatusCode, Uri};
+
+    use super::*;
+
+    #[test]
+    fn list_query_preserves_people_filters_and_rejects_organization_filters() {
+        let uri: Uri = "/?owner_user_ids=user-1&procurement_owner_user_ids=buyer-1&page=1".parse().unwrap();
+        let Query(params) = Query::<SupplierOfferingListParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(params.owner_user_ids.unwrap().as_slice(), &["user-1".to_string()]);
+        assert_eq!(params.procurement_owner_user_ids.unwrap().as_slice(), &["buyer-1".to_string()]);
+        for query in ["org_unit_ids=org-a", "include_descendants=true", "include_descendants=false"] {
+            let uri: Uri = format!("/?{query}").parse().unwrap();
+            let error = Query::<SupplierOfferingListParams>::try_from_uri(&uri).unwrap_err();
+            assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+        }
+    }
+}
