@@ -6,6 +6,7 @@ mod direct_upload;
 mod execute;
 mod identity;
 mod images;
+mod legacy;
 mod media;
 mod parse;
 mod query;

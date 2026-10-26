@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_import::{collapse_import_text, truncate_import_text};
-use erp_catalog::{PRODUCT_IMPORT_SHEET_NAME, ProductImportJobView};
+use erp_catalog::{PRODUCT_IMPORT_NAME_COLUMN, PRODUCT_IMPORT_SHEET_NAME, ProductImportJobView};
 use erp_support::repository::bulk_job::BackgroundJobInput;
 use erp_support::repository::prelude::*;
 use erp_support::{
@@ -180,7 +180,7 @@ fn import_item_drafts(parsed: &ParsedProductSheet) -> Vec<BackgroundJobItemDraft
         .rows
         .iter()
         .map(|row| {
-            let name = row.cells.get(8).and_then(|value| {
+            let name = row.cells.get(PRODUCT_IMPORT_NAME_COLUMN - 1).and_then(|value| {
                 let text = collapse_import_text(value);
                 if text.is_empty() { None } else { Some(truncate_import_text(&text, 128)) }
             });

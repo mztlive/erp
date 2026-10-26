@@ -9,7 +9,7 @@ use crate::error::Result;
 
 /// 「对内」工作表名称。
 pub const PRODUCT_IMPORT_SHEET_NAME: &str = "对内";
-/// 「对内」表头，共 24 列，必须与原模板第 1 行一致。
+/// 「对内」表头，共 13 列，必须与精简模板第 1 行一致。
 pub const PRODUCT_IMPORT_HEADERS: &[&str] = &[
     "产品编码",
     "产品条码",
@@ -18,26 +18,15 @@ pub const PRODUCT_IMPORT_HEADERS: &[&str] = &[
     "产品副图",
     "品牌",
     "产品类别",
-    "产品类别编码",
     "产品名称",
     "产品规格",
-    "一件代发成本价（含税运）",
-    "集采成本价（含税）",
     "一件代发底价（含税运）",
     "集采底价（含税）",
     "集采起订量",
-    "一件代发快递",
     "市场价",
-    "供应商名称",
-    "供应商编号",
-    "食品产品有效期",
-    "生产批次",
-    "是否自营产品",
-    "自营产品库存",
-    "商品税率",
 ];
 /// 产品名称列（1 起）。
-pub const PRODUCT_IMPORT_NAME_COLUMN: usize = 9;
+pub const PRODUCT_IMPORT_NAME_COLUMN: usize = 8;
 /// 默认基础单位代码（开发种子 `JIAN` / 「件」）。
 pub const PRODUCT_IMPORT_UNIT_CODE: &str = "JIAN";
 /// 默认基础单位名称。

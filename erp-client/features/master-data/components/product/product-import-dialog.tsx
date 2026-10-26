@@ -91,7 +91,10 @@ export function ProductImportDialog({
                 <DialogHeader>
                     <DialogTitle>导入商品</DialogTitle>
                     <DialogDescription>
-                        使用产品报价表「对内」工作表。大文件上传时显示进度；提交后后台逐行导入，进度与结果在「后台任务」查看。图片随文件导入；供应商与成本价不会写入供给。
+                        使用 13
+                        列商品导入模板的「对内」工作表，产品类别和产品名称必填，也兼容原
+                        24
+                        列报价表。提交后后台逐行导入，进度与结果在「后台任务」查看。导入只建立商品资料，不创建供应商供给或库存。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">

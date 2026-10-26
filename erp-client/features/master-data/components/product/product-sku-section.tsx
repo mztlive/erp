@@ -1,8 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, InfoIcon } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ChevronDownIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 import { Badge } from "@/components/ui/badge"
@@ -242,28 +241,15 @@ function ProductSkuSection({
                     {masterDataCopy.productNoSkus}
                 </p>
             ) : (
-                <div className="min-w-0 space-y-2">
-                    <Alert
-                        id={`${prefix}-price-audience`}
-                        variant="info"
-                        role="note"
-                        className="items-center rounded-lg px-3 py-1.5 *:[svg]:translate-y-0"
-                    >
-                        <InfoIcon className="size-3.5" aria-hidden="true" />
-                        <AlertDescription className="text-xs">
-                            {masterDataCopy.productSkuPriceAudience}
-                        </AlertDescription>
-                    </Alert>
-                    <ProductSkuTable
-                        fields={fields}
-                        activeSpecs={activeSpecs}
-                        canRevise={canRevise}
-                        name={name}
-                        updateSku={updateSku}
-                        rememberSkuFile={rememberSkuFile}
-                        onOpenInventory={onOpenInventory}
-                    />
-                </div>
+                <ProductSkuTable
+                    fields={fields}
+                    activeSpecs={activeSpecs}
+                    canRevise={canRevise}
+                    name={name}
+                    updateSku={updateSku}
+                    rememberSkuFile={rememberSkuFile}
+                    onOpenInventory={onOpenInventory}
+                />
             )}
         </section>
     )

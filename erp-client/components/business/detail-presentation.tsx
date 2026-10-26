@@ -13,10 +13,13 @@ import { cn } from "@/lib/utils"
 export function DetailHint({
     id,
     label,
+    icon,
     children,
 }: {
     id: string
     label: string
+    /** 缺省为信息图标；表头帮助可传问号图标。 */
+    icon?: ReactNode
     children: ReactNode
 }) {
     return (
@@ -26,7 +29,7 @@ export function DetailHint({
                 aria-label={`${label}说明`}
                 className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-                <InfoIcon className="size-3.5" aria-hidden="true" />
+                {icon ?? <InfoIcon className="size-3.5" aria-hidden="true" />}
             </PopoverTrigger>
             <PopoverContent
                 className="max-w-[calc(100vw-2rem)] rounded-lg text-xs leading-5"

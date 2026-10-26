@@ -467,8 +467,6 @@ export type BrandComboboxItem = Readonly<{
     brandId: string
     brandCode: string
     brandName: string
-    statusLabel?: string
-    statusTone?: StatusTone
     description?: string
 }>
 
@@ -476,7 +474,7 @@ export type BrandComboboxProps = EntityComboboxBaseProps & {
     brands: readonly BrandComboboxItem[]
 }
 
-/** 品牌字典选择：搜索品牌代码与名称；仅应由 feature 注入当前可选项。 */
+/** 品牌字典选择：搜索品牌代码与名称；选项集由 feature 限定为启用品牌。 */
 export function BrandCombobox({
     brands,
     placeholder = "搜索品牌代码或名称",
@@ -490,10 +488,6 @@ export function BrandCombobox({
                     id: b.brandId,
                     code: b.brandCode,
                     label: b.brandName,
-                    status: {
-                        label: b.statusLabel ?? "启用",
-                        tone: b.statusTone ?? "success",
-                    },
                     description: b.description,
                 })),
             ),

@@ -220,9 +220,9 @@ export const masterDataCopy = {
     productRebuildSkus: "按规格重新生成 SKU",
     productSpecValuesPlaceholder: "多个取值用顿号或逗号分隔，如：红、蓝、绿",
     productNoSkus: "尚未生成 SKU",
-    productSkuNoPending: "保存后按商品编号生成",
+    productSkuCodeHint: "SKU 编码在保存后按商品编号生成，不可修改；条码可选。",
     productSkuPriceAudience:
-        "以下价格均为给销售看的参考售价（含税），不是供应商成本价。",
+        "代发价、集采价、市场价均为给销售看的含税参考售价，不是供应商成本价。",
     productDefaultSpec: "默认规格",
     productMainImageHint: "SKU 主图，单张",
     productSpuMediaHint: "商品级多图，允许为空",

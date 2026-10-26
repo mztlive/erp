@@ -15,13 +15,14 @@ use serde::{Deserialize, Serialize};
 use storage::S3Storage;
 
 use super::images::RowMedia;
+use super::legacy;
 use super::media::{PreparedImage, WorkbookMedia, row_media_targets};
 use super::parse::ParsedProductSheet;
 use crate::{Error, Result};
 
-/// 行级清单版本号；版本不一致时执行阶段回退到源文件链路。
-const ROW_MANIFEST_VERSION: u32 = 1;
-/// 私有后台输入的格式标识；仍须验证清单自身版本及请求身份。
+/// 行级清单版本号；版本 2 使用 13 列，版本 1 读取时转换，未知版本回退源文件。
+const ROW_MANIFEST_VERSION: u32 = 2;
+/// 私有输入信封标识保持稳定；行列布局由清单自身版本区分。
 pub(super) const ROW_MANIFEST_INPUT_FORMAT: &str = "product_import_rows_v1";
 /// 行级清单对象键前缀。
 const ROW_MANIFEST_KEY_PREFIX: &str = "product-import-rows";
@@ -219,14 +220,20 @@ pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> 
 /// * `request_id` - 任务当前的请求身份。
 ///
 /// # 返回
-/// 返回绑定同一请求及清单版本的全部原始行。
+/// 返回绑定同一请求的当前 13 列输入；旧版清单在内存中转换。
 /// # 错误
 /// JSON 损坏、请求身份不符或版本不一致时拒绝该来源。
 pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowManifest> {
-    let manifest: RowManifest =
+    let mut manifest: RowManifest =
         serde_json::from_slice(bytes).map_err(|_| Error::Internal("行清单损坏".to_string()))?;
-    if manifest.version != ROW_MANIFEST_VERSION || manifest.request_id != request_id {
+    if ![1, ROW_MANIFEST_VERSION].contains(&manifest.version) || manifest.request_id != request_id {
         return Err(Error::Internal("行清单版本不一致".to_string()));
+    }
+    if manifest.version == 1 {
+        for row in &mut manifest.rows {
+            row.cells = legacy::compact_cells(&row.cells);
+        }
+        manifest.version = ROW_MANIFEST_VERSION;
     }
     Ok(manifest)
 }
@@ -477,7 +484,7 @@ mod tests {
         assert!(decode_row_manifest(&bytes, "req-1").is_ok());
         assert!(matches!(decode_row_manifest(&bytes, "req-2"), Err(Error::Internal(message))
             if message == "行清单版本不一致"));
-        let newer = serde_json::json!({"version":2,"request_id":"req-1","rows":[]});
+        let newer = serde_json::json!({"version":3,"request_id":"req-1","rows":[]});
         assert!(
             matches!(decode_row_manifest(&serde_json::to_vec(&newer).unwrap(), "req-1"), Err(Error::Internal(message))
             if message == "行清单版本不一致")
@@ -499,7 +506,9 @@ mod tests {
         .unwrap();
         let parsed = decode_row_manifest(&bytes, "req-1").unwrap();
         assert_eq!(parsed.rows.len(), 1);
-        assert_eq!(parsed.rows[0].cells, ["product"]);
+        assert_eq!(parsed.version, ROW_MANIFEST_VERSION);
+        assert_eq!(parsed.rows[0].cells[0], "product");
+        assert_eq!(parsed.rows[0].cells.len(), erp_catalog::PRODUCT_IMPORT_HEADERS.len());
         assert!(parsed.rows[0].main_image.is_none());
         assert!(parsed.rows[0].carousel.is_empty());
     }
@@ -547,7 +556,7 @@ mod tests {
             }],
         };
         let bytes = serde_json::to_vec(&manifest).unwrap();
-        let decoded: RowManifest = serde_json::from_slice(&bytes).unwrap();
+        let decoded = decode_row_manifest(&bytes, "req-1").unwrap();
         assert_eq!(decoded.version, ROW_MANIFEST_VERSION);
         assert_eq!(decoded.request_id, "req-1");
         assert_eq!(decoded.rows.len(), 1);
@@ -581,6 +590,44 @@ mod tests {
             media.pending[0].registration.storage_object_key,
             "product-import-images/req-1/2/main.png"
         );
+    }
+
+    /// 已提交旧任务在解码时转换列位，已上传图片引用与行错误保持原样。
+    #[test]
+    fn legacy_manifest_converts_columns_without_changing_media() {
+        let manifest = RowManifest {
+            version: 1,
+            request_id: "req-1".into(),
+            rows: vec![RowManifestRow {
+                row_number: 7,
+                cells: (0..24).map(|index| format!("old-{index}")).collect(),
+                main_image: Some(ManifestImage {
+                    reference: "pending-file:req-1-7-main".into(),
+                    registration: sample_registration(),
+                }),
+                carousel: vec![ManifestCarouselImage {
+                    reference: "pending-file:req-1-7-carousel-0".into(),
+                    sort_order: 2,
+                    registration: sample_registration(),
+                }],
+                media_error: Some("原图片错误".into()),
+            }],
+        };
+        let decoded = decode_row_manifest(&serde_json::to_vec(&manifest).unwrap(), "req-1").unwrap();
+        assert_eq!(decoded.version, ROW_MANIFEST_VERSION);
+        let row = &decoded.rows[0];
+        assert_eq!(row.row_number, 7);
+        assert_eq!(
+            row.cells,
+            [
+                "old-0", "old-1", "old-2", "old-3", "old-4", "old-5", "old-6", "old-8", "old-9", "old-12",
+                "old-13", "old-14", "old-16"
+            ]
+        );
+        assert_eq!(row.main_image.as_ref().unwrap().reference, "pending-file:req-1-7-main");
+        assert_eq!(row.carousel[0].reference, "pending-file:req-1-7-carousel-0");
+        assert_eq!(row.carousel[0].sort_order, 2);
+        assert_eq!(row.media_error.as_deref(), Some("原图片错误"));
     }
 
     /// 内存上传替身执行真实行编排，不访问 S3。

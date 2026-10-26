@@ -7,6 +7,7 @@ use erp_catalog::{
     ensure_product_import_headers,
 };
 
+use super::legacy;
 use crate::xlsx::{self, Archive, ArchiveLimits, Cell, MergeRange, SheetLimits};
 use crate::{Error, Result};
 
@@ -51,11 +52,23 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
         .ok_or_else(|| invalid("未找到「对内」工作表，请使用原产品报价表模板"))?;
     let rows = parse_sheet_rows(&archive.xml(&sheet_path)?, &shared)?;
     let headers = rows.first().ok_or_else(|| invalid("模板没有可导入的数据行"))?;
-    ensure_product_import_headers(&headers.cells).map_err(Error::from)?;
+    let legacy_layout = headers.cells.iter().map(|cell| cell.trim()).eq(legacy::HEADERS.iter().copied());
+    if !legacy_layout {
+        ensure_product_import_headers(&headers.cells).map_err(Error::from)?;
+    }
+    let width = if legacy_layout { legacy::HEADERS.len() } else { PRODUCT_IMPORT_HEADERS.len() };
     let data_rows = rows
         .into_iter()
         .skip(1)
-        .filter(|row| row.cells.iter().any(|cell| !cell.trim().is_empty()))
+        .filter(|row| row.cells.iter().take(width).any(|cell| !cell.trim().is_empty()))
+        .map(|mut row| {
+            if legacy_layout {
+                row.cells = legacy::compact_cells(&row.cells);
+            } else {
+                row.cells.truncate(PRODUCT_IMPORT_HEADERS.len());
+            }
+            row
+        })
         .collect::<Vec<_>>();
     if data_rows.is_empty() {
         return Err(invalid("模板没有可导入的数据行"));
@@ -69,13 +82,12 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
 
 /// 模板后的附加列继续忽略；DISPIMG 保留公式，其余单元格使用缓存值。
 fn parse_sheet_rows(xml: &str, shared: &[String]) -> Result<Vec<ParsedProductRow>> {
-    let limits =
-        SheetLimits { columns: 16_384, rows: 10_000, retained_columns: PRODUCT_IMPORT_HEADERS.len() };
+    let limits = SheetLimits { columns: 16_384, rows: 10_000, retained_columns: legacy::HEADERS.len() };
     let sheet = xlsx::rows(xml, shared, limits)?;
     let mut rows = BTreeMap::new();
     for row in sheet.rows {
         let mut cells = row.cells.into_iter().map(product_cell).collect::<Vec<_>>();
-        cells.resize(PRODUCT_IMPORT_HEADERS.len(), String::new());
+        cells.resize(legacy::HEADERS.len(), String::new());
         if cells.iter().any(|cell| !cell.is_empty()) {
             rows.insert(row.number, cells);
         }
@@ -98,7 +110,7 @@ fn product_cell(cell: Cell) -> String {
 }
 
 fn fill_merged_cells(rows: &mut BTreeMap<u32, Vec<String>>, merges: &[MergeRange]) {
-    let width = PRODUCT_IMPORT_HEADERS.len();
+    let width = legacy::HEADERS.len();
     for range in merges {
         let origin = rows.get(&range.start_row).and_then(|row| row.get(range.start_column)).cloned();
         let Some(value) = origin.filter(|value| !value.trim().is_empty()) else {
@@ -252,19 +264,29 @@ mod tests {
                 </sheetData>"#
             );
             let rows = parse_sheet_rows(&xml, &[]).unwrap();
-            assert!(rows.iter().all(|row| row.cells.len() == PRODUCT_IMPORT_HEADERS.len()));
-            let row = normalize_import_row(2, &rows[1].cells).unwrap();
+            assert!(rows.iter().all(|row| row.cells.len() == super::legacy::HEADERS.len()));
+            let row = normalize_import_row(2, &super::legacy::compact_cells(&rows[1].cells)).unwrap();
             assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
         }
     }
 
     fn product_workbook(shared: Option<&[u8]>) -> Vec<u8> {
+        let value = if shared.is_some() { "<v>0</v>" } else { "<is><t>inline&amp;lt;</t></is>" };
+        let kind = if shared.is_some() { "s" } else { "inlineStr" };
+        let cells = format!(
+            r#"<c s='1' t='{kind}' r='H2'>{value}</c><c r='C2'><f>_xlfn.DISPIMG(&quot;ID_ABC&quot;,1)</f><v/></c>"#
+        );
+        workbook_with_cells(PRODUCT_IMPORT_HEADERS, &cells, shared)
+    }
+
+    /// 生成真实 ZIP 工作簿，覆盖两种表头布局的完整解析入口。
+    fn workbook_with_cells(headers: &[&str], cells: &str, shared: Option<&[u8]>) -> Vec<u8> {
         use std::io::{Cursor, Write};
 
         use zip::ZipWriter;
         use zip::write::SimpleFileOptions;
 
-        let headers = PRODUCT_IMPORT_HEADERS
+        let headers = headers
             .iter()
             .enumerate()
             .map(|(index, header)| {
@@ -272,11 +294,7 @@ mod tests {
                 format!(r#"<c t='inlineStr' r='{column}1'><is><t>{header}</t></is></c>"#)
             })
             .collect::<String>();
-        let value = if shared.is_some() { "<v>0</v>" } else { "<is><t>inline&amp;lt;</t></is>" };
-        let kind = if shared.is_some() { "s" } else { "inlineStr" };
-        let sheet = format!(
-            r#"<worksheet><sheetData>{headers}<c s='1' t='{kind}' r='I2'>{value}</c><c r='C2'><f>_xlfn.DISPIMG(&quot;ID_ABC&quot;,1)</f><v/></c></sheetData></worksheet>"#
-        );
+        let sheet = format!("<worksheet><sheetData>{headers}{cells}</sheetData></worksheet>");
         let workbook = r#"<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet r:id='r1' name='对内'/></sheets></workbook>"#;
         let rels = r#"<Relationships><Relationship Target='worksheets/sheet1.xml' Id='r1'/></Relationships>"#;
         let mut files = vec![
@@ -300,10 +318,59 @@ mod tests {
         let bytes = product_workbook(Some("<sst><si><t>A&amp;lt;&#x4e2d;</t></si></sst>".as_bytes()));
         let parsed = super::parse_product_quote_xlsx(&bytes).unwrap();
         assert_eq!(parsed.rows[0].row_number, 2);
-        assert_eq!(parsed.rows[0].cells[8], "A&lt;中");
+        assert_eq!(parsed.rows[0].cells[7], "A&lt;中");
         assert_eq!(parsed.rows[0].cells[2], "=_xlfn.DISPIMG(\"ID_ABC\",1)");
         let parsed = super::parse_product_quote_xlsx(&product_workbook(None)).unwrap();
-        assert_eq!(parsed.rows[0].cells[8], "inline&lt;");
+        assert_eq!(parsed.rows[0].cells[7], "inline&lt;");
+    }
+
+    /// 新旧模板都映射到同一建品输入；旧成本价与模板外附加内容不得串入参考售价。
+    #[test]
+    fn compact_and_legacy_workbooks_preserve_product_fields() {
+        for (headers, positions) in [
+            (PRODUCT_IMPORT_HEADERS, ['H', 'I', 'J', 'K', 'L', 'M']),
+            (super::legacy::HEADERS, ['I', 'J', 'M', 'N', 'O', 'Q']),
+        ] {
+            let mut cells = String::from(
+                r#"<c r="A2" t="inlineStr"><is><t>00123</t></is></c>
+                <c r="B2" t="inlineStr"><is><t>0691234567890</t></is></c>
+                <c r="G2" t="inlineStr"><is><t>米</t></is></c>"#,
+            );
+            for (column, value) in
+                positions.into_iter().zip(["东北大米", "5kg", "40.00", "38.00", "12.5", "50.00"])
+            {
+                cells.push_str(&format!(r#"<c r="{column}2" t="inlineStr"><is><t>{value}</t></is></c>"#));
+            }
+            if headers.len() == 24 {
+                cells.push_str(r#"<c r="K2"><v>31.00</v></c><c r="L2"><v>29.00</v></c>"#);
+            }
+            let extra = char::from(b'A' + u8::try_from(headers.len()).unwrap());
+            cells.push_str(&format!(r#"<c r="{extra}2"><v>99.00</v></c><c r="{extra}3"><v>88.00</v></c>"#));
+            let bytes = workbook_with_cells(headers, &cells, None);
+            let parsed = super::parse_product_quote_xlsx(&bytes).unwrap();
+            assert_eq!(parsed.rows.len(), 1);
+            assert_eq!(parsed.rows[0].cells.len(), 13);
+            let row = normalize_import_row(2, &parsed.rows[0].cells).unwrap();
+            assert_eq!(row.product_no, "00123");
+            assert_eq!(row.barcode.as_deref(), Some("0691234567890"));
+            assert_eq!(row.name, "东北大米");
+            assert_eq!(row.specification.as_deref(), Some("5kg"));
+            assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
+            assert_eq!(row.bulk_price.unwrap().to_string(), "38.00");
+            assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "12.5");
+            assert_eq!(row.market_price.unwrap().to_string(), "50.00");
+        }
+    }
+
+    /// 表头调换必须明确拒绝，不能按近似布局读入错误业务字段。
+    #[test]
+    fn reordered_headers_are_rejected() {
+        for original in [PRODUCT_IMPORT_HEADERS, super::legacy::HEADERS] {
+            let mut headers = original.to_vec();
+            headers.swap(7, 8);
+            let bytes = workbook_with_cells(&headers, "", None);
+            assert!(matches!(super::parse_product_quote_xlsx(&bytes), Err(crate::Error::ValidationError(_))));
+        }
     }
 
     #[test]

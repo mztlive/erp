@@ -26,7 +26,8 @@ type BusinessObjectOption = {
     id: string
     code: string
     label: string
-    status: {
+    /** 选项集已按状态收敛时省略，避免每条都显示同一状态。 */
+    status?: {
         label: string
         tone: StatusTone
     }
@@ -122,7 +123,7 @@ function BusinessObjectCombobox({
                     item.code,
                     item.description,
                     item.validUntil,
-                    item.status.label,
+                    item.status?.label,
                 ]
                     .filter(Boolean)
                     .join(" ")
@@ -176,10 +177,12 @@ function BusinessObjectCombobox({
                                         <span className="truncate font-medium">
                                             {item.label}
                                         </span>
-                                        <StatusBadge
-                                            tone={item.status.tone}
-                                            label={item.status.label}
-                                        />
+                                        {item.status ? (
+                                            <StatusBadge
+                                                tone={item.status.tone}
+                                                label={item.status.label}
+                                            />
+                                        ) : null}
                                     </div>
                                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                         <span className="num">{item.code}</span>

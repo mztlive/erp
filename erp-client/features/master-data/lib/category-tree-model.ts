@@ -152,7 +152,7 @@ export function toCategoryComboboxItems(
         }))
 }
 
-/** 品牌列表 → Combobox 行。 */
+/** 品牌列表 → Combobox 行；只收录启用品牌，因此不携带状态。 */
 export function toBrandComboboxItems(rows: readonly MasterDataListItem[]) {
     return rows
         .filter((row) => row.lifecycleStatus === "ENABLED")
@@ -163,7 +163,5 @@ export function toBrandComboboxItems(rows: readonly MasterDataListItem[]) {
                 row.keyFacts.find((f) => f.label === "品牌代码")?.value ??
                 row.stableNo,
             brandName: row.name,
-            statusLabel: row.lifecycleStatusLabel,
-            statusTone: row.lifecycleTone,
         }))
 }

@@ -4,6 +4,9 @@ import { RequiredMark } from "@/components/ui/required-mark"
 
 import { useChangeConfirmation } from "../../hooks/use-change-confirmation"
 
+import { CircleHelpIcon } from "lucide-react"
+
+import { DetailHint } from "@/components/business/detail-presentation"
 import { Label } from "@/components/ui/label"
 
 import { Badge } from "@/components/ui/badge"
@@ -62,7 +65,7 @@ function SkuRow({
     const disableConfirmation = useChangeConfirmation(
         `master-data-product-sku-${skuSegment}-disable`,
     )
-    const cellPad = "whitespace-normal align-middle"
+    const cellPad = "whitespace-normal align-top"
     const skuName = sku.name || name || "未填写 SKU 名称"
     const specText = activeSpecs.length
         ? activeSpecs
@@ -74,8 +77,8 @@ function SkuRow({
         : "默认规格"
     return (
         <TableRow>
-            <TableCell className="sticky left-0 z-10 min-w-56 max-w-80 whitespace-normal bg-card align-middle">
-                <div className="flex items-center gap-3">
+            <TableCell className="sticky left-0 z-10 min-w-56 max-w-80 whitespace-normal bg-card align-top">
+                <div className="flex items-start gap-3">
                     <div
                         className="w-16 shrink-0"
                         role="group"
@@ -148,21 +151,15 @@ function SkuRow({
             </TableCell>
             <TableCell className={`${cellPad} px-2`}>
                 <div className="flex min-w-40 flex-col gap-1">
-                    <p
-                        id={`master-data-product-sku-${skuSegment}-code`}
-                        className={
-                            sku.skuNo
-                                ? "num flex h-control-sm items-center truncate px-1 text-sm"
-                                : "flex h-control-sm items-center truncate px-1 text-xs text-muted-foreground"
-                        }
-                        title={
-                            sku.skuNo
-                                ? "SKU 编码：系统生成，不可修改"
-                                : undefined
-                        }
-                    >
-                        {sku.skuNo || masterDataCopy.productSkuNoPending}
-                    </p>
+                    {sku.skuNo ? (
+                        <p
+                            id={`master-data-product-sku-${skuSegment}-code`}
+                            className="num flex h-control-sm items-center truncate px-1 text-sm"
+                            title="SKU 编码：系统生成，不可修改"
+                        >
+                            {sku.skuNo}
+                        </p>
+                    ) : null}
                     <Input
                         id={`master-data-product-sku-${skuSegment}-barcode`}
                         className="h-control-sm num"
@@ -350,10 +347,38 @@ function ProductSkuTable({
                             <RequiredMark />
                         </TableHead>
                         <TableHead className="w-44 min-w-40">
-                            SKU 编码 / 条码
+                            <span className="inline-flex items-center gap-1">
+                                SKU 编码 / 条码
+                                <DetailHint
+                                    id="master-data-product-sku-code-hint"
+                                    label="SKU 编码 / 条码"
+                                    icon={
+                                        <CircleHelpIcon
+                                            className="size-3.5"
+                                            aria-hidden="true"
+                                        />
+                                    }
+                                >
+                                    {masterDataCopy.productSkuCodeHint}
+                                </DetailHint>
+                            </span>
                         </TableHead>
                         <TableHead className="w-28 min-w-24">
-                            代发价（含税）
+                            <span className="inline-flex items-center gap-1">
+                                代发价（含税）
+                                <DetailHint
+                                    id="master-data-product-sku-price-hint"
+                                    label="价格"
+                                    icon={
+                                        <CircleHelpIcon
+                                            className="size-3.5"
+                                            aria-hidden="true"
+                                        />
+                                    }
+                                >
+                                    {masterDataCopy.productSkuPriceAudience}
+                                </DetailHint>
+                            </span>
                         </TableHead>
                         <TableHead className="w-28 min-w-24">
                             集采价（含税）

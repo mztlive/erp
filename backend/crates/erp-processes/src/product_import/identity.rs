@@ -70,7 +70,7 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
     if is_import_blank(&category_name) {
         return Err(Error::ValidationError("产品类别不能为空".into()));
     }
-    let spec_raw = cell(9);
+    let spec_raw = cell(8);
     let specification = if is_import_blank(spec_raw) {
         None
     } else {
@@ -93,10 +93,10 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         brand_name: import_brand_name(cell(5)),
         category_name,
         barcode,
-        sales_price: parse_optional_amount(cell(12), PRODUCT_IMPORT_HEADERS[12])?,
-        bulk_price: parse_optional_amount(cell(13), PRODUCT_IMPORT_HEADERS[13])?,
-        bulk_min_quantity: parse_optional_quantity(cell(14), PRODUCT_IMPORT_HEADERS[14])?,
-        market_price: parse_optional_amount(cell(16), PRODUCT_IMPORT_HEADERS[16])?,
+        sales_price: parse_optional_amount(cell(9), PRODUCT_IMPORT_HEADERS[9])?,
+        bulk_price: parse_optional_amount(cell(10), PRODUCT_IMPORT_HEADERS[10])?,
+        bulk_min_quantity: parse_optional_quantity(cell(11), PRODUCT_IMPORT_HEADERS[11])?,
+        market_price: parse_optional_amount(cell(12), PRODUCT_IMPORT_HEADERS[12])?,
         coded_spu,
         spec_entries,
     })
@@ -215,7 +215,7 @@ mod tests {
     fn name_and_category_are_required() {
         let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
         assert!(normalize_import_row(2, &cells).is_err());
-        cells[8] = "莲香楼凤梨酥".into();
+        cells[7] = "莲香楼凤梨酥".into();
         assert!(normalize_import_row(2, &cells).is_err());
         cells[6] = "酥点".into();
         let row = normalize_import_row(2, &cells).unwrap();
@@ -230,10 +230,10 @@ mod tests {
         let mut first = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
         first[0] = "FSY-1".into();
         first[6] = "米".into();
-        first[8] = "东北大米".into();
-        first[9] = "5kg".into();
+        first[7] = "东北大米".into();
+        first[8] = "5kg".into();
         let mut second = first.clone();
-        second[9] = "10kg".into();
+        second[8] = "10kg".into();
         let left = normalize_import_row(2, &first).unwrap();
         let right = normalize_import_row(3, &second).unwrap();
         assert_eq!(left.product_no, "FSY-1");
@@ -242,25 +242,23 @@ mod tests {
         assert_eq!(right.spec_entries[0].attribute_value_code, "10kg");
     }
 
-    /// 原模板只导入公司代发/集采底价与市场价，供应商成本不能补成公司参考价。
+    /// 精简模板分别读取公司代发价、集采价、起订量与市场价。
     #[test]
-    fn original_template_prices_are_independent_from_supplier_costs() {
+    fn compact_template_prices_and_minimum_are_independent() {
         let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
         cells[6] = "米".into();
-        cells[8] = "东北大米".into();
-        cells[10] = "31.00".into();
-        cells[11] = "29.00".into();
-        cells[12] = "40.00".into();
-        cells[13] = "38.00".into();
-        cells[14] = "12.5".into();
-        cells[16] = "50.00".into();
+        cells[7] = "东北大米".into();
+        cells[9] = "40.00".into();
+        cells[10] = "38.00".into();
+        cells[11] = "12.5".into();
+        cells[12] = "50.00".into();
         let row = normalize_import_row(2, &cells).unwrap();
         assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
         assert_eq!(row.bulk_price.unwrap().to_string(), "38.00");
         assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "12.5");
         assert_eq!(row.market_price.unwrap().to_string(), "50.00");
-        cells[13].clear();
-        cells[14].clear();
+        cells[10].clear();
+        cells[11].clear();
         let unmaintained = normalize_import_row(2, &cells).unwrap();
         assert!(unmaintained.bulk_price.is_none());
         assert!(unmaintained.bulk_min_quantity.is_none());
@@ -271,9 +269,9 @@ mod tests {
     fn bulk_minimum_rejects_invalid_and_non_positive_quantities() {
         let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
         cells[6] = "米".into();
-        cells[8] = "东北大米".into();
+        cells[7] = "东北大米".into();
         for value in ["0", "-1", "NaN", "invalid", "1.0000001"] {
-            cells[14] = value.into();
+            cells[11] = value.into();
             assert!(normalize_import_row(2, &cells).is_err(), "invalid quantity: {value}");
         }
     }
