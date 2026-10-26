@@ -317,20 +317,7 @@ export const SupplierOfferingsPage = () => {
                     selectionBar={
                         !state.taskMode && canSelect ? (
                             <div className="flex flex-wrap items-center gap-2 text-sm">
-                                <Button
-                                    id="supplier-offerings-batch-clear"
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                        setSelection({
-                                            scope: selectionScope,
-                                            ids: [],
-                                        })
-                                    }
-                                >
-                                    清空
-                                </Button>
+                                
                                 {canBatchRevise && (
                                     <Button
                                         id="supplier-offerings-batch-revise"
