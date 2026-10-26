@@ -131,9 +131,9 @@ export function CatalogBrowser({
             },
             {
                 accessorKey: "unit",
-                header: "单位",
-                meta: { label: "单位" },
-                cell: ({ row }) => row.original.unit || "待确认",
+                header: "来源单位",
+                meta: { label: "来源单位" },
+                cell: ({ row }) => row.original.unit || "供应商未提供",
             },
             {
                 accessorKey: "purchase_price",
@@ -143,7 +143,7 @@ export function CatalogBrowser({
                     !canReadCost ? (
                         "无查看权限"
                     ) : row.original.purchase_price == null ? (
-                        "未取得"
+                        "暂无接口报价"
                     ) : (
                         <MoneyValue
                             value={row.original.purchase_price}
@@ -181,7 +181,7 @@ export function CatalogBrowser({
                                 {row.original.requires_identity_review
                                     ? "规格或单位有变，请核对供给"
                                     : catalogMediaBlocker(row.original)
-                                      ? "图片待核验，请同步后选品"
+                                      ? "图片尚未同步完成，请同步后选品"
                                       : row.original.offering_id
                                         ? "已入库"
                                         : "已匹配，待入库"}
@@ -467,7 +467,7 @@ export function CatalogBrowser({
                                     !canReadCost
                                         ? "无采购报价查看权限"
                                         : previewRow.purchase_price == null
-                                          ? "未取得"
+                                          ? "暂无接口报价"
                                           : undefined
                                 }
                                 size="section"
@@ -478,8 +478,11 @@ export function CatalogBrowser({
                             <dd>{previewRow.category_name || "未提供"}</dd>
                             <dt className="text-muted-foreground">品牌</dt>
                             <dd>{previewRow.brand_name || "未提供"}</dd>
-                            <dt className="text-muted-foreground">单位</dt>
-                            <dd>{previewRow.unit || "待确认"}</dd>
+                            <dt className="text-muted-foreground">来源单位</dt>
+                            <dd>
+                                {previewRow.unit ||
+                                    "供应商未提供，入库时选择公司单位"}
+                            </dd>
                             <dt className="text-muted-foreground">可供数量</dt>
                             <dd>
                                 {previewRow.quantity_unbounded
@@ -499,9 +502,9 @@ export function CatalogBrowser({
                             </section>
                         ) : null}
                         {[
-                            { title: "商品图片", images: previewRow.images },
+                            { title: "商品轮播图", images: previewRow.images },
                             {
-                                title: "详情图片",
+                                title: "商品详情图",
                                 images: previewRow.detail_images,
                             },
                         ].map(({ title, images }) =>

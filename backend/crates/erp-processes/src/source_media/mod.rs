@@ -1,4 +1,4 @@
-//! 供应商来源图片的受控读取、内容核验与事务外对象准备。
+//! 供应商来源图片的下载、内容核验与事务外对象准备。
 
 use std::collections::HashSet;
 use std::mem::take;
@@ -38,16 +38,16 @@ pub struct DownloadedSourceImage {
     pub content_type: Option<String>,
 }
 
-/// 可替换的来源读取边界；生产实现必须限制目的地址及响应体。
+/// 可替换的来源读取边界；生产实现必须限制请求时长及响应体。
 #[async_trait]
 pub trait SourceImageTransport: Send + Sync {
-    /// 读取一个经过来源白名单核验的图片。
+    /// 按供应商提供的链接读取图片。
     /// # 参数
-    /// `url` 为供应商响应中的 HTTPS 图片地址。
+    /// `url` 为供应商响应中的 HTTP/HTTPS 图片地址。
     /// # 返回
     /// 有界图片字节和内容类型。
     /// # 错误
-    /// 未授权地址、网络错误及超限时返回明确错误。
+    /// 无效地址、网络错误及超限时返回明确错误。
     async fn download(&self, url: &str) -> Result<DownloadedSourceImage>;
 }
 
@@ -163,24 +163,20 @@ struct MediaPreparation<'a> {
 }
 
 impl SourceMediaPreparer {
-    /// 使用受控 HTTP 与现有对象存储装配来源图片准备器。
+    /// 使用 HTTP 客户端与现有对象存储装配来源图片准备器。
     /// # 参数
-    /// 对象存储、内容 HMAC 密钥与部署明确登记的完整图片主机名。
+    /// 对象存储及内容 HMAC 密钥。
     /// # 返回
-    /// 已验证主机配置的准备器，不执行网络请求。
+    /// 来源图片准备器，不执行网络请求。
     /// # 错误
-    /// 空密钥或主机名配置非法时拒绝；空主机集合允许无图处理。
-    pub fn new(storage: S3Storage, secret: Vec<u8>, allowed_hosts: Vec<String>) -> Result<Self> {
-        Self::with_ports(
-            Arc::new(HttpSourceImages::new(allowed_hosts)?),
-            Arc::new(S3SourceImages(storage)),
-            secret,
-        )
+    /// 空密钥或 HTTP 客户端初始化失败时返回错误。
+    pub fn new(storage: S3Storage, secret: Vec<u8>) -> Result<Self> {
+        Self::with_ports(Arc::new(HttpSourceImages::new()?), Arc::new(S3SourceImages(storage)), secret)
     }
 
     /// 从已验证的读取与存储边界构造准备器。
     /// # 参数
-    /// 受控来源传输、对象存储及内容 HMAC 密钥。
+    /// 来源传输、对象存储及内容 HMAC 密钥。
     /// # 返回
     /// 可注入替身的完整生产编排。
     /// # 错误

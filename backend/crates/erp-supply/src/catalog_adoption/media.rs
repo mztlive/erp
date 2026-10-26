@@ -13,10 +13,10 @@ impl CatalogAdoptionPreview {
     /// # 错误
     /// 不返回错误。
     pub fn media_blockers(item: &SupplierCatalogItem) -> Vec<String> {
-        [(&item.images, "主图"), (&item.detail_images, "详情图")]
+        [(&item.images, "轮播图"), (&item.detail_images, "详情图")]
             .into_iter()
             .filter(|(group, _)| group.as_deref().unwrap_or_default().iter().any(|image| !verified(image)))
-            .map(|(_, label)| format!("{label}尚未核验，请先重新同步商品资料后预览"))
+            .map(|(_, label)| format!("{label}尚未同步完成，请重新同步商品资料后预览"))
             .collect()
     }
 

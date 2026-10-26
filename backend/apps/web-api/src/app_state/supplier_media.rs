@@ -9,24 +9,20 @@ use erp_processes::supplier_catalog_adoption::SupplierCatalogAdoptionProcess;
 use super::AppState;
 
 impl AppState {
-    /// 从当前部署配置创建受控来源图片准备器。
+    /// 从当前部署配置创建来源图片准备器。
     /// # 参数
     /// 无；复用应用对象存储和受控配置快照。
     /// # 返回
     /// 已启用协议对应的准备器；未启用协议时返回空。
     /// # 错误
-    /// 素材主机或内容校验配置无效时拒绝，不吞掉错误。
+    /// 客户端初始化失败或内容密钥无效时返回错误。
     pub fn supplier_source_media_preparer(&self) -> Result<Option<Arc<SourceMediaPreparer>>> {
         let config = self.config_snapshot();
-        let Some(settings) = config.dangaoshushu.as_ref().filter(|settings| settings.enabled) else {
+        if !config.dangaoshushu.as_ref().is_some_and(|settings| settings.enabled) {
             return Ok(None);
-        };
-        SourceMediaPreparer::new(
-            self.storage().clone(),
-            config.app.secret.as_bytes().to_vec(),
-            settings.media_allowed_hosts.clone(),
-        )
-        .map(|preparer| Some(Arc::new(preparer)))
+        }
+        SourceMediaPreparer::new(self.storage().clone(), config.app.secret.as_bytes().to_vec())
+            .map(|preparer| Some(Arc::new(preparer)))
     }
 
     /// 装配真实商品、供给和来源素材共用的选品流程。

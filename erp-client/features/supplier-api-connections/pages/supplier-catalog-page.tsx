@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { PlugZapIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
@@ -11,6 +12,7 @@ import {
 } from "@/components/business"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetTrigger } from "@/components/ui/sheet"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import {
     useCatalogQuery,
@@ -21,6 +23,7 @@ import {
 import { catalogRunning } from "../api/catalog"
 import { newIdempotencyKey, outcomeToResult } from "../lib/operations"
 import { CatalogSection } from "../components/sections/catalog-section"
+import { CatalogOnboarding } from "../components/catalog/catalog-onboarding"
 import type { ConnectionCenterView } from "../types"
 import type { ResultState } from "@/components/business/feedback"
 
@@ -29,6 +32,9 @@ export function SupplierCatalogPage() {
     const params = useSearchParams()
     const connectionId = params.get("connectionId") ?? ""
     const [search, setSearch] = React.useState("")
+    const [recordsConnectionId, setRecordsConnectionId] = React.useState<
+        string | null
+    >(null)
     const connections = useConnectionListQuery({
         q: search || undefined,
         page: 1,
@@ -43,6 +49,7 @@ export function SupplierCatalogPage() {
                 scroll: false,
             })
             setSearch("")
+            setRecordsConnectionId(null)
         },
         [router],
     )
@@ -52,6 +59,12 @@ export function SupplierCatalogPage() {
             selectConnection(first.connectionId)
     }, [connectionId, connections.data?.items, search, selectConnection])
     const conn = center.data
+    const missingConnection = Boolean(connectionId) && center.isSuccess && !conn
+    const noConnections =
+        !connectionId &&
+        !search &&
+        connections.isSuccess &&
+        connections.data.items.length === 0
     const options = (connections.data?.items ?? []).map((item) => ({
         value: item.connectionId,
         label: `${item.supplier.name} · ${item.connectionCode}`,
@@ -62,7 +75,7 @@ export function SupplierCatalogPage() {
             label: `${conn.supplier.name} · ${conn.connectionCode}`,
         })
     const supplierFilter = (
-        <div className="space-y-2">
+        <div className="w-full space-y-2 sm:max-w-sm">
             <label
                 htmlFor="supplier-catalog-connection"
                 className="text-sm font-medium"
@@ -71,7 +84,9 @@ export function SupplierCatalogPage() {
             </label>
             <OptionCombobox
                 id="supplier-catalog-connection"
-                value={connectionId || undefined}
+                value={
+                    missingConnection ? undefined : connectionId || undefined
+                }
                 options={options}
                 onValueChange={(id) => {
                     if (id) selectConnection(id)
@@ -98,53 +113,130 @@ export function SupplierCatalogPage() {
         </div>
     )
     return (
-        <PageScaffold density="compact" className="gap-5">
-            <ListWorkspaceHeader
-                eyebrow="采购选品"
-                title="供应商品库"
-                description="同步供应商商品，选择需要经营的商品纳入公司商品库。"
-            >
-                <Button
-                    id="supplier-catalog-connections-settings"
-                    variant="outline"
-                    render={<Link href="/supplier-api/connections" />}
+        <Sheet
+            open={Boolean(conn && recordsConnectionId === conn.connectionId)}
+            onOpenChange={(open) =>
+                setRecordsConnectionId(open && conn ? conn.connectionId : null)
+            }
+        >
+            <PageScaffold density="compact" className="gap-5">
+                <ListWorkspaceHeader
+                    eyebrow="采购选品"
+                    title="供应商品库"
+                    description="同步供应商商品，选择需要经营的商品纳入公司商品库。"
                 >
-                    管理接口连接
-                </Button>
-            </ListWorkspaceHeader>
-            {!conn ? supplierFilter : null}
-            {!connectionId && connections.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                    正在读取供应商…
-                </p>
-            ) : null}
-            {!connectionId && !connections.isPending && !connections.isError ? (
-                <BusinessEmptyState
-                    kind="no-data"
-                    title="尚无供应商 API 连接"
-                    description="先在已有供应商档案基础上配置 API 连接，再同步商品选品。"
-                />
-            ) : null}
-            {connectionId && center.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                    正在读取供应商商品资料…
-                </p>
-            ) : null}
-            {center.isError ? (
-                <BusinessFailureState
-                    title="供应商连接读取失败"
-                    description={center.error.message}
-                    onRetry={() => void center.refetch()}
-                />
-            ) : null}
-            {conn ? (
-                <SupplierCatalogContent
-                    key={conn.connectionId}
-                    conn={conn}
-                    supplierFilter={supplierFilter}
-                />
-            ) : null}
-        </PageScaffold>
+                    {conn ? (
+                        <SheetTrigger
+                            id="supplier-catalog-sync-records-trigger"
+                            render={<Button variant="outline" />}
+                        >
+                            同步记录
+                        </SheetTrigger>
+                    ) : null}
+                    <Button
+                        id="supplier-catalog-connections-settings"
+                        variant="outline"
+                        render={<Link href="/supplier-api/connections" />}
+                    >
+                        管理接口连接
+                    </Button>
+                </ListWorkspaceHeader>
+                {!conn && !noConnections ? supplierFilter : null}
+                {!connectionId && connections.isPending ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        正在读取供应商…
+                    </p>
+                ) : null}
+                {noConnections ? (
+                    <CatalogOnboarding
+                        step={0}
+                        title="连接供应商，开始选品"
+                        description="当前还没有供应商接口连接。先为已有供应商配置接口，完成连接测试后，即可同步商品并选品入库。"
+                        action={
+                            <Button
+                                id="supplier-catalog-setup-connection"
+                                render={
+                                    <Link href="/supplier-api/connections" />
+                                }
+                            >
+                                <PlugZapIcon aria-hidden="true" />
+                                去配置供应商连接
+                            </Button>
+                        }
+                    />
+                ) : null}
+                {!connectionId && !noConnections && connections.isSuccess ? (
+                    <BusinessEmptyState
+                        kind="no-data"
+                        title="选择供应商，查看商品库"
+                        description="在上方搜索并选择供应商，即可查看商品与同步进度。"
+                        action={
+                            <Button
+                                id="supplier-catalog-select-connection"
+                                onClick={() =>
+                                    document
+                                        .getElementById(
+                                            "supplier-catalog-connection",
+                                        )
+                                        ?.focus()
+                                }
+                            >
+                                选择供应商
+                            </Button>
+                        }
+                    />
+                ) : null}
+                {!connectionId && connections.isError ? (
+                    <BusinessFailureState
+                        idPrefix="supplier-catalog-connections"
+                        title="供应商列表读取失败"
+                        description="暂时无法读取供应商，请重试后再选择。"
+                        onRetry={() => void connections.refetch()}
+                    />
+                ) : null}
+                {connectionId && center.isPending ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        正在读取供应商商品资料…
+                    </p>
+                ) : null}
+                {center.isError ? (
+                    <BusinessFailureState
+                        idPrefix="supplier-catalog-connection"
+                        title="供应商连接读取失败"
+                        description={center.error.message}
+                        onRetry={() => void center.refetch()}
+                    />
+                ) : null}
+                {missingConnection ? (
+                    <CatalogOnboarding
+                        step={0}
+                        title="此供应商连接已不可用"
+                        description="原链接对应的连接已不存在。请重新选择供应商，或前往管理接口连接检查配置。"
+                        action={
+                            <Button
+                                id="supplier-catalog-reselect-connection"
+                                onClick={() => {
+                                    router.replace("/supplier-api/catalog", {
+                                        scroll: false,
+                                    })
+                                    setSearch("")
+                                    setRecordsConnectionId(null)
+                                }}
+                            >
+                                重新选择供应商
+                            </Button>
+                        }
+                    />
+                ) : null}
+                {conn ? (
+                    <SupplierCatalogContent
+                        key={conn.connectionId}
+                        conn={conn}
+                        supplierFilter={supplierFilter}
+                    />
+                ) : null}
+            </PageScaffold>
+        </Sheet>
     )
 }
 
@@ -161,6 +253,7 @@ function SupplierCatalogContent({
     const [result, setResult] = React.useState<ResultState>(null)
     return (
         <CatalogSection
+            syncRecordsInSheet
             conn={conn}
             query={catalog}
             supplierFilter={supplierFilter}

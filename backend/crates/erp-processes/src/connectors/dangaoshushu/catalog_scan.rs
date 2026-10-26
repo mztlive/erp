@@ -38,6 +38,7 @@ impl DangaoshushuConnector {
             let position = format!("第 {number} 页第 {} 个商品", index + 1);
             self.scan_product(product, &position, &mut page, &mut details).await?;
         }
+        self.name_catalog_categories(&mut page.items).await?;
         Ok(page)
     }
 

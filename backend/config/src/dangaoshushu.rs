@@ -1,7 +1,6 @@
 //! 蛋糕叔叔技术配置；ERP 连接身份由后台记录提供，接口环境由部署地址与凭据决定。
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::net::IpAddr;
 
 use serde::Deserialize;
 use url::Url;
@@ -38,18 +37,12 @@ pub struct DangaoshushuConfig {
     pub callback_max_skew_seconds: u64,
     #[serde(default = "requests")]
     pub requests_per_second: u32,
-    /// 采购核实 clearing_price 为人民币含税供货价后才能打开。
-    #[serde(default)]
-    pub clearing_price_is_tax_inclusive_cny: bool,
     /// 供应商 spec_id -> 与公司 SKU 一致的计量单位；缺失不猜测。
     #[serde(default)]
     pub spec_units: BTreeMap<String, String>,
     /// 供应商 city_id -> 公司标准地区编码；禁止直接混用 ID。
     #[serde(default)]
     pub city_regions: BTreeMap<String, String>,
-    /// 允许读取商品图片的精确 HTTPS 公网主机；空集合保持图片待核验。
-    #[serde(default)]
-    pub media_allowed_hosts: Vec<String>,
     /// 首次明确同步后自动校对周期。
     #[serde(default = "catalog_interval")]
     pub catalog_sync_interval_seconds: u64,
@@ -143,14 +136,7 @@ impl DangaoshushuConfig {
             .city_regions
             .iter()
             .all(|(id, region)| identifier(id) && identifier(region) && regions.insert(region));
-        let valid_media_hosts = self.media_allowed_hosts.iter().all(|host| {
-            host.len() <= 253
-                && host.contains('.')
-                && !host.ends_with('.')
-                && host.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"-.".contains(&byte))
-                && host.parse::<IpAddr>().is_err()
-        });
-        if !valid_units || !valid_regions || !valid_media_hosts {
+        if !valid_units || !valid_regions {
             return Err(Error::Invalid(
                 "dangaoshushu requires explicit, unambiguous unit and region mappings".into(),
             ));
@@ -209,18 +195,5 @@ mod tests {
         let mut config = configured();
         config.city_regions = BTreeMap::from([("2".into(), "110100".into()), ("3".into(), "110100".into())]);
         assert!(config.validate().is_err());
-    }
-
-    #[test]
-    fn source_media_hosts_are_explicit_and_do_not_accept_addresses_or_wildcards() {
-        let mut config = configured();
-        config.media_allowed_hosts = vec!["cdn.example.com".into()];
-        config.validate().unwrap();
-        for host in
-            ["*.example.com", "cdn.example.com/path", "127.0.0.1", "cdn.example.com:443", " localhost "]
-        {
-            config.media_allowed_hosts = vec![host.into()];
-            assert!(config.validate().is_err(), "{host}");
-        }
     }
 }

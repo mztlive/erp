@@ -96,11 +96,15 @@ export function AdoptionBatchEditor({
                         <p className="font-medium">{item.name}</p>
                         <p className="mt-1 text-muted-foreground">
                             来源规格：{item.specification || "未标注"} ·
-                            来源单位：{item.unit || "未提供"} · 采购报价：
+                            来源单位：{item.unit || "供应商未提供"} · 采购报价：
                             {item.purchase_price ?? "未提供"}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                             展示资料默认由供应商带入，可整理公司名称与介绍。相同供应商商品的多个规格会归入同一个公司商品，分类、品牌及商品类型须一致。新建商品将保持未上架，入库后可维护销售价格。
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            轮播图和详情图按供应商顺序带入，SKU
+                            主图默认使用第一张轮播图。供应商未提供单位时，请在下方选择公司计量单位。
                         </p>
                         {rows[index]?.missing_fields.length ? (
                             <p className="mt-2 text-xs text-muted-foreground">
@@ -114,16 +118,16 @@ export function AdoptionBatchEditor({
                                     id={`${prefix}-source-images-toggle`}
                                     className="cursor-pointer font-medium"
                                 >
-                                    查看本次已核验来源图片
+                                    查看商品轮播图和详情图
                                 </summary>
                                 <div className="mt-3 space-y-4">
                                     {[
                                         {
-                                            title: "商品图片",
+                                            title: "商品轮播图",
                                             images: item.images,
                                         },
                                         {
-                                            title: "详情图片",
+                                            title: "商品详情图",
                                             images: item.detail_images,
                                         },
                                     ].map((group) =>

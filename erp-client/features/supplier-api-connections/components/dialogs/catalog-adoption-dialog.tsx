@@ -55,7 +55,7 @@ export function CatalogAdoptionDialog({
                         {preview.rows.filter((row) => row.adopted).length}{" "}
                         项已入库
                         {blockedRows.length
-                            ? `，${blockedRows.length} 项图片待核验暂不可入库`
+                            ? `，${blockedRows.length} 项图片尚未同步完成，暂不可入库`
                             : ""}
                         。新商品进入现有公司商品列表，维护销售价格并上架后才可销售。
                     </DialogDescription>
@@ -81,7 +81,7 @@ export function CatalogAdoptionDialog({
                                 {row.item.name} ·{" "}
                                 {row.item.specification || "未标注规格"}：
                                 {row.blocking_reasons.join("；") ||
-                                    "商品图片待核验"}
+                                    "商品图片尚未同步完成"}
                             </p>
                         ))}
                     </div>

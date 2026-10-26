@@ -15,6 +15,8 @@ pub use crate::ports::connector::offer::{CatalogAvailability, CatalogImage};
 use crate::ports::connector::offer::{Offer, OfferDetails};
 use crate::{Error, Result};
 
+const CATALOG_MAPPING_VERSION: u32 = 1;
+
 /// 一个连接内一个外部订货规格的最近观察；匹配只由人工操作改变。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
 pub struct SupplierCatalogItem {
@@ -378,6 +380,9 @@ pub struct SupplierCatalogRun {
     pub base: BaseModel,
     pub connection_id: String,
     pub technical_config_version: u64,
+    /// 目录映射版本；旧检查点缺省为零，升级后须重新完成一次全量同步。
+    #[serde(default)]
+    pub mapping_version: u32,
     pub cursor: Option<String>,
     pub pages: u32,
     pub observed_count: u64,
@@ -419,6 +424,7 @@ impl SupplierCatalogRun {
             base: BaseModel::new(job.into()),
             connection_id: connection.base.id.clone(),
             technical_config_version: connection.technical_config_version,
+            mapping_version: CATALOG_MAPPING_VERSION,
             cursor: None,
             pages: 0,
             observed_count: 0,
@@ -429,6 +435,19 @@ impl SupplierCatalogRun {
             scan_since: None,
             scan_through: Instant::now(),
         }
+    }
+    /// 判断完成的检查点能否作为当前配置和映射版本的增量依据。
+    /// # 参数
+    /// `config_version` 为当前连接技术配置版本。
+    /// # 返回
+    /// 已完整处理且没有跳过项，并与当前配置和映射版本一致时返回 true。
+    /// # 错误
+    /// 不返回错误。
+    pub fn supports_incremental(&self, config_version: u64) -> bool {
+        self.finished
+            && self.skipped_count == 0
+            && self.technical_config_version == config_version
+            && self.mapping_version == CATALOG_MAPPING_VERSION
     }
     /// 累计跳过数量并保留最近一百条原因，与页面推进同事务保存。
     /// # 参数
@@ -605,6 +624,21 @@ mod tests {
         assert!(run.finished);
         assert_eq!((run.pages, run.observed_count), (3, 5));
         assert!(run.advance(None, 0).is_err());
+    }
+    #[test]
+    fn incremental_sync_requires_a_completed_current_mapping_checkpoint() {
+        let connection = connection();
+        let mut run = SupplierCatalogRun::new("job", &connection);
+        assert!(!run.supports_incremental(connection.technical_config_version));
+        run.advance(None, 1).unwrap();
+        assert!(run.supports_incremental(connection.technical_config_version));
+        assert!(!run.supports_incremental(connection.technical_config_version + 1));
+        let mut legacy = serde_json::to_value(&run).unwrap();
+        legacy.as_object_mut().unwrap().remove("mapping_version");
+        let restored: SupplierCatalogRun = serde_json::from_value(legacy).unwrap();
+        assert!(!restored.supports_incremental(connection.technical_config_version));
+        run.record_skipped(vec!["来源字段错误".into()]).unwrap();
+        assert!(!run.supports_incremental(connection.technical_config_version));
     }
     #[test]
     fn source_merge_preserves_adoption_and_omitted_media_and_blocks_identity_changes() {

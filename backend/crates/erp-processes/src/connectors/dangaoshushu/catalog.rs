@@ -90,8 +90,7 @@ impl DangaoshushuConnector {
     pub(super) fn offer_value(&self, product: &Value, spec: &Value, detail: bool) -> ConnectorResult<Offer> {
         let spec_id = id(&spec[if detail { "id" } else { "spec_id" }])?;
         let unit = self.settings.spec_units.get(&spec_id).cloned();
-        let quote = if self.settings.clearing_price_is_tax_inclusive_cny && !spec["clearing_price"].is_null()
-        {
+        let quote = if !spec["clearing_price"].is_null() {
             let unit_price: UnitPrice = fixed(&spec["clearing_price"])?;
             if unit_price.to_decimal() < Decimal::ZERO {
                 return Err(mapping());
@@ -290,6 +289,7 @@ impl OfferSource for DangaoshushuConnector {
         } else {
             None
         };
+        self.name_catalog_categories(&mut items).await?;
         Ok(Page { items, next })
     }
 
@@ -300,6 +300,9 @@ impl OfferSource for DangaoshushuConnector {
         };
         let mut offer = self.offer_value(&value["product"], spec, true)?;
         offer.details = super::catalog_details::details(&value["product"], spec, Some(&value))?;
+        if let Some(category_id) = &offer.details.category_id {
+            offer.details.category_name = self.category_names().await?.get(category_id).cloned();
+        }
         Ok(Lookup::Found(snapshot(offer, source_time(&spec["updated_at"])?)))
     }
 }
@@ -580,13 +583,10 @@ mod tests {
     }
 
     #[test]
-    fn quotes_require_confirmed_currency_tax_basis_but_preserve_unknown_unit() {
+    fn settlement_quotes_are_imported_without_unit_mapping() {
         let mut connector = connector(vec![]);
         let product = json!({"id": "product-1", "title": "蛋糕"});
         let spec = json!({"id": "spec-1", "name": "6寸", "clearing_price": "100.25"});
-        connector.settings.clearing_price_is_tax_inclusive_cny = false;
-        assert!(connector.offer_value(&product, &spec, true).unwrap().quote.is_none());
-        connector.settings.clearing_price_is_tax_inclusive_cny = true;
         connector.settings.spec_units.clear();
         let offer = connector.offer_value(&product, &spec, true).unwrap();
         assert_eq!(offer.unit, None);
@@ -596,5 +596,26 @@ mod tests {
         assert_eq!(quote.dropship.unwrap().unit_price.to_string(), "100.25");
         assert_eq!(quote.bulk, None);
         assert_eq!(quote.tax_rate, None);
+    }
+
+    #[test]
+    fn settlement_quote_preserves_zero_and_rejects_invalid_prices_without_retail_fallback() {
+        let connector = connector(vec![]);
+        let product = json!({"id":"p1","title":"商品"});
+        let mut spec = json!({"id":"s1","name":"6寸","price":"100","market_price":"200"});
+        assert!(connector.offer_value(&product, &spec, true).unwrap().quote.is_none());
+        spec["clearing_price"] = Value::Null;
+        assert!(connector.offer_value(&product, &spec, true).unwrap().quote.is_none());
+        for value in ["0", "123.4567"] {
+            spec["clearing_price"] = json!(value);
+            let quote = connector.offer_value(&product, &spec, true).unwrap().quote.unwrap();
+            assert_eq!(quote.dropship.unwrap().unit_price.to_string(), value);
+            assert!(quote.bulk.is_none());
+            assert!(quote.tax_rate.is_none());
+        }
+        for invalid in ["-1", "invalid", "", "1.12345"] {
+            spec["clearing_price"] = json!(invalid);
+            assert!(connector.offer_value(&product, &spec, true).is_err(), "{invalid}");
+        }
     }
 }

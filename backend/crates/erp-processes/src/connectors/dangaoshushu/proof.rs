@@ -47,7 +47,6 @@ pub(super) fn configuration_hash(settings: &DangaoshushuConfig) -> ConnectorResu
         "timestamp_unit":format!("{:?}",settings.timestamp_unit),
         "timeout":settings.timeout_seconds,"rate":settings.requests_per_second,
         "callback_skew":settings.callback_max_skew_seconds,
-        "price_basis":settings.clearing_price_is_tax_inclusive_cny,
         "units":settings.spec_units,"regions":settings.city_regions
     }))
     .map_err(|_| mapping())?;

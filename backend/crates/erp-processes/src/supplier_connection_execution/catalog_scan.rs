@@ -117,7 +117,7 @@ impl SupplierConnectionExecutionProcess {
             if prior.skipped_count > 0 {
                 return Ok(());
             }
-            if prior.finished && prior.technical_config_version == connection.technical_config_version {
+            if prior.supports_incremental(connection.technical_config_version) {
                 // 日粒度来源保留一天重叠；适配器继续向外扩展 through 当日。
                 run.scan_since =
                     Some(Instant::from_unix_secs(prior.scan_through.unix_secs().saturating_sub(86_400)));
@@ -142,10 +142,8 @@ impl SupplierConnectionExecutionProcess {
         for prior_job in history.iter().filter(|job| job.status == JobStatus::Succeeded) {
             if let Some(prior) =
                 self.db.supplier_catalog_runs().find_by_id(&prior_job.base.id, &mut NoTransaction).await?
-                && prior.finished
-                && prior.skipped_count == 0
+                && prior.supports_incremental(connection.technical_config_version)
                 && prior.sync_mode == CatalogSyncMode::Full
-                && prior.technical_config_version == connection.technical_config_version
                 && prior.scan_through.unix_secs() >= since
             {
                 return Ok(true);

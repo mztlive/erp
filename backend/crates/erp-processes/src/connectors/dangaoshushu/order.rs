@@ -87,13 +87,6 @@ impl DangaoshushuConnector {
     }
 
     async fn verify_prices(&self, request: &CreateOrder) -> ConnectorResult<()> {
-        if !self.settings.clearing_price_is_tax_inclusive_cny {
-            return Err(error(
-                SupplierFailureClass::CapabilityGap,
-                "DGSS_PRICE_BASIS_UNCONFIRMED",
-                "蛋糕叔叔结算价的人民币含税口径尚未确认",
-            ));
-        }
         for line in &request.lines {
             let Lookup::Found(offer) = self.offer(&line.sku).await? else {
                 return Err(price_rejected());

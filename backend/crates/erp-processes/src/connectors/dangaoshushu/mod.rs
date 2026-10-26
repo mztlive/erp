@@ -15,6 +15,7 @@ mod callback;
 mod catalog;
 mod catalog_details;
 mod catalog_scan;
+mod categories;
 mod delivery;
 mod order;
 mod parsing;

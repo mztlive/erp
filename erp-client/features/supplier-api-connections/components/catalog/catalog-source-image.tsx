@@ -19,12 +19,19 @@ export function CatalogSourceImage({
     height: number
     className?: string
 }) {
-    const asset = useFileAssetQuery(image.file_asset_id ?? undefined)
-    if (!hasVerifiedCatalogImage(image))
-        return <span className="text-xs text-muted-foreground">图片待核验</span>
+    const verified = hasVerifiedCatalogImage(image)
+    const asset = useFileAssetQuery(
+        verified ? (image.file_asset_id ?? undefined) : undefined,
+    )
+    if (!verified)
+        return (
+            <span className="block rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+                图片尚未同步
+            </span>
+        )
     if (!asset.data?.public_url)
         return (
-            <span className="text-xs text-muted-foreground">
+            <span className="block rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
                 {asset.isFetching ? "图片读取中…" : "图片暂不可预览"}
             </span>
         )

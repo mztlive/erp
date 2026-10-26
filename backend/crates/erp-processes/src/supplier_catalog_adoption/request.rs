@@ -301,6 +301,28 @@ mod tests {
         assert_eq!(request.skus[0].main_image_asset_id.as_ref().unwrap().as_ref(), "asset-one");
     }
     #[test]
+    fn detail_images_keep_order_and_do_not_substitute_for_missing_sku_main_image() {
+        use erp_catalog::ProductMediaInput;
+        use erp_core::ids::FileAssetId;
+
+        let mut media = PreparedSourceMedia::empty();
+        media.detail_media = ["detail-two", "detail-one"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| ProductMediaInput {
+                file_asset_id: FileAssetId::new(id),
+                sort_order: i32::try_from(index).unwrap(),
+                alt_text: None,
+            })
+            .collect();
+        let request = product_request(&item(), &row(), &media).unwrap();
+        assert!(request.carousel_media.is_empty());
+        assert!(request.skus[0].main_image_asset_id.is_none());
+        assert_eq!(request.detail_media[0].file_asset_id.as_ref(), "detail-two");
+        assert_eq!(request.detail_media[1].file_asset_id.as_ref(), "detail-one");
+        assert_eq!(request.detail_media[1].sort_order, 1);
+    }
+    #[test]
     fn company_text_overrides_preserve_full_source_and_allow_explicit_clear() {
         let (mut item, mut row) = (item(), row());
         item.name = "源".repeat(129);

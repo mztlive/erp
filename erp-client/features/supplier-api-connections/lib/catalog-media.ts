@@ -13,6 +13,6 @@ export function hasVerifiedCatalogImage(image: CatalogImage): boolean {
 export function catalogMediaBlocker(item: CatalogItem): string | undefined {
     const images = [...(item.images ?? []), ...(item.detail_images ?? [])]
     return images.some((image) => !hasVerifiedCatalogImage(image))
-        ? "商品图片待核验，请先重新同步商品"
+        ? "商品图片尚未同步完成，请重新同步商品"
         : undefined
 }

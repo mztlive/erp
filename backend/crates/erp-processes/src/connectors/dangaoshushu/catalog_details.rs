@@ -14,7 +14,7 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
         .or(optional_id(product, "cat_id")?);
     let mut details = OfferDetails {
         category_id,
-        category_name: None, // 官方接口未提供分类名称；label_name是商品标签，不得冒充分类。
+        category_name: None, // 由独立分类字典补齐；label_name 是商品标签，不得冒充分类。
         brand_id: optional_id(product, "brand_id")?,
         brand_name: optional_text(product, "brand_name")?,
         description: optional_text(product, "description")?,
@@ -50,6 +50,7 @@ fn optional_id(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
     match value.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(value)) if value.is_empty() || value == "0" => Ok(None),
+        Some(Value::Number(value)) if value.as_u64() == Some(0) => Ok(None),
         Some(value) => id(value).map(Some),
     }
 }
