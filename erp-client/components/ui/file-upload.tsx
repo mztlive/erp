@@ -29,7 +29,7 @@ type FileUploadImagePreview = Readonly<{
     /** 已上传图片的可访问 URL；不传时以文件名占位回显。 */
     src?: string
     name: string
-    status?: "uploaded" | "pending"
+    status?: "uploaded" | "pending" | "saved"
 }>
 
 /** 仅把浏览器可直接访问的字符串识别为图片预览源。 */
@@ -65,6 +65,9 @@ function FileUpload({
     validateFiles,
     readOnly = false,
     className,
+    controlClassName,
+    showTileLabel = false,
+    selectedDescription = fileUploadText.selected,
     "aria-describedby": ariaDescribedby,
     "aria-invalid": ariaInvalid,
 }: {
@@ -98,6 +101,12 @@ function FileUpload({
     /** 仅展示已上传图片，禁止选择、替换和拖入文件。 */
     readOnly?: boolean
     className?: string
+    /** 只约束上传框尺寸；错误与预览操作保留在框外。 */
+    controlClassName?: string
+    /** 大尺寸图片入口显示动作和说明，小缩略图入口保持紧凑。 */
+    showTileLabel?: boolean
+    /** 本地文件下一步的业务动作，由保存或导入入口提供。 */
+    selectedDescription?: string
     "aria-describedby"?: string
     "aria-invalid"?: boolean | string
 }) {
@@ -160,7 +169,13 @@ function FileUpload({
     )
 
     const selectFiles = (files: FileList | null) => {
-        if (disabled || readOnly || !files?.length) return
+        if (
+            disabled ||
+            readOnly ||
+            inputRef.current?.matches(":disabled") ||
+            !files?.length
+        )
+            return
         const selectedFiles = Array.from(files)
         const error =
             fileSelectionError(selectedFiles, {
@@ -168,7 +183,11 @@ function FileUpload({
                 multiple,
                 maxFileSize,
             }) || validateFiles?.(selectedFiles)
-        setSelectionError(error ?? null)
+        setSelectionError(
+            error
+                ? `${error}${multiple && selectedFiles.length > 1 ? ` ${fileUploadText.batchRejected}` : ""}`
+                : null,
+        )
         if (error) return
         if (previewSelectedImage && selectedImageFile === undefined) {
             const image = selectedFiles.find((file) =>
@@ -187,8 +206,13 @@ function FileUpload({
     const activePreview = localPreview ?? preview ?? null
     const previewStatus =
         activePreview?.status === "pending"
-            ? fileUploadText.selected
-            : fileUploadText.uploaded
+            ? selectedDescription
+            : activePreview?.status === "saved"
+              ? fileUploadText.saved
+              : fileUploadText.uploaded
+
+    const hasSelection = Boolean(selectedFiles?.length && !activePreview)
+    const effectiveDensity = hasSelection ? "button" : density
 
     const removePreview = () => {
         setSelectionError(null)
@@ -204,8 +228,10 @@ function FileUpload({
                     files={selectedFiles}
                     idPrefix={idPrefix}
                     multiple={multiple}
-                    disabled={disabled || readOnly}
+                    disabled={disabled}
+                    readOnly={readOnly}
                     fileKey={fileKey}
+                    description={selectedDescription}
                     onRemove={
                         onFileRemove
                             ? (file) => {
@@ -222,24 +248,32 @@ function FileUpload({
                 data-dragging={dragging || undefined}
                 className={cn(
                     "relative flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-ring data-dragging:bg-accent",
-                    density === "hero"
+                    effectiveDensity === "hero"
                         ? "min-h-64 flex-col gap-5 px-5 py-10 text-center sm:min-h-72 lg:min-h-90"
-                        : density === "button"
+                        : effectiveDensity === "button"
                           ? "flex-row flex-wrap justify-start gap-3 border-0 bg-transparent p-0 text-left"
-                          : density === "tile"
-                            ? "size-full flex-col gap-1 p-1 text-center"
-                            : density === "compact"
+                          : effectiveDensity === "tile"
+                            ? "aspect-square w-full flex-col gap-2 p-2 text-center"
+                            : effectiveDensity === "compact"
                               ? "flex-row gap-2 p-2 text-left"
                               : "flex-col gap-3 p-6 text-center",
                     activePreview && "overflow-hidden p-0",
                     !activePreview &&
-                        density !== "button" &&
+                        effectiveDensity !== "button" &&
                         "has-[button:enabled:hover]:border-ring has-[button:enabled:hover]:bg-accent has-[button:focus-visible]:border-ring has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring",
+                    readOnly && !activePreview && "hidden",
                     disabled && "cursor-not-allowed opacity-50",
+                    controlClassName,
                 )}
                 onDragEnter={(event) => {
                     event.preventDefault()
-                    if (!disabled && !readOnly) setDragging(true)
+                    if (
+                        !disabled &&
+                        !readOnly &&
+                        !inputRef.current?.matches(":disabled") &&
+                        event.dataTransfer.types.includes("Files")
+                    )
+                        setDragging(true)
                 }}
                 onDragOver={(event) => event.preventDefault()}
                 onDragLeave={(event) => {
@@ -260,7 +294,7 @@ function FileUpload({
                 <input
                     id={inputId ?? (idPrefix ? `${idPrefix}-input` : undefined)}
                     ref={inputRef}
-                    className="sr-only"
+                    hidden
                     type="file"
                     accept={accept}
                     multiple={multiple}
@@ -290,7 +324,7 @@ function FileUpload({
                             className={cn(
                                 "group relative flex w-full items-center justify-center overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                                 density === "tile"
-                                    ? "size-full"
+                                    ? "aspect-square w-full"
                                     : density === "compact"
                                       ? "min-h-24"
                                       : "min-h-40",
@@ -336,57 +370,22 @@ function FileUpload({
                                 </span>
                             ) : null}
                         </button>
-                        <span className="absolute bottom-1 left-1 rounded-md bg-background/90 px-1 text-2xs font-medium text-foreground shadow-xs">
-                            {previewStatus}
-                        </span>
-                        {!readOnly ? (
-                            <Button
-                                id={
-                                    selectId ??
-                                    (idPrefix
-                                        ? `${idPrefix}-select`
-                                        : undefined)
-                                }
-                                type="button"
-                                variant="secondary"
-                                size="icon-xs"
-                                className="absolute left-1 top-1 size-5"
-                                disabled={disabled}
-                                aria-label={fileUploadText.replace}
-                                onClick={() => inputRef.current?.click()}
-                            >
-                                <RefreshCwIcon className="size-3" />
-                            </Button>
-                        ) : null}
-                        {!readOnly && onPreviewRemove ? (
-                            <Button
-                                id={idPrefix ? `${idPrefix}-remove` : undefined}
-                                type="button"
-                                variant="secondary"
-                                size="icon-xs"
-                                className="absolute right-1 top-1 size-5"
-                                disabled={disabled}
-                                aria-label={`移除 ${activePreview.name}`}
-                                onClick={removePreview}
-                            >
-                                <XIcon className="size-3" />
-                            </Button>
-                        ) : null}
                     </>
                 ) : (
                     <>
-                        {density !== "tile" && density !== "button" ? (
+                        {effectiveDensity !== "tile" &&
+                        effectiveDensity !== "button" ? (
                             <div
                                 className={cn(
                                     "flex shrink-0 items-center justify-center bg-muted text-foreground",
-                                    density === "compact"
+                                    effectiveDensity === "compact"
                                         ? "size-8 rounded-lg"
                                         : "size-10 rounded-xl",
                                 )}
                             >
                                 <UploadCloudIcon
                                     className={
-                                        density === "compact"
+                                        effectiveDensity === "compact"
                                             ? "size-4"
                                             : "size-5"
                                     }
@@ -396,20 +395,24 @@ function FileUpload({
                         ) : null}
                         <div
                             className={cn(
-                                density === "compact" && "min-w-0 flex-1",
-                                density === "tile" && "min-w-0 leading-none",
+                                effectiveDensity === "compact" &&
+                                    "min-w-0 flex-1",
+                                effectiveDensity === "tile" &&
+                                    "min-w-0 leading-none",
                             )}
                         >
                             <div
                                 className={cn(
                                     "font-medium text-foreground",
-                                    density === "hero" &&
+                                    effectiveDensity === "hero" &&
                                         "text-base sm:text-lg",
-                                    density === "tile" || density === "button"
+                                    (effectiveDensity === "tile" &&
+                                        !showTileLabel) ||
+                                        effectiveDensity === "button"
                                         ? "sr-only"
-                                        : density === "compact"
+                                        : effectiveDensity === "compact"
                                           ? "text-xs"
-                                          : density === "hero"
+                                          : effectiveDensity === "hero"
                                             ? undefined
                                             : "text-sm",
                                 )}
@@ -420,9 +423,10 @@ function FileUpload({
                                 id={descriptionId}
                                 className={cn(
                                     "text-xs text-muted-foreground",
-                                    density === "tile"
+                                    effectiveDensity === "tile" &&
+                                        !showTileLabel
                                         ? "sr-only"
-                                        : density === "compact"
+                                        : effectiveDensity === "compact"
                                           ? "break-words"
                                           : "mt-1",
                                 )}
@@ -437,32 +441,38 @@ function FileUpload({
                             }
                             type="button"
                             variant={
-                                density === "hero"
+                                effectiveDensity === "hero"
                                     ? "default"
-                                    : density === "button"
+                                    : effectiveDensity === "button"
                                       ? "ghost"
                                       : "outline"
                             }
                             // 扩展原生按钮的命中区域，保留键盘与 fieldset 禁用语义。
                             // 不使用按压位移，避免按钮成为伪元素的定位容器。
                             className={cn(
-                                density === "button"
+                                effectiveDensity === "button"
                                     ? "order-first"
                                     : "static cursor-pointer after:absolute after:inset-0 after:rounded-lg active:not-aria-[haspopup]:translate-none",
                             )}
                             size={
-                                density === "hero"
+                                effectiveDensity === "hero"
                                     ? "lg"
-                                    : density === "tile"
-                                      ? "icon-xs"
-                                      : density === "compact"
+                                    : effectiveDensity === "tile" &&
+                                        !showTileLabel
+                                      ? "icon-sm"
+                                      : effectiveDensity === "compact"
                                         ? "xs"
                                         : "sm"
                             }
                             disabled={disabled || readOnly}
                             aria-describedby={describedBy}
+                            aria-invalid={
+                                Boolean(selectionError) ||
+                                ariaInvalid === true ||
+                                ariaInvalid === "true"
+                            }
                             aria-label={
-                                density === "tile"
+                                effectiveDensity === "tile"
                                     ? `选择${typeof label === "string" ? label : "上传文件"}`
                                     : undefined
                             }
@@ -470,13 +480,13 @@ function FileUpload({
                         >
                             <FileUpIcon
                                 data-icon={
-                                    density === "tile"
+                                    effectiveDensity === "tile"
                                         ? undefined
                                         : "inline-start"
                                 }
                                 aria-hidden="true"
                             />
-                            {density === "tile" ? (
+                            {effectiveDensity === "tile" && !showTileLabel ? (
                                 <span className="sr-only">选择文件</span>
                             ) : (
                                 (selectLabel ??
@@ -490,6 +500,56 @@ function FileUpload({
                     </>
                 )}
             </div>
+
+            {activePreview ? (
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                    <span className="min-w-0 flex-1 basis-full break-words text-xs text-muted-foreground sm:basis-auto">
+                        {previewStatus}
+                    </span>
+                    {!readOnly ? (
+                        <Button
+                            id={
+                                selectId ??
+                                (idPrefix ? `${idPrefix}-select` : undefined)
+                            }
+                            type="button"
+                            variant="secondary"
+                            size="icon-sm"
+                            title={fileUploadText.replace}
+                            disabled={disabled}
+                            aria-describedby={describedBy}
+                            aria-invalid={
+                                Boolean(selectionError) ||
+                                ariaInvalid === true ||
+                                ariaInvalid === "true"
+                            }
+                            aria-label={fileUploadText.replace}
+                            onClick={() => inputRef.current?.click()}
+                        >
+                            <RefreshCwIcon className="size-3" />
+                        </Button>
+                    ) : null}
+                    {!readOnly && onPreviewRemove ? (
+                        <Button
+                            id={idPrefix ? `${idPrefix}-remove` : undefined}
+                            type="button"
+                            variant="secondary"
+                            size="icon-sm"
+                            title={`${fileUploadText.remove} ${activePreview.name}`}
+                            disabled={disabled}
+                            aria-label={`移除 ${activePreview.name}`}
+                            onClick={removePreview}
+                        >
+                            <XIcon className="size-3" />
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
+            {readOnly && !activePreview && !hasSelection ? (
+                <p className="text-sm text-muted-foreground">
+                    {fileUploadText.empty}
+                </p>
+            ) : null}
 
             {selectionError ? (
                 <p

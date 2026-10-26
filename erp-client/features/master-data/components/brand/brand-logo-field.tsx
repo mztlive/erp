@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload, imagePreviewSource } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
 
@@ -24,6 +25,7 @@ export function BrandLogoField({
         <div className="space-y-2">
             <Label htmlFor={`${id}-input`}>品牌 Logo（选填）</Label>
             <FileUpload
+                selectedDescription={fileUploadText.pendingSave}
                 idPrefix={id}
                 density="compact"
                 label="上传品牌 Logo"

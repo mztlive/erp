@@ -8,6 +8,7 @@ import {
     FieldError,
     FieldLabel,
 } from "@/components/ui/field"
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 
 /** 业务凭证允许的文件类型；与服务端凭证校验一致。 */
@@ -60,6 +61,7 @@ export function EvidenceUploadField({
                 {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <FileUpload
+                selectedDescription={fileUploadText.pendingSubmit}
                 idPrefix={resolvedId}
                 accept={EVIDENCE_FILE_TYPES.join(",")}
                 multiple={false}

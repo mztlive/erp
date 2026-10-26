@@ -1,5 +1,6 @@
 "use client"
 
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 import {
     Field,
@@ -10,6 +11,7 @@ import {
 import {
     INVOICE_FILE_ACCEPT,
     invoiceFileReference,
+    invoiceFilesError,
 } from "@/features/customer-receivables/lib/invoice-files"
 
 /** 受控的开票附件选择；文件与登记命令同时上传。 */
@@ -34,10 +36,19 @@ export function InvoiceFilesField({
         <Field data-invalid={invalid || undefined}>
             <FieldLabel htmlFor={`${baseId}-input`}>{label}</FieldLabel>
             <FileUpload
+                selectedDescription={fileUploadText.pendingSubmit}
                 idPrefix={baseId}
                 density={density}
                 accept={INVOICE_FILE_ACCEPT}
                 multiple
+                validateFiles={(selected) => {
+                    const next = new Map(
+                        files.map((file) => [invoiceFileReference(file), file]),
+                    )
+                    for (const file of selected)
+                        next.set(invoiceFileReference(file), file)
+                    return invoiceFilesError([...next.values()])
+                }}
                 selectedFiles={files}
                 fileKey={invoiceFileReference}
                 onFileRemove={(file) =>

@@ -31,6 +31,13 @@ export const fileUploadText = {
     unsupported: "文件类型不支持，请按说明重新选择",
     selected: "已选择",
     uploaded: "已上传",
+    saved: "已保存",
+    pendingSave: "已选择 · 保存时上传",
+    pendingSubmit: "已选择 · 提交时上传",
+    uploadedUnsaved: "已上传 · 尚未保存到单据",
+    preview: "预览",
+    batchRejected: "本次文件均未添加，原有文件保持不变。",
+    empty: "暂无文件",
 } as const
 
 export const listFilterText = {

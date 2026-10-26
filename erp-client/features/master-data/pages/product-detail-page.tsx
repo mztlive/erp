@@ -383,6 +383,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         {section === "media" ? (
                                             <ProductMediaSection
                                                 idPrefix="master-data-product-detail-media"
+                                                disabled={pending}
                                                 canRevise={canRevise}
                                                 fields={fields}
                                                 setFields={setFields}

@@ -22,12 +22,7 @@ export function useSalesOrderEvidenceUpload(form: SalesOrderCreateFormApi) {
                 { id: asset.id, fileName: asset.file_name },
             ])
         },
-        onError: (error) =>
-            toast.add({
-                title: "开单凭证上传失败",
-                description: getErrorMessage(error, "请重新上传 PDF 或图片"),
-                type: "error",
-            }),
+        meta: { suppressErrorToast: true },
     })
 }
 

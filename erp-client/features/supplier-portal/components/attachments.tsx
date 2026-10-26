@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Button } from "@/components/ui/button"
 import { commandFailureDisposition } from "@/lib/api/command-recovery"
+import { selectedFileKey } from "@/lib/file-selection"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { portalFile, portalUpload } from "../api"
 import { commandKey } from "../lib/presentation"
@@ -179,9 +180,30 @@ export function PortalAttachments({
             />
             {intent.current && (
                 <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                        上传结果尚未全部确认。请重试原文件，确认完成后再保存或继续上传。
+                    <p className="text-sm text-muted-foreground" role="status">
+                        {upload.isPending
+                            ? "正在上传，请等待完成后保存。"
+                            : "上传结果尚未全部确认。请重试原文件，确认完成后再保存或继续上传。"}
                     </p>
+                    <ul className="space-y-1 text-sm">
+                        {intent.current.rows.map((row) => (
+                            <li
+                                key={row.key}
+                                className="flex flex-wrap justify-between gap-2 rounded-md border px-3 py-2"
+                            >
+                                <span className="min-w-0 break-all">
+                                    {row.file.name}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                    {row.result
+                                        ? "已上传 · 保存后生效"
+                                        : upload.isPending
+                                          ? "等待上传完成"
+                                          : "尚未确认 · 需重试"}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
                     <Button
                         id={`${prefix}-retry`}
                         type="button"
@@ -194,6 +216,7 @@ export function PortalAttachments({
                 </div>
             )}
             <FileUpload
+                maxFileSize={5 * 1024 * 1024}
                 idPrefix={`${prefix}-upload`}
                 accept={
                     imageOnly
@@ -209,7 +232,17 @@ export function PortalAttachments({
                           ? "添加商品图片"
                           : "添加商品资料图片"
                 }
-                description="支持JPG、PNG、WebP，每个文件最多5 MB。资料区支持PDF；上传后需保存本次引用。"
+                description={
+                    imageOnly
+                        ? "支持 JPG、PNG、WebP，每个文件最多 5 MB；上传后需保存申请。"
+                        : "支持 JPG、PNG、WebP、PDF，每个文件最多 5 MB；上传后需保存申请。"
+                }
+                validateFiles={(files) => {
+                    const keys = files.map(selectedFileKey)
+                    return new Set(keys).size !== keys.length
+                        ? "本次选择包含重复文件，请每个文件只选择一次"
+                        : null
+                }}
                 onFilesSelected={(files) => upload.mutate(files)}
             />
             {assetIds.map((id, index) => (

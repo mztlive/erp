@@ -77,7 +77,7 @@ function SkuRow({
             <TableCell className="sticky left-0 z-10 min-w-56 max-w-80 whitespace-normal bg-card align-middle">
                 <div className="flex items-center gap-3">
                     <div
-                        className="size-14 shrink-0"
+                        className="w-16 shrink-0"
                         role="group"
                         aria-label={`${sku.name || sku.specLabel} 主图`}
                     >

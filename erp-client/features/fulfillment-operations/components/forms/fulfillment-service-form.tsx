@@ -4,6 +4,7 @@ import { RequiredMark } from "@/components/ui/required-mark"
 
 import { OptionCombobox } from "@/components/business"
 import { DateTimeRangeLocalPicker } from "@/components/ui/date-picker"
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -183,6 +184,8 @@ export function FulfillmentServiceForm({
                         <span className="text-destructive">*</span>
                     </Label>
                     <FileUpload
+                        maxFileSize={5 * 1024 * 1024}
+                        selectedDescription={fileUploadText.pendingSubmit}
                         idPrefix="fulfillment-operations-service-form-evidence"
                         accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
                         multiple={false}

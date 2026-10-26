@@ -21,6 +21,7 @@ import {
     FieldError,
     FieldLabel,
 } from "@/components/ui/field"
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 import { toFieldErrors } from "@/components/form"
 import {
@@ -252,6 +253,9 @@ export function AllocationFactFormCard({
                                                 </span>
                                             </FieldLabel>
                                             <FileUpload
+                                                selectedDescription={
+                                                    fileUploadText.pendingSubmit
+                                                }
                                                 idPrefix="supplier-payables-allocation-form-bank-receipt"
                                                 className="w-full"
                                                 accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"

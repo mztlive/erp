@@ -1,13 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ArrowDownIcon,
-    ArrowUpIcon,
-    GripVerticalIcon,
-    ImageIcon,
-    XIcon,
-} from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, ImageIcon, XIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,6 +19,8 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { moveListItem } from "@/features/master-data/lib/move-list-item"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { fileNameConflictError } from "@/lib/file-selection"
+import { fileUploadText } from "@/lib/ui-text"
 
 function MoneyInput({
     value,
@@ -71,6 +67,9 @@ function MediaListEditor({
     onPreviewUrlsChange,
     onFilesSelected,
     mode = "carousel",
+    readOnly = false,
+    disabled = false,
+    existingFileNames,
 }: {
     idPrefix?: string
     label: string
@@ -83,6 +82,9 @@ function MediaListEditor({
     /** 选择文件时透出原始文件（用于保存前上传）。 */
     onFilesSelected?: (files: File[]) => void
     mode?: "carousel" | "detail"
+    readOnly?: boolean
+    disabled?: boolean
+    existingFileNames?: readonly string[]
 }) {
     const [localPreviewUrls, setLocalPreviewUrls] = React.useState<
         ReadonlyMap<string, string>
@@ -101,11 +103,9 @@ function MediaListEditor({
                 previous: ReadonlyMap<string, string>,
             ) => Map<string, string>,
         ) => {
-            setLocalPreviewUrls((previous) => {
-                const next = update(previous)
-                localPreviewUrlsRef.current = next
-                return next
-            })
+            const next = update(localPreviewUrlsRef.current)
+            localPreviewUrlsRef.current = next
+            setLocalPreviewUrls(next)
         },
         [],
     )
@@ -122,9 +122,17 @@ function MediaListEditor({
     React.useEffect(() => {
         const retainedNames = new Set(value)
         const removedNames = [...localPreviewUrlsRef.current.keys()].filter(
-            (name) => !retainedNames.has(name),
+            (name) =>
+                !retainedNames.has(name) ||
+                Boolean(
+                    previewUrls?.[name] &&
+                    !previewUrls[name].startsWith("blob:"),
+                ),
         )
         if (removedNames.length === 0) return
+        setExpandedPreview((current) =>
+            current && removedNames.includes(current.name) ? null : current,
+        )
         updateLocalPreviewUrls((previous) => {
             const next = new Map(previous)
             for (const name of removedNames) {
@@ -134,7 +142,7 @@ function MediaListEditor({
             }
             return next
         })
-    }, [updateLocalPreviewUrls, value])
+    }, [updateLocalPreviewUrls, value, previewUrls])
 
     const derivedBasePrefix =
         idPrefix ?? `master-data-product-media-${toAutomationIdSegment(label)}`
@@ -224,105 +232,148 @@ function MediaListEditor({
                                     首图
                                 </Badge>
                             ) : null}
-                            <div className="flex items-center justify-center gap-1 border-t border-border bg-surface-sunken/95 p-1">
-                                <Button
-                                    id={`${base}-move-up`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    disabled={index === 0}
-                                    aria-label={`${name} 上移`}
-                                    onClick={() =>
-                                        onChange(
-                                            moveListItem(
-                                                value,
-                                                index,
-                                                index - 1,
-                                            ),
-                                        )
-                                    }
-                                >
-                                    <ArrowUpIcon />
-                                </Button>
-                                <GripVerticalIcon
-                                    className="size-3.5 text-muted-foreground"
-                                    aria-hidden
-                                />
-                                <Button
-                                    id={`${base}-move-down`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    disabled={index === value.length - 1}
-                                    aria-label={`${name} 下移`}
-                                    onClick={() =>
-                                        onChange(
-                                            moveListItem(
-                                                value,
-                                                index,
-                                                index + 1,
-                                            ),
-                                        )
-                                    }
-                                >
-                                    <ArrowDownIcon />
-                                </Button>
-                                <Button
-                                    id={`${base}-remove`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    aria-label={`${masterDataCopy.mediaRemove} ${name}`}
-                                    onClick={() =>
-                                        onChange(
-                                            value.filter((_, i) => i !== index),
-                                        )
-                                    }
-                                >
-                                    <XIcon />
-                                </Button>
-                            </div>
+                            <p className="px-2 py-1 text-xs text-muted-foreground">
+                                {previewSrc?.startsWith("blob:")
+                                    ? fileUploadText.pendingSave
+                                    : fileUploadText.saved}
+                            </p>
+                            {!readOnly ? (
+                                <div className="flex flex-wrap items-center justify-center gap-1 border-t border-border bg-surface-sunken/95 p-1">
+                                    <Button
+                                        id={`${base}-move-up`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        disabled={disabled || index === 0}
+                                        aria-label={`${name} 前移`}
+                                        title="前移"
+                                        onClick={() =>
+                                            onChange(
+                                                moveListItem(
+                                                    value,
+                                                    index,
+                                                    index - 1,
+                                                ),
+                                            )
+                                        }
+                                    >
+                                        <ArrowUpIcon />
+                                    </Button>
+                                    <Button
+                                        id={`${base}-move-down`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        disabled={
+                                            disabled ||
+                                            index === value.length - 1
+                                        }
+                                        aria-label={`${name} 后移`}
+                                        title="后移"
+                                        onClick={() =>
+                                            onChange(
+                                                moveListItem(
+                                                    value,
+                                                    index,
+                                                    index + 1,
+                                                ),
+                                            )
+                                        }
+                                    >
+                                        <ArrowDownIcon />
+                                    </Button>
+                                    {mode === "carousel" && index > 0 ? (
+                                        <Button
+                                            id={`${base}-set-cover`}
+                                            disabled={disabled}
+                                            type="button"
+                                            variant="ghost"
+                                            size="xs"
+                                            onClick={() =>
+                                                onChange(
+                                                    moveListItem(
+                                                        value,
+                                                        index,
+                                                        0,
+                                                    ),
+                                                )
+                                            }
+                                        >
+                                            设为首图
+                                        </Button>
+                                    ) : null}
+                                    <Button
+                                        id={`${base}-remove`}
+                                        disabled={disabled}
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        aria-label={`${masterDataCopy.mediaRemove} ${name}`}
+                                        onClick={() =>
+                                            onChange(
+                                                value.filter(
+                                                    (_, i) => i !== index,
+                                                ),
+                                            )
+                                        }
+                                    >
+                                        <XIcon />
+                                    </Button>
+                                </div>
+                            ) : null}
                         </div>
                     )
                 })}
-                <FileUpload
-                    idPrefix={`${derivedBasePrefix}-upload`}
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    label={`添加${label}`}
-                    density="tile"
-                    description={
-                        mode === "carousel"
-                            ? "支持多选，首张作为首图"
-                            : "支持多选，按顺序展示"
-                    }
-                    onFilesSelected={(files) => {
-                        onFilesSelected?.(files)
-                        const addedUrls: Record<string, string> = {}
-                        updateLocalPreviewUrls((previous) => {
-                            const next = new Map(previous)
-                            for (const file of files) {
-                                const previousSrc = next.get(file.name)
-                                if (previousSrc)
-                                    URL.revokeObjectURL(previousSrc)
-                                const blobUrl = URL.createObjectURL(file)
-                                next.set(file.name, blobUrl)
-                                addedUrls[file.name] = blobUrl
-                            }
-                            return next
-                        })
-                        if (onPreviewUrlsChange) {
-                            onPreviewUrlsChange({
-                                ...previewUrls,
-                                ...addedUrls,
-                            })
+                {!readOnly ? (
+                    <FileUpload
+                        idPrefix={`${derivedBasePrefix}-upload`}
+                        disabled={disabled}
+                        showTileLabel
+                        validateFiles={(files) =>
+                            fileNameConflictError(
+                                files,
+                                existingFileNames ?? value,
+                            )
                         }
-                        onChange([...value, ...files.map((f) => f.name)])
-                    }}
-                    className={
-                        mode === "carousel" ? "aspect-square" : "aspect-[4/5]"
-                    }
-                />
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        label={`添加${label}`}
+                        density="tile"
+                        description={
+                            mode === "carousel"
+                                ? "点击或拖入图片，支持多选"
+                                : "点击或拖入图片，按顺序展示"
+                        }
+                        onFilesSelected={(files) => {
+                            onFilesSelected?.(files)
+                            const addedUrls: Record<string, string> = {}
+                            updateLocalPreviewUrls((previous) => {
+                                const next = new Map(previous)
+                                for (const file of files) {
+                                    const previousSrc = next.get(file.name)
+                                    if (previousSrc)
+                                        URL.revokeObjectURL(previousSrc)
+                                    const blobUrl = URL.createObjectURL(file)
+                                    next.set(file.name, blobUrl)
+                                    addedUrls[file.name] = blobUrl
+                                }
+                                return next
+                            })
+                            if (onPreviewUrlsChange) {
+                                onPreviewUrlsChange({
+                                    ...previewUrls,
+                                    ...addedUrls,
+                                })
+                            }
+                            onChange([...value, ...files.map((f) => f.name)])
+                        }}
+                        controlClassName={
+                            mode === "carousel"
+                                ? "aspect-square"
+                                : "aspect-[4/5]"
+                        }
+                    />
+                ) : null}
             </div>
             {value.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
@@ -380,6 +431,7 @@ function SkuMainImageField({
     disabled?: boolean
     idPrefix?: string
 }) {
+    const [file, setFile] = React.useState<File | null>(null)
     return (
         <FileUpload
             idPrefix={idPrefix ?? "master-data-product-sku-main-image"}
@@ -388,20 +440,33 @@ function SkuMainImageField({
             label={masterDataCopy.fMainImage}
             description="1:1"
             density="tile"
-            className="aspect-square size-14 overflow-hidden"
-            disabled={disabled}
+            className="w-16"
+            controlClassName="aspect-square"
+            selectedDescription={fileUploadText.pendingSave}
+            readOnly={disabled}
             previewSelectedImage
+            selectedImageFile={
+                previewUrl?.startsWith("blob:") && file?.name === value
+                    ? file
+                    : null
+            }
             preview={
                 value
                     ? {
                           src: previewUrl ?? imagePreviewSource(value),
                           name: value,
-                          status: "uploaded",
+                          status: previewUrl?.startsWith("blob:")
+                              ? "pending"
+                              : "saved",
                       }
                     : null
             }
-            onPreviewRemove={() => onChange("")}
+            onPreviewRemove={() => {
+                setFile(null)
+                onChange("")
+            }}
             onFilesSelected={(files) => {
+                setFile(files[0] ?? null)
                 onFilesSelected?.(files)
                 if (files[0]) onChange(files[0].name)
             }}

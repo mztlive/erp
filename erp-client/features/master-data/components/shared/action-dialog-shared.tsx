@@ -159,8 +159,9 @@ export function MediaSingleField({
                 label={label}
                 description={hint ?? masterDataCopy.mediaUploadHint}
                 density={aspectRatio === "1:1" ? "tile" : "compact"}
-                className={
-                    aspectRatio === "1:1" ? "aspect-square size-24" : undefined
+                className={aspectRatio === "1:1" ? "w-24" : undefined}
+                controlClassName={
+                    aspectRatio === "1:1" ? "aspect-square" : undefined
                 }
                 accept="image/jpeg,image/png,image/webp"
                 multiple={false}

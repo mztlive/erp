@@ -1,5 +1,7 @@
 "use client"
 
+import { getErrorMessage } from "@/lib/api/errors"
+import { fileUploadText } from "@/lib/ui-text"
 import { Trash2Icon } from "lucide-react"
 
 import { toFieldErrors } from "@/components/form"
@@ -47,6 +49,11 @@ export function SalesOrderCreateEvidenceField({
                                         >
                                             <span className="min-w-0 break-all">
                                                 {file.fileName}
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {locked
+                                                        ? fileUploadText.saved
+                                                        : fileUploadText.uploadedUnsaved}
+                                                </span>
                                             </span>
                                             {!locked ? (
                                                 <Button
@@ -82,11 +89,24 @@ export function SalesOrderCreateEvidenceField({
                         ) : null}
                         {!locked ? (
                             <FileUpload
+                                maxFileSize={5 * 1024 * 1024}
                                 idPrefix="sales-orders-create-evidence"
                                 accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
                                 multiple={false}
                                 density="compact"
                                 disabled={upload.isPending}
+                                selectedFiles={
+                                    (upload.isPending || upload.isError) &&
+                                    upload.variables
+                                        ? [upload.variables]
+                                        : []
+                                }
+                                selectedDescription={
+                                    upload.isPending
+                                        ? "正在上传…"
+                                        : "上传失败 · 可重试原文件"
+                                }
+                                onFileRemove={() => upload.reset()}
                                 label={
                                     upload.isPending
                                         ? "正在上传凭证…"
@@ -101,6 +121,32 @@ export function SalesOrderCreateEvidenceField({
                                 aria-invalid={invalid || undefined}
                                 aria-describedby="sales-orders-create-evidence-description"
                             />
+                        ) : null}
+                        {upload.isError && !locked ? (
+                            <div className="space-y-2">
+                                <p
+                                    role="alert"
+                                    className="text-sm text-destructive"
+                                >
+                                    {getErrorMessage(
+                                        upload.error,
+                                        "上传失败，请重试",
+                                    )}
+                                </p>
+                                <Button
+                                    id="sales-orders-create-evidence-retry"
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!upload.variables}
+                                    onClick={() => {
+                                        if (upload.variables)
+                                            upload.mutate(upload.variables)
+                                    }}
+                                >
+                                    重试原文件
+                                </Button>
+                            </div>
                         ) : null}
                         <FieldDescription id="sales-orders-create-evidence-description">
                             {locked

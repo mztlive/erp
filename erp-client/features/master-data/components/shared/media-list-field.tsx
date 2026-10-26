@@ -23,6 +23,8 @@ import {
 } from "@/features/master-data/lib/resource-fields"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { fileNameConflictError } from "@/lib/file-selection"
+import { fileUploadText } from "@/lib/ui-text"
 import { getErrorMessage } from "@/lib/api/errors"
 
 /** 根据展示文件名判定内嵌预览类型。 */
@@ -43,6 +45,7 @@ export function MediaListField({
     assetIdByFileName,
     onFilesSelected,
     disabled = false,
+    existingFileNames,
 }: {
     idPrefix?: string
     label: string
@@ -59,6 +62,7 @@ export function MediaListField({
     onFilesSelected?: (files: File[]) => void
     /** 禁止新增和移除文件；已登记文件仍可查看。 */
     disabled?: boolean
+    existingFileNames?: readonly string[]
 }) {
     const basePrefix =
         idPrefix ?? `master-data-media-${toAutomationIdSegment(label)}`
@@ -195,25 +199,34 @@ export function MediaListField({
                                         {previewLoading === name
                                             ? "正在打开预览…"
                                             : name}
+                                        <span className="block text-xs text-muted-foreground">
+                                            {localPreviewUrls[name] &&
+                                            !assetIdByFileName?.[name] &&
+                                            !url
+                                                ? fileUploadText.pendingSave
+                                                : fileUploadText.saved}
+                                        </span>
                                     </span>
                                 </button>
-                                <Button
-                                    id={`${basePrefix}-item-${toAutomationIdSegment(name)}-remove`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label={`${masterDataCopy.mediaRemove} ${name}`}
-                                    disabled={disabled}
-                                    onClick={() => {
-                                        removeLocalPreview(name)
-                                        const next = items.filter(
-                                            (_, i) => i !== index,
-                                        )
-                                        onChange(joinMediaList(next))
-                                    }}
-                                >
-                                    <XIcon className="size-3.5" />
-                                </Button>
+                                {!disabled ? (
+                                    <Button
+                                        id={`${basePrefix}-item-${toAutomationIdSegment(name)}-remove`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={`${masterDataCopy.mediaRemove} ${name}`}
+                                        disabled={disabled}
+                                        onClick={() => {
+                                            removeLocalPreview(name)
+                                            const next = items.filter(
+                                                (_, i) => i !== index,
+                                            )
+                                            onChange(joinMediaList(next))
+                                        }}
+                                    >
+                                        <XIcon className="size-3.5" />
+                                    </Button>
+                                ) : null}
                             </li>
                         )
                     })}
@@ -224,33 +237,39 @@ export function MediaListField({
                     {masterDataCopy.mediaAllowEmpty}）
                 </p>
             )}
-            <FileUpload
-                idPrefix={`${basePrefix}-upload`}
-                accept={accept}
-                multiple
-                disabled={disabled}
-                label={`添加${label}`}
-                description={masterDataCopy.mediaUploadHint}
-                onFilesSelected={(files) => {
-                    onFilesSelected?.(files)
-                    for (const file of files) {
-                        if (
-                            !file.type.startsWith("image/") &&
-                            file.type !== "application/pdf"
-                        ) {
-                            continue
-                        }
-                        const previous = localPreviewUrlsRef.current[file.name]
-                        if (previous) URL.revokeObjectURL(previous)
-                        localPreviewUrlsRef.current[file.name] =
-                            URL.createObjectURL(file)
+            {!disabled ? (
+                <FileUpload
+                    validateFiles={(files) =>
+                        fileNameConflictError(files, existingFileNames ?? items)
                     }
-                    setLocalPreviewUrls({ ...localPreviewUrlsRef.current })
-                    const names = files.map((f) => f.name)
-                    onChange(joinMediaList([...items, ...names]))
-                }}
-                density="compact"
-            />
+                    idPrefix={`${basePrefix}-upload`}
+                    accept={accept}
+                    multiple
+                    disabled={disabled}
+                    label={`添加${label}`}
+                    description={masterDataCopy.mediaUploadHint}
+                    onFilesSelected={(files) => {
+                        onFilesSelected?.(files)
+                        for (const file of files) {
+                            if (
+                                !file.type.startsWith("image/") &&
+                                file.type !== "application/pdf"
+                            ) {
+                                continue
+                            }
+                            const previous =
+                                localPreviewUrlsRef.current[file.name]
+                            if (previous) URL.revokeObjectURL(previous)
+                            localPreviewUrlsRef.current[file.name] =
+                                URL.createObjectURL(file)
+                        }
+                        setLocalPreviewUrls({ ...localPreviewUrlsRef.current })
+                        const names = files.map((f) => f.name)
+                        onChange(joinMediaList([...items, ...names]))
+                    }}
+                    density="compact"
+                />
+            ) : null}
             <Dialog
                 open={preview != null}
                 onOpenChange={(open) => {

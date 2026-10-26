@@ -18,6 +18,7 @@ import { isDirectUploadCancelled } from "@/features/master-data/api/product-impo
 import { useSubmitProductImportMutation } from "@/features/master-data/hooks/use-product-import"
 import {
     formatUploadMegabytes,
+    MAX_PRODUCT_IMPORT_FILE_BYTES,
     useProductImportDirectUpload,
 } from "@/features/master-data/hooks/use-product-import-upload"
 
@@ -90,7 +91,7 @@ export function ProductImportDialog({
                 <DialogHeader>
                     <DialogTitle>导入商品</DialogTitle>
                     <DialogDescription>
-                        使用产品报价表「对内」工作表。大文件分片直传对象存储并显示进度；提交后后台逐行导入，进度与结果在「后台任务」查看。图片随文件导入；供应商与成本价不会写入供给。
+                        使用产品报价表「对内」工作表。大文件上传时显示进度；提交后后台逐行导入，进度与结果在「后台任务」查看。图片随文件导入；供应商与成本价不会写入供给。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
@@ -98,7 +99,8 @@ export function ProductImportDialog({
                         idPrefix="product-import-file"
                         inputId="product-import-file"
                         label="导入商品报价表"
-                        description="选择或拖入 Excel 文件，仅支持 XLSX"
+                        description="选择或拖入 XLSX 文件，最大 700 MB；上传后可查看导入进度和结果"
+                        maxFileSize={MAX_PRODUCT_IMPORT_FILE_BYTES}
                         density="compact"
                         multiple={false}
                         accept=".xlsx"
@@ -124,7 +126,7 @@ export function ProductImportDialog({
                             >
                                 {committing
                                     ? "上传完成，正在登记导入任务…"
-                                    : `正在上传第 ${progress.partIndex + 1}/${progress.totalParts} 片 · ${formatUploadMegabytes(progress.loadedBytes)} / ${formatUploadMegabytes(progress.totalBytes)} · ${progress.percent}%`}
+                                    : `正在上传 · ${formatUploadMegabytes(progress.loadedBytes)} / ${formatUploadMegabytes(progress.totalBytes)} · ${progress.percent}%`}
                             </p>
                         </div>
                     ) : null}

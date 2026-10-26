@@ -16,6 +16,8 @@ import type {
 import { MediaListField } from "@/features/master-data/components/shared/media-list-field"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
+import { parseMediaList } from "@/features/master-data/lib/resource-fields"
+
 const QUALIFICATION_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf"
 
 export function SupplierEditorContractSection({
@@ -30,6 +32,23 @@ export function SupplierEditorContractSection({
     mediaAssetIdsFor: SupplierMediaLookup
     rememberMediaFiles: SupplierRememberMediaFiles
 }) {
+    const existingFileNames = [
+        values.contractFile,
+        values.authorizationFile,
+        values.qualification,
+        values.foodLicense,
+        values.legalPersonIdCard,
+    ]
+        .flatMap(parseMediaList)
+        .concat(
+            ...[
+                "contractFile",
+                "authorizationFile",
+                "qualification",
+                "foodLicense",
+                "legalPersonIdCard",
+            ].map((key) => Object.keys(mediaAssetIdsFor(key))),
+        )
     return (
         <SectionPanel
             title="合同与资质"
@@ -113,6 +132,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="border-grid lg:border-l lg:pl-5">
                             <MediaListField
+                                existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-contract-file-upload"
                                 label={masterDataCopy.fContractFile}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -180,6 +200,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="border-grid lg:border-l lg:pl-5">
                             <MediaListField
+                                existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-authorization-file-upload"
                                 label={masterDataCopy.fAuthorizationFile}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -208,6 +229,7 @@ export function SupplierEditorContractSection({
                     <div className="grid gap-4 lg:grid-cols-3">
                         <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
+                                existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-qualification-upload"
                                 label={masterDataCopy.fQualification}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -226,6 +248,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
+                                existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-food-license-upload"
                                 label={masterDataCopy.fFoodLicense}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -244,6 +267,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
+                                existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-legal-person-id-card-upload"
                                 label={masterDataCopy.fLegalPersonIdCard}
                                 hint={masterDataCopy.supplierQualificationHint}

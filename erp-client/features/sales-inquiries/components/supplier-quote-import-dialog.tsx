@@ -5,7 +5,8 @@ import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 import { UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { selectedFileKey } from "@/lib/file-selection"
+import { FileUpload } from "@/components/ui/file-upload"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
@@ -135,26 +136,63 @@ export function SupplierQuoteImportButton({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="min-h-0 space-y-4 overflow-y-auto">
-                        <Input
-                            id="procurement-quote-import-files"
-                            aria-label="供应商回填报价表"
-                            type="file"
+                        <FileUpload
+                            idPrefix="procurement-quote-import"
+                            inputId="procurement-quote-import-files"
+                            label="选择供应商回填报价表"
+                            description="支持 XLSX，最多 20 个文件，合计不超过 50 MB"
+                            density="compact"
                             accept=".xlsx"
                             multiple
+                            selectedFiles={preview.variables ?? []}
+                            selectLabel={
+                                preview.variables?.length
+                                    ? "重新选择文件"
+                                    : "选择文件"
+                            }
+                            selectedDescription={
+                                preview.isPending
+                                    ? "正在读取并核对"
+                                    : preview.isError
+                                      ? "读取失败"
+                                      : "已选择 · 确认后导入"
+                            }
+                            validateFiles={(files) => {
+                                if (
+                                    new Set(files.map(selectedFileKey)).size !==
+                                    files.length
+                                )
+                                    return "本次选择包含重复文件，请每个文件只选择一次"
+                                if (files.length > 20)
+                                    return "最多选择 20 个文件"
+                                if (
+                                    files.reduce(
+                                        (total, file) => total + file.size,
+                                        0,
+                                    ) >
+                                    50 * 1024 * 1024
+                                )
+                                    return "文件合计不能超过 50 MB"
+                                return null
+                            }}
                             disabled={
                                 pending ||
                                 !command.ready ||
                                 command.unresolved ||
                                 details.isPending
                             }
-                            onChange={(event) => {
+                            onFilesSelected={(files) => {
                                 setMessage("")
                                 preview.reset()
-                                const files = Array.from(
-                                    event.target.files ?? [],
-                                )
-                                event.target.value = ""
-                                if (files.length) preview.mutate(files)
+                                preview.mutate(files)
+                            }}
+                            onFileRemove={(file) => {
+                                const remaining = (
+                                    preview.variables ?? []
+                                ).filter((item) => item !== file)
+                                setMessage("")
+                                preview.reset()
+                                if (remaining.length) preview.mutate(remaining)
                             }}
                         />
                         <p className="text-xs text-muted-foreground">

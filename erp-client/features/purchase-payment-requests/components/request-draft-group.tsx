@@ -1,6 +1,7 @@
 import { ChevronDownIcon, SplitIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 import { selectedFileKey } from "@/lib/file-selection"
 import {
@@ -318,6 +319,9 @@ export function RequestDraftGroup({
                         {(field) => (
                             <Field>
                                 <FileUpload
+                                    selectedDescription={
+                                        fileUploadText.pendingSave
+                                    }
                                     idPrefix={`${id}-attachments`}
                                     inputId={fieldId("attachments")}
                                     selectId={`${id}-attachments-trigger`}

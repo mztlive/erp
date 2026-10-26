@@ -10,6 +10,7 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 import { SupplierPaymentSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-payment-submit-confirm-dialog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -246,6 +247,10 @@ export function RequestPaymentForm({
                                 </span>
                             </FieldLabel>
                             <FileUpload
+                                maxFileSize={5 * 1024 * 1024}
+                                selectedDescription={
+                                    fileUploadText.pendingSubmit
+                                }
                                 idPrefix="ppr-pay-bank-receipt"
                                 label="上传银行回单"
                                 description="点击选择或拖入 JPG、PNG、WebP 图片"

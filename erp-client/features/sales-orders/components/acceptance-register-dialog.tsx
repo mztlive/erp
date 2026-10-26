@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import { ValidationSummary, type ValidationIssue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 import {
     Field,
@@ -218,6 +219,9 @@ export function AcceptanceRegisterDialog({
                                                     </span>
                                                 </FieldLabel>
                                                 <FileUpload
+                                                    selectedDescription={
+                                                        fileUploadText.pendingSubmit
+                                                    }
                                                     idPrefix="sales-orders-acceptance-evidence"
                                                     accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
                                                     multiple={false}

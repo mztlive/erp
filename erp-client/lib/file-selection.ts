@@ -29,6 +29,7 @@ export function fileSelectionError(
         .map((item) => item.trim())
         .filter(Boolean)
     for (const file of files) {
+        if (file.size === 0) return `${file.name}：文件为空，请重新选择`
         const name = file.name.toLowerCase()
         const type = file.type.toLowerCase()
         const supported =
@@ -58,4 +59,19 @@ export function fileSelectionError(
 
 export function selectedFileKey(file: File): string {
     return `${encodeURIComponent(file.name)}:${file.size}:${file.lastModified}`
+}
+
+/** 文件名作为业务引用时，拒绝整批中的重名，避免覆盖已有文件。 */
+export function fileNameConflictError(
+    files: readonly File[],
+    existingNames: readonly string[],
+): string | null {
+    const names = new Set(existingNames)
+    for (const file of files) {
+        if (names.has(file.name)) {
+            return `「${file.name}」已存在同名文件，请使用不同文件名后重新添加。`
+        }
+        names.add(file.name)
+    }
+    return null
 }
