@@ -102,8 +102,8 @@ impl DangaoshushuConnector {
         };
         Ok(Offer {
             sku: SupplierSku { product_id: Some(id(&product["id"])?), spec_id },
-            name: field(product, "title")?,
-            specification: field(spec, "name")?,
+            name: display_field(product, "title")?,
+            specification: display_field(spec, "name")?,
             unit,
             quote,
         })
@@ -121,6 +121,18 @@ impl DangaoshushuConnector {
             })
             .transpose()
     }
+}
+
+/// 展示名称允许供应商附带首尾空白，身份和金额继续使用严格解析。
+fn display_field(value: &Value, key: &str) -> ConnectorResult<String> {
+    let result = match value[key].as_str() {
+        Some(value) if !value.trim().is_empty() => Ok(value.trim().to_owned()),
+        _ => field(value, key),
+    };
+    result.map_err(|mut failure| {
+        failure.summary = format!("供应商名称字段 {key} 缺失、为空或类型无效");
+        failure
+    })
 }
 
 fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)> {
@@ -243,9 +255,18 @@ impl OfferSource for DangaoshushuConnector {
             .await?;
         let products = value["product_list"].as_array().ok_or_else(mapping)?;
         let mut items = Vec::new();
-        for product in products {
-            for spec in product["specs"].as_array().ok_or_else(mapping)? {
-                items.push(snapshot(OfferChange::Upsert(self.offer_value(product, spec, false)?), None));
+        for (product_index, product) in products.iter().enumerate() {
+            for (spec_index, spec) in product["specs"].as_array().ok_or_else(mapping)?.iter().enumerate() {
+                let offer = self.offer_value(product, spec, false).map_err(|mut failure| {
+                    failure.summary = format!(
+                        "第 {page} 页第 {} 个商品第 {} 个规格：{}",
+                        product_index + 1,
+                        spec_index + 1,
+                        failure.summary
+                    );
+                    failure
+                })?;
+                items.push(snapshot(OfferChange::Upsert(offer), None));
             }
         }
         let next = if products.len() >= usize::try_from(scan.limit.get()).map_err(|_| mapping())? {
@@ -347,6 +368,90 @@ mod tests {
             "product": {"id": "product-1", "status": "1", "can_buy": "1"},
             "specs": [{"id": "spec-1", "deleted": "0", "is_up": "1", "can_buy": "1", "stock": "-9999999"}]
         })
+    }
+
+    #[tokio::test]
+    async fn catalog_trims_display_names_in_scan_and_detail() {
+        let product = json!({
+            "id": "00023", "title": "  「倾世之爱」奢宠   ",
+            "specs": [{"spec_id": "721-101902", "name": "\t「倾世之爱」奢宠   "}]
+        });
+        let connector = connector(vec![
+            json!({"product_list": [product]}),
+            json!({
+                "product": {"id": "00023", "title": "  「倾世之爱」奢宠   "},
+                "specs": [{"id": "721-101902", "name": "\t「倾世之爱」奢宠   "}]
+            }),
+        ]);
+        let scan = Scan { window: ScanWindow::Full, cursor: None, limit: NonZeroU32::new(50).unwrap() };
+        let page = connector.scan(&scan).await.unwrap();
+        assert_eq!(page.next, None);
+        assert_eq!(page.items.len(), 1);
+        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("目录观察") };
+        assert_eq!(offer.name, "「倾世之爱」奢宠");
+        assert_eq!(offer.specification, "「倾世之爱」奢宠");
+        assert_eq!(offer.sku.product_id.as_deref(), Some("00023"));
+        assert_eq!(offer.sku.spec_id, "721-101902");
+        assert_eq!(offer.unit, None);
+        assert_eq!(offer.quote, None);
+        let Lookup::Found(detail) = connector.offer(&offer.sku).await.unwrap() else {
+            panic!("商品详情")
+        };
+        assert_eq!(detail.value, *offer);
+        assert_eq!(detail.stamp.changed_at, None);
+    }
+
+    #[tokio::test]
+    async fn catalog_rejects_invalid_names_with_safe_location() {
+        for (field_name, invalid) in [
+            ("title", Value::Null),
+            ("title", json!(" \t\n")),
+            ("name", json!("")),
+            ("name", json!({"private": "must-not-be-reported"})),
+        ] {
+            let mut product = json!({
+                "id": "product-1", "title": "蛋糕",
+                "specs": [{"spec_id": "unmapped-spec", "name": "6寸"}]
+            });
+            if field_name == "title" {
+                product["title"] = invalid;
+            } else {
+                product["specs"][0]["name"] = invalid;
+            }
+            let scan = Scan {
+                window: ScanWindow::Full,
+                cursor: Some("3".into()),
+                limit: NonZeroU32::new(50).unwrap(),
+            };
+            let failure = connector(vec![json!({"product_list": [product]})]).scan(&scan).await.unwrap_err();
+            assert_eq!(failure.class, SupplierFailureClass::MappingError);
+            assert_eq!(failure.code, "DGSS_MAPPING");
+            assert_eq!(
+                failure.summary,
+                format!("第 3 页第 1 个商品第 1 个规格：供应商名称字段 {field_name} 缺失、为空或类型无效")
+            );
+        }
+    }
+
+    #[test]
+    fn catalog_name_normalization_keeps_identity_and_price_strict() {
+        let connector = connector(vec![]);
+        let product = json!({"id": "product-1", "title": " 蛋糕  礼盒 "});
+        let spec = json!({"id": "spec-1", "name": " 6寸 ", "clearing_price": "100.25"});
+        assert_eq!(connector.offer_value(&product, &spec, true).unwrap().name, "蛋糕  礼盒");
+        for (target, key, invalid) in [
+            ("product", "id", " product-1 "),
+            ("spec", "id", " spec-1 "),
+            ("spec", "clearing_price", " 100.25 "),
+        ] {
+            let (mut product, mut spec) = (product.clone(), spec.clone());
+            if target == "product" {
+                product[key] = json!(invalid);
+            } else {
+                spec[key] = json!(invalid);
+            }
+            assert_eq!(connector.offer_value(&product, &spec, true).unwrap_err().code, "DGSS_MAPPING");
+        }
     }
 
     #[test]
