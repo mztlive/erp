@@ -221,7 +221,7 @@ function FileUpload({
                 data-slot="file-upload"
                 data-dragging={dragging || undefined}
                 className={cn(
-                    "flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-ring data-dragging:bg-accent",
+                    "relative flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-ring data-dragging:bg-accent",
                     density === "hero"
                         ? "min-h-64 flex-col gap-5 px-5 py-10 text-center sm:min-h-72 lg:min-h-90"
                         : density === "button"
@@ -231,7 +231,10 @@ function FileUpload({
                             : density === "compact"
                               ? "flex-row gap-2 p-2 text-left"
                               : "flex-col gap-3 p-6 text-center",
-                    activePreview && "relative overflow-hidden p-0",
+                    activePreview && "overflow-hidden p-0",
+                    !activePreview &&
+                        density !== "button" &&
+                        "has-[button:enabled:hover]:border-ring has-[button:enabled:hover]:bg-accent has-[button:focus-visible]:border-ring has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring",
                     disabled && "cursor-not-allowed opacity-50",
                 )}
                 onDragEnter={(event) => {
@@ -440,9 +443,13 @@ function FileUpload({
                                       ? "ghost"
                                       : "outline"
                             }
-                            className={
-                                density === "button" ? "order-first" : undefined
-                            }
+                            // 扩展原生按钮的命中区域，保留键盘与 fieldset 禁用语义。
+                            // 不使用按压位移，避免按钮成为伪元素的定位容器。
+                            className={cn(
+                                density === "button"
+                                    ? "order-first"
+                                    : "static cursor-pointer after:absolute after:inset-0 after:rounded-lg active:not-aria-[haspopup]:translate-none",
+                            )}
                             size={
                                 density === "hero"
                                     ? "lg"
