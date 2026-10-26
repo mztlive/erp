@@ -32,7 +32,7 @@ mod draft_update;
 
 mod dto;
 mod invoice;
-mod invoice_attachments;
+pub(crate) mod invoice_attachments;
 mod invoice_commit;
 mod invoice_evidence;
 mod invoice_posting;

@@ -3,6 +3,8 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `erp_finance::dto::payable` 的 DTO。
 
+pub(crate) mod invoice_files;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::body::Body;

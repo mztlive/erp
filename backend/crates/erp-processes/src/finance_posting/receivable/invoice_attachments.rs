@@ -24,7 +24,7 @@ use crate::{Error, Result};
 ///
 /// # 错误
 /// 附件超过 32 个、临时引用无法解析、附件重复或仍有未消费上传时返回错误。
-pub(super) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBatch) -> Result<()> {
+pub(crate) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBatch) -> Result<()> {
     if ids.len() > 32 {
         return Err(Error::ValidationError("发票附件最多 32 个".into()));
     }
@@ -55,7 +55,7 @@ pub(super) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBa
 ///
 /// # 错误
 /// 文件登记失败、附件不存在、不是发票证据、不是本人上传或附件关系写入失败时返回错误。
-pub(super) async fn persist(
+pub(crate) async fn persist(
     db: &Database,
     invoice_id: &str,
     ids: &[FileAssetId],

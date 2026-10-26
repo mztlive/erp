@@ -4,6 +4,7 @@ mod allocation;
 mod authorization;
 mod guard;
 mod invoice;
+mod invoice_files;
 mod invoice_rows;
 mod linked;
 mod party_names;

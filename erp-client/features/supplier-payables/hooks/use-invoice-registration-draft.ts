@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { z } from "zod"
+import { invoiceFileReference } from "@/lib/invoice-files"
 import { toast } from "@/components/ui/toast"
 import type { AllocationSessionState } from "./use-allocation-session"
 import { useWorkspaceFormGuard } from "@/lib/workspace-form-guard"
@@ -19,7 +20,10 @@ const snapshotSchema = z.object({
     selected: z.array(z.string()),
     amounts: z.record(z.string(), z.string()),
 })
-const draftSchema = snapshotSchema.extend({ savedAt: z.string() })
+const draftSchema = snapshotSchema.extend({
+    savedAt: z.string(),
+    invoiceFileNames: z.array(z.string()).default([]),
+})
 
 /** 登记草稿按账号、供应商、原票和会话隔离；恢复时重新核对当前应付池。 */
 export function useInvoiceRegistrationDraft(
@@ -33,12 +37,16 @@ export function useInvoiceRegistrationDraft(
     const restored = useRef<string | null>(null)
     const [hint, setHint] = useState<string | null>(null)
     const [baseline, setBaseline] = useState<string | null>(null)
+    const { invoiceFiles, ...invoice } = state.invoiceForm.state.values
     const snapshot = {
-        invoice: state.invoiceForm.state.values,
+        invoice,
         selected: [...state.selected],
         amounts: state.amounts,
     }
-    const signature = JSON.stringify(snapshot)
+    const signature = JSON.stringify({
+        ...snapshot,
+        invoiceFileNames: invoiceFiles.map(invoiceFileReference),
+    })
     const completed = state.result?.status === "succeeded"
     const guard = useMemo(
         () => ({
@@ -68,16 +76,29 @@ export function useInvoiceRegistrationDraft(
             )
             const selected = saved.selected.filter((id) => available.has(id))
             const next = {
-                invoice: saved.invoice,
+                invoice: { ...saved.invoice, invoiceFiles: [] },
                 selected,
                 amounts: saved.amounts,
             }
             state.restoreInvoiceDraft(next)
-            setBaseline(JSON.stringify(next))
+            setBaseline(
+                JSON.stringify({
+                    ...next,
+                    invoice: saved.invoice,
+                    invoiceFileNames: [],
+                }),
+            )
             setHint(
-                selected.length === saved.selected.length
-                    ? "已恢复本机草稿，请核对当前可收票金额"
-                    : "已恢复本机草稿；部分单据已不可核销，请重新核对",
+                [
+                    selected.length === saved.selected.length
+                        ? "已恢复本机草稿，请核对当前可收票金额"
+                        : "已恢复本机草稿；部分单据已不可核销，请重新核对",
+                    saved.invoiceFileNames.length
+                        ? `原选 ${saved.invoiceFileNames.length} 个发票文件未保存，请重新选择`
+                        : null,
+                ]
+                    .filter(Boolean)
+                    .join("；"),
             )
         } catch {
             setHint("本机草稿读取失败，请重新填写或重试")
@@ -104,11 +125,18 @@ export function useInvoiceRegistrationDraft(
         if (!key || !userId || state.isSubmitting) return
         try {
             const savedAt = new Date().toISOString()
-            localStorage.setItem(key, JSON.stringify({ ...snapshot, savedAt }))
+            localStorage.setItem(
+                key,
+                JSON.stringify({
+                    ...snapshot,
+                    savedAt,
+                    invoiceFileNames: invoiceFiles.map(invoiceFileReference),
+                }),
+            )
             state.invoiceForm.reset(state.invoiceForm.state.values)
             setBaseline(signature)
             setHint(
-                `草稿已保存到本机 ${new Date(savedAt).toLocaleTimeString("zh-CN")}`,
+                `草稿已保存到本机 ${new Date(savedAt).toLocaleTimeString("zh-CN")}${invoiceFiles.length ? "；发票文件未保存，恢复时需重新选择" : ""}`,
             )
         } catch {
             toast.add({

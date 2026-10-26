@@ -1,5 +1,7 @@
 "use client"
 
+import { InvoiceFilesField } from "@/components/business/invoice-files-field"
+import { toFieldErrors } from "@/components/form"
 import { MoneyValue } from "@/components/business"
 import type { AllocationSessionState } from "@/features/supplier-payables/hooks/use-allocation-session"
 
@@ -105,6 +107,29 @@ export function InvoiceRegistrationFields({
                     </form.AppField>
                 </div>
             )}
+            {!session?.existingInvoiceId ? (
+                <form.AppField name="invoiceFiles">
+                    {(field) => (
+                        <InvoiceFilesField
+                            idPrefix="supplier-payables-invoice-files"
+                            label="发票文件（可选）"
+                            density="compact"
+                            files={field.state.value}
+                            disabled={isSubmitting}
+                            errors={
+                                field.state.meta.isTouched
+                                    ? toFieldErrors(field.state.meta.errors)
+                                    : []
+                            }
+                            description="文件随登记一并保存，可在进项发票详情下载。本机草稿不保存文件，刷新后请重新选择。"
+                            onChange={(files) => {
+                                field.handleChange(files)
+                                field.handleBlur()
+                            }}
+                        />
+                    )}
+                </form.AppField>
+            ) : null}
         </section>
     )
 }

@@ -434,6 +434,7 @@ export type PostPaymentInput = {
 }
 
 export type PostInvoiceInput = {
+    invoiceFiles?: readonly File[]
     draftSessionId: string
     supplierId: string
     invoiceCode: string

@@ -1156,6 +1156,252 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "客户往来",
+        description: "应收台账、回款与销项发票管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices/{id}/files",
+                description: "查询发票文件",
+                permission: {
+                    resource: "invoice",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices/{id}/files/{asset_id}/download",
+                description: "下载发票文件",
+                permission: {
+                    resource: "invoice",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/receivable-accounts",
+                description: "查询应收往来子账列表",
+                permission: {
+                    resource: "receivable_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receivable-accounts",
+                description: "建立应收往来子账",
+                permission: {
+                    resource: "receivable_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/receivable-accounts/{id}",
+                description: "查询应收往来子账详情",
+                permission: {
+                    resource: "receivable_account",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts",
+                description: "查询客户回款单列表",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts",
+                description: "登记客户回款草稿",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts/{id}",
+                description: "查询客户回款单详情",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/drafts",
+                description: "保存回款登记草稿",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/commit",
+                description: "原子创建或提交客户回款审批",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/{id}/submit",
+                description: "提交客户回款审批",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/{id}/cancel-approval",
+                description: "撤回客户回款审批",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "cancel_approval",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/{id}/post",
+                description: "客户回款过账并核销",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices",
+                description: "查询发票列表",
+                permission: {
+                    resource: "invoice",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices",
+                description: "登记发票草稿",
+                permission: {
+                    resource: "invoice",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices/{id}",
+                description: "查询发票详情",
+                permission: {
+                    resource: "invoice",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/commit",
+                description: "原子登记销项发票并分配",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/{id}/post",
+                description: "发票登记过账并分配",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/{id}/red-issue",
+                description: "开具红票并红冲",
+                permission: {
+                    resource: "invoice",
+                    action: "reverse",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/with-files",
+                description: "登记发票草稿",
+                permission: {
+                    resource: "invoice",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/commit-with-files",
+                description: "原子登记销项发票并分配",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/complete-with-files",
+                description: "上传附件并完成开票",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/customer-receipts/{id}",
+                description: "修改原财务单据草稿",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts/{id}/draft",
+                description: "读取原回款编辑字段",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+        ],
+    },
+    {
         name: "授权文件",
         description: "声明式授权配置",
         permissions: [
@@ -4720,232 +4966,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "客户往来",
-        description: "应收台账、回款与销项发票管理",
-        permissions: [
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/receivable-accounts",
-                description: "查询应收往来子账列表",
-                permission: {
-                    resource: "receivable_account",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/receivable-accounts",
-                description: "建立应收往来子账",
-                permission: {
-                    resource: "receivable_account",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/receivable-accounts/{id}",
-                description: "查询应收往来子账详情",
-                permission: {
-                    resource: "receivable_account",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/customer-receipts",
-                description: "查询客户回款单列表",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/customer-receipts",
-                description: "登记客户回款草稿",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/customer-receipts/{id}",
-                description: "查询客户回款单详情",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/customer-receipts/drafts",
-                description: "保存回款登记草稿",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/customer-receipts/commit",
-                description: "原子创建或提交客户回款审批",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/customer-receipts/{id}/submit",
-                description: "提交客户回款审批",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/customer-receipts/{id}/cancel-approval",
-                description: "撤回客户回款审批",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "cancel_approval",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/customer-receipts/{id}/post",
-                description: "客户回款过账并核销",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "post",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/invoices",
-                description: "查询发票列表",
-                permission: {
-                    resource: "invoice",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/invoices",
-                description: "登记发票草稿",
-                permission: {
-                    resource: "invoice",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/invoices/{id}",
-                description: "查询发票详情",
-                permission: {
-                    resource: "invoice",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/invoices/commit",
-                description: "原子登记销项发票并分配",
-                permission: {
-                    resource: "invoice",
-                    action: "post",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/invoices/{id}/post",
-                description: "发票登记过账并分配",
-                permission: {
-                    resource: "invoice",
-                    action: "post",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/invoices/{id}/red-issue",
-                description: "开具红票并红冲",
-                permission: {
-                    resource: "invoice",
-                    action: "reverse",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/invoices/with-files",
-                description: "登记发票草稿",
-                permission: {
-                    resource: "invoice",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/invoices/commit-with-files",
-                description: "原子登记销项发票并分配",
-                permission: {
-                    resource: "invoice",
-                    action: "post",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/invoices/complete-with-files",
-                description: "上传附件并完成开票",
-                permission: {
-                    resource: "invoice",
-                    action: "post",
-                },
-            },
-            {
-                module: "admin",
-                method: "PUT",
-                path: "/admin/customer-receipts/{id}",
-                description: "修改原财务单据草稿",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/customer-receipts/{id}/draft",
-                description: "读取原回款编辑字段",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "submit",
-                },
-            },
-        ],
-    },
-    {
         name: "开票申请",
         description: "开票申请与授权管理",
         permissions: [
@@ -5110,6 +5130,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 method: "POST",
                 path: "/admin/purchase-invoice-allocations",
                 description: "进项发票登记过账并分配",
+                permission: {
+                    resource: "purchase_invoice_allocation",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-invoice-allocations/with-files",
+                description: "上传发票文件并登记过账分配",
                 permission: {
                     resource: "purchase_invoice_allocation",
                     action: "post",

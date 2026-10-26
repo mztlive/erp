@@ -22,6 +22,7 @@ use crate::adapters::identity::shared_rbac_service;
 
 mod account;
 mod invoice;
+pub use invoice::PurchaseInvoiceWithAssetsResult;
 mod payment;
 mod payment_merge;
 pub mod payment_request;

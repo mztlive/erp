@@ -15,7 +15,7 @@ use crate::core::middleware::with_permission;
 /// # 错误
 /// 无。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new()
+    invoice_routes(rbac)
         .route(
             "/work-items/{id}/purchase-payment",
             with_permission(
@@ -54,6 +54,27 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(financial_files::purchase_payment_receipt_download),
                 rbac,
                 financial_files::purchase_payment_receipt_download_permission_key(),
+            ),
+        )
+}
+
+/// 按整票读取权限挂载发票文件清单与下载。
+fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/invoices/{id}/files",
+            with_permission(
+                get(financial_files::invoice::invoice_files),
+                rbac,
+                financial_files::invoice::invoice_files_permission_key(),
+            ),
+        )
+        .route(
+            "/invoices/{id}/files/{asset_id}/download",
+            with_permission(
+                get(financial_files::invoice::invoice_download),
+                rbac,
+                financial_files::invoice::invoice_download_permission_key(),
             ),
         )
 }

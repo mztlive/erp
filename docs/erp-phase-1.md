@@ -993,6 +993,8 @@ sequenceDiagram
 | 合同筛选 | 销售单列表 `has_contract=true/false`；省略表示不限制 |
 | 签收凭证 | 现有客户验收 JSON 命令新增 `evidence_attachment_id`；`GET /admin/customer-acceptances/{id}/evidence` 按签收来源下载 |
 | 明细物流单号 | 发货创建、草稿更新和确认命令使用 `tracking_entries: [{sales_order_line_id, tracking_no, carrier?}]`；销售明细必须存在于当前发货行，更新时显式空数组清除全部物流关联；取消旧单据级物流字段 |
+| 进项发票文件 | `POST /admin/purchase-invoice-allocations/with-files` 使用 multipart `command` 与 `attachment_asset_ids` 引用的文件字段；无新文件继续使用原 JSON 接口。文件可选，最多 32 个、每个不超过 5 MiB，支持 PDF、JPG、PNG、WebP；服务端核对文件扩展名、类型及内容签名。文件资产、附件关系与登记分配在同一事务持久化；确定未提交或重放未消费的上传须清理，结果未知须保留并沿原操作号重试。 |
+| 发票文件读取 | `GET /admin/invoices/{id}/files` 列出文件，`GET /admin/invoices/{id}/files/{asset_id}/download` 下载；要求 `invoice:detail` 及整票数据范围，部分核销份额授权不得读取整票文件。 |
 | 财务发票文件 | `POST /admin/invoices/with-files`、`POST /admin/invoices/commit-with-files` 使用 multipart `command` 和命令引用的文件字段；无新文件继续使用原 JSON 接口 |
 | 销售单发票下载 | `GET /admin/sales-orders/{id}/invoice-files` 列文件；其 `/{invoice_id}/{asset_id}/download` 下载本单关联文件 |
 | 采购履约付款回单 | `GET /admin/work-items/{id}/payment-receipts` 列文件；其 `/{payment_id}/download` 下载任务采购来源的回单 |

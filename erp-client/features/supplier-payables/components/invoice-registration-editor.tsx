@@ -17,6 +17,7 @@ import type { AllocationSessionState } from "@/features/supplier-payables/hooks/
 import { invoiceSchema } from "@/features/supplier-payables/lib/allocation-model"
 
 const fieldTargets: Record<string, string> = {
+    invoiceFiles: "supplier-payables-invoice-files-input",
     invoiceNo: "supplier-payables-allocation-form-invoice-no",
     invoiceDate: "supplier-payables-allocation-form-invoice-date",
     grossAmount: "supplier-payables-allocation-form-gross-amount",
@@ -164,6 +165,7 @@ export function InvoiceRegistrationEditor({
                         <MoneyValue value={factAmount} />
                     </span>,
                     `核销单据：${state.selected.size} 笔`,
+                    `发票文件：${invoiceForm.state.values.invoiceFiles.length} 个`,
                     <span key="allocated">
                         本次核销：
                         <MoneyValue value={allocatedHint} />

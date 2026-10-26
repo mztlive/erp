@@ -2390,7 +2390,7 @@
     },
     {
       "path": "crates/erp-processes/src/finance_posting/payable/invoice.rs",
-      "function": "register_purchase_invoice",
+      "function": "register_purchase_invoice_with_assets",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
@@ -2402,7 +2402,7 @@
         "execute_audited": 1
       },
       "location_count": 1,
-      "reason": "用例 register_purchase_invoice 在自身事务或已声明 run_audited 边界通过 BusinessEventContext::new、execute_audited 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "用例 register_purchase_invoice_with_assets 在自身事务或已声明 run_audited 边界通过 BusinessEventContext::new、execute_audited 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
       "path": "crates/erp-processes/src/finance_posting/payable/payment.rs",

@@ -21,6 +21,11 @@ use crate::core::upload;
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    account_routes(rbac).merge(payment_routes(rbac)).merge(invoice_routes(rbac))
+}
+
+/// 应付子账读取、建立与收款账户查看。
+fn account_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/payable-accounts",
@@ -54,6 +59,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 payable::payment_recipient_reveal_permission_key(),
             ),
         )
+}
+
+/// 供应商付款读取、回单与提交。
+fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/supplier-payments",
             with_permission(
@@ -97,6 +107,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 payable::supplier_payment_commit_permission_key(),
             ),
         )
+}
+
+/// 进项发票分配列表与含文件登记。
+fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/purchase-invoice-allocations",
             with_permission(
@@ -111,6 +126,17 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(payable::purchase_invoice_allocation_post),
                 rbac,
                 payable::purchase_invoice_allocation_post_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-invoice-allocations/with-files",
+            with_permission(
+                upload::multipart_route(
+                    post(payable::invoice_files::purchase_invoice_allocation_post_with_files),
+                    upload::MAX_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                payable::invoice_files::purchase_invoice_allocation_post_with_files_permission_key(),
             ),
         )
 }

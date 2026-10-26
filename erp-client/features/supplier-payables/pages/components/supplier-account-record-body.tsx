@@ -1,5 +1,6 @@
 "use client"
 
+import { SupplierInvoiceFiles } from "../../components/supplier-invoice-files"
 import { SupplierSourceDocuments } from "../../components/supplier-source-documents"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import {
@@ -101,6 +102,9 @@ export function SupplierAccountRecordBody({
                     ) : null}
                 </dl>
             </PreviewSection>
+            {invoice ? (
+                <SupplierInvoiceFiles invoiceId={invoice.invoiceId} />
+            ) : null}
             {payment?.paymentRecipient ? (
                 <PreviewSection title="收款账户">
                     <dl className="space-y-3">

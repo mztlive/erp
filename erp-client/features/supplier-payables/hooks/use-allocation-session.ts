@@ -160,6 +160,7 @@ export function useAllocationSession(
 
     const invoiceForm = useAppForm({
         defaultValues: {
+            invoiceFiles: [] as File[],
             allocationTaxes: {} as Record<string, string>,
             invoiceCode: "",
             invoiceNo: "",
@@ -627,6 +628,7 @@ export function useAllocationSession(
                 netAmount: v.netAmount,
                 taxAmount: v.taxAmount,
                 invoiceKind: "BLUE",
+                invoiceFiles: v.invoiceFiles,
                 targets: targets.map((target) => ({
                     ...target,
                     taxAmount: v.allocationTaxes[target.payableAccountId],

@@ -1,6 +1,7 @@
 /** W12 供应商往来 · 核销表单 Zod 校验与金额/日期工具（纯函数，无 React）。 */
 
 import { z } from "zod"
+import { invoiceFilesError } from "@/lib/invoice-files"
 import {
     compareDecimal,
     formatScaled,
@@ -72,6 +73,18 @@ export const paymentSchema = z
 
 export const invoiceSchema = z
     .object({
+        invoiceFiles: z
+            .array(
+                z.custom<File>(
+                    (value) =>
+                        typeof File !== "undefined" && value instanceof File,
+                    "请选择有效的发票文件",
+                ),
+            )
+            .superRefine((files, context) => {
+                const message = invoiceFilesError(files)
+                if (message) context.addIssue({ code: "custom", message })
+            }),
         allocationTaxes: z.record(z.string(), z.string()),
         invoiceCode: z.string(),
         invoiceNo: z.string().trim().min(1, "请填写发票号码"),

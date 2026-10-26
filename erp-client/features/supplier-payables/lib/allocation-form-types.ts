@@ -12,6 +12,7 @@ export type PaymentFormValues = {
 }
 
 export type InvoiceFormValues = {
+    invoiceFiles: File[]
     allocationTaxes: Record<string, string>
     invoiceCode: string
     invoiceNo: string

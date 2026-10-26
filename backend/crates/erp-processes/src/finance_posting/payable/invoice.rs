@@ -1,6 +1,7 @@
 //! 进项发票登记过账、独立命令回执及结构化业务事件编排。
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
@@ -15,6 +16,7 @@ use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::payable::{self, PayableService as FinancePayableService};
 use erp_supplier::repository::prelude::*;
 use erp_supplier::{SupplierAccount, SupplierExt};
+use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
@@ -22,6 +24,7 @@ use validator::Validate;
 use super::PayableProcess;
 use super::dto::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
 use crate::audit::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
+use crate::finance_posting::receivable::invoice_attachments;
 use crate::{Error, Result};
 
 const PURCHASE_INVOICE_REGISTER: AuditAction = AuditAction {
@@ -35,6 +38,15 @@ const PURCHASE_INVOICE_REGISTER: AuditAction = AuditAction {
         AuditField { code: "tax_amount", label: "税额", kind: AuditFieldKind::Amount },
     ],
 };
+
+/// 本次上传是否随进项发票提交；详情读取失败独立保留，禁止误删已提交文件。
+#[derive(Debug)]
+pub struct PurchaseInvoiceWithAssetsResult {
+    /// 原登记结果或已提交后的读取错误。
+    pub view: Result<PurchaseInvoiceRegisteredView>,
+    /// 本次上传对象是否已被本次登记消费。
+    pub assets_committed: bool,
+}
 
 impl PayableProcess {
     /// 进项发票登记过账并分配（§8.3-2 事务不变量）。
@@ -57,12 +69,32 @@ impl PayableProcess {
         req: RegisterPurchaseInvoiceRequest,
         actor: &AuditActor,
     ) -> Result<PurchaseInvoiceRegisteredView> {
+        self.register_purchase_invoice_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await?.view
+    }
+
+    /// 登记进项发票并在同一事务保存文件资产与发票附件关系。
+    /// # 参数
+    /// `req` 为登记命令，`pending` 为已上传文件，`actor` 为认证操作人。
+    /// # 返回
+    /// 登记视图与本次上传是否已提交；重放不消费新上传。
+    /// # 错误
+    /// 校验或事务失败返回错误；提交结果未知时保留原错误。
+    pub async fn register_purchase_invoice_with_assets(
+        &self,
+        mut req: RegisterPurchaseInvoiceRequest,
+        pending: Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+    ) -> Result<PurchaseInvoiceWithAssetsResult> {
         req.validate()?;
-        let receipt = purchase_invoice_receipt(&req, actor)?;
+        let receipt = purchase_invoice_receipt_with_assets(&req, actor, pending.as_ref())?;
         let port = MongoPurchaseInvoiceCommand { db: self.db.clone() };
         if let Some(invoice_id) = port.receipt_invoice_id(&receipt, &mut NoTransaction).await? {
-            return port.registered_view(&invoice_id).await;
+            return Ok(PurchaseInvoiceWithAssetsResult {
+                view: port.registered_view(&invoice_id).await,
+                assets_committed: false,
+            });
         }
+        invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let supplier = self
             .db
             .supplier_accounts()
@@ -72,8 +104,14 @@ impl PayableProcess {
         let invoice = payable::prepare_purchase_invoice(&req, supplier.party_id, actor.id())?;
         let context = BusinessEventContext::new(actor.clone(), PURCHASE_INVOICE_REGISTER)?
             .with_command_id(Some(receipt.id().to_string()))?;
-        let registration =
-            PurchaseInvoiceRegistration { req, invoice, actor: actor.clone(), receipt: receipt.clone() };
+        let fresh_invoice_id = (!pending.is_empty()).then(|| invoice.base.id.clone());
+        let registration = PurchaseInvoiceRegistration {
+            req,
+            invoice,
+            actor: actor.clone(),
+            receipt: receipt.clone(),
+            pending,
+        };
         let client = self.db.client().clone();
         let transaction_port = MongoPurchaseInvoiceCommand { db: self.db.clone() };
         let result = client
@@ -89,7 +127,7 @@ impl PayableProcess {
                 })
             })
             .await;
-        finish_registration(&port, result, &receipt).await
+        finish_registration(&port, result, &receipt, fresh_invoice_id.as_deref()).await
     }
 }
 
@@ -108,11 +146,35 @@ fn purchase_invoice_receipt(
     )?)
 }
 
+/// 内容摘要参与指纹，重新上传同内容不受随机存储对象键影响。
+fn purchase_invoice_receipt_with_assets(
+    req: &RegisterPurchaseInvoiceRequest,
+    actor: &AuditActor,
+    pending: &dyn PendingAttachmentBatch,
+) -> Result<CommandReceipt> {
+    let manifest = pending.content_manifest();
+    if manifest.is_empty() {
+        if !pending.is_empty() {
+            return Err(Error::ValidationError("发票上传缺少真实文件内容清单".into()));
+        }
+        return purchase_invoice_receipt(req, actor);
+    }
+    Ok(CommandReceipt::from_payload(
+        "purchase-invoice-register-",
+        actor.id(),
+        PURCHASE_INVOICE_REGISTER.code,
+        PURCHASE_INVOICE_REGISTER.resource_type,
+        &req.idempotency_key,
+        &serde_json::json!({ "request": req, "files": manifest }),
+    )?)
+}
+
 struct PurchaseInvoiceRegistration {
     req: RegisterPurchaseInvoiceRequest,
     invoice: Invoice,
     actor: AuditActor,
     receipt: CommandReceipt,
+    pending: Arc<dyn PendingAttachmentBatch>,
 }
 
 /// 只抽象本命令的编排边界，不为各财务仓储另建接口层。
@@ -130,6 +192,13 @@ trait PurchaseInvoiceCommandPort: Send + Sync {
         registration: &PurchaseInvoiceRegistration,
         executor: &mut dyn Executor,
     ) -> Result<Invoice>;
+    /// 在发票事务内持久化文件资产与关联。
+    async fn persist_attachments(
+        &self,
+        registration: &PurchaseInvoiceRegistration,
+        invoice: &Invoice,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
     /// 保存本命令的发票回执及审计事件关联。
     async fn save_receipt(
         &self,
@@ -147,23 +216,32 @@ async fn finish_registration(
     port: &impl PurchaseInvoiceCommandPort,
     result: Result<InvoiceId>,
     receipt: &CommandReceipt,
-) -> Result<PurchaseInvoiceRegisteredView> {
-    let original_error = match result {
-        Ok(id) => return port.registered_view(&id).await,
-        Err(error) => error,
+    fresh_invoice_id: Option<&str>,
+) -> Result<PurchaseInvoiceWithAssetsResult> {
+    let (invoice_id, original_unknown) = match result {
+        Ok(id) => (id, None),
+        Err(original_error) => {
+            let recovered = port.receipt_invoice_id(receipt, &mut NoTransaction).await;
+            let id = match recovered {
+                Ok(Some(id)) => id,
+                Ok(None) => return Err(original_error),
+                Err(_) if matches!(original_error, Error::OutcomeUnknown(_)) => return Err(original_error),
+                Err(error) => return Err(error),
+            };
+            let unknown = matches!(original_error, Error::OutcomeUnknown(_)).then_some(original_error);
+            (id, unknown)
+        },
     };
-    let recovered = port.receipt_invoice_id(receipt, &mut NoTransaction).await;
-    let invoice_id = match recovered {
-        Ok(Some(id)) => id,
-        Ok(None) => return Err(original_error),
-        Err(_) if matches!(original_error, Error::OutcomeUnknown(_)) => return Err(original_error),
-        Err(error) => return Err(error),
-    };
-    match port.registered_view(&invoice_id).await {
-        Ok(view) => Ok(view),
-        Err(_) if matches!(original_error, Error::OutcomeUnknown(_)) => Err(original_error),
-        Err(error) => Err(error),
+    let view = port.registered_view(&invoice_id).await;
+    if view.is_err()
+        && let Some(error) = original_unknown
+    {
+        return Err(error);
     }
+    Ok(PurchaseInvoiceWithAssetsResult {
+        assets_committed: fresh_invoice_id == Some(invoice_id.as_ref()),
+        view,
+    })
 }
 
 struct RegisterPurchaseInvoiceCommand<'a, P> {
@@ -192,6 +270,9 @@ impl<P: PurchaseInvoiceCommandPort> AuditedCommand for RegisterPurchaseInvoiceCo
             return Ok(AuditedWrite::Replayed(id));
         }
         let invoice = self.port.persist_invoice(registration, executor).await?;
+        if !registration.req.attachment_asset_ids.is_empty() {
+            self.port.persist_attachments(registration, &invoice, executor).await?;
+        }
         let invoice_id = InvoiceId::new(invoice.base.id.clone());
         self.port.save_receipt(registration, invoice_id.clone(), self.audit_event_id, executor).await?;
         Ok(AuditedWrite::Fresh { result: invoice_id, content: registered_event_content(&invoice)? })
@@ -258,14 +339,32 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
         .await?;
         validate_supplier_parties(&self.db, &accounts, &plan, &registration.invoice.party_id, executor)
             .await?;
-        Ok(payable::persist_purchase_invoice(
+        let invoice = payable::persist_purchase_invoice(
             &self.db,
             registration.invoice.clone(),
             &plan,
             registration.actor.id(),
             executor,
         )
-        .await?)
+        .await?;
+        Ok(invoice)
+    }
+
+    async fn persist_attachments(
+        &self,
+        registration: &PurchaseInvoiceRegistration,
+        invoice: &Invoice,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        invoice_attachments::persist(
+            &self.db,
+            &invoice.base.id,
+            &registration.req.attachment_asset_ids,
+            registration.pending.as_ref(),
+            &registration.actor,
+            executor,
+        )
+        .await
     }
 
     async fn save_receipt(
@@ -342,7 +441,7 @@ mod tests {
     use erp_audit::AuditLog;
     use erp_core::AccountKind;
     use erp_core::common::time::BusinessDate;
-    use erp_core::ids::PayableAccountId;
+    use erp_core::ids::{FileAssetId, PayableAccountId};
     use erp_core::money::Amount;
     use erp_finance::FinanceCommandReceipt;
     use mongodb::error::Error as MongoError;
@@ -351,6 +450,14 @@ mod tests {
     use super::super::dto::PurchaseInvoiceAllocationLineRequest;
     use super::*;
     use crate::audit::AuditEventSink;
+
+    async fn finish_registration(
+        port: &impl PurchaseInvoiceCommandPort,
+        result: Result<InvoiceId>,
+        receipt: &CommandReceipt,
+    ) -> Result<PurchaseInvoiceRegisteredView> {
+        super::finish_registration(port, result, receipt, None).await?.view
+    }
 
     struct RecordingPort {
         receipt: Mutex<Option<FinanceCommandReceipt>>,
@@ -412,6 +519,15 @@ mod tests {
             Ok(invoice)
         }
 
+        async fn persist_attachments(
+            &self,
+            _registration: &PurchaseInvoiceRegistration,
+            _invoice: &Invoice,
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            self.visit("attachments", executor)
+        }
+
         async fn save_receipt(
             &self,
             registration: &PurchaseInvoiceRegistration,
@@ -464,6 +580,7 @@ mod tests {
             net_amount: Amount::from_str("90.00").unwrap(),
             tax_amount: Amount::from_str("10.00").unwrap(),
             supplier_id: SupplierAccountId::new("supplier-1"),
+            attachment_asset_ids: vec![],
             allocations: vec![PurchaseInvoiceAllocationLineRequest {
                 payable_account_id: PayableAccountId::new("account-1"),
                 allocated_gross_amount: Amount::from_str("100.00").unwrap(),
@@ -475,7 +592,13 @@ mod tests {
         let mut invoice =
             payable::prepare_purchase_invoice(&req, PartyId::new("party-1"), actor.id()).unwrap();
         invoice.base.id = "invoice-original".to_string();
-        PurchaseInvoiceRegistration { req, invoice, actor, receipt }
+        PurchaseInvoiceRegistration {
+            req,
+            invoice,
+            actor,
+            receipt,
+            pending: Arc::new(EmptyPendingAttachments),
+        }
     }
 
     fn context(registration: &PurchaseInvoiceRegistration) -> BusinessEventContext {
@@ -694,5 +817,125 @@ mod tests {
         assert_eq!(*port.calls.lock().unwrap(), ["lookup"]);
         assert!(port.saved_receipts.lock().unwrap().is_empty());
         assert!(port.events.lock().unwrap().is_empty());
+    }
+    #[tokio::test]
+    async fn invoice_files_share_executor_and_fail_before_receipt_and_event() {
+        for fail in [None, Some("attachments")] {
+            let mut registration = registration();
+            registration.req.attachment_asset_ids = vec![FileAssetId::new("asset-1")];
+            let context = context(&registration);
+            let mut port = RecordingPort::new(None);
+            let mut executor = NoTransaction;
+            port.executor_id = Some(&mut executor as *mut NoTransaction as usize);
+            port.fail = fail;
+            let command = RegisterPurchaseInvoiceCommand {
+                port: &port,
+                registration: &registration,
+                audit_event_id: context.event_id(),
+            };
+            let result = execute_audited(&context, &port, &mut executor, &command).await;
+            if fail.is_some() {
+                assert!(result.is_err());
+                assert_eq!(*port.calls.lock().unwrap(), ["lookup", "business", "attachments"]);
+                assert!(port.saved_receipts.lock().unwrap().is_empty());
+                assert!(port.events.lock().unwrap().is_empty());
+            } else {
+                assert!(result.is_ok());
+                assert_eq!(
+                    *port.calls.lock().unwrap(),
+                    ["lookup", "business", "attachments", "receipt", "event"]
+                );
+                port.calls.lock().unwrap().clear();
+                execute_audited(&context, &port, &mut executor, &command).await.unwrap();
+                assert_eq!(*port.calls.lock().unwrap(), ["lookup"]);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn committed_files_survive_detail_error_and_replay_does_not_consume_uploads() {
+        let registration = registration();
+        let mut port = RecordingPort::new(None);
+        port.fail = Some("view");
+        let result = super::finish_registration(
+            &port,
+            Ok(InvoiceId::new("fresh")),
+            &registration.receipt,
+            Some("fresh"),
+        )
+        .await
+        .unwrap();
+        assert!(result.assets_committed);
+        assert!(result.view.is_err());
+        let result = super::finish_registration(
+            &port,
+            Ok(InvoiceId::new("original")),
+            &registration.receipt,
+            Some("fresh"),
+        )
+        .await
+        .unwrap();
+        assert!(!result.assets_committed);
+    }
+
+    #[test]
+    fn attachment_content_changes_receipt_but_storage_key_does_not() {
+        use erp_support::{
+            PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass, SensitivityClass,
+        };
+
+        use crate::attachments::PendingFileAssets;
+        let mut registration = registration();
+        registration.req.attachment_asset_ids = vec![FileAssetId::new("pending-file:invoice")];
+        let batch = |hmac: &str, key: &str| {
+            PendingFileAssets::prepare(
+                vec![PendingFileAssetRequest {
+                    reference: "pending-file:invoice".into(),
+                    registration: RegisterFileAssetRequest {
+                        storage_object_key: key.into(),
+                        file_name: "invoice.pdf".into(),
+                        content_type: "application/pdf".into(),
+                        byte_size: 10,
+                        content_hmac: hmac.repeat(64),
+                        sensitivity_class: SensitivityClass::Sensitive,
+                        retention_class: RetentionClass::LongTerm,
+                        expires_at: None,
+                    },
+                }],
+                &registration.actor,
+            )
+            .unwrap()
+        };
+        let first = purchase_invoice_receipt_with_assets(
+            &registration.req,
+            &registration.actor,
+            &batch("a", "first"),
+        )
+        .unwrap();
+        let retry = purchase_invoice_receipt_with_assets(
+            &registration.req,
+            &registration.actor,
+            &batch("a", "retry"),
+        )
+        .unwrap();
+        let changed = purchase_invoice_receipt_with_assets(
+            &registration.req,
+            &registration.actor,
+            &batch("b", "changed"),
+        )
+        .unwrap();
+        assert_eq!(first.fingerprint(), retry.fingerprint());
+        assert_ne!(first.fingerprint(), changed.fingerprint());
+        let mut ids = registration.req.attachment_asset_ids.clone();
+        invoice_attachments::resolve(&mut ids, &batch("a", "first")).unwrap();
+        assert!(!ids[0].as_ref().starts_with("pending-file:"));
+        assert!(invoice_attachments::resolve(&mut [], &batch("a", "first")).is_err());
+        assert!(
+            invoice_attachments::resolve(
+                &mut registration.req.attachment_asset_ids.clone(),
+                &EmptyPendingAttachments
+            )
+            .is_err()
+        );
     }
 }

@@ -5,7 +5,8 @@ import { invoiceTaxAllocations } from "@/features/supplier-payables/lib/invoice-
  * 正式幂等只由服务端命令收据保证。
  */
 
-import { apiPost } from "@/lib/api"
+import { invoiceFileReference, invoiceFilesError } from "@/lib/invoice-files"
+import { apiPost, apiPostForm } from "@/lib/api"
 import { getErrorCode } from "@/lib/api/errors"
 import type {
     BackendInvoice,
@@ -55,12 +56,16 @@ export async function submitInvoice(
             }
         }
 
-        const registered = await apiPost<{
+        const files = input.invoiceFiles ?? []
+        const fileError = invoiceFilesError(files)
+        if (fileError) throw new Error(fileError)
+        type RegisteredInvoice = {
             invoice_id: string
             invoice_no: string
             gross_amount: string
             allocations: BackendPurchaseInvoiceAllocation[]
-        }>("/admin/purchase-invoice-allocations", {
+        }
+        const command = {
             invoice_code: input.invoiceCode || undefined,
             invoice_no: input.invoiceNo,
             invoice_date: input.invoiceDate,
@@ -70,7 +75,22 @@ export async function submitInvoice(
             supplier_id: input.supplierId,
             idempotency_key: input.idempotencyKey,
             allocations: invoiceTaxAllocations(targets, input.taxAmount),
-        })
+            attachment_asset_ids: files.map(invoiceFileReference),
+        }
+        const form = new FormData()
+        form.append("command", JSON.stringify(command))
+        for (const file of files)
+            form.append(invoiceFileReference(file), file, file.name)
+        const registered = files.length
+            ? await apiPostForm<RegisteredInvoice>(
+                  "/admin/purchase-invoice-allocations/with-files",
+                  form,
+                  { timeoutMs: 60_000 },
+              )
+            : await apiPost<RegisteredInvoice>(
+                  "/admin/purchase-invoice-allocations",
+                  command,
+              )
 
         const result: FormalSubmitResult = {
             status: "succeeded",

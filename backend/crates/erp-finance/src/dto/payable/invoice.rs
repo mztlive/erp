@@ -6,7 +6,7 @@
 
 use application_core::{QueryIds, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{PayableAccountId, SupplierAccountId};
+use erp_core::ids::{FileAssetId, PayableAccountId, SupplierAccountId};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -40,6 +40,10 @@ pub struct RegisterPurchaseInvoiceRequest {
     pub tax_amount: Amount,
     /// 供应商（发票往来主体对应的供应商账号）。
     pub supplier_id: SupplierAccountId,
+    /// 发票附件；multipart 中使用临时文件引用，空集合保持原无附件命令指纹。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[validate(length(max = 32, message = "发票附件最多 32 个"))]
+    pub attachment_asset_ids: Vec<FileAssetId>,
     /// 进项发票分配行（合计必须等于发票含税金额）。
     #[validate(length(min = 1, message = "至少提供一条发票分配"))]
     pub allocations: Vec<PurchaseInvoiceAllocationLineRequest>,

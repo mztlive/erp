@@ -1,4 +1,4 @@
-/** 财务文件按销售单或正式履约任务访问，不授予通用资产下载资格。 */
+/** 财务文件按发票、销售单或正式履约任务访问，不授予通用资产下载资格。 */
 import { apiGet, apiGetBlob } from "@/lib/api"
 
 export type FinancialFile = {
@@ -50,6 +50,18 @@ export function downloadPurchasePaymentReceipt(
 ) {
     return download(
         `/admin/work-items/${encodeURIComponent(workItemId)}/payment-receipts/${encodeURIComponent(file.document_id)}/download`,
+        file.file_name,
+    )
+}
+
+export function fetchInvoiceFiles(invoiceId: string) {
+    return apiGet<FinancialFile[]>(
+        `/admin/invoices/${encodeURIComponent(invoiceId)}/files`,
+    )
+}
+export function downloadInvoiceFile(invoiceId: string, file: FinancialFile) {
+    return download(
+        `/admin/invoices/${encodeURIComponent(invoiceId)}/files/${encodeURIComponent(file.file_asset_id)}/download`,
         file.file_name,
     )
 }
