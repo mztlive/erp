@@ -20,8 +20,8 @@ use super::media::{PreparedImage, WorkbookMedia, row_media_targets};
 use super::parse::ParsedProductSheet;
 use crate::{Error, Result};
 
-/// 行级清单版本号；版本 2 使用 13 列，版本 1 读取时转换，未知版本回退源文件。
-const ROW_MANIFEST_VERSION: u32 = 2;
+/// 行级清单版本号；版本 3 支持 16 列联合导入；版本 1、2 保留旧商品导入语义。
+const ROW_MANIFEST_VERSION: u32 = 3;
 /// 私有输入信封标识保持稳定；行列布局由清单自身版本区分。
 pub(super) const ROW_MANIFEST_INPUT_FORMAT: &str = "product_import_rows_v1";
 /// 行级清单对象键前缀。
@@ -220,13 +220,13 @@ pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> 
 /// * `request_id` - 任务当前的请求身份。
 ///
 /// # 返回
-/// 返回绑定同一请求的当前 13 列输入；旧版清单在内存中转换。
+/// 返回绑定同一请求的输入；旧版保留 13 列售价语义，新版保留 16 列供给语义。
 /// # 错误
 /// JSON 损坏、请求身份不符或版本不一致时拒绝该来源。
 pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowManifest> {
     let mut manifest: RowManifest =
         serde_json::from_slice(bytes).map_err(|_| Error::Internal("行清单损坏".to_string()))?;
-    if ![1, ROW_MANIFEST_VERSION].contains(&manifest.version) || manifest.request_id != request_id {
+    if ![1, 2, ROW_MANIFEST_VERSION].contains(&manifest.version) || manifest.request_id != request_id {
         return Err(Error::Internal("行清单版本不一致".to_string()));
     }
     if manifest.version == 1 {
@@ -484,7 +484,7 @@ mod tests {
         assert!(decode_row_manifest(&bytes, "req-1").is_ok());
         assert!(matches!(decode_row_manifest(&bytes, "req-2"), Err(Error::Internal(message))
             if message == "行清单版本不一致"));
-        let newer = serde_json::json!({"version":3,"request_id":"req-1","rows":[]});
+        let newer = serde_json::json!({"version":4,"request_id":"req-1","rows":[]});
         assert!(
             matches!(decode_row_manifest(&serde_json::to_vec(&newer).unwrap(), "req-1"), Err(Error::Internal(message))
             if message == "行清单版本不一致")
@@ -508,9 +508,32 @@ mod tests {
         assert_eq!(parsed.rows.len(), 1);
         assert_eq!(parsed.version, ROW_MANIFEST_VERSION);
         assert_eq!(parsed.rows[0].cells[0], "product");
-        assert_eq!(parsed.rows[0].cells.len(), erp_catalog::PRODUCT_IMPORT_HEADERS.len());
+        assert_eq!(parsed.rows[0].cells.len(), 13);
         assert!(parsed.rows[0].main_image.is_none());
         assert!(parsed.rows[0].carousel.is_empty());
+    }
+
+    /// 版本 2 的 13 列继续解释为公司售价，不得扩成新供给模板。
+    #[test]
+    fn compact_manifest_keeps_legacy_price_semantics() {
+        let mut cells = vec![String::new(); 13];
+        cells[6] = "米".into();
+        cells[7] = "大米".into();
+        cells[9] = "40.00".into();
+        cells[10] = "38.00".into();
+        cells[11] = "10".into();
+        let bytes = serde_json::to_vec(&RowManifest {
+            version: 2,
+            request_id: "req-old".into(),
+            rows: vec![RowManifestRow { row_number: 2, cells, ..Default::default() }],
+        })
+        .unwrap();
+        let decoded = decode_row_manifest(&bytes, "req-old").unwrap();
+        assert_eq!(decoded.rows[0].cells.len(), 13);
+        let row = crate::product_import::identity::normalize_import_row(2, &decoded.rows[0].cells).unwrap();
+        assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
+        assert_eq!(row.bulk_price.unwrap().to_string(), "38.00");
+        assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "10");
     }
 
     fn sample_registration() -> erp_support::RegisterFileAssetRequest {

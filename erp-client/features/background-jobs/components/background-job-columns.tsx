@@ -6,7 +6,7 @@ import { TableRowActions } from "@/components/business"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { BackgroundJobView } from "../api"
 import {
-    backgroundJobDomainLabel,
+    backgroundJobIdentity,
     formatJobDateTime,
     JOB_STATUS_LABELS,
 } from "../labels"
@@ -16,23 +16,24 @@ import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
 export function backgroundJobColumns(
     openPreview: (job: BackgroundJobView) => void,
 ): ColumnDef<BackgroundJobView>[] {
-    const jobLabel = (job: BackgroundJobView) =>
-        backgroundJobDomainLabel(job.domain_job_type, job.job_type)
     return [
         {
             id: "job",
             header: "任务",
             meta: { label: "任务" },
-            cell: ({ row }) => (
-                <div className="min-w-0">
-                    <p className="truncate font-medium">
-                        {jobLabel(row.original)}
-                    </p>
-                    <p className="num mt-0.5 truncate text-xs text-muted-foreground">
-                        {row.original.job_no}
-                    </p>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const { title, number } = backgroundJobIdentity(row.original)
+                return (
+                    <div className="min-w-0">
+                        <p className="truncate font-medium" title={title}>
+                            {title}
+                        </p>
+                        <p className="num mt-0.5 truncate text-xs text-muted-foreground">
+                            {number}
+                        </p>
+                    </div>
+                )
+            },
         },
         {
             id: "status",
@@ -83,7 +84,7 @@ export function backgroundJobColumns(
             cell: ({ row }) => (
                 <TableRowActions
                     moreId={`${ID_PREFIX}-row-${row.original.id}-more`}
-                    moreLabel={`${jobLabel(row.original)} 更多操作`}
+                    moreLabel={`${backgroundJobIdentity(row.original).title} 更多操作`}
                     actions={[
                         {
                             id: `${ID_PREFIX}-row-${row.original.id}-preview`,

@@ -54,6 +54,8 @@ function FileUpload({
     previewFit = "cover",
     selectedImageFile,
     onPreviewRemove,
+    previewActions = "default",
+    showPreviewStatus = true,
     idPrefix,
     inputId,
     selectId,
@@ -87,6 +89,10 @@ function FileUpload({
     selectedImageFile?: File | null
     /** 移除已上传或待上传预览；调用方负责同步清空表单值。 */
     onPreviewRemove?: () => void
+    /** 预览更换/移除动作的位置；overlay 适合窄缩略图。 */
+    previewActions?: "default" | "overlay"
+    /** 是否显示预览状态文案（已上传、已保存等）。 */
+    showPreviewStatus?: boolean
     idPrefix?: string
     /** 迁移旧入口时保留原生 input 和触发按钮的自动化 ID。 */
     inputId?: string
@@ -220,6 +226,45 @@ function FileUpload({
         clearLocalPreview()
         onPreviewRemove?.()
     }
+
+    const previewActionButtons = (
+        <>
+            {!readOnly ? (
+                <Button
+                    id={selectId ?? (idPrefix ? `${idPrefix}-select` : undefined)}
+                    type="button"
+                    variant="secondary"
+                    size={previewActions === "overlay" ? "icon-xs" : "icon-sm"}
+                    title={fileUploadText.replace}
+                    disabled={disabled}
+                    aria-describedby={describedBy}
+                    aria-invalid={
+                        Boolean(selectionError) ||
+                        ariaInvalid === true ||
+                        ariaInvalid === "true"
+                    }
+                    aria-label={fileUploadText.replace}
+                    onClick={() => inputRef.current?.click()}
+                >
+                    <RefreshCwIcon className="size-3" />
+                </Button>
+            ) : null}
+            {!readOnly && onPreviewRemove ? (
+                <Button
+                    id={idPrefix ? `${idPrefix}-remove` : undefined}
+                    type="button"
+                    variant="secondary"
+                    size={previewActions === "overlay" ? "icon-xs" : "icon-sm"}
+                    title={`${fileUploadText.remove} ${activePreview?.name ?? ""}`}
+                    disabled={disabled}
+                    aria-label={`移除 ${activePreview?.name ?? ""}`}
+                    onClick={removePreview}
+                >
+                    <XIcon className="size-3" />
+                </Button>
+            ) : null}
+        </>
+    )
 
     return (
         <div className={cn("min-w-0 space-y-2", className)}>
@@ -370,6 +415,13 @@ function FileUpload({
                                 </span>
                             ) : null}
                         </button>
+                        {previewActions === "overlay" && !readOnly ? (
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-end gap-1 bg-gradient-to-t from-overlay/70 via-overlay/20 to-transparent p-1">
+                                <div className="pointer-events-auto flex items-center gap-1">
+                                    {previewActionButtons}
+                                </div>
+                            </div>
+                        ) : null}
                     </>
                 ) : (
                     <>

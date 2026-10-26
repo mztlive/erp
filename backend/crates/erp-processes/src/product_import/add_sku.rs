@@ -87,7 +87,7 @@ impl ProductImportProcess {
     }
 
     /// 读取现有商品修订后追加导入 SKU，保留现存 SKU 价格与媒体顺序。
-    async fn append_sku_request(
+    pub(super) async fn append_sku_request(
         &self,
         product: &Product,
         row: &NormalizedImportRow,
@@ -171,7 +171,7 @@ fn media_inputs(media: &[ProductRevisionMedia], role: MediaRole) -> Vec<ProductM
 ///
 /// # 错误
 /// 规格名或值非法时返回错误。
-fn sku_signature(row: &NormalizedImportRow) -> Result<String> {
+pub(super) fn sku_signature(row: &NormalizedImportRow) -> Result<String> {
     let entries = row
         .spec_entries
         .iter()
@@ -214,7 +214,6 @@ fn appended_sku_input(
 #[cfg(test)]
 mod tests {
     use entity_core::BaseModel;
-    use erp_catalog::PRODUCT_IMPORT_HEADERS;
     use erp_catalog::entity::catalog::product::ProductData;
     use erp_catalog::entity::catalog::product_revision::ProductRevisionData;
     use erp_catalog::entity::catalog::{EnableStatus, ProductKind};
@@ -224,6 +223,7 @@ mod tests {
 
     use super::*;
     use crate::product_import::identity::normalize_import_row;
+    use crate::product_import::legacy::COMPACT_HEADERS as PRODUCT_IMPORT_HEADERS;
 
     /// 构造带既有 SKU 身份和价格的追加请求输入。
     fn fixture() -> (Product, NormalizedImportRow, ProductRevision, ProductSkuInput) {

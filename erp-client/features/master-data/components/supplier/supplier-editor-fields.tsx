@@ -239,7 +239,7 @@ export function CredentialGroup({
     children,
 }: {
     title: string
-    description: string
+    description?: string
     children: React.ReactNode
 }) {
     return (
@@ -248,9 +248,11 @@ export function CredentialGroup({
                 <h3 className="text-sm font-semibold text-foreground">
                     {title}
                 </h3>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {description}
-                </p>
+                {description ? (
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {description}
+                    </p>
+                ) : null}
             </div>
             <div className="p-4">{children}</div>
         </section>

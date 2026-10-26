@@ -3,7 +3,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -19,7 +19,7 @@ use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
 
 /// 商品（SPU）创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
-struct ProductDraft {
+pub struct ProductDraft {
     /// 写入审计日志的创建原因。
     change_reason: Option<String>,
     /// SPU 稳定身份。
@@ -70,21 +70,50 @@ impl CatalogService {
     /// 临时引用无效、业务校验失败或事务写入失败时返回错误。
     pub async fn product_create_with_assets(
         &self,
-        mut req: CreateProductRequest,
+        req: CreateProductRequest,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductView> {
+        let draft = self.prepare_product_create(req, &pending_assets, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let product = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.write_product_draft(draft, &actor, pending_assets, executor).await },
+                )
+            })
+            .await?;
+        self.product_view(product).await
+    }
+
+    /// 校验商品与附件并构造草稿，供跨域用例在自己的事务中写入。
+    ///
+    /// # 参数
+    /// * `req` - 商品创建请求。
+    /// * `pending_assets` - 已上传且尚未登记的附件。
+    /// * `actor` - 当前操作人。
+    /// # 返回
+    /// 返回尚未持久化的商品草稿。
+    /// # 错误
+    /// 输入、字典、媒体或规格校验失败时返回错误。
+    pub async fn prepare_product_create(
+        &self,
+        mut req: CreateProductRequest,
+        pending_assets: &Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+    ) -> Result<ProductDraft> {
         req.validate()?;
         let used = resolve_product_file_references(
             &mut req.carousel_media,
             &mut req.detail_media,
             &mut req.skus,
-            &pending_assets,
+            pending_assets,
         )?;
         pending_assets.ensure_all_used(&used)?;
-        let draft = self.build_product_draft(req, actor, &pending_assets).await?;
-        let product = self.write_product_draft(draft, actor, pending_assets).await?;
-        self.product_view(product).await
+        self.build_product_draft(req, actor, pending_assets.as_ref()).await
     }
 
     /// 构造商品创建草稿（全部 ID 预生成，事务外完成全部业务校验）。
@@ -242,7 +271,7 @@ impl CatalogService {
         Ok(sku_items)
     }
 
-    /// 在单个事务内写入商品创建草稿并返回 SPU。
+    /// 使用调用方事务写入商品创建草稿并返回 SPU，不开启嵌套事务。
     ///
     /// 依次写入 `products`、`product_revisions` + 媒体、每个 SKU 的
     /// `skus` + `sku_revisions` + 规格属性值，以及审计日志。
@@ -250,17 +279,20 @@ impl CatalogService {
     /// # 参数
     /// * `draft` - 创建草稿
     /// * `actor` - 审计操作人
+    /// * `pending_assets` - 同事务登记的附件。
+    /// * `executor` - 调用方事务执行器。
     ///
     /// # 返回
     /// 返回写入后的 SPU 实体。
     ///
     /// # 错误
     /// 唯一索引冲突（409）或事务失败时返回错误并整体回滚。
-    async fn write_product_draft(
+    pub async fn write_product_draft(
         &self,
         draft: ProductDraft,
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
+        executor: &mut dyn Executor,
     ) -> Result<Product> {
         let ProductDraft { change_reason, product, revision, media, sku_items } = draft;
         let audit = self.audit.resource_log_with_message(
@@ -271,34 +303,25 @@ impl CatalogService {
             change_reason,
         )?;
         let db = self.db.clone();
-        let client = db.client().clone();
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor = actor.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access
-                        .ensure_writable(
-                            &actor,
-                            "create",
-                            &product.maintainer_user_id,
-                            &product.business_org_unit_id,
-                            executor,
-                        )
-                        .await?;
-                    pending_assets.persist(&db, executor).await?;
-                    db.products().create(&product, executor).await?;
-                    db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
-                    for item in &sku_items {
-                        db.catalog()
-                            .create_sku_with_revision(&item.sku, &item.revision, &[], executor)
-                            .await?;
-                    }
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<Product, crate::error::Error>(product)
-                })
-            })
-            .await
+        access
+            .ensure_writable(
+                &actor,
+                "create",
+                &product.maintainer_user_id,
+                &product.business_org_unit_id,
+                executor,
+            )
+            .await?;
+        pending_assets.persist(&db, executor).await?;
+        db.products().create(&product, executor).await?;
+        db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
+        for item in &sku_items {
+            db.catalog().create_sku_with_revision(&item.sku, &item.revision, &[], executor).await?;
+        }
+        audit_port.persist(&audit, executor).await?;
+        Ok(product)
     }
 }

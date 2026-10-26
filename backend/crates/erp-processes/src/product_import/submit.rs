@@ -50,6 +50,7 @@ impl ProductImportProcess {
         let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
             .await
             .map_err(|_| Error::Internal("解析导入文件失败".into()))??;
+        parsed.ensure_supply_template()?;
         let file_asset = FileAsset::new(FileAssetId::new(next_id()), registration.into_data(actor.id())?)?;
         self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, shared_bytes).await
     }

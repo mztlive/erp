@@ -411,7 +411,7 @@ export function InquiryImportDialog({
     )
 }
 
-function InquiryImportPreviewPanel({
+export function InquiryImportPreviewPanel({
     preview,
 }: {
     preview: InquiryImportPreview

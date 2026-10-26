@@ -91,10 +91,9 @@ export function ProductImportDialog({
                 <DialogHeader>
                     <DialogTitle>导入商品</DialogTitle>
                     <DialogDescription>
-                        使用 13
-                        列商品导入模板的「对内」工作表，产品类别和产品名称必填，也兼容原
-                        24
-                        列报价表。提交后后台逐行导入，进度与结果在「后台任务」查看。导入只建立商品资料，不创建供应商供给或库存。
+                        使用 16
+                        列商品与供给导入模板的「对内」工作表。供应商须已录入；每行同时建立商品规格和供应商供给，失败时该行不写入。新供给默认可供数量为
+                        999，重复导入保留已有数量。供应商成本价不写入公司销售参考价；导入不创建库存。进度与结果在「后台任务」查看。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">

@@ -52,12 +52,12 @@ export function SupplierEditorContractSection({
     return (
         <SectionPanel
             title="合同与资质"
-            description="合同、授权与证照集中维护；有效期到期后需重新上传。"
+            description="附件选填，支持 JPG、PNG、WebP、PDF，可上传多个文件。"
         >
             <div className="space-y-5">
                 <CredentialGroup
                     title="采购合同"
-                    description="维护合同编号、有效期与附件。未知日期可留空；起止日期不完整时标记为有效期未核实，不能作为有效合同用于采购或供给。"
+                    description="有效期未填写完整时，不能作为有效合同用于采购或供给。"
                 >
                     {(values.contractNo || values.contractFile) &&
                         (!values.contractValidFrom ||
@@ -135,7 +135,7 @@ export function SupplierEditorContractSection({
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-contract-file-upload"
                                 label={masterDataCopy.fContractFile}
-                                hint={masterDataCopy.supplierQualificationHint}
+                                compact
                                 value={values.contractFile}
                                 onChange={(next) =>
                                     setFieldValue("contractFile", next)
@@ -152,10 +152,7 @@ export function SupplierEditorContractSection({
                     </div>
                 </CredentialGroup>
 
-                <CredentialGroup
-                    title="品牌与经营授权"
-                    description="授权书有效期与附件成组维护，便于到期前统一核验。"
-                >
+                <CredentialGroup title="品牌与经营授权">
                     <div className="grid gap-5 lg:grid-cols-2">
                         <div className="grid content-start gap-4 sm:grid-cols-2">
                             <FieldShell>
@@ -203,7 +200,7 @@ export function SupplierEditorContractSection({
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-authorization-file-upload"
                                 label={masterDataCopy.fAuthorizationFile}
-                                hint={masterDataCopy.supplierQualificationHint}
+                                compact
                                 value={values.authorizationFile}
                                 onChange={(next) =>
                                     setFieldValue("authorizationFile", next)
@@ -222,17 +219,14 @@ export function SupplierEditorContractSection({
                     </div>
                 </CredentialGroup>
 
-                <CredentialGroup
-                    title="企业经营资质"
-                    description="按证照类型分别归档，缺少的材料可后续补充。"
-                >
+                <CredentialGroup title="企业经营资质">
                     <div className="grid gap-4 lg:grid-cols-3">
                         <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-qualification-upload"
                                 label={masterDataCopy.fQualification}
-                                hint={masterDataCopy.supplierQualificationHint}
+                                compact
                                 value={values.qualification}
                                 onChange={(next) =>
                                     setFieldValue("qualification", next)
@@ -251,7 +245,7 @@ export function SupplierEditorContractSection({
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-food-license-upload"
                                 label={masterDataCopy.fFoodLicense}
-                                hint={masterDataCopy.supplierQualificationHint}
+                                compact
                                 value={values.foodLicense}
                                 onChange={(next) =>
                                     setFieldValue("foodLicense", next)
@@ -270,7 +264,7 @@ export function SupplierEditorContractSection({
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-legal-person-id-card-upload"
                                 label={masterDataCopy.fLegalPersonIdCard}
-                                hint={masterDataCopy.supplierQualificationHint}
+                                compact
                                 value={values.legalPersonIdCard}
                                 onChange={(next) =>
                                     setFieldValue("legalPersonIdCard", next)

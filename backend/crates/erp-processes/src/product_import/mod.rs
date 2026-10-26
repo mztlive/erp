@@ -6,6 +6,8 @@ mod direct_upload;
 mod execute;
 mod identity;
 mod images;
+mod joint;
+mod joint_commit;
 mod legacy;
 mod media;
 mod parse;
@@ -14,6 +16,7 @@ mod resolve;
 mod row;
 mod row_manifest;
 mod submit;
+mod supply_input;
 mod views;
 
 use std::sync::Arc;

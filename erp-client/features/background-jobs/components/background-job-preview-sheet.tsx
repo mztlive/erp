@@ -16,6 +16,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
     backgroundJobDomainLabel,
+    backgroundJobIdentity,
     formatJobDateTime,
     isJobActive,
     JOB_STATUS_LABELS,
@@ -53,8 +54,7 @@ export function BackgroundJobPreviewSheet({
     onCancel,
 }: BackgroundJobPreviewSheetProps) {
     const previewJob = detailQuery.data ?? null
-    const jobLabel = (job: NonNullable<typeof previewJob>) =>
-        backgroundJobDomainLabel(job.domain_job_type, job.job_type)
+    const identity = previewJob ? backgroundJobIdentity(previewJob) : null
     return (
         <QuickPreviewSheet
             idPrefix={`${ID_PREFIX}-preview-sheet`}
@@ -63,11 +63,11 @@ export function BackgroundJobPreviewSheet({
                 if (!open) onClose()
             }}
             size="preview"
-            title={previewJob ? jobLabel(previewJob) : "后台任务"}
+            title={identity?.title ?? "后台任务"}
             identity={
-                previewJob ? (
+                identity ? (
                     <span className="num break-all">
-                        任务号：{previewJob.job_no}
+                        任务号：{identity.number}
                     </span>
                 ) : null
             }
@@ -87,7 +87,10 @@ export function BackgroundJobPreviewSheet({
                             label={JOB_STATUS_LABELS[previewJob.status]}
                         />
                         <span className="text-xs text-muted-foreground">
-                            {jobLabel(previewJob)}
+                            {backgroundJobDomainLabel(
+                                previewJob.domain_job_type,
+                                previewJob.job_type,
+                            )}
                         </span>
                     </div>
                 ) : null
@@ -136,7 +139,7 @@ export function BackgroundJobPreviewSheet({
                         succeeded={previewJob.success_count}
                         skipped={previewJob.skipped_count}
                         failed={previewJob.failed_count}
-                        label={jobLabel(previewJob)}
+                        label={identity?.title}
                         description={
                             previewJob.error_summary
                                 ? previewJob.error_summary

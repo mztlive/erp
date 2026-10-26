@@ -9,7 +9,7 @@ use crate::error::Result;
 
 /// 「对内」工作表名称。
 pub const PRODUCT_IMPORT_SHEET_NAME: &str = "对内";
-/// 「对内」表头，共 13 列，必须与精简模板第 1 行一致。
+/// 商品与供给联合导入表头，共 16 列。
 pub const PRODUCT_IMPORT_HEADERS: &[&str] = &[
     "产品编码",
     "产品条码",
@@ -20,10 +20,13 @@ pub const PRODUCT_IMPORT_HEADERS: &[&str] = &[
     "产品类别",
     "产品名称",
     "产品规格",
-    "一件代发底价（含税运）",
-    "集采底价（含税）",
-    "集采起订量",
-    "市场价",
+    "供应商代发成本价（含税，元）",
+    "供应商集采成本价（含税，元）",
+    "供应商集采起订量",
+    "市场参考价（元）",
+    "供应商编号",
+    "供应商订货编码",
+    "进项税率（%）",
 ];
 /// 产品名称列（1 起）。
 pub const PRODUCT_IMPORT_NAME_COLUMN: usize = 8;

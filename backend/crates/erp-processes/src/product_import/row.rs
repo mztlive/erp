@@ -3,7 +3,9 @@
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::{EnableStatus, ProductKind};
 use erp_catalog::repository::prelude::*;
-use erp_catalog::{CatalogExt, CreateProductRequest, ProductMediaInput, ProductSkuInput, ProductView};
+use erp_catalog::{
+    CatalogExt, CreateProductRequest, PRODUCT_IMPORT_HEADERS, ProductMediaInput, ProductSkuInput, ProductView,
+};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 use persistence_core::NoTransaction;
@@ -94,6 +96,9 @@ impl ProductImportProcess {
         actor: &AuditActor,
         cache: &mut ImportDictionaryCache,
     ) -> Result<RowImportOutcome> {
+        if cells.len() == PRODUCT_IMPORT_HEADERS.len() {
+            return self.import_with_supply(row_number, cells, media_source, actor, cache).await;
+        }
         let row = normalize_import_row(row_number, cells)?;
         if let Some(existing) =
             self.db.products().find_by_product_no(&row.product_no, &mut NoTransaction).await?
@@ -164,7 +169,7 @@ impl ProductImportProcess {
 }
 
 /// 把已规范化行转换为商品与完整三价 SKU 输入，媒体上传及字典解析由调用方完成。
-fn imported_product_request(
+pub(super) fn imported_product_request(
     row: NormalizedImportRow,
     unit_id: UnitOfMeasureId,
     brand_id: ProductBrandId,

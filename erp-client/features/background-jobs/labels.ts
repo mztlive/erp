@@ -1,5 +1,8 @@
 import type { BackgroundJobStatus } from "@/components/business"
-import type { JobStatus } from "@/features/background-jobs/api"
+import type {
+    BackgroundJobView,
+    JobStatus,
+} from "@/features/background-jobs/api"
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
     pending: "等待执行",
@@ -55,7 +58,7 @@ export const JOB_DOMAIN_FILTER_OPTIONS: ReadonlyArray<{
     })),
 ]
 
-/** 任务标题：优先业务类型，其次任务类型。 */
+/** 业务分类：优先业务类型，其次任务类型。 */
 export function backgroundJobDomainLabel(
     domainJobType: string | null,
     jobType: string | null,
@@ -65,6 +68,25 @@ export function backgroundJobDomainLabel(
     }
     if (jobType) return JOB_TYPE_LABELS[jobType] ?? "后台任务"
     return "后台任务"
+}
+
+/** 文件任务的 job_no 格式为「业务名称 · DT-编号」，拆分用于列表与预览。 */
+export function backgroundJobIdentity(
+    job: Pick<BackgroundJobView, "job_no" | "domain_job_type" | "job_type">,
+): { title: string; number: string } {
+    if (job.domain_job_type === "DATA_TRANSFER") {
+        const separator = job.job_no.lastIndexOf(" · DT-")
+        if (separator > 0) {
+            return {
+                title: job.job_no.slice(0, separator),
+                number: job.job_no.slice(separator + 3),
+            }
+        }
+    }
+    return {
+        title: backgroundJobDomainLabel(job.domain_job_type, job.job_type),
+        number: job.job_no,
+    }
 }
 
 export function jobProgressStatus(status: JobStatus): BackgroundJobStatus {

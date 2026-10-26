@@ -293,6 +293,20 @@ impl Pagination for SupplierAccountFilter {
 /// 供应商账号集合上的域查询。
 #[allow(async_fn_in_trait)]
 pub trait SupplierAccountRepositoryExt {
+    /// 按唯一供应商编号精确读取未删除的供应商。
+    ///
+    /// # 参数
+    /// * `supplier_no` - 已规范化的供应商编号。
+    /// * `executor` - 调用方执行器。
+    /// # 返回
+    /// 返回匹配的供应商，缺失时为 `None`。
+    /// # 错误
+    /// 数据库读取失败时返回错误。
+    async fn find_by_number(
+        &self,
+        supplier_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierAccount>>;
     /// 批量读取未删除供应商的稳定 ID 与供应商编号。
     ///
     /// # 参数
@@ -383,6 +397,13 @@ pub trait SupplierAccountRepositoryExt {
 }
 
 impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
+    async fn find_by_number(
+        &self,
+        supplier_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierAccount>> {
+        self.find_one(doc! { "supplier_no": supplier_no }, executor).await
+    }
     async fn supplier_numbers_by_ids(
         &self,
         supplier_ids: &[SupplierAccountId],

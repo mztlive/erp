@@ -20,6 +20,16 @@ pub struct ParsedProductSheet {
     pub image_targets: HashMap<String, String>,
 }
 
+impl ParsedProductSheet {
+    /// 新提交必须携带供给列；历史任务仍由解析器按旧布局恢复。
+    pub(super) fn ensure_supply_template(&self) -> Result<()> {
+        if self.rows.iter().any(|row| row.cells.len() != PRODUCT_IMPORT_HEADERS.len()) {
+            return Err(invalid("请使用包含供应商编号、供应商订货编码和进项税率的 16 列商品与供给导入模板"));
+        }
+        Ok(())
+    }
+}
+
 /// 解析后的一行。
 #[derive(Debug, Clone)]
 pub struct ParsedProductRow {
@@ -52,11 +62,8 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
         .ok_or_else(|| invalid("未找到「对内」工作表，请使用原产品报价表模板"))?;
     let rows = parse_sheet_rows(&archive.xml(&sheet_path)?, &shared)?;
     let headers = rows.first().ok_or_else(|| invalid("模板没有可导入的数据行"))?;
-    let legacy_layout = headers.cells.iter().map(|cell| cell.trim()).eq(legacy::HEADERS.iter().copied());
-    if !legacy_layout {
-        ensure_product_import_headers(&headers.cells).map_err(Error::from)?;
-    }
-    let width = if legacy_layout { legacy::HEADERS.len() } else { PRODUCT_IMPORT_HEADERS.len() };
+    let width = template_width(&headers.cells)?;
+    let legacy_layout = width == legacy::HEADERS.len();
     let data_rows = rows
         .into_iter()
         .skip(1)
@@ -65,7 +72,7 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
             if legacy_layout {
                 row.cells = legacy::compact_cells(&row.cells);
             } else {
-                row.cells.truncate(PRODUCT_IMPORT_HEADERS.len());
+                row.cells.truncate(width);
             }
             row
         })
@@ -78,6 +85,17 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     }
     let image_targets = parse_image_targets(&mut archive)?;
     Ok(ParsedProductSheet { rows: data_rows, image_targets })
+}
+
+/// 先匹配完整旧表头，再严格校验新模板，避免将历史售价解释为供给成本。
+fn template_width(headers: &[String]) -> Result<usize> {
+    for layout in [legacy::HEADERS, legacy::COMPACT_HEADERS] {
+        if headers.iter().take(layout.len()).map(|cell| cell.trim()).eq(layout.iter().copied()) {
+            return Ok(layout.len());
+        }
+    }
+    ensure_product_import_headers(headers).map_err(Error::from)?;
+    Ok(PRODUCT_IMPORT_HEADERS.len())
 }
 
 /// 模板后的附加列继续忽略；DISPIMG 保留公式，其余单元格使用缓存值。
@@ -328,7 +346,7 @@ mod tests {
     #[test]
     fn compact_and_legacy_workbooks_preserve_product_fields() {
         for (headers, positions) in [
-            (PRODUCT_IMPORT_HEADERS, ['H', 'I', 'J', 'K', 'L', 'M']),
+            (super::legacy::COMPACT_HEADERS, ['H', 'I', 'J', 'K', 'L', 'M']),
             (super::legacy::HEADERS, ['I', 'J', 'M', 'N', 'O', 'Q']),
         ] {
             let mut cells = String::from(
@@ -370,6 +388,73 @@ mod tests {
             headers.swap(7, 8);
             let bytes = workbook_with_cells(&headers, "", None);
             assert!(matches!(super::parse_product_quote_xlsx(&bytes), Err(crate::Error::ValidationError(_))));
+        }
+    }
+
+    /// 新列全部保留并进入供给 DTO；成本与起订量不得写入公司参考售价。
+    #[test]
+    fn supply_template_preserves_supplier_columns_and_separates_prices() {
+        let values = [
+            "RICE-1",
+            "",
+            "",
+            "",
+            "",
+            "品牌",
+            "米",
+            "大米",
+            "5kg",
+            "31.1234",
+            "29.50",
+            "12",
+            "49.00",
+            "SUP-001",
+            "SUP-RICE-5",
+            "13",
+        ];
+        let cells = values
+            .iter()
+            .enumerate()
+            .map(|(index, value)| {
+                let column = char::from(b'A' + u8::try_from(index).unwrap());
+                format!(r#"<c r="{column}2" t="inlineStr"><is><t>{value}</t></is></c>"#)
+            })
+            .collect::<String>();
+        let parsed =
+            super::parse_product_quote_xlsx(&workbook_with_cells(PRODUCT_IMPORT_HEADERS, &cells, None))
+                .unwrap();
+        parsed.ensure_supply_template().unwrap();
+        assert_eq!(parsed.rows[0].cells, values);
+        let row = normalize_import_row(2, &parsed.rows[0].cells).unwrap();
+        assert!(row.sales_price.is_none());
+        assert!(row.bulk_price.is_none());
+        assert!(row.bulk_min_quantity.is_none());
+        assert_eq!(row.market_price.unwrap().to_string(), "49.00");
+        let supply = crate::product_import::supply_input::SupplyImportInput::from_cells(
+            &parsed.rows[0].cells,
+            "2026-10-26".parse().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(supply.supplier_no, "SUP-001");
+        assert_eq!(supply.supplier_sku_code, "SUP-RICE-5");
+        assert_eq!(supply.terms.input_tax_rate, "0.13");
+        assert_eq!(supply.terms.bulk_minimum_order_quantity, "12");
+    }
+
+    /// 旧文件可恢复既有任务，但不能作为新的联合导入提交。
+    #[test]
+    fn historical_templates_are_recovery_only() {
+        for headers in [super::legacy::HEADERS, super::legacy::COMPACT_HEADERS] {
+            let parsed = super::parse_product_quote_xlsx(&workbook_with_cells(
+                headers,
+                r#"<c r="A2" t="inlineStr"><is><t>old</t></is></c>"#,
+                None,
+            ))
+            .unwrap();
+            assert_eq!(parsed.rows[0].cells.len(), 13);
+            assert!(
+                matches!(parsed.ensure_supply_template(), Err(crate::Error::ValidationError(message)) if message.contains("16 列"))
+            );
         }
     }
 

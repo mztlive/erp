@@ -1,14 +1,19 @@
 //! 导入编号与金额规范化。
 
+use std::collections::HashMap;
+
 use erp_catalog::entity::catalog::product_import::{
     IMPORT_NAME_MAX_CHARS, IMPORT_SPEC_MAX_CHARS, collapse_import_text, first_import_barcode,
     import_brand_name, is_import_blank, truncate_import_text,
 };
+use erp_catalog::entity::catalog::{Sku, SkuRevision};
 use erp_catalog::{PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN, SpecEntryInput};
 use erp_core::money::{Amount, Quantity};
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 
+use super::add_sku::sku_signature;
+use super::legacy;
 use crate::{Error, Result};
 
 /// SKU 规格维度名：同一产品编码下用规格值区分 SKU。
@@ -49,6 +54,29 @@ pub struct NormalizedImportRow {
     pub spec_entries: Vec<SpecEntryInput>,
 }
 
+impl NormalizedImportRow {
+    /// 规格和条码同时定位到不同 SKU 时拒绝，防止将供给关联到错误规格。
+    pub(super) fn matching_sku<'a>(
+        &self,
+        skus: &'a [Sku],
+        revisions: &HashMap<String, SkuRevision>,
+    ) -> Result<Option<&'a Sku>> {
+        let signature = sku_signature(self)?;
+        let by_spec = skus.iter().find(|sku| sku.specification_signature == signature);
+        let by_barcode = self.barcode.as_ref().and_then(|barcode| {
+            skus.iter().find(|sku| {
+                revisions.get(&sku.base.id).is_some_and(|revision| revision.barcode.as_ref() == Some(barcode))
+            })
+        });
+        if let (Some(left), Some(right)) = (by_spec, by_barcode)
+            && left.base.id != right.base.id
+        {
+            return Err(Error::ValidationError("产品规格与条码对应不同 SKU，请核对后重新导入".into()));
+        }
+        Ok(by_spec.or(by_barcode))
+    }
+}
+
 /// 把模板单元格映射为建品输入。
 ///
 /// # 参数
@@ -84,6 +112,7 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         stable_code("PRD", &[&name, specification.as_deref().unwrap_or(""), barcode.as_deref().unwrap_or("")])
     });
     let spec_entries = import_spec_entries(coded_spu, specification.as_deref(), barcode.as_deref(), &name);
+    let legacy_price = |index| if cells.len() == PRODUCT_IMPORT_HEADERS.len() { "" } else { cell(index) };
     Ok(NormalizedImportRow {
         row_number,
         sku_no: format!("{product_no}-01"),
@@ -93,9 +122,9 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         brand_name: import_brand_name(cell(5)),
         category_name,
         barcode,
-        sales_price: parse_optional_amount(cell(9), PRODUCT_IMPORT_HEADERS[9])?,
-        bulk_price: parse_optional_amount(cell(10), PRODUCT_IMPORT_HEADERS[10])?,
-        bulk_min_quantity: parse_optional_quantity(cell(11), PRODUCT_IMPORT_HEADERS[11])?,
+        sales_price: parse_optional_amount(legacy_price(9), legacy::COMPACT_HEADERS[9])?,
+        bulk_price: parse_optional_amount(legacy_price(10), legacy::COMPACT_HEADERS[10])?,
+        bulk_min_quantity: parse_optional_quantity(legacy_price(11), legacy::COMPACT_HEADERS[11])?,
         market_price: parse_optional_amount(cell(12), PRODUCT_IMPORT_HEADERS[12])?,
         coded_spu,
         spec_entries,
@@ -201,9 +230,8 @@ fn parse_optional_quantity(value: &str, column: &str) -> Result<Option<Quantity>
 
 #[cfg(test)]
 mod tests {
-    use erp_catalog::PRODUCT_IMPORT_HEADERS;
-
     use super::{normalize_import_row, stable_code};
+    use crate::product_import::legacy::COMPACT_HEADERS as PRODUCT_IMPORT_HEADERS;
 
     #[test]
     fn stable_code_is_deterministic() {

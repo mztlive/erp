@@ -63,7 +63,7 @@ impl ProductImportProcess {
         }
     }
 
-    async fn product_has_images(&self, product: &Product) -> Result<bool> {
+    pub(super) async fn product_has_images(&self, product: &Product) -> Result<bool> {
         let snapshot = self
             .db
             .catalog()
@@ -82,7 +82,7 @@ impl ProductImportProcess {
         Ok(revisions.values().any(|revision| revision.source_main_image_asset_id.is_some()))
     }
 
-    async fn update_request_with_images(
+    pub(super) async fn update_request_with_images(
         &self,
         product: &Product,
         media: RowMedia,

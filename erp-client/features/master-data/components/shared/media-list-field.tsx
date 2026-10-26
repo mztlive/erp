@@ -46,6 +46,7 @@ export function MediaListField({
     onFilesSelected,
     disabled = false,
     existingFileNames,
+    compact = false,
 }: {
     idPrefix?: string
     label: string
@@ -63,6 +64,8 @@ export function MediaListField({
     /** 禁止新增和移除文件；已登记文件仍可查看。 */
     disabled?: boolean
     existingFileNames?: readonly string[]
+    /** 上传规则由分区统一说明时，只展示文件列表与上传按钮。 */
+    compact?: boolean
 }) {
     const basePrefix =
         idPrefix ?? `master-data-media-${toAutomationIdSegment(label)}`
@@ -141,11 +144,20 @@ export function MediaListField({
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-                <Label className="text-sm font-medium">{label}</Label>
-                <span className="text-xs text-muted-foreground">
-                    {masterDataCopy.mediaCount(items.length)}
-                    {hint ? ` · ${hint}` : null}
-                </span>
+                <Label
+                    htmlFor={
+                        disabled ? undefined : `${basePrefix}-upload-select`
+                    }
+                    className="text-sm font-medium"
+                >
+                    {label}
+                </Label>
+                {!compact ? (
+                    <span className="text-xs text-muted-foreground">
+                        {masterDataCopy.mediaCount(items.length)}
+                        {hint ? ` · ${hint}` : null}
+                    </span>
+                ) : null}
             </div>
             {items.length > 0 ? (
                 <ul className="space-y-1.5">
@@ -231,12 +243,18 @@ export function MediaListField({
                         )
                     })}
                 </ul>
-            ) : (
+            ) : !compact || disabled ? (
                 <p className="text-xs text-muted-foreground">
-                    {masterDataCopy.mediaEmpty}（
-                    {masterDataCopy.mediaAllowEmpty}）
+                    {compact ? (
+                        fileUploadText.empty
+                    ) : (
+                        <>
+                            {masterDataCopy.mediaEmpty}（
+                            {masterDataCopy.mediaAllowEmpty}）
+                        </>
+                    )}
                 </p>
-            )}
+            ) : null}
             {!disabled ? (
                 <FileUpload
                     validateFiles={(files) =>
@@ -247,7 +265,10 @@ export function MediaListField({
                     multiple
                     disabled={disabled}
                     label={`添加${label}`}
-                    description={masterDataCopy.mediaUploadHint}
+                    description={
+                        compact ? null : masterDataCopy.mediaUploadHint
+                    }
+                    selectLabel={compact ? fileUploadText.upload : undefined}
                     onFilesSelected={(files) => {
                         onFilesSelected?.(files)
                         for (const file of files) {
@@ -267,7 +288,7 @@ export function MediaListField({
                         const names = files.map((f) => f.name)
                         onChange(joinMediaList([...items, ...names]))
                     }}
-                    density="compact"
+                    density={compact ? "button" : "compact"}
                 />
             ) : null}
             <Dialog

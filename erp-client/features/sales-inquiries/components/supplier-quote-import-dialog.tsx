@@ -1,6 +1,5 @@
 "use client"
 import { transferJson, transferFileInput } from "@/lib/data-transfer"
-import type { ImportedQuote } from "../lib/supplier-quote-import"
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 import { UploadIcon } from "lucide-react"
@@ -16,10 +15,7 @@ import {
     DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog"
-import { MoneyValue } from "@/components/business"
-import { multiplyFixed } from "@/lib/fixed-decimal"
 import { getErrorMessage } from "@/lib/api/errors"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/hooks/queries"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
 import { useInternalQuotes } from "../hooks/use-internal-quotes"
@@ -27,6 +23,10 @@ import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import { inquiryPath } from "../api"
 import type { ProcurementInquiry } from "../types"
 import type { InquiryTask } from "./inquiry-feedback-editor"
+import {
+    SupplierQuotePreviewPanel,
+    type SupplierQuoteImportPreview,
+} from "./supplier-quote-preview-panel"
 
 export function SupplierQuoteImportButton({
     inquiry,
@@ -58,11 +58,7 @@ export function SupplierQuoteImportButton({
             if (freshQuotes.error) throw freshQuotes.error
             if (freshOfferings.error) throw freshOfferings.error
             if (details.error) throw details.error
-            const result = await transferJson<{
-                rows: ImportedQuote[]
-                issues: string[]
-                skipped: number
-            }>("supplier_quote_preview", {
+            const result = await transferJson<SupplierQuoteImportPreview>("supplier_quote_preview", {
                 inquiry_id: inquiry.id,
                 task_id: task.id,
                 expected_version: inquiry.version,
@@ -223,110 +219,7 @@ export function SupplierQuoteImportButton({
                             </Alert>
                         )}
                         {preview.data && (
-                            <>
-                                <p className="text-sm">
-                                    读取 {preview.data.rows.length}{" "}
-                                    条回复，未报价 {preview.data.skipped}{" "}
-                                    行，已导入{" "}
-                                    {preview.data.rows.length - rows.length}{" "}
-                                    条。
-                                </p>
-                                {preview.data.issues.length > 0 && (
-                                    <Alert variant="destructive">
-                                        <AlertDescription>
-                                            <ul>
-                                                {preview.data.issues.map(
-                                                    (issue) => (
-                                                        <li key={issue}>
-                                                            {issue}
-                                                        </li>
-                                                    ),
-                                                )}
-                                            </ul>
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-                                <div className="divide-y rounded-lg border">
-                                    {preview.data.rows.map((row) => (
-                                        <div
-                                            key={`${row.quote.supplier_id}:${row.quote.line_id}`}
-                                            id={`quote-import-preview-${toAutomationIdSegment(row.quote.supplier_id)}-${toAutomationIdSegment(row.quote.line_id)}`}
-                                            className="space-y-1 p-3 text-sm"
-                                        >
-                                            <div className="flex justify-between gap-3">
-                                                <strong>
-                                                    {row.product} ·{" "}
-                                                    {row.supplier}
-                                                </strong>
-                                                <span>{row.status}</span>
-                                            </div>
-                                            <p>
-                                                {row.quote.terms.unavailable ? (
-                                                    "无法供货"
-                                                ) : (
-                                                    <>
-                                                        含税单价{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                row.quote.terms
-                                                                    .unit_cost_gross
-                                                            }
-                                                        />{" "}
-                                                        · 税率{" "}
-                                                        {multiplyFixed(
-                                                            row.quote.terms
-                                                                .input_tax_rate,
-                                                            "100",
-                                                            {
-                                                                leftMaxScale: 6,
-                                                                rightMaxScale: 0,
-                                                                outputScale: 4,
-                                                            },
-                                                        )}
-                                                        % · 可供{" "}
-                                                        {
-                                                            row.quote.terms
-                                                                .available_quantity
-                                                        }{" "}
-                                                        · 运费{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                row.quote.terms
-                                                                    .freight_gross!
-                                                            }
-                                                        />{" "}
-                                                        · 交期{" "}
-                                                        {
-                                                            row.quote.terms
-                                                                .expected_delivery_date
-                                                        }{" "}
-                                                    </>
-                                                )}
-                                            </p>
-                                            {row.previous &&
-                                                row.status === "新版本" && (
-                                                    <p className="text-muted-foreground">
-                                                        原回复：
-                                                        {row.previous.terms
-                                                            .unavailable
-                                                            ? "无法供货"
-                                                            : `单价 ${row.previous.terms.unit_cost_gross}，税率 ${multiplyFixed(row.previous.terms.input_tax_rate, "100", { leftMaxScale: 6, rightMaxScale: 0, outputScale: 4 })}%，可供 ${row.previous.terms.available_quantity}，运费 ${row.previous.terms.freight_gross ?? "未确认"}，交期 ${row.previous.terms.expected_delivery_date}`}
-                                                        ；原备注：
-                                                        {row.previous
-                                                            .internal_note ||
-                                                            "无"}
-                                                    </p>
-                                                )}
-                                            {row.quote.internal_note && (
-                                                <p>{row.quote.internal_note}</p>
-                                            )}
-                                            <p className="text-xs text-muted-foreground">
-                                                {row.source}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
+                            <SupplierQuotePreviewPanel preview={preview.data} />
                         )}
                     </div>
                     <DialogFooter>

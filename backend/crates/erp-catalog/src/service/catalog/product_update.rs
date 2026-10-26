@@ -4,7 +4,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -26,7 +26,7 @@ use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
 
 /// 商品规格编辑计划（数据模型 §6.3 全量替换语义）。
-struct SpecEditPlan {
+pub struct SpecEditPlan {
     /// 写入审计日志的变更原因。
     change_reason: Option<String>,
     /// 修订后的 SPU。
@@ -180,24 +180,55 @@ impl CatalogService {
     pub async fn product_update_with_assets(
         &self,
         id: &str,
-        mut req: UpdateProductRequest,
+        req: UpdateProductRequest,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductView> {
+        let plan = self.prepare_product_update(id, req, &pending_assets, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let product = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.write_spec_edit_plan(plan, &actor, pending_assets, executor).await },
+                )
+            })
+            .await?;
+        self.product_view(product).await
+    }
+
+    /// 校验更新请求并构造商品编辑计划，供跨域用例原子提交。
+    ///
+    /// # 参数
+    /// * `id` - 商品 ID。
+    /// * `req` - 完整编辑请求。
+    /// * `pending_assets` - 已上传且尚未登记的附件。
+    /// * `actor` - 当前操作人。
+    /// # 返回
+    /// 返回尚未持久化的编辑计划。
+    /// # 错误
+    /// 权限、版本、字典、媒体或规格校验失败时返回错误。
+    pub async fn prepare_product_update(
+        &self,
+        id: &str,
+        mut req: UpdateProductRequest,
+        pending_assets: &Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+    ) -> Result<SpecEditPlan> {
         req.validate()?;
         let used = resolve_product_file_references(
             &mut req.carousel_media,
             &mut req.detail_media,
             &mut req.skus,
-            &pending_assets,
+            pending_assets,
         )?;
         pending_assets.ensure_all_used(&used)?;
         let product = self.access().require_product(actor, "update", id, &mut NoTransaction).await?;
         product.ensure_has_responsibility()?;
         ensure_version(product.base.version, req.version)?;
-        let plan = self.build_spec_edit_plan(product, req, actor, &pending_assets).await?;
-        let product = self.write_spec_edit_plan(plan, actor, pending_assets).await?;
-        self.product_view(product).await
+        self.build_spec_edit_plan(product, req, actor, pending_assets.as_ref()).await
     }
 
     /// 构造规格编辑计划（分类保留/新增/重新启用/移除 + 新商品修订与媒体）。
@@ -353,7 +384,7 @@ impl CatalogService {
         }
     }
 
-    /// 在单个事务内写入规格编辑计划。
+    /// 使用调用方事务写入规格编辑计划，不开启嵌套事务。
     ///
     /// 写新商品修订与媒体、按动作写 SKU 修订/状态，更新 SPU，
     /// 移除签名的既有 SKU 转为停用，最后写审计日志；任一步失败整体回滚。
@@ -361,17 +392,20 @@ impl CatalogService {
     /// # 参数
     /// * `plan` - 规格编辑计划
     /// * `actor` - 审计操作人
+    /// * `pending_assets` - 同事务登记的附件。
+    /// * `executor` - 调用方事务执行器。
     ///
     /// # 返回
     /// 返回编辑后的 SPU 实体。
     ///
     /// # 错误
     /// 并发冲突（409）或事务失败时返回错误并整体回滚。
-    async fn write_spec_edit_plan(
+    pub async fn write_spec_edit_plan(
         &self,
         plan: SpecEditPlan,
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
+        executor: &mut dyn Executor,
     ) -> Result<Product> {
         let SpecEditPlan { change_reason, mut product, revision, media, mut sku_items, mut disable } = plan;
         let audit = self.audit.resource_log_with_message(
@@ -382,46 +416,37 @@ impl CatalogService {
             change_reason,
         )?;
         let db = self.db.clone();
-        let client = db.client().clone();
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor = actor.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access
-                        .ensure_writable(
-                            &actor,
-                            "update",
-                            &product.maintainer_user_id,
-                            &product.business_org_unit_id,
-                            executor,
-                        )
-                        .await?;
-                    pending_assets.persist(&db, executor).await?;
-                    db.products().update(&mut product, executor).await?;
-                    db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
-                    for item in &mut sku_items {
-                        match item.action {
-                            SkuEditAction::Create => {
-                                db.catalog()
-                                    .create_sku_with_revision(&item.sku, &item.revision, &[], executor)
-                                    .await?;
-                            },
-                            SkuEditAction::Keep | SkuEditAction::Reactivate => {
-                                db.catalog().create_sku_revision(&item.revision, executor).await?;
-                                db.skus().update(&mut item.sku, executor).await?;
-                            },
-                        }
-                    }
-                    for sku in &mut disable {
-                        db.skus().update(sku, executor).await?;
-                    }
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<Product, crate::error::Error>(product)
-                })
-            })
-            .await
+        access
+            .ensure_writable(
+                &actor,
+                "update",
+                &product.maintainer_user_id,
+                &product.business_org_unit_id,
+                executor,
+            )
+            .await?;
+        pending_assets.persist(&db, executor).await?;
+        db.products().update(&mut product, executor).await?;
+        db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
+        for item in &mut sku_items {
+            match item.action {
+                SkuEditAction::Create => {
+                    db.catalog().create_sku_with_revision(&item.sku, &item.revision, &[], executor).await?;
+                },
+                SkuEditAction::Keep | SkuEditAction::Reactivate => {
+                    db.catalog().create_sku_revision(&item.revision, executor).await?;
+                    db.skus().update(&mut item.sku, executor).await?;
+                },
+            }
+        }
+        for sku in &mut disable {
+            db.skus().update(sku, executor).await?;
+        }
+        audit_port.persist(&audit, executor).await?;
+        Ok(product)
     }
 
     /// 计算某商品已有修订的最大序号 + 1。

@@ -6845,6 +6845,22 @@
       },
       "location_count": 1,
       "reason": "复用已登记的 background_job.create 安全动作生成任务审计；参数正文和文件内容不进入事件。"
+    },
+    {
+      "path": "crates/erp-processes/src/product_import/joint_commit.rs",
+      "function": "write_import_offering",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log_with_message",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log_with_message": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "联合导入在同一行事务中写入商品、SKU、供给和审计；已存在供给只复用，不重复写审计或重置价格和数量。"
     }
   ]
 }
