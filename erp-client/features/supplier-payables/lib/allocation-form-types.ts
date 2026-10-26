@@ -21,6 +21,13 @@ export type InvoiceFormValues = {
     taxAmount: string
 }
 
+/** 本机进项发票草稿只保存票面字段和显式分配，不保存权限或服务器版本。 */
+export type InvoiceRegistrationSnapshot = {
+    invoice: InvoiceFormValues
+    selected: string[]
+    amounts: Record<string, string>
+}
+
 /**
  * 核销记录表单实例的共享类型。校验槽位用 `any`：各拆分组件只关心字段与值，
  * 不需要复述 TanStack Form 的完整校验泛型。

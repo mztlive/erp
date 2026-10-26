@@ -1,6 +1,7 @@
 /** W12 供应商往来 · 后端 DTO 与视图映射（纯函数，无 HTTP 无 React）。 */
 
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
+import { payableDue } from "@/features/supplier-payables/lib/payable-due"
 import type {
     PayableRow,
     PaymentGuidance,
@@ -325,6 +326,7 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
     const status = mapPayableStatus(a.status)
     const sourceType = mapSourceType(a.source_type)
     const primary = (a.entries ?? []).find((e) => e.direction === "increase")
+    const dueDate = primary?.due_date ?? a.entries?.[0]?.due_date ?? ""
     return {
         payableAccountId: a.id,
         supplierId: a.supplier_id,
@@ -351,9 +353,8 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
         paymentGuidance: mapPaymentGuidance(a.payment_guidance),
         invoicedTotal: a.invoiced_total,
         openInvoiceableTotal: a.open_invoiceable_total,
-        dueDate: primary?.due_date ?? a.entries?.[0]?.due_date ?? "",
-        dueState: "not_due",
-        dueStateLabel: "未到期",
+        dueDate,
+        ...payableDue(dueDate, status),
         status,
         statusLabel: PAYABLE_STATUS_LABEL[status],
         statusTone: PAYABLE_STATUS_TONE[status],

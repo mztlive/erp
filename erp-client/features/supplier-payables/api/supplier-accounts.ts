@@ -1,4 +1,5 @@
 import { isApiError } from "@/lib/api/errors"
+import { payableDue } from "@/features/supplier-payables/lib/payable-due"
 /**
  * W12 供应商往来 · 应付台账相关请求（列表、详情、核销会话）。
  * 会话共享状态见 api/shared；DTO 映射见 api/mappers。
@@ -474,7 +475,8 @@ async function allocationPoolTarget(account: BackendPayableAccount) {
         paymentGuidance: guidance,
         openInvoiceableTotal: account.open_invoiceable_total,
         dueDate,
-        dueStateLabel: "未到期",
+        dueStateLabel: payableDue(dueDate, mapPayableStatus(account.status))
+            .dueStateLabel,
         statusLabel: PAYABLE_STATUS_LABEL[mapPayableStatus(account.status)],
     }
 }

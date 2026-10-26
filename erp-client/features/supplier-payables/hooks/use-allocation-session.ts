@@ -1,5 +1,6 @@
 "use client"
 
+import type { InvoiceRegistrationSnapshot } from "@/features/supplier-payables/lib/allocation-form-types"
 import { suggestedPayment } from "@/features/supplier-payables/lib/payment-guidance"
 import * as React from "react"
 
@@ -125,8 +126,12 @@ export function useAllocationSession(
                 ? (session?.pool.filter((item) =>
                       lockedPaymentAccountIds.has(item.payableAccountId),
                   ) ?? [])
-                : (session?.pool ?? []),
-        [lockedPaymentAccountIds, session?.pool],
+                : (session?.pool ?? []).filter(
+                      (item) =>
+                          track !== "purchase_invoice" ||
+                          cents(item.openInvoiceableTotal) > BigInt(0),
+                  ),
+        [lockedPaymentAccountIds, session?.pool, track],
     )
 
     const [amounts, setAmounts] = React.useState<Record<string, string>>({})
@@ -190,12 +195,24 @@ export function useAllocationSession(
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅会话主键变化时同步
     }, [session?.draftSessionId, draftSessionId])
 
+    const initializedSession = React.useRef<string | null>(null)
     React.useEffect(() => {
         if (!session) return
+        const identity = `${session.draftSessionId}:${preselectKey}`
+        if (
+            track === "purchase_invoice" &&
+            initializedSession.current === identity
+        )
+            return
+        initializedSession.current = identity
         const next = new Set(
             track === "payment" && paymentPayableAccountId
                 ? pool.map((item) => item.payableAccountId)
-                : session.preselectedPayableAccountIds,
+                : session.preselectedPayableAccountIds.filter(
+                      (id) =>
+                          track !== "purchase_invoice" ||
+                          pool.some((item) => item.payableAccountId === id),
+                  ),
         )
         setSelected(next)
         const am: Record<string, string> = {}
@@ -687,7 +704,15 @@ export function useAllocationSession(
         return nextDraftSessionId
     }
 
+    function restoreInvoiceDraft(snapshot: InvoiceRegistrationSnapshot) {
+        invoiceForm.reset(snapshot.invoice)
+        setSelected(new Set(snapshot.selected))
+        setAmounts(snapshot.amounts)
+    }
+
     return {
+        restoreInvoiceDraft,
+        clearSelection: () => setSelected(new Set()),
         sessionQuery,
         session,
         policy,

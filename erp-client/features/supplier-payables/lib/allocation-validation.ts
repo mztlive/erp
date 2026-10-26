@@ -61,7 +61,16 @@ export function buildAllocationIssues(
     }
     for (const id of selected) {
         const item = pool?.find((p) => p.payableAccountId === id)
-        if (!item) continue
+        if (!item) {
+            if (track === "purchase_invoice")
+                issues.push({
+                    id: `unavailable-${id}`,
+                    label: "核销目标",
+                    message: "部分已选单据已不可核销，请清空选择后重新勾选",
+                    targetId: "alloc-pool",
+                })
+            continue
+        }
         const open =
             track === "payment" ? item.openTotal : item.openInvoiceableTotal
         if (cents(amounts[id] ?? "0") > cents(open)) {

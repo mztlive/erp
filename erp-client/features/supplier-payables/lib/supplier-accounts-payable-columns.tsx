@@ -4,20 +4,27 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import type { PayableRow } from "@/features/supplier-payables/types"
+import { cn } from "@/lib/utils"
 
 export function buildPayableColumns(): ColumnDef<PayableRow>[] {
     return [
         {
             id: "supplier",
-            header: "供应商 / 来源",
-            meta: { label: "供应商", width: "reference" },
+            header: "供应商 / 来源单据",
+            meta: { label: "供应商 / 来源单据", width: "flex" },
             cell: ({ row }) => (
-                <div className="flex min-w-0 max-w-64 flex-col items-start gap-1 whitespace-normal text-sm">
-                    <span className="truncate font-medium">
+                <div className="flex w-0 min-w-full flex-col gap-1 text-sm">
+                    <span
+                        className="truncate font-medium"
+                        title={row.original.supplierName}
+                    >
                         {row.original.supplierName}
                     </span>
                     <span className="sr-only">·</span>
-                    <span className="break-words text-xs text-muted-foreground">
+                    <span
+                        className="truncate select-text text-xs text-muted-foreground"
+                        title={`${row.original.sourceTypeLabel} · ${row.original.sourceDocumentNo}`}
+                    >
                         {row.original.sourceTypeLabel} ·{" "}
                         <span className="num">
                             {row.original.sourceDocumentNo}
@@ -27,65 +34,81 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
             ),
         },
         {
-            id: "amounts",
-            header: "应付（含税）/ 开放（含税）",
+            id: "openTotal",
+            header: "剩余应付（含税）",
             meta: {
-                label: "金额",
+                label: "剩余应付（含税）",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="space-y-1 text-end text-sm">
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            开放
-                        </span>
-                        <MoneyValue value={row.original.openTotal} />
-                    </div>
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            应付
-                        </span>
-                        <MoneyValue value={row.original.grossTotal} />
-                    </div>
-                </div>
+                <MoneyValue
+                    value={row.original.openTotal}
+                    display="exact"
+                    className="font-semibold"
+                />
             ),
         },
         {
-            id: "tracks",
-            header: "已付（净）/ 已收票（净）",
+            id: "grossTotal",
+            header: "应付总额（含税）",
             meta: {
-                label: "进度",
+                label: "应付总额（含税）",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="space-y-1 text-end text-sm">
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            付款
-                        </span>
-                        <MoneyValue value={row.original.settledTotal} />
-                    </div>
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            收票
-                        </span>
-                        <MoneyValue value={row.original.invoicedTotal} />
-                    </div>
-                </div>
+                <MoneyValue value={row.original.grossTotal} display="exact" />
+            ),
+        },
+        {
+            id: "settledTotal",
+            header: "已付净额",
+            meta: {
+                label: "已付净额",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => (
+                <MoneyValue value={row.original.settledTotal} display="exact" />
+            ),
+        },
+        {
+            id: "invoicedTotal",
+            header: "已收票净额",
+            meta: {
+                label: "已收票净额",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => (
+                <MoneyValue
+                    value={row.original.invoicedTotal}
+                    display="exact"
+                />
             ),
         },
         {
             id: "due",
-            header: "到期",
-            meta: { label: "到期", width: "default" },
+            header: "到期情况",
+            meta: { label: "到期情况", width: "default" },
             cell: ({ row }) => (
                 <div className="flex flex-col items-start gap-1 text-sm">
-                    <span className="num">{row.original.dueDate}</span>
-                    <span className="text-xs text-muted-foreground">
+                    {row.original.dueDate ? (
+                        <span className="num">{row.original.dueDate}</span>
+                    ) : null}
+                    <span
+                        className={cn(
+                            "text-xs",
+                            row.original.dueState === "overdue"
+                                ? "text-destructive"
+                                : "text-muted-foreground",
+                        )}
+                    >
                         {row.original.dueStateLabel}
                     </span>
                 </div>
@@ -93,8 +116,8 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
         },
         {
             id: "status",
-            header: "状态",
-            meta: { label: "状态", width: "status" },
+            header: "结清状态",
+            meta: { label: "结清状态", width: "status" },
             cell: ({ row }) => (
                 <div className="flex flex-col items-start gap-1.5">
                     <BusinessStatusBadge

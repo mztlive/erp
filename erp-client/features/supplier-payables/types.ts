@@ -113,7 +113,7 @@ export type PayableRow = Readonly<{
     invoicedTotal: string
     openInvoiceableTotal: string
     dueDate: string
-    dueState: "not_due" | "due_today" | "overdue"
+    dueState: "not_due" | "due_today" | "overdue" | "unknown" | "settled"
     dueStateLabel: string
     status: PayableStatus
     statusLabel: string
@@ -533,7 +533,7 @@ export const PAYABLE_STATUS_LABEL: Record<PayableStatus, string> = {
 }
 
 export const PAYABLE_STATUS_TONE: Record<PayableStatus, StatusTone> = {
-    OPEN: "warning",
+    OPEN: "neutral",
     PARTIAL: "info",
     SETTLED: "success",
 }

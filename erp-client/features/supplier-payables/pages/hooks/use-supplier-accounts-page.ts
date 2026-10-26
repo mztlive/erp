@@ -13,9 +13,7 @@ import { useSupplierAccountsNavigation } from "./use-supplier-accounts-navigatio
 export function useSupplierAccountsPage() {
     const filters = useSupplierAccountsFilters()
     const navigation = useSupplierAccountsNavigation({
-        data: filters.data,
         supplierId: filters.supplierId,
-        purchaseOrderId: filters.purchaseOrderId,
         patchUrl: filters.patchUrl,
     })
 

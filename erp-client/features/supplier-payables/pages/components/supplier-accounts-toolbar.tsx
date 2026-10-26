@@ -360,7 +360,6 @@ export function SupplierAccountsToolbar({
             onClearAll={clearAllFilters}
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

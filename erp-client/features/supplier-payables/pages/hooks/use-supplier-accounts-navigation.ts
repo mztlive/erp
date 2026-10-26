@@ -8,25 +8,20 @@ import {
     parseWorkItemId,
 } from "@/features/supplier-payables/lib/url-state"
 import type {
-    AllocationTrack,
     FormalSubmitResult,
     SessionState,
-    SupplierAccountsListView,
 } from "@/features/supplier-payables/types"
+import { invoiceRegistrationHref } from "@/features/supplier-payables/lib/invoice-registration-route"
 import type { SupplierAccountsPatchUrl } from "./use-supplier-accounts-filters"
 
 type Options = {
-    data: SupplierAccountsListView | undefined
     supplierId: string | undefined
-    purchaseOrderId: string | undefined
     patchUrl: SupplierAccountsPatchUrl
 }
 
 /** W12 深链、核销会话和详情预览导航。 */
 export function useSupplierAccountsNavigation({
-    data,
     supplierId,
-    purchaseOrderId,
     patchUrl,
 }: Options) {
     const router = useRouter()
@@ -34,12 +29,9 @@ export function useSupplierAccountsNavigation({
     const searchParams = useSearchParams()
     const fromWorkspace = searchParams.get("from") ?? undefined
     const returnTo = searchParams.get("returnTo") ?? undefined
-    const sessionTrack = searchParams.get("session") as AllocationTrack | null
-    const draftSessionId = searchParams.get("draftSessionId") ?? undefined
     const detailId = searchParams.get("detailId") ?? undefined
     const previewKind = parsePreviewKind(searchParams.get("previewKind"))
     const workItemId = parseWorkItemId(searchParams)
-    const existingInvoiceId = searchParams.get("invoiceId") ?? undefined
     const previewPayableId =
         previewKind === "payable" && detailId ? detailId : null
     const previewPaymentId =
@@ -73,42 +65,23 @@ export function useSupplierAccountsNavigation({
     const [session, setSession] = React.useState<SessionState | null>(null)
     const [lastResult, setLastResult] =
         React.useState<FormalSubmitResult | null>(null)
-    const deepLinkHandled = React.useRef(false)
-
-    React.useEffect(() => {
-        if (deepLinkHandled.current || !data?.moduleAllowed) return
-        if (sessionTrack === "purchase_invoice" && supplierId) {
-            deepLinkHandled.current = true
-            setSession({
-                track: sessionTrack,
-                supplierId,
-                draftSessionId,
-                purchaseOrderId,
-                returnTo,
-                fromWorkspace,
-                existingInvoiceId,
-                preselectPayableAccountId:
-                    previewKind === "payable" ? detailId : undefined,
-            })
-            return
-        }
-    }, [
-        data,
-        detailId,
-        draftSessionId,
-        existingInvoiceId,
-        fromWorkspace,
-        patchUrl,
-        previewKind,
-        purchaseOrderId,
-        returnTo,
-        sessionTrack,
-        supplierId,
-    ])
-
     const openSession = React.useCallback(
         (next: SessionState) => {
             setLastResult(null)
+            if (next.track === "purchase_invoice") {
+                const listParams = new URLSearchParams(searchParams.toString())
+                listParams.delete("detailId")
+                listParams.delete("previewKind")
+                const listHref = listParams.size
+                    ? `${pathname}?${listParams}`
+                    : pathname
+                patchUrl(
+                    { detailId: null, previewKind: null },
+                    { replace: true },
+                )
+                router.push(invoiceRegistrationHref(next, listHref))
+                return
+            }
             setSession(next)
             patchUrl(
                 {
@@ -122,7 +95,7 @@ export function useSupplierAccountsNavigation({
                 { replace: true },
             )
         },
-        [patchUrl],
+        [patchUrl, pathname, router, searchParams],
     )
     const closeSession = React.useCallback(() => {
         setSession(null)

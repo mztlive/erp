@@ -116,6 +116,20 @@ export function tabHref(url: URL): string {
 
 /** Filters belong to a tab; separately named fulfillment lanes belong to different tabs. */
 export function workspaceTabKey(url: URL): string {
+    if (url.pathname === "/finance/supplier-accounts/invoices/new") {
+        const identity = new URLSearchParams()
+        for (const name of [
+            "draftSessionId",
+            "supplierId",
+            "invoiceId",
+            "payableAccountId",
+            "purchaseOrderId",
+        ]) {
+            const value = url.searchParams.get(name)
+            if (value) identity.set(name, value)
+        }
+        return `${url.pathname}?${identity}`
+    }
     const create =
         url.pathname.endsWith("/new") ||
         url.searchParams.get("mode") === "create" ||
@@ -149,6 +163,10 @@ export function workspaceTabKey(url: URL): string {
 }
 
 export function workspaceTabTitle(url: URL): string {
+    if (url.pathname === "/finance/supplier-accounts/invoices/new")
+        return url.searchParams.has("invoiceId")
+            ? "继续核销进项发票"
+            : "登记进项发票"
     const items = WORKSPACE_NAV_GROUPS.flatMap((group) => group.items)
     const match = items
         .filter((item) => {

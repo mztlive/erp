@@ -28,7 +28,7 @@ function SupplierAccountsFallback() {
 
 /**
  * SPA 壳：URL 查询由客户端 useSearchParams 恢复
- * view / supplierId / q / purchaseOrderId / from / returnTo / session /
+ * view / supplierId / q / purchaseOrderId / from / returnTo /
  * previewKind / detailId / currentWorkItemId。
  * 业务数据不在服务端 fetch。
  *

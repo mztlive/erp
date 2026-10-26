@@ -41,8 +41,7 @@ export type SupplierAllocationSessionPageProps = {
 }
 
 /**
- * 供应商付款/进项票核销作业页。与往来列表共用路由，但是独立页面骨架：
- * 页头、浮起工作面、提交结果均按作业页渲染，而不是列表内嵌组件。
+ * 供应商付款核销会话骨架。进项发票登记由独立路由 SupplierInvoiceRegistrationPage 承接。
  */
 export function SupplierAllocationSessionPage({
     track,
