@@ -31,6 +31,16 @@ pub struct TransferContext {
 }
 
 impl TransferContext {
+    pub(super) fn retain_classification(&mut self) {
+        let mut classification = json!({});
+        for key in ["mode", "resource", "view"] {
+            if let Some(value) = self.context.get(key) {
+                classification[key] = value.clone();
+            }
+        }
+        self.context = classification;
+    }
+
     pub(super) fn from_input(kind: TransferKind, input: &Value) -> Self {
         let mut context = json!({});
         for key in ["inquiry_id", "customer_id", "task_id", "expected_version", "task_version", "file_name"] {
@@ -75,6 +85,19 @@ impl TransferContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_export_context_keeps_classification_without_business_references() {
+        let mut view = TransferContext::from_input(
+            TransferKind::SupplierQuoteArchive,
+            &json!({
+                "inquiry_id":"private-inquiry", "task_id":"private-task", "file_name":"private.xlsx", "view":"receipt"
+            }),
+        );
+        view.retain_classification();
+        assert_eq!(view.context, json!({"view":"receipt"}));
+        assert_eq!(view.kind, TransferKind::SupplierQuoteArchive);
+    }
 
     #[test]
     fn context_allowlist_excludes_file_bytes_commands_and_authorization() {

@@ -232,6 +232,8 @@ export function BackgroundJobsWorkspace() {
             <BackgroundJobPreviewSheet
                 previewId={previewId}
                 currentUserId={currentUserId}
+                identityError={profileQuery.error}
+                onRetryIdentity={() => void profileQuery.refetch()}
                 detailQuery={detailQuery}
                 itemsQuery={itemsQuery}
                 itemsPage={itemsPage}

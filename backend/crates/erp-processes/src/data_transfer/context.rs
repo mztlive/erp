@@ -1,4 +1,4 @@
-//! 本人文件任务的业务恢复信息；业务事实与当前授权均在读取时重新核验。
+//! 文件任务分类与本人业务恢复信息；业务事实与当前授权均在读取时重新核验。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_sales::repository::extensions::SalesInquiryImportExt;
@@ -17,21 +17,25 @@ use crate::sales_inquiry_import::SalesInquiryImportProcess;
 use crate::{Error, Result};
 
 impl DataTransferProcess {
-    /// 从原私有输入读取本人任务类型与受控业务引用。
+    /// 读取可访问任务类型；导出可由当前获授权账号读取分类信息。
     /// # 参数
     /// `id` 为任务号，`actor` 为当前认证身份。
     /// # 返回
     /// 当前权限下的续办状态及取消能力。
     /// # 错误
-    /// 非本人、历史输入不可恢复或当前授权失效时拒绝；新版过期上下文返回明确过期状态。
+    /// 非本人读取导入、历史输入不可恢复或当前授权失效时拒绝；过期上下文返回明确过期状态。
     pub async fn context(&self, id: &str, actor: &AuditActor) -> Result<TransferContext> {
-        let job = self.owned_job(id, actor).await?;
+        let job = self.transfer_job(id).await?;
         let mut source = self.context_input(&job).await?;
+        source.kind.authorize_reader(&job.requested_by, actor)?;
         let expired = source.expires_at <= Instant::now().unix_secs();
         source.input["__context_expires_at"] = json!(source.expires_at);
         let result =
             if source.kind.is_export() || expired { None } else { self.context_result(&job).await? };
         let mut view = self.handler.context(source.kind, &source.input, result.as_ref(), actor).await?;
+        if job.requested_by != actor.id() {
+            view.retain_classification();
+        }
         view.can_cancel = job.cancellation_allowed();
         view.can_recover = matches!(source.kind, TransferKind::SupplyBatch | TransferKind::PortalBatch)
             && job.finished_at.is_some()
@@ -43,14 +47,22 @@ impl DataTransferProcess {
     }
 
     pub(super) async fn owned_job(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJob> {
+        let job = self.transfer_job(id).await?;
+        if job.requested_by != actor.id() {
+            return Err(Error::Forbidden("只能读取本人提交任务的业务结果".into()));
+        }
+        Ok(job)
+    }
+
+    pub(super) async fn transfer_job(&self, id: &str) -> Result<BackgroundJob> {
         let job = self
             .db
             .background_jobs()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-        if job.requested_by != actor.id() || job.domain_job_type.as_deref() != Some(DOMAIN) {
-            return Err(Error::Forbidden("只能读取本人提交任务的业务结果".into()));
+        if job.domain_job_type.as_deref() != Some(DOMAIN) {
+            return Err(Error::Forbidden("该任务不是文件处理任务".into()));
         }
         Ok(job)
     }
@@ -87,13 +99,7 @@ impl BusinessTransfers {
         }
         let mut view = TransferContext::from_input(kind, input);
         if input["__context_expires_at"].as_i64().is_some_and(|at| at <= Instant::now().unix_secs()) {
-            let mut classification = json!({});
-            for key in ["mode", "resource", "view"] {
-                if let Some(value) = view.context.get(key) {
-                    classification[key] = value.clone();
-                }
-            }
-            view.context = classification;
+            view.retain_classification();
             view.state(TransferResumeState::Expired, "任务文件及业务预览已过期，请返回原业务页重新提交");
             return Ok(view);
         }

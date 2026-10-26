@@ -31,6 +31,8 @@ import { canCancelJob } from "../labels"
 type BackgroundJobPreviewSheetProps = {
     previewId: string | null
     currentUserId: string | undefined
+    identityError: unknown
+    onRetryIdentity: () => void
     detailQuery: ReturnType<typeof useBackgroundJobDetailQuery>
     itemsQuery: ReturnType<typeof useBackgroundJobItemsQuery>
     itemsPage: number
@@ -44,6 +46,8 @@ type BackgroundJobPreviewSheetProps = {
 export function BackgroundJobPreviewSheet({
     previewId,
     currentUserId,
+    identityError,
+    onRetryIdentity,
     detailQuery,
     itemsQuery,
     itemsPage,
@@ -127,14 +131,34 @@ export function BackgroundJobPreviewSheet({
             ) : previewJob ? (
                 <div className="space-y-6 text-sm">
                     {previewJob.domain_job_type === "DATA_TRANSFER" ? (
+                        previewJob.job_type === "export" ||
                         previewJob.requested_by === currentUserId ? (
                             <DataTransferTaskResult
                                 key={previewJob.id}
                                 job={previewJob}
                             />
+                        ) : !currentUserId ? (
+                            identityError ? (
+                                <BusinessFailureState
+                                    error={identityError}
+                                    action={
+                                        <Button
+                                            id={`${ID_PREFIX}-identity-retry`}
+                                            variant="outline"
+                                            onClick={onRetryIdentity}
+                                        >
+                                            重新读取账号信息
+                                        </Button>
+                                    }
+                                />
+                            ) : (
+                                <p className="text-muted-foreground">
+                                    正在核对任务发起人…
+                                </p>
+                            )
                         ) : (
                             <p className="text-muted-foreground">
-                                此任务由其他用户发起。业务结果、文件下载与继续办理仅供发起人使用。
+                                此任务由其他用户发起。导入预览、批量处理结果与继续办理仅供发起人使用。
                             </p>
                         )
                     ) : previewJob.domain_job_type === "PRODUCT_IMPORT" ||
@@ -168,9 +192,14 @@ export function BackgroundJobPreviewSheet({
                             <DescriptionItem>
                                 <DescriptionTerm>发起人</DescriptionTerm>
                                 <DescriptionDetails>
-                                    {previewJob.requested_by === currentUserId
-                                        ? "我"
-                                        : "其他用户"}
+                                    {!currentUserId
+                                        ? identityError
+                                            ? "账号信息读取失败"
+                                            : "正在核对…"
+                                        : previewJob.requested_by ===
+                                            currentUserId
+                                          ? "我"
+                                          : "其他用户"}
                                 </DescriptionDetails>
                             </DescriptionItem>
                             <DescriptionItem>

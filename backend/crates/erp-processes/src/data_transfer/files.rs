@@ -108,23 +108,15 @@ impl DataTransferProcess {
         let id = job.input_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务输入缺失".into()))?;
         self.read_private(id.as_ref(), &job.requested_by).await
     }
-    /// 仅向提交人返回仍获授权且未过期的结果，读取前后均重验业务权限。
+    /// 返回当前身份仍获授权且未过期的结果；导出允许非原提交人下载。
     /// # 参数
     /// 后台任务 ID 和当前认证人。
     /// # 返回
     /// 受控文件或导入预览结果。
     /// # 错误
-    /// 非本人、未完成、过期、撤权、范围变化或文件不可用时拒绝。
+    /// 非本人读取导入、未完成、过期、撤权、范围变化或文件不可用时拒绝。
     pub async fn result(&self, id: &str, actor: &AuditActor) -> Result<TransferResult> {
-        let job = self
-            .db
-            .background_jobs()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-        if job.requested_by != actor.id() || job.domain_job_type.as_deref() != Some(DOMAIN) {
-            return Err(Error::Forbidden("只能读取本人提交任务的结果".into()));
-        }
+        let job = self.transfer_job(id).await?;
         if !matches!(job.status, JobStatus::Succeeded | JobStatus::Failed | JobStatus::PartiallySucceeded)
             || job.finished_at.is_none()
             || job.result_expires_at.is_none_or(|at| at <= Instant::now())
@@ -132,10 +124,11 @@ impl DataTransferProcess {
             return Err(Error::BusinessLogicError("任务尚未完成或结果已过期，请查询原任务".into()));
         }
         let source = self.source(&job).await?;
+        source.kind.authorize_reader(&job.requested_by, actor)?;
         let asset =
             job.result_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务结果不存在".into()))?;
 
-        let mut result: TransferResult = self.read_private(asset.as_ref(), actor.id()).await?;
+        let mut result: TransferResult = self.read_private(asset.as_ref(), &job.requested_by).await?;
         self.handler.authorize_result(source.kind, &source.input, &result.authorization, actor).await?;
         if !result.metadata.is_object() {
             result.metadata = json!({});
@@ -151,7 +144,10 @@ impl DataTransferProcess {
             None
         };
         let compact = self.context_input(&job).await?;
-        let context = self.handler.context(compact.kind, &compact.input, decoded.as_ref(), actor).await?;
+        let mut context = self.handler.context(compact.kind, &compact.input, decoded.as_ref(), actor).await?;
+        if job.requested_by != actor.id() {
+            context.retain_classification();
+        }
         result.metadata["kind"] = json!(source.kind);
         result.metadata["context"] = context.context;
         Ok(result)

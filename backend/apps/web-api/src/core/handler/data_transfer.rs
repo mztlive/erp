@@ -44,13 +44,13 @@ pub async fn status(
 ) -> Result<Response, Error> {
     Ok(private(ApiResponse::ok_with_data(process(&state).status(&id, &actor).await?).into_response()))
 }
-/// 读取本人任务的固定类型及当前可继续办理的业务上下文。
+/// 读取获授权导出的分类信息，或本人任务的业务续办上下文。
 /// # 参数
 /// 当前认证人与原任务 ID。
 /// # 返回
 /// 受控业务引用、续办状态和取消能力。
 /// # 错误
-/// 非本人、源文件过期或当前业务授权失效时拒绝。
+/// 非本人读取导入、源文件不可恢复或当前业务授权失效时拒绝。
 pub async fn context(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -75,7 +75,7 @@ pub async fn recover(
     Ok(private(ApiResponse::ok_with_data(json!({"file_name":result.file_name,"content_type":result.content_type,"content_base64":result.content_base64,"metadata":result.metadata})).into_response()))
 }
 
-/// 读取本人任务的未过期结果。
+/// 按当前业务权限读取未过期结果；导出允许非原提交人下载。
 /// # 参数
 /// 当前认证人与任务 ID。
 /// # 返回
