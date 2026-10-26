@@ -94,19 +94,6 @@ pub trait BatchOperation: Send + Sync + 'static {
     /// # 错误
     /// 不返回错误。
     fn identity(&self) -> String;
-    /// 返回批量创建的供应商；更新命令返回空。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 创建行的供应商标识。默认实现返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn supplier(&self) -> Option<&str> {
-        None
-    }
     /// 取原命令键，用于批内去重与主体隔离。
     ///
     /// # 参数
@@ -148,14 +135,14 @@ impl SupplierOfferingProcess {
     /// 校验整批并按行执行供给操作。
     ///
     /// # 参数
-    /// * `request` - 最多 100 行同类操作；创建限一个供应商
+    /// * `request` - 最多 100 行同类条款修订或可供更新
     /// * `actor` - 当前操作人，命令键按该主体隔离
     ///
     /// # 返回
     /// 返回每行校验、成功、失败或待确认结果。
     ///
     /// # 错误
-    /// 空批、超限、重复行/业务身份/命令键或混合供应商时拒绝整批。
+    /// 空批、超限、重复行/业务身份/命令键时拒绝整批。
     pub async fn batch<T: BatchOperation>(
         &self,
         mut request: BatchRequest<T>,
@@ -174,7 +161,6 @@ fn validate_envelope<T: BatchOperation>(request: &mut BatchRequest<T>, actor: &s
     let mut rows = HashSet::new();
     let mut identities = HashSet::new();
     let mut keys = HashSet::new();
-    let mut suppliers = HashSet::new();
     for row in &mut request.rows {
         if row.row_id.trim().is_empty() || row.row_id.len() > 200 || !rows.insert(row.row_id.clone()) {
             return Err(Error::ValidationError("行标识为空或重复".into()));
@@ -182,17 +168,11 @@ fn validate_envelope<T: BatchOperation>(request: &mut BatchRequest<T>, actor: &s
         if !identities.insert(row.input.identity()) {
             return Err(Error::ValidationError("同一批次存在重复的供给，请合并后提交".into()));
         }
-        if let Some(supplier) = row.input.supplier() {
-            suppliers.insert(supplier.to_owned());
-        }
         let key = row.input.key();
         if key.trim().is_empty() || key.len() > 200 || !keys.insert(key.clone()) {
             return Err(Error::ValidationError("提交标识为空或重复，请重新打开配置".into()));
         }
         *key = format!("batch:{}:{actor}:{key}", actor.len());
-    }
-    if suppliers.len() > 1 {
-        return Err(Error::ValidationError("批量新增每次只能选择一个供应商".into()));
     }
     Ok(())
 }

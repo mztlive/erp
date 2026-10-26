@@ -7,7 +7,6 @@ use super::*;
 struct Fake {
     identity: String,
     key: String,
-    supplier: String,
     invalid: bool,
     replay: bool,
     writes: Arc<AtomicUsize>,
@@ -26,19 +25,6 @@ impl BatchOperation for Fake {
     /// 不返回错误。
     fn identity(&self) -> String {
         self.identity.clone()
-    }
-    /// 返回测试供应商。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `supplier`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn supplier(&self) -> Option<&str> {
-        Some(&self.supplier)
     }
     /// 返回测试命令键。
     ///
@@ -96,7 +82,6 @@ fn request(count: usize) -> BatchRequest<Fake> {
                 input: Fake {
                     identity: i.to_string(),
                     key: i.to_string(),
-                    supplier: "s1".into(),
                     invalid: false,
                     replay: false,
                     writes: Arc::new(AtomicUsize::new(0)),
@@ -107,17 +92,16 @@ fn request(count: usize) -> BatchRequest<Fake> {
 }
 /// 验证批量容器及错误恢复约束。
 #[test]
-fn rejects_empty_oversize_duplicates_and_mixed_supplier() {
+fn rejects_empty_oversize_and_duplicates() {
     assert!(validate_envelope(&mut request(0), "a").is_err());
     assert!(validate_envelope(&mut request(101), "a").is_err());
     assert!(validate_envelope(&mut request(100), "a").is_ok());
-    for change in 0..4 {
+    for change in 0..3 {
         let mut batch = request(2);
         match change {
             0 => batch.rows[1].row_id = "0".into(),
             1 => batch.rows[1].input.identity = "0".into(),
-            2 => batch.rows[1].input.key = "0".into(),
-            _ => batch.rows[1].input.supplier = "s2".into(),
+            _ => batch.rows[1].input.key = "0".into(),
         }
         assert!(validate_envelope(&mut batch, "a").is_err());
     }

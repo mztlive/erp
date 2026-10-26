@@ -3,7 +3,7 @@ import * as React from "react"
 import { useAppForm } from "@/components/form"
 import { isApiError } from "@/lib/api/errors"
 import { toast } from "@/components/ui/toast"
-import type { FixedSku, SupplierOfferingView } from "../types"
+import type { SupplierOfferingView } from "../types"
 import {
     batchDefaults,
     offeringBatchRow,
@@ -18,7 +18,7 @@ import {
     type TextFieldKey,
 } from "../lib/batch-supply"
 import { errorMessage, idempotencyKey } from "../lib/offering-forms"
-import { parseDelimited } from "../lib/batch-supply-import"
+import { parseDelimited } from "../lib/batch-supply-transfer"
 import {
     batchValidationMessage,
     SupplyBatchValidationError,
@@ -26,7 +26,6 @@ import {
 import {
     useReloadSupplyRowsMutation,
     useSupplyBatchMutation,
-    useSupplyFileMutation,
 } from "./use-supply-batch"
 
 /** 只保存已经发起提交的快照，按用户和操作类型隔离恢复。 */
@@ -58,25 +57,20 @@ function restore(key: string, defaults: BatchValues): BatchValues {
 }
 export function useBatchSupplyEditor({
     mode,
-    skus,
     offerings,
-    supplierId,
     userId,
     onClose,
 }: {
     mode: BatchMode
-    skus: readonly FixedSku[]
     offerings: readonly SupplierOfferingView[]
-    supplierId: string
     userId: string
     onClose: () => void
 }) {
     const mutation = useSupplyBatchMutation(mode)
-    const fileMutation = useSupplyFileMutation()
     const reloadMutation = useReloadSupplyRowsMutation()
     const storageKey = `supply-batch-v1:${userId}:${mode}`
     const [defaults] = React.useState(() =>
-        restore(storageKey, batchDefaults(mode, skus, offerings, supplierId)),
+        restore(storageKey, batchDefaults(mode, offerings)),
     )
     const form = useAppForm({
         defaultValues: defaults,
@@ -84,8 +78,7 @@ export function useBatchSupplyEditor({
             await run(false)
         },
     })
-    const busy =
-        mutation.isPending || fileMutation.isPending || reloadMutation.isPending
+    const busy = mutation.isPending || reloadMutation.isPending
     const message = (text: string) => form.setFieldValue("message", text)
     const changeRows = (rows: BatchRow[]) => form.setFieldValue("rows", rows)
     const changed = (row: BatchRow): BatchRow => ({
@@ -121,23 +114,6 @@ export function useBatchSupplyEditor({
                     : row,
             ),
         )
-    }
-    function addRows(rows: BatchRow[]) {
-        const current = form.state.values.rows
-        if (current.length + rows.length > BATCH_LIMIT) {
-            message(`每批最多 ${BATCH_LIMIT} 行，请分批添加`)
-            return
-        }
-        if (
-            rows.some((row) =>
-                current.some((existing) => existing.rowId === row.rowId),
-            )
-        ) {
-            message("所选 SKU 已在表格中，请直接编辑已有行")
-            return
-        }
-        changeRows([...current, ...rows])
-        message("")
     }
     function applyCommon(overwrite: boolean) {
         const { common, rows, applyQuantity, applyAvailabilityStatus } =
@@ -217,22 +193,12 @@ export function useBatchSupplyEditor({
                     row.quantityMode = row.availableQuantity
                         ? "provided"
                         : "unknown"
-                rows[rowIndex + i] = changed({
-                    ...row,
-                    source: mode === "create" ? "EXCEL" : row.source,
-                })
+                rows[rowIndex + i] = changed(row)
             })
             changeRows(rows)
             message(`已粘贴 ${matrix.length} 行，请核对后校验。`)
         } catch (error) {
             message(batchValidationMessage(error, "粘贴失败"))
-        }
-    }
-    async function importFile(file: File) {
-        try {
-            addRows(await fileMutation.mutateAsync(file))
-        } catch (error) {
-            message(batchValidationMessage(error, "文件导入失败"))
         }
     }
     async function reloadFailed() {
@@ -431,10 +397,8 @@ export function useBatchSupplyEditor({
         editRow,
         editCell,
         selectRow,
-        addRows,
         applyCommon,
         paste,
-        importFile,
         reloadFailed,
         run,
         samePrice: () =>

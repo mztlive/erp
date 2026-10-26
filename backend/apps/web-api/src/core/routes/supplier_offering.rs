@@ -104,17 +104,9 @@ fn read_routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
 }
 
-/// 注册独立的批量新增、修订和可供更新命令。
+/// 注册独立的批量条款修订和可供更新命令。
 fn batch_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
-        .route(
-            "/supplier-offerings/batch/create",
-            with_permission(
-                post(supplier_offering::batch::create),
-                rbac,
-                supplier_offering::batch::create_permission_key(),
-            ),
-        )
         .route(
             "/supplier-offerings/batch/revise",
             with_permission(

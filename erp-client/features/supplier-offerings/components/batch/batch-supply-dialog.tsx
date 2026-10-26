@@ -1,10 +1,8 @@
 "use client"
 
-import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { FileUpload } from "@/components/ui/file-upload"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -16,30 +14,16 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import {
-    CompanySkuSearchCombobox,
-    SupplierSearchCombobox,
-} from "@/features/entity-selectors"
-import type { FixedSku, SupplierOfferingView } from "../../types"
-import {
-    MODE_LABELS,
-    newBatchRow,
-    type BatchMode,
-} from "../../lib/batch-supply"
-import {
-    downloadFailedRows,
-    downloadSupplyTemplate,
-} from "../../lib/batch-supply-import"
-import { errorMessage } from "../../lib/offering-forms"
+import type { SupplierOfferingView } from "../../types"
+import { MODE_LABELS, type BatchMode } from "../../lib/batch-supply"
+import { downloadFailedRows } from "../../lib/batch-supply-transfer"
 import { useBatchSupplyEditor } from "../../hooks/use-batch-supply-editor"
 import { BatchCommonSettings } from "./batch-common-settings"
 import { BatchSupplyTable } from "./batch-supply-table"
 
 type Props = {
     mode: BatchMode
-    skus?: readonly FixedSku[]
     offerings?: readonly SupplierOfferingView[]
-    supplierId?: string
     onClose: () => void
 }
 export function BatchSupplyDialog(props: Props) {
@@ -49,23 +33,18 @@ export function BatchSupplyDialog(props: Props) {
 }
 function BatchSupplyEditor({
     mode,
-    skus = [],
     offerings = [],
-    supplierId = "",
     onClose,
     userId,
 }: Props & { userId: string }) {
     const editor = useBatchSupplyEditor({
         mode,
-        skus,
         offerings,
-        supplierId,
         userId,
         onClose,
     })
     const [reloadConfirm, setReloadConfirm] = React.useState(false)
     const [discard, setDiscard] = React.useState(false)
-    const [templateBusy, setTemplateBusy] = React.useState(false)
     const requestClose = () => {
         if (editor.busy) return
         const values = editor.form.state.values
@@ -97,11 +76,9 @@ function BatchSupplyEditor({
                     <DialogHeader className="shrink-0 border-b px-6 py-5">
                         <DialogTitle>{MODE_LABELS[mode]}</DialogTitle>
                         <DialogDescription>
-                            {mode === "create"
-                                ? "一个供应商，多个公司 SKU。填写公共设置后逐行核对，已有供给不会被覆盖。"
-                                : mode === "revise"
-                                  ? "按行追加价格与商业条款版本，保持当前可供数量。"
-                                  : "只调整可供状态和数量，保留现有价格与商业条款。"}
+                            {mode === "revise"
+                                ? "按行追加价格与商业条款版本，保持当前可供数量。"
+                                : "只调整可供状态和数量，保留现有价格与商业条款。"}
                         </DialogDescription>
                     </DialogHeader>
                     <editor.form.Subscribe selector={(state) => state.values}>
@@ -117,11 +94,6 @@ function BatchSupplyEditor({
                                 (row) =>
                                     row.status === "INVALID" ||
                                     row.status === "FAILED",
-                            )
-                            const frozen = values.rows.some(
-                                (row) =>
-                                    row.status === "UNKNOWN" ||
-                                    row.status === "SUCCEEDED",
                             )
                             return (
                                 <form
@@ -156,62 +128,6 @@ function BatchSupplyEditor({
                                             disabled={editor.busy}
                                             className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2"
                                         >
-                                            {mode === "create" && (
-                                                <editor.form.AppField name="supplierId">
-                                                    {(field) => (
-                                                        <div className="space-y-2">
-                                                            <label
-                                                                htmlFor="batch-supply-supplier"
-                                                                className="text-sm font-medium"
-                                                            >
-                                                                供应商
-                                                                <RequiredMark />
-                                                            </label>
-                                                            <SupplierSearchCombobox
-                                                                id="batch-supply-supplier"
-                                                                value={
-                                                                    field.state
-                                                                        .value ||
-                                                                    undefined
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) => {
-                                                                    field.handleChange(
-                                                                        value ??
-                                                                            "",
-                                                                    )
-                                                                    editor.form.setFieldValue(
-                                                                        "rows",
-                                                                        values.rows.map(
-                                                                            (
-                                                                                row,
-                                                                            ) => ({
-                                                                                ...row,
-                                                                                status: "DRAFT",
-                                                                                message:
-                                                                                    "",
-                                                                            }),
-                                                                        ),
-                                                                    )
-                                                                }}
-                                                                onBlur={
-                                                                    field.handleBlur
-                                                                }
-                                                                disabled={
-                                                                    frozen
-                                                                }
-                                                                purpose="supplier-offering"
-                                                                aria-label="批量供给供应商"
-                                                                allowClear={
-                                                                    false
-                                                                }
-                                                                className="w-full"
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </editor.form.AppField>
-                                            )}
                                             <editor.form.AppField name="changeReason">
                                                 {(field) => (
                                                     <field.TextField
@@ -231,97 +147,6 @@ function BatchSupplyEditor({
                                             />
                                         </fieldset>
                                         <div className="flex flex-wrap items-center gap-2">
-                                            {mode === "create" && (
-                                                <>
-                                                    <div className="min-w-52 flex-1">
-                                                        <CompanySkuSearchCombobox
-                                                            id="batch-supply-add-sku"
-                                                            value={undefined}
-                                                            onValueChange={() => {}}
-                                                            onItemChange={(
-                                                                item,
-                                                            ) => {
-                                                                if (item)
-                                                                    editor.addRows(
-                                                                        [
-                                                                            newBatchRow(
-                                                                                {
-                                                                                    skuId: item.productId,
-                                                                                    skuCode:
-                                                                                        item.sku ??
-                                                                                        "",
-                                                                                    skuName:
-                                                                                        item.name,
-                                                                                    specification:
-                                                                                        item.description ??
-                                                                                        "",
-                                                                                    baseUnit:
-                                                                                        "",
-                                                                                },
-                                                                            ),
-                                                                        ],
-                                                                    )
-                                                            }}
-                                                            aria-label="添加公司 SKU"
-                                                            placeholder="搜索并添加公司 SKU"
-                                                            disabled={
-                                                                editor.busy
-                                                            }
-                                                            className="w-full"
-                                                        />
-                                                    </div>
-                                                    <LoadingButton
-                                                        id="batch-supply-template"
-                                                        loading={templateBusy}
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        disabled={
-                                                            templateBusy ||
-                                                            editor.busy
-                                                        }
-                                                        onClick={async () => {
-                                                            setTemplateBusy(
-                                                                true,
-                                                            )
-                                                            try {
-                                                                await downloadSupplyTemplate()
-                                                            } catch (error) {
-                                                                editor.message(
-                                                                    errorMessage(
-                                                                        error,
-                                                                        "模板下载失败",
-                                                                    ),
-                                                                )
-                                                            } finally {
-                                                                setTemplateBusy(
-                                                                    false,
-                                                                )
-                                                            }
-                                                        }}
-                                                    >
-                                                        下载供给模板
-                                                    </LoadingButton>
-                                                    <FileUpload
-                                                        idPrefix="batch-supply-file"
-                                                        inputId="batch-supply-file"
-                                                        density="compact"
-                                                        label="导入供给资料"
-                                                        description="支持 XLSX、CSV，导入后在下方表格核对"
-                                                        accept=".xlsx,.csv"
-                                                        multiple={false}
-                                                        disabled={editor.busy}
-                                                        onFilesSelected={(
-                                                            files,
-                                                        ) => {
-                                                            if (files[0])
-                                                                void editor.importFile(
-                                                                    files[0],
-                                                                )
-                                                        }}
-                                                    />
-                                                </>
-                                            )}
                                             <span className="text-xs text-muted-foreground">
                                                 共 {values.rows.length} 行 ·
                                                 已勾选 {selected.length} 行
@@ -330,7 +155,7 @@ function BatchSupplyEditor({
                                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                                             <p>
                                                 可从 Excel
-                                                复制多格，点击对应单元格粘贴。订货编码须填写供应商使用的编码。
+                                                复制多格，点击对应的价格或数量单元格粘贴。
                                             </p>
                                             {invalid.length > 0 && (
                                                 <Button
@@ -348,76 +173,73 @@ function BatchSupplyEditor({
                                                 </Button>
                                             )}
                                         </div>
-                                        {mode !== "create" &&
-                                            invalid.length > 0 && (
-                                                <div className="rounded-lg border p-3 text-sm">
-                                                    <p>
-                                                        版本冲突时，先重新读取异常行的最新内容，再填写本次修改。已完成和待确认的行保持锁定。
-                                                    </p>
-                                                    <Button
-                                                        id="batch-supply-reload-failed"
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        disabled={editor.busy}
-                                                        onClick={() =>
-                                                            setReloadConfirm(
-                                                                true,
-                                                            )
-                                                        }
+                                        {invalid.length > 0 && (
+                                            <div className="rounded-lg border p-3 text-sm">
+                                                <p>
+                                                    版本冲突时，先重新读取异常行的最新内容，再填写本次修改。已完成和待确认的行保持锁定。
+                                                </p>
+                                                <Button
+                                                    id="batch-supply-reload-failed"
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={editor.busy}
+                                                    onClick={() =>
+                                                        setReloadConfirm(true)
+                                                    }
+                                                >
+                                                    重新读取异常行…
+                                                </Button>
+                                                {reloadConfirm && (
+                                                    <div
+                                                        className="mt-2 flex flex-wrap items-center gap-2"
+                                                        role="alert"
                                                     >
-                                                        重新读取异常行…
-                                                    </Button>
-                                                    {reloadConfirm && (
-                                                        <div
-                                                            className="mt-2 flex flex-wrap items-center gap-2"
-                                                            role="alert"
-                                                        >
-                                                            <span>
-                                                                将替换异常行的当前输入，请确认。
-                                                            </span>
-                                                            <LoadingButton
-                                                                id="batch-supply-reload-confirm"
-                                                                loading={
-                                                                    editor.reloadPending
-                                                                }
-                                                                type="button"
-                                                                size="sm"
-                                                                disabled={
-                                                                    editor.busy
-                                                                }
-                                                                onClick={async () => {
-                                                                    try {
-                                                                        await editor.reloadFailed()
-                                                                    } finally {
-                                                                        setReloadConfirm(
-                                                                            false,
-                                                                        )
-                                                                    }
-                                                                }}
-                                                            >
-                                                                确认重新读取
-                                                            </LoadingButton>
-                                                            <Button
-                                                                id="batch-supply-reload-cancel"
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                disabled={
-                                                                    editor.busy
-                                                                }
-                                                                onClick={() =>
+                                                        <span>
+                                                            将替换异常行的当前输入，请确认。
+                                                        </span>
+                                                        <LoadingButton
+                                                            id="batch-supply-reload-confirm"
+                                                            loading={
+                                                                editor.reloadPending
+                                                            }
+                                                            type="button"
+                                                            size="sm"
+                                                            disabled={
+                                                                editor.busy
+                                                            }
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await editor.reloadFailed()
+                                                                } finally {
                                                                     setReloadConfirm(
                                                                         false,
                                                                     )
                                                                 }
-                                                            >
-                                                                取消
-                                                            </Button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                                            }}
+                                                        >
+                                                            确认重新读取
+                                                        </LoadingButton>
+                                                        <Button
+                                                            id="batch-supply-reload-cancel"
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            disabled={
+                                                                editor.busy
+                                                            }
+                                                            onClick={() =>
+                                                                setReloadConfirm(
+                                                                    false,
+                                                                )
+                                                            }
+                                                        >
+                                                            取消
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                         <BatchSupplyTable
                                             editor={editor}
                                             rows={values.rows}

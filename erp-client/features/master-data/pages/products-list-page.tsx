@@ -1,9 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { BatchSupplyDialog } from "@/features/supplier-offerings/components/batch/batch-supply-dialog"
 import type { FixedSku } from "@/features/supplier-offerings/types"
 import { useRouter } from "@/lib/navigation"
 import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
@@ -61,11 +58,6 @@ function toSupplySkus(
 
 export function ProductsListPage() {
     const router = useRouter()
-    const account = useAccountProfileQuery()
-    const canBatchCreate = hasPermission(
-        account.data?.permissions,
-        "supplier_offering:create",
-    )
     const [supplyDialogFixedSku, setSupplyDialogFixedSku] =
         React.useState<FixedSku>()
     const [supplyDialogProduct, setSupplyDialogProduct] =
@@ -73,30 +65,10 @@ export function ProductsListPage() {
     const supplyOptionsQuery = useProductListSkusQuery(
         supplyDialogProduct ? [supplyDialogProduct.stableId] : [],
     )
-    const [batchSkus, setBatchSkus] = React.useState<FixedSku[] | null>(null)
-    const [selection, setSelection] = React.useState<{
-        scope: string
-        ids: Record<string, boolean>
-    }>({ scope: "", ids: {} })
     const [importOpen, setImportOpen] = React.useState(false)
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useProductListState(searchInputRef)
-    const selectionScope = state.pageRows.map((row) => row.stableId).join("|")
-    const rowSelection = selection.scope === selectionScope ? selection.ids : {}
-    const selectedProducts = state.pageRows.filter(
-        (row) => rowSelection[row.stableId],
-    )
-    const selectedSkus = selectedProducts.flatMap((product) =>
-        (state.productSkusByProduct.get(product.stableId) ?? []).map((sku) => ({
-            skuId: sku.skuId,
-            skuCode: sku.skuNo,
-            skuName: sku.skuName || product.name,
-            productName: product.name,
-            specification: sku.specification,
-            baseUnit: sku.baseUnit,
-        })),
-    )
     const exportPending =
         useIsMutating({
             predicate: (mutation) => {
@@ -254,79 +226,6 @@ export function ProductsListPage() {
                         failed={state.listQuery.isError}
                     />
                 }
-                selectionBar={
-                    canBatchCreate ? (
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <span>
-                                本页已选 {selectedProducts.length} 个商品 ·{" "}
-                                {selectedSkus.length} 个 SKU
-                            </span>
-                            <Button
-                                id="products-batch-supply-select-page"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={
-                                    state.productSkusQuery.isPending ||
-                                    state.productSkusQuery.isError
-                                }
-                                onClick={() =>
-                                    setSelection({
-                                        scope: selectionScope,
-                                        ids: Object.fromEntries(
-                                            state.pageRows
-                                                .filter(
-                                                    (row) =>
-                                                        (state.productSkusByProduct.get(
-                                                            row.stableId,
-                                                        )?.length ?? 0) > 0,
-                                                )
-                                                .map((row) => [
-                                                    row.stableId,
-                                                    true,
-                                                ]),
-                                        ),
-                                    })
-                                }
-                            >
-                                选择本页
-                            </Button>
-                            <Button
-                                id="products-batch-supply-clear"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                    setSelection({
-                                        scope: selectionScope,
-                                        ids: {},
-                                    })
-                                }
-                            >
-                                清空
-                            </Button>
-                            <Button
-                                id="products-batch-supply-create"
-                                type="button"
-                                size="sm"
-                                disabled={
-                                    !selectedSkus.length ||
-                                    state.productSkusQuery.isPending ||
-                                    state.productSkusQuery.isError ||
-                                    selectedSkus.length > 100
-                                }
-                                onClick={() => setBatchSkus(selectedSkus)}
-                            >
-                                批量添加供给
-                            </Button>
-                            {selectedSkus.length > 100 && (
-                                <span className="text-destructive">
-                                    每批最多 100 个 SKU，请减少勾选商品
-                                </span>
-                            )}
-                        </div>
-                    ) : undefined
-                }
                 tableClassName={productsListStyles.table}
                 table={
                     <DataTable
@@ -355,18 +254,6 @@ export function ProductsListPage() {
                             "skuNames",
                             "blocker",
                         ]}
-                        enableRowSelection={(row) =>
-                            canBatchCreate &&
-                            !state.productSkusQuery.isPending &&
-                            !state.productSkusQuery.isError &&
-                            (state.productSkusByProduct.get(
-                                row.original.stableId,
-                            )?.length ?? 0) > 0
-                        }
-                        rowSelection={rowSelection}
-                        onRowSelectionChange={(ids) =>
-                            setSelection({ scope: selectionScope, ids })
-                        }
                         getRowId={(row) => row.stableId}
                         rowCount={state.rows.length}
                         pagination={filters.pagination}
@@ -457,13 +344,7 @@ export function ProductsListPage() {
                     />
                 }
             />
-            {batchSkus && (
-                <BatchSupplyDialog
-                    mode="create"
-                    skus={batchSkus}
-                    onClose={() => setBatchSkus(null)}
-                />
-            )}
+
             {!state.supplyDialogSkus && (
                 <ProductSupplyDialog
                     product={state.supplyProduct}

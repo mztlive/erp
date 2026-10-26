@@ -1,9 +1,8 @@
 "use client"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { fetchSupplierOfferingsForSkus } from "../api/offerings"
-import { resolveSupplyImport, submitSupplyBatch } from "../api/batch"
+import { submitSupplyBatch } from "../api/batch"
 import type { BatchInput, BatchMode } from "../lib/batch-supply"
-import { readSupplyFile } from "../lib/batch-supply-import"
 export function useSupplyBatchMutation(mode: BatchMode) {
     const client = useQueryClient()
     return useMutation({
@@ -23,14 +22,6 @@ export function useSupplyBatchMutation(mode: BatchMode) {
         },
     })
 }
-export function useSupplyFileMutation() {
-    return useMutation({
-        mutationFn: async (file: File) =>
-            resolveSupplyImport(await readSupplyFile(file)),
-        retry: false,
-    })
-}
-
 /** 版本冲突后重新读取当前条款，用户核对后再应用批量修改。 */
 export function useReloadSupplyRowsMutation() {
     return useMutation({

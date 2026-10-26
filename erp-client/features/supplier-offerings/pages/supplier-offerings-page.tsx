@@ -62,10 +62,6 @@ export const SupplierOfferingsPage = () => {
         }
     }
     const account = useAccountProfileQuery()
-    const canBatchCreate = hasPermission(
-        account.data?.permissions,
-        "supplier_offering:create",
-    )
     const canBatchRevise =
         hasPermission(account.data?.permissions, "supplier_offering:update") &&
         hasPermission(
@@ -207,18 +203,6 @@ export const SupplierOfferingsPage = () => {
                             返回商品
                         </Button>
                     ) : null}
-                    {!state.taskMode && canBatchCreate && (
-                        <Button
-                            id="supplier-offerings-page-batch-create"
-                            type="button"
-                            variant="outline"
-                            onClick={() =>
-                                setBatch({ mode: "create", offerings: [] })
-                            }
-                        >
-                            批量添加供给
-                        </Button>
-                    )}
                     {!state.taskMode ? (
                         <Button
                             id="supplier-offerings-page-delivery-templates"
@@ -534,7 +518,6 @@ export const SupplierOfferingsPage = () => {
                 <BatchSupplyDialog
                     mode={batch.mode}
                     offerings={batch.offerings}
-                    supplierId={state.urlState.supplierId}
                     onClose={() => setBatch(null)}
                 />
             )}

@@ -1,8 +1,8 @@
-//! 三种批量操作复用单条供给用例。
+//! 批量条款与可供更新复用单条供给用例。
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_supply::dto::supplier_offering::{
-    CreateSupplierOfferingRequest, ReviseSupplierOfferingRequest, UpdateSupplierOfferingAvailabilityRequest,
+    ReviseSupplierOfferingRequest, UpdateSupplierOfferingAvailabilityRequest,
 };
 use erp_supply::service::supplier_offering::CommandPreparation;
 use persistence_core::NoTransaction;
@@ -23,82 +23,6 @@ fn replay<P, R: Serialize>(prepared: CommandPreparation<P, R>) -> Result<Option<
     match prepared {
         CommandPreparation::Apply(_) => Ok(None),
         CommandPreparation::Replay(result) => result_value(result).map(Some),
-    }
-}
-
-#[async_trait]
-impl BatchOperation for CreateSupplierOfferingRequest {
-    /// 供应商订货编码构成唯一供给身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `供应商 ID 长度:供应商 ID:去空白订货编码`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn identity(&self) -> String {
-        format!("{}:{}:{}", self.supplier_id.len(), self.supplier_id, self.supplier_sku_code.trim())
-    }
-    /// 批量创建固定一个供应商。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `supplier_id`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn supplier(&self) -> Option<&str> {
-        Some(&self.supplier_id)
-    }
-    /// 复用原新增命令键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回可改写的 `idempotency_key`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn key(&mut self) -> &mut String {
-        &mut self.idempotency_key
-    }
-    /// 使用真实创建预检，包括授权、身份和资质。读取使用 `NoTransaction`。
-    ///
-    /// # 参数
-    /// * `process` - 供给流程，提供领域服务与资质端口。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
-    /// 尚未执行时返回 `None`；已有持久化结果时返回其 JSON。
-    ///
-    /// # 错误
-    /// 创建预检失败时返回对应错误；结果无法序列化时返回 `Internal`。
-    async fn prepare(&self, process: &SupplierOfferingProcess, actor: &AuditActor) -> Result<Option<Value>> {
-        replay(
-            process
-                .domain()
-                .prepare_create(self, actor, process.qualification.as_ref(), &mut NoTransaction)
-                .await?,
-        )
-    }
-    /// 每行独立创建供给、首版条款、可供状态与审计。
-    ///
-    /// # 参数
-    /// * `process` - 供给流程。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
-    /// 返回创建结果的 JSON。
-    ///
-    /// # 错误
-    /// 单条创建失败时返回对应错误；结果无法序列化时返回 `Internal`。
-    async fn execute(self, process: &SupplierOfferingProcess, actor: &AuditActor) -> Result<Value> {
-        result_value(process.create(self, actor).await?)
     }
 }
 

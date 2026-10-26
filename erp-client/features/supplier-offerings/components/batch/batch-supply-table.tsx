@@ -3,7 +3,6 @@
 import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import {
@@ -40,11 +39,7 @@ export function BatchSupplyTable({
     const fields =
         editor.mode === "availability"
             ? [{ key: "availableQuantity" as const, label: "可供数量" }]
-            : GRID_FIELDS.filter(
-                  (field) =>
-                      editor.mode === "create" ||
-                      field.key !== "supplierSkuCode",
-              )
+            : GRID_FIELDS
     function input(
         row: BatchRow,
         key: TextFieldKey,
@@ -200,11 +195,9 @@ export function BatchSupplyTable({
                                         <p className="mt-1 text-xs text-muted-foreground">
                                             {row.skuCode}
                                         </p>
-                                        {editor.mode !== "create" && (
-                                            <p className="text-xs text-muted-foreground">
-                                                订货码：{row.supplierSkuCode}
-                                            </p>
-                                        )}
+                                        <p className="text-xs text-muted-foreground">
+                                            订货码：{row.supplierSkuCode}
+                                        </p>
                                     </TableCell>
                                     {fields.map((field) => (
                                         <TableCell
@@ -258,27 +251,6 @@ export function BatchSupplyTable({
                                         >
                                             {STATUS_LABELS[row.status]}
                                         </span>
-                                        {editor.mode === "create" &&
-                                            !locked && (
-                                                <Button
-                                                    id={`${id}-remove`}
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        editor.form.setFieldValue(
-                                                            "rows",
-                                                            rows.filter(
-                                                                (item) =>
-                                                                    item.rowId !==
-                                                                    row.rowId,
-                                                            ),
-                                                        )
-                                                    }
-                                                >
-                                                    移除
-                                                </Button>
-                                            )}
                                     </TableCell>
                                 </TableRow>
                                 <TableRow>
@@ -340,54 +312,32 @@ export function BatchSupplyTable({
                                                     id={`${id}-details`}
                                                     className="w-fit cursor-pointer text-xs text-muted-foreground"
                                                 >
-                                                    日期、费用
-                                                    {editor.mode === "create"
-                                                        ? "与可供数量"
-                                                        : ""}{" "}
-                                                    ·{" "}
+                                                    生效与失效日期 ·{" "}
                                                     {row.validFrom ||
                                                         "未填生效日期"}{" "}
                                                     —{" "}
                                                     {row.validTo || "长期有效"}
                                                 </summary>
                                                 <div className="mt-3 grid grid-cols-3 gap-3">
-                                                    {EXTRA_FIELDS.filter(
-                                                        (field) =>
-                                                            editor.mode ===
-                                                                "create" ||
-                                                            field.key !==
-                                                                "supplierProductCode",
-                                                    ).map((field) => (
-                                                        <label
-                                                            key={field.key}
-                                                            htmlFor={`${id}-${toAutomationIdSegment(field.key)}`}
-                                                            className="space-y-1 text-xs"
-                                                        >
-                                                            {field.label}
-                                                            {field.key ===
-                                                            "validFrom" ? (
-                                                                <RequiredMark />
-                                                            ) : null}
-                                                            {input(
-                                                                row,
-                                                                field.key,
-                                                                field.label,
-                                                            )}
-                                                        </label>
-                                                    ))}
-                                                    {editor.mode ===
-                                                        "create" && (
-                                                        <label
-                                                            htmlFor={`${id}-availablequantity`}
-                                                            className="space-y-1 text-xs"
-                                                        >
-                                                            可供数量（空白表示未提供）
-                                                            {input(
-                                                                row,
-                                                                "availableQuantity",
-                                                                "可供数量",
-                                                            )}
-                                                        </label>
+                                                    {EXTRA_FIELDS.map(
+                                                        (field) => (
+                                                            <label
+                                                                key={field.key}
+                                                                htmlFor={`${id}-${toAutomationIdSegment(field.key)}`}
+                                                                className="space-y-1 text-xs"
+                                                            >
+                                                                {field.label}
+                                                                {field.key ===
+                                                                "validFrom" ? (
+                                                                    <RequiredMark />
+                                                                ) : null}
+                                                                {input(
+                                                                    row,
+                                                                    field.key,
+                                                                    field.label,
+                                                                )}
+                                                            </label>
+                                                        ),
                                                     )}
                                                     <label
                                                         htmlFor={`${id}-same-price`}

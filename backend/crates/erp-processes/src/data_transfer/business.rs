@@ -315,11 +315,37 @@ fn permissions(kind: TransferKind, input: &Value) -> Result<Vec<&'static str>> {
         InquiryPreview => vec!["sales_inquiry:import"],
         InquiryCreationPreview => vec!["sales_inquiry:create", "sales_inquiry:import", "sellable_sku:list"],
         SupplyBatch => vec![match input["mode"].as_str() {
-            Some("create") => "supplier_offering:create",
             Some("revise") => "supplier_offering:update",
             Some("availability") => "supplier_offering_availability:update",
-            _ => return Err(Error::ValidationError("供给批量模式无效".into())),
+            _ => {
+                return Err(Error::ValidationError(
+                    "仅支持批量调价或更新可供情况，批量建档请使用商品导入".into(),
+                ));
+            },
         }],
         PortalBatch => vec![],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn supply_batch_permissions_allow_maintenance_and_reject_creation() {
+        for (mode, permission) in [
+            ("revise", "supplier_offering:update"),
+            ("availability", "supplier_offering_availability:update"),
+        ] {
+            assert_eq!(
+                permissions(TransferKind::SupplyBatch, &json!({ "mode": mode })).unwrap(),
+                vec![permission]
+            );
+        }
+        for input in [json!({ "mode": "create" }), json!({ "mode": "invalid" }), json!({})] {
+            assert!(matches!(permissions(TransferKind::SupplyBatch, &input), Err(Error::ValidationError(_))));
+        }
+    }
 }

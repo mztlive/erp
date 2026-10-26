@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import type { FixedSku, SupplierOfferingView } from "../types"
+import type { SupplierOfferingView } from "../types"
 import {
     registerSupplyDefaults,
     registerSupplySchema,
@@ -11,7 +11,7 @@ import {
     rateFromPercentage,
 } from "./offering-forms"
 
-export type BatchMode = "create" | "revise" | "availability"
+export type BatchMode = "revise" | "availability"
 export type RowStatus =
     | "DRAFT"
     | "READY"
@@ -33,11 +33,9 @@ export type BatchRow = SupplyFields & {
     status: RowStatus
     message: string
     key: string
-    source: "MANUAL" | "EXCEL"
     frozen: BatchInput | null
 }
 export type BatchValues = {
-    supplierId: string
     changeReason: string
     applyAvailabilityStatus: boolean
     applyQuantity: boolean
@@ -55,7 +53,6 @@ export type BatchResult = {
 }
 export const BATCH_LIMIT = 100
 export const MODE_LABELS: Record<BatchMode, string> = {
-    create: "批量添加供给",
     revise: "批量调价与条款",
     availability: "批量更新可供情况",
 }
@@ -68,33 +65,16 @@ export const STATUS_LABELS: Record<RowStatus, string> = {
     UNKNOWN: "待确认结果",
 }
 
-export function newBatchRow(sku: FixedSku): BatchRow {
+export function offeringBatchRow(item: SupplierOfferingView): BatchRow {
     return {
-        ...registerSupplyDefaults(sku.skuId),
-        rowId: sku.skuId,
-        skuCode: sku.skuCode,
-        skuName: sku.skuName,
-        offeringId: "",
-        expectedRevision: null,
-        expectedVersion: null,
-        capabilities: [],
+        ...registerSupplyDefaults(item.sku_id),
+        skuCode: item.sku_no ?? "",
+        skuName: item.sku_name ?? "商品规格",
         selected: true,
         status: "DRAFT",
         message: "",
         key: idempotencyKey("batch-supply"),
-        source: "MANUAL",
         frozen: null,
-    }
-}
-export function offeringBatchRow(item: SupplierOfferingView): BatchRow {
-    return {
-        ...newBatchRow({
-            skuId: item.sku_id,
-            skuCode: item.sku_no ?? "",
-            skuName: item.sku_name ?? "商品规格",
-            specification: item.specification ?? "",
-            baseUnit: "",
-        }),
         rowId: item.id,
         offeringId: item.id,
         supplierId: item.supplier_id,
@@ -117,24 +97,18 @@ export function offeringBatchRow(item: SupplierOfferingView): BatchRow {
 }
 export function batchDefaults(
     mode: BatchMode,
-    skus: readonly FixedSku[],
     offerings: readonly SupplierOfferingView[],
-    supplierId: string,
 ): BatchValues {
     const common = registerSupplyDefaults()
     // 未填写的公共设置不覆盖行值；日期、数量均需用户明确选择。
     common.minimumQuantity = ""
     common.validFrom = ""
     return {
-        supplierId,
         changeReason: MODE_LABELS[mode],
         applyAvailabilityStatus: false,
         applyQuantity: false,
         common,
-        rows:
-            mode === "create"
-                ? skus.map(newBatchRow)
-                : offerings.map(offeringBatchRow),
+        rows: offerings.map(offeringBatchRow),
         message: "",
     }
 }
@@ -148,7 +122,6 @@ export function rowErrors(
     if (lockedRow(row)) return ""
     const value = {
         ...row,
-        supplierId: mode === "create" ? values.supplierId : row.supplierId,
         changeReason: values.changeReason,
     }
     const parsed =
@@ -189,16 +162,6 @@ export function rowErrors(
         !row.availableQuantity.trim()
     )
         errors.push("请填写数量或选择数量未提供")
-    if (
-        mode === "create" &&
-        values.rows.some(
-            (other) =>
-                other.rowId !== row.rowId &&
-                other.selected &&
-                other.supplierSkuCode.trim() === row.supplierSkuCode.trim(),
-        )
-    )
-        errors.push("供应商订货编码在本批重复")
     return [...new Set(errors)].join("；")
 }
 export function rowInput(
@@ -236,29 +199,17 @@ export function rowInput(
         valid_from: row.validFrom,
         valid_to: row.validityMode === "dated" ? row.validTo : null,
     }
-    if (mode === "revise")
-        return {
-            offering_id: row.offeringId,
-            command: {
-                ...base,
-                terms,
-                expected_revision_no: row.expectedRevision,
-            },
-        }
     return {
-        ...base,
-        ...availability,
-        terms,
-        sku_id: row.skuId,
-        supplier_id: values.supplierId,
-        supplier_sku_code: row.supplierSkuCode.trim(),
-        supplier_product_code: row.supplierProductCode.trim() || null,
-        source_type: row.source,
+        offering_id: row.offeringId,
+        command: {
+            ...base,
+            terms,
+            expected_revision_no: row.expectedRevision,
+        },
     }
 }
 
 export type TextFieldKey =
-    | "supplierSkuCode"
     | "dropshipPrice"
     | "bulkPrice"
     | "inputTaxPercentage"
@@ -266,16 +217,13 @@ export type TextFieldKey =
     | "validFrom"
     | "validTo"
     | "availableQuantity"
-    | "supplierProductCode"
 export const GRID_FIELDS: { key: TextFieldKey; label: string }[] = [
-    { key: "supplierSkuCode", label: "供应商订货编码" },
     { key: "dropshipPrice", label: "代发含税价" },
     { key: "bulkPrice", label: "集采含税价" },
     { key: "inputTaxPercentage", label: "税率 %" },
     { key: "minimumQuantity", label: "集采起订量" },
 ]
 export const EXTRA_FIELDS: { key: TextFieldKey; label: string }[] = [
-    { key: "supplierProductCode", label: "供应商商品编码" },
     { key: "validFrom", label: "生效日期" },
     { key: "validTo", label: "失效日期（留空长期有效）" },
 ]

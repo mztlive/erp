@@ -4,7 +4,7 @@ use base64::engine::general_purpose::STANDARD;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_supply::dto::supplier_offering::{
-    CreateSupplierOfferingRequest, ReviseSupplierOfferingRequest, UpdateSupplierOfferingAvailabilityRequest,
+    ReviseSupplierOfferingRequest, UpdateSupplierOfferingAvailabilityRequest,
 };
 use persistence_core::NoTransaction;
 use serde::de::DeserializeOwned;
@@ -132,9 +132,6 @@ impl BusinessTransfers {
         let mut request = input.clone();
         request["validate_only"] = json!(validate);
         let result = match required(input, "mode")? {
-            "create" => {
-                service.batch(decode::<BatchRequest<CreateSupplierOfferingRequest>>(&request)?, actor).await?
-            },
             "revise" => {
                 service
                     .batch(decode::<BatchRequest<Targeted<ReviseSupplierOfferingRequest>>>(&request)?, actor)
@@ -150,7 +147,11 @@ impl BusinessTransfers {
                     )
                     .await?
             },
-            _ => return Err(Error::ValidationError("未知的批量供给模式".into())),
+            _ => {
+                return Err(Error::ValidationError(
+                    "仅支持批量调价或更新可供情况，批量建档请使用商品导入".into(),
+                ));
+            },
         };
         serde_json::to_value(result).map_err(json_error)
     }

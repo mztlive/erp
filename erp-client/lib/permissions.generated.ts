@@ -5792,16 +5792,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/supplier-offerings/batch/create",
-                description: "新增供应商供给",
-                permission: {
-                    resource: "supplier_offering",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
                 path: "/admin/supplier-offerings/batch/revise",
                 description: "保存供应商供给条款",
                 permission: {
