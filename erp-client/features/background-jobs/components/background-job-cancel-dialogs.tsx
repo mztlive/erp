@@ -78,14 +78,14 @@ export function BackgroundJobsStopAllDialog({
                 <AlertDialogHeader>
                     <AlertDialogTitle>停止并取消所有任务</AlertDialogTitle>
                     <AlertDialogDescription>
-                        将停止并取消当前全部未完成的后台任务，包括他人创建的任务。已经完成的部分不受影响，没有进行中的任务时不做任何处理。
+                        将取消当前允许取消的未完成任务，包括他人创建的任务。已开始的文件导入会继续执行；已经完成的部分不受影响。
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 {result ? (
                     <p className="text-sm text-muted-foreground" role="status">
                         已取消 {result.cancelled_count} 个任务
                         {result.skipped_count > 0
-                            ? `，跳过 ${result.skipped_count} 个已结束任务`
+                            ? `，跳过 ${result.skipped_count} 个已结束或不可取消的任务`
                             : ""}
                         {result.failed_count > 0
                             ? `，${result.failed_count} 个取消失败，可重试`

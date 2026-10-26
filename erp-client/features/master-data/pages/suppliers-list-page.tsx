@@ -25,7 +25,7 @@ import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-ch
 import { useSupplierListColumns } from "@/features/master-data/hooks/use-supplier-list-columns"
 import { useSupplierListState } from "@/features/master-data/hooks/use-supplier-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import type { BackgroundJobView } from "@/features/background-jobs/api"
+import type { BackgroundJobView } from "@/lib/background-jobs"
 import { launchNavDelivery } from "@/lib/nav-delivery"
 
 /** 导入动作按钮与投递落点：动作 id 同时是动画起点。 */

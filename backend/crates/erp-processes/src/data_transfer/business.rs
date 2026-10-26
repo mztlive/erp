@@ -14,7 +14,7 @@ use storage::S3Storage;
 
 use super::csv::render as render_csv;
 use super::master::rows as master_rows;
-use super::{TransferHandler, TransferKind, TransferResult};
+use super::{TransferContext, TransferHandler, TransferKind, TransferResult};
 use crate::{Error, Result};
 
 /// 组合根将固定业务查询接回原有 Service/ReadModel，不允许自由查询数据库或 URL。
@@ -192,6 +192,25 @@ impl BusinessTransfers {
 }
 #[async_trait]
 impl TransferHandler for BusinessTransfers {
+    async fn context(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        result: Option<&Value>,
+        actor: &AuditActor,
+    ) -> Result<TransferContext> {
+        self.task_context(kind, input, result, actor).await
+    }
+
+    async fn recover(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<Value> {
+        self.access(kind, input, actor).await?;
+        match kind {
+            TransferKind::SupplyBatch => self.supply_batch(input, actor, true).await,
+            TransferKind::PortalBatch => self.portal_recover(input, actor).await,
+            _ => Err(Error::ValidationError("该任务不支持批量结果核对".into())),
+        }
+    }
+
     async fn prepare(&self, kind: TransferKind, mut input: Value, actor: &AuditActor) -> Result<Value> {
         self.access(kind, &input, actor).await?;
         if !kind.is_export() {

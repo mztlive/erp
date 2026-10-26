@@ -35,6 +35,8 @@ pub fn routes(state: AppState) -> Router<AppState> {
                 .layer(DefaultBodyLimit::max(76 * 1024 * 1024)),
         )
         .route("/data-transfers/{id}", get(transfers::portal_status))
+        .route("/data-transfers/{id}/context", get(transfers::portal_context))
+        .route("/data-transfers/{id}/recover", post(transfers::portal_recover))
         .route("/data-transfers/{id}/result", get(transfers::portal_result))
         .route("/password", post(auth::password))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate_portal));

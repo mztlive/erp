@@ -1,5 +1,8 @@
 //! 持久化导入导出任务：输入密文归档、CAS 认领、心跳、受控结果读取。
 mod business;
+mod context;
+mod context_input;
+mod context_view;
 mod csv;
 mod execute;
 mod imports;
@@ -8,6 +11,7 @@ mod outcome;
 mod portal;
 mod quote_import;
 mod quotes;
+mod recovery;
 mod workbook;
 mod workbook_access;
 pub use business::{BusinessTransfers, TransferReader};
@@ -19,6 +23,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+pub use context_view::{TransferContext, TransferResumeState};
 use erp_party::SensitiveDataCodec;
 use mongodb::Database;
 use serde_json::Value;
@@ -60,6 +65,28 @@ pub trait TransferHandler: Send + Sync {
         authorization: &Value,
         actor: &AuditActor,
     ) -> Result<()>;
+    /// 返回当前权限允许公开的业务续办上下文。
+    /// # 参数
+    /// 固定类型、私有输入、可选原结果和当前认证人。
+    /// # 返回
+    /// 白名单业务引用、真实续办状态与有效期。
+    /// # 错误
+    /// 身份、权限或业务读取失败时拒绝。
+    async fn context(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        result: Option<&Value>,
+        actor: &AuditActor,
+    ) -> Result<TransferContext>;
+    /// 仅查询原批量命令回执，不启动新的业务写入。
+    /// # 参数
+    /// 批量类型、原私有输入和当前认证人。
+    /// # 返回
+    /// 当前已确认回执及仍待确认的结果。
+    /// # 错误
+    /// 非批量任务、越权或恢复查询失败时拒绝。
+    async fn recover(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<Value>;
 }
 
 /// 可由独立有界 worker 与 HTTP 入口共享的导入导出流程。

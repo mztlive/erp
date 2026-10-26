@@ -38,6 +38,33 @@ impl BackgroundJobInput {
 }
 
 impl BulkJobRepository<'_> {
+    /// 严格读取已有私有记录；损坏或格式不符时明确失败。
+    /// # 参数
+    /// 任务身份、固定版本格式及当前执行器。
+    /// # 返回
+    /// 没有记录时返回空；有效记录返回完整有界字节。
+    /// # 错误
+    /// 数据库失败或已有记录格式、类型及容量损坏时返回错误。
+    pub async fn strict_job_input(
+        &self,
+        job_id: &BackgroundJobId,
+        format: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Vec<u8>>> {
+        let record = mongo_ops::find_one(
+            &self.db.collection::<Document>(<Database as BulkJobExt>::BACKGROUND_JOB_INPUTS),
+            doc! { "_id": job_id.as_ref() },
+            executor,
+        )
+        .await?;
+        record
+            .map(|record| {
+                input_bytes(record, format)
+                    .ok_or_else(|| Error::ValidationError("后台任务私有上下文格式或内容损坏".into()))
+            })
+            .transpose()
+    }
+
     /// 在任务登记的原事务中保存私有输入，不另开事务或覆盖既有记录。
     ///
     /// # 参数

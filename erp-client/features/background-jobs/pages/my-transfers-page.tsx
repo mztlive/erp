@@ -1,25 +1,16 @@
 "use client"
 import { useState } from "react"
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { apiGet } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api/errors"
-import {
-    readTransferResult,
-    downloadTransfer,
-    type TransferJob,
-} from "@/lib/data-transfer"
+import type { BackgroundJobView } from "../api"
+import { MyTransferPreview } from "../components/my-transfer-preview"
+import { JOB_STATUS_LABELS, backgroundJobIdentity } from "../labels"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-const labels: Record<string, string> = {
-    pending: "排队中",
-    running: "处理中",
-    succeeded: "处理完成",
-    partially_succeeded: "部分完成",
-    failed: "处理失败",
-    cancelled: "已取消",
-}
 export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
     const [page, setPage] = useState(1)
+    const [previewId, setPreviewId] = useState<string | null>(null)
     const query = useQuery({
         queryKey: [
             portal ? "supplier-portal" : "account",
@@ -27,7 +18,7 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
             page,
         ],
         queryFn: () =>
-            apiGet<{ items: TransferJob[]; total: number }>(
+            apiGet<{ items: BackgroundJobView[]; total: number }>(
                 portal
                     ? "/supplier-portal/data-transfers"
                     : "/account/data-transfers",
@@ -40,10 +31,6 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
                 portal ? { session: "supplier-portal" } : undefined,
             ),
         refetchInterval: 5000,
-    })
-    const download = useMutation({
-        mutationFn: async (id: string) =>
-            downloadTransfer(await readTransferResult(id, portal)),
     })
     return (
         <main className="mx-auto max-w-5xl space-y-4 p-6">
@@ -58,11 +45,6 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
                     {getErrorMessage(query.error, "任务读取失败，请重试")}
                 </p>
             )}
-            {download.isError && (
-                <p className="text-destructive">
-                    {getErrorMessage(download.error, "下载失败，请重试")}
-                </p>
-            )}
             <Button
                 id="my-transfers-refresh"
                 variant="outline"
@@ -70,7 +52,9 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
             >
                 刷新
             </Button>
-            {query.data?.items.length === 0 && <p>暂无文件任务。</p>}
+            {!query.isError && query.data?.items.length === 0 && (
+                <p>暂无文件任务。</p>
+            )}
             <ul className="space-y-3">
                 {query.data?.items.map((job) => (
                     <li
@@ -79,11 +63,11 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
                     >
                         <div>
                             <p>
-                                {job.job_no} ·{" "}
-                                {labels[job.status.toLowerCase()] ?? "处理中"}
+                                {backgroundJobIdentity(job).title} ·{" "}
+                                {JOB_STATUS_LABELS[job.status]}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                                已处理 {job.processed_count} / {job.total_count}
+                                {backgroundJobIdentity(job).number}
                             </p>
                             {job.error_summary && (
                                 <p className="text-sm text-destructive">
@@ -91,15 +75,13 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
                                 </p>
                             )}
                         </div>
-                        {job.finished_at && job.result_file_asset_id && (
-                            <Button
-                                id={`my-transfers-download-${toAutomationIdSegment(job.id)}`}
-                                disabled={download.isPending}
-                                onClick={() => download.mutate(job.id)}
-                            >
-                                下载结果
-                            </Button>
-                        )}
+                        <Button
+                            id={`my-transfers-open-${toAutomationIdSegment(job.id)}`}
+                            variant="outline"
+                            onClick={() => setPreviewId(job.id)}
+                        >
+                            查看结果与后续操作
+                        </Button>
                     </li>
                 ))}
             </ul>
@@ -120,6 +102,11 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
                     下一页
                 </Button>
             </div>
+            <MyTransferPreview
+                jobId={previewId}
+                portal={portal}
+                onClose={() => setPreviewId(null)}
+            />
         </main>
     )
 }

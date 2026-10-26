@@ -8,7 +8,7 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
     pending: "等待执行",
     running: "执行中",
     partially_succeeded: "部分成功",
-    succeeded: "已完成",
+    succeeded: "执行完成",
     failed: "执行失败",
     cancelled: "已取消",
 }
@@ -28,6 +28,9 @@ export const JOB_DOMAIN_LABELS: Record<string, string> = {
     PRODUCT_IMPORT: "商品导入",
     DATA_TRANSFER: "导入导出",
     SUPPLIER_IMPORT: "供应商导入",
+    SUPPLIER_HEALTH_CHECK: "供应商接口检测",
+    SUPPLIER_CATALOG_SYNC: "供应商目录同步",
+    LEGACY_IMPORT: "历史期初导入",
     SALES_ORDER_EXPORT: "销售单导出",
     INVENTORY_LEDGER_EXPORT: "库存台账导出",
     supplier_fulfillment_order_export: "供应商订单导出",
@@ -64,7 +67,7 @@ export function backgroundJobDomainLabel(
     jobType: string | null,
 ): string {
     if (domainJobType) {
-        return JOB_DOMAIN_LABELS[domainJobType] ?? domainJobType
+        return JOB_DOMAIN_LABELS[domainJobType] ?? "其他后台任务"
     }
     if (jobType) return JOB_TYPE_LABELS[jobType] ?? "后台任务"
     return "后台任务"
@@ -116,6 +119,18 @@ export function isJobActive(
         status === "pending" ||
         status === "running" ||
         status === "partially_succeeded"
+    )
+}
+
+/** 文件导入开始后不可取消，其他任务沿用服务端的活动状态约束。 */
+export function canCancelJob(job: BackgroundJobView): boolean {
+    return (
+        isJobActive(job.status, job.finished_at) &&
+        !(
+            job.domain_job_type === "DATA_TRANSFER" &&
+            job.job_type === "import" &&
+            job.status !== "pending"
+        )
     )
 }
 

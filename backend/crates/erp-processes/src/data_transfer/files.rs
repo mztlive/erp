@@ -142,6 +142,18 @@ impl DataTransferProcess {
         }
         result.metadata["completed_at"] = json!(job.finished_at);
         result.metadata["expires_at"] = json!(job.result_expires_at);
+        let decoded = if result.content_type == "application/json" {
+            Some(
+                serde_json::from_slice(&result.bytes()?)
+                    .map_err(|_| Error::Internal("任务结果格式无效".into()))?,
+            )
+        } else {
+            None
+        };
+        let compact = self.context_input(&job).await?;
+        let context = self.handler.context(compact.kind, &compact.input, decoded.as_ref(), actor).await?;
+        result.metadata["kind"] = json!(source.kind);
+        result.metadata["context"] = context.context;
         Ok(result)
     }
 }

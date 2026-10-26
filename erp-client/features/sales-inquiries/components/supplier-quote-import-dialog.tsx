@@ -58,13 +58,16 @@ export function SupplierQuoteImportButton({
             if (freshQuotes.error) throw freshQuotes.error
             if (freshOfferings.error) throw freshOfferings.error
             if (details.error) throw details.error
-            const result = await transferJson<SupplierQuoteImportPreview>("supplier_quote_preview", {
-                inquiry_id: inquiry.id,
-                task_id: task.id,
-                expected_version: inquiry.version,
-                task_version: task.version,
-                files: await Promise.all(files.map(transferFileInput)),
-            })
+            const result = await transferJson<SupplierQuoteImportPreview>(
+                "supplier_quote_preview",
+                {
+                    inquiry_id: inquiry.id,
+                    task_id: task.id,
+                    expected_version: inquiry.version,
+                    task_version: task.version,
+                    files: await Promise.all(files.map(transferFileInput)),
+                },
+            )
             return {
                 ...result,
                 requirement: inquiry.requirement_version,

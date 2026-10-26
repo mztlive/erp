@@ -107,6 +107,39 @@ pub struct BackgroundJobItem {
 }
 
 impl BackgroundJobItem {
+    /// 将已有的结果待确认项按原命令持久化回执确认成功。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 原待确认项更新为成功，其他结果字段保持不变。
+    /// # 错误
+    /// 只有失败且标记为结果待确认的项可被确认。
+    pub fn confirm_unknown_success(&mut self) -> Result<()> {
+        if self.status != Some(ItemStatus::Failed) || self.result_code.as_deref() != Some("outcome_unknown") {
+            return Err(Error::from("只有结果待确认项允许通过原回执确认成功"));
+        }
+        self.status = Some(ItemStatus::Success);
+        self.result_code = None;
+        self.result_summary = Some("已核对原操作结果，处理成功".into());
+        Ok(())
+    }
+
+    /// 按原命令封存的确定拒绝回执解除结果待确认标记。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 保留失败状态，将原因改为已确认执行失败。
+    /// # 错误
+    /// 原项目不是结果待确认时拒绝覆盖已有结果。
+    pub fn confirm_unknown_failure(&mut self) -> Result<()> {
+        if self.status != Some(ItemStatus::Failed) || self.result_code.as_deref() != Some("outcome_unknown") {
+            return Err(Error::from("只有结果待确认项允许通过原拒绝回执确认失败"));
+        }
+        self.result_code = Some("row_failed".into());
+        self.result_summary = Some("已核对原操作结果，执行失败".into());
+        Ok(())
+    }
+
     /// 创建逐项记录。
     ///
     /// 完成可选字段的校验与规范化（trim、长度上限），并强制两条关联一致性：

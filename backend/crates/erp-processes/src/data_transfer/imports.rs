@@ -122,7 +122,12 @@ impl BusinessTransfers {
             authorization,
         )
     }
-    async fn supply_batch(&self, input: &Value, actor: &AuditActor, validate: bool) -> Result<Value> {
+    pub(super) async fn supply_batch(
+        &self,
+        input: &Value,
+        actor: &AuditActor,
+        validate: bool,
+    ) -> Result<Value> {
         let service = scoped_offering_process(self.db.clone(), self.rbac.clone());
         let mut request = input.clone();
         request["validate_only"] = json!(validate);

@@ -5,6 +5,19 @@ use erp_core::{Error, Result};
 use super::{BackgroundJob, JobStatus, JobType};
 
 impl BackgroundJob {
+    /// 返回当前任务是否允许请求取消。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 未结束且满足领域取消约束时为真。
+    /// # 错误
+    /// 无。
+    pub fn cancellation_allowed(&self) -> bool {
+        self.finished_at.is_none()
+            && matches!(self.status, JobStatus::Pending | JobStatus::Running | JobStatus::PartiallySucceeded)
+            && self.ensure_transfer_cancellable().is_ok()
+    }
+
     pub(super) fn ensure_transfer_cancellable(&self) -> Result<()> {
         if self.domain_job_type.as_deref() == Some("DATA_TRANSFER")
             && self.job_type == JobType::Import

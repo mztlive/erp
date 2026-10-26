@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button"
 import type { BackgroundJobView } from "../api"
 import type { useBackgroundJobItemsQuery } from "../queries"
 import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
-import { TransferResult } from "./transfer-result"
-import { SupplierImportFailures } from "./supplier-import-failures"
+import {
+    DirectImportItemIdentity,
+    directImportItemResultLabel,
+} from "./direct-import-result"
 
 type BackgroundJobItemResultsProps = {
     previewJob: BackgroundJobView
@@ -20,7 +22,6 @@ type BackgroundJobItemResultsProps = {
 /** 逐项结果、结果分页与原提交人的供应商待处理行下载。 */
 export function BackgroundJobItemResults({
     previewJob,
-    currentUserId,
     itemsPage,
     onPageChange,
     itemsQuery,
@@ -28,13 +29,6 @@ export function BackgroundJobItemResults({
     return (
         <section className="space-y-3">
             <h3 className="font-medium">逐项结果</h3>
-            {previewJob.domain_job_type === "DATA_TRANSFER" &&
-                Boolean(
-                    previewJob.finished_at && previewJob.result_file_asset_id,
-                ) &&
-                previewJob.requested_by === currentUserId && (
-                    <TransferResult jobId={previewJob.id} />
-                )}
             {(itemsQuery.data?.total ?? 0) > 100 && (
                 <div className="mt-3 flex items-center justify-end gap-3">
                     <Button
@@ -61,21 +55,10 @@ export function BackgroundJobItemResults({
                     </Button>
                 </div>
             )}
-            {previewJob.domain_job_type === "SUPPLIER_IMPORT" &&
-                previewJob.finished_at !== null &&
-                previewJob.requested_by === currentUserId &&
-                (previewJob.failed_count > 0 ||
-                    previewJob.processed_count < previewJob.total_count) && (
-                    <div className="mt-4">
-                        <SupplierImportFailures
-                            key={previewJob.id}
-                            jobId={previewJob.id}
-                        />
-                    </div>
-                )}
             {itemsQuery.isPending ? (
                 <p className="text-muted-foreground">正在加载逐项结果…</p>
-            ) : (itemsQuery.data?.items.length ?? 0) === 0 ? (
+            ) : itemsQuery.isError ? null : (itemsQuery.data?.items.length ??
+                  0) === 0 ? (
                 <p className="text-muted-foreground">暂无逐项结果。</p>
             ) : (
                 <ul className="space-y-2">
@@ -88,22 +71,26 @@ export function BackgroundJobItemResults({
                                         : `第 ${item.item_no} 项`}
                                 </span>
                                 <span className="text-xs">
-                                    {item.result_code === "outcome_unknown"
-                                        ? "结果待确认"
-                                        : ({
-                                              success: "成功",
-                                              skipped: "跳过",
-                                              failed: "执行失败",
-                                          }[item.status ?? ""] ?? "待执行")}
+                                    {previewJob.domain_job_type ===
+                                        "PRODUCT_IMPORT" ||
+                                    previewJob.domain_job_type ===
+                                        "SUPPLIER_IMPORT"
+                                        ? directImportItemResultLabel(item)
+                                        : item.result_code === "outcome_unknown"
+                                          ? "结果待核对"
+                                          : ({
+                                                success: "执行完成",
+                                                skipped: "已跳过",
+                                                failed: "执行失败",
+                                            }[item.status ?? ""] ?? "未处理")}
                                 </span>
                             </div>
-                            {item.object_type === "supplier_import_row" && (
-                                <p className="mt-1 font-medium">
-                                    {item.object_id}
-                                </p>
-                            )}
+                            <DirectImportItemIdentity item={item} />
                             <p className="mt-1 text-body-compact">
-                                {item.result_summary || "排队执行中"}
+                                {item.result_summary ||
+                                    (previewJob.finished_at
+                                        ? "未处理"
+                                        : "等待处理")}
                             </p>
                         </li>
                     ))}

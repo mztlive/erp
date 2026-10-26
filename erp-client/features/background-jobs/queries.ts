@@ -11,15 +11,28 @@ import {
     type BackgroundJobListParams,
 } from "@/features/background-jobs/api"
 import { isJobActive } from "@/features/background-jobs/labels"
+import { readTransferContext } from "@/lib/data-transfer"
 
-export const backgroundJobKeys = {
-    all: ["background-jobs"] as const,
-    list: (params: BackgroundJobListParams) =>
-        [...backgroundJobKeys.all, "list", params] as const,
-    detail: (id: string) => [...backgroundJobKeys.all, "detail", id] as const,
-    items: (id: string, page = 1) =>
-        [...backgroundJobKeys.all, "items", id, page] as const,
+export function useDataTransferContextQuery(
+    jobId: string,
+    portal = false,
+    enabled = true,
+) {
+    return useQuery({
+        queryKey: ["data-transfer-context", portal, jobId],
+        queryFn: () => readTransferContext(jobId, portal),
+        enabled: enabled && Boolean(jobId),
+        staleTime: 0,
+        gcTime: 0,
+        retry: false,
+        refetchOnWindowFocus: "always",
+        refetchInterval: (query) =>
+            query.state.data?.resume_state === "pending" ? 2000 : false,
+    })
 }
+
+import { backgroundJobKeys } from "@/lib/background-jobs"
+export { backgroundJobKeys } from "@/lib/background-jobs"
 
 /** 菜单角标使用服务端授权范围内的总数，不对当前页任务求和。 */
 export function useBackgroundJobActiveCountQuery(enabled: boolean) {

@@ -4,6 +4,6 @@ import { toQuery } from "../api/scoped-view"
 export function exportSupplierScopeCsv(query: SupplierScopeQuery) {
     return transferCsv("supplier_payables", {
         ...toQuery(query),
-        view: query.view,
+        view: query.view === "purchase_invoice" ? "allocation" : query.view,
     })
 }

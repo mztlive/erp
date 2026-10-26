@@ -48,6 +48,60 @@ export type TransferFile = {
     content_base64: string
     metadata?: Record<string, unknown>
 }
+
+/** 原任务的受控业务上下文；不包含上传文件或调用方指定的跳转地址。 */
+export type DataTransferContext = {
+    kind: TransferKind
+    context: {
+        inquiry_id?: string
+        customer_id?: string
+        task_id?: string
+        expected_version?: number
+        task_version?: number
+        requirement_version?: number
+        feedback_round?: number
+        inquiry_no?: string
+        file_name?: string
+        file_names?: string[]
+        mode?: string
+        resource?: string
+        view?: string
+    }
+    can_cancel: boolean
+    can_recover: boolean
+    resume_state:
+        | "not_applicable"
+        | "pending"
+        | "ready"
+        | "confirmed"
+        | "invalid"
+        | "stale"
+        | "expired"
+        | "unavailable"
+    resume_reason: string | null
+    preview_expires_at: number | null
+}
+
+export function readTransferContext(id: string, portal = false) {
+    return apiGet<DataTransferContext>(
+        `${base(portal)}/${encodeURIComponent(id)}/context`,
+        undefined,
+        options(portal),
+    )
+}
+
+/** 仅按原任务查询结果待确认行的回执，不提交新的业务写入。 */
+export function recoverDataTransfer(id: string, portal = false) {
+    return apiPost<TransferFile>(
+        `${base(portal)}/${encodeURIComponent(id)}/recover`,
+        {},
+        options(portal),
+    )
+}
+
+export function decodeTransferJson<T>(file: TransferFile): T {
+    return JSON.parse(transferText(file)) as T
+}
 const options = (portal: boolean) =>
     portal ? { session: "supplier-portal" as const } : undefined
 const base = (portal: boolean) =>

@@ -183,6 +183,7 @@ export function useInquiryCommand(userId: string, scope: string) {
             body: Record<string, unknown>,
             method: "POST" | "PUT" = "POST",
             keyField: "command_key" | "idempotency_key" = "command_key",
+            commandKey?: string,
         ): Promise<T> {
             if (!ready) throw new Error("正在恢复上次操作，请稍候。")
             if (client.isMutating(mutationFilters) > 0)
@@ -192,7 +193,10 @@ export function useInquiryCommand(userId: string, scope: string) {
             return (await mutation.mutateAsync({
                 path,
                 method,
-                body: { ...body, [keyField]: `inquiry:${crypto.randomUUID()}` },
+                body: {
+                    ...body,
+                    [keyField]: commandKey ?? `inquiry:${crypto.randomUUID()}`,
+                },
             })) as T
         },
         async recover<T>(): Promise<T | undefined> {

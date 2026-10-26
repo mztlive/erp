@@ -1,26 +1,11 @@
 "use client"
-import { useMutation } from "@tanstack/react-query"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { apiGet } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
-import {
-    downloadSupplierFailures,
-    type SupplierImportRow,
-    type SupplierImportResult,
-} from "@/lib/supplier-import"
+import { useSupplierImportFailuresDownload } from "../hooks/use-supplier-import-failures"
 
 /** 原提交人下载已结束任务的待处理行；敏感原文不写入查询缓存。 */
 export const SupplierImportFailures = ({ jobId }: { jobId: string }) => {
-    const download = useMutation({
-        mutationFn: async () => {
-            const data = await apiGet<{
-                rows: SupplierImportRow[]
-                results: SupplierImportResult[]
-            }>(`/admin/supplier-profiles/import/jobs/${jobId}/failures`)
-            await downloadSupplierFailures(data.rows, data.results)
-        },
-        retry: false,
-    })
+    const download = useSupplierImportFailuresDownload(jobId)
     return (
         <div className="space-y-2">
             <LoadingButton

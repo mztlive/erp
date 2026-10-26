@@ -18,6 +18,7 @@ pub mod bulk_selection_snapshot;
 mod import_result_batch;
 pub mod legacy_import_job;
 pub mod product_import_job;
+mod result_recovery;
 pub mod supplier_governance_job;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。

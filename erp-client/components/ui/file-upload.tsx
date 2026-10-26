@@ -231,7 +231,10 @@ function FileUpload({
         <>
             {!readOnly ? (
                 <Button
-                    id={selectId ?? (idPrefix ? `${idPrefix}-select` : undefined)}
+                    id={
+                        selectId ??
+                        (idPrefix ? `${idPrefix}-select` : undefined)
+                    }
                     type="button"
                     variant="secondary"
                     size={previewActions === "overlay" ? "icon-xs" : "icon-sm"}
@@ -553,48 +556,16 @@ function FileUpload({
                 )}
             </div>
 
-            {activePreview ? (
+            {activePreview &&
+            previewActions === "default" &&
+            (showPreviewStatus || !readOnly) ? (
                 <div className="flex flex-wrap items-center justify-between gap-1">
-                    <span className="min-w-0 flex-1 basis-full break-words text-xs text-muted-foreground sm:basis-auto">
-                        {previewStatus}
-                    </span>
-                    {!readOnly ? (
-                        <Button
-                            id={
-                                selectId ??
-                                (idPrefix ? `${idPrefix}-select` : undefined)
-                            }
-                            type="button"
-                            variant="secondary"
-                            size="icon-sm"
-                            title={fileUploadText.replace}
-                            disabled={disabled}
-                            aria-describedby={describedBy}
-                            aria-invalid={
-                                Boolean(selectionError) ||
-                                ariaInvalid === true ||
-                                ariaInvalid === "true"
-                            }
-                            aria-label={fileUploadText.replace}
-                            onClick={() => inputRef.current?.click()}
-                        >
-                            <RefreshCwIcon className="size-3" />
-                        </Button>
+                    {showPreviewStatus ? (
+                        <span className="min-w-0 flex-1 basis-full break-words text-xs text-muted-foreground sm:basis-auto">
+                            {previewStatus}
+                        </span>
                     ) : null}
-                    {!readOnly && onPreviewRemove ? (
-                        <Button
-                            id={idPrefix ? `${idPrefix}-remove` : undefined}
-                            type="button"
-                            variant="secondary"
-                            size="icon-sm"
-                            title={`${fileUploadText.remove} ${activePreview.name}`}
-                            disabled={disabled}
-                            aria-label={`移除 ${activePreview.name}`}
-                            onClick={removePreview}
-                        >
-                            <XIcon className="size-3" />
-                        </Button>
-                    ) : null}
+                    {previewActionButtons}
                 </div>
             ) : null}
             {readOnly && !activePreview && !hasSelection ? (

@@ -444,6 +444,8 @@ function SkuMainImageField({
             controlClassName="aspect-square"
             selectedDescription={fileUploadText.pendingSave}
             readOnly={disabled}
+            previewActions="overlay"
+            showPreviewStatus={false}
             previewSelectedImage
             selectedImageFile={
                 previewUrl?.startsWith("blob:") && file?.name === value

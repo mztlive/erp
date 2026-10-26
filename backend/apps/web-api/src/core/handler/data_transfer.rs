@@ -44,6 +44,37 @@ pub async fn status(
 ) -> Result<Response, Error> {
     Ok(private(ApiResponse::ok_with_data(process(&state).status(&id, &actor).await?).into_response()))
 }
+/// 读取本人任务的固定类型及当前可继续办理的业务上下文。
+/// # 参数
+/// 当前认证人与原任务 ID。
+/// # 返回
+/// 受控业务引用、续办状态和取消能力。
+/// # 错误
+/// 非本人、源文件过期或当前业务授权失效时拒绝。
+pub async fn context(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Response, Error> {
+    Ok(private(ApiResponse::ok_with_data(process(&state).context(&id, &actor).await?).into_response()))
+}
+
+/// 查询原批量命令回执并原子确认结果未知项。
+/// # 参数
+/// 当前认证人与原任务 ID；不接受替换输入或命令号。
+/// # 返回
+/// 原任务更新后的受控处理结果。
+/// # 错误
+/// 无待确认项、任务过期、授权或回执查询失败时拒绝。
+pub async fn recover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Response, Error> {
+    let result = process(&state).recover(&id, &actor).await?;
+    Ok(private(ApiResponse::ok_with_data(json!({"file_name":result.file_name,"content_type":result.content_type,"content_base64":result.content_base64,"metadata":result.metadata})).into_response()))
+}
+
 /// 读取本人任务的未过期结果。
 /// # 参数
 /// 当前认证人与任务 ID。
@@ -90,6 +121,35 @@ pub async fn portal_status(
     Path(id): Path<String>,
 ) -> Result<Response, Error> {
     status(State(state), Extension(actor.audit_actor()), Path(id)).await
+}
+/// 读取门户本人任务的受控业务上下文。
+/// # 参数
+/// 当前门户身份与原任务 ID。
+/// # 返回
+/// 当前供应商范围允许的任务上下文。
+/// # 错误
+/// 身份、归属或业务授权无效时拒绝。
+pub async fn portal_context(
+    State(state): State<AppState>,
+    Extension(actor): Extension<PortalActor>,
+    Path(id): Path<String>,
+) -> Result<Response, Error> {
+    context(State(state), Extension(actor.audit_actor()), Path(id)).await
+}
+
+/// 按原门户命令查询结果未知项的回执。
+/// # 参数
+/// 当前门户身份与原任务 ID。
+/// # 返回
+/// 原任务已核对的结果，不启动新的业务提交。
+/// # 错误
+/// 身份、归属、有效期或回执查询失败时拒绝。
+pub async fn portal_recover(
+    State(state): State<AppState>,
+    Extension(actor): Extension<PortalActor>,
+    Path(id): Path<String>,
+) -> Result<Response, Error> {
+    recover(State(state), Extension(actor.audit_actor()), Path(id)).await
 }
 /// 读取门户本人任务结果。
 /// # 参数

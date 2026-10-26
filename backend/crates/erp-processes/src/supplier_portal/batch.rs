@@ -118,6 +118,39 @@ impl PreparedRow {
 }
 
 impl SupplierPortalProcess {
+    /// 仅查询原批量操作的已保存回执，不重新执行业务或封存新的拒绝。
+    /// # 参数
+    /// `actor` 为当前门户身份，`input` 为保留原操作号及原内容的批量输入。
+    /// # 返回
+    /// 已保存的成功、拒绝回执，以及尚无终态回执的待确认行。
+    /// # 错误
+    /// 当前会话、批量输入或原命令身份无效，或回执读取失败时拒绝。
+    pub async fn batch_receipts(
+        &self,
+        actor: &PortalActor,
+        input: PortalBatchInput,
+    ) -> Result<PortalBatchResult> {
+        actor.require_write()?;
+        self.session_validate(actor, &mut NoTransaction).await?;
+        validate_rows(&input)?;
+        let service = PortalOfferingService::new(self.db.clone());
+        let mut rows = Vec::with_capacity(input.rows.len());
+        for ParsedRow { row, input } in parse_batch_rows(&input) {
+            let action = batch_action(&input?);
+            let command = scoped_command(
+                &actor.account_id,
+                &actor.supplier_id,
+                action,
+                &row.idempotency_key,
+                &row.input,
+            )?;
+            let receipt = service.command_result(&command, &mut NoTransaction).await?;
+            rows.push(batch_receipt_result(&row.row_id, receipt)?);
+        }
+        self.session_validate(actor, &mut NoTransaction).await?;
+        Ok(PortalBatchResult { valid: batch_rows_valid(&rows), rows })
+    }
+
     /// 先预检整批，再对各行独立提交；恢复重用原内容及原操作号。
     /// # 参数
     /// 当前门户身份和保留原命令标识的批量请求。
@@ -594,6 +627,22 @@ fn serialize<T: Serialize>(result: T) -> Result<Value> {
 fn row_result(id: &str, status: &str, error: Option<String>, result: Option<Value>) -> PortalBatchRowResult {
     PortalBatchRowResult { row_id: id.into(), status: status.into(), error, result }
 }
+
+fn batch_receipt_result(id: &str, receipt: Option<Value>) -> Result<PortalBatchRowResult> {
+    let Some(value) = receipt else {
+        return Ok(row_result(
+            id,
+            "unknown",
+            Some("尚未查到原操作的终态回执，请保留原内容及原操作号，稍后再次核对".into()),
+            None,
+        ));
+    };
+    if let Some(rejection) = rejection(&value)? {
+        return Ok(rejected_row_result(id, &rejection));
+    }
+    Ok(row_result(id, "replayed", None, Some(external_result(value))))
+}
+
 fn rejected_row_result(id: &str, rejection: &CommandRejection) -> PortalBatchRowResult {
     row_result(
         id,
@@ -646,6 +695,41 @@ fn external_result(value: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn receipt_query_without_a_terminal_receipt_keeps_the_original_row_unknown() {
+        let result = batch_receipt_result("original-row", None).unwrap();
+        assert_eq!(result.row_id, "original-row");
+        assert_eq!(result.status, "unknown");
+        assert!(result.error.is_some());
+        assert!(result.result.is_none());
+        assert!(!batch_rows_valid(&[result]));
+    }
+
+    #[test]
+    fn receipt_query_replays_only_the_public_result_and_preserves_sealed_rejections() {
+        let success = batch_receipt_result(
+            "original-row",
+            Some(json!({"id":"saved-application","version":2,"status":"draft","supplier_id":"private","submissions":["private"]})),
+        )
+        .unwrap();
+        assert_eq!(success.status, "replayed");
+        assert_eq!(
+            success.result,
+            Some(json!({"id":"saved-application","version":2,"status":"draft","result":null}))
+        );
+        assert!(batch_rows_valid(&[success]));
+        let rejected = batch_receipt_result(
+            "rejected-row",
+            Some(json!({"portal_command_outcome":"rejected","rejection":{"kind":"conflict","message":"原版本已变化"}})),
+        )
+        .unwrap();
+        assert_eq!(rejected.status, "failed");
+        assert_eq!(rejected.result, Some(json!({"command_outcome":"rejected"})));
+        assert!(rejected.error.unwrap().contains("原版本已变化"));
+        assert!(batch_receipt_result("broken", Some(json!({"portal_command_outcome":"rejected"}))).is_err());
+    }
+
     fn batch(rows: Vec<PortalBatchRow>) -> PortalBatchInput {
         PortalBatchInput {
             mode: PortalBatchMode::Availability,

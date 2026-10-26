@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use application_core::command::CommandFingerprint;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::{BackgroundJobId, BackgroundJobItemId};
+use erp_support::repository::bulk_job::BackgroundJobInput;
 use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobItem,
@@ -13,6 +14,7 @@ use persistence_core::{NoTransaction, Transactional};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::context_input::ContextInput;
 use super::types::Envelope;
 use super::{DataTransferProcess, TransferKind, TransferRequest};
 use crate::audit::persist_log;
@@ -49,7 +51,12 @@ impl DataTransferProcess {
             self.save_private(&format!("data-transfer/{id}/source.enc"), &envelope, actor.id()).await?;
         let (job, items) =
             build_job(id, request_id, digest, source.base.id.clone(), request.kind, &envelope.input, actor)?;
-        match self.persist_submission(job, items, source, actor).await {
+        let context = ContextInput::new(
+            &envelope,
+            source.expires_at.ok_or_else(|| Error::Internal("任务输入有效期缺失".into()))?,
+        )
+        .record()?;
+        match self.persist_submission(job, items, source, context, actor).await {
             Ok(view) => Ok(view),
             Err(error) => {
                 if let Some(existing) = self
@@ -82,6 +89,7 @@ impl DataTransferProcess {
         job: BackgroundJob,
         items: Vec<BackgroundJobItem>,
         source: FileAsset,
+        context: BackgroundJobInput,
         actor: &AuditActor,
     ) -> Result<BackgroundJobView> {
         let audit = submission_log(&job, actor)?;
@@ -93,6 +101,9 @@ impl DataTransferProcess {
                 Box::pin(async move {
                     db.file_assets().create(&source, executor).await?;
                     db.bulk_job().create_job_with_items(&copy, items, executor).await?;
+                    db.bulk_job()
+                        .create_job_input(&BackgroundJobId::new(&copy.base.id), &context, executor)
+                        .await?;
                     persist_log(&db, &audit, executor).await?;
                     Ok::<_, Error>(())
                 })

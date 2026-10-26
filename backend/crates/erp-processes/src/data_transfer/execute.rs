@@ -85,7 +85,9 @@ impl DataTransferProcess {
     async fn complete(&self, mut job: BackgroundJob, result: TransferResult) -> Result<()> {
         self.heartbeat(&mut job).await?;
         let key = format!("data-transfer/{}/result-{}.enc", job.base.id, job.base.version);
-        let asset = self.save_private(&key, &result, &job.requested_by).await?;
+        let mut asset = self.save_private(&key, &result, &job.requested_by).await?;
+        let source_expiry = self.source_expiry(&job).await?;
+        asset.expires_at = asset.expires_at.map(|expires| expires.min(source_expiry));
         self.heartbeat(&mut job).await?;
         let mut items = self
             .db

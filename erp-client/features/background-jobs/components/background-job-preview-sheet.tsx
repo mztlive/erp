@@ -1,11 +1,7 @@
 "use client"
 
 import type { Dispatch, SetStateAction } from "react"
-import {
-    BackgroundJobProgress,
-    BusinessFailureState,
-    QuickPreviewSheet,
-} from "@/components/business"
+import { BusinessFailureState, QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     DescriptionDetails,
@@ -20,7 +16,6 @@ import {
     formatJobDateTime,
     isJobActive,
     JOB_STATUS_LABELS,
-    jobProgressStatus,
 } from "../labels"
 import type {
     useBackgroundJobDetailQuery,
@@ -28,6 +23,10 @@ import type {
 } from "../queries"
 import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
 import { BackgroundJobItemResults } from "./background-job-item-results"
+import { DataTransferTaskResult } from "./data-transfer-task-result"
+import { DirectImportResult } from "./direct-import-result"
+import { DomainJobResult } from "./domain-job-result"
+import { canCancelJob } from "../labels"
 
 type BackgroundJobPreviewSheetProps = {
     previewId: string | null
@@ -53,7 +52,7 @@ export function BackgroundJobPreviewSheet({
     onClose,
     onCancel,
 }: BackgroundJobPreviewSheetProps) {
-    const previewJob = detailQuery.data ?? null
+    const previewJob = detailQuery.isError ? null : (detailQuery.data ?? null)
     const identity = previewJob ? backgroundJobIdentity(previewJob) : null
     return (
         <QuickPreviewSheet
@@ -106,11 +105,7 @@ export function BackgroundJobPreviewSheet({
                         >
                             关闭
                         </Button>
-                        {previewJob &&
-                        isJobActive(
-                            previewJob.status,
-                            previewJob.finished_at,
-                        ) ? (
+                        {previewJob && canCancelJob(previewJob) ? (
                             <Button
                                 id={`${ID_PREFIX}-preview-cancel`}
                                 type="button"
@@ -131,28 +126,51 @@ export function BackgroundJobPreviewSheet({
                 </p>
             ) : previewJob ? (
                 <div className="space-y-6 text-sm">
-                    <BackgroundJobProgress
-                        mode="partialAllowed"
-                        status={jobProgressStatus(previewJob.status)}
-                        total={previewJob.total_count}
-                        completed={previewJob.processed_count}
-                        succeeded={previewJob.success_count}
-                        skipped={previewJob.skipped_count}
-                        failed={previewJob.failed_count}
-                        label={identity?.title}
-                        description={
-                            previewJob.error_summary
-                                ? previewJob.error_summary
-                                : "任务在后台逐项执行，已完成的部分不受未完成部分影响。"
-                        }
-                    />
+                    {previewJob.domain_job_type === "DATA_TRANSFER" ? (
+                        previewJob.requested_by === currentUserId ? (
+                            <DataTransferTaskResult
+                                key={previewJob.id}
+                                job={previewJob}
+                            />
+                        ) : (
+                            <p className="text-muted-foreground">
+                                此任务由其他用户发起。业务结果、文件下载与继续办理仅供发起人使用。
+                            </p>
+                        )
+                    ) : previewJob.domain_job_type === "PRODUCT_IMPORT" ||
+                      previewJob.domain_job_type === "SUPPLIER_IMPORT" ? (
+                        <DirectImportResult
+                            job={previewJob}
+                            currentUserId={currentUserId}
+                        />
+                    ) : (
+                        <DomainJobResult job={previewJob} />
+                    )}
+                    {previewJob.error_summary && (
+                        <p role="alert" className="text-destructive">
+                            {previewJob.error_summary}
+                        </p>
+                    )}
+                    {previewJob.domain_job_type === "DATA_TRANSFER" &&
+                        previewJob.job_type === "import" &&
+                        isJobActive(
+                            previewJob.status,
+                            previewJob.finished_at,
+                        ) &&
+                        !canCancelJob(previewJob) && (
+                            <p className="text-muted-foreground">
+                                此任务已开始处理，不能中途取消，请等待执行结果。
+                            </p>
+                        )}
                     <section className="space-y-3">
                         <h3 className="font-medium">任务资料</h3>
                         <DescriptionList columns="one">
                             <DescriptionItem>
                                 <DescriptionTerm>发起人</DescriptionTerm>
                                 <DescriptionDetails>
-                                    {previewJob.requested_by || "—"}
+                                    {previewJob.requested_by === currentUserId
+                                        ? "我"
+                                        : "其他用户"}
                                 </DescriptionDetails>
                             </DescriptionItem>
                             <DescriptionItem>
@@ -173,29 +191,17 @@ export function BackgroundJobPreviewSheet({
                                     {formatJobDateTime(previewJob.finished_at)}
                                 </DescriptionDetails>
                             </DescriptionItem>
-                            <DescriptionItem>
-                                <DescriptionTerm>结果有效期至</DescriptionTerm>
-                                <DescriptionDetails className="num">
-                                    {formatJobDateTime(
-                                        previewJob.result_expires_at,
-                                    )}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                            <DescriptionItem>
-                                <DescriptionTerm>目标总数</DescriptionTerm>
-                                <DescriptionDetails className="num">
-                                    {previewJob.total_count}
-                                </DescriptionDetails>
-                            </DescriptionItem>
                         </DescriptionList>
                     </section>
-                    <BackgroundJobItemResults
-                        previewJob={previewJob}
-                        currentUserId={currentUserId}
-                        itemsPage={itemsPage}
-                        onPageChange={onItemsPageChange}
-                        itemsQuery={itemsQuery}
-                    />
+                    {previewJob.domain_job_type !== "DATA_TRANSFER" && (
+                        <BackgroundJobItemResults
+                            previewJob={previewJob}
+                            currentUserId={currentUserId}
+                            itemsPage={itemsPage}
+                            onPageChange={onItemsPageChange}
+                            itemsQuery={itemsQuery}
+                        />
+                    )}
                 </div>
             ) : detailQuery.isError ? (
                 <BusinessFailureState

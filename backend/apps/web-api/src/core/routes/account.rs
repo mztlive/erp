@@ -25,6 +25,8 @@ pub fn routes(state: AppState) -> Router<AppState> {
             get(transfers::list).post(transfers::submit).layer(DefaultBodyLimit::max(76 * 1024 * 1024)),
         )
         .route("/data-transfers/{id}", get(transfers::status))
+        .route("/data-transfers/{id}/context", get(transfers::context))
+        .route("/data-transfers/{id}/recover", post(transfers::recover))
         .route("/data-transfers/{id}/result", get(transfers::result))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state)

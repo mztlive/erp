@@ -9,6 +9,23 @@ use super::imports::{decode, required};
 use crate::supplier_portal::{PortalBatchInput, SupplierPortalProcess};
 use crate::{Error, Result};
 impl BusinessTransfers {
+    pub(super) async fn portal_context_access(&self, input: &Value, actor: &AuditActor) -> Result<()> {
+        self.portal_actor(input, actor).await?.require_write()?;
+        Ok(())
+    }
+
+    pub(super) async fn portal_recover(&self, input: &Value, actor: &AuditActor) -> Result<Value> {
+        let portal = self.portal_actor(input, actor).await?;
+        portal.require_write()?;
+        let mut request: PortalBatchInput = decode(&input["request"])?;
+        request.validate_only = true;
+        request.recovery_only = true;
+        let result = SupplierPortalProcess::new(self.db.clone(), self.rbac.clone())
+            .batch_receipts(&portal, request)
+            .await?;
+        serde_json::to_value(result).map_err(json_error)
+    }
+
     async fn portal_actor(&self, input: &Value, actor: &AuditActor) -> Result<PortalActor> {
         if actor.kind() != AccountKind::Supplier {
             return Err(Error::Forbidden("此任务仅供供应商门户使用".into()));

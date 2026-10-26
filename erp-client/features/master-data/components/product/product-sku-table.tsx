@@ -77,7 +77,7 @@ function SkuRow({
         : "默认规格"
     return (
         <TableRow>
-            <TableCell className="sticky left-0 z-10 min-w-56 max-w-80 whitespace-normal bg-card align-top">
+            <TableCell className="sticky left-0 z-10 whitespace-normal bg-card align-top transition-colors group-hover/row:bg-row-hover">
                 <div className="flex items-start gap-3">
                     <div
                         className="w-16 shrink-0"
@@ -149,12 +149,12 @@ function SkuRow({
                     </div>
                 </div>
             </TableCell>
-            <TableCell className={`${cellPad} px-2`}>
-                <div className="flex min-w-40 flex-col gap-1">
+            <TableCell className={cellPad}>
+                <div className="flex min-w-0 flex-col gap-1">
                     {sku.skuNo ? (
                         <p
                             id={`master-data-product-sku-${skuSegment}-code`}
-                            className="num flex h-control-sm items-center truncate px-1 text-sm"
+                            className="num flex h-control-sm items-center truncate text-sm"
                             title="SKU 编码：系统生成，不可修改"
                         >
                             {sku.skuNo}
@@ -176,7 +176,7 @@ function SkuRow({
                     />
                 </div>
             </TableCell>
-            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
+            <TableCell className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-sale-price`}
                     value={sku.salePrice ?? ""}
@@ -189,7 +189,7 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 一件代发价`}
                 />
             </TableCell>
-            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
+            <TableCell className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-bulk-price`}
                     value={sku.bulkPriceGross ?? ""}
@@ -200,7 +200,7 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 集采价`}
                 />
             </TableCell>
-            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
+            <TableCell className={cellPad}>
                 <Input
                     id={`master-data-product-sku-${skuSegment}-bulk-min-quantity`}
                     className="h-control-sm num"
@@ -215,7 +215,7 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 集采起订量`}
                 />
             </TableCell>
-            <TableCell className={`${cellPad} px-2 [&_input]:min-w-24`}>
+            <TableCell className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-market-price`}
                     value={sku.marketPrice ?? ""}
@@ -338,15 +338,24 @@ function ProductSkuTable({
         <div className="w-full max-w-full overflow-hidden rounded-lg border">
             <Table
                 data-density="comfortable"
-                className="min-w-[60rem] [&_thead_th]:!static"
+                className="min-w-[64rem] table-fixed [--table-cell-inline:0.75rem] [&_thead_th]:!static"
             >
+                <colgroup>
+                    <col className="w-[23.5%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[14.5%]" />
+                    <col className="w-[11.5%]" />
+                    <col className="w-[11.5%]" />
+                    <col className="w-[11.5%]" />
+                    <col className="w-[12.5%]" />
+                </colgroup>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="min-w-56">
+                        <TableHead>
                             SKU 名称与规格
                             <RequiredMark />
                         </TableHead>
-                        <TableHead className="w-44 min-w-40">
+                        <TableHead>
                             <span className="inline-flex items-center gap-1">
                                 SKU 编码 / 条码
                                 <DetailHint
@@ -363,7 +372,7 @@ function ProductSkuTable({
                                 </DetailHint>
                             </span>
                         </TableHead>
-                        <TableHead className="w-28 min-w-24">
+                        <TableHead>
                             <span className="inline-flex items-center gap-1">
                                 代发价（含税）
                                 <DetailHint
@@ -380,16 +389,10 @@ function ProductSkuTable({
                                 </DetailHint>
                             </span>
                         </TableHead>
-                        <TableHead className="w-28 min-w-24">
-                            集采价（含税）
-                        </TableHead>
-                        <TableHead className="w-28 min-w-24">
-                            集采起订量
-                        </TableHead>
-                        <TableHead className="w-28 min-w-24">
-                            市场价（含税）
-                        </TableHead>
-                        <TableHead className="w-36 min-w-32">状态</TableHead>
+                        <TableHead>集采价（含税）</TableHead>
+                        <TableHead>集采起订量</TableHead>
+                        <TableHead>市场价（含税）</TableHead>
+                        <TableHead>状态</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
