@@ -1,8 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { writeReceiptSession } from "../lib/receipt-session-storage"
-import { useRouter } from "@/lib/navigation"
+import {
+    receiptRegistrationHref,
+    receiptReturnHref,
+} from "../lib/receipt-registration-route"
+import { useRouter, usePathname, useSearchParams } from "@/lib/navigation"
 
 import { FormalActionResult, PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
@@ -81,6 +84,11 @@ export function CustomerReceivablesWorkspace({
     onSalesOrderChanged,
 }: CustomerReceivablesWorkspaceProps = {}) {
     const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const registrationReturnTo = receiptReturnHref(
+        `${pathname}?${searchParams}`,
+    )
     const permissions = useCustomerReceivablesPermissions()
 
     const urlState = useCustomerReceivablesUrlState({
@@ -89,9 +97,6 @@ export function CustomerReceivablesWorkspace({
     })
 
     const [lastResult, setLastResult] = React.useState<ResultState>(null)
-    const [submittedReceiptNo, setSubmittedReceiptNo] = React.useState<
-        string | null
-    >(null)
     const [actionError, setActionError] = React.useState<string | null>(null)
     const [partyPickerOpen, setPartyPickerOpen] = React.useState(false)
     const [partyPickerMode, setPartyPickerMode] =
@@ -165,33 +170,17 @@ export function CustomerReceivablesWorkspace({
     const listQuery = useCustomerAccountsListQuery(urlState.query)
     const detailQuery = useCustomerAccountsDetailQuery(previewKind, previewId)
     const sessionQuery = useAllocationSessionQuery(urlState.sessionId ?? null)
-    const migratedSession = React.useRef<string | null>(null)
+    // 旧会话链接只负责转入独立登记页，不再替换客户往来列表。
     React.useEffect(() => {
-        const current = sessionQuery.data
-        if (
-            current?.mode !== "receipt" ||
-            !current.existingFactId ||
-            current.recoveryPending ||
-            current.status !== "draft" ||
-            current.draftSessionId === current.existingFactId ||
-            migratedSession.current === current.draftSessionId
+        if (sessionQuery.data?.mode !== "receipt") return
+        router.replace(
+            receiptRegistrationHref(
+                sessionQuery.data.draftSessionId,
+                sessionQuery.data.returnContext?.returnTo ??
+                    registrationReturnTo,
+            ),
         )
-            return
-        try {
-            writeReceiptSession(
-                { ...current, draftSessionId: current.existingFactId },
-                null,
-            )
-        } catch (error) {
-            setActionError(getErrorMessage(error, "无法保存本页恢复信息"))
-            return
-        }
-        migratedSession.current = current.draftSessionId
-        urlState.patchUrl(
-            { sessionId: current.existingFactId },
-            { replace: true },
-        )
-    }, [sessionQuery.data, urlState])
+    }, [sessionQuery.data, registrationReturnTo, router])
 
     const createSession = useCreateAllocationSessionMutation()
     const startSessionPending = createSession.isPending
@@ -238,6 +227,13 @@ export function CustomerReceivablesWorkspace({
         ),
         createSession,
         patchUrl: urlState.patchUrl,
+        onReceiptCreated: (id) =>
+            router.replace(
+                receiptRegistrationHref(
+                    id,
+                    urlState.returnTo ?? registrationReturnTo,
+                ),
+            ),
         setActionError,
     })
 
@@ -268,7 +264,6 @@ export function CustomerReceivablesWorkspace({
         }
         setActionError(null)
         setLastResult(null)
-        setSubmittedReceiptNo(null)
         try {
             const party = data?.counterparties.find(
                 (item) => item.counterpartyPartyId === partyId,
@@ -304,11 +299,27 @@ export function CustomerReceivablesWorkspace({
                         ? invoiceExecutionTask?.businessObjectId
                         : (target?.receivableAccountId ??
                           urlState.receivableAccountId),
-                returnTo: urlState.returnTo,
-                from: urlState.from,
+                returnTo:
+                    mode === "receipt"
+                        ? (urlState.returnTo ?? registrationReturnTo)
+                        : urlState.returnTo,
+                from:
+                    mode === "receipt" &&
+                    registrationReturnTo.startsWith("/sales/orders/")
+                        ? "W05"
+                        : urlState.from,
             })
             setPartyPickerOpen(false)
             openPreview(null)
+            if (mode === "receipt") {
+                router.push(
+                    receiptRegistrationHref(
+                        session.draftSessionId,
+                        urlState.returnTo ?? registrationReturnTo,
+                    ),
+                )
+                return
+            }
             urlState.patchUrl({
                 previewKind: null,
                 previewId: null,
@@ -358,6 +369,15 @@ export function CustomerReceivablesWorkspace({
     const invoiceColumns = React.useMemo(createInvoiceColumns, [])
 
     // 核销会话全屏
+    if (urlState.sessionId && sessionQuery.data?.mode === "receipt") {
+        return (
+            <PageScaffold>
+                <p role="status" className="text-sm text-muted-foreground">
+                    正在打开回款登记…
+                </p>
+            </PageScaffold>
+        )
+    }
     if (urlState.sessionId) {
         return (
             <AllocationSessionScreen
@@ -378,26 +398,9 @@ export function CustomerReceivablesWorkspace({
                     }
                     urlState.patchUrl({ sessionId: null })
                 }}
-                onPosted={(result) => {
+                onPosted={() => {
                     void listQuery.refetch()
                     onSalesOrderChanged?.()
-                    if (result.mode !== "receipt") return
-                    const ret = sessionQuery.data?.returnContext
-                    if (!embedded && ret?.returnTo && ret.from === "W05") {
-                        router.replace(ret.returnTo)
-                        return
-                    }
-                    setSubmittedReceiptNo(result.factNo)
-                    urlState.patchUrl(
-                        {
-                            sessionId: null,
-                            register: null,
-                            previewKind: null,
-                            previewId: null,
-                            focusId: null,
-                        },
-                        { replace: true },
-                    )
                 }}
                 canOperate={sessionCanOperate}
                 permissionReason={sessionPermissionReason}
@@ -449,17 +452,6 @@ export function CustomerReceivablesWorkspace({
                     }
                     returnTo={urlState.returnTo}
                 />
-            ) : null}
-
-            {submittedReceiptNo ? (
-                <Alert>
-                    <AlertTitle>回款已提交审批</AlertTitle>
-                    <AlertDescription>
-                        回款单 {submittedReceiptNo}{" "}
-                        已提交，全部审批通过后过账核销。
-                        可在回款详情中查看审批进度。
-                    </AlertDescription>
-                </Alert>
             ) : null}
 
             {lastResult ? (

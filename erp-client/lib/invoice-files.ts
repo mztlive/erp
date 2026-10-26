@@ -18,9 +18,12 @@ export function invoiceFileReference(file: File): string {
 }
 
 /** 校验开票附件数量、单文件大小和扩展名与 MIME 类型。 */
-export function invoiceFilesError(files: readonly File[]): string | undefined {
+export function invoiceFilesError(
+    files: readonly File[],
+    label = "发票附件",
+): string | undefined {
     if (files.length > INVOICE_FILE_MAX_COUNT) {
-        return `发票附件最多上传 ${INVOICE_FILE_MAX_COUNT} 个文件`
+        return `${label}最多上传 ${INVOICE_FILE_MAX_COUNT} 个文件`
     }
     for (const file of files) {
         if (file.size === 0) return `${file.name}：文件不能为空`

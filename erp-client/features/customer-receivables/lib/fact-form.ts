@@ -15,6 +15,17 @@ export const factFormSchema = z.object({
     grossAmount: z.string(),
     netAmount: z.string(),
     taxAmount: z.string(),
+    receiptFiles: z
+        .array(
+            z.custom<File>(
+                (value) => typeof File !== "undefined" && value instanceof File,
+                "回款凭证文件无效",
+            ),
+        )
+        .superRefine((files, context) => {
+            const message = invoiceFilesError(files, "回款凭证")
+            if (message) context.addIssue({ code: "custom", message })
+        }),
     invoiceFiles: z
         .array(
             z.custom<File>(
@@ -46,6 +57,7 @@ export function factDefaultValues(
             netAmount: "",
             taxAmount: "",
             invoiceFiles: [],
+            receiptFiles: [...(fact.receiptFiles ?? [])],
         }
     }
     return {
@@ -59,6 +71,7 @@ export function factDefaultValues(
         netAmount: fact.netAmount ?? "",
         taxAmount: fact.taxAmount ?? "",
         invoiceFiles: [...(fact.invoiceFiles ?? [])],
+        receiptFiles: [],
     }
 }
 
@@ -72,6 +85,8 @@ export function factFromValues(
             receivedAt: values.receivedAt,
             amount: values.amount,
             bankReference: values.bankReference,
+            receiptFiles: [...values.receiptFiles],
+            receiptFileNames: values.receiptFiles.map((file) => file.name),
         }
     }
     return {

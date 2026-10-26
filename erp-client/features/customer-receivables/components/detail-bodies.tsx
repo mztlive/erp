@@ -1,6 +1,7 @@
 "use client"
 
 import { CustomerSourceDocuments } from "./customer-source-documents"
+import { ReceiptFiles } from "./receipt-files"
 import { ReceiptPendingAllocations } from "./receipt-pending-allocations"
 import { MoneyValue } from "@/components/business"
 import {
@@ -178,6 +179,9 @@ export function ReceiptDetailBody({
                         </PreviewFact>
                     ) : null}
                 </dl>
+            </PreviewSection>
+            <PreviewSection title="回款凭证">
+                <ReceiptFiles receiptId={row.receiptId} />
             </PreviewSection>
             {posted ? (
                 <>

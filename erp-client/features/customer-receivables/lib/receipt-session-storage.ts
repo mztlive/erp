@@ -19,6 +19,7 @@ const fact = z.object({
     receivedAt: z.string().optional(),
     amount: z.string().optional(),
     bankReference: z.string().optional(),
+    receiptFileNames: z.array(z.string()).optional(),
 })
 const sessionSchema = z
     .object({
@@ -150,7 +151,9 @@ export function writeReceiptSession(
     try {
         sessionStorage.setItem(
             key(session.ownerId, session.draftSessionId),
-            JSON.stringify(record),
+            JSON.stringify(record, (field, value) =>
+                field === "receiptFiles" ? undefined : value,
+            ),
         )
     } catch {
         throw new Error("浏览器无法暂存本次回款，请检查存储空间后重试。")

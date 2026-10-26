@@ -22,7 +22,7 @@ use crate::core::upload;
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new()
+    receipt_file_routes(rbac)
         .merge(additional_document_routes(rbac))
         .route(
             "/receivable-accounts",
@@ -253,4 +253,19 @@ fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 receivable::draft_read::customer_receipt_draft_permission_key(),
             ),
         )
+}
+
+/// 回款草稿凭证沿用提交权限和统一上传限制。
+fn receipt_file_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/customer-receipts/drafts/with-files",
+        with_permission(
+            upload::multipart_route(
+                post(receivable::receipt_files::customer_receipt_save_with_files),
+                upload::MAX_MULTIPART_REQUEST_BYTES,
+            ),
+            rbac,
+            receivable::receipt_files::customer_receipt_save_with_files_permission_key(),
+        ),
+    )
 }

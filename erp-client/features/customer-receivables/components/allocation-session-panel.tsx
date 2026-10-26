@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState } from "react"
 import { SaveIcon } from "lucide-react"
 
 import {
@@ -61,6 +62,7 @@ export function AllocationSessionPanel({
     hideSessionClose?: boolean
     closeLabel?: string
 }) {
+    const [attempted, setAttempted] = useState(false)
     const {
         form,
         isReceipt,
@@ -120,7 +122,7 @@ export function AllocationSessionPanel({
     const saveAction = (
         <LoadingButton
             id="customer-receivables-session-save-draft"
-            size={isReceipt ? "lg" : "default"}
+            size="default"
             type="button"
             loading={saveMutation.isPending}
             variant="outline"
@@ -134,13 +136,19 @@ export function AllocationSessionPanel({
             {saveMutation.isPending ? "保存中…" : "保存草稿"}
         </LoadingButton>
     )
+    const requestSubmit = () => {
+        setAttempted(true)
+        if (canSubmit) void form.handleSubmit()
+        else void form.validateAllFields("submit")
+    }
+    const FormRoot = isReceipt ? "form" : "div"
     const submitAction = (
         <LoadingButton
             id="customer-receivables-session-submit"
-            size={isReceipt ? "lg" : "default"}
-            type="button"
+            size="default"
+            type={isReceipt ? "submit" : "button"}
             loading={postMutation.isPending}
-            disabled={editingDisabled || !canSubmit}
+            disabled={editingDisabled || (!isReceipt && !canSubmit)}
             title={
                 !canOperate
                     ? permissionReason
@@ -148,7 +156,7 @@ export function AllocationSessionPanel({
                       ? (issues[0]?.message ?? "请先填写大于零的金额")
                       : undefined
             }
-            onClick={() => void form.handleSubmit()}
+            onClick={isReceipt ? undefined : () => void form.handleSubmit()}
         >
             {postMutation.isPending
                 ? "提交中…"
@@ -157,12 +165,7 @@ export function AllocationSessionPanel({
                   : "确认登记并核销"}
         </LoadingButton>
     )
-    const actions = isReceipt ? (
-        <>
-            {submitAction}
-            {saveAction}
-        </>
-    ) : (
+    const actions = (
         <>
             {saveAction}
             {submitAction}
@@ -170,16 +173,22 @@ export function AllocationSessionPanel({
     )
 
     return (
-        <div className="@container flex min-w-0 flex-1 flex-col">
+        <FormRoot
+            id={isReceipt ? "receipt-registration-form" : undefined}
+            className="@container flex min-w-0 flex-1 flex-col"
+            onSubmit={(event) => {
+                if (event.target !== event.currentTarget) return
+                event.preventDefault()
+                requestSubmit()
+            }}
+        >
             <div
                 className={
-                    isReceipt
-                        ? "grid min-w-0 flex-1 grid-cols-1 gap-6 @5xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] @5xl:gap-8"
-                        : "min-w-0"
+                    isReceipt ? "flex min-w-0 flex-1 flex-col gap-6" : "min-w-0"
                 }
             >
                 <div
-                    className={`flex min-w-0 flex-col ${isReceipt ? "gap-8" : "gap-4"}`}
+                    className={`flex min-w-0 flex-col ${isReceipt ? "gap-6" : "gap-4"}`}
                 >
                     <SessionHeader
                         session={session}
@@ -189,6 +198,11 @@ export function AllocationSessionPanel({
                         onRequestClose={requestClose}
                         showClose={!hideSessionClose}
                         submitted={submitted}
+                        closeDisabled={
+                            saveMutation.isPending ||
+                            postMutation.isPending ||
+                            resolveMutation.isPending
+                        }
                     />
 
                     {isReceipt && temporarySaved && !result && !submitted ? (
@@ -264,17 +278,13 @@ export function AllocationSessionPanel({
                         </Alert>
                     ) : null}
 
-                    {isReceipt && !submitted && receiptApproval ? (
-                        <CustomerReceiptApprovalArea
-                            phase={receiptPhase}
-                            approval={receiptApproval}
-                            documentId={session.existingFactId}
-                        />
-                    ) : null}
-
                     {isReceipt ? (
                         <ReceiptSessionFields
                             form={form}
+                            receiptId={session.existingFactId}
+                            unsavedFileCount={
+                                session.fact.receiptFileNames?.length ?? 0
+                            }
                             existing={existing}
                             locked={locked || editingDisabled}
                         />
@@ -326,7 +336,7 @@ export function AllocationSessionPanel({
                         <ReceiptAllocationTable
                             session={session}
                             allocations={allocations}
-                            issues={issues}
+                            issues={attempted ? issues : []}
                             disabled={editingDisabled}
                             removalDisabled={locked}
                             onAdd={addFromPool}
@@ -462,11 +472,18 @@ export function AllocationSessionPanel({
                             actions={actions}
                         />
                     )}
+                    {isReceipt && !submitted && receiptApproval ? (
+                        <CustomerReceiptApprovalArea
+                            phase={receiptPhase}
+                            approval={receiptApproval}
+                            documentId={session.existingFactId}
+                        />
+                    ) : null}
                 </div>
                 {isReceipt ? (
                     <ReceiptSessionFooter
                         submitHint={
-                            !submitted && !canSubmit
+                            attempted && !submitted && !canSubmit
                                 ? (issues[0]?.message ??
                                   "请填写大于零的到账金额。")
                                 : undefined
@@ -555,6 +572,6 @@ export function AllocationSessionPanel({
                     onConfirm={() => void doPost()}
                 />
             )}
-        </div>
+        </FormRoot>
     )
 }

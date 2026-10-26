@@ -4,6 +4,8 @@ import { toast } from "@/components/ui/toast"
 import { getErrorMessage } from "@/lib/api/errors"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
+    fetchCustomerReceiptFiles,
+    downloadCustomerReceiptFile,
     fetchInvoiceFiles,
     downloadInvoiceFile,
     fetchSalesInvoiceFiles,
@@ -74,6 +76,31 @@ export function useInvoiceFiles(invoiceId: string) {
             toast.add({
                 type: "error",
                 title: "发票下载失败",
+                description: getErrorMessage(error, "请重试"),
+            }),
+    })
+    return { query, download }
+}
+
+export function useCustomerReceiptFiles(receiptId: string, draft: boolean) {
+    const query = useQuery({
+        queryKey: [
+            ...queryKeyRoots.customerReceivables,
+            "receipt-files",
+            receiptId,
+            draft,
+        ],
+        queryFn: () => fetchCustomerReceiptFiles(receiptId, draft),
+        staleTime: 0,
+    })
+    const download = useMutation({
+        meta: { suppressErrorToast: true },
+        mutationFn: (file: FinancialFile) =>
+            downloadCustomerReceiptFile(receiptId, draft, file),
+        onError: (error) =>
+            toast.add({
+                type: "error",
+                title: "回款凭证下载失败",
                 description: getErrorMessage(error, "请重试"),
             }),
     })

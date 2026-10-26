@@ -2594,7 +2594,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "接收 save_customer_receipt_draft 事务传入的同一 Executor，依次保存草稿及拟核销分配、审计事件和命令回执；审计失败向上返回并阻止事务提交。已提交命令重放经授权和归属校验后返回原结果，不再次持久化成功事件；真实回滚与并发行为不由本登记核销。"
+      "reason": "接收 save_customer_receipt_draft_with_assets 事务传入的同一 Executor，依次保存草稿、拟核销分配与新增凭证附件、审计事件和命令回执；审计失败向上返回并阻止事务提交。已提交命令重放经授权和归属校验后返回原结果，不再次持久化成功事件；真实回滚与并发行为不由本登记核销。"
     },
     {
       "path": "crates/erp-processes/src/finance_posting/receivable/draft_update.rs",

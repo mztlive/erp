@@ -116,6 +116,8 @@ export function tabHref(url: URL): string {
 
 /** Filters belong to a tab; separately named fulfillment lanes belong to different tabs. */
 export function workspaceTabKey(url: URL): string {
+    if (url.pathname === "/finance/customer-accounts/receipts/new")
+        return `${url.pathname}?${new URLSearchParams({ sessionId: url.searchParams.get("sessionId") ?? "" })}`
     if (url.pathname === "/finance/supplier-accounts/invoices/new") {
         const identity = new URLSearchParams()
         for (const name of [
@@ -163,6 +165,8 @@ export function workspaceTabKey(url: URL): string {
 }
 
 export function workspaceTabTitle(url: URL): string {
+    if (url.pathname === "/finance/customer-accounts/receipts/new")
+        return "登记回款"
     if (url.pathname === "/finance/supplier-accounts/invoices/new")
         return url.searchParams.has("invoiceId")
             ? "继续核销进项发票"

@@ -4,6 +4,7 @@
 //! 直接复用 `erp_finance::dto::receivable` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 pub(crate) mod invoice_files;
+pub(crate) mod receipt_files;
 
 pub mod draft_read;
 pub mod draft_update;

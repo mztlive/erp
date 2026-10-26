@@ -32,6 +32,7 @@ import {
     sumAmounts,
 } from "@/features/customer-receivables/lib/allocation-math"
 import { normalizeFixed, splitGrossByPercentRate } from "@/lib/fixed-decimal"
+import { useWorkspaceFormGuard } from "@/lib/workspace-form-guard"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     usePostAllocationMutation,
@@ -113,6 +114,7 @@ export function useAllocationSession({
     const lastPostInputRef = React.useRef<PostAllocationInput | null>(null)
     const baselineRef = React.useRef("")
     const discardedRef = React.useRef(false)
+    const [leaving, setLeaving] = React.useState(false)
     const [receiptApproval, setReceiptApproval] = React.useState<
         DocumentApprovalView | undefined
     >(() => (session.mode === "receipt" ? session.approval : undefined))
@@ -136,10 +138,36 @@ export function useAllocationSession({
     const snapshot = () =>
         JSON.stringify({
             values: form.state.values,
+            receiptFiles:
+                form.state.values.receiptFiles.map(invoiceFileReference),
             invoiceFiles:
                 form.state.values.invoiceFiles.map(invoiceFileReference),
             allocations,
         })
+
+    const clean =
+        !isReceipt ||
+        leaving ||
+        session.status === "posted" ||
+        postedLocally ||
+        snapshot() === baselineRef.current
+    const busy =
+        isReceipt &&
+        (saveMutation.isPending ||
+            postMutation.isPending ||
+            resolveMutation.isPending ||
+            result?.status === "unknown")
+    const workspaceGuard = React.useMemo(
+        () => ({
+            state: { isDefaultValue: clean, isSubmitting: busy },
+            store: { subscribe: () => ({ unsubscribe() {} }) },
+        }),
+        [clean, busy],
+    )
+    useWorkspaceFormGuard(workspaceGuard)
+    React.useEffect(() => {
+        if (leaving) onClose()
+    }, [leaving, onClose])
 
     React.useEffect(() => {
         setRemovedLine(null)
@@ -216,7 +244,13 @@ export function useAllocationSession({
     function discardAndClose() {
         discardedRef.current = true
         removeReceiptSession(session)
-        onClose()
+        if (!isReceipt) {
+            onClose()
+            return
+        }
+        form.reset(form.state.values)
+        baselineRef.current = snapshot()
+        setLeaving(true)
     }
 
     // 发票 gross 变化时按 13% 预填不含税/税额（可手动覆盖）
@@ -249,14 +283,16 @@ export function useAllocationSession({
 
     const issues: ValidationIssue[] = []
     const invoiceFileError = isReceipt
-        ? undefined
+        ? invoiceFilesError(formValues.receiptFiles, "回款凭证")
         : invoiceFilesError(formValues.invoiceFiles)
     if (invoiceFileError) {
         issues.push({
             id: "invoice-files",
-            label: "发票附件",
+            label: isReceipt ? "回款凭证" : "发票附件",
             message: invoiceFileError,
-            targetId: "customer-receivables-session-invoice-files-input",
+            targetId: isReceipt
+                ? "customer-receivables-receipt-files-input"
+                : "customer-receivables-session-invoice-files-input",
         })
     }
     if (!canOperate) {
@@ -560,7 +596,10 @@ export function useAllocationSession({
         try {
             const fact = factFromValues(form.state.values, isReceipt)
             let submittedVersion = editVersion
-            if (isReceipt && existing) {
+            if (
+                isReceipt &&
+                (existing || form.state.values.receiptFiles.length > 0)
+            ) {
                 const saved = await saveMutation.mutateAsync({
                     draftSessionId: session.draftSessionId,
                     fact,
@@ -577,7 +616,9 @@ export function useAllocationSession({
                 draftSessionId: session.draftSessionId,
                 editVersion: submittedVersion,
                 idempotencyKey: idempotencyRef.current,
-                fact: { ...fact },
+                fact: isReceipt
+                    ? { ...fact, receiptFiles: [], receiptFileNames: [] }
+                    : { ...fact },
                 allocations: allocations.map((line) => ({ ...line })),
             }
             lastPostInputRef.current = command

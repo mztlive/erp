@@ -1,4 +1,6 @@
 //! 回款草稿与命令回执的原子保存。
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::CustomerReceiptId;
@@ -12,18 +14,27 @@ use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::customer_receipt_commit::convert_allocations;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_read_models::finance::dto::CustomerReceiptView;
+use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use erp_workflow::service::approval::approval_action_roles_with_executor;
 use id_generator::next_id;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::ReceivableProcess;
 use super::customer_receipt_posting::create_new_commit_records;
 use super::draft_read::{ensure_receipt_owner, receipt_view_with_actions};
 use super::draft_update::ensure_receipt_edit_authorized;
+use super::{ReceivableProcess, receipt_files};
 use crate::adapters::workflow::workflow_auth;
 use crate::audit::persist_log;
 use crate::{Error, Result};
+
+/// 草稿视图及本次上传消费状态，用于清理重放未消费的上传。
+pub struct ReceiptDraftWithAssets {
+    /// 原回款草稿视图。
+    pub view: CustomerReceiptView,
+    /// 是否保存了本次上传资产。
+    pub assets_committed: bool,
+}
 
 impl ReceivableProcess {
     /// 在同一事务保存完整回款草稿、拟核销分配与幂等回执。
@@ -39,23 +50,38 @@ impl ReceivableProcess {
         req: SaveCustomerReceiptDraftRequest,
         actor: &AuditActor,
     ) -> Result<CustomerReceiptView> {
+        Ok(self
+            .save_customer_receipt_draft_with_assets(req, Arc::new(EmptyPendingAttachments), actor)
+            .await?
+            .view)
+    }
+
+    /// 保存草稿及新增凭证，同号重放不再次消费文件。
+    /// # 参数
+    /// 登记字段、本次上传批次和认证操作人。
+    /// # 返回
+    /// 当前草稿及本批文件是否已提交。
+    /// # 错误
+    /// 校验、授权、版本、事务或读取失败时拒绝；未知提交保持原错误。
+    pub async fn save_customer_receipt_draft_with_assets(
+        &self,
+        mut req: SaveCustomerReceiptDraftRequest,
+        pending: Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+    ) -> Result<ReceiptDraftWithAssets> {
         req.validate()?;
         req.receipt.validate()?;
         req.validate_identity()?;
-        let command = CommandReceipt::from_payload(
-            "customer-receipt-draft-",
-            actor.id(),
-            "customer_receipt.save_draft",
-            "customer_receipt",
-            &req.idempotency_key,
-            &req,
-        )?;
+        let command = receipt_files::receipt(&req, actor, pending.as_ref())?;
+        receipt_files::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let process = Self::new(self.db.clone()).with_object_read(self.object_read.clone());
         let actor = actor.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { process.save_draft_command(req, &actor, &command, executor).await })
+                Box::pin(async move {
+                    process.save_draft_command(req, &actor, &command, pending.as_ref(), executor).await
+                })
             })
             .await
     }
@@ -65,24 +91,40 @@ impl ReceivableProcess {
         req: SaveCustomerReceiptDraftRequest,
         actor: &AuditActor,
         command: &CommandReceipt,
+        pending: &dyn PendingAttachmentBatch,
         executor: &mut dyn Executor,
-    ) -> Result<CustomerReceiptView> {
+    ) -> Result<ReceiptDraftWithAssets> {
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         if let Some(id) = receipts.committed_resource_id(command, executor).await? {
             ensure_receipt_edit_authorized(&self.db, &self.rbac, actor, &id, executor).await?;
             let receipt = self.draft_receipt(&id, executor).await?;
             ensure_receipt_owner(&receipt, actor.id())?;
-            return receipt_view_with_actions(&self.db, &self.rbac, actor, &id, executor).await;
+            return Ok(ReceiptDraftWithAssets {
+                view: receipt_view_with_actions(&self.db, &self.rbac, actor, &id, executor).await?,
+                assets_committed: false,
+            });
         }
         let mut receipt = self.prepare_saved_draft(&req, actor, executor).await?;
         receipt.save_allocations(convert_allocations(&req.allocations)?)?;
         self.validate_draft_sources(&receipt, executor).await?;
         self.db.customer_receipts().update(&mut receipt, executor).await?;
         ensure_receipt_edit_authorized(&self.db, &self.rbac, actor, &receipt.base.id, executor).await?;
+        receipt_files::persist(
+            &self.db,
+            &receipt.base.id,
+            &req.attachment_asset_ids,
+            pending,
+            actor,
+            executor,
+        )
+        .await?;
         let audit = draft_audit(actor, &receipt.base.id, req.receipt_id.as_deref())?;
         persist_log(&self.db, &audit, executor).await?;
         receipts.save_resource(command, receipt.base.id.clone(), audit.base.id, executor).await?;
-        receipt_view_with_actions(&self.db, &self.rbac, actor, &receipt.base.id, executor).await
+        Ok(ReceiptDraftWithAssets {
+            view: receipt_view_with_actions(&self.db, &self.rbac, actor, &receipt.base.id, executor).await?,
+            assets_committed: !pending.is_empty(),
+        })
     }
 
     async fn prepare_saved_draft(

@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_identity::SharedRbacService;
+use erp_read_models::finance::document_files::{FinancialFileView, financial_document_files};
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_workflow::service::approval::approval_action_roles_with_executor;
@@ -16,6 +17,39 @@ use crate::adapters::workflow::workflow_auth;
 use crate::{Error, Result};
 
 impl ReceivableProcess {
+    /// 原登记人按草稿编辑资格读取回款凭证。
+    /// # 参数
+    /// 回款主键与当前认证操作人。
+    /// # 返回
+    /// 本单凭证展示清单。
+    /// # 错误
+    /// 当前编辑资格、原登记人或文件读取校验失败时拒绝。
+    pub async fn customer_receipt_draft_files(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<Vec<FinancialFileView>> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    ensure_receipt_edit_authorized(&db, &rbac, &actor, &id, executor).await?;
+                    let receipt = db
+                        .customer_receipts()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
+                    ensure_receipt_owner(&receipt, actor.id())?;
+                    Ok(financial_document_files(&db, &id, &receipt.receipt_no, executor).await?)
+                })
+            })
+            .await
+    }
+
     /// 读取原登记人的完整回款字段，供草稿编辑与未知提交确认。
     ///
     /// # 参数

@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { LockKeyholeIcon, XIcon } from "lucide-react"
+import { ArrowLeftIcon, LockKeyholeIcon, XIcon } from "lucide-react"
 
-import { DetailPageHeader } from "@/components/business/detail-page-header"
+import { PageHeader, PageActions } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -19,6 +19,7 @@ export function SessionHeader({
     onRequestClose,
     showClose = true,
     submitted = false,
+    closeDisabled = false,
 }: {
     session: AllocationSessionView
     isReceipt: boolean
@@ -27,6 +28,7 @@ export function SessionHeader({
     onRequestClose: () => void
     showClose?: boolean
     submitted?: boolean
+    closeDisabled?: boolean
 }) {
     if (isReceipt) {
         const title = existing ? "编辑回款草稿" : "登记回款"
@@ -35,34 +37,30 @@ export function SessionHeader({
             tone: submitted ? ("warning" as const) : ("neutral" as const),
         }
         return (
-            <div className="space-y-2">
+            <div className="space-y-6">
                 {showClose ? (
-                    <DetailPageHeader
+                    <PageHeader
                         title={title}
-                        headingProps={{
-                            className: "text-page-title md:text-page-title",
-                        }}
-                        documentNumber={session.existingFactNo}
-                        primaryStatus={status}
-                        back={{
-                            id: "customer-receivables-session-close",
-                            label:
-                                session.returnContext?.from === "W05" &&
-                                session.returnContext.returnTo
-                                    ? "返回销售单"
-                                    : "客户往来",
-                            onClick: onRequestClose,
-                        }}
-                        titleExtra={
-                            !submitted ? (
-                                <span className="text-xs text-muted-foreground">
-                                    {draftSavedAt
-                                        ? `已保存 ${formatDateTime(draftSavedAt, "monthDayIntl")}`
-                                        : existing
-                                          ? "已保存"
-                                          : "未保存"}
-                                </span>
-                            ) : null
+                        description="填写到账信息，选择对应的销售单应收"
+                        status={status}
+                        actions={
+                            <PageActions
+                                actions={[
+                                    {
+                                        actionKey: "back",
+                                        id: "customer-receivables-session-close",
+                                        label:
+                                            session.returnContext?.from ===
+                                            "W05"
+                                                ? "返回销售单"
+                                                : "返回列表",
+                                        icon: ArrowLeftIcon,
+                                        variant: "outline",
+                                        disabled: closeDisabled,
+                                        onClick: onRequestClose,
+                                    },
+                                ]}
+                            />
                         }
                     />
                 ) : (
@@ -71,7 +69,7 @@ export function SessionHeader({
                         <StatusBadge {...status} />
                     </div>
                 )}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <div className="flex flex-wrap items-center gap-3 rounded-md bg-muted/40 px-4 py-3 text-sm">
                     <span className="text-muted-foreground">结算主体</span>
                     <LockKeyholeIcon
                         className="size-4 shrink-0 text-muted-foreground"
@@ -80,6 +78,20 @@ export function SessionHeader({
                     <span className="min-w-0 break-words font-medium">
                         {session.counterpartyPartyName}
                     </span>
+                    <span className="text-xs text-muted-foreground">
+                        已选定
+                    </span>
+                    {session.existingFactNo ? (
+                        <span className="num text-xs text-muted-foreground">
+                            {session.existingFactNo}
+                        </span>
+                    ) : null}
+                    {draftSavedAt ? (
+                        <span className="text-xs text-muted-foreground">
+                            已保存{" "}
+                            {formatDateTime(draftSavedAt, "monthDayIntl")}
+                        </span>
+                    ) : null}
                 </div>
             </div>
         )

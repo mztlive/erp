@@ -28,6 +28,8 @@ mod customer_receipt_posting;
 mod customer_receipt_submit;
 mod draft_read;
 mod draft_save;
+mod receipt_files;
+pub use draft_save::ReceiptDraftWithAssets;
 mod draft_update;
 
 mod dto;

@@ -331,6 +331,9 @@ export type AllocationSessionView = Readonly<{
         receivedAt?: string
         amount?: string
         bankReference?: string
+        /** 本次新增凭证；文件名用于未保存文件提示，文件内容不写入会话 JSON。 */
+        receiptFiles?: readonly File[]
+        receiptFileNames?: readonly string[]
         invoiceCode?: string
         invoiceNo?: string
         invoiceDate?: string

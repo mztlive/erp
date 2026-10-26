@@ -53,7 +53,13 @@ export function AllocationSessionScreen({
     closeLabel,
 }: AllocationSessionScreenProps) {
     const wrap = (content: React.ReactNode) =>
-        embedded ? content : <PageScaffold>{content}</PageScaffold>
+        embedded ? (
+            content
+        ) : (
+            <PageScaffold density="compact" className="gap-6">
+                {content}
+            </PageScaffold>
+        )
 
     if (isPending) {
         return wrap(

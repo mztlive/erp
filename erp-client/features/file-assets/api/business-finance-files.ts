@@ -65,3 +65,19 @@ export function downloadInvoiceFile(invoiceId: string, file: FinancialFile) {
         file.file_name,
     )
 }
+
+export function fetchCustomerReceiptFiles(receiptId: string, draft: boolean) {
+    return apiGet<FinancialFile[]>(
+        `/admin/customer-receipts/${encodeURIComponent(receiptId)}/${draft ? "draft-files" : "files"}`,
+    )
+}
+export function downloadCustomerReceiptFile(
+    receiptId: string,
+    draft: boolean,
+    file: FinancialFile,
+) {
+    return download(
+        `/admin/customer-receipts/${encodeURIComponent(receiptId)}/${draft ? "draft-files" : "files"}/${encodeURIComponent(file.file_asset_id)}/download`,
+        file.file_name,
+    )
+}

@@ -993,6 +993,8 @@ sequenceDiagram
 | 合同筛选 | 销售单列表 `has_contract=true/false`；省略表示不限制 |
 | 签收凭证 | 现有客户验收 JSON 命令新增 `evidence_attachment_id`；`GET /admin/customer-acceptances/{id}/evidence` 按签收来源下载 |
 | 明细物流单号 | 发货创建、草稿更新和确认命令使用 `tracking_entries: [{sales_order_line_id, tracking_no, carrier?}]`；销售明细必须存在于当前发货行，更新时显式空数组清除全部物流关联；取消旧单据级物流字段 |
+| 回款凭证 | `POST /admin/customer-receipts/drafts/with-files` 使用 multipart `command` 和 `attachment_asset_ids` 引用的新增文件；原 JSON 草稿接口保留。草稿、文件资产、附件关联和命令回执须同事务保存。文件支持 PDF、JPG、PNG、WebP，每笔累计最多 32 个、单个不超过 5 MiB；保存后的凭证随本单审批材料冻结。结果未知须保留原文件及操作号并查证，明确失败或重放未消费上传时清理新对象。 |
+| 回款凭证读取 | `GET /admin/customer-receipts/{id}/files` 及其 `/{asset_id}/download` 要求回款详情权限和整单范围；`draft-files` 对应路径要求提交权限、完整编辑资格及原登记人身份。下载须在存储读取前后重验资格、关联和资产状态，禁止返回公开存储地址。 |
 | 进项发票文件 | `POST /admin/purchase-invoice-allocations/with-files` 使用 multipart `command` 与 `attachment_asset_ids` 引用的文件字段；无新文件继续使用原 JSON 接口。文件可选，最多 32 个、每个不超过 5 MiB，支持 PDF、JPG、PNG、WebP；服务端核对文件扩展名、类型及内容签名。文件资产、附件关系与登记分配在同一事务持久化；确定未提交或重放未消费的上传须清理，结果未知须保留并沿原操作号重试。 |
 | 发票文件读取 | `GET /admin/invoices/{id}/files` 列出文件，`GET /admin/invoices/{id}/files/{asset_id}/download` 下载；要求 `invoice:detail` 及整票数据范围，部分核销份额授权不得读取整票文件。 |
 | 财务发票文件 | `POST /admin/invoices/with-files`、`POST /admin/invoices/commit-with-files` 使用 multipart `command` 和命令引用的文件字段；无新文件继续使用原 JSON 接口 |

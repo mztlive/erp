@@ -16,6 +16,7 @@ use crate::core::middleware::with_permission;
 /// 无。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     invoice_routes(rbac)
+        .merge(receipt_routes(rbac))
         .route(
             "/work-items/{id}/purchase-payment",
             with_permission(
@@ -75,6 +76,43 @@ fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(financial_files::invoice::invoice_download),
                 rbac,
                 financial_files::invoice::invoice_download_permission_key(),
+            ),
+        )
+}
+
+/// 回款凭证查看与草稿编辑下载。
+fn receipt_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/customer-receipts/{id}/files",
+            with_permission(
+                get(financial_files::receipt::receipt_files),
+                rbac,
+                financial_files::receipt::receipt_files_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-receipts/{id}/files/{asset_id}/download",
+            with_permission(
+                get(financial_files::receipt::receipt_file_download),
+                rbac,
+                financial_files::receipt::receipt_file_download_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-receipts/{id}/draft-files",
+            with_permission(
+                get(financial_files::receipt::receipt_draft_files),
+                rbac,
+                financial_files::receipt::receipt_draft_files_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-receipts/{id}/draft-files/{asset_id}/download",
+            with_permission(
+                get(financial_files::receipt::receipt_draft_file_download),
+                rbac,
+                financial_files::receipt::receipt_draft_file_download_permission_key(),
             ),
         )
 }

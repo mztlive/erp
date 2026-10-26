@@ -92,7 +92,7 @@ export function ReceiptAllocationTable({
                 id="customer-receivables-session-allocations-title"
                 className="text-base font-semibold"
             >
-                关联销售单应收
+                核销明细
             </h2>
             <TableToolbarScope>
                 <div className="min-w-0 space-y-4">
@@ -119,7 +119,7 @@ export function ReceiptAllocationTable({
                             </div>
                         </TableToolbar>
                     </div>
-                    <Table data-density="comfortable">
+                    <Table data-density="comfortable" className="min-w-3xl">
                         <caption className="sr-only">
                             选择销售单应收并填写本次核销金额
                         </caption>

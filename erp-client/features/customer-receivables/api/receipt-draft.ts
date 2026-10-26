@@ -1,4 +1,11 @@
-import { apiGet, apiPost } from "@/lib/api"
+import { toast } from "@/components/ui/toast"
+import { invoiceFileReference, invoiceFilesError } from "@/lib/invoice-files"
+import {
+    readReceiptFileValue,
+    writeReceiptFileValue,
+    removeReceiptFileValue,
+} from "@/lib/receipt-file-store"
+import { apiGet, apiPost, apiPostForm } from "@/lib/api"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { getErrorCode } from "@/lib/api/errors"
 import { normalizeFixed } from "@/lib/fixed-decimal"
@@ -100,14 +107,30 @@ export async function saveReceiptDraft(
         !Number.isFinite(new Date(input.fact.receivedAt).getTime())
     )
         throw new Error("请填写有效的到账时间。")
-    const recovering = Boolean(
-        session.ownerId &&
-        readReceiptSession(session.ownerId, session.draftSessionId)?.pending,
-    )
+    const pending = session.ownerId
+        ? readReceiptSession(session.ownerId, session.draftSessionId)?.pending
+        : undefined
+    const recovering = Boolean(pending)
+    const idempotencyKey = pending?.input.idempotencyKey ?? crypto.randomUUID()
+    const fileKey = `${session.ownerId}:${session.draftSessionId}:${idempotencyKey}`
+    const files = pending
+        ? pending.input.fact.receiptFileNames?.length
+            ? await readReceiptFileValue<File[]>(fileKey)
+            : []
+        : [...(input.fact.receiptFiles ?? [])]
+    if (!files)
+        throw new Error(
+            "原操作的凭证文件无法恢复，请保留当前页面并联系管理员核对保存结果。",
+        )
+    const fileError = invoiceFilesError(files, "回款凭证")
+    if (fileError) throw new Error(fileError)
+    if (!pending && files.length) await writeReceiptFileValue(fileKey, files)
     const command = prepareReceiptCommand(session, "save", {
         ...input,
+        idempotencyKey,
         fact: {
             ...input.fact,
+            receiptFileNames: files.map((file) => file.name),
             amount,
             receivedAt: new Date(input.fact.receivedAt).toISOString(),
         },
@@ -115,32 +138,44 @@ export async function saveReceiptDraft(
     const original = command.session
     const fact = command.input.fact
     try {
-        const saved = await apiPost<BackendCustomerReceipt>(
-            "/admin/customer-receipts/drafts",
-            {
-                receipt_id: original.existingFactId ?? null,
-                expected_version: original.existingFactVersion ?? null,
-                receipt: {
-                    receipt_no:
-                        original.existingFactNo ??
-                        `SK-${original.draftSessionId.replace("alloc_cust_", "")}`,
-                    counterparty_party_id: original.counterpartyPartyId,
-                    customer_id: original.existingFactId
-                        ? (original.receiptCustomerId ?? null)
-                        : original.customerId || null,
-                    received_at: Math.floor(
-                        new Date(fact.receivedAt!).getTime() / 1000,
-                    ),
-                    amount: fact.amount,
-                    bank_reference: fact.bankReference || null,
-                },
-                allocations: command.input.allocations.map((line) => ({
-                    receivable_entry_id: line.targetId,
-                    allocated_amount: line.amount || "0",
-                })),
-                idempotency_key: command.input.idempotencyKey,
+        const payload = {
+            receipt_id: original.existingFactId ?? null,
+            expected_version: original.existingFactVersion ?? null,
+            receipt: {
+                receipt_no:
+                    original.existingFactNo ??
+                    `SK-${original.draftSessionId.replace("alloc_cust_", "")}`,
+                counterparty_party_id: original.counterpartyPartyId,
+                customer_id: original.existingFactId
+                    ? (original.receiptCustomerId ?? null)
+                    : original.customerId || null,
+                received_at: Math.floor(
+                    new Date(fact.receivedAt!).getTime() / 1000,
+                ),
+                amount: fact.amount,
+                bank_reference: fact.bankReference || null,
             },
-        )
+            allocations: command.input.allocations.map((line) => ({
+                receivable_entry_id: line.targetId,
+                allocated_amount: line.amount || "0",
+            })),
+            idempotency_key: command.input.idempotencyKey,
+            attachment_asset_ids: files.map(invoiceFileReference),
+        }
+        const body = new FormData()
+        body.append("command", JSON.stringify(payload))
+        for (const file of files)
+            body.append(invoiceFileReference(file), file, file.name)
+        const saved = files.length
+            ? await apiPostForm<BackendCustomerReceipt>(
+                  "/admin/customer-receipts/drafts/with-files",
+                  body,
+                  { timeoutMs: 60_000 },
+              )
+            : await apiPost<BackendCustomerReceipt>(
+                  "/admin/customer-receipts/drafts",
+                  payload,
+              )
         const next: AllocationSessionView = {
             ...original,
             existingFactId: saved.id,
@@ -161,11 +196,21 @@ export async function saveReceiptDraft(
             status: saved.status === "draft" ? "draft" : "posted",
         }
         writeReceiptSession(next, null)
+        if (files.length) clearUploadCopy(fileKey)
         return next
     } catch (error) {
         // 已有未确认操作的恢复失败仍保持锁定，不能据此生成另一笔登记。
-        if (!recovering && !isReceiptOutcomeUnknown(error))
+        if (!recovering && !isReceiptOutcomeUnknown(error)) {
             writeReceiptSession(session, null)
+            if (files.length) clearUploadCopy(fileKey)
+        }
         throw error
     }
+}
+
+/** 服务端结果已明确后清理重试副本；清理失败不得改变已完成业务结果。 */
+function clearUploadCopy(key: string) {
+    void removeReceiptFileValue(key).catch(() => {
+        toast.add({ type: "warning", title: "本机回款凭证副本未能清理" })
+    })
 }

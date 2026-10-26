@@ -1,4 +1,5 @@
 //! 可恢复的客户回款草稿保存命令。
+use erp_core::ids::FileAssetId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -17,6 +18,10 @@ pub struct SaveCustomerReceiptDraftRequest {
     pub receipt: CreateCustomerReceiptRequest,
     /// 拟核销分配，可为空；已提交过的原单仍须保留原来源。
     pub allocations: Vec<ReceiptAllocationLineRequest>,
+    /// 本次新增回款凭证；仅 multipart 上传引用，已有凭证保留。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[validate(length(max = 32))]
+    pub attachment_asset_ids: Vec<FileAssetId>,
     /// 保存操作号；结果未知时须使用原号和原内容重试。
     #[validate(length(min = 1, max = 128))]
     pub idempotency_key: String,

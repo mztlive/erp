@@ -21,6 +21,8 @@ export function InvoiceFilesField({
     disabled,
     errors,
     label = "发票附件（可选）",
+    uploadLabel = "添加发票附件",
+    fileKind = "发票附件",
     density = "default",
     idPrefix = "customer-receivables-session-invoice-files",
     description = "登记成功后，销售单详情可下载已上传的发票。",
@@ -29,6 +31,8 @@ export function InvoiceFilesField({
     description?: string
     density?: "default" | "compact"
     label?: string
+    uploadLabel?: string
+    fileKind?: string
     files: readonly File[]
     onChange: (files: File[]) => void
     disabled: boolean
@@ -51,7 +55,7 @@ export function InvoiceFilesField({
                     )
                     for (const file of selected)
                         next.set(invoiceFileReference(file), file)
-                    return invoiceFilesError([...next.values()])
+                    return invoiceFilesError([...next.values()], fileKind)
                 }}
                 selectedFiles={files}
                 fileKey={invoiceFileReference}
@@ -66,7 +70,7 @@ export function InvoiceFilesField({
                 }
                 maxFileSize={5 * 1024 * 1024}
                 disabled={disabled}
-                label="添加发票附件"
+                label={uploadLabel}
                 description="支持 PDF、JPG、PNG、WebP，最多 32 个，单个不超过 5 MB"
                 aria-describedby={`${baseId}-description${invalid ? ` ${baseId}-error` : ""}`}
                 aria-invalid={invalid || undefined}

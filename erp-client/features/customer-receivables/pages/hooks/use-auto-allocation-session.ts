@@ -31,6 +31,7 @@ export function useAutoAllocationSession(args: {
             from?: string
         }) => Promise<{ draftSessionId: string }>
     }
+    onReceiptCreated: (sessionId: string) => void
     patchUrl: CustomerReceivablesPatchUrl
     setActionError: React.Dispatch<React.SetStateAction<string | null>>
 }): void {
@@ -47,6 +48,7 @@ export function useAutoAllocationSession(args: {
         canRegister = true,
         createSession,
         patchUrl,
+        onReceiptCreated,
         setActionError,
     } = args
     const autoSessionRef = React.useRef(false)
@@ -99,6 +101,10 @@ export function useAutoAllocationSession(args: {
                     returnTo,
                     from,
                 })
+                if (registerMode === "receipt") {
+                    onReceiptCreated(session.draftSessionId)
+                    return
+                }
                 patchUrl(
                     { sessionId: session.draftSessionId },
                     { replace: true },

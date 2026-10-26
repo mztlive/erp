@@ -1182,6 +1182,46 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/customer-receipts/{id}/files",
+                description: "查询回款凭证",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts/{id}/files/{asset_id}/download",
+                description: "下载回款凭证",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts/{id}/draft-files",
+                description: "查询回款凭证",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts/{id}/draft-files/{asset_id}/download",
+                description: "下载回款凭证",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/receivable-accounts",
                 description: "查询应收往来子账列表",
                 permission: {
@@ -1394,6 +1434,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 method: "GET",
                 path: "/admin/customer-receipts/{id}/draft",
                 description: "读取原回款编辑字段",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/drafts/with-files",
+                description: "保存回款草稿及凭证附件",
                 permission: {
                     resource: "customer_receipt",
                     action: "submit",

@@ -1,9 +1,11 @@
 //! 业务单据关联的财务文件；仅返回文件展示字段，存储位置不进入业务响应。
 
+mod attachments;
 mod fulfillment_payment;
 use std::collections::{BTreeMap, BTreeSet};
 
 use application_core::AuditActor;
+pub use attachments::financial_document_files;
 use erp_core::ids::{BusinessDocumentId, PurchaseOrderId, ReceivableAccountId};
 use erp_core::money::Amount;
 use erp_finance::entity::payable::PaymentAllocation;
