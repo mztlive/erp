@@ -55,6 +55,8 @@ impl SupplierApiService {
                 id: row.id,
                 supplier_id: row.supplier_id,
                 connection_code: row.connection_code,
+                connector_type: row.connector_type,
+                connector_type_label: row.connector_type.map(|kind| kind.label()),
                 status: row.status,
                 rate_limit_policy: None,
                 last_health_at: row.last_health_at.map(|at| at as u64),

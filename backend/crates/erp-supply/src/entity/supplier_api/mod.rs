@@ -24,6 +24,8 @@
 pub mod capability;
 pub mod capability_change_set;
 pub mod connection;
+mod connector_type;
+pub use connector_type::SupplierConnectorType;
 pub mod governance;
 pub mod prepared_commands;
 

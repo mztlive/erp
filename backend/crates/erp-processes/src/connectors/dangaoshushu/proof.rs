@@ -60,7 +60,8 @@ pub(super) fn binding_hash(
 ) -> ConnectorResult<String> {
     let bytes = to_vec(&json!({
         "configuration":configuration_hash(settings)?,
-        "connection":target.connection_id,"supplier":target.supplier_id
+        "connection":target.connection_id,"supplier":target.supplier_id,
+        "connector_type":target.connector_type
     }))
     .map_err(|_| mapping())?;
     Ok(hash(&settings.private_key, &bytes))

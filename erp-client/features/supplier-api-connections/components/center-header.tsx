@@ -81,6 +81,14 @@ export function CenterHeader({
                 }
                 statuses={[
                     {
+                        id: "connector-type",
+                        label: "接口类型",
+                        status: {
+                            label: conn.connectorTypeLabel,
+                            tone: "neutral",
+                        },
+                    },
+                    {
                         id: "health",
                         label: "最近健康",
                         status: {

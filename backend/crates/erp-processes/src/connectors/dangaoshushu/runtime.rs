@@ -6,7 +6,7 @@ use config::DangaoshushuConfig;
 use erp_core::common::time::Instant;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
-    SupplierApiConnection, SupplierApiConnectionStatus, SupplierHealthCheckType,
+    SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType, SupplierHealthCheckType,
 };
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
@@ -37,6 +37,7 @@ pub struct SupplierReferenceTickets {
 struct ReferenceTicket {
     connection_id: String,
     supplier_id: String,
+    connector_type: SupplierConnectorType,
     kind: String,
     fingerprint: String,
     expires_at: i64,
@@ -135,6 +136,13 @@ impl DangaoshushuRuntime {
     }
 
     fn validate_target(&self, target: &SupplierReferenceTarget) -> ConnectorResult<()> {
+        if target.connector_type != Some(SupplierConnectorType::Dangaoshushu) {
+            return Err(error(
+                SupplierFailureClass::CapabilityGap,
+                "DGSS_CONNECTOR_TYPE_MISMATCH",
+                "连接未选择蛋糕叔叔 API",
+            ));
+        }
         if target.connection_id.as_ref().is_empty() || target.supplier_id.as_ref().is_empty() {
             return Err(binding_error());
         }
@@ -170,6 +178,7 @@ impl DangaoshushuRuntime {
                 &ReferenceTicket {
                     connection_id: target.connection_id.to_string(),
                     supplier_id: target.supplier_id.to_string(),
+                    connector_type: SupplierConnectorType::Dangaoshushu,
                     kind: kind.into(),
                     fingerprint: proof::binding_hash(&self.settings, target)?,
                     expires_at,
@@ -196,7 +205,8 @@ impl DangaoshushuRuntime {
     ) -> ConnectorResult<ResolvedSupplierReference> {
         let expected = reference_kind(kind)?;
         let ticket: ReferenceTicket = proof::decode(&self.settings.private_key, payload)?;
-        if ticket.kind != expected
+        if Some(ticket.connector_type) != target.connector_type
+            || ticket.kind != expected
             || ticket.connection_id != target.connection_id.as_ref()
             || ticket.supplier_id != target.supplier_id.as_ref()
             || ticket.fingerprint != proof::binding_hash(&self.settings, target)?
@@ -279,9 +289,10 @@ impl SupplierApiGateway for DangaoshushuRuntime {
     }
     fn catalog_sync<'a>(
         &'a self,
-        _connection: &'a SupplierApiConnection,
+        connection: &'a SupplierApiConnection,
     ) -> Pin<Box<dyn Future<Output = Result<(), ClassifiedError>> + Send + 'a>> {
-        Box::pin(async {
+        Box::pin(async move {
+            self.validate_target(&SupplierReferenceTarget::from(connection)).map_err(classified)?;
             Err(ClassifiedError {
                 class: SupplierFailureClass::CapabilityGap,
                 code: "DGSS_CATALOG_APPLY_NOT_CONFIGURED".into(),
@@ -321,6 +332,7 @@ fn classified(error: ConnectorError) -> ClassifiedError {
 mod tests {
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
+    use serde_json::{from_value, json};
 
     use super::super::test_support::{recording_connector, settings};
     use super::*;
@@ -331,6 +343,7 @@ mod tests {
             SupplierApiConnectionData {
                 supplier_id: SupplierAccountId::new("supplier-1"),
                 connection_code: "dgss-test".into(),
+                connector_type: SupplierConnectorType::Dangaoshushu,
                 endpoint_reference: "unbound".into(),
                 credential_reference: None,
                 rate_limit_policy: None,
@@ -409,8 +422,7 @@ mod tests {
 
     #[tokio::test]
     async fn capability_health_cannot_use_brand_read_success_as_metadata_evidence() {
-        let (connector, transport) =
-            recording_connector(vec![Ok(serde_json::json!([])), Ok(serde_json::json!([]))]);
+        let (connector, transport) = recording_connector(vec![Ok(json!([])), Ok(json!([]))]);
         let runtime = DangaoshushuRuntime { settings: connector.settings, transport: transport.clone() };
         let mut connection = connection();
         connection
@@ -458,7 +470,7 @@ mod tests {
 
     #[tokio::test]
     async fn backend_connections_bind_independently_without_config_ids_and_share_transport() {
-        let (_, transport) = recording_connector(vec![Ok(serde_json::json!([])), Ok(serde_json::json!([]))]);
+        let (_, transport) = recording_connector(vec![Ok(json!([])), Ok(json!([]))]);
         let runtime = DangaoshushuRuntime { settings: settings(), transport: transport.clone() };
         let mut first = connection();
         let mut second = connection();
@@ -498,6 +510,33 @@ mod tests {
         assert!(changed.bound_connector(&connection).is_ok());
         connection.supplier_id = SupplierAccountId::new("other-supplier");
         assert!(changed.bound_connector(&connection).is_err());
+    }
+
+    /// 专用入口也检查接口类型；旧连接即使持有正确引用也不得绕过类型分派。
+    #[tokio::test]
+    async fn direct_adapter_entries_reject_untyped_connection_without_external_calls() {
+        let (_, transport) = recording_connector(vec![]);
+        let runtime = DangaoshushuRuntime { settings: settings(), transport: transport.clone() };
+        let mut connection = connection();
+        bind_from_options(&runtime, &mut connection).await;
+        let tickets = runtime.reference_tickets(&connection, Instant::now()).unwrap();
+        connection.connector_type = None;
+        connection.stable.status = SupplierApiConnectionStatus::Active;
+        assert_eq!(runtime.connector(&connection).err().unwrap().code, "DGSS_CONNECTOR_TYPE_MISMATCH");
+        let query: DangaoshushuReadQuery = from_value(json!({"kind":"brands"})).unwrap();
+        assert_eq!(runtime.read(&connection, &query).await.unwrap_err().code, "DGSS_CONNECTOR_TYPE_MISMATCH");
+        assert!(runtime.reference_tickets(&connection, Instant::now()).is_err());
+        assert!(runtime.health_check(&connection, SupplierHealthCheckType::Connectivity).await.is_err());
+        assert!(runtime.catalog_sync(&connection).await.is_err());
+        let target = SupplierReferenceTarget::from(&connection);
+        assert!(runtime.options(SupplierReferenceKind::Endpoint, &target).await.unwrap().is_empty());
+        assert!(
+            runtime
+                .resolve(SupplierReferenceKind::Endpoint, &tickets.endpoint_ticket, &target)
+                .await
+                .is_err()
+        );
+        assert!(transport.requests.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -109,3 +109,9 @@ export async function fetchOpaqueReferenceOptions(
         expiresAt: option.expires_at,
     }))
 }
+
+export type ConnectorTypeOption = { code: string; label: string }
+
+export async function fetchConnectorTypes(): Promise<ConnectorTypeOption[]> {
+    return apiGet<ConnectorTypeOption[]>("/admin/supplier-api-connector-types")
+}

@@ -12,6 +12,8 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::SupplierConnectorType;
+
 /// 连接代码最大长度。
 const CODE_MAX_LEN: usize = 64;
 /// 地址配置引用最大长度。
@@ -197,6 +199,8 @@ pub struct SupplierApiConnectionData {
     pub supplier_id: SupplierAccountId,
     /// ERP 内稳定连接代码（唯一）。
     pub connection_code: String,
+    /// 明确选择的接口协议；创建后不可修改。
+    pub connector_type: SupplierConnectorType,
     /// 地址配置引用。
     pub endpoint_reference: String,
     /// 密钥管理系统引用（不保存明文密钥）。
@@ -238,6 +242,9 @@ pub struct SupplierApiConnection {
     pub supplier_id: SupplierAccountId,
     /// ERP 内稳定连接代码（创建后不可修改）。
     pub connection_code: String,
+    /// 接口协议；旧记录缺失时保持未指定，不得默认选择供应商。
+    #[serde(default)]
+    pub connector_type: Option<SupplierConnectorType>,
     /// 地址配置引用。
     pub endpoint_reference: String,
     /// 地址配置引用是否已由权威引用注册表确认绑定。
@@ -274,6 +281,7 @@ impl PartialEq for SupplierApiConnection {
             && self.stable.updated_by == other.stable.updated_by
             && self.supplier_id == other.supplier_id
             && self.connection_code == other.connection_code
+            && self.connector_type == other.connector_type
             && self.endpoint_reference == other.endpoint_reference
             && self.endpoint_reference_bound == other.endpoint_reference_bound
             && self.credential_reference == other.credential_reference
@@ -328,6 +336,7 @@ impl SupplierApiConnection {
             stable: StableBase::new(data.status, created_by),
             supplier_id: data.supplier_id,
             connection_code,
+            connector_type: Some(data.connector_type),
             endpoint_reference_bound: !endpoint_reference.is_empty(),
             endpoint_reference,
             credential_reference_bound: credential_reference.is_some(),
@@ -673,16 +682,18 @@ impl SupplierApiConnection {
 mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+    use serde_json::{from_value, to_value};
 
     use super::{
         HealthCheckResult, RateLimitPolicy, SupplierApiConnection, SupplierApiConnectionData,
-        SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
+        SupplierApiConnectionStatus, SupplierApiConnectionUpdate, SupplierConnectorType,
     };
 
     fn connection_data() -> SupplierApiConnectionData {
         SupplierApiConnectionData {
             supplier_id: SupplierAccountId::new("sup-1"),
             connection_code: " SUP-CN-001 ".to_string(),
+            connector_type: SupplierConnectorType::Dangaoshushu,
             endpoint_reference: " config://supplier/001 ".to_string(),
             credential_reference: Some(" kms://prod/erp/sup-001 ".to_string()),
             rate_limit_policy: None,
@@ -713,12 +724,26 @@ mod tests {
             SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
                 .unwrap();
         for environment in ["production", "testing"] {
-            let mut stored = serde_json::to_value(&connection).unwrap();
+            let mut stored = to_value(&connection).unwrap();
             stored["environment"] = environment.into();
-            let restored: SupplierApiConnection = serde_json::from_value(stored).unwrap();
+            let restored: SupplierApiConnection = from_value(stored).unwrap();
             assert_eq!(restored, connection);
-            assert!(serde_json::to_value(restored).unwrap().get("environment").is_none());
+            assert!(to_value(restored).unwrap().get("environment").is_none());
         }
+    }
+
+    /// 旧记录可读取，但缺失协议时不得根据连接代码或供应商自动补齐。
+    #[test]
+    fn legacy_connection_keeps_missing_connector_type() {
+        let connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "actor")
+                .unwrap();
+        let mut stored = to_value(&connection).unwrap();
+        stored.as_object_mut().unwrap().remove("connector_type");
+        let restored: SupplierApiConnection = from_value(stored).unwrap();
+        assert_eq!(restored.connector_type, None);
+        assert_eq!(restored.base.id, connection.base.id);
+        assert_eq!(restored.supplier_id, connection.supplier_id);
     }
 
     #[test]

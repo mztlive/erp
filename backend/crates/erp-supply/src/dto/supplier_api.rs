@@ -17,8 +17,23 @@ use crate::Result;
 use crate::entity::supplier_api::{
     BusinessCapabilityRequirement, HealthCheckResult, RateLimitPolicy, SupplierApiCapabilityCode,
     SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionStatus, SupplierCommandOutcome,
-    SupplierConnectionAction, SupplierHealthCheckStatus, SupplierHealthCheckType,
+    SupplierConnectionAction, SupplierConnectorType, SupplierHealthCheckStatus, SupplierHealthCheckType,
 };
+
+/// 接口类型的稳定代码与展示名称，不包含供应商账号或凭据。
+#[derive(Serialize)]
+pub struct SupplierConnectorTypeOption {
+    /// 已实现的接口协议。
+    pub code: SupplierConnectorType,
+    /// 接口协议展示名称。
+    pub label: &'static str,
+}
+
+impl From<SupplierConnectorType> for SupplierConnectorTypeOption {
+    fn from(code: SupplierConnectorType) -> Self {
+        Self { code, label: code.label() }
+    }
+}
 
 /// 连接列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const SUPPLIER_API_CONNECTION_SORT_FIELDS: &[&str] =
@@ -95,6 +110,8 @@ pub struct CreateSupplierApiConnectionRequest {
     /// ERP 内稳定连接代码（全局唯一）。
     #[validate(custom(function = "non_blank", message = "连接代码不能为空"))]
     pub connection_code: String,
+    /// 已实现的接口协议；必须显式选择。
+    pub connector_type: SupplierConnectorType,
     /// 地址配置引用。
     pub endpoint_reference: Option<String>,
     /// 密钥管理系统引用（不保存明文密钥）。
@@ -401,6 +418,10 @@ pub struct SupplierApiConnectionView {
     pub supplier_id: String,
     /// ERP 内稳定连接代码。
     pub connection_code: String,
+    /// 旧连接可缺失协议，缺失时禁止技术调用。
+    pub connector_type: Option<SupplierConnectorType>,
+    /// 接口协议展示名称。
+    pub connector_type_label: Option<&'static str>,
     /// 启停/故障状态。
     pub status: SupplierApiConnectionStatus,
     /// 限流策略。
@@ -584,6 +605,8 @@ impl From<SupplierApiConnection> for SupplierApiConnectionView {
             id: connection.base.id,
             supplier_id: connection.supplier_id.to_string(),
             connection_code: connection.connection_code,
+            connector_type: connection.connector_type,
+            connector_type_label: connection.connector_type.map(SupplierConnectorType::label),
             status: connection.stable.status,
             rate_limit_policy: connection.rate_limit_policy.map(|policy| RateLimitPolicyView {
                 max_requests: policy.max_requests(),
@@ -632,32 +655,43 @@ impl RateLimitPolicyRequest {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{Value, from_value, json, to_value};
     use validator::Validate;
 
-    use super::{SortDir, SupplierApiConnectionListParams, normalize_sort};
+    use super::{
+        CreateSupplierApiConnectionRequest, SortDir, SupplierApiConnectionListParams, SupplierConnectorType,
+        normalize_sort,
+    };
     use crate::entity::supplier_api::SupplierApiConnectionStatus;
 
     /// 创建请求不要求环境；旧调用方的环境参数不改变当前部署的连接身份。
     #[test]
     fn create_request_uses_supplier_and_code_without_environment() {
-        let payload = serde_json::json!({
-            "supplier_id": "sup-1", "connection_code": "CONN-1", "capabilities": []
+        let payload = json!({
+            "supplier_id": "sup-1", "connection_code": "CONN-1", "connector_type": "dangaoshushu", "capabilities": []
         });
-        let request: super::CreateSupplierApiConnectionRequest =
-            serde_json::from_value(payload.clone()).unwrap();
+        let request: CreateSupplierApiConnectionRequest = from_value(payload.clone()).unwrap();
         request.validate().unwrap();
-        let expected = serde_json::to_value(request).unwrap();
+        let expected = to_value(request).unwrap();
         assert!(expected.get("environment").is_none());
         let mut legacy = payload.clone();
         legacy["environment"] = "production".into();
-        let request: super::CreateSupplierApiConnectionRequest = serde_json::from_value(legacy).unwrap();
-        assert_eq!(serde_json::to_value(request).unwrap(), expected);
+        let request: CreateSupplierApiConnectionRequest = from_value(legacy).unwrap();
+        assert_eq!(to_value(request).unwrap(), expected);
         let mut missing_supplier = payload;
         missing_supplier.as_object_mut().unwrap().remove("supplier_id");
-        assert!(
-            serde_json::from_value::<super::CreateSupplierApiConnectionRequest>(missing_supplier).is_err()
-        );
+        assert!(from_value::<CreateSupplierApiConnectionRequest>(missing_supplier).is_err());
+    }
+
+    /// 新建连接必须显式选择已实现协议，不接受缺失、空值或未知协议。
+    #[test]
+    fn create_request_rejects_missing_or_unsupported_connector_type() {
+        let mut payload = json!({"supplier_id":"sup-1", "connection_code":"DGSS", "capabilities":[]});
+        assert!(from_value::<CreateSupplierApiConnectionRequest>(payload.clone()).is_err());
+        for kind in [Value::Null, json!("unknown"), json!(""), json!("蛋糕叔叔")] {
+            payload["connector_type"] = kind;
+            assert!(from_value::<CreateSupplierApiConnectionRequest>(payload.clone()).is_err());
+        }
     }
 
     #[test]
@@ -723,16 +757,18 @@ mod tests {
     #[test]
     fn rate_limit_policy_request_rejects_zero_bounds() {
         let invalid: super::RateLimitPolicyRequest =
-            serde_json::from_value(json!({ "max_requests": 0, "window_secs": 60 })).unwrap();
+            from_value(json!({ "max_requests": 0, "window_secs": 60 })).unwrap();
         assert!(invalid.validate().is_err());
     }
 
     #[test]
     fn connection_view_omits_credential_reference() {
-        let view = serde_json::to_value(super::SupplierApiConnectionView {
+        let view = to_value(super::SupplierApiConnectionView {
             id: "conn-1".to_string(),
             supplier_id: "sup-1".to_string(),
             connection_code: "CN-1".to_string(),
+            connector_type: Some(SupplierConnectorType::Dangaoshushu),
+            connector_type_label: Some("蛋糕叔叔 API"),
             status: SupplierApiConnectionStatus::Active,
             rate_limit_policy: None,
             last_health_at: None,

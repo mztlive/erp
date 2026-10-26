@@ -16,6 +16,16 @@ import {
     type ListQueryInput,
 } from "@/features/supplier-api-connections/api/connections"
 
+import { fetchConnectorTypes } from "@/features/supplier-api-connections/api/list"
+
+export function useConnectorTypesQuery(enabled: boolean) {
+    return useQuery({
+        queryKey: ["supplier-api-connector-types"],
+        queryFn: fetchConnectorTypes,
+        enabled,
+    })
+}
+
 const supplierConnectionKeys = {
     all: ["supplier-api-connections"] as const,
     list: (input: ListQueryInput) =>

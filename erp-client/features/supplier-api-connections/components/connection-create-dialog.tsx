@@ -3,6 +3,7 @@
 import * as React from "react"
 import { z } from "zod"
 
+import { OptionCombobox } from "@/components/business/option-combobox"
 import type { ResultState } from "@/components/business/feedback"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,10 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
-import { useCreateConnectionMutation } from "@/features/supplier-api-connections/hooks/queries"
+import {
+    useConnectorTypesQuery,
+    useCreateConnectionMutation,
+} from "@/features/supplier-api-connections/hooks/queries"
 import {
     newIdempotencyKey,
     outcomeToResult,
@@ -26,6 +30,7 @@ const createSchema = z.object({
     connectionCode: z.string().trim().min(3, "请填写连接代码"),
     supplierId: z.string().trim().min(1, "请选择供应商"),
     supplierName: z.string().trim().min(2, "请选择供应商"),
+    connectorType: z.string().min(1, "请选择接口类型"),
 })
 
 export function ConnectionCreateDialog({
@@ -42,12 +47,14 @@ export function ConnectionCreateDialog({
     ) => void
 }) {
     const createMutation = useCreateConnectionMutation()
+    const connectorTypes = useConnectorTypesQuery(open)
 
     const form = useAppForm({
         defaultValues: {
             connectionCode: "",
             supplierId: "",
             supplierName: "",
+            connectorType: "",
         },
         validators: { onChange: createSchema },
         onSubmit: async ({ value }) => {
@@ -55,6 +62,7 @@ export function ConnectionCreateDialog({
                 connectionCode: value.connectionCode,
                 supplierId: value.supplierId,
                 supplierName: value.supplierName,
+                connectorType: value.connectorType,
                 idempotencyKey: newIdempotencyKey("create"),
             })
             const mapped = outcomeToResult(outcome)
@@ -92,7 +100,7 @@ export function ConnectionCreateDialog({
                 <DialogHeader>
                     <DialogTitle>新建连接</DialogTitle>
                     <DialogDescription>
-                        选择供应商并填写唯一的连接代码，创建后绑定接口配置。
+                        选择供应商和接口类型，填写唯一的连接代码。接口类型创建后不可修改。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -151,6 +159,60 @@ export function ConnectionCreateDialog({
                             )
                         }}
                     />
+                    <form.AppField
+                        name="connectorType"
+                        children={(field) => (
+                            <Field>
+                                <FieldLabel htmlFor="supplier-api-connections-create-connector-type">
+                                    接口类型
+                                    <span className="text-destructive">*</span>
+                                </FieldLabel>
+                                <OptionCombobox
+                                    id="supplier-api-connections-create-connector-type"
+                                    value={field.state.value || null}
+                                    onValueChange={(value) =>
+                                        field.handleChange(value ?? "")
+                                    }
+                                    options={(connectorTypes.data ?? []).map(
+                                        (option) => ({
+                                            value: option.code,
+                                            label: option.label,
+                                        }),
+                                    )}
+                                    placeholder={
+                                        connectorTypes.isPending
+                                            ? "正在加载接口类型…"
+                                            : "请选择接口类型"
+                                    }
+                                    disabled={
+                                        connectorTypes.isPending ||
+                                        connectorTypes.isError
+                                    }
+                                />
+                                {field.state.meta.isTouched &&
+                                !field.state.meta.isValid ? (
+                                    <FieldError
+                                        errors={toFieldErrors(
+                                            field.state.meta.errors,
+                                        )}
+                                    />
+                                ) : null}
+                            </Field>
+                        )}
+                    />
+                    {connectorTypes.isError ? (
+                        <div role="alert" className="text-sm text-destructive">
+                            接口类型加载失败，请重试。
+                            <Button
+                                id="supplier-api-connections-create-types-retry"
+                                type="button"
+                                variant="link"
+                                onClick={() => void connectorTypes.refetch()}
+                            >
+                                重试
+                            </Button>
+                        </div>
+                    ) : null}
                     <DialogFooter>
                         <Button
                             id="supplier-api-connections-create-cancel"
@@ -166,7 +228,11 @@ export function ConnectionCreateDialog({
                                 id="supplier-api-connections-create-submit"
                                 label="创建"
                                 loading={createMutation.isPending}
-                                disabled={createMutation.isPending}
+                                disabled={
+                                    createMutation.isPending ||
+                                    !connectorTypes.data?.length ||
+                                    connectorTypes.isError
+                                }
                             />
                         </form.AppForm>
                     </DialogFooter>

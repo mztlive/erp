@@ -166,6 +166,14 @@ impl SupplierConnectionGovernance<'_> {
         impact: SupplierConnectionBusinessImpact,
         reference_registry_available: bool,
     ) -> Vec<SupplierGovernanceBlocker> {
+        if self.connection.connector_type.is_none() && action != SupplierConnectionAction::Disable {
+            return vec![governance_blocker(
+                action,
+                "CONNECTOR_TYPE_REQUIRED",
+                "请联系管理员补充接口类型",
+                None,
+            )];
+        }
         match action {
             SupplierConnectionAction::UpdateBusinessProfile
             | SupplierConnectionAction::BindEndpointReference
@@ -442,7 +450,7 @@ mod tests {
     use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
 
     use super::*;
-    use crate::entity::supplier_api::HealthCheckResult;
+    use crate::entity::supplier_api::{HealthCheckResult, SupplierConnectorType};
 
     /// 构造已绑定技术引用的连接治理测试夹具。
     fn governance_connection(status: SupplierApiConnectionStatus) -> SupplierApiConnection {
@@ -451,6 +459,7 @@ mod tests {
             crate::entity::supplier_api::SupplierApiConnectionData {
                 supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 connection_code: "CONN-1".to_string(),
+                connector_type: SupplierConnectorType::Dangaoshushu,
                 endpoint_reference: "endpoint://supplier-1".to_string(),
                 credential_reference: Some("credential://supplier-1".to_string()),
                 rate_limit_policy: None,
@@ -604,6 +613,7 @@ mod tests {
             crate::entity::supplier_api::SupplierApiConnectionData {
                 supplier_id: erp_core::ids::SupplierAccountId::new("supplier-1"),
                 connection_code: "CONN-1".to_string(),
+                connector_type: SupplierConnectorType::Dangaoshushu,
                 endpoint_reference: String::new(),
                 credential_reference: None,
                 rate_limit_policy: None,
@@ -724,6 +734,27 @@ mod tests {
             .code,
             "DUAL_ROLE_REQUIRED"
         );
+    }
+
+    /// 未指定接口类型的旧连接不得执行技术动作，仍可按原业务约束停用。
+    #[test]
+    fn legacy_connection_requires_type_before_technical_actions() {
+        let mut connection = governance_connection(SupplierApiConnectionStatus::Active);
+        connection.connector_type = None;
+        let governance = SupplierConnectionGovernance {
+            connection: &connection,
+            capabilities: &[],
+            confirmations: &[],
+            health_runs: &[],
+        };
+        for action in SupplierConnectionAction::all() {
+            let blockers = governance.blockers(action, SupplierConnectionBusinessImpact::default(), true);
+            if action == SupplierConnectionAction::Disable {
+                assert!(blockers.is_empty());
+            } else {
+                assert_eq!(blockers[0].code, "CONNECTOR_TYPE_REQUIRED");
+            }
+        }
     }
 
     /// 停用连接拒绝活动业务影响，目录同步要求健康连接与商品能力。

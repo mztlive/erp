@@ -44,6 +44,14 @@ fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn connection_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/supplier-api-connector-types",
+            with_permission(
+                get(supplier_api::connector_types::options),
+                rbac,
+                supplier_api::connector_types::options_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-api-connections",
             with_permission(
                 get(supplier_api::supplier_api_connection_list),

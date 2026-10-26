@@ -45,6 +45,12 @@ export function useConnectionListColumns(
                 },
             },
             {
+                id: "connectorType",
+                accessorFn: (row) => row.connectorTypeLabel,
+                header: "接口类型",
+                meta: { label: "接口类型", width: "status" },
+            },
+            {
                 id: "status",
                 accessorFn: (row) => row.statusLabel,
                 header: "状态",

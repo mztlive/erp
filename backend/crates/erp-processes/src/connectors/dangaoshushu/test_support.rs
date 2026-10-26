@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use config::DangaoshushuConfig;
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+use erp_supply::entity::supplier_api::SupplierConnectorType;
 use erp_supply::ports::connector::common::ConnectorResult;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 use serde_json::{Value, from_value, json};
@@ -47,6 +48,7 @@ pub(super) fn recording_connector(
 pub(super) fn target() -> SupplierReferenceTarget {
     SupplierReferenceTarget {
         connection_id: SupplierApiConnectionId::new("connection-1"),
+        connector_type: Some(SupplierConnectorType::Dangaoshushu),
         supplier_id: SupplierAccountId::new("supplier-1"),
     }
 }

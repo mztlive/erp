@@ -172,7 +172,7 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{
-        SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
+        SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierConnectorType,
     };
     use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 
@@ -263,6 +263,7 @@ mod tests {
             SupplierApiConnectionData {
                 supplier_id: SupplierAccountId::new("supplier-1"),
                 connection_code: "dgss-test".into(),
+                connector_type: SupplierConnectorType::Dangaoshushu,
                 endpoint_reference: "unbound".into(),
                 credential_reference: None,
                 rate_limit_policy: None,

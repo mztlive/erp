@@ -16,12 +16,14 @@ use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGa
 use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth, workflow_object_facts};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::connectors::dangaoshushu::DangaoshushuRuntime;
+use erp_processes::connectors::registry::SupplierConnectorRegistry;
 use erp_processes::contract_import::{ContractImportProcess, RecognitionProviders};
 use erp_processes::integration_resolution::IntegrationResolutionProcess;
 use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
 use erp_processes::sales_inquiry::SalesInquiryProcess;
 use erp_read_models::integration_center::IntegrationCenterReadService;
-use erp_supply::ports::connector::common::ConnectorResult;
+use erp_supply::entity::supplier_api::SupplierConnectorType;
+use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
@@ -121,14 +123,24 @@ impl ExternalConnectorPorts {
     /// 启用配置无法构建 HTTP 客户端时返回脱敏分类错误。
     pub fn from_config(config: &Config) -> ConnectorResult<Self> {
         let mut ports = Self::fail_closed();
+        let mut registry = SupplierConnectorRegistry::default();
         if let Some(settings) = config.dangaoshushu.as_ref().filter(|settings| settings.enabled) {
             let runtime = Arc::new(DangaoshushuRuntime::new(settings.clone())?);
-            ports.supplier_api = runtime.clone();
-            ports.supplier_reference_registry = runtime.clone();
+            registry.register(SupplierConnectorType::Dangaoshushu, runtime.clone()).map_err(|error| {
+                ConnectorError {
+                    class: error.class,
+                    code: error.code,
+                    summary: error.summary,
+                    retry_after: None,
+                }
+            })?;
             ports.dangaoshushu = Some(runtime);
             ports.readiness.supplier_api = ConnectorMode::Configured;
             ports.readiness.supplier_reference_registry = ConnectorMode::Configured;
         }
+        let registry = Arc::new(registry);
+        ports.supplier_api = registry.clone();
+        ports.supplier_reference_registry = registry;
         Ok(ports)
     }
 }

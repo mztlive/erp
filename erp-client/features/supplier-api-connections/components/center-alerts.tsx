@@ -11,6 +11,15 @@ export function CenterAlerts({ conn }: { conn: ConnectionCenterView }) {
     const resultUnknown = conn.lastHealth?.result === "UNKNOWN"
     return (
         <>
+            {!conn.connectorType ? (
+                <Alert variant="warning">
+                    <TriangleAlertIcon aria-hidden="true" />
+                    <AlertTitle>请补充接口类型</AlertTitle>
+                    <AlertDescription>
+                        此连接尚未指定接口类型，请联系管理员补充后再绑定配置或执行检查。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
             {conn.alerts.map((al) => (
                 <Alert
                     key={al.id}

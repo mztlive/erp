@@ -22,6 +22,7 @@ export async function createConnection(input: {
     connectionCode: string
     supplierId: string
     supplierName: string
+    connectorType: string
     idempotencyKey: string
 }): Promise<FormalOutcome> {
     const code = input.connectionCode.trim().toUpperCase()
@@ -38,6 +39,7 @@ export async function createConnection(input: {
         {
             supplier_id: input.supplierId,
             connection_code: code,
+            connector_type: input.connectorType,
             rate_limit_policy: null,
             status: "disabled",
             capabilities: [],

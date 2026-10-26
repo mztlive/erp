@@ -6,12 +6,13 @@ use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 use serde::{Deserialize, Serialize};
 
 use super::supplier_api_gateway::ClassifiedError;
-use crate::entity::supplier_api::SupplierApiConnection;
+use crate::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
 
 /// 本次绑定命令预检的目标身份；禁止以票据携带的身份替代目标连接。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupplierReferenceTarget {
     pub connection_id: SupplierApiConnectionId,
+    pub connector_type: Option<SupplierConnectorType>,
     pub supplier_id: SupplierAccountId,
 }
 
@@ -20,6 +21,7 @@ impl From<&SupplierApiConnection> for SupplierReferenceTarget {
         Self {
             connection_id: SupplierApiConnectionId::new(connection.base.id.clone()),
             supplier_id: connection.supplier_id.clone(),
+            connector_type: connection.connector_type,
         }
     }
 }

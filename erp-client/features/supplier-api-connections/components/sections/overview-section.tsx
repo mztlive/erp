@@ -32,6 +32,7 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                 <CardContent className="grid gap-2 text-sm">
                     <Row label="连接代码" value={conn.connectionCode} mono />
                     <Row label="供应商" value={conn.supplier.name} />
+                    <Row label="接口类型" value={conn.connectorTypeLabel} />
                     <Row
                         label="业务负责人"
                         value={conn.businessOwner?.label ?? "—"}

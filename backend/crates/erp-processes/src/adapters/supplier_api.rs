@@ -69,11 +69,10 @@ impl SupplierApiGateway for UnavailableSupplierApiGateway {
 
 #[cfg(test)]
 mod tests {
-
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::failure::SupplierFailureClass;
     use erp_supply::entity::supplier_api::{
-        SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
+        SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierConnectorType,
         SupplierHealthCheckType,
     };
 
@@ -85,6 +84,7 @@ mod tests {
             SupplierApiConnectionData {
                 supplier_id: SupplierAccountId::new("sup-1"),
                 connection_code: "CN-1".to_string(),
+                connector_type: SupplierConnectorType::Dangaoshushu,
                 endpoint_reference: "config://supplier/001".to_string(),
                 credential_reference: Some("kms://prod/sup-001".to_string()),
                 rate_limit_policy: None,

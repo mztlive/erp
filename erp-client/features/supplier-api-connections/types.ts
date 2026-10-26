@@ -142,6 +142,8 @@ type AuditEventView = {
 export type ConnectionListItem = {
     connectionId: string
     connectionCode: string
+    connectorType?: string
+    connectorTypeLabel: string
     supplier: { id: string; name: string }
     status: ConnectionStatus
     statusLabel: string
@@ -163,6 +165,8 @@ export type ConnectionListItem = {
 export type ConnectionCenterView = {
     connectionId: string
     connectionCode: string
+    connectorType?: string
+    connectorTypeLabel: string
     supplier: { id: string; name: string }
     status: ConnectionStatus
     statusLabel: string

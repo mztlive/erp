@@ -6104,6 +6104,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/supplier-api-connector-types",
+                description: "创建供应商 API 连接",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/supplier-api-connections",
                 description: "查询供应商 API 连接列表",
                 permission: {

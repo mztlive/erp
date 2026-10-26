@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::entity::supplier_api::{
     BusinessCapabilityConfirmation, HealthCheckResult, SupplierApiCapability, SupplierApiCapabilityCode,
     SupplierApiCapabilityStatus, SupplierApiConnectionId, SupplierApiConnectionStatus,
-    SupplierConnectionAction, SupplierConnectionCommandReceipt, SupplierHealthCheckRun,
+    SupplierConnectionAction, SupplierConnectionCommandReceipt, SupplierConnectorType,
+    SupplierHealthCheckRun,
 };
 use crate::repository::owned::{
     BusinessCapabilityConfirmationRepository, SupplierApiCapabilityRepository,
@@ -29,6 +30,9 @@ pub struct SupplierApiConnectionRow {
     pub supplier_id: String,
     /// ERP 内稳定连接代码。
     pub connection_code: String,
+    /// 旧记录缺失时不推断接口类型。
+    #[serde(default)]
+    pub connector_type: Option<SupplierConnectorType>,
     /// 启停/故障状态。
     pub status: SupplierApiConnectionStatus,
     /// 最近健康检查时间。
@@ -620,6 +624,7 @@ fn supplier_api_connection_projection() -> Document {
         "id": 1,
         "supplier_id": 1,
         "connection_code": 1,
+        "connector_type": 1,
         "status": 1,
         "last_health_at": 1,
         "last_health_result": 1,

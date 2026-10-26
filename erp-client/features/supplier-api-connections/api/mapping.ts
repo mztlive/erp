@@ -38,6 +38,8 @@ export type BackendConnection = {
     id: string
     supplier_id: string
     connection_code: string
+    connector_type: string | null
+    connector_type_label: string | null
     status: "active" | "disabled" | "fault" | string
     rate_limit_policy?: { max_requests: number; window_secs: number } | null
     last_health_at?: number | null
@@ -230,6 +232,8 @@ export function toListItem(
     return {
         connectionId: connection.id,
         connectionCode: connection.connection_code,
+        connectorType: connection.connector_type ?? undefined,
+        connectorTypeLabel: connection.connector_type_label ?? "未指定接口类型",
         supplier: {
             id: connection.supplier_id,
             name: supplierName ?? connection.supplier_id,
@@ -312,6 +316,8 @@ export function toCenter(
     return {
         connectionId: detail.id,
         connectionCode: detail.connection_code,
+        connectorType: detail.connector_type ?? undefined,
+        connectorTypeLabel: detail.connector_type_label ?? "未指定接口类型",
         supplier: {
             id: detail.supplier_id,
             name: supplierName ?? detail.supplier_id,

@@ -19,6 +19,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+pub mod connector_types;
 pub mod dangaoshushu;
 pub mod references;
 
