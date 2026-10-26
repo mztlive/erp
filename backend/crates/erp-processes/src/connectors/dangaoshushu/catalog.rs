@@ -176,6 +176,13 @@ fn availability_value(query: &AvailabilityQuery, product: &Value) -> ConnectorRe
     ))
 }
 
+/// 结合上级状态、规格可购与库存判定可供性；忽略供应商 `is_up` 字段。
+/// # 参数
+/// `product` 为详情响应，`spec` 为目标规格，`quantity` 为已解析库存。
+/// # 返回
+/// 可供状态及明确的阻断原因。
+/// # 错误
+/// 必需状态字段缺失或取值非法时返回映射错误。
 pub(super) fn availability_state(
     product: &Value,
     spec: &Value,
@@ -188,10 +195,7 @@ pub(super) fn availability_state(
             flag(&product["product"]["status"])? && flag(&product["product"]["can_buy"])?,
             AvailabilityBlock::Product,
         ),
-        (
-            !flag(&spec["deleted"])? && flag(&spec["is_up"])? && flag(&spec["can_buy"])?,
-            AvailabilityBlock::Specification,
-        ),
+        (!flag(&spec["deleted"])? && flag(&spec["can_buy"])?, AvailabilityBlock::Specification),
     ] {
         if !enabled {
             reasons.push(reason);
@@ -456,7 +460,6 @@ mod tests {
             ("product", "status", "0", AvailabilityBlock::Product),
             ("product", "can_buy", "0", AvailabilityBlock::Product),
             ("spec", "deleted", "1", AvailabilityBlock::Specification),
-            ("spec", "is_up", "0", AvailabilityBlock::Specification),
             ("spec", "can_buy", "0", AvailabilityBlock::Specification),
             ("spec", "stock", "0", AvailabilityBlock::Quantity),
         ] {
@@ -468,6 +471,29 @@ mod tests {
             }
             let result = connector(vec![value_json]).availability(&query).await.unwrap().remove(0).value;
             assert_eq!(result.state, AvailabilityState::Unavailable { reasons: vec![expected] });
+        }
+    }
+
+    #[tokio::test]
+    async fn availability_uses_can_buy_regardless_of_is_up() {
+        let query = AvailabilityQuery { skus: vec![sku()], region: None };
+        for is_up in [None, Some(json!("0")), Some(json!("1")), Some(json!("invalid"))] {
+            for can_buy in ["0", "1"] {
+                let mut value = product();
+                let spec = value["specs"][0].as_object_mut().unwrap();
+                spec.remove("is_up");
+                if let Some(is_up) = &is_up {
+                    spec.insert("is_up".into(), is_up.clone());
+                }
+                spec.insert("can_buy".into(), json!(can_buy));
+                let result = connector(vec![value]).availability(&query).await.unwrap().remove(0).value;
+                let expected = if can_buy == "1" {
+                    AvailabilityState::Available
+                } else {
+                    AvailabilityState::Unavailable { reasons: vec![AvailabilityBlock::Specification] }
+                };
+                assert_eq!(result.state, expected);
+            }
         }
     }
 

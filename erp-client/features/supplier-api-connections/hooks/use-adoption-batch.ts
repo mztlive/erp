@@ -18,6 +18,8 @@ import type {
 import { newIdempotencyKey } from "../lib/operations"
 import { useAdoptionTargetQuery, useConfirmAdoptionMutation } from "./adoption"
 
+export type AdoptionRowState = "SUCCEEDED" | "FAILED" | "READY" | "INCOMPLETE"
+
 type RowDraft = {
     itemId: string
     kind: "CREATE" | "EXISTING"
@@ -41,7 +43,7 @@ type RowDraft = {
     deliveryTemplateId: string
 }
 
-const rowSchema = z
+export const rowSchema = z
     .object({
         itemId: z.string(),
         kind: z.enum(["CREATE", "EXISTING"]),
@@ -316,6 +318,24 @@ export function useAdoptionBatch({
         },
     })
     const values = useStore(form.store, (state) => state.values)
+    const isDirty = useStore(form.store, (state) => state.isDirty)
+    const rowStates = React.useMemo<AdoptionRowState[]>(() => {
+        const succeeded = new Set(
+            rowResults
+                .filter((row) => row.status === "SUCCEEDED")
+                .map((row) => row.item_id),
+        )
+        const failed = new Set(
+            rowResults
+                .filter((row) => row.status === "FAILED")
+                .map((row) => row.item_id),
+        )
+        return values.rows.map((row) => {
+            if (succeeded.has(row.itemId)) return "SUCCEEDED"
+            if (failed.has(row.itemId)) return "FAILED"
+            return rowSchema.safeParse(row).success ? "READY" : "INCOMPLETE"
+        })
+    }, [rowResults, values.rows])
     const active = values.rows[activeIndex]
     const target = useAdoptionTargetQuery(
         connectionId,
@@ -392,6 +412,8 @@ export function useAdoptionBatch({
     return {
         form,
         values,
+        isDirty,
+        rowStates,
         active,
         activeIndex,
         setActiveIndex,

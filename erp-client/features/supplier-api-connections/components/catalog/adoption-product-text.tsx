@@ -1,5 +1,10 @@
 "use client"
 
+import * as React from "react"
+import { ChevronRightIcon, TriangleAlertIcon } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
     Field,
     FieldDescription,
@@ -7,7 +12,9 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 import type { CatalogItem } from "../../api/catalog"
 import type { useAdoptionBatch } from "../../hooks/use-adoption-batch"
 
@@ -28,113 +35,171 @@ export function AdoptionProductText({
         item.description?.trim() ?? "",
     ).length
     const overCapacity = sourceNameLength > 128 || sourceDescriptionLength > 512
+    const [sourceOpen, setSourceOpen] = React.useState(overCapacity)
     return (
-        <section
-            className="space-y-3 rounded-lg border p-3"
-            aria-labelledby={`${prefix}-company-text-title`}
-        >
-            <h3
-                id={`${prefix}-company-text-title`}
-                className="text-sm font-medium"
-            >
-                公司展示资料
-            </h3>
+        <div className="space-y-4">
             {overCapacity ? (
-                <p
-                    role="status"
-                    className="text-sm text-warning-soft-foreground"
-                >
-                    供应商原文超过公司展示容量，请整理公司名称或介绍后再入库。来源原文完整保留。
-                </p>
+                <Alert variant="warning" role="status">
+                    <TriangleAlertIcon aria-hidden="true" />
+                    <AlertTitle>供应商原文超过公司展示容量</AlertTitle>
+                    <AlertDescription>
+                        请整理公司名称或介绍后再入库。来源原文完整保留。
+                    </AlertDescription>
+                </Alert>
             ) : null}
             <details
-                open={overCapacity}
-                className="rounded-md bg-muted/40 p-3 text-sm"
+                open={sourceOpen}
+                onToggle={(event) => setSourceOpen(event.currentTarget.open)}
+                className="group rounded-lg border bg-muted/20"
             >
                 <summary
                     id={`${prefix}-source-text-toggle`}
-                    className="cursor-pointer font-medium"
+                    className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden"
                 >
-                    供应商原文（只读）
+                    <span className="flex items-center gap-2">
+                        <ChevronRightIcon
+                            className="size-4 text-muted-foreground transition-transform group-open:rotate-90"
+                            aria-hidden="true"
+                        />
+                        供应商原文
+                        <Badge variant="secondary">只读</Badge>
+                    </span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                        名称 {sourceNameLength} 字 · 介绍{" "}
+                        {sourceDescriptionLength} 字
+                    </span>
                 </summary>
-                <dl className="mt-3 space-y-3">
+                <dl className="space-y-3 border-t px-3 py-3 text-sm">
                     <div>
                         <dt className="text-xs text-muted-foreground">
-                            商品名称 · {sourceNameLength} 个字符
+                            商品名称
                         </dt>
-                        <dd className="mt-1 whitespace-pre-wrap break-words">
+                        <dd className="mt-0.5 break-words whitespace-pre-wrap">
                             {item.name}
                         </dd>
                     </div>
                     <div>
                         <dt className="text-xs text-muted-foreground">
-                            商品介绍 · {sourceDescriptionLength} 个字符
+                            商品介绍
                         </dt>
-                        <dd className="mt-1 whitespace-pre-wrap break-words">
+                        <dd className="mt-0.5 break-words whitespace-pre-wrap">
                             {item.description ?? "未提供"}
                         </dd>
                     </div>
                 </dl>
             </details>
             <form.AppField name={`rows[${index}].companyName`}>
-                {(field) => (
-                    <Field>
-                        <FieldLabel htmlFor={`${prefix}-company-name`}>
-                            公司展示名称
-                        </FieldLabel>
-                        <Input
-                            id={`${prefix}-company-name`}
-                            value={field.state.value}
-                            onChange={(event) =>
-                                field.handleChange(event.target.value)
-                            }
-                            onBlur={field.handleBlur}
-                            aria-invalid={field.state.meta.errors.length > 0}
-                            aria-describedby={`${prefix}-company-name-help ${prefix}-company-name-error`}
-                        />
-                        <FieldDescription id={`${prefix}-company-name-help`}>
-                            已填写 {Array.from(field.state.value.trim()).length}{" "}
-                            / 128 个字符。公司商品及新 SKU
-                            使用此名称，不修改供应商原文。
-                        </FieldDescription>
-                        <FieldError
-                            id={`${prefix}-company-name-error`}
-                            errors={field.state.meta.errors}
-                        />
-                    </Field>
-                )}
+                {(field) => {
+                    const length = Array.from(field.state.value.trim()).length
+                    return (
+                        <Field>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <FieldLabel htmlFor={`${prefix}-company-name`}>
+                                    公司展示名称
+                                    <RequiredMark />
+                                </FieldLabel>
+                                {field.state.value !== item.name ? (
+                                    <Button
+                                        id={`${prefix}-restore-company-name`}
+                                        type="button"
+                                        variant="link"
+                                        size="xs"
+                                        className="h-auto px-0 text-xs"
+                                        onClick={() =>
+                                            field.handleChange(item.name)
+                                        }
+                                    >
+                                        使用供应商原文
+                                    </Button>
+                                ) : null}
+                            </div>
+                            <Input
+                                id={`${prefix}-company-name`}
+                                value={field.state.value}
+                                onChange={(event) =>
+                                    field.handleChange(event.target.value)
+                                }
+                                onBlur={field.handleBlur}
+                                aria-invalid={
+                                    field.state.meta.errors.length > 0
+                                }
+                                aria-describedby={`${prefix}-company-name-help ${prefix}-company-name-error`}
+                            />
+                            <div
+                                id={`${prefix}-company-name-help`}
+                                className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1"
+                            >
+                                <FieldDescription>
+                                    公司商品及新 SKU 使用此名称。
+                                </FieldDescription>
+                                <span
+                                    className={cn(
+                                        "shrink-0 text-xs tabular-nums",
+                                        length > 128
+                                            ? "text-destructive"
+                                            : "text-muted-foreground",
+                                    )}
+                                >
+                                    {length}/128
+                                </span>
+                            </div>
+                            <FieldError
+                                id={`${prefix}-company-name-error`}
+                                errors={field.state.meta.errors}
+                            />
+                        </Field>
+                    )
+                }}
             </form.AppField>
             <form.AppField name={`rows[${index}].companyDescription`}>
-                {(field) => (
-                    <Field>
-                        <FieldLabel htmlFor={`${prefix}-company-description`}>
-                            公司商品介绍
-                        </FieldLabel>
-                        <Textarea
-                            id={`${prefix}-company-description`}
-                            value={field.state.value}
-                            onChange={(event) =>
-                                field.handleChange(event.target.value)
-                            }
-                            onBlur={field.handleBlur}
-                            rows={4}
-                            aria-invalid={field.state.meta.errors.length > 0}
-                            aria-describedby={`${prefix}-company-description-help ${prefix}-company-description-error`}
-                        />
-                        <FieldDescription
-                            id={`${prefix}-company-description-help`}
-                        >
-                            已填写 {Array.from(field.state.value.trim()).length}{" "}
-                            / 512
-                            个字符。清空后入库表示公司暂不展示介绍，供应商原文仍保留。
-                        </FieldDescription>
-                        <FieldError
-                            id={`${prefix}-company-description-error`}
-                            errors={field.state.meta.errors}
-                        />
-                    </Field>
-                )}
+                {(field) => {
+                    const length = Array.from(field.state.value.trim()).length
+                    return (
+                        <Field>
+                            <FieldLabel
+                                htmlFor={`${prefix}-company-description`}
+                            >
+                                公司商品介绍
+                            </FieldLabel>
+                            <Textarea
+                                id={`${prefix}-company-description`}
+                                value={field.state.value}
+                                onChange={(event) =>
+                                    field.handleChange(event.target.value)
+                                }
+                                onBlur={field.handleBlur}
+                                rows={3}
+                                aria-invalid={
+                                    field.state.meta.errors.length > 0
+                                }
+                                aria-describedby={`${prefix}-company-description-help ${prefix}-company-description-error`}
+                            />
+                            <div
+                                id={`${prefix}-company-description-help`}
+                                className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1"
+                            >
+                                <FieldDescription>
+                                    留空则公司暂不展示介绍，供应商原文仍保留。
+                                </FieldDescription>
+                                <span
+                                    className={cn(
+                                        "shrink-0 text-xs tabular-nums",
+                                        length > 512
+                                            ? "text-destructive"
+                                            : "text-muted-foreground",
+                                    )}
+                                >
+                                    {length}/512
+                                </span>
+                            </div>
+                            <FieldError
+                                id={`${prefix}-company-description-error`}
+                                errors={field.state.meta.errors}
+                            />
+                        </Field>
+                    )
+                }}
             </form.AppField>
-        </section>
+        </div>
     )
 }

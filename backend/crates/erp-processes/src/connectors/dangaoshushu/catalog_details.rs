@@ -8,6 +8,13 @@ use serde_json::Value;
 
 use super::parsing::{id, mapping};
 
+/// 提取目录资料，并在必需状态完整时计算可供性；`is_up` 不参与完整性检查。
+/// # 参数
+/// `product` 与 `spec` 为来源商品和规格，`root` 为可选的完整详情响应。
+/// # 返回
+/// 规范化资料；缺少必需状态时保留未知可供状态。
+/// # 错误
+/// 来源标识、素材、库存或参与判定的状态字段非法时返回映射错误。
 pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> ConnectorResult<OfferDetails> {
     let category_id = optional_id(product, "cat_id3")?
         .or(optional_id(product, "cat_id2")?)
@@ -28,7 +35,6 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
             && !root["product"]["status"].is_null()
             && !root["product"]["can_buy"].is_null()
             && !spec["deleted"].is_null()
-            && !spec["is_up"].is_null()
             && !spec["can_buy"].is_null();
         details.availability = if complete_state {
             match super::catalog::availability_state(root, spec, &super::catalog::stock(&spec["stock"])?)? {
@@ -107,6 +113,33 @@ mod tests {
         assert_eq!(value.availability, CatalogAvailability::Available);
         assert_eq!(value.available_quantity.as_deref(), Some("2"));
         assert_eq!(details(&product, &spec, None).unwrap().images, None);
+    }
+
+    #[test]
+    fn catalog_availability_requires_can_buy_but_ignores_is_up() {
+        let root = json!({"product":{"status":"1","can_buy":"1"},"brand":{"status":"1"}});
+        for is_up in [None, Some(json!("0")), Some(json!("1")), Some(json!("invalid"))] {
+            let mut spec = json!({"deleted":"0","can_buy":"1","stock":"-9999999"});
+            if let Some(is_up) = is_up {
+                spec["is_up"] = is_up;
+            }
+            assert_eq!(
+                details(&root["product"], &spec, Some(&root)).unwrap().availability,
+                CatalogAvailability::Available
+            );
+            spec["can_buy"] = json!("0");
+            assert_eq!(
+                details(&root["product"], &spec, Some(&root)).unwrap().availability,
+                CatalogAvailability::Unavailable
+            );
+            spec["can_buy"] = Value::Null;
+            assert_eq!(
+                details(&root["product"], &spec, Some(&root)).unwrap().availability,
+                CatalogAvailability::Unknown
+            );
+            spec["can_buy"] = json!("invalid");
+            assert!(details(&root["product"], &spec, Some(&root)).is_err());
+        }
     }
 
     #[test]
