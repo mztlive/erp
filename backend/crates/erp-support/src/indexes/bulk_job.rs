@@ -81,6 +81,10 @@ fn background_job_indexes() -> Vec<IndexModel> {
             "idx_background_jobs_execution",
             doc! { "domain_job_type": 1, "finished_at": 1, "status": 1, "last_progress_at": 1, "created_at": 1 },
         ),
+        named_index(
+            "idx_background_jobs_connection_history",
+            doc! { "domain_job_type": 1, "domain_job_id": 1, "created_at": -1, "id": -1 },
+        ),
         named_index("idx_background_jobs_domain", doc! { "domain_job_type": 1, "domain_job_id": 1 }),
         named_index("idx_background_jobs_requested_created", doc! { "requested_by": 1, "created_at": -1 }),
     ]

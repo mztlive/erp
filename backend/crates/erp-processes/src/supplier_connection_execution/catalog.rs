@@ -71,6 +71,9 @@ impl SupplierConnectionExecutionProcess {
                         .find_by_id(&job.base.id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("目录同步任务不存在".to_string()))?;
+                    if job.is_terminal() {
+                        return Ok(());
+                    }
                     let at = Instant::now();
                     if let Err(error) = &outcome {
                         job.record_progress(0, 0, 1, at)?;
@@ -114,7 +117,7 @@ impl ConnectionJobExecutionPort for CatalogExecution<'_> {
         Ok((connection, started_job))
     }
     async fn invoke(&self, started: &Self::Started) -> Self::Outcome {
-        self.0.gateway.catalog_sync(&started.0).await
+        self.0.scan_catalog(&started.0, &started.1).await
     }
     async fn finish(&self, started: Self::Started, outcome: Self::Outcome, actor: &AuditActor) -> Result<()> {
         self.0.finish_catalog_job(started.1, started.0, outcome, actor).await

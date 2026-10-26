@@ -3,6 +3,7 @@
 pub mod delivery_template;
 pub mod offering_scope;
 pub mod supplier_api;
+pub mod supplier_catalog;
 pub mod supplier_fulfillment;
 pub mod supplier_fulfillment_scope;
 pub use supplier_fulfillment_scope::{

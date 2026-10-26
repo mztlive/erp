@@ -37,7 +37,7 @@ export function DisableConnectionDialog({
                 <DialogHeader>
                     <DialogTitle>停用连接</DialogTitle>
                     <DialogDescription>
-                        停用后暂停此连接的接口请求，历史记录保留。
+                        停用后停止新的业务调用，商品目录同步和连接测试仍可使用，历史记录保留。
                     </DialogDescription>
                 </DialogHeader>
                 <p className="text-sm font-medium">

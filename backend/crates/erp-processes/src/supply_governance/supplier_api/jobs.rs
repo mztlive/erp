@@ -2,15 +2,18 @@ use application_core::AuditActor;
 use erp_core::ids::BackgroundJobId;
 use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
 use erp_supply::entity::supplier_api::{
-    SupplierCommandOutcome, SupplierConnectionAction, SupplierHealthCheckType,
+    SupplierApiConnection, SupplierCommandOutcome, SupplierConnectionAction, SupplierHealthCheckType,
 };
+use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
 use erp_support::{BackgroundJob, BulkJobExt, SupplierGovernanceJobKind, SupplierGovernanceJobSpec};
 use id_generator::next_id;
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::SupplierApiGovernanceProcess;
+use super::catalog_recovery::{clear_stalled, next_run};
 use super::receipt::{CommandReceiptWrite, persist_command_receipt};
 use crate::Result;
 impl SupplierApiGovernanceProcess {
@@ -36,6 +39,7 @@ impl SupplierApiGovernanceProcess {
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
+        let deployment = self.deployment(id).await?;
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -44,7 +48,7 @@ impl SupplierApiGovernanceProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let domain = SupplierApiService::new(db.clone());
-                    let (connection, capabilities) = domain
+                    let (mut connection, capabilities) = domain
                         .prepare_job_target(
                             &connection_id_value,
                             expected_version,
@@ -52,13 +56,15 @@ impl SupplierApiGovernanceProcess {
                             executor,
                         )
                         .await?;
-                    let job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
-                        job_id: BackgroundJobId::new(next_id()),
-                        connection_id: connection_id_value.clone(),
-                        kind: SupplierGovernanceJobKind::HealthCheck,
-                        requested_by: actor.id().to_string(),
-                        idempotency_hash: identity.idempotency_hash.clone(),
-                    })?;
+                    if deployment.apply(&mut connection, actor.id())? {
+                        domain.persist_connection(&mut connection, executor).await?;
+                    }
+                    let job = background_job(
+                        &connection_id_value,
+                        SupplierGovernanceJobKind::HealthCheck,
+                        &actor,
+                        &identity,
+                    )?;
                     let run = SupplierApiService::prepare_health_run(
                         &connection,
                         &capabilities,
@@ -69,16 +75,13 @@ impl SupplierApiGovernanceProcess {
                     )?;
                     db.background_jobs().create(&job, executor).await?;
                     domain.create_health_run(&run, executor).await?;
-                    persist_command_receipt(
+                    processing_receipt(
                         &db,
-                        CommandReceiptWrite {
-                            connection: &connection,
-                            action: SupplierConnectionAction::RunHealthCheck,
-                            identity: &identity,
-                            outcome: SupplierCommandOutcome::Processing,
-                            job_id: Some(job.base.id.clone()),
-                            actor: &actor,
-                        },
+                        &connection,
+                        SupplierConnectionAction::RunHealthCheck,
+                        identity,
+                        &job,
+                        &actor,
                         executor,
                     )
                     .await
@@ -106,6 +109,7 @@ impl SupplierApiGovernanceProcess {
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
+        let deployment = self.deployment(id).await?;
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -114,7 +118,7 @@ impl SupplierApiGovernanceProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let domain = SupplierApiService::new(db.clone());
-                    let (connection, _capabilities) = domain
+                    let (mut connection, _capabilities) = domain
                         .prepare_job_target(
                             &connection_id_value,
                             expected_version,
@@ -122,24 +126,26 @@ impl SupplierApiGovernanceProcess {
                             executor,
                         )
                         .await?;
-                    let job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
-                        job_id: BackgroundJobId::new(next_id()),
-                        connection_id: connection_id_value.clone(),
-                        kind: SupplierGovernanceJobKind::CatalogSync,
-                        requested_by: actor.id().to_string(),
-                        idempotency_hash: identity.idempotency_hash.clone(),
-                    })?;
+                    clear_stalled(&db, &connection.base.id, executor).await?;
+                    deployment.apply(&mut connection, actor.id())?;
+                    connection.stable.touch(actor.id());
+                    domain.persist_connection(&mut connection, executor).await?;
+                    let job = background_job(
+                        &connection_id_value,
+                        SupplierGovernanceJobKind::CatalogSync,
+                        &actor,
+                        &identity,
+                    )?;
+                    let run = next_run(&db, &job.base.id, &connection, executor).await?;
+                    db.supplier_catalog_runs().create(&run, executor).await?;
                     db.background_jobs().create(&job, executor).await?;
-                    persist_command_receipt(
+                    processing_receipt(
                         &db,
-                        CommandReceiptWrite {
-                            connection: &connection,
-                            action: SupplierConnectionAction::StartCatalogSync,
-                            identity: &identity,
-                            outcome: SupplierCommandOutcome::Processing,
-                            job_id: Some(job.base.id.clone()),
-                            actor: &actor,
-                        },
+                        &connection,
+                        SupplierConnectionAction::StartCatalogSync,
+                        identity,
+                        &job,
+                        &actor,
                         executor,
                     )
                     .await
@@ -147,4 +153,45 @@ impl SupplierApiGovernanceProcess {
             })
             .await
     }
+}
+
+/// 复用连接任务身份生成，任务和回执由调用方统一保存。
+fn background_job(
+    id: &str,
+    kind: SupplierGovernanceJobKind,
+    actor: &AuditActor,
+    identity: &CommandIdentity,
+) -> Result<BackgroundJob> {
+    Ok(BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
+        job_id: BackgroundJobId::new(next_id()),
+        connection_id: id.into(),
+        kind,
+        requested_by: actor.id().to_string(),
+        idempotency_hash: identity.idempotency_hash.clone(),
+    })?)
+}
+
+/// 保存任务受理回执，沿用任务事务并保留命令幂等身份。
+async fn processing_receipt(
+    db: &Database,
+    connection: &SupplierApiConnection,
+    action: SupplierConnectionAction,
+    identity: CommandIdentity,
+    job: &BackgroundJob,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<SupplierConnectionCommandResult> {
+    persist_command_receipt(
+        db,
+        CommandReceiptWrite {
+            connection,
+            action,
+            identity: &identity,
+            outcome: SupplierCommandOutcome::Processing,
+            job_id: Some(job.base.id.clone()),
+            actor,
+        },
+        executor,
+    )
+    .await
 }

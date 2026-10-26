@@ -48,7 +48,7 @@ export async function createConnection(input: {
     return {
         status: "succeeded",
         title: "连接身份已创建",
-        message: `已创建 ${code}。下一步完成技术引用与能力配置。`,
+        message: `已创建 ${code}。服务端自动提供接口配置，打开连接即可开始同步商品。`,
         reference: code,
         connectionId: created.id,
         connectionVersion: String(created.version),
@@ -90,7 +90,7 @@ function commandOutcome(
         return {
             status: "processing",
             title: success.title,
-            message: "后台任务已创建；请按任务号查询进度与终态。",
+            message: success.message,
             jobId: result.job_id,
             jobNo: result.job_no,
         }
@@ -224,7 +224,7 @@ export async function runHealthCheck(input: {
         checkType: input.checkType,
     })
     return commandOutcome(result, input.idempotencyKey, {
-        title: "健康检查任务已创建",
+        title: "连接测试已提交",
         message: "检查在后台执行；HTTP 完成不代表技术健康成功。",
     })
 }
@@ -241,8 +241,8 @@ export async function startCatalogSync(input: {
         idempotencyKey: input.idempotencyKey,
     })
     return commandOutcome(result, input.idempotencyKey, {
-        title: "目录同步任务已创建",
-        message: "目录同步在后台执行。",
+        title: "商品同步任务已创建",
+        message: "商品在后台同步，本页会自动更新进度。",
     })
 }
 

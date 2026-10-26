@@ -11,6 +11,7 @@ use persistence_core::NoTransaction;
 use crate::{Error, Result};
 
 mod catalog;
+mod catalog_scan;
 mod execution;
 mod failure;
 mod health;

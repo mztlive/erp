@@ -180,10 +180,11 @@ impl SupplierConnectionGovernance<'_> {
             | SupplierConnectionAction::BindCredentialReference => {
                 self.reference_change_blockers(action, reference_registry_available)
             },
-            SupplierConnectionAction::RunHealthCheck => self.health_check_blockers(action),
+            SupplierConnectionAction::RunHealthCheck | SupplierConnectionAction::StartCatalogSync => {
+                self.deployment_blockers(action, reference_registry_available)
+            },
             SupplierConnectionAction::Enable => self.enable_blockers(action),
             SupplierConnectionAction::Disable => self.disable_blockers(action, impact),
-            SupplierConnectionAction::StartCatalogSync => self.catalog_sync_blockers(action),
         }
     }
 
@@ -246,21 +247,19 @@ impl SupplierConnectionGovernance<'_> {
         blockers
     }
 
-    /// 返回执行技术健康检查前的阻塞原因。
-    ///
-    /// # 参数
-    /// * `action` - 健康检查治理动作
-    ///
-    /// # 返回
-    /// 地址或密钥引用未就绪时返回阻塞原因，否则返回空集合。
-    fn health_check_blockers(&self, action: SupplierConnectionAction) -> Vec<SupplierGovernanceBlocker> {
-        if self.connection.technical_references_ready() {
+    /// 服务端配置就绪后允许只读检查与目录采集，不改变业务启用资格。
+    fn deployment_blockers(
+        &self,
+        action: SupplierConnectionAction,
+        available: bool,
+    ) -> Vec<SupplierGovernanceBlocker> {
+        if available {
             return Vec::new();
         }
         vec![governance_blocker(
             action,
-            "TECHNICAL_REFERENCES_MISSING",
-            "地址与密钥引用均绑定后才能执行健康检查",
+            "SUPPLIER_CONNECTOR_UNAVAILABLE",
+            "服务端接口配置未就绪，请联系管理员",
             None,
         )]
     }
@@ -357,43 +356,6 @@ impl SupplierConnectionGovernance<'_> {
                 action,
                 "DUAL_ROLE_REQUIRED",
                 "必须由不同人员完成采购业务确认与技术健康检查",
-                None,
-            )];
-        }
-        Vec::new()
-    }
-
-    /// 返回启动目录同步前的阻塞原因。
-    ///
-    /// # 参数
-    /// * `action` - 目录同步治理动作
-    ///
-    /// # 返回
-    /// 连接未启用、技术配置不健康或商品能力未启用时返回阻塞原因。
-    fn catalog_sync_blockers(&self, action: SupplierConnectionAction) -> Vec<SupplierGovernanceBlocker> {
-        if !self.connection.is_active() {
-            return vec![governance_blocker(
-                action,
-                "CONNECTION_NOT_ENABLED",
-                "连接启用后才能同步目录",
-                None,
-            )];
-        }
-        if !self.connection.current_technical_config_is_healthy() {
-            return vec![governance_blocker(
-                action,
-                "TECHNICAL_HEALTH_MISSING",
-                "当前技术配置健康后才能同步目录",
-                None,
-            )];
-        }
-        if !self.capabilities.iter().any(|capability| {
-            capability.capability_code == SupplierApiCapabilityCode::Product && capability.is_active()
-        }) {
-            return vec![governance_blocker(
-                action,
-                "CATALOG_CAPABILITY_DISABLED",
-                "商品目录能力尚未启用",
                 None,
             )];
         }
@@ -790,6 +752,27 @@ mod tests {
             .code,
             "ACTIVE_BUSINESS_IMPACT"
         );
+    }
+
+    #[test]
+    fn catalog_and_test_require_deployment_but_not_business_enable_or_manual_binding() {
+        let mut connection = governance_connection(SupplierApiConnectionStatus::Disabled);
+        connection.endpoint_reference_bound = false;
+        connection.credential_reference_bound = false;
+        let governance = SupplierConnectionGovernance {
+            connection: &connection,
+            capabilities: &[],
+            confirmations: &[],
+            health_runs: &[],
+        };
+        for action in [SupplierConnectionAction::RunHealthCheck, SupplierConnectionAction::StartCatalogSync] {
+            assert!(governance.blockers(action, Default::default(), true).is_empty());
+            assert_eq!(
+                governance.blockers(action, Default::default(), false)[0].code,
+                "SUPPLIER_CONNECTOR_UNAVAILABLE"
+            );
+        }
+        assert!(!governance.blockers(SupplierConnectionAction::Enable, Default::default(), true).is_empty());
     }
 
     /// 重复能力代码在实体边界稳定拒绝。

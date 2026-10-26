@@ -5217,6 +5217,22 @@
       "reason": "用例或步骤 persist_capability_event 通过 .resource_log_with_id、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
+      "path": "crates/erp-processes/src/supply_governance/supplier_api/catalog_match.rs",
+      "function": "match_catalog_item",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "人工匹配在同一事务重验公司商品范围与目录版本，并保存匹配及审计；相同 SKU 重复确认不重复写入。"
+    },
+    {
       "path": "crates/erp-processes/src/supply_governance/supplier_api/creation.rs",
       "function": "create_connection",
       "policy": "Audited",

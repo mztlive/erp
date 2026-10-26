@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
+use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
@@ -14,11 +15,14 @@ use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectionAction,
     SupplierConnectionGovernance, SupplierHealthCheckRun, SupplierHealthCheckType,
 };
+use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 use erp_supply::repository::SupplierApiExt;
 use erp_supply::repository::prelude::*;
 use erp_supply::service::supplier_api::context::{
     blocker, governance_blocker_view, impact_view, safe_reference,
 };
+use erp_support::BulkJobExt;
+use erp_support::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::SupplierApiReadService;
@@ -142,55 +146,9 @@ impl SupplierApiReadService {
     ) -> Result<SupplierApiConnectionDetailView> {
         let reference_visible =
             self.has_permission(actor, "supplier_api_connection:view_reference_metadata").await?;
-        let governance = SupplierConnectionGovernance {
-            connection: &connection,
-            capabilities: &context.capabilities,
-            confirmations: &context.confirmations,
-            health_runs: &context.health_runs,
-        };
-        let latest_success = governance.latest_successful_health_run();
         let can_confirm = self.has_permission(actor, "supplier_api_capability:confirm_requirement").await?;
-        let can_update_capability = self.has_permission(actor, "supplier_api_capability:update").await?;
-        let mut capabilities = Vec::with_capacity(context.capabilities.len());
-        for capability in &context.capabilities {
-            let confirmation = governance.latest_confirmation(capability.capability_code);
-            let verified = latest_success.is_some_and(|run| run.verifies(capability));
-            let mut allowed_actions = Vec::new();
-            let mut action_blockers = Vec::new();
-            if can_confirm {
-                allowed_actions.push(CONFIRM_CAPABILITY_ACTION.to_string());
-            }
-            if can_update_capability {
-                if connection.stable.status == SupplierApiConnectionStatus::Active {
-                    action_blockers.push(blocker(
-                        UPDATE_CAPABILITIES_ACTION,
-                        "CONNECTION_ENABLED",
-                        "请先停用连接，再修改能力配置",
-                        None,
-                    ));
-                } else {
-                    allowed_actions.push(UPDATE_CAPABILITIES_ACTION.to_string());
-                }
-            }
-            capabilities.push(SupplierApiCapabilityView {
-                id: capability.base.id.clone(),
-                connection_id: connection.base.id.clone(),
-                capability_code: capability.capability_code,
-                status: capability.status,
-                version: capability.base.version,
-                created_at: capability.base.created_at,
-                constraint_summary: capability.constraint_snapshot.clone(),
-                business_requirement: confirmation.map(|value| value.requirement),
-                business_confirmation_version: confirmation.map(|value| value.base.version),
-                technically_verified: verified,
-                verified_at: latest_success
-                    .filter(|_| verified)
-                    .and_then(|run| run.finished_at)
-                    .map(|at| at.unix_secs() as u64),
-                allowed_actions,
-                action_blockers,
-            });
-        }
+        let can_update = self.has_permission(actor, "supplier_api_capability:update").await?;
+        let capabilities = capability_views(&connection, &context, can_confirm, can_update);
 
         let (allowed_actions, action_blockers) =
             self.connection_action_projection(&connection, &context, actor).await?;
@@ -201,14 +159,23 @@ impl SupplierApiReadService {
         };
         connection_view.allowed_actions = allowed_actions;
         connection_view.action_blockers = action_blockers;
+        let deployment_ready = self.reference_registry.as_ref().is_some_and(|registry| {
+            registry.deployment_config(&SupplierReferenceTarget::from(&connection)).is_ok()
+        });
         Ok(SupplierApiConnectionDetailView {
+            deployment_ready,
+            deployment_message: if deployment_ready {
+                "已自动使用服务端接口地址和凭据"
+            } else {
+                "服务端接口配置未就绪，请联系管理员配置并重启服务"
+            }
+            .into(),
             connection: connection_view,
             capabilities,
             health_records: context.health_runs.iter().map(health_run_view).collect(),
             health_check_types: vec![
                 SupplierHealthCheckType::Connectivity,
                 SupplierHealthCheckType::Authentication,
-                SupplierHealthCheckType::CapabilityMetadata,
             ],
             related_impact: impact_view(context.impact),
         })
@@ -228,15 +195,34 @@ impl SupplierApiReadService {
             confirmations: &context.confirmations,
             health_runs: &context.health_runs,
         };
+        let active_catalog =
+            self.db.background_jobs().active_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
+        let catalog_running = active_catalog.len() >= 100
+            || active_catalog.iter().any(|job| !job.catalog_stalled(Instant::now()));
+        let deployment = self
+            .reference_registry
+            .as_ref()
+            .and_then(|registry| registry.deployment_config(&SupplierReferenceTarget::from(connection)).ok());
         for action in SupplierConnectionAction::all() {
+            if matches!(
+                action,
+                SupplierConnectionAction::BindEndpointReference
+                    | SupplierConnectionAction::BindCredentialReference
+            ) {
+                continue;
+            }
             if !self.has_action_permission(actor, action).await? {
                 continue;
             }
-            let blockers = governance.blockers(
-                action,
-                context.impact,
-                self.reference_registry.as_ref().is_some_and(|registry| registry.is_available()),
-            );
+            let blockers = governance.blockers(action, context.impact, deployment.is_some());
+            let deployment_current = deployment.as_ref().is_some_and(|config| {
+                connection.endpoint_reference == config.endpoint
+                    && connection.credential_reference.as_ref() == Some(&config.credential)
+            });
+            if let Some(blocker) = operation_blocker(action, catalog_running, deployment_current) {
+                blocked.push(blocker);
+                continue;
+            }
             if blockers.is_empty() {
                 allowed.push(action.as_str().to_string());
             } else {
@@ -260,5 +246,83 @@ fn health_run_view(run: &SupplierHealthCheckRun) -> SupplierHealthCheckRunView {
         latency_ms: run.latency_ms,
         error_code: run.error_code.clone(),
         error_summary: run.error_summary.clone(),
+    }
+}
+
+/// 将能力事实转换为权限、确认和检查结果视图。
+fn capability_views(
+    connection: &SupplierApiConnection,
+    context: &GovernanceContext,
+    can_confirm: bool,
+    can_update_capability: bool,
+) -> Vec<SupplierApiCapabilityView> {
+    let governance = SupplierConnectionGovernance {
+        connection,
+        capabilities: &context.capabilities,
+        confirmations: &context.confirmations,
+        health_runs: &context.health_runs,
+    };
+    let latest_success = governance.latest_successful_health_run();
+    let mut capabilities = Vec::with_capacity(context.capabilities.len());
+    for capability in &context.capabilities {
+        let confirmation = governance.latest_confirmation(capability.capability_code);
+        let verified = latest_success.is_some_and(|run| run.verifies(capability));
+        let mut allowed_actions = Vec::new();
+        let mut action_blockers = Vec::new();
+        if can_confirm {
+            allowed_actions.push(CONFIRM_CAPABILITY_ACTION.to_string());
+        }
+        if can_update_capability {
+            if connection.stable.status == SupplierApiConnectionStatus::Active {
+                action_blockers.push(blocker(
+                    UPDATE_CAPABILITIES_ACTION,
+                    "CONNECTION_ENABLED",
+                    "请先停用连接，再修改能力配置",
+                    None,
+                ));
+            } else {
+                allowed_actions.push(UPDATE_CAPABILITIES_ACTION.to_string());
+            }
+        }
+        capabilities.push(SupplierApiCapabilityView {
+            id: capability.base.id.clone(),
+            connection_id: connection.base.id.clone(),
+            capability_code: capability.capability_code,
+            status: capability.status,
+            version: capability.base.version,
+            created_at: capability.base.created_at,
+            constraint_summary: capability.constraint_snapshot.clone(),
+            business_requirement: confirmation.map(|value| value.requirement),
+            business_confirmation_version: confirmation.map(|value| value.base.version),
+            technically_verified: verified,
+            verified_at: latest_success
+                .filter(|_| verified)
+                .and_then(|run| run.finished_at)
+                .map(|at| at.unix_secs() as u64),
+            allowed_actions,
+            action_blockers,
+        });
+    }
+
+    capabilities
+}
+
+/// 将运行中任务和部署变化转换为可直接操作的提示。
+fn operation_blocker(
+    action: SupplierConnectionAction,
+    running: bool,
+    current: bool,
+) -> Option<SupplierActionBlockerView> {
+    match action {
+        SupplierConnectionAction::StartCatalogSync if running => {
+            Some(blocker(action.as_str(), "CATALOG_SYNC_RUNNING", "商品同步正在运行，请等待完成", None))
+        },
+        SupplierConnectionAction::Enable if !current => Some(blocker(
+            action.as_str(),
+            "DEPLOYMENT_CHANGED",
+            "接口配置尚未验证或已变化，请先测试连接",
+            None,
+        )),
+        _ => None,
     }
 }

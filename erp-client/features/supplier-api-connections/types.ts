@@ -44,14 +44,7 @@ type CapabilityStatus = "ENABLED" | "DISABLED"
 
 type CapabilityVerification = "SUCCESS" | "FAILED" | "UNVERIFIED" | "STALE"
 
-export type ConnectionSection =
-    | "overview"
-    | "capabilities"
-    | "security"
-    | "health"
-    | "catalog"
-    | "related"
-    | "audit"
+export type ConnectionSection = "catalog" | "settings" | "records"
 
 type EmptyReason =
     | "NO_PERMISSION"
@@ -163,6 +156,8 @@ export type ConnectionListItem = {
 }
 
 export type ConnectionCenterView = {
+    deploymentReady: boolean
+    deploymentMessage: string
     connectionId: string
     connectionCode: string
     connectorType?: string
@@ -329,13 +324,9 @@ export const REFERENCE_STATE_LABEL: Record<ReferenceState, string> = {
 }
 
 export const SECTION_LABEL: Record<ConnectionSection, string> = {
-    overview: "概览",
-    capabilities: "能力配置",
-    security: "安全配置",
-    health: "健康记录",
-    catalog: "目录同步",
-    related: "关联业务",
-    audit: "操作记录",
+    catalog: "商品同步",
+    settings: "连接设置",
+    records: "运行记录",
 }
 
 /** 审计动作中文映射（动作码只在代码与审计数据结构中使用） */
@@ -352,12 +343,4 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
     HEALTH_AUTH_FAILED: "鉴权/签名失败",
 }
 
-export const SECTIONS: ConnectionSection[] = [
-    "overview",
-    "capabilities",
-    "security",
-    "health",
-    "catalog",
-    "related",
-    "audit",
-]
+export const SECTIONS: ConnectionSection[] = ["catalog", "settings", "records"]

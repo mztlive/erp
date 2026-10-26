@@ -62,7 +62,7 @@ export function connectionHealthAdvice(
             title: "完成连接配置",
             description:
                 "接口地址和访问凭据均须完成绑定。请前往安全配置，核对尚未完成的项目。",
-            section: "security",
+            section: "settings",
             actionLabel: "查看安全配置",
         }
     }
@@ -74,7 +74,7 @@ export function connectionHealthAdvice(
             title: "核对访问凭据及接口权限",
             description:
                 "请确认凭据有效且供应商已开通所需权限。修改配置后重新执行健康检查。",
-            section: "security",
+            section: "settings",
             actionLabel: "查看安全配置",
         }
     }
@@ -83,7 +83,7 @@ export function connectionHealthAdvice(
             title: "核对连接配置与检查记录",
             description:
                 "请结合下方检查记录排查接口地址、访问凭据和供应商服务状态，再重新检查。",
-            section: "security",
+            section: "settings",
             actionLabel: "查看安全配置",
         }
     }
@@ -98,14 +98,14 @@ export function connectionHealthAdvice(
             title: "确认能力配置与验证状态",
             description:
                 "请核对业务需要的能力及其验证状态。连接检查通过不代表每项能力或每件商品均可使用。",
-            section: "capabilities",
+            section: "settings",
             actionLabel: "查看能力配置",
         }
     }
     return {
         title: "按需检查当前连接",
         description: conn.nextStep,
-        section: "overview",
+        section: "settings",
         actionLabel: "查看连接概览",
     }
 }

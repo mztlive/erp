@@ -483,6 +483,11 @@ pub struct RateLimitPolicyView {
 /// 连接详情响应视图（连接身份 + 能力清单）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SupplierApiConnectionDetailView {
+    /// 当前部署是否登记可用技术配置；不返回地址或密钥。
+    pub deployment_ready: bool,
+    /// 缺失或变化时面向操作人的下一步说明。
+    pub deployment_message: String,
+
     /// 连接身份（列表同款字段）。
     #[serde(flatten)]
     pub connection: SupplierApiConnectionView,

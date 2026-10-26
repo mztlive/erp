@@ -3,6 +3,7 @@ use erp_audit::AuditActorLogs;
 use erp_supplier::SupplierExt;
 use erp_supply::dto::supplier_api::*;
 use erp_supply::entity::supplier_api::PreparedSupplierConnectionCreate;
+use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 use erp_supply::service::supplier_api::{SupplierApiService, map_command_shape_rejection};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -48,7 +49,11 @@ impl SupplierApiGovernanceProcess {
             .await?
             .ok_or_else(|| Error::NotFound("API 供应商不存在".to_string()))?;
 
-        let connection = SupplierApiService::prepare_connection(req, prepared, actor.id())?;
+        let mut connection = SupplierApiService::prepare_connection(req, prepared, actor.id())?;
+        let target = SupplierReferenceTarget::from(&connection);
+        if let Ok(config) = self.reference_registry.deployment_config(&target) {
+            connection.apply_deployment(&config, actor.id())?;
+        }
         let audit = actor.clone().resource_log(
             "supplier_api_connection.create",
             "supplier_api_connection",

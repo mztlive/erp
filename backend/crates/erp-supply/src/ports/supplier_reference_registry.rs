@@ -6,6 +6,7 @@ use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 use serde::{Deserialize, Serialize};
 
 use super::supplier_api_gateway::ClassifiedError;
+use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
 
 /// 本次绑定命令预检的目标身份；禁止以票据携带的身份替代目标连接。
@@ -59,8 +60,33 @@ pub struct ResolvedSupplierReference {
     pub internal_reference: String,
 }
 
+/// 当前部署为一个连接解析出的内部配置；不得序列化到响应或日志。
+#[derive(Clone, PartialEq, Eq)]
+pub struct SupplierDeploymentConfig {
+    pub endpoint: String,
+    pub credential: String,
+}
+
 /// 服务端不透明引用注册表端口。
 pub trait SupplierReferenceRegistry: Send + Sync {
+    /// 按后台身份取得当前部署配置，无需用户选择地址或凭据。
+    /// # 参数
+    /// `target` 是服务器读取的连接身份。
+    /// # 返回
+    /// 仅供后端绑定及失效检测的配置引用。
+    /// # 错误
+    /// 配置未登记或类型不支持时明确拒绝。
+    fn deployment_config(
+        &self,
+        _target: &SupplierReferenceTarget,
+    ) -> Result<SupplierDeploymentConfig, ClassifiedError> {
+        Err(ClassifiedError {
+            class: SupplierFailureClass::CapabilityGap,
+            code: "SUPPLIER_CONNECTOR_UNAVAILABLE".into(),
+            summary: "服务端尚未配置该供应商接口，请联系管理员".into(),
+        })
+    }
+
     /// 判断当前进程是否已注入权威注册表。
     ///
     /// # 参数

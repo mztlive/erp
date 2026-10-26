@@ -88,9 +88,9 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked
 `connectors::registry::SupplierConnectorRegistry` 按连接声明的接口类型分派技术网关与配置目录；无类型或未注册类型不得使用其它供应商适配器。
 
 `connectors::dangaoshushu::DangaoshushuConnector` 实现商品、可供、地区、地址与配送、单组订单、
-独立支付及回调协议。`DangaoshushuRuntime` 登记技术参数，按后台连接记录和所绑定引用创建客户端；后台选择器取得连接专属配置票据，健康检查复用相同绑定；
+独立支付及回调协议。`DangaoshushuRuntime` 登记技术参数，按后台连接记录和所绑定引用创建客户端；业务操作自动使用当前部署配置，配置变化使旧健康证据失效；
 `reception::receive` 保存推送密文和刷新意图后应答。配置、管理端查询、技术绑定和新增集合
 的启停回滚须执行[接入合同](../../../docs/dangaoshushu-connector-contract.md)。
 
-旧履约网关继续失败关闭；目录同步尚未应用到正式供给，回调尚未装配补查与领域应用 worker。
+旧履约网关继续失败关闭；目录同步保存来源观察和分页检查点，人工匹配不自动建立正式供给，回调尚未装配补查与领域应用 worker。
 正式业务调用方须先完成各写步骤的意图、回执及恢复持久化，再切换到协议能力。

@@ -8,6 +8,7 @@ pub mod owned;
 pub mod prelude;
 pub mod sku_delivery_coverage;
 pub mod supplier_api;
+pub mod supplier_catalog;
 pub mod supplier_fulfillment;
 pub mod supplier_fulfillment_scope;
 pub mod supplier_offering;

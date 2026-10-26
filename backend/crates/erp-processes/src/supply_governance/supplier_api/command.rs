@@ -288,6 +288,8 @@ impl SupplierApiGovernanceProcess {
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
+        let deployment =
+            if action == SupplierConnectionAction::Enable { Some(self.deployment(id).await?) } else { None };
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -299,6 +301,9 @@ impl SupplierApiGovernanceProcess {
                     let (mut connection, context) = domain
                         .prepare_status_target(&connection_id_value, expected_version, executor)
                         .await?;
+                    if let Some(deployment) = &deployment {
+                        deployment.ensure_current(&connection)?;
+                    }
                     let active_sync_jobs = db
                         .background_jobs()
                         .count_active_supplier_catalog_jobs(&connection_id_value, executor)

@@ -96,6 +96,8 @@ export type BackendHealthRun = {
 }
 
 export type BackendConnectionDetail = BackendConnection & {
+    deployment_ready: boolean
+    deployment_message: string
     capabilities: BackendCapability[]
     health_records: BackendHealthRun[]
     health_check_types: BackendHealthCheckType[]
@@ -257,12 +259,10 @@ export function toListItem(
         healthTone: HEALTH_TONE[health],
         lastHealthAt: secsToIso(connection.last_health_at),
         catalogState: "NEVER",
-        catalogLabel: CATALOG_LABEL.NEVER,
+        catalogLabel: "打开连接查看",
         nextStep:
             connection.action_blockers[0]?.message ??
-            (status === "ENABLED"
-                ? "连接已启用"
-                : "当前暂无可执行操作，请联系管理员确认连接配置"),
+            (status === "ENABLED" ? "连接已启用" : "打开连接，开始同步商品"),
         allowedActions: connection.allowed_actions,
         actionBlockers: connection.action_blockers.map(mapBlocker),
     }
@@ -318,6 +318,8 @@ export function toCenter(
         activeSyncJobs: detail.related_impact.active_sync_jobs,
     }
     return {
+        deploymentReady: detail.deployment_ready,
+        deploymentMessage: detail.deployment_message,
         connectionId: detail.id,
         connectionCode: detail.connection_code,
         connectorType: detail.connector_type ?? undefined,
@@ -369,9 +371,7 @@ export function toCenter(
             })),
         nextStep:
             detail.action_blockers[0]?.message ??
-            (status === "ENABLED"
-                ? "连接已启用"
-                : "当前暂无可执行操作，请联系管理员确认连接配置"),
+            (status === "ENABLED" ? "连接已启用" : "打开连接，开始同步商品"),
     }
 }
 

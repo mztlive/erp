@@ -32,7 +32,7 @@ const detailCodec = createUrlStateCodec<{ section: ConnectionSection }>([
         key: "section",
         type: "enum",
         values: SECTIONS,
-        defaultValue: "health",
+        defaultValue: "catalog",
     },
 ])
 
@@ -41,10 +41,10 @@ export const parseConnectionDetailSearchParams = detailCodec.parse
 export function buildConnectionDetailHref(
     connectionId: string,
     listState: ConnectionsUrlState,
-    section: ConnectionSection = "health",
+    section: ConnectionSection = "catalog",
 ): string {
     const params = new URLSearchParams(buildConnectionsSearchParams(listState))
-    if (section !== "health") params.set("section", section)
+    if (section !== "catalog") params.set("section", section)
     const query = params.toString()
     const path = `/supplier-api/connections/${encodeURIComponent(connectionId)}`
     return query ? `${path}?${query}` : path

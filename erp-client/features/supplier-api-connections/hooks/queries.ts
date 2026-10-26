@@ -16,6 +16,12 @@ import {
     type ListQueryInput,
 } from "@/features/supplier-api-connections/api/connections"
 
+import {
+    fetchCatalog,
+    catalogRunning,
+    matchCatalog,
+} from "@/features/supplier-api-connections/api/catalog"
+
 import { fetchConnectorTypes } from "@/features/supplier-api-connections/api/list"
 
 export function useConnectorTypesQuery(enabled: boolean) {
@@ -46,6 +52,12 @@ export function useConnectionCenterQuery(connectionId: string | undefined) {
         queryKey: supplierConnectionKeys.center(connectionId ?? ""),
         queryFn: () => fetchConnectionCenter({ connectionId: connectionId! }),
         enabled: Boolean(connectionId),
+        refetchInterval: (query) =>
+            query.state.data?.healthRecords.some(
+                (record) => record.result === "UNKNOWN",
+            )
+                ? 2000
+                : false,
     })
 }
 
@@ -147,4 +159,22 @@ export function useEnableConnectionMutation() {
             if (result.status === "succeeded") await invalidate()
         },
     })
+}
+
+export function useCatalogQuery(connectionId: string, page: number) {
+    return useQuery({
+        queryKey: [
+            ...supplierConnectionKeys.all,
+            "catalog",
+            connectionId,
+            page,
+        ],
+        queryFn: () => fetchCatalog(connectionId, page),
+        refetchInterval: (query) =>
+            catalogRunning(query.state.data?.jobs[0]) ? 2000 : false,
+    })
+}
+export function useMatchCatalogMutation() {
+    const invalidate = useInvalidateAll()
+    return useMutation({ mutationFn: matchCatalog, onSuccess: invalidate })
 }

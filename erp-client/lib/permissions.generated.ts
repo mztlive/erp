@@ -6191,6 +6191,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "list",
                 },
             },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/catalog/{item}/match",
+                description: "同步供应商商品目录",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/catalog",
+                description: "查看供应商 API 连接详情",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "detail",
+                },
+            },
         ],
     },
     {

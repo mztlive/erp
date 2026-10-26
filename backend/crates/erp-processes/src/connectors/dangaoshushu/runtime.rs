@@ -8,11 +8,12 @@ use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType, SupplierHealthCheckType,
 };
-use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
-use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
+use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Scan};
+use erp_supply::ports::connector::offer::OfferSource;
+use erp_supply::ports::supplier_api_gateway::{CatalogRead, ClassifiedError, SupplierApiGateway};
 use erp_supply::ports::supplier_reference_registry::{
-    ResolvedSupplierReference, SupplierReferenceKind, SupplierReferenceOption, SupplierReferenceRegistry,
-    SupplierReferenceTarget,
+    ResolvedSupplierReference, SupplierDeploymentConfig, SupplierReferenceKind, SupplierReferenceOption,
+    SupplierReferenceRegistry, SupplierReferenceTarget,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -81,7 +82,15 @@ impl DangaoshushuRuntime {
                 "请先在后台启用供应商 API 连接",
             ));
         }
-        self.bound_connector(connection)
+        let connector = self.bound_connector(connection)?;
+        if !connection.current_technical_config_is_healthy() {
+            return Err(error(
+                SupplierFailureClass::BusinessRejected,
+                "DGSS_HEALTH_REQUIRED",
+                "接口配置尚未通过连接测试，不能用于业务调用",
+            ));
+        }
+        Ok(connector)
     }
 
     fn bound_connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<DangaoshushuConnector> {
@@ -269,6 +278,12 @@ fn reference_kind(kind: SupplierReferenceKind) -> ConnectorResult<&'static str> 
 }
 
 impl SupplierApiGateway for DangaoshushuRuntime {
+    fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
+        Box::pin(async move {
+            self.bound_connector(connection).map_err(classified)?.scan(scan).await.map_err(classified)
+        })
+    }
+
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,
@@ -287,21 +302,19 @@ impl SupplierApiGateway for DangaoshushuRuntime {
             Ok(())
         })
     }
-    fn catalog_sync<'a>(
-        &'a self,
-        connection: &'a SupplierApiConnection,
-    ) -> Pin<Box<dyn Future<Output = Result<(), ClassifiedError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.validate_target(&SupplierReferenceTarget::from(connection)).map_err(classified)?;
-            Err(ClassifiedError {
-                class: SupplierFailureClass::CapabilityGap,
-                code: "DGSS_CATALOG_APPLY_NOT_CONFIGURED".into(),
-                summary: "目录读取不等于正式供给同步；须先绑定公司 SKU 并配置来源证据应用".into(),
-            })
-        })
-    }
 }
 impl SupplierReferenceRegistry for DangaoshushuRuntime {
+    fn deployment_config(
+        &self,
+        target: &SupplierReferenceTarget,
+    ) -> Result<SupplierDeploymentConfig, ClassifiedError> {
+        self.validate_target(target).map_err(classified)?;
+        Ok(SupplierDeploymentConfig {
+            endpoint: self.internal_reference("endpoint", target).map_err(classified)?,
+            credential: self.internal_reference("credential", target).map_err(classified)?,
+        })
+    }
+
     fn is_available(&self) -> bool {
         true
     }
@@ -330,8 +343,13 @@ fn classified(error: ConnectorError) -> ClassifiedError {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
+
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
-    use erp_supply::entity::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
+    use erp_supply::entity::supplier_api::{
+        HealthCheckResult, SupplierApiConnectionData, SupplierApiConnectionStatus,
+    };
+    use erp_supply::ports::connector::common::ScanWindow;
     use serde_json::{from_value, json};
 
     use super::super::test_support::{recording_connector, settings};
@@ -353,6 +371,40 @@ mod tests {
         )
         .unwrap()
     }
+    #[tokio::test]
+    async fn automatic_configuration_supports_catalog_before_business_enable_and_invalidates_on_rotation() {
+        let (connector, transport) = recording_connector(vec![Ok(json!({ "product_list": [
+            { "id": "p1", "title": "蛋糕", "specs": [{ "spec_id": "s1", "name": "6寸" }] }
+        ] }))]);
+        let runtime = DangaoshushuRuntime { settings: connector.settings, transport: transport.clone() };
+        let mut connection = connection();
+        let config = runtime.deployment_config(&SupplierReferenceTarget::from(&connection)).unwrap();
+        assert!(connection.apply_deployment(&config, "actor").unwrap());
+        let version = connection.technical_config_version;
+        assert!(!connection.apply_deployment(&config, "actor").unwrap());
+        assert_eq!(connection.technical_config_version, version);
+        assert!(!connection.is_active());
+        let page = runtime
+            .catalog_page(
+                &connection,
+                &Scan { window: ScanWindow::Full, cursor: None, limit: NonZeroU32::new(50).unwrap() },
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert!(page.next.is_none());
+        assert_eq!(transport.requests.lock().unwrap().len(), 1);
+        connection.record_health(HealthCheckResult::Healthy, Instant::now());
+        let mut rotated_settings = settings();
+        rotated_settings.private_key = "rotated-secret".into();
+        let rotated = DangaoshushuRuntime::new(rotated_settings).unwrap();
+        assert!(rotated.validate_binding(&connection, true).is_err());
+        let rotated_config = rotated.deployment_config(&SupplierReferenceTarget::from(&connection)).unwrap();
+        assert!(connection.apply_deployment(&rotated_config, "actor").unwrap());
+        assert!(!connection.current_technical_config_is_healthy());
+        assert!(rotated.validate_binding(&connection, true).is_ok());
+    }
+
     #[test]
     fn tickets_are_kind_configuration_connection_and_expiry_bound() {
         let runtime = DangaoshushuRuntime::new(settings()).unwrap();
@@ -499,6 +551,8 @@ mod tests {
         bind_from_options(&runtime, &mut connection).await;
         assert_eq!(runtime.connector(&connection).err().unwrap().code, "DGSS_CONNECTION_DISABLED");
         connection.stable.status = SupplierApiConnectionStatus::Active;
+        assert_eq!(runtime.connector(&connection).err().unwrap().code, "DGSS_HEALTH_REQUIRED");
+        connection.record_health(HealthCheckResult::Healthy, Instant::now());
         assert!(runtime.connector(&connection).is_ok());
         connection.stable.status = SupplierApiConnectionStatus::Disabled;
         assert!(runtime.connector(&connection).is_err());
@@ -527,7 +581,15 @@ mod tests {
         assert_eq!(runtime.read(&connection, &query).await.unwrap_err().code, "DGSS_CONNECTOR_TYPE_MISMATCH");
         assert!(runtime.reference_tickets(&connection, Instant::now()).is_err());
         assert!(runtime.health_check(&connection, SupplierHealthCheckType::Connectivity).await.is_err());
-        assert!(runtime.catalog_sync(&connection).await.is_err());
+        assert!(
+            runtime
+                .catalog_page(
+                    &connection,
+                    &Scan { window: ScanWindow::Full, cursor: None, limit: NonZeroU32::new(50).unwrap() }
+                )
+                .await
+                .is_err()
+        );
         let target = SupplierReferenceTarget::from(&connection);
         assert!(runtime.options(SupplierReferenceKind::Endpoint, &target).await.unwrap().is_empty());
         assert!(

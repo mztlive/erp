@@ -6,10 +6,11 @@
 //! 通用 BPM 不拥有 ERP 任务类型。
 
 use erp_core::Result;
+use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
 use serde::{Deserialize, Serialize};
 
-use super::background_job::{BackgroundJob, BackgroundJobData, JobType};
+use super::background_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
 
 /// W20 健康检查任务的领域任务类型代码。
 pub const SUPPLIER_HEALTH_CHECK_JOB_TYPE: &str = "SUPPLIER_HEALTH_CHECK";
@@ -79,6 +80,45 @@ pub struct SupplierGovernanceJobSpec {
 }
 
 impl BackgroundJob {
+    /// 结束失联目录任务，等待中任务取消，执行中任务失败并保留进度。
+    /// # 参数
+    /// `now` 为服务器判定和结束任务的时间。
+    /// # 返回
+    /// 旧任务进入终态，新任务可重新开始或恢复检查点。
+    /// # 错误
+    /// 非失联目录任务或状态不允许结束时拒绝。
+    pub fn close_stalled_catalog(&mut self, now: Instant) -> Result<()> {
+        if !self.catalog_stalled(now) {
+            return Err(erp_core::Error::from("同步任务仍在运行或已经结束"));
+        }
+        let message = Some("同步执行中断，将从已保存页面继续".into());
+        if self.status == JobStatus::Pending {
+            self.cancel(now)?;
+            self.error_summary = message;
+            Ok(())
+        } else {
+            self.mark_failed(message, now)
+        }
+    }
+
+    /// 判断目录任务是否超过五分钟没有推进；不把其他任务当作可恢复目录。
+    /// # 参数
+    /// `now` 为服务器当前时间。
+    /// # 返回
+    /// 未结束的目录任务在五分钟无心跳后返回 true。
+    /// # 错误
+    /// 不返回错误。
+    pub fn catalog_stalled(&self, now: Instant) -> bool {
+        if self.domain_job_type.as_deref() != Some(SUPPLIER_CATALOG_SYNC_JOB_TYPE) || self.is_terminal() {
+            return false;
+        }
+        let last = self
+            .last_progress_at
+            .map(|at| at.unix_secs())
+            .unwrap_or_else(|| i64::try_from(self.base.created_at).unwrap_or(i64::MAX));
+        now.unix_secs().saturating_sub(last) >= 300
+    }
+
     /// 为 W20 连接治理构造后台任务（健康检查或目录同步）。
     ///
     /// 任务编号为 `{W20-HC|W20-CS}-{幂等摘要前 16 字符}`，请求身份为
@@ -128,6 +168,7 @@ impl BackgroundJob {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
     use erp_core::ids::BackgroundJobId;
 
     use super::{
@@ -135,6 +176,33 @@ mod tests {
         SupplierGovernanceJobSpec,
     };
     use crate::entity::bulk_job::{BackgroundJob, JobStatus, JobType};
+
+    #[test]
+    fn interrupted_catalog_can_be_closed_but_recent_progress_cannot_be_reclaimed() {
+        let mut job = BackgroundJob::for_supplier_governance(job_spec(
+            SupplierGovernanceJobKind::CatalogSync,
+            "0123456789abcdef0123456789abcdef",
+        ))
+        .unwrap();
+        job.base.created_at = 100;
+        assert!(!job.catalog_stalled(Instant::from_unix_secs(399)));
+        assert!(job.catalog_stalled(Instant::from_unix_secs(400)));
+        job.close_stalled_catalog(Instant::from_unix_secs(400)).unwrap();
+        assert_eq!(job.status, JobStatus::Cancelled);
+        assert!(!job.catalog_stalled(Instant::from_unix_secs(999)));
+        let mut job = BackgroundJob::for_supplier_governance(job_spec(
+            SupplierGovernanceJobKind::CatalogSync,
+            "0123456789abcdef0123456789abcdef",
+        ))
+        .unwrap();
+        job.start(Instant::from_unix_secs(100)).unwrap();
+        job.record_progress(0, 0, 0, Instant::from_unix_secs(350)).unwrap();
+        assert!(!job.catalog_stalled(Instant::from_unix_secs(500)));
+        assert!(job.close_stalled_catalog(Instant::from_unix_secs(500)).is_err());
+        assert!(job.catalog_stalled(Instant::from_unix_secs(650)));
+        job.close_stalled_catalog(Instant::from_unix_secs(650)).unwrap();
+        assert_eq!(job.status, JobStatus::Failed);
+    }
 
     /// 构造 W20 任务规格测试夹具。
     fn job_spec(kind: SupplierGovernanceJobKind, hash: &str) -> SupplierGovernanceJobSpec {

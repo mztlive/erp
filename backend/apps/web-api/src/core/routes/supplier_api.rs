@@ -10,7 +10,10 @@ use crate::core::middleware::with_permission;
 
 /// 返回本域管理端路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
-    connection_routes(rbac).merge(governance_routes(rbac)).merge(dangaoshushu_routes(rbac))
+    connection_routes(rbac)
+        .merge(governance_routes(rbac))
+        .merge(dangaoshushu_routes(rbac))
+        .merge(catalog_routes(rbac))
 }
 
 fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<AppState> {
@@ -117,6 +120,26 @@ fn governance_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(supplier_api::supplier_api_capability_list),
                 rbac,
                 supplier_api::supplier_api_capability_list_permission_key(),
+            ),
+        )
+}
+
+fn catalog_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/supplier-api-connections/{id}/catalog/{item}/match",
+            with_permission(
+                post(supplier_api::catalog::match_item),
+                rbac,
+                supplier_api::catalog::match_item_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/catalog",
+            with_permission(
+                get(supplier_api::catalog::list),
+                rbac,
+                supplier_api::catalog::list_permission_key(),
             ),
         )
 }

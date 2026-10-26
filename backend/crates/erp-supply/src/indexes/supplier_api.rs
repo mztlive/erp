@@ -10,6 +10,7 @@ use persistence_core::Result;
 use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::SupplierApiExt;
+use crate::repository::supplier_catalog::{ITEMS, RUNS};
 
 /// `supplier_api_connection` 集合名。
 pub(crate) const SUPPLIER_API_CONNECTIONS: &str =
@@ -45,6 +46,20 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_API_BUSINESS_CONFIRMATIONS, business_confirmation_indexes()).await?;
     create_indexes(db, SUPPLIER_API_HEALTH_CHECK_RUNS, health_check_run_indexes()).await?;
     create_indexes(db, SUPPLIER_API_COMMAND_RECEIPTS, command_receipt_indexes()).await?;
+    create_indexes(
+        db,
+        ITEMS,
+        vec![
+            unique_index("uk_supplier_catalog_items_id", doc! { "id": 1 }),
+            unique_index(
+                "uk_supplier_catalog_source",
+                doc! { "connection_id": 1, "product_id": 1, "spec_id": 1 },
+            ),
+            named_index("idx_supplier_catalog_page", doc! { "connection_id": 1, "name": 1, "id": 1 }),
+        ],
+    )
+    .await?;
+    create_indexes(db, RUNS, vec![unique_index("uk_supplier_catalog_runs_id", doc! { "id": 1 })]).await?;
     Ok(())
 }
 

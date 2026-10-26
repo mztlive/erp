@@ -1,6 +1,16 @@
 //! 供应商技术调用消费方合同；外部调用不持有事务。
+use std::future::Future;
+use std::pin::Pin;
+
+use super::connector::common::{Page, Scan, Snapshot};
+use super::connector::offer::OfferChange;
 use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckType};
+/// 一页标准商品来源记录。
+pub type CatalogPage = Page<Snapshot<OfferChange>>;
+/// 事务外目录读取 Future。
+pub type CatalogRead<'a> = Pin<Box<dyn Future<Output = Result<CatalogPage, ClassifiedError>> + Send + 'a>>;
+
 /// 既有网关失败分类；是否可重试由编排层依据副作用及恢复证据判断。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassifiedError {
@@ -16,10 +26,30 @@ pub struct ClassifiedError {
 ///
 /// 单次调用必须设置超时并返回分类结果；调度层负责有限退避和恢复，协议适配器不得
 /// 隐藏写重试。连接检查只读，不创建业务订单。默认实现
-/// `UnavailableSupplierApiGateway` 在端点引用无法解析为可调用地址时以分类错误
-/// 失败关闭（当前无地址配置注册表，`config://` 引用不可解析），测试注入 mock 验证
-/// 成功与失败两条路径。
+/// 未注册的供应商以明确能力缺口失败；已注册协议使用当前服务端配置，
+/// 由 Process 保存分页目录，不允许协议客户端直接修改 ERP 数据。
 pub trait SupplierApiGateway: Send + Sync {
+    /// 读取一页供应商商品；数据库写入由 Process 执行。
+    /// # 参数
+    /// `connection` 为当前连接，`scan` 为持久化游标和固定页大小。
+    /// # 返回
+    /// 标准化来源记录及下一页游标。
+    /// # 错误
+    /// 未实现或供应商调用失败时返回明确错误。
+    fn catalog_page<'a>(
+        &'a self,
+        _connection: &'a SupplierApiConnection,
+        _scan: &'a Scan,
+    ) -> CatalogRead<'a> {
+        Box::pin(async {
+            Err(ClassifiedError {
+                class: SupplierFailureClass::CapabilityGap,
+                code: "CATALOG_SYNC_ADAPTER_UNAVAILABLE".into(),
+                summary: "当前接口尚不支持商品同步".into(),
+            })
+        })
+    }
+
     /// 执行一次连接健康检查（生产检查不创建业务订单，phase-2 §14.1）。
     ///
     /// # 参数
@@ -38,33 +68,4 @@ pub trait SupplierApiGateway: Send + Sync {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
     >;
-
-    /// 保留既有目录同步调用入口；新实现由 OfferSource 读取，再由 Process 调用正式供给用例。
-    ///
-    /// 协议适配器不得直接写 ERP 仓储。切换前必须补齐分页、来源核验和断点恢复，
-    /// 不能把读取 HTTP 成功直接解释为目录业务已经同步完成。
-    ///
-    /// # 参数
-    /// * `connection` - 目标供应商 API 连接。
-    ///
-    /// # 返回
-    /// 覆盖实现同步成功时返回 `Ok(())`。默认实现不成功。
-    ///
-    /// # 错误
-    /// 默认实现返回 `ClassifiedError`，`class` 为 `SupplierFailureClass::TransientFailure`，
-    /// `code` 为 `CATALOG_SYNC_ADAPTER_UNAVAILABLE`。覆盖实现失败时同样返回 `ClassifiedError`。
-    fn catalog_sync<'a>(
-        &'a self,
-        connection: &'a SupplierApiConnection,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
-    > {
-        Box::pin(async move {
-            Err(ClassifiedError {
-                class: SupplierFailureClass::TransientFailure,
-                code: "CATALOG_SYNC_ADAPTER_UNAVAILABLE".to_string(),
-                summary: format!("连接 {} 未注入目录同步适配器", connection.connection_code),
-            })
-        })
-    }
 }

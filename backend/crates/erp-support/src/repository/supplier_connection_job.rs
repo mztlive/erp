@@ -1,6 +1,7 @@
 //! 连接治理消费的后台任务查询，任务集合与状态归 support。
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
+use mongodb::options::FindOptions;
 use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::BackgroundJob;
@@ -8,6 +9,32 @@ use crate::BackgroundJob;
 /// 后台任务集合仓储的供应商连接治理查询。
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobRepositorySupplierConnectionExt {
+    /// 读取连接最近的同步任务，最多二十条。
+    /// # 参数
+    /// `connection_id` 为限定连接，`executor` 为调用方执行器。
+    /// # 返回
+    /// 按创建时间倒序排列的目录任务。
+    /// # 错误
+    /// 数据库读取失败时返回错误。
+    async fn recent_catalog_jobs(
+        &self,
+        connection_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>>;
+
+    /// 读取连接未结束的目录任务，最多一百条，用于串行恢复。
+    /// # 参数
+    /// 连接身份和当前事务执行器。
+    /// # 返回
+    /// 活动任务；达到上限时调用方必须拒绝创建新任务。
+    /// # 错误
+    /// 存储读取失败时返回错误。
+    async fn active_catalog_jobs(
+        &self,
+        connection_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>>;
+
     /// 返回属于指定连接及任务类型的后台任务；空白名单直接无结果。
     ///
     /// # 参数
@@ -49,6 +76,36 @@ pub trait BackgroundJobRepositorySupplierConnectionExt {
 }
 
 impl BackgroundJobRepositorySupplierConnectionExt for persistence_core::Repository<'_, BackgroundJob> {
+    async fn recent_catalog_jobs(
+        &self,
+        connection_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>> {
+        mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "domain_job_id": connection_id, "domain_job_type": "SUPPLIER_CATALOG_SYNC",
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder().sort(doc! { "created_at": -1, "id": -1 }).limit(20).build(),
+            executor,
+        )
+        .await
+    }
+
+    async fn active_catalog_jobs(
+        &self,
+        connection_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>> {
+        mongo_ops::find_many(
+            &self.collection(),
+            active_catalog_filter(connection_id),
+            FindOptions::builder().limit(100).build(),
+            executor,
+        )
+        .await
+    }
     async fn find_supplier_connection_job(
         &self,
         connection_id: &str,

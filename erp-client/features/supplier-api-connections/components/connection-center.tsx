@@ -1,8 +1,5 @@
 "use client"
-
 import * as React from "react"
-import { ArrowLeftIcon } from "lucide-react"
-
 import {
     BusinessEmptyState,
     BusinessFailureState,
@@ -12,43 +9,40 @@ import {
     ObjectSectionTabsPanel,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { CenterAlerts } from "@/features/supplier-api-connections/components/center-alerts"
-import { CenterHeader } from "@/features/supplier-api-connections/components/center-header"
 import {
-    AuditSection,
-    CapabilitiesSection,
-    CapConfigDialog,
-    CatalogSection,
-    HealthSection,
-    OverviewSection,
-    RelatedSection,
-    SecuritySection,
-} from "@/features/supplier-api-connections/components/connection-center-sections"
-import { DisableConnectionDialog } from "@/features/supplier-api-connections/components/dialogs/disable-connection-dialog"
-import { EnableConnectionDialog } from "@/features/supplier-api-connections/components/dialogs/enable-connection-dialog"
-import { ReferenceBindDialog } from "@/features/supplier-api-connections/components/dialogs/reference-bind-dialog"
-import { RunHealthCheckDialog } from "@/features/supplier-api-connections/components/dialogs/run-health-check-dialog"
+    Card,
+    CardHeader,
+    CardTitle,
+    CardDescription,
+    CardContent,
+} from "@/components/ui/card"
+import { CenterHeader } from "./center-header"
+import { CatalogSection } from "./sections/catalog-section"
+import { CatalogRecords } from "./sections/catalog-records"
+import { CapabilitiesSection } from "./sections/capabilities-section"
+import { HealthRecords } from "./sections/health-records"
+import { RelatedSection } from "./sections/related-section"
+import { CapConfigDialog } from "./dialogs/cap-config-dialog"
+import { DisableConnectionDialog } from "./dialogs/disable-connection-dialog"
+import { EnableConnectionDialog } from "./dialogs/enable-connection-dialog"
 import {
-    useBindCredentialMutation,
-    useBindEndpointMutation,
     useConnectionCenterQuery,
+    useCatalogQuery,
     useDisableConnectionMutation,
     useEnableConnectionMutation,
     useRunHealthCheckMutation,
     useStartCatalogSyncMutation,
     useUpdateCapabilitiesMutation,
-} from "@/features/supplier-api-connections/hooks/queries"
-import {
-    newIdempotencyKey,
-    outcomeToResult,
-} from "@/features/supplier-api-connections/lib/operations"
+} from "../hooks/queries"
+import { catalogRunning } from "../api/catalog"
+import { newIdempotencyKey, outcomeToResult } from "../lib/operations"
 import {
     SECTION_LABEL,
     SECTIONS,
     type ConnectionSection,
     type FormalOutcome,
-} from "@/features/supplier-api-connections/types"
-import { type ResultState } from "@/components/business/feedback"
+} from "../types"
+import type { ResultState } from "@/components/business/feedback"
 
 export function ConnectionCenter({
     connectionId,
@@ -62,128 +56,92 @@ export function ConnectionCenter({
     onBack: () => void
 }) {
     const centerQuery = useConnectionCenterQuery(connectionId)
+    const [page, setPage] = React.useState(1)
+    const catalogQuery = useCatalogQuery(connectionId, page)
     const [result, setResult] = React.useState<ResultState>(null)
     const [disableOpen, setDisableOpen] = React.useState(false)
-    const [credOpen, setCredOpen] = React.useState(false)
-    const [endpointOpen, setEndpointOpen] = React.useState(false)
-    const [selectedRef, setSelectedRef] = React.useState<string>("")
-    const [selectedEndpointRef, setSelectedEndpointRef] =
-        React.useState<string>("")
-    const [confirmHealthOpen, setConfirmHealthOpen] = React.useState(false)
     const [confirmEnableOpen, setConfirmEnableOpen] = React.useState(false)
     const [capConfigOpen, setCapConfigOpen] = React.useState(false)
-
-    const bindCred = useBindCredentialMutation()
-    const bindEndpoint = useBindEndpointMutation()
     const updateCaps = useUpdateCapabilitiesMutation()
     const runHealth = useRunHealthCheckMutation()
     const startCatalog = useStartCatalogSyncMutation()
     const disableMut = useDisableConnectionMutation()
     const enableMut = useEnableConnectionMutation()
-
     const conn = centerQuery.data
-
     const applyOutcome = (outcome: FormalOutcome) =>
         setResult(outcomeToResult(outcome))
-
-    if (centerQuery.isPending) {
+    const latestStatus = catalogQuery.data?.jobs[0]?.status
+    const isCatalogRunning = catalogRunning(catalogQuery.data?.jobs[0])
+    const refreshCenter = centerQuery.refetch
+    React.useEffect(() => {
+        if (latestStatus && !isCatalogRunning) void refreshCenter()
+    }, [latestStatus, isCatalogRunning, refreshCenter])
+    if (centerQuery.isPending)
         return (
             <PageScaffold>
-                <div className="h-10 w-40 animate-pulse rounded-lg bg-muted" />
-                <div className="h-24 animate-pulse rounded-lg bg-muted" />
-                <div className="h-64 animate-pulse rounded-lg bg-muted" />
+                <p role="status">正在读取连接…</p>
             </PageScaffold>
         )
-    }
-
-    if (centerQuery.isError) {
+    if (centerQuery.isError)
         return (
             <PageScaffold>
                 <BusinessFailureState
-                    title="连接详情加载失败"
-                    error={centerQuery.error}
-                    action={
-                        <Button
-                            id="supplier-api-connections-center-retry"
-                            type="button"
-                            onClick={() => void centerQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
+                    title="连接加载失败"
+                    description={centerQuery.error.message}
+                    onRetry={() => void centerQuery.refetch()}
                 />
             </PageScaffold>
         )
-    }
-
-    if (!conn) {
+    if (!conn)
         return (
             <PageScaffold>
-                <Button
-                    id="supplier-api-connections-center-back-empty"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={onBack}
-                >
-                    <ArrowLeftIcon className="size-4" aria-hidden="true" />
-                    返回列表
-                </Button>
                 <BusinessEmptyState
                     kind="no-data"
-                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                     title="未找到连接"
-                    description="该连接不存在或当前角色无权查看。可返回列表重新选择。"
+                    description="该连接不存在或当前角色无权查看。"
                 />
             </PageScaffold>
         )
-    }
-    const actionBlocker = (action: string) =>
-        conn.actionBlockers.find((blocker) => blocker.action === action)
     const canRunHealth = conn.allowedActions.includes("RUN_HEALTH_CHECK")
     const canEnable = conn.allowedActions.includes("ENABLE")
     const canDisable = conn.allowedActions.includes("DISABLE")
-    const healthBlocker = actionBlocker("RUN_HEALTH_CHECK")
-    const enableBlocker = actionBlocker("ENABLE")
-    const disableBlocker = actionBlocker("DISABLE")
-
+    const enableBlocker = conn.actionBlockers.find((v) => v.action === "ENABLE")
+    const disableBlocker = conn.actionBlockers.find(
+        (v) => v.action === "DISABLE",
+    )
+    const canSync =
+        conn.allowedActions.includes("START_CATALOG_SYNC") &&
+        !catalogRunning(catalogQuery.data?.jobs[0])
+    const syncBlocker = conn.actionBlockers.find(
+        (v) => v.action === "START_CATALOG_SYNC",
+    )?.message
+    const checkConnection = async () => {
+        const outcome = await runHealth.mutateAsync({
+            connectionId,
+            expectedVersion: conn.version,
+            checkType: "AUTHENTICATION",
+            idempotencyKey: newIdempotencyKey("health"),
+        })
+        applyOutcome(outcome)
+    }
     return (
         <PageScaffold className="gap-6">
-            <CenterHeader
-                conn={conn}
-                onBack={onBack}
-                canRunHealth={canRunHealth}
-                canEnable={canEnable}
-                canDisable={canDisable}
-                healthPending={runHealth.isPending}
-                enablePending={enableMut.isPending}
-                disablePending={disableMut.isPending}
-                healthBlocker={healthBlocker}
-                enableBlocker={enableBlocker}
-                disableBlocker={disableBlocker}
-                onRunHealth={() => setConfirmHealthOpen(true)}
-                onEnable={() => setConfirmEnableOpen(true)}
-                onDisable={() => setDisableOpen(true)}
-            />
-
-            <CenterAlerts conn={conn} />
-
-            {result ? (
-                <div className="space-y-2">
-                    <FormalActionResult
-                        status={
-                            result.status === "failed"
-                                ? "rejected"
-                                : result.status === "processing"
-                                  ? "processing"
-                                  : result.status
-                        }
-                        title={result.title}
-                        description={result.description}
-                        reference={result.reference}
-                        facts={result.facts}
-                    />
-                </div>
+            <CenterHeader conn={conn} onBack={onBack} />
+            {startCatalog.error || runHealth.error ? (
+                <p role="alert" className="text-sm text-destructive">
+                    {(startCatalog.error ?? runHealth.error)?.message}
+                </p>
+            ) : null}
+            {result && result.status !== "processing" ? (
+                <FormalActionResult
+                    status={
+                        result.status === "failed" ? "rejected" : result.status
+                    }
+                    title={result.title}
+                    description={result.description}
+                    reference={result.reference}
+                    facts={result.facts}
+                />
             ) : null}
             <ObjectSectionTabs
                 idPrefix="supplier-api-connections-center"
@@ -195,57 +153,142 @@ export function ConnectionCenter({
                 listLabel="连接详情分区"
             >
                 <ObjectSectionTabsPanel value={section}>
-                    {section === "overview" ? (
-                        <OverviewSection conn={conn} />
-                    ) : null}
-                    {section === "capabilities" ? (
-                        <CapabilitiesSection
-                            conn={conn}
-                            onOpenConfig={() => setCapConfigOpen(true)}
-                        />
-                    ) : null}
-                    {section === "security" ? (
-                        <SecuritySection
-                            conn={conn}
-                            onBind={() => {
-                                setSelectedRef("")
-                                setCredOpen(true)
-                            }}
-                            onBindEndpoint={() => {
-                                setSelectedEndpointRef("")
-                                setEndpointOpen(true)
-                            }}
-                        />
-                    ) : null}
-                    {section === "health" ? (
-                        <HealthSection
-                            conn={conn}
-                            onSectionChange={onSectionChange}
-                            onRefresh={() => void centerQuery.refetch()}
-                        />
-                    ) : null}
                     {section === "catalog" ? (
                         <CatalogSection
                             conn={conn}
-                            syncing={startCatalog.isPending}
+                            query={catalogQuery}
+                            page={page}
+                            onPageChange={setPage}
+                            syncing={
+                                startCatalog.isPending ||
+                                catalogRunning(catalogQuery.data?.jobs[0])
+                            }
+                            canSync={canSync}
+                            blocker={syncBlocker}
+                            onSettings={() => onSectionChange("settings")}
                             onSync={async () => {
                                 const outcome = await startCatalog.mutateAsync({
-                                    connectionId: conn.connectionId,
+                                    connectionId,
                                     expectedVersion: conn.version,
                                     idempotencyKey:
                                         newIdempotencyKey("catalog"),
                                 })
                                 applyOutcome(outcome)
+                                setPage(1)
                             }}
                         />
                     ) : null}
-                    {section === "related" ? (
-                        <RelatedSection conn={conn} />
+                    {section === "settings" ? (
+                        <div className="space-y-5">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>接口配置</CardTitle>
+                                    <CardDescription>
+                                        {conn.deploymentMessage}
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <p className="text-sm text-muted-foreground">
+                                        接口地址和凭据由服务端配置统一管理。配置就绪后可直接同步商品，也可先测试连接。
+                                    </p>
+                                    <Button
+                                        id="supplier-api-connections-center-run-health"
+                                        variant="outline"
+                                        disabled={
+                                            !canRunHealth || runHealth.isPending
+                                        }
+                                        onClick={() =>
+                                            void checkConnection().catch(
+                                                () => undefined,
+                                            )
+                                        }
+                                    >
+                                        {runHealth.isPending
+                                            ? "正在提交…"
+                                            : "测试连接"}
+                                    </Button>
+                                    {conn.lastHealth ? (
+                                        <p className="text-sm" role="status">
+                                            最近测试：
+                                            {conn.lastHealth.resultLabel}
+                                            {conn.lastHealth.errorSummary
+                                                ? ` · ${conn.lastHealth.errorSummary}`
+                                                : ""}
+                                        </p>
+                                    ) : null}
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>业务使用</CardTitle>
+                                    <CardDescription>
+                                        当前状态：{conn.statusLabel}
+                                        。同步商品目录无需启用业务连接；用于业务前需完成能力确认和连接测试。
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <CapabilitiesSection
+                                        conn={conn}
+                                        onOpenConfig={() =>
+                                            setCapConfigOpen(true)
+                                        }
+                                    />
+                                    <div className="flex gap-2">
+                                        {canEnable || enableBlocker ? (
+                                            <Button
+                                                id="supplier-api-connections-center-enable"
+                                                disabled={
+                                                    !canEnable ||
+                                                    enableMut.isPending
+                                                }
+                                                onClick={() =>
+                                                    setConfirmEnableOpen(true)
+                                                }
+                                            >
+                                                启用业务连接
+                                            </Button>
+                                        ) : null}
+                                        {canDisable || disableBlocker ? (
+                                            <Button
+                                                id="supplier-api-connections-center-disable"
+                                                variant="outline"
+                                                disabled={
+                                                    !canDisable ||
+                                                    disableMut.isPending
+                                                }
+                                                onClick={() =>
+                                                    setDisableOpen(true)
+                                                }
+                                            >
+                                                停用业务连接
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    {conn.status !== "ENABLED" &&
+                                    enableBlocker ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            {enableBlocker.message}
+                                        </p>
+                                    ) : null}
+                                    {conn.status === "ENABLED" &&
+                                    disableBlocker ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            {disableBlocker.message}
+                                        </p>
+                                    ) : null}
+                                </CardContent>
+                            </Card>
+                            <RelatedSection conn={conn} />
+                        </div>
                     ) : null}
-                    {section === "audit" ? <AuditSection conn={conn} /> : null}
+                    {section === "records" ? (
+                        <div className="space-y-6">
+                            <CatalogRecords query={catalogQuery} />
+                            <HealthRecords records={conn.healthRecords} />
+                        </div>
+                    ) : null}
                 </ObjectSectionTabsPanel>
             </ObjectSectionTabs>
-
             <DisableConnectionDialog
                 open={disableOpen}
                 onOpenChange={setDisableOpen}
@@ -261,69 +304,6 @@ export function ConnectionCenter({
                     })
                     applyOutcome(outcome)
                     setDisableOpen(false)
-                }}
-            />
-
-            <ReferenceBindDialog
-                kind="credential"
-                open={credOpen}
-                onOpenChange={setCredOpen}
-                conn={conn}
-                value={selectedRef}
-                onValueChange={setSelectedRef}
-                allowed={conn.allowedActions.includes(
-                    "BIND_CREDENTIAL_REFERENCE",
-                )}
-                pending={bindCred.isPending}
-                onSubmit={async () => {
-                    const outcome = await bindCred.mutateAsync({
-                        connectionId: conn.connectionId,
-                        opaqueReferenceId: selectedRef,
-                        expectedVersion: conn.version,
-                        idempotencyKey: newIdempotencyKey("cred"),
-                    })
-                    applyOutcome(outcome)
-                    if (outcome.status === "succeeded") setCredOpen(false)
-                }}
-            />
-
-            <ReferenceBindDialog
-                kind="endpoint"
-                open={endpointOpen}
-                onOpenChange={setEndpointOpen}
-                conn={conn}
-                value={selectedEndpointRef}
-                onValueChange={setSelectedEndpointRef}
-                allowed={conn.allowedActions.includes(
-                    "BIND_ENDPOINT_REFERENCE",
-                )}
-                pending={bindEndpoint.isPending}
-                onSubmit={async () => {
-                    const outcome = await bindEndpoint.mutateAsync({
-                        connectionId: conn.connectionId,
-                        opaqueReferenceId: selectedEndpointRef,
-                        expectedVersion: conn.version,
-                        idempotencyKey: newIdempotencyKey("endpoint"),
-                    })
-                    applyOutcome(outcome)
-                    if (outcome.status === "succeeded") setEndpointOpen(false)
-                }}
-            />
-
-            <RunHealthCheckDialog
-                open={confirmHealthOpen}
-                onOpenChange={setConfirmHealthOpen}
-                canRunHealth={canRunHealth}
-                pending={runHealth.isPending}
-                onSubmit={async () => {
-                    const outcome = await runHealth.mutateAsync({
-                        connectionId: conn.connectionId,
-                        expectedVersion: conn.version,
-                        idempotencyKey: newIdempotencyKey("health"),
-                        checkType: conn.healthCheckTypes[0]!,
-                    })
-                    applyOutcome(outcome)
-                    setConfirmHealthOpen(false)
                 }}
             />
 

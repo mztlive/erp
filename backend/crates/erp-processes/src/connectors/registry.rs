@@ -8,10 +8,11 @@ use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierConnectorType, SupplierHealthCheckType,
 };
-use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
+use erp_supply::ports::connector::common::Scan;
+use erp_supply::ports::supplier_api_gateway::{CatalogRead, ClassifiedError, SupplierApiGateway};
 use erp_supply::ports::supplier_reference_registry::{
-    ResolvedSupplierReference, SupplierReferenceKind, SupplierReferenceOption, SupplierReferenceRegistry,
-    SupplierReferenceTarget,
+    ResolvedSupplierReference, SupplierDeploymentConfig, SupplierReferenceKind, SupplierReferenceOption,
+    SupplierReferenceRegistry, SupplierReferenceTarget,
 };
 
 struct Adapter {
@@ -63,6 +64,12 @@ impl SupplierConnectorRegistry {
 }
 
 impl SupplierApiGateway for SupplierConnectorRegistry {
+    fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
+        Box::pin(async move {
+            self.adapter(connection.connector_type)?.gateway.catalog_page(connection, scan).await
+        })
+    }
+
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,
@@ -72,18 +79,16 @@ impl SupplierApiGateway for SupplierConnectorRegistry {
             self.adapter(connection.connector_type)?.gateway.health_check(connection, check_type).await
         })
     }
-
-    fn catalog_sync<'a>(
-        &'a self,
-        connection: &'a SupplierApiConnection,
-    ) -> Pin<Box<dyn Future<Output = Result<(), ClassifiedError>> + Send + 'a>> {
-        Box::pin(
-            async move { self.adapter(connection.connector_type)?.gateway.catalog_sync(connection).await },
-        )
-    }
 }
 
 impl SupplierReferenceRegistry for SupplierConnectorRegistry {
+    fn deployment_config(
+        &self,
+        target: &SupplierReferenceTarget,
+    ) -> Result<SupplierDeploymentConfig, ClassifiedError> {
+        self.adapter(target.connector_type)?.references.deployment_config(target)
+    }
+
     fn is_available(&self) -> bool {
         !self.adapters.is_empty()
     }
@@ -111,10 +116,12 @@ impl SupplierReferenceRegistry for SupplierConnectorRegistry {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
     use std::sync::Mutex;
 
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
+    use erp_supply::ports::connector::common::{Page, ScanWindow};
 
     use super::*;
 
@@ -132,13 +139,10 @@ mod tests {
                 Ok(())
             })
         }
-        fn catalog_sync<'a>(
-            &'a self,
-            _: &'a SupplierApiConnection,
-        ) -> Pin<Box<dyn Future<Output = Result<(), ClassifiedError>> + Send + 'a>> {
+        fn catalog_page<'a>(&'a self, _: &'a SupplierApiConnection, _: &'a Scan) -> CatalogRead<'a> {
             Box::pin(async move {
                 self.0.lock().unwrap().push("catalog");
-                Ok(())
+                Ok(Page { items: vec![], next: None })
             })
         }
     }
@@ -201,8 +205,9 @@ mod tests {
         registry.register(SupplierConnectorType::Dangaoshushu, adapter.clone()).unwrap();
         let mut connection = connection();
         let target = SupplierReferenceTarget::from(&connection);
+        let scan = Scan { window: ScanWindow::Full, cursor: None, limit: NonZeroU32::new(50).unwrap() };
         registry.health_check(&connection, SupplierHealthCheckType::Authentication).await.unwrap();
-        registry.catalog_sync(&connection).await.unwrap();
+        registry.catalog_page(&connection, &scan).await.unwrap();
         let options = registry.options(SupplierReferenceKind::Endpoint, &target).await.unwrap();
         assert_eq!(options[0].reference_id, "ticket");
         let resolved = registry.resolve(SupplierReferenceKind::Endpoint, "ticket", &target).await.unwrap();
@@ -219,7 +224,10 @@ mod tests {
             registry.health_check(&connection, SupplierHealthCheckType::Connectivity).await.unwrap_err().code,
             "CONNECTOR_TYPE_REQUIRED"
         );
-        assert_eq!(registry.catalog_sync(&connection).await.unwrap_err().code, "CONNECTOR_TYPE_REQUIRED");
+        assert_eq!(
+            registry.catalog_page(&connection, &scan).await.unwrap_err().code,
+            "CONNECTOR_TYPE_REQUIRED"
+        );
         assert_eq!(
             registry.options(SupplierReferenceKind::Endpoint, &target).await.err().unwrap().code,
             "CONNECTOR_TYPE_REQUIRED"
