@@ -48,7 +48,7 @@ pub(super) fn build_basis_view(
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {
-        let cost = line.unit_cost(group.scope.price_basis);
+        let cost = line.unit_cost(group.scope.price_basis)?;
         let (gross, _, _) = line_amounts(cost, line.max_create_quantity, line.tax_rate());
         estimated = estimated.checked_add(gross);
         let delivery = delivery_view(line, &group.scope, warehouses);
@@ -135,7 +135,8 @@ fn delivery_view(
         && scope.price_basis == SupplyPriceBasis::Bulk
         && line.inquiry_quote.is_none()
     {
-        view.bulk_minimum_order_quantity = Some(line.supply.revision.bulk_minimum_order_quantity.to_string());
+        view.bulk_minimum_order_quantity =
+            line.supply.revision.bulk_minimum_order_quantity.map(|value| value.to_string());
     }
     view
 }

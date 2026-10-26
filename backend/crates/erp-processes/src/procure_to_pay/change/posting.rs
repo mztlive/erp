@@ -1,8 +1,11 @@
 //! 采购变更生效真实步骤，统一使用调用方执行器；失败不得推进后继写入。
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use erp_audit::AuditLog;
+use erp_core::ids::PurchaseLineSalesAllocationId;
 use erp_finance::service::payable::purchase_change::{PurchaseChangePayableWrite, sync_purchase_subject};
-use erp_procurement::entity::purchase_order::PurchaseOrder;
+use erp_procurement::entity::purchase_order::{FulfillmentResponsibility, PurchaseOrder};
 use erp_procurement::service::purchase_order::allocation_maintenance::{
     PreparedSalesAllocations, persist_current_sales_allocations,
 };
@@ -25,6 +28,7 @@ use super::guard::check_effective_lines;
 use crate::audit::persist_log;
 use crate::reverse_flow::direct_return_completion::complete_direct_returns;
 use crate::sales_inquiry_expense::PurchaseExpenseTarget;
+use crate::supplier_api_orders::{create_api_delivery_drafts, enqueue_purchase};
 use crate::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
@@ -34,6 +38,7 @@ enum EffectStep {
     SalesGuard,
     Revision,
     CurrentOrder,
+    ApiFulfillment,
     ProcurementTasks,
     Submission,
     Change,
@@ -45,6 +50,9 @@ enum EffectStep {
 trait EffectSteps: Send {
     type Allocations: Send;
     type Payable: Send;
+
+    /// 只有旧 API 执行已经按未发单规则停止，才重新建立执行责任。
+    fn reschedule_api(&self) -> bool;
 
     /// 取出可选应付计划，由编排层唯一决定是否执行差额写入。
     fn take_payable(&mut self) -> Option<Self::Payable>;
@@ -75,9 +83,11 @@ async fn execute(steps: &mut impl EffectSteps, executor: &mut dyn Executor) -> R
     let allocations = steps.prepare_allocations(executor).await?;
     steps.apply(Revision, executor).await?;
     steps.persist_allocations(allocations, executor).await?;
-    for step in [CurrentOrder, ProcurementTasks] {
-        steps.apply(step, executor).await?;
+    steps.apply(CurrentOrder, executor).await?;
+    if steps.reschedule_api() {
+        steps.apply(ApiFulfillment, executor).await?;
     }
+    steps.apply(ProcurementTasks, executor).await?;
     if let Some(payable) = steps.take_payable() {
         steps.persist_payable(payable, executor).await?;
     }
@@ -93,12 +103,18 @@ struct MongoEffect<'a> {
     write: EffectiveChangePosting,
     audit: AuditLog,
     actor_id: &'a str,
+    reschedule_api: bool,
+    allocation_ids: HashMap<String, PurchaseLineSalesAllocationId>,
 }
 
 #[async_trait]
 impl EffectSteps for MongoEffect<'_> {
     type Allocations = PreparedSalesAllocations;
     type Payable = PurchaseChangePayableWrite;
+
+    fn reschedule_api(&self) -> bool {
+        self.reschedule_api
+    }
 
     fn take_payable(&mut self) -> Option<Self::Payable> {
         self.write.payable.take()
@@ -116,6 +132,7 @@ impl EffectSteps for MongoEffect<'_> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         persist_current_sales_allocations(self.db, &allocations, executor).await?;
+        self.allocation_ids = allocations.by_purchase_line;
         Ok(())
     }
 
@@ -136,6 +153,9 @@ impl EffectSteps for MongoEffect<'_> {
             CurrentOrder => {
                 persist_current_purchase(self.db, purchase, self.actor_id, executor).await?;
             },
+            ApiFulfillment => {
+                reschedule_api_fulfillment(self.db, purchase, &self.allocation_ids, executor).await?;
+            },
             ProcurementTasks => {
                 sync_procurement_tasks_for_sales_order(self.db, &purchase.order.sales_order_id, executor)
                     .await?;
@@ -151,6 +171,20 @@ impl EffectSteps for MongoEffect<'_> {
         }
         Ok(())
     }
+}
+
+/// 只有旧未发 API 意图被安全停止后，才为正式新版本建立新执行和对应直发草稿。
+async fn reschedule_api_fulfillment(
+    db: &Database,
+    purchase: &EffectiveChangeWrite,
+    allocations: &HashMap<String, PurchaseLineSalesAllocationId>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    enqueue_purchase(db, &purchase.order, &purchase.revision_lines, executor).await?;
+    if purchase.order.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
+        create_api_delivery_drafts(db, &purchase.order, allocations, executor).await?;
+    }
+    Ok(())
 }
 
 /// 复核结算主体并串行化来源销售，保证后续分配基于同一销售版本。
@@ -230,6 +264,7 @@ pub(super) async fn persist_effective_writes(
     write: EffectiveChangePosting,
     audit: AuditLog,
     actor_id: &str,
+    reschedule_api: bool,
     executor: &mut dyn Executor,
 ) -> Result<u64> {
     let fees = write
@@ -246,7 +281,8 @@ pub(super) async fn persist_effective_writes(
         .collect::<Vec<_>>();
     crate::sales_inquiry_expense::resize_purchase(db, &write.purchase.order, &fees, actor_id, executor)
         .await?;
-    let mut steps = MongoEffect { db, write, audit, actor_id };
+    let mut steps =
+        MongoEffect { db, write, audit, actor_id, reschedule_api, allocation_ids: HashMap::new() };
     execute(&mut steps, executor).await?;
     Ok(steps.write.purchase.order.base.version)
 }
@@ -297,6 +333,7 @@ mod tests {
         identity: usize,
         fail_at: Option<Call>,
         payable: Option<&'static str>,
+        reschedule_api: bool,
     }
     impl RecordingSteps {
         fn record(&mut self, call: Call, executor: &mut dyn Executor) -> Result<()> {
@@ -312,6 +349,10 @@ mod tests {
     impl EffectSteps for RecordingSteps {
         type Allocations = u8;
         type Payable = &'static str;
+
+        fn reschedule_api(&self) -> bool {
+            self.reschedule_api
+        }
 
         fn take_payable(&mut self) -> Option<Self::Payable> {
             self.payable.take()
@@ -354,6 +395,7 @@ mod tests {
             Apply(Revision),
             Allocations,
             Apply(CurrentOrder),
+            Apply(ApiFulfillment),
             Apply(ProcurementTasks),
             Payable,
             Apply(Submission),
@@ -366,8 +408,13 @@ mod tests {
         let mut executor = TestExecutor { identity: 1 };
         assert_eq!(executor.identity, 1);
         let identity = &mut executor as *mut TestExecutor as usize;
-        let mut steps =
-            RecordingSteps { calls: Vec::new(), identity, fail_at: None, payable: Some("payable-1") };
+        let mut steps = RecordingSteps {
+            calls: Vec::new(),
+            identity,
+            fail_at: None,
+            payable: Some("payable-1"),
+            reschedule_api: true,
+        };
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.calls, expected());
         assert!(steps.payable.is_none());
@@ -382,6 +429,7 @@ mod tests {
                 identity,
                 fail_at: Some(step),
                 payable: Some("payable-1"),
+                reschedule_api: true,
             };
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(
@@ -396,10 +444,35 @@ mod tests {
     async fn zero_delta_skips_delta_without_skipping_current_subject_effects() {
         let mut executor = TestExecutor { identity: 1 };
         let identity = &mut executor as *mut TestExecutor as usize;
-        let mut steps = RecordingSteps { calls: Vec::new(), identity, fail_at: None, payable: None };
+        let mut steps = RecordingSteps {
+            calls: Vec::new(),
+            identity,
+            fail_at: None,
+            payable: None,
+            reschedule_api: true,
+        };
         execute(&mut steps, &mut executor).await.unwrap();
         let expected =
             expected().into_iter().filter(|step| !matches!(step, Call::Payable)).collect::<Vec<_>>();
+        assert_eq!(steps.calls, expected);
+    }
+
+    #[tokio::test]
+    async fn ordinary_purchase_change_does_not_create_api_execution() {
+        let mut executor = TestExecutor { identity: 1 };
+        let identity = &mut executor as *mut TestExecutor as usize;
+        let mut steps = RecordingSteps {
+            calls: Vec::new(),
+            identity,
+            fail_at: None,
+            payable: None,
+            reschedule_api: false,
+        };
+        execute(&mut steps, &mut executor).await.unwrap();
+        let expected = expected()
+            .into_iter()
+            .filter(|step| !matches!(step, Call::Payable | Call::Apply(EffectStep::ApiFulfillment)))
+            .collect::<Vec<_>>();
         assert_eq!(steps.calls, expected);
     }
 }

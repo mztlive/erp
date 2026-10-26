@@ -214,10 +214,11 @@ impl SupplierOfferingView {
         self.current_revision_no = Some(revision.revision.revision_no);
         self.dropship_supply_price_gross = Some(revision.dropship_supply_price_gross.to_string());
         self.dropship_supply_price_net = Some(revision.dropship_supply_price_net.to_string());
-        self.bulk_supply_price_gross = Some(revision.bulk_supply_price_gross.to_string());
-        self.bulk_supply_price_net = Some(revision.bulk_supply_price_net.to_string());
+        self.bulk_supply_price_gross = revision.bulk_supply_price_gross.map(|value| value.to_string());
+        self.bulk_supply_price_net = revision.bulk_supply_price_net.map(|value| value.to_string());
         self.input_tax_rate = Some(revision.input_tax_rate.to_string());
-        self.bulk_minimum_order_quantity = Some(revision.bulk_minimum_order_quantity.to_string());
+        self.bulk_minimum_order_quantity =
+            revision.bulk_minimum_order_quantity.map(|value| value.to_string());
         self.product_capabilities = revision.product_capabilities;
         self.valid_from = Some(revision.valid_from.to_string());
         self.valid_to = revision.valid_to.map(|value| value.to_string());

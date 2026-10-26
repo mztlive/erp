@@ -8,10 +8,13 @@ use erp_support::{BulkJobExt, SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CH
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
+use crate::source_media::SourceMediaPreparer;
 use crate::{Error, Result};
 
 mod catalog;
 mod catalog_scan;
+mod catalog_supply;
+pub(crate) use catalog_supply::apply_source_supply;
 mod execution;
 mod failure;
 mod health;
@@ -20,6 +23,7 @@ mod health;
 pub struct SupplierConnectionExecutionProcess {
     db: Database,
     gateway: Arc<dyn SupplierApiGateway>,
+    source_media: Option<Arc<SourceMediaPreparer>>,
 }
 
 impl SupplierConnectionExecutionProcess {
@@ -35,7 +39,19 @@ impl SupplierConnectionExecutionProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, gateway: Arc<dyn SupplierApiGateway>) -> Self {
-        Self { db, gateway }
+        Self { db, gateway, source_media: None }
+    }
+
+    /// 注入事务外来源图片准备器，不改变网关或业务启用状态。
+    /// # 参数
+    /// `source_media` 使用部署登记的受信图片主机、对象存储及内容密钥。
+    /// # 返回
+    /// 带媒体准备能力的连接执行流程。
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_source_media(mut self, source_media: Option<Arc<SourceMediaPreparer>>) -> Self {
+        self.source_media = source_media;
+        self
     }
 
     /// 按任务类型执行已登记的连接后台任务；已经终态则直接返回。

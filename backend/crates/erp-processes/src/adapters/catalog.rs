@@ -10,6 +10,7 @@ use erp_catalog::{
     CatalogAuditPort, CatalogService, FileAssetFact, FileAssetFactsPort, PendingAttachmentBatch,
     PreparedCatalogAudit,
 };
+use erp_core::common::time::Instant;
 use erp_core::ids::FileAssetId;
 use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
@@ -142,7 +143,14 @@ impl FileAssetFactsPort for MongoCatalogFileAssets {
             .find_by_id(asset_id.as_ref(), executor)
             .await
             .map_err(erp_catalog::Error::from)?
-            .map(|asset| FileAssetFact { id: asset.base.id }))
+            .map(|asset| FileAssetFact {
+                usable_image: asset.is_usable_at(Instant::now())
+                    && matches!(
+                        asset.content_type.as_str(),
+                        "image/jpeg" | "image/png" | "image/webp" | "image/gif"
+                    ),
+                id: asset.base.id,
+            }))
     }
 
     async fn missing_ids(

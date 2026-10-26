@@ -19,6 +19,25 @@ use crate::repository::owned::{ProductRepository, SkuRepository, SkuRevisionRepo
 use crate::repository::prelude::*;
 
 impl<'a> CatalogRepository<'a> {
+    /// 判断同一公司商品的规格签名是否已被历史或当前 SKU 占用。
+    /// # 参数
+    /// `product_id` 为公司商品身份，`signature` 为已规范化规格签名，沿用调用方执行器。
+    /// # 返回
+    /// 存在同签名 SKU 时返回 true，包含已停用身份。
+    /// # 错误
+    /// 数据库查询失败时返回持久化错误。
+    pub async fn sku_signature_exists(
+        &self,
+        product_id: &ProductId,
+        signature: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.db
+            .skus()
+            .exists(doc! {"product_id":product_id.as_ref(),"specification_signature":signature}, executor)
+            .await
+    }
+
     /// 按 SKU 编号、正式规格签名或当前修订名称解析公司 SKU 主键。
     ///
     /// 两个字段均按字面量部分匹配并忽略大小写；名称命中只接受稳定 SKU 当前修订，

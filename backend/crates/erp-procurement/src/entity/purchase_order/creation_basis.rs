@@ -60,12 +60,11 @@ impl BasisLine {
     /// # 返回
     /// 返回专项原始采购价或通用供给价。
     /// # 错误
-    /// 无。
-    pub fn unit_cost(&self, basis: SupplyPriceBasis) -> UnitPrice {
+    /// 选择未支持的采购价格口径时拒绝。
+    pub fn unit_cost(&self, basis: SupplyPriceBasis) -> Result<UnitPrice> {
         self.inquiry_quote
             .as_ref()
-            .map(|quote| quote.unit_cost_gross)
-            .unwrap_or_else(|| supply_cost(&self.supply.revision, basis))
+            .map_or_else(|| supply_cost(&self.supply.revision, basis), |quote| Ok(quote.unit_cost_gross))
     }
     /// 读取实际采用条款税率。
     /// # 参数
@@ -386,17 +385,19 @@ pub fn maximum_create_quantity(remaining: Quantity, available: Option<Quantity>)
 /// * `price_basis` - 本采购依据选择的价格依据
 ///
 /// # 返回
-/// 集采返回集采价，代发返回一件代发价。
+/// 集采返回已维护的集采价，代发返回一件代发价。
 ///
 /// # 错误
-/// 无。
+/// 供给未提供集采价格时拒绝集采取价。
 ///
 /// # 关键业务约束
-/// 成本只从依据确定的当前供给修订读取。
-pub fn supply_cost(revision: &SupplierOfferingRevision, price_basis: SupplyPriceBasis) -> UnitPrice {
+/// 成本只从依据确定的当前供给修订读取；缺失集采条款不回退到代发价。
+pub fn supply_cost(revision: &SupplierOfferingRevision, price_basis: SupplyPriceBasis) -> Result<UnitPrice> {
     match price_basis {
-        SupplyPriceBasis::Bulk => revision.bulk_supply_price_gross,
-        SupplyPriceBasis::Dropship => revision.dropship_supply_price_gross,
+        SupplyPriceBasis::Bulk => revision
+            .bulk_supply_price_gross
+            .ok_or_else(|| Error::from("该供给未提供集采条款，不能按集采采购")),
+        SupplyPriceBasis::Dropship => Ok(revision.dropship_supply_price_gross),
     }
 }
 
@@ -574,9 +575,9 @@ mod tests {
             base: FactIdentity { id: format!("offrev-{offering_id}") },
             supplier_offering_id: SupplierOfferingId::new(offering_id),
             dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
-            bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
+            bulk_supply_price_gross: Some(UnitPrice::from_str("5").unwrap()),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
-            bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
+            bulk_minimum_order_quantity: Some(Quantity::from_str("1").unwrap()),
             valid_from: erp_core::common::time::BusinessDate::from_str(valid_from).unwrap(),
             valid_to: valid_to.map(|value| erp_core::common::time::BusinessDate::from_str(value).unwrap()),
         }
@@ -768,8 +769,23 @@ mod tests {
     fn supply_cost_follows_price_basis() {
         let revision = offering_revision("offering-1", "2026-01-01", None);
 
-        assert_eq!(supply_cost(&revision, SupplyPriceBasis::Bulk), UnitPrice::from_str("5").unwrap());
-        assert_eq!(supply_cost(&revision, SupplyPriceBasis::Dropship), UnitPrice::from_str("6").unwrap());
+        assert_eq!(
+            supply_cost(&revision, SupplyPriceBasis::Bulk).unwrap(),
+            UnitPrice::from_str("5").unwrap()
+        );
+        assert_eq!(
+            supply_cost(&revision, SupplyPriceBasis::Dropship).unwrap(),
+            UnitPrice::from_str("6").unwrap()
+        );
+    }
+
+    #[test]
+    fn dropship_only_supply_cannot_be_bought_as_bulk() {
+        let mut revision = offering_revision("api", "2026-01-01", None);
+        revision.bulk_supply_price_gross = None;
+        revision.bulk_minimum_order_quantity = None;
+        assert_eq!(supply_cost(&revision, SupplyPriceBasis::Dropship).unwrap(), "6".parse().unwrap());
+        assert!(supply_cost(&revision, SupplyPriceBasis::Bulk).is_err());
     }
 
     /// 请求行解析去除空白并校验数量与交付日。
@@ -845,7 +861,7 @@ mod tests {
             Some(group.lines[0].supply.revision.base.id.clone());
         let source = special_source();
         group.lines[0].inquiry_quote = Some(source.clone());
-        assert_eq!(group.lines[0].unit_cost(SupplyPriceBasis::Bulk), source.unit_cost_gross);
+        assert_eq!(group.lines[0].unit_cost(SupplyPriceBasis::Bulk).unwrap(), source.unit_cost_gross);
         assert_eq!(group.lines[0].tax_rate(), source.input_tax_rate);
         let frozen = group.lines[0].offering_source().unwrap();
         assert_eq!(frozen.inquiry_quote, Some(source));

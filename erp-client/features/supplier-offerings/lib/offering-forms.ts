@@ -73,11 +73,38 @@ export const createSchema = z.object({
     changeReason: z.string().trim().min(1, "请填写登记原因"),
 })
 
-export const reviseSchema = z.object({
-    ...termsSchema,
-    status: z.enum(["ACTIVE", "PAUSED", "STOPPED"]),
-    changeReason: z.string().trim().min(1, "请填写变更原因"),
-})
+function revisionSchema(allowMissingBulk: boolean) {
+    return z
+        .object({
+            ...termsSchema,
+            bulkPrice: z.union([z.literal(""), decimal]),
+            minimumQuantity: z.union([
+                z.literal(""),
+                termsSchema.minimumQuantity,
+            ]),
+            status: z.enum(["ACTIVE", "PAUSED", "STOPPED"]),
+            changeReason: z.string().trim().min(1, "请填写变更原因"),
+        })
+        .superRefine((value, context) => {
+            if (Boolean(value.bulkPrice) !== Boolean(value.minimumQuantity)) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["bulkPrice"],
+                    message: "集采价格和起订量须同时填写或同时留空",
+                })
+            } else if (!allowMissingBulk && !value.bulkPrice) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["bulkPrice"],
+                    message: "请填写集采价格和起订量",
+                })
+            }
+        })
+}
+
+export const reviseSchema = revisionSchema(false)
+/** API 来源可明确未支持集采，不以代发价推导集采条款。 */
+export const apiReviseSchema = revisionSchema(true)
 
 export const availabilitySchema = z.object({
     availabilityStatus: z.enum([
@@ -145,10 +172,10 @@ export function buildStatusRevisionInput(
         expectedRevisionNo == null ||
         expectedRevisionNo < 1 ||
         !dropship ||
-        !bulk ||
         !tax ||
-        !moq ||
-        !validFrom
+        !validFrom ||
+        Boolean(bulk) !== Boolean(moq) ||
+        (offering.source_type !== "API" && !bulk)
     ) {
         return null
     }
@@ -157,9 +184,9 @@ export function buildStatusRevisionInput(
         expected_revision_no: expectedRevisionNo,
         terms: {
             dropship_supply_price_gross: dropship,
-            bulk_supply_price_gross: bulk,
+            bulk_supply_price_gross: bulk || null,
             input_tax_rate: tax,
-            bulk_minimum_order_quantity: moq,
+            bulk_minimum_order_quantity: moq || null,
             product_capabilities: offering.product_capabilities,
             valid_from: validFrom,
             valid_to: optionalText(offering.valid_to),

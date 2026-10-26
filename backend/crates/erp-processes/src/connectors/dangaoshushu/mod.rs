@@ -13,6 +13,7 @@ use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 
 mod callback;
 mod catalog;
+mod catalog_details;
 mod delivery;
 mod order;
 mod parsing;

@@ -4,6 +4,8 @@
 //! 直接复用 供应链领域及组合层的 DTO，禁止重复定义同构类型、
 //! 禁止直连数据库。Connector 由启动组合根注入，Handler 不选择实现。
 
+pub mod execution_setup;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};

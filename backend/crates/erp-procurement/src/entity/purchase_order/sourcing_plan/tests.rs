@@ -55,7 +55,7 @@ fn sourcing_preserves_optional_specification_through_formalization() {
         let plan = SourcingPlan::plan(&order, &[group], &[], "wi-1", &assignments).unwrap();
         let purchase = &plan.purchase_plans()[0];
         let selected = validate_requested_quantities(&purchase.requested_lines, &purchase.group).unwrap();
-        let computed = compute_selected_lines(&selected, purchase.group.scope.price_basis);
+        let computed = compute_selected_lines(&selected, purchase.group.scope.price_basis).unwrap();
         let draft = build_submission_line(&"draft".to_string().into(), 1, &computed.lines[0]).unwrap();
         let frozen = PurchaseOrderSubmissionLine::freeze_from_draft(
             "frozen-line".to_string().into(),
@@ -176,9 +176,9 @@ fn offering_revision(offering_id: &str) -> SupplierOfferingRevision {
         base: FactIdentity { id: format!("offrev-{offering_id}") },
         supplier_offering_id: SupplierOfferingId::new(offering_id),
         dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
-        bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
+        bulk_supply_price_gross: Some(UnitPrice::from_str("5").unwrap()),
         input_tax_rate: Rate::from_str("0.13").unwrap(),
-        bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
+        bulk_minimum_order_quantity: Some(Quantity::from_str("1").unwrap()),
         valid_from: erp_core::common::time::BusinessDate::from_str("2026-01-01").unwrap(),
         valid_to: None,
     }

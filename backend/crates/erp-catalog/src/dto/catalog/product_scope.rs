@@ -111,6 +111,8 @@ pub struct ProductListParams {
     pub sales_price_min: Option<Amount>,
     /// 当前启用 SKU 销售价上限（含）。
     pub sales_price_max: Option<Amount>,
+    /// 仅筛选是否存在供应商资料待确认差异。
+    pub source_diff_pending: Option<bool>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -156,6 +158,8 @@ pub(crate) struct ProductListQuery {
     pub sales_price_min: Option<Amount>,
     /// 销售价上限（含）。
     pub sales_price_max: Option<Amount>,
+    /// 供应商资料待确认状态。
+    pub source_diff_pending: Option<bool>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -191,6 +195,7 @@ impl ProductListParams {
             supply_coverage: self.supply_coverage,
             sales_price_min: self.sales_price_min,
             sales_price_max: self.sales_price_max,
+            source_diff_pending: self.source_diff_pending,
             paging: paging_params(
                 self.page,
                 self.page_size,

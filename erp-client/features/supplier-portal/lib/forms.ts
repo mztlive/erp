@@ -70,9 +70,9 @@ export function valuesFromTerms(terms?: PortalTerms): TermsValues {
     return {
         ...termsDefaults,
         dropshipPrice: terms.dropship_supply_price_gross,
-        bulkPrice: terms.bulk_supply_price_gross,
+        bulkPrice: terms.bulk_supply_price_gross ?? "",
         taxPercentage: percentageFromRate(terms.input_tax_rate),
-        minimumQuantity: terms.bulk_minimum_order_quantity,
+        minimumQuantity: terms.bulk_minimum_order_quantity ?? "",
         validFrom: terms.valid_from,
         validTo: terms.valid_to ?? "",
     }

@@ -28,6 +28,8 @@ import {
 import { SECTION_LABEL, SECTIONS } from "@/features/supplier-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { hasPermission } from "@/lib/permissions"
+import { SupplierOrderExecutionSetup } from "../components/supplier-order-execution-setup"
 import { SupplierOrderCenterDialogs } from "@/features/supplier-orders/components/supplier-order-preview-center-dialogs"
 import {
     AftersalesSection,
@@ -241,10 +243,22 @@ export function SupplierOrderCenterPage({
                 onProcess={() => task.setCompleteOpen(true)}
             />
 
+            <SupplierOrderExecutionSetup
+                orderId={supplierOrderId}
+                addressSummary={
+                    detail.address.revealed ?? detail.address.masked
+                }
+                canEdit={hasPermission(
+                    profileQuery.data?.permissions,
+                    "supplier_fulfillment_order:submit",
+                )}
+            />
+
             <StatusAlertsPanel
                 order={o}
                 lastInvestigation={detail.lastInvestigation}
                 noQueryCapability={derivation.noQueryCapability}
+                trackingError={detail.trackingError}
             />
 
             {detail.workItem ? (
@@ -285,7 +299,11 @@ export function SupplierOrderCenterPage({
 
                 <div className={objectSectionPanelClassName}>
                     {activeSection === "overview" ? (
-                        <OverviewSection order={o} />
+                        <OverviewSection
+                            order={o}
+                            purchaseOrderId={detail.purchaseOrderId}
+                            purchaseOrderNo={detail.purchaseOrderNo}
+                        />
                     ) : null}
 
                     {activeSection === "items" ? (

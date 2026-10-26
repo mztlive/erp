@@ -2,7 +2,7 @@
 
 use erp_core::common::time::Instant;
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId};
-use erp_core::money::Quantity;
+use erp_core::money::{Quantity, UnitPrice};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use validator::Validate;
@@ -33,13 +33,13 @@ pub struct SupplierOfferingTermsWrite {
     pub dropship_supply_price_gross: String,
     /// 集采含税价。
     #[validate(custom(function = "non_blank", message = "集采供给价不能为空"))]
-    pub bulk_supply_price_gross: String,
+    pub bulk_supply_price_gross: Option<String>,
     /// 进项税率。
     #[validate(custom(function = "non_blank", message = "进项税率不能为空"))]
     pub input_tax_rate: String,
     /// 集采起订量。
     #[validate(custom(function = "non_blank", message = "集采起订量不能为空"))]
-    pub bulk_minimum_order_quantity: String,
+    pub bulk_minimum_order_quantity: Option<String>,
     /// 商品级能力。
     #[serde(default)]
     pub product_capabilities: Vec<String>,
@@ -73,9 +73,9 @@ impl SupplierOfferingTermsWrite {
     ) -> Self {
         Self {
             dropship_supply_price_gross,
-            bulk_supply_price_gross,
+            bulk_supply_price_gross: Some(bulk_supply_price_gross),
             input_tax_rate,
-            bulk_minimum_order_quantity,
+            bulk_minimum_order_quantity: Some(bulk_minimum_order_quantity),
             product_capabilities: Vec::new(),
             valid_from,
             valid_to: None,
@@ -272,7 +272,7 @@ pub struct UpdateSupplierOfferingAvailabilityResult {
     /// 可供投影版本。
     pub availability_version: u64,
     /// 来源更新时间。
-    pub source_updated_at: i64,
+    pub source_updated_at: Option<i64>,
     /// 发布侧影响已移除，恒为空。
     pub safety_pause: Option<serde_json::Value>,
 }
@@ -370,16 +370,53 @@ impl SupplierOfferingTermsWrite {
         offering_id: SupplierOfferingId,
         revision_no: u32,
     ) -> Result<SupplierOfferingRevisionData> {
+        self.revision_data(offering_id, revision_no, false)
+    }
+
+    /// 将 API 来源的已确认条款转换为修订，允许明确不支持集采。
+    /// # 参数
+    /// 供给身份与新修订号；两项集采输入须同时有值或同时缺失。
+    /// # 返回
+    /// 保留真实缺失的商业条款，不推导集采价格。
+    /// # 错误
+    /// 单项集采输入、数值或日期无效时拒绝。
+    pub fn try_into_api_revision_data(
+        &self,
+        offering_id: SupplierOfferingId,
+        revision_no: u32,
+    ) -> Result<SupplierOfferingRevisionData> {
+        self.revision_data(offering_id, revision_no, true)
+    }
+
+    /// 按供给来源转换条款，只有 API 允许明确缺失集采价格。
+    /// # 参数
+    /// 供给身份、新修订号和服务端已核验的来源类型。
+    /// # 返回
+    /// 保留真实缺失并派生含税换算后的商业条款。
+    /// # 错误
+    /// 普通来源缺少集采条件、输入不成对或数值非法时拒绝。
+    pub fn try_into_source_revision_data(
+        &self,
+        offering_id: SupplierOfferingId,
+        revision_no: u32,
+        source_type: OfferingSourceType,
+    ) -> Result<SupplierOfferingRevisionData> {
+        self.revision_data(offering_id, revision_no, source_type == OfferingSourceType::Api)
+    }
+
+    fn revision_data(
+        &self,
+        offering_id: SupplierOfferingId,
+        revision_no: u32,
+        allow_missing_bulk: bool,
+    ) -> Result<SupplierOfferingRevisionData> {
         use crate::entity::supplier_offering::write_data;
         let rate = write_data::parse_input_tax_rate(&self.input_tax_rate)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let dropship_gross =
             write_data::parse_unit_price(&self.dropship_supply_price_gross, "一件代发供给价")
                 .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let bulk_gross = write_data::parse_unit_price(&self.bulk_supply_price_gross, "集采供给价")
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let moq = write_data::parse_minimum_order_quantity(&self.bulk_minimum_order_quantity)
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let (bulk_gross, moq) = self.parse_bulk_terms(allow_missing_bulk)?;
         let valid_from = write_data::parse_business_date(&self.valid_from)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let valid_to = self
@@ -401,9 +438,42 @@ impl SupplierOfferingTermsWrite {
             prefill_source_refs: PrefillSourceRefs::default(),
         }))
     }
+
+    fn parse_bulk_terms(&self, allow_missing: bool) -> Result<(Option<UnitPrice>, Option<Quantity>)> {
+        use crate::entity::supplier_offering::write_data;
+        match (self.bulk_supply_price_gross.as_deref(), self.bulk_minimum_order_quantity.as_deref()) {
+            (Some(price), Some(minimum)) => Ok((
+                Some(
+                    write_data::parse_unit_price(price, "集采供给价")
+                        .map_err(|error| Error::ValidationError(error.to_string()))?,
+                ),
+                Some(
+                    write_data::parse_minimum_order_quantity(minimum)
+                        .map_err(|error| Error::ValidationError(error.to_string()))?,
+                ),
+            )),
+            (None, None) if allow_missing => Ok((None, None)),
+            (None, None) => Err(Error::ValidationError("集采供给价和起订量不能为空".into())),
+            _ => Err(Error::ValidationError("集采供给价和起订量必须同时提供或同时缺失".into())),
+        }
+    }
 }
 
 impl CreateSupplierOfferingRequest {
+    /// 按已核验登记来源转换首版商业条款。
+    /// # 参数
+    /// `offering_id` 为服务端分配且已通过身份及连接校验的供给身份。
+    /// # 返回
+    /// 修订号为一的条款；仅 API 来源允许明确缺失集采条件。
+    /// # 错误
+    /// 普通来源缺少集采条件、金额或日期非法时拒绝。
+    pub fn try_into_initial_revision(
+        &self,
+        offering_id: SupplierOfferingId,
+    ) -> Result<SupplierOfferingRevisionData> {
+        self.terms.try_into_source_revision_data(offering_id, 1, self.source_type)
+    }
+
     /// 将创建请求转换为供给稳定身份数据。
     ///
     /// # 参数
@@ -473,7 +543,7 @@ impl CreateSupplierOfferingRequest {
             supplier_offering_id: offering_id,
             availability_status: self.availability_status,
             available_quantity,
-            source_updated_at,
+            source_updated_at: Some(source_updated_at),
             received_at,
             source_revision_token: self.source_revision_token.clone(),
             updated_by,
@@ -510,7 +580,7 @@ impl UpdateSupplierOfferingAvailabilityRequest {
             supplier_offering_id: offering_id,
             availability_status: self.availability_status,
             available_quantity,
-            source_updated_at,
+            source_updated_at: Some(source_updated_at),
             received_at,
             source_revision_token: self.source_revision_token.clone(),
             updated_by,
@@ -641,12 +711,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn api_dropship_only_does_not_require_invented_bulk_terms() {
+        let mut write = terms();
+        write.bulk_supply_price_gross = None;
+        write.bulk_minimum_order_quantity = None;
+        let revision = write.try_into_api_revision_data(SupplierOfferingId::new("api"), 1).unwrap();
+        assert!(revision.bulk_supply_price_gross.is_none());
+        assert!(revision.bulk_supply_price_net.is_none());
+        assert!(revision.bulk_minimum_order_quantity.is_none());
+        assert_eq!(revision.dropship_supply_price_gross, "10".parse().unwrap());
+        assert!(write.try_into_revision_data(SupplierOfferingId::new("manual"), 1).is_err());
+        write.bulk_minimum_order_quantity = Some("1".into());
+        assert!(write.try_into_api_revision_data(SupplierOfferingId::new("api"), 1).is_err());
+    }
+
     fn terms() -> SupplierOfferingTermsWrite {
         SupplierOfferingTermsWrite {
             dropship_supply_price_gross: "10.00".to_string(),
-            bulk_supply_price_gross: "9.00".to_string(),
+            bulk_supply_price_gross: Some("9.00".to_string()),
             input_tax_rate: "0.13".to_string(),
-            bulk_minimum_order_quantity: "10".to_string(),
+            bulk_minimum_order_quantity: Some("10".to_string()),
             product_capabilities: vec!["DROP_SHIP".to_string()],
             valid_from: "2026-01-01".to_string(),
             valid_to: None,
@@ -716,7 +801,7 @@ mod tests {
         let err = bad_price.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法一件代发供给价"));
         let mut bad_moq = terms();
-        bad_moq.bulk_minimum_order_quantity = "0".to_string();
+        bad_moq.bulk_minimum_order_quantity = Some("0".to_string());
         assert!(bad_moq.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_ok());
         let mut bad_window = terms();
         bad_window.valid_from = "not-a-date".to_string();
@@ -738,7 +823,7 @@ mod tests {
                 "actor-1".to_string(),
             )
             .unwrap();
-        assert_eq!(data.source_updated_at, source);
+        assert_eq!(data.source_updated_at, Some(source));
         assert_eq!(data.received_at, received);
         assert!(data.available_quantity.is_some());
         let mut missing = req.clone();
@@ -817,13 +902,13 @@ mod tests {
         let mut multi = terms();
         multi.input_tax_rate = "abc".to_string();
         multi.dropship_supply_price_gross = "abc".to_string();
-        multi.bulk_minimum_order_quantity = "abc".to_string();
+        multi.bulk_minimum_order_quantity = Some("abc".to_string());
         multi.valid_from = "abc".to_string();
         let err = multi.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法进项税率"));
         let mut second = terms();
         second.dropship_supply_price_gross = "abc".to_string();
-        second.bulk_supply_price_gross = "abc".to_string();
+        second.bulk_supply_price_gross = Some("abc".to_string());
         let err = second.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法一件代发供给价"));
     }

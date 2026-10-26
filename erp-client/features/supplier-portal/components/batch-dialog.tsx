@@ -375,7 +375,7 @@ export function PortalBatchDialog({
             }))
             const summary =
                 "source_type" in target
-                    ? `当前供给：${target.name ?? target.sku_name ?? "商品规格"}；代发含税价${offeringTerms(target).dropship_supply_price_gross}，集采含税价${offeringTerms(target).bulk_supply_price_gross}；可供数量${target.available_quantity ?? "未提供"}。原输入继续保留。`
+                    ? `当前供给：${target.name ?? target.sku_name ?? "商品规格"}；代发含税价${offeringTerms(target).dropship_supply_price_gross}，集采含税价${offeringTerms(target).bulk_supply_price_gross ?? "未提供"}；可供数量${target.available_quantity ?? "未提供"}。原输入继续保留。`
                     : `当前规格：${target.name} / ${target.specification} / ${target.unit_name}。原报价继续保留，请核对是否仍适用。`
             changeRows(
                 form.state.values.rows.map((item) =>

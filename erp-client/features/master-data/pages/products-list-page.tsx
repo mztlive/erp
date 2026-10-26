@@ -107,6 +107,12 @@ export function ProductsListPage() {
         supplierOfferingsError: state.supplierOfferingsQuery.isError,
         onUpdateProductListing: state.updateProductListing,
         onSupplyProduct: state.setSupplyProduct,
+        onSourceDiff: (product) => {
+            lastFocusedRowId.current = product.stableId
+            router.push(
+                `/master-data/products/${encodeURIComponent(product.stableId)}?sourceDiff=true`,
+            )
+        },
         onAddSupply: (product) => {
             state.setSupplyProduct(null)
             openSupply(

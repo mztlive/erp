@@ -12,7 +12,7 @@ use erp_identity::service::iam::ensure_identity_foundation;
 use erp_identity::{AdminService, InitializeSuperAdminParams};
 use erp_processes::background::{
     BackgroundRunner, DeliveryCoverageRefreshAdapter, ProductImportTaskAdapter, SalesSelectionTaskAdapter,
-    SellableProjectionRefreshAdapter, SupplierImportTaskAdapter,
+    SellableProjectionRefreshAdapter, SupplierCatalogTaskAdapter, SupplierImportTaskAdapter,
 };
 use erp_processes::delivery_coverage_refresh::DeliveryCoverageRefreshProcess;
 use erp_processes::sellable_projection_refresh::SellableProjectionRefresher;
@@ -139,9 +139,11 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     );
 
     let outbox_worker = state.start_approval_outbox_worker();
-    spawn_background_runner(state.clone());
+    let supplier_order_worker = web_api::core::supplier_order_worker::spawn(state.clone());
+    spawn_background_runner(state.clone())?;
     web_api::core::data_transfer::spawn(state.clone());
     let result = run_app(app_port, state).await;
+    supplier_order_worker.stop().await;
     outbox_worker.stop().await;
     result
 }
@@ -191,23 +193,35 @@ async fn bootstrap_initial_admin(state: &AppState, password: Option<&str>) -> Re
 /// * `state` - 应用状态
 ///
 /// # 返回
-/// 无；后台循环独立运行，失败只记日志，不中断进程。
-fn spawn_background_runner(state: AppState) {
-    let runner = Arc::new(
-        BackgroundRunner::new(std::time::Duration::from_secs(2))
-            .register(ProductImportTaskAdapter::new(state.product_import_process()))
-            .register(SupplierImportTaskAdapter::new(state.supplier_import_process()))
-            .register(SalesSelectionTaskAdapter::new(
-                erp_processes::sales_selection::SalesSelectionProcess::new(
-                    state.db(),
-                    state.storage().clone(),
-                    state.config_snapshot().app.secret.as_bytes(),
-                ),
-            ))
-            .register(DeliveryCoverageRefreshAdapter::new(DeliveryCoverageRefreshProcess::new(state.db())))
-            .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db()))),
-    );
-    runner.spawn();
+/// 后台适配器装配成功返回 `Ok(())`，运行失败由各适配器保留结果并记录。
+///
+/// # 错误
+/// 来源素材准备配置非法时拒绝启动目录调度。
+fn spawn_background_runner(state: AppState) -> Result<()> {
+    let mut runner = BackgroundRunner::new(std::time::Duration::from_secs(2))
+        .register(ProductImportTaskAdapter::new(state.product_import_process()))
+        .register(SupplierImportTaskAdapter::new(state.supplier_import_process()))
+        .register(SalesSelectionTaskAdapter::new(erp_processes::sales_selection::SalesSelectionProcess::new(
+            state.db(),
+            state.storage().clone(),
+            state.config_snapshot().app.secret.as_bytes(),
+        )))
+        .register(DeliveryCoverageRefreshAdapter::new(DeliveryCoverageRefreshProcess::new(state.db())))
+        .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db())));
+    if let Some(settings) = state.config_snapshot().dangaoshushu.as_ref().filter(|settings| settings.enabled)
+    {
+        let execution = state
+            .supplier_connection_execution_process()
+            .with_source_media(state.supplier_source_media_preparer()?);
+        runner = runner.register(SupplierCatalogTaskAdapter::new(
+            state.db(),
+            execution,
+            state.supplier_api_governance_process(),
+            settings.catalog_sync_interval_seconds,
+        ));
+    }
+    Arc::new(runner).spawn();
+    Ok(())
 }
 
 /// 启动前穷尽校验全部固定单据类型政策。

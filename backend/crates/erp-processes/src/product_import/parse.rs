@@ -438,7 +438,7 @@ mod tests {
         assert_eq!(supply.supplier_no, "SUP-001");
         assert_eq!(supply.supplier_sku_code, "SUP-RICE-5");
         assert_eq!(supply.terms.input_tax_rate, "0.13");
-        assert_eq!(supply.terms.bulk_minimum_order_quantity, "12");
+        assert_eq!(supply.terms.bulk_minimum_order_quantity.as_deref().unwrap(), "12");
     }
 
     /// 旧文件可恢复既有任务，但不能作为新的联合导入提交。

@@ -37,6 +37,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .merge(product_import_upload_routes(rbac))
         .merge(product_import_job_routes(rbac))
         .merge(product_item_routes(rbac))
+        .merge(product_source_diff_routes(rbac))
         .merge(product_handover_routes(rbac))
         .merge(product_revision_query_routes(rbac))
         .merge(product_asset_routes(rbac))
@@ -708,6 +709,33 @@ fn voucher_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 put(catalog::product::voucher_category_update),
                 rbac,
                 catalog::product::voucher_category_update_permission_key(),
+            ),
+        )
+}
+
+/// 商品来源资料读取与确认路由，分别复用商品详情和维护权限。
+/// # 参数
+/// `rbac` 为认证后的权限解析服务。
+/// # 返回
+/// 两条具有独立动作权限的管理路由。
+/// # 错误
+/// 无；业务错误由处理器返回。
+fn product_source_diff_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/products/{id}/source-diff",
+            with_permission(
+                get(catalog::source_diff::product_source_diff),
+                rbac,
+                catalog::source_diff::product_source_diff_permission_key(),
+            ),
+        )
+        .route(
+            "/products/{id}/source-diff/resolve",
+            with_permission(
+                post(catalog::source_diff::resolve_product_source_diff),
+                rbac,
+                catalog::source_diff::resolve_product_source_diff_permission_key(),
             ),
         )
 }

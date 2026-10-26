@@ -57,6 +57,9 @@ pub(super) async fn next_run(
         && !run.finished
         && run.technical_config_version == connection.technical_config_version
     {
+        next.scan_since = run.scan_since;
+        next.scan_through = run.scan_through;
+        next.sync_mode = run.sync_mode;
         next.cursor = run.cursor;
         next.pages = run.pages;
         next.observed_count = run.observed_count;

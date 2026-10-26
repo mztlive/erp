@@ -132,10 +132,10 @@ mod tests {
                     supplier_offering_id: "offering".to_string().into(),
                     valid_from: "2000-01-01".parse().unwrap(),
                     valid_to: None,
-                    bulk_supply_price_gross: "60".parse().unwrap(),
+                    bulk_supply_price_gross: Some("60".parse().unwrap()),
                     dropship_supply_price_gross: "60".parse().unwrap(),
                     input_tax_rate: "0.13".parse().unwrap(),
-                    bulk_minimum_order_quantity: "1".parse().unwrap(),
+                    bulk_minimum_order_quantity: Some("1".parse().unwrap()),
                 },
             )]
             .into(),
@@ -198,11 +198,11 @@ mod tests {
         assert_eq!(groups.len(), 2);
         assert_eq!(facts.source_inquiry_id.as_deref(), Some("inquiry"));
         let special = groups.iter().find(|group| group.scope.inquiry_quote_revision_id.is_some()).unwrap();
-        assert_eq!(special.lines[0].unit_cost(SupplyPriceBasis::Dropship), "45".parse().unwrap());
+        assert_eq!(special.lines[0].unit_cost(SupplyPriceBasis::Dropship).unwrap(), "45".parse().unwrap());
         assert_eq!(special.lines[0].max_create_quantity, "7".parse().unwrap());
         assert_eq!(special.lines[0].tax_rate(), "0.06".parse().unwrap());
         let general = groups.iter().find(|group| group.scope.inquiry_quote_revision_id.is_none()).unwrap();
-        assert_eq!(general.lines[0].unit_cost(SupplyPriceBasis::Dropship), "60".parse().unwrap());
+        assert_eq!(general.lines[0].unit_cost(SupplyPriceBasis::Dropship).unwrap(), "60".parse().unwrap());
         let groups = InquiryBasis::default()
             .groups(&order(), &coverage(), &["sales-line".into()], &mut facts)
             .unwrap();

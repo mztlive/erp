@@ -7,6 +7,7 @@ mod middleware;
 pub(crate) mod rate_limit;
 mod response;
 pub mod routes;
+pub mod supplier_order_worker;
 pub mod tracing;
 pub(crate) mod upload;
 

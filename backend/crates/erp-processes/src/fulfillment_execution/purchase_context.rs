@@ -29,7 +29,7 @@ use crate::{Error, Result};
 ///
 /// # 错误
 /// 采购单不在生效/部分执行状态时返回 `BusinessLogicError`。
-pub(super) fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
+pub(crate) fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
     PurchaseFulfillmentEligibility::ensure_order_fulfillable(match po.stable.status {
         erp_procurement::entity::purchase_order::PurchaseOrderStatus::Effective => {
             PurchaseOrderStatusFact::Effective
@@ -58,7 +58,7 @@ pub(super) fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
 ///
 /// # 错误
 /// 生效版本缺失、或有效付款未达门槛时返回 `BusinessLogicError`。
-pub(super) async fn ensure_prepay_gate(
+pub(crate) async fn ensure_prepay_gate(
     db: &Database,
     session: &mut dyn Executor,
     po: &PurchaseOrder,

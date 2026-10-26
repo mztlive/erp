@@ -37,11 +37,9 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                 <div className="space-y-6 px-7 py-6">
                     <Alert variant="info" className="py-3">
                         <AlertTitle className="text-sm">
-                            客户款项已收
+                            供应商接口履约
                         </AlertTitle>
-                        <AlertDescription>
-                            {o.paymentOccurredNotice}
-                        </AlertDescription>
+                        <AlertDescription>{o.executionNotice}</AlertDescription>
                     </Alert>
 
                     <section className="space-y-2" aria-label="三轨进度">
@@ -106,11 +104,11 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                 }
                             />
                             <Field
-                                label="支付时间"
+                                label="创建时间"
                                 value={
                                     <span className="num text-xs">
                                         {formatDateTime(
-                                            o.paidAt,
+                                            o.createdAt,
                                             "monthDayIntl",
                                             "passthrough",
                                         )}

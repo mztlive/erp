@@ -498,8 +498,10 @@ mod tests {
                     supplier_offering_id: SupplierOfferingId::new("offering"),
                     availability_status: status,
                     available_quantity: quantity,
-                    source_updated_at: Instant::from_unix_secs(1),
+                    source_updated_at: Some(Instant::from_unix_secs(1)),
                     received_at: Instant::from_unix_secs(2),
+                    verified_at: None,
+                    valid_until: None,
                     source_revision_token: token.clone(),
                     updated_by: "operator".into(),
                 });

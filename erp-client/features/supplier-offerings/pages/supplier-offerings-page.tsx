@@ -317,7 +317,6 @@ export const SupplierOfferingsPage = () => {
                     selectionBar={
                         !state.taskMode && canSelect ? (
                             <div className="flex flex-wrap items-center gap-2 text-sm">
-                                
                                 {canBatchRevise && (
                                     <Button
                                         id="supplier-offerings-batch-revise"

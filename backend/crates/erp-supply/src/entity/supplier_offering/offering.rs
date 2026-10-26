@@ -250,6 +250,20 @@ impl SupplierOffering {
         self.base.version.checked_add(1).ok_or_else(|| Error::from("供给版本已达到上限"))
     }
 
+    /// 校验普通后台操作是否允许改写来源可供事实。
+    /// # 参数
+    /// 无；读取供给登记来源。
+    /// # 返回
+    /// 手工及导入来源可进入既有更新流程。
+    /// # 错误
+    /// API 来源必须由同步流程更新，普通命令拒绝。
+    pub fn ensure_manual_availability_writable(&self) -> Result<()> {
+        if self.source_type == OfferingSourceType::Api {
+            return Err(Error::from("API 来源库存和可供状态由供应商同步，请暂停供给以停止业务使用"));
+        }
+        Ok(())
+    }
+
     /// 判断供给是否已具备可查询、可交接的维护责任事实。
     ///
     /// # 参数
@@ -332,14 +346,14 @@ pub struct SupplierOfferingRevisionData {
     pub dropship_supply_price_gross: UnitPrice,
     /// 一件代发不含税价。
     pub dropship_supply_price_net: UnitPrice,
-    /// 集采含税价。
-    pub bulk_supply_price_gross: UnitPrice,
-    /// 集采不含税价。
-    pub bulk_supply_price_net: UnitPrice,
+    /// 集采含税价；未支持集采时为空。
+    pub bulk_supply_price_gross: Option<UnitPrice>,
+    /// 集采不含税价；与含税价及起订量同时缺失。
+    pub bulk_supply_price_net: Option<UnitPrice>,
     /// 进项税率。
     pub input_tax_rate: Rate,
-    /// 集采起订量。
-    pub bulk_minimum_order_quantity: Quantity,
+    /// 集采起订量；未支持集采时为空。
+    pub bulk_minimum_order_quantity: Option<Quantity>,
     /// 商品级能力。
     pub product_capabilities: Vec<String>,
     /// 生效日期。
@@ -359,12 +373,12 @@ pub struct FromGrossPricesParams {
     pub revision_no: u32,
     /// 一件代发含税价。
     pub dropship_supply_price_gross: UnitPrice,
-    /// 集采含税价。
-    pub bulk_supply_price_gross: UnitPrice,
+    /// 集采含税价；未支持集采时为空。
+    pub bulk_supply_price_gross: Option<UnitPrice>,
     /// 进项税率。
     pub input_tax_rate: Rate,
-    /// 集采起订量。
-    pub bulk_minimum_order_quantity: Quantity,
+    /// 集采起订量；未支持集采时为空。
+    pub bulk_minimum_order_quantity: Option<Quantity>,
     /// 商品级能力。
     pub product_capabilities: Vec<String>,
     /// 生效日期。
@@ -399,7 +413,9 @@ impl SupplierOfferingRevisionData {
             dropship_supply_price_gross: params.dropship_supply_price_gross,
             dropship_supply_price_net: net_price(params.dropship_supply_price_gross, params.input_tax_rate),
             bulk_supply_price_gross: params.bulk_supply_price_gross,
-            bulk_supply_price_net: net_price(params.bulk_supply_price_gross, params.input_tax_rate),
+            bulk_supply_price_net: params
+                .bulk_supply_price_gross
+                .map(|price| net_price(price, params.input_tax_rate)),
             input_tax_rate: params.input_tax_rate,
             bulk_minimum_order_quantity: params.bulk_minimum_order_quantity,
             product_capabilities: params.product_capabilities,
@@ -423,14 +439,14 @@ pub struct SupplierOfferingRevision {
     pub dropship_supply_price_gross: UnitPrice,
     /// 一件代发不含税价。
     pub dropship_supply_price_net: UnitPrice,
-    /// 集采含税价。
-    pub bulk_supply_price_gross: UnitPrice,
-    /// 集采不含税价。
-    pub bulk_supply_price_net: UnitPrice,
+    /// 集采含税价；未支持集采时为空。
+    pub bulk_supply_price_gross: Option<UnitPrice>,
+    /// 集采不含税价；与含税价及起订量同时缺失。
+    pub bulk_supply_price_net: Option<UnitPrice>,
     /// 进项税率。
     pub input_tax_rate: Rate,
-    /// 集采起订量。
-    pub bulk_minimum_order_quantity: Quantity,
+    /// 集采起订量；未支持集采时为空。
+    pub bulk_minimum_order_quantity: Option<Quantity>,
     /// 商品级能力。
     pub product_capabilities: Vec<String>,
     /// 生效日期。
@@ -476,6 +492,23 @@ impl SupplierOfferingRevision {
             valid_to: data.valid_to,
             prefill_source_refs,
         })
+    }
+
+    /// 阻止管理端手工覆盖 API 来源的采购价格与集采支持范围。
+    /// # 参数
+    /// `prior` 为同供给的当前正式条款。
+    /// # 返回
+    /// 仅状态、公司确认条件等变更时成功。
+    /// # 错误
+    /// 采购价格或集采起订量变化时拒绝；来源同步使用独立流程追加修订。
+    pub fn ensure_api_prices_unchanged(&self, prior: &Self) -> Result<()> {
+        if self.dropship_supply_price_gross != prior.dropship_supply_price_gross
+            || self.bulk_supply_price_gross != prior.bulk_supply_price_gross
+            || self.bulk_minimum_order_quantity != prior.bulk_minimum_order_quantity
+        {
+            return Err(Error::from("API 来源采购价格和集采条件由供应商同步，不允许手工覆盖"));
+        }
+        Ok(())
     }
 
     /// 比较上一版商业条款并分类销售安全影响。
@@ -541,7 +574,11 @@ fn ensure_price_pairs(data: &SupplierOfferingRevisionData) -> Result<()> {
         data.input_tax_rate,
         "一件代发",
     )?;
-    ensure_price_pair(data.bulk_supply_price_gross, data.bulk_supply_price_net, data.input_tax_rate, "集采")
+    match (data.bulk_supply_price_gross, data.bulk_supply_price_net, data.bulk_minimum_order_quantity) {
+        (Some(gross), Some(net), Some(_)) => ensure_price_pair(gross, net, data.input_tax_rate, "集采"),
+        (None, None, None) => Ok(()),
+        _ => Err(Error::from("集采供给价、含税换算与起订量必须同时提供或同时缺失")),
+    }
 }
 
 fn ensure_price_pair(gross: UnitPrice, net: UnitPrice, rate: Rate, label: &str) -> Result<()> {
@@ -556,7 +593,10 @@ fn ensure_price_pair(gross: UnitPrice, net: UnitPrice, rate: Rate, label: &str) 
 }
 
 fn ensure_supply_conditions(data: &SupplierOfferingRevisionData) -> Result<()> {
-    if data.bulk_minimum_order_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+    if data
+        .bulk_minimum_order_quantity
+        .is_some_and(|minimum| minimum.to_decimal() <= rust_decimal::Decimal::ZERO)
+    {
         return Err(Error::from("集采起订量必须为正"));
     }
     Ok(())
@@ -639,15 +679,57 @@ mod tests {
             revision_no: 1,
             dropship_supply_price_gross: UnitPrice::from_str("11.30").unwrap(),
             dropship_supply_price_net: UnitPrice::from_str("9.83").unwrap(),
-            bulk_supply_price_gross: UnitPrice::from_str("9.04").unwrap(),
-            bulk_supply_price_net: UnitPrice::from_str("7.86").unwrap(),
+            bulk_supply_price_gross: Some(UnitPrice::from_str("9.04").unwrap()),
+            bulk_supply_price_net: Some(UnitPrice::from_str("7.86").unwrap()),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
-            bulk_minimum_order_quantity: Quantity::from_str("10").unwrap(),
+            bulk_minimum_order_quantity: Some(Quantity::from_str("10").unwrap()),
             product_capabilities: vec![" REFUND ".to_string(), "REFUND".to_string()],
             valid_from: BusinessDate::from_str("2026-08-08").unwrap(),
             valid_to: None,
             prefill_source_refs: PrefillSourceRefs::default(),
         }
+    }
+
+    #[test]
+    fn dropship_only_terms_keep_bulk_unknown_and_reject_partial_pairs() {
+        let mut data = revision_data();
+        data.bulk_supply_price_gross = None;
+        data.bulk_supply_price_net = None;
+        data.bulk_minimum_order_quantity = None;
+        let revision =
+            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("r"), data.clone()).unwrap();
+        assert_eq!(revision.dropship_supply_price_gross, "11.30".parse().unwrap());
+        assert!(revision.bulk_supply_price_gross.is_none());
+        let stored = serde_json::to_value(&revision).unwrap();
+        let restored: SupplierOfferingRevision = serde_json::from_value(stored).unwrap();
+        assert_eq!(restored, revision);
+        data.bulk_minimum_order_quantity = Some("1".parse().unwrap());
+        assert!(SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("bad"), data).is_err());
+    }
+
+    #[test]
+    fn legacy_scalar_bulk_values_remain_readable_and_api_prices_are_protected() {
+        let revision =
+            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("r"), revision_data()).unwrap();
+        let stored = serde_json::to_value(&revision).unwrap();
+        assert_eq!(stored["bulk_supply_price_gross"], "9.04");
+        let restored: SupplierOfferingRevision = serde_json::from_value(stored).unwrap();
+        assert_eq!(restored.bulk_supply_price_gross, Some("9.04".parse().unwrap()));
+        assert!(restored.ensure_api_prices_unchanged(&revision).is_ok());
+        let mut changed = restored;
+        changed.bulk_supply_price_gross = None;
+        assert!(changed.ensure_api_prices_unchanged(&revision).is_err());
+    }
+
+    #[test]
+    fn api_availability_is_source_owned_but_manual_sources_remain_editable() {
+        let mut data = offering_data();
+        let manual = SupplierOffering::new(SupplierOfferingId::new("m"), data.clone(), "actor").unwrap();
+        assert!(manual.ensure_manual_availability_writable().is_ok());
+        data.source_type = OfferingSourceType::Api;
+        data.source_connection_id = Some("connection".to_string().into());
+        let api = SupplierOffering::new(SupplierOfferingId::new("a"), data, "actor").unwrap();
+        assert!(api.ensure_manual_availability_writable().is_err());
     }
 
     #[test]
@@ -739,7 +821,7 @@ mod tests {
         assert_eq!(revision.product_capabilities, vec!["REFUND"]);
 
         let zero_moq = SupplierOfferingRevisionData {
-            bulk_minimum_order_quantity: Quantity::from_str("0").unwrap(),
+            bulk_minimum_order_quantity: Some(Quantity::from_str("0").unwrap()),
             ..revision_data()
         };
         assert!(
@@ -753,9 +835,9 @@ mod tests {
             supplier_offering_id: SupplierOfferingId::new("offering-1"),
             revision_no: 1,
             dropship_supply_price_gross: UnitPrice::from_str("11.30").unwrap(),
-            bulk_supply_price_gross: UnitPrice::from_str("9.04").unwrap(),
+            bulk_supply_price_gross: Some(UnitPrice::from_str("9.04").unwrap()),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
-            bulk_minimum_order_quantity: Quantity::from_str("10").unwrap(),
+            bulk_minimum_order_quantity: Some(Quantity::from_str("10").unwrap()),
             product_capabilities: vec!["REFUND".to_string()],
             valid_from: BusinessDate::from_str("2026-08-08").unwrap(),
             valid_to: None,
@@ -786,7 +868,7 @@ mod tests {
 
         let mut critical_data = data;
         critical_data.revision_no = 2;
-        critical_data.bulk_minimum_order_quantity = Quantity::from_str("20").unwrap();
+        critical_data.bulk_minimum_order_quantity = Some(Quantity::from_str("20").unwrap());
         let critical =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-3"), critical_data)
                 .unwrap();

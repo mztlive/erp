@@ -18,9 +18,9 @@ export type PortalPage<T> = {
 }
 export type PortalTerms = {
     dropship_supply_price_gross: string
-    bulk_supply_price_gross: string
+    bulk_supply_price_gross: string | null
     input_tax_rate: string
-    bulk_minimum_order_quantity: string
+    bulk_minimum_order_quantity: string | null
     product_capabilities: string[]
     valid_from: string
     valid_to: string | null
@@ -42,9 +42,9 @@ export type PortalOffering = {
     current_revision_no: number
     terms?: PortalTerms
     dropship_supply_price_gross?: string
-    bulk_supply_price_gross?: string
+    bulk_supply_price_gross?: string | null
     input_tax_rate?: string
-    bulk_minimum_order_quantity?: string
+    bulk_minimum_order_quantity?: string | null
     product_capabilities?: string[]
     valid_from?: string
     valid_to?: string | null

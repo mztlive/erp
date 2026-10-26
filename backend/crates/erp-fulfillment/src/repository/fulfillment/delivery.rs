@@ -1,7 +1,7 @@
 //! `delivery` 发货单仓储：列表投影查询与按物流单号查询。
 
 use erp_core::common::time::Instant;
-use erp_core::ids::{PurchaseOrderId, SalesOrderId, WarehouseId};
+use erp_core::ids::{DeliveryId, PurchaseOrderId, SalesOrderId, WarehouseId};
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
 use serde::{Deserialize, Serialize};
@@ -101,6 +101,20 @@ impl Pagination for DeliveryFilter {
 /// 发货单仓储扩展：列表投影查询。
 #[allow(async_fn_in_trait)]
 pub trait DeliveryRepositoryExt {
+    /// 在指定采购单内读取冻结的发货单身份，不扩大到其他采购单。
+    /// # 参数
+    /// 采购单身份、已冻结的非空发货单集合，以及调用方执行器。
+    /// # 返回
+    /// 属于该采购单且尚未删除的指定发货单；空身份集合直接返回空。
+    /// # 错误
+    /// 数据库读取失败时返回原仓储错误。
+    async fn find_for_purchase(
+        &self,
+        purchase_id: &PurchaseOrderId,
+        delivery_ids: &[DeliveryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Delivery>>;
+
     /// 分页检索发货单列表（投影查询）。
     ///
     /// 只返回 [`DeliveryRow`] 所需的列表字段（敏感履约地址字段不进投影）；
@@ -123,6 +137,19 @@ pub trait DeliveryRepositoryExt {
 }
 
 impl DeliveryRepositoryExt for persistence_core::Repository<'_, Delivery> {
+    async fn find_for_purchase(
+        &self,
+        purchase_id: &PurchaseOrderId,
+        delivery_ids: &[DeliveryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Delivery>> {
+        if delivery_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = delivery_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! {"id":{"$in":ids},"purchase_order_id":purchase_id.to_string()}, executor).await
+    }
+
     #[tracing::instrument(
         name = "repository.fulfillment.search_deliveries",
         skip_all,

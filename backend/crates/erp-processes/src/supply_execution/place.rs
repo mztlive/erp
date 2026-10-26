@@ -54,6 +54,7 @@ impl SupplierFulfillmentProcess {
             .find_by_fulfillment_order_no(&req.fulfillment_order_no, &mut NoTransaction)
             .await?
         {
+            self.ensure_legacy_order(&existing.base.id, &mut NoTransaction).await?;
             tracing::info!(account = %actor.id(), order_no = %req.fulfillment_order_no, "下单幂等命中，返回原订单");
             return Ok(existing.into());
         }

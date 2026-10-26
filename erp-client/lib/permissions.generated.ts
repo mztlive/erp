@@ -2888,6 +2888,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/products/{id}/source-diff",
+                description: "查看商品来源资料差异",
+                permission: {
+                    resource: "product",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/products/{id}/source-diff/resolve",
+                description: "确认商品来源资料差异",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/warehouses",
                 description: "查询仓库列表",
                 permission: {
@@ -6073,6 +6093,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/catalog/adoptions/preview",
+                description: "同步供应商商品目录",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/catalog/adoptions/{preview}/confirm",
+                description: "同步供应商商品目录",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/catalog/adoption-targets/{sku}",
+                description: "同步供应商商品目录",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-api-connections/{id}/reference-options",
                 description: "查看供应商接口配置选项",
@@ -6189,6 +6239,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "supplier_api_capability",
                     action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/catalog/{item}/identity-review",
+                description: "查看供应商 API 连接详情",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/catalog/{item}/identity-review",
+                description: "同步供应商商品目录",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
                 },
             },
             {
@@ -6335,6 +6405,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "supplier_refund_fact",
                     action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-fulfillment-orders/{id}/execution-setup",
+                description: "读取自动执行配送资料",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/execution-setup",
+                description: "补充自动执行配送资料",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "submit",
                 },
             },
         ],

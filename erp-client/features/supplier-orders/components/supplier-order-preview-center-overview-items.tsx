@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { DescriptionList } from "@/components/ui/description-list"
 import {
@@ -17,21 +18,22 @@ import { Item } from "@/features/supplier-orders/components/supplier-order-previ
 
 export function OverviewSection({
     order,
+    purchaseOrderId,
+    purchaseOrderNo,
 }: {
     order: SupplierOrderDetailView["order"]
+    purchaseOrderId?: string
+    purchaseOrderNo?: string
 }) {
     return (
         <DocumentSection
             title="概览"
-            description="来源支付、供应商与下单记录版本"
+            description="来源采购、供应商与下单记录版本"
         >
             <DescriptionList className="gap-y-3">
                 <Item label="履约链" value="ERP 自动供应商履约" />
                 <Item label="供应商" value={order.supplierName} />
-                <Item
-                    label="连接"
-                    value={`${order.connectionCode} · ${order.connectionEnvironment}`}
-                />
+                <Item label="连接" value={order.connectionCode} />
                 <Item
                     label="供给数据版本"
                     value={
@@ -41,8 +43,22 @@ export function OverviewSection({
                     }
                 />
                 <Item
-                    label="支付凭证号"
-                    value={<span className="num">{order.paymentFactKey}</span>}
+                    label="来源采购单"
+                    value={
+                        purchaseOrderId && purchaseOrderNo ? (
+                            <Link
+                                id="supplier-order-overview-open-purchase"
+                                className="num text-primary underline underline-offset-4"
+                                href={`/procurement/purchase-orders/${encodeURIComponent(purchaseOrderId)}`}
+                            >
+                                {purchaseOrderNo}
+                            </Link>
+                        ) : (
+                            <span className="text-muted-foreground">
+                                未关联采购来源
+                            </span>
+                        )
+                    }
                 />
             </DescriptionList>
             <p className="mt-3 text-xs text-muted-foreground">

@@ -24,8 +24,8 @@ import { mapWorkItemDto } from "@/features/work-items/types"
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import type { BackendDetail, BackendOrder } from "./wire-types"
 
-export const PAYMENT_OCCURRED_NOTICE =
-    "客户款项已收。供应商履约结果独立记录，不得用取消/退款折入履约主状态。"
+export const SUPPLIER_EXECUTION_NOTICE =
+    "系统按已批准的采购条件执行供应商发单与履约接口确认。实际收付款以 ERP 财务记录为准，履约、取消和退款分别跟踪。"
 export const PERMISSION_VERSION = "server"
 
 export function tsToIso(secs: number | null | undefined): string {
@@ -115,7 +115,7 @@ export function mapListRow(o: BackendOrder): SupplierOrderListRow {
         refundStatus: refund,
         refundLabel: REFUND_STATUS_LABEL[refund],
         refundTone: REFUND_STATUS_TONE[refund],
-        paidAt: tsToIso(o.created_at),
+        createdAt: tsToIso(o.created_at),
         updatedAt: lastBusinessAt,
         lastBusinessAt,
         followUpUserId: o.follow_up_user_id ?? undefined,
@@ -220,8 +220,8 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
         order: {
             id: o.id,
             orderNo: o.fulfillment_order_no,
-            paidAt: tsToIso(o.created_at),
-            paymentFactKey: "",
+            createdAt: tsToIso(o.created_at),
+            submittedAt: tsToIso(o.submitted_at) || undefined,
             fulfillmentChain: "ERP_AUTOMATED",
             supplierId: o.supplier_id,
             supplierName:
@@ -243,8 +243,11 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
             refundLabel: REFUND_STATUS_LABEL[refund],
             refundTone: REFUND_STATUS_TONE[refund],
             lockVersion: o.version,
-            paymentOccurredNotice: PAYMENT_OCCURRED_NOTICE,
+            executionNotice: SUPPLIER_EXECUTION_NOTICE,
         },
+        trackingError: d.tracking_error ?? undefined,
+        purchaseOrderId: d.purchase_order_id ?? undefined,
+        purchaseOrderNo: d.purchase_order_no ?? undefined,
         items: (d.items ?? []).map((it) => ({
             itemId: it.id,
             productName:

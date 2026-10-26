@@ -1,4 +1,5 @@
 import type { Page } from "@/lib/api/paging"
+import type { ProductSourceField } from "./types-product-source"
 import type {
     ProductKind,
     SupplierQualificationHealth,
@@ -61,6 +62,8 @@ export type ProductDto = {
     maintainer_user_id?: string
     maintainer_user_name?: string | null
     business_org_unit_id?: string
+    source_diff_count?: number
+    source_diff_fields?: readonly ProductSourceField[]
 }
 
 export type ProductListingDto = {

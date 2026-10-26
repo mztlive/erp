@@ -445,6 +445,7 @@ impl CatalogService {
         for sku in &mut disable {
             db.skus().update(sku, executor).await?;
         }
+        self.record_source_company_edit(&product.base.id, executor).await?;
         audit_port.persist(&audit, executor).await?;
         Ok(product)
     }

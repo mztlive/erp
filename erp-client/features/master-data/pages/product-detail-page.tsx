@@ -3,6 +3,7 @@
 import { useChangeConfirmation } from "../hooks/use-change-confirmation"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import {
     DiscardConfirmDialog,
     PageScaffold,
@@ -22,6 +23,7 @@ import { ProductDetailFeedback } from "@/features/master-data/components/product
 import { ProductDetailHeader } from "@/features/master-data/components/product/product-detail-header"
 import { ProductSectionTabs } from "@/features/master-data/components/product/product-detail-navigation"
 import { ProductSaveDialog } from "@/features/master-data/components/product/product-save-dialog"
+import { ProductSourceDiff } from "@/features/master-data/components/product/product-source-diff"
 import { createProductFormBindings } from "@/features/master-data/lib/product-form-bindings"
 import { productChangeSummary } from "@/features/master-data/lib/product-change-summary"
 import { useProductEditor } from "@/features/master-data/hooks/use-product-editor"
@@ -31,6 +33,7 @@ import { cn } from "@/lib/utils"
 const productCardClassName = "rounded-lg border bg-card p-5 md:p-6"
 
 export function ProductDetailPage({ stableId }: { stableId: string }) {
+    const sourceDiffRequested = useSearchParams().get("sourceDiff") === "true"
     const editor = useProductEditor(stableId)
     const changeConfirmation = useChangeConfirmation(
         "master-data-product-change",
@@ -47,6 +50,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         setPriceUndo(null)
     }, [stableId, editor.saveOpen])
     const [resetOpen, setResetOpen] = React.useState(false)
+    const [sourceProcessing, setSourceProcessing] = React.useState(false)
     const {
         isCreate,
         router,
@@ -117,10 +121,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         >
             <form.Subscribe
                 selector={(state) =>
-                    [state.values, state.isSubmitting] as const
+                    [state.values, state.isSubmitting, state.isDirty] as const
                 }
             >
-                {([values, isSubmitting]) => {
+                {([values, isSubmitting, isDirty]) => {
                     const bindings = createProductFormBindings(
                         form,
                         values,
@@ -151,7 +155,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         activeSpecs,
                         applyBatchReferencePrices,
                     } = bindings
-                    const saving = pending || isSubmitting
+                    const saving = pending || isSubmitting || sourceProcessing
                     // Retain old deep links to the effective section, now shown as the save dialog.
                     const showSave = saveOpen || activeSection === "effective"
                     const section =
@@ -189,7 +193,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 className="min-w-0 space-y-5"
                                 onSubmit={(event) => {
                                     event.preventDefault()
-                                    requestSave(values)
+                                    if (!sourceProcessing) requestSave(values)
                                 }}
                             >
                                 <ProductDetailHeader
@@ -212,6 +216,16 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     }
                                 />
                                 {!showSave ? feedback : null}
+                                <ProductSourceDiff
+                                    key={stableId}
+                                    productId={stableId}
+                                    enabled={!isCreate && Boolean(data)}
+                                    canRevise={canRevise}
+                                    dirty={isDirty}
+                                    busy={saving}
+                                    openRequested={sourceDiffRequested}
+                                    onProcessingChange={setSourceProcessing}
+                                />
                                 <div
                                     className={cn(
                                         surfacePanelClassName,
@@ -261,7 +275,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                         }
                                                         idPrefix="master-data-product-detail-basic"
                                                         isCreate={isCreate}
-                                                        canRevise={canRevise}
+                                                        canRevise={
+                                                            canRevise &&
+                                                            !sourceProcessing
+                                                        }
                                                         name={name}
                                                         setName={setName}
                                                         fields={fields}
@@ -291,7 +308,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                     <ProductSkuSection
                                                         idPrefix="master-data-product-detail-sku"
                                                         isCreate={isCreate}
-                                                        canRevise={canRevise}
+                                                        canRevise={
+                                                            canRevise &&
+                                                            !sourceProcessing
+                                                        }
                                                         name={name}
                                                         fields={fields}
                                                         specDrafts={specDrafts}
@@ -383,7 +403,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         {section === "media" ? (
                                             <ProductMediaSection
                                                 idPrefix="master-data-product-detail-media"
-                                                disabled={pending}
+                                                disabled={
+                                                    pending || sourceProcessing
+                                                }
                                                 canRevise={canRevise}
                                                 fields={fields}
                                                 setFields={setFields}

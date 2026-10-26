@@ -35,6 +35,11 @@ pub struct SupplierFulfillmentOrderDetailView {
     /// W26 领域动作及展示事实阻断。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub action_blockers: Vec<SupplierOrderActionBlockerView>,
+    /// 已授权订单的自动跟踪错误；不含原始报文、地址或联系方式。
+    pub tracking_error: Option<String>,
+    /// API 自动执行关联的真实采购来源；旧订单无关联时为空。
+    pub purchase_order_id: Option<String>,
+    pub purchase_order_no: Option<String>,
 }
 
 /// 履约明细与下单供给修订关联的可读资料。

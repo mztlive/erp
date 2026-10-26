@@ -53,3 +53,23 @@ impl SupplierCallbackRepositoryExt for Repository<'_, SupplierCallbackReceipt> {
         .await
     }
 }
+
+/// 读取后台订单消费者的有界队列；原始正文保持密文。
+/// # 参数
+/// `db` 为当前部署库，执行器由调用方提供。
+/// # 返回
+/// 最早的至多 20 条订单或状态回调接收记录。
+/// # 错误
+/// 数据库读取失败时返回原错误。
+pub async fn pending_order_callbacks(
+    db: &Database,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierCallbackReceipt>> {
+    mongo_ops::find_many(
+        &db.supplier_callback_receipts().collection(),
+        doc! {"status":"received","route_kind":{"$in":["order","status"]},"deleted_at":NOT_DELETED_TIMESTAMP_BSON,
+            "$or":[{"next_attempt_at":null},{"next_attempt_at":{"$lte":erp_core::common::time::Instant::now().unix_secs()}}]},
+        FindOptions::builder().sort(doc! {"next_attempt_at":1,"received_at":1,"id":1}).limit(20).build(),
+        executor,
+    ).await
+}

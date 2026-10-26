@@ -30,6 +30,21 @@ export function useSupplierOrdersUrlState() {
     )
     const returnTo = searchParams.get("returnTo") ?? undefined
 
+    // 清除旧链接中的无效支付日期，不改其余筛选、分页及返回上下文。
+    React.useEffect(() => {
+        if (!searchParams.has("paidFrom") && !searchParams.has("paidTo")) return
+        const target =
+            searchParams.get("supplierOrderId") ?? searchParams.get("preview")
+        if (target && searchParams.get("openCenter") === "1") return
+        const clean = new URLSearchParams(searchParams.toString())
+        clean.delete("paidFrom")
+        clean.delete("paidTo")
+        const query = clean.toString()
+        router.replace(`${pathname}${query ? `?${query}` : ""}`, {
+            scroll: false,
+        })
+    }, [pathname, router, searchParams])
+
     // 对象中心直达：supplierOrderId/preview + openCenter=1 时进入对象中心
     React.useEffect(() => {
         const soId =

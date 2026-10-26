@@ -36,6 +36,7 @@ impl SupplierFulfillmentProcess {
     ) -> Result<SupplierOrderStatusHistoryView> {
         req.validate()?;
         let mut order = self.require_scoped_order(id, actor, "reject", &mut NoTransaction).await?;
+        self.ensure_legacy_order(id, &mut NoTransaction).await?;
         let connection_id = order.connection_id.clone();
         if let Some(existing) = self
             .db

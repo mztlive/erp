@@ -14,6 +14,35 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .merge(governance_routes(rbac))
         .merge(dangaoshushu_routes(rbac))
         .merge(catalog_routes(rbac))
+        .merge(adoption_routes(rbac))
+}
+
+fn adoption_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/supplier-api-connections/{id}/catalog/adoptions/preview",
+            with_permission(
+                post(supplier_api::adoptions::preview),
+                rbac,
+                supplier_api::adoptions::preview_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/catalog/adoptions/{preview}/confirm",
+            with_permission(
+                post(supplier_api::adoptions::confirm),
+                rbac,
+                supplier_api::adoptions::confirm_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/catalog/adoption-targets/{sku}",
+            with_permission(
+                get(supplier_api::adoptions::target),
+                rbac,
+                supplier_api::adoptions::target_permission_key(),
+            ),
+        )
 }
 
 fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<AppState> {
@@ -126,6 +155,19 @@ fn governance_routes(rbac: &SharedRbacService) -> Router<AppState> {
 
 fn catalog_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .route(
+            "/supplier-api-connections/{id}/catalog/{item}/identity-review",
+            with_permission(
+                get(supplier_api::catalog::identity_review),
+                rbac,
+                supplier_api::catalog::identity_review_permission_key(),
+            )
+            .merge(with_permission(
+                post(supplier_api::catalog::confirm_identity_review),
+                rbac,
+                supplier_api::catalog::confirm_identity_review_permission_key(),
+            )),
+        )
         .route(
             "/supplier-api-connections/{id}/catalog/{item}/match",
             with_permission(

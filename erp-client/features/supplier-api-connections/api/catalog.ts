@@ -1,5 +1,29 @@
 import { apiGet, apiPost } from "@/lib/api"
 
+export type CatalogImage = {
+    url: string
+    content_fingerprint: string | null
+    file_asset_id?: string | null
+}
+export type CatalogAvailability =
+    | "AVAILABLE"
+    | "UNAVAILABLE"
+    | "UNKNOWN"
+    | "WITHDRAWN"
+export type CatalogFilters = {
+    keyword?: string
+    category_id?: string
+    brand_id?: string
+    price_min?: string
+    price_max?: string
+    availability?: CatalogAvailability
+    selection_status?: "ALL" | "UNSELECTED" | "SELECTED"
+}
+export type CatalogFilterOptions = {
+    categories: Array<{ id: string; name: string }>
+    brands: Array<{ id: string; name: string }>
+}
+
 export type CatalogItem = {
     id: string
     version: number
@@ -13,6 +37,19 @@ export type CatalogItem = {
     sku_id: string | null
     sku_no: string | null
     company_product_id: string | null
+    offering_id: string | null
+    category_id: string | null
+    category_name: string | null
+    brand_id: string | null
+    brand_name: string | null
+    description: string | null
+    images: CatalogImage[] | null
+    detail_images: CatalogImage[] | null
+    availability: CatalogAvailability
+    available_quantity: string | null
+    quantity_unbounded: boolean
+    requires_identity_review: boolean
+    source_fingerprint: string
 }
 export type CatalogJob = {
     stalled: boolean
@@ -30,6 +67,7 @@ export type CatalogJob = {
     created_at: number
     finished_at: number | null
     error_summary: string | null
+    sync_mode: "FULL" | "INCREMENTAL_PARTIAL" | "INCREMENTAL_COMPLETE"
 }
 export type CatalogResult = {
     items: CatalogItem[]
@@ -37,6 +75,10 @@ export type CatalogResult = {
     page: number
     page_size: number
     jobs: CatalogJob[]
+    filters: CatalogFilterOptions
+    sync_mode: "FULL" | "INCREMENTAL_PARTIAL" | "INCREMENTAL_COMPLETE"
+    coverage: "PARTIAL" | "COMPLETE"
+    incremental_supported: boolean
 }
 export const catalogRunning = (job?: CatalogJob) =>
     !job?.stalled &&
@@ -51,9 +93,14 @@ export const CATALOG_JOB_LABEL: Record<CatalogJob["status"], string> = {
     failed: "同步失败",
     cancelled: "已取消",
 }
-export function fetchCatalog(connectionId: string, page: number) {
+export function fetchCatalog(
+    connectionId: string,
+    page: number,
+    filters: CatalogFilters = {},
+) {
     return apiGet<CatalogResult>(
-        `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/catalog?page=${page}&page_size=20`,
+        `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/catalog`,
+        { page, page_size: 20, ...filters },
     )
 }
 export function matchCatalog(input: {

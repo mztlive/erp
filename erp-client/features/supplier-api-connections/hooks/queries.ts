@@ -20,6 +20,7 @@ import {
     fetchCatalog,
     catalogRunning,
     matchCatalog,
+    type CatalogFilters,
 } from "@/features/supplier-api-connections/api/catalog"
 
 import { fetchConnectorTypes } from "@/features/supplier-api-connections/api/list"
@@ -161,15 +162,21 @@ export function useEnableConnectionMutation() {
     })
 }
 
-export function useCatalogQuery(connectionId: string, page: number) {
+export function useCatalogQuery(
+    connectionId: string,
+    page: number,
+    filters: CatalogFilters = {},
+) {
     return useQuery({
         queryKey: [
             ...supplierConnectionKeys.all,
             "catalog",
             connectionId,
             page,
+            filters,
         ],
-        queryFn: () => fetchCatalog(connectionId, page),
+        queryFn: () => fetchCatalog(connectionId, page, filters),
+        enabled: Boolean(connectionId),
         refetchInterval: (query) =>
             catalogRunning(query.state.data?.jobs[0]) ? 2000 : false,
     })

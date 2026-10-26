@@ -39,6 +39,8 @@ use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
+mod supplier_media;
+
 /// worker 轮询间隔。
 const OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -407,6 +409,43 @@ impl AppState {
             self.db(),
             Arc::clone(&self.external_connectors.supplier_api),
         )
+    }
+
+    /// 返回正式采购的真实供应商 API 分步执行入口。
+    /// # 参数
+    /// 无；使用应用当前协议运行时及加密器。
+    /// # 返回
+    /// 已配置协议返回流程，未配置返回 None。
+    /// # 错误
+    /// 不返回错误。
+    pub fn supplier_api_order_process(
+        &self,
+    ) -> Option<erp_processes::supplier_api_orders::SupplierApiOrderProcess> {
+        self.external_connectors.dangaoshushu.as_ref().map(|runtime| {
+            erp_processes::supplier_api_orders::SupplierApiOrderProcess::new(
+                self.db(),
+                Arc::clone(runtime),
+                self.sensitive_data(),
+            )
+        })
+    }
+
+    /// 返回供应商订单的真实协议补查与履约应用入口。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已配置协议返回流程，未配置返回 None。
+    /// # 错误
+    /// 不返回错误。
+    pub fn supplier_order_tracking_process(
+        &self,
+    ) -> Option<erp_processes::supplier_order_tracking::SupplierOrderTrackingProcess> {
+        self.external_connectors.dangaoshushu.as_ref().map(|runtime| {
+            erp_processes::supplier_order_tracking::SupplierOrderTrackingProcess::new(
+                self.db(),
+                Arc::clone(runtime),
+            )
+        })
     }
 
     /// 返回供应商履约的本域查询与持久化服务。

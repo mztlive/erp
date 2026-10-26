@@ -6,6 +6,7 @@ use erp_read_models::supplier_center::supplier_api::SupplierApiReadService;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
 use mongodb::Database;
+mod catalog_identity_review;
 mod catalog_match;
 mod catalog_recovery;
 mod command;

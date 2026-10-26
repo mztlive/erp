@@ -5,6 +5,7 @@ mod catalog;
 
 mod handover_receipt;
 mod portal;
+mod source_sync;
 
 use mongodb::Database;
 use persistence_core::Result;
@@ -23,5 +24,6 @@ pub async fn ensure(db: &Database) -> Result<()> {
     catalog::ensure(db).await?;
     barcode_claim::ensure(db).await?;
     handover_receipt::ensure(db).await?;
-    portal::ensure(db).await
+    portal::ensure(db).await?;
+    source_sync::ensure(db).await
 }

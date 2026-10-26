@@ -22,6 +22,7 @@ mod listing;
 mod parent_chain;
 pub mod procurement_facts;
 mod product;
+mod product_row;
 mod scope;
 mod sellable;
 pub mod sellable_projection;
@@ -30,6 +31,7 @@ mod sku;
 mod sku_exact;
 mod sku_lookup;
 mod sku_revision;
+mod source_snapshot;
 mod specification_audit;
 mod voucher;
 
@@ -53,7 +55,7 @@ use mongodb::Database;
 pub use parent_chain::{CategoryParentChainFact, ProductCategoryRepositoryParentChainExt};
 pub use product::{
     ProductFilter, ProductRepositoryExt, ProductRevisionFilter, ProductRevisionMediaRepositoryExt,
-    ProductRevisionRepositoryExt, ProductRevisionRow, ProductRow,
+    ProductRevisionRepositoryExt, ProductRevisionRow,
 };
 pub use scope::{CatalogReadScope, CatalogScopeClause};
 pub use sellable::{SellableSkuFilter, SellableSkuRow, SellableSort, SellableSortField};
@@ -90,3 +92,5 @@ impl<'a> CatalogRepository<'a> {
         Self { db }
     }
 }
+
+pub use product_row::ProductRow;

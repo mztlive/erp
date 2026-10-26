@@ -140,6 +140,7 @@ pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter>
         supply_coverage: query.supply_coverage,
         sales_price_min: query.sales_price_min,
         sales_price_max: query.sales_price_max,
+        source_diff_pending: query.source_diff_pending,
         page: query.paging.page,
         page_size: query.paging.page_size,
         sort_by: Some(query.paging.sort_by.to_string()),

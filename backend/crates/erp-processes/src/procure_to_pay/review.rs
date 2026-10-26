@@ -299,12 +299,14 @@ async fn create_delivery_draft_for_order(
     allocations: &HashMap<String, PurchaseLineSalesAllocationId>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let covered =
+        crate::supplier_api_orders::create_api_delivery_drafts(db, order, allocations, executor).await?;
     let delivery = prepare_direct_delivery(db, order).await?;
     let delivery_id = DeliveryId::new(delivery.base.id.clone());
     let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
     let mut lines = Vec::with_capacity(revision_lines.len());
     for (index, line) in revision_lines.iter().enumerate() {
-        if line.line_type != PurchaseLineType::ItemService {
+        if line.line_type != PurchaseLineType::ItemService || covered.contains(&line.base.id) {
             continue;
         }
         let Some(confirmation_line_id) = &line.procurement_confirmation_line_id else {
@@ -341,7 +343,7 @@ async fn create_delivery_draft_for_order(
 }
 
 /// 在原调用位置分配发货标识和单号；行验证仍在此步骤之后执行。
-async fn prepare_direct_delivery(db: &Database, order: &PurchaseOrder) -> Result<Delivery> {
+pub(crate) async fn prepare_direct_delivery(db: &Database, order: &PurchaseOrder) -> Result<Delivery> {
     let delivery_id = DeliveryId::new(next_id());
     Delivery::new(
         delivery_id.clone(),
@@ -551,6 +553,7 @@ impl FormalizedPurchaseEffects {
         actor_id: &str,
         session: &mut dyn Executor,
     ) -> Result<()> {
+        crate::supplier_api_orders::enqueue_purchase(db, &self.order, &self.revision_lines, session).await?;
         if self.order.fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
             create_receipt_draft_for_order(db, &self.order, &self.revision_lines, session).await?;
         } else if self.order.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {

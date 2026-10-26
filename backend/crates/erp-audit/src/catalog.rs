@@ -194,7 +194,14 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("product.handover", "product", "商品交接"),
     action("product.listing.update", "product", "变更商品上下架状态"),
     action("product.restore", "product", "恢复商品"),
+    action("product.source_diff.resolve", "product", "确认供应商商品资料差异"),
+    action("product.source_sync.apply", "product", "同步供应商商品资料"),
+    action("product.source_sync.initialize", "product", "建立供应商商品资料来源"),
     action("product.update", "product", "修改商品"),
+    action("purchase_order.api_execution_supersede", "purchase_order", "采购变更替代接口执行"),
+    action("supplier_catalog.adopt", "product", "供应商商品选品入库"),
+    action("supplier_catalog.identity.review", "supplier_api_connection", "核对供应商商品规格与单位"),
+    action("supplier_catalog.supply.apply", "supplier_offering", "同步供应商供给资料"),
     action("product_brand.create", "product_brand", "创建商品品牌"),
     action("product_brand.delete", "product_brand", "删除商品品牌"),
     action("product_brand.update", "product_brand", "修改商品品牌"),
@@ -338,7 +345,10 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     ),
     action("supplier_capability.handover", "supplier_capability", "能力负责人交接"),
     action("supplier_fulfillment.after_sales_action", "supplier_order_action", "登记供应商售后操作"),
+    action("supplier_fulfillment.execution_setup", "supplier_fulfillment_order", "补充供应商订单配送资料"),
     action("supplier_fulfillment.handover", "supplier_fulfillment_order", "交接供应商履约跟进责任"),
+    action("supplier_fulfillment.observe", "supplier_fulfillment_order", "自动同步供应商订单"),
+    action("supplier_fulfillment.observe_delivery", "delivery", "自动同步供应商发货"),
     action("supplier_fulfillment.investigate", "SUPPLIER_FULFILLMENT_ORDER", "登记供应商履约调查"),
     action("supplier_fulfillment.refund_result", "supplier_refund_fact", "登记供应商退款结果"),
     action("supplier_fulfillment.reject", "supplier_fulfillment_order", "驳回供应商履约订单"),
@@ -449,6 +459,36 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{registered_action, registered_actions};
+
+    #[test]
+    fn api_product_and_fulfillment_actions_create_real_audits_with_exact_resource_pairs() {
+        use application_core::AuditActor;
+        use erp_core::AccountKind;
+
+        use crate::AuditActorLogs;
+
+        for (code, resource) in [
+            ("supplier_catalog.adopt", "product"),
+            ("supplier_catalog.identity.review", "supplier_api_connection"),
+            ("purchase_order.api_execution_supersede", "purchase_order"),
+            ("product.source_sync.initialize", "product"),
+            ("product.source_sync.apply", "product"),
+            ("product.source_diff.resolve", "product"),
+            ("supplier_catalog.supply.apply", "supplier_offering"),
+            ("supplier_fulfillment.execution_setup", "supplier_fulfillment_order"),
+            ("supplier_fulfillment.observe", "supplier_fulfillment_order"),
+            ("supplier_fulfillment.observe_delivery", "delivery"),
+        ] {
+            let actor = AuditActor::new("buyer".into(), "buyer-account".into(), AccountKind::Admin);
+            let log = actor.resource_log(code, resource, "business-object".into()).unwrap();
+            assert!(log.success);
+            assert_eq!(log.action, code);
+            assert_eq!(log.resource_type, resource);
+            assert_eq!(log.resource_id.as_deref(), Some("business-object"));
+            assert_eq!(log.structured_event.as_ref().unwrap().action_code, code);
+            assert!(registered_action(code, "unrelated_resource").is_err());
+        }
+    }
 
     #[test]
     fn inquiry_events_accept_only_the_inquiry_resource_and_no_sensitive_fields() {

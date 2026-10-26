@@ -17,6 +17,7 @@ use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
 use super::super::change_adapter::execute_purchase_change_domain_action;
+use crate::supplier_api_orders::supersede_purchase_executions;
 use crate::{Error, Result};
 
 impl PurchaseOrderProcess {
@@ -226,6 +227,14 @@ async fn write_effective_change_apply(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<u64> {
+    let reschedule_api = supersede_purchase_executions(
+        db,
+        &write.purchase.order,
+        &write.purchase.revision.base.id,
+        actor,
+        executor,
+    )
+    .await?;
     let audit = actor.clone().resource_log(
         "purchase_change_order.effect",
         "purchase_change_order",
@@ -233,5 +242,5 @@ async fn write_effective_change_apply(
     )?;
     let actor_id = actor.id().to_string();
     write.purchase.mark_effective(&actor_id)?;
-    super::posting::persist_effective_writes(db, write, audit, &actor_id, executor).await
+    super::posting::persist_effective_writes(db, write, audit, &actor_id, reschedule_api, executor).await
 }

@@ -33,6 +33,7 @@ export function masterTransferQuery(query: MasterDataListQuery) {
             supplier_id: query.productSupplierId,
             listing_status: query.productListingStatus,
             supply_coverage: query.productSupplyCoverage,
+            source_diff_pending: query.productSourceDiffPending,
             sales_price_min: query.productSalesPriceMin,
             sales_price_max: query.productSalesPriceMax,
             owner_user_ids: query.ownerUserIds || undefined,

@@ -302,10 +302,10 @@ mod tests {
                 supplier_offering_id: SupplierOfferingId::new("selected"),
                 valid_from: "2026-01-01".parse().unwrap(),
                 valid_to: None,
-                bulk_supply_price_gross: "10".parse().unwrap(),
+                bulk_supply_price_gross: Some("10".parse().unwrap()),
                 dropship_supply_price_gross: "11".parse().unwrap(),
                 input_tax_rate: "0.13".parse().unwrap(),
-                bulk_minimum_order_quantity: "1".parse().unwrap(),
+                bulk_minimum_order_quantity: Some("1".parse().unwrap()),
             },
             availability: AvailabilityFact {
                 base: VersionedFactIdentity { id: "availability".into(), version: 11 },

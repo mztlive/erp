@@ -20,4 +20,4 @@ mod serialization_contract;
 mod command_receipt;
 pub use command_receipt::{IntegrationCommandExt, IntegrationCommandRepositoryExt};
 mod supplier_callback;
-pub use supplier_callback::{SupplierCallbackExt, SupplierCallbackRepositoryExt};
+pub use supplier_callback::{SupplierCallbackExt, SupplierCallbackRepositoryExt, pending_order_callbacks};

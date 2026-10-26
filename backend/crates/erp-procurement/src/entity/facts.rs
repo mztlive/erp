@@ -240,13 +240,13 @@ pub struct OfferingRevisionFact {
     /// 可选截止自然日。
     pub valid_to: Option<BusinessDate>,
     /// 集采含税价。
-    pub bulk_supply_price_gross: UnitPrice,
+    pub bulk_supply_price_gross: Option<UnitPrice>,
     /// 一件代发含税价。
     pub dropship_supply_price_gross: UnitPrice,
     /// 进项税率。
     pub input_tax_rate: Rate,
     /// 供应商集采起订量。
-    pub bulk_minimum_order_quantity: Quantity,
+    pub bulk_minimum_order_quantity: Option<Quantity>,
 }
 
 /// 供给可用状态的采购消费值。

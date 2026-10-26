@@ -10,7 +10,6 @@ import {
     ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { DatePicker } from "@/components/ui/date-picker"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
 import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
@@ -36,11 +35,9 @@ import {
 
 const prefix = "supplier-orders-list-filter"
 const panelId = `${prefix}-more-panel`
-const paidErrorId = `${prefix}-paid-error`
 const MORE_CHIP_KEYS: readonly SupplierOrdersFilterKey[] = [
     "cancelStatuses",
     "refundStatuses",
-    "paidRange",
     "aftersalePending",
     "ownerUserIds",
     "handlerUserIds",
@@ -299,51 +296,6 @@ export function SupplierOrdersListToolbar({
                             includeDescendants={f.includeDescendantsDraft}
                             onDescendantsChange={f.setIncludeDescendantsDraft}
                         />
-                    </fieldset>
-                    <fieldset className="min-w-0 border-t pt-4">
-                        <legend className="mb-3 text-sm font-medium">
-                            支付日期
-                        </legend>
-                        <div className="flex min-w-0 items-center gap-1.5">
-                            <DatePicker
-                                id={`${prefix}-paid-from`}
-                                className="w-0 min-w-0 flex-1 [&_button]:h-control"
-                                value={f.paidFromDraft || undefined}
-                                onValueChange={(next) => {
-                                    f.setPaidFromDraft(next ?? "")
-                                    f.setFilterError(null)
-                                }}
-                                placeholder="开始日期"
-                                aria-invalid={Boolean(f.filterError)}
-                                aria-describedby={
-                                    f.filterError ? paidErrorId : undefined
-                                }
-                            />
-                            <span className="text-muted-foreground">至</span>
-                            <DatePicker
-                                id={`${prefix}-paid-to`}
-                                className="w-0 min-w-0 flex-1 [&_button]:h-control"
-                                value={f.paidToDraft || undefined}
-                                onValueChange={(next) => {
-                                    f.setPaidToDraft(next ?? "")
-                                    f.setFilterError(null)
-                                }}
-                                placeholder="结束日期"
-                                aria-invalid={Boolean(f.filterError)}
-                                aria-describedby={
-                                    f.filterError ? paidErrorId : undefined
-                                }
-                            />
-                        </div>
-                        {f.filterError ? (
-                            <span
-                                id={paidErrorId}
-                                className="text-xs text-destructive"
-                                role="alert"
-                            >
-                                {f.filterError}
-                            </span>
-                        ) : null}
                     </fieldset>
                 </div>
             }

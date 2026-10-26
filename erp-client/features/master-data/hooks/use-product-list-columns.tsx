@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { PRODUCT_SOURCE_FIELD_LABELS } from "../api/types-product-source"
 import { Switch } from "@/components/ui/switch"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { productSkuPriceRange } from "@/features/master-data/lib/list-filters"
@@ -98,6 +99,7 @@ export function useProductListColumns({
     supplierOfferingsError,
     onUpdateProductListing,
     onSupplyProduct,
+    onSourceDiff,
     onAddSupply,
     onDisableTarget,
 }: {
@@ -117,6 +119,7 @@ export function useProductListColumns({
         listed: boolean,
     ) => Promise<void>
     onSupplyProduct: (item: MasterDataListItem) => void
+    onSourceDiff: (item: MasterDataListItem) => void
     onAddSupply: (item: MasterDataListItem) => void
     onDisableTarget: (item: MasterDataListItem) => void
 }) {
@@ -136,6 +139,47 @@ export function useProductListColumns({
             },
             revisionNoColumn(),
             lifecycleColumn(),
+            {
+                id: "sourceDiff",
+                header: "资料更新",
+                meta: { label: "资料更新" },
+                cell: ({ row }) => {
+                    const item = row.original
+                    if (!item.sourceDiffCount)
+                        return (
+                            <span className="text-sm text-muted-foreground">
+                                —
+                            </span>
+                        )
+                    return (
+                        <Button
+                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-source-diff`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto max-w-48 flex-col items-start gap-1 px-0 text-left"
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                onSourceDiff(item)
+                            }}
+                        >
+                            <BusinessStatusBadge
+                                context="list"
+                                tone="warning"
+                                label={`资料更新待确认 · ${item.sourceDiffCount} 项`}
+                            />
+                            <span className="line-clamp-2 text-xs text-muted-foreground">
+                                {[...new Set(item.sourceDiffFields ?? [])]
+                                    .map(
+                                        (field) =>
+                                            PRODUCT_SOURCE_FIELD_LABELS[field],
+                                    )
+                                    .join("、")}
+                            </span>
+                        </Button>
+                    )
+                },
+            },
             {
                 id: "skuNames",
                 header: "SKU 名称",
@@ -339,6 +383,7 @@ export function useProductListColumns({
             onAddSupply,
             onDisableTarget,
             onSupplyProduct,
+            onSourceDiff,
             onUpdateProductListing,
             productListingPending,
             productListingProductId,

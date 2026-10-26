@@ -24,6 +24,7 @@ import {
     percentageFromRate,
     rateFromPercentage,
     reviseSchema,
+    apiReviseSchema,
 } from "@/features/supplier-offerings/lib/offering-forms"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 import { OFFERING_STATUS_LABELS } from "@/features/supplier-offerings/types"
@@ -41,14 +42,19 @@ export function ReviseOfferingDialog({
         defaultValues: {
             dropshipPrice: offering.dropship_supply_price_gross ?? "",
             bulkPrice: offering.bulk_supply_price_gross ?? "",
-            minimumQuantity: offering.bulk_minimum_order_quantity ?? "1",
+            minimumQuantity:
+                offering.bulk_minimum_order_quantity ??
+                (offering.source_type === "API" ? "" : "1"),
             inputTaxPercentage: percentageFromRate(offering.input_tax_rate),
             validFrom: offering.valid_from ?? "",
             validTo: offering.valid_to ?? "",
             status: offering.status,
             changeReason: "调整供给条款",
         },
-        validators: { onSubmit: reviseSchema },
+        validators: {
+            onSubmit:
+                offering.source_type === "API" ? apiReviseSchema : reviseSchema,
+        },
         onSubmit: async ({ value }) => {
             setSubmitError(null)
             try {
@@ -57,12 +63,12 @@ export function ReviseOfferingDialog({
                     expected_revision_no: offering.current_revision_no ?? 1,
                     terms: {
                         dropship_supply_price_gross: value.dropshipPrice.trim(),
-                        bulk_supply_price_gross: value.bulkPrice.trim(),
+                        bulk_supply_price_gross: value.bulkPrice.trim() || null,
                         input_tax_rate: rateFromPercentage(
                             value.inputTaxPercentage,
                         ),
                         bulk_minimum_order_quantity:
-                            value.minimumQuantity.trim(),
+                            value.minimumQuantity.trim() || null,
                         product_capabilities: offering.product_capabilities,
                         valid_from: value.validFrom,
                         valid_to: value.validTo || null,
@@ -112,11 +118,20 @@ export function ReviseOfferingDialog({
                                 <FieldLegend variant="label">
                                     价格与条款
                                 </FieldLegend>
+                                {offering.source_type === "API" ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        采购报价与集采条件随供应商同步；未提供集采条件时仅支持一件代发采购。
+                                    </p>
+                                ) : null}
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <form.AppField name="dropshipPrice">
                                         {(field) => (
                                             <field.TextField
                                                 id="supplier-offerings-dialog-revise-dropship-price"
+                                                disabled={
+                                                    offering.source_type ===
+                                                    "API"
+                                                }
                                                 label="一件代发供给价（含税）"
                                                 required
                                             />
@@ -126,8 +141,15 @@ export function ReviseOfferingDialog({
                                         {(field) => (
                                             <field.TextField
                                                 id="supplier-offerings-dialog-revise-bulk-price"
+                                                disabled={
+                                                    offering.source_type ===
+                                                    "API"
+                                                }
                                                 label="集采供给价（含税）"
-                                                required
+                                                required={
+                                                    offering.source_type !==
+                                                    "API"
+                                                }
                                             />
                                         )}
                                     </form.AppField>
@@ -135,8 +157,15 @@ export function ReviseOfferingDialog({
                                         {(field) => (
                                             <field.TextField
                                                 id="supplier-offerings-dialog-revise-minimum-quantity"
+                                                disabled={
+                                                    offering.source_type ===
+                                                    "API"
+                                                }
                                                 label="集采起订量"
-                                                required
+                                                required={
+                                                    offering.source_type !==
+                                                    "API"
+                                                }
                                             />
                                         )}
                                     </form.AppField>

@@ -54,6 +54,18 @@ pub struct SupplierFulfillmentProcess {
     handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
 }
 impl SupplierFulfillmentProcess {
+    /// 新采购 API 执行对象禁止进入旧动作网关，避免两套状态同时写同一订单。
+    async fn ensure_legacy_order(
+        &self,
+        id: &str,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> Result<()> {
+        use erp_supply::api_order::ApiOrderExt;
+        if self.db.supplier_api_order_executions().find_by_id(id, executor).await?.is_some() {
+            return Err(crate::Error::BusinessLogicError("此订单由采购 API 流程自动执行和跟踪，请使用接口配送资料及来源采购处理；不能通过旧发单、重放或人工回执入口修改".into()));
+        }
+        Ok(())
+    }
     /// 创建供应商履约流程实例。
     ///
     /// # 参数

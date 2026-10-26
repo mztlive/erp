@@ -46,7 +46,12 @@ pub fn validate_portal_quantities(
     available_quantity: Option<&str>,
     quantity_scale: u8,
 ) -> Result<()> {
-    let minimum = parse_minimum_order_quantity(&terms.bulk_minimum_order_quantity)?;
+    let minimum = parse_minimum_order_quantity(
+        terms
+            .bulk_minimum_order_quantity
+            .as_deref()
+            .ok_or_else(|| Error::ValidationError("集采起订量不能为空".into()))?,
+    )?;
     if quantity_scale > 6
         || minimum.to_decimal() <= Decimal::ZERO
         || minimum.to_decimal().normalize().scale() > u32::from(quantity_scale)

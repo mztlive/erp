@@ -36,6 +36,7 @@ const MORE_CHIP_KEYS = [
     "revisionTiming",
     "productListingStatus",
     "productSupplyCoverage",
+    "productSourceDiffPending",
     "productBrandId",
     "productSupplierId",
     "salesPrice",
@@ -292,6 +293,30 @@ export function ProductListToolbar({
                             商品
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-source-diff`}
+                                label="资料更新"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-source-diff`}
+                                    className="w-full min-w-0"
+                                    aria-label="供应商资料更新"
+                                    value={
+                                        f.productSourceDiffPendingDraft
+                                            ? "pending"
+                                            : null
+                                    }
+                                    options={[
+                                        { value: "pending", label: "待确认" },
+                                    ]}
+                                    placeholder="全部"
+                                    onValueChange={(value) =>
+                                        f.setProductSourceDiffPendingDraft(
+                                            value === "pending",
+                                        )
+                                    }
+                                />
+                            </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
                                 htmlFor={`${prefix}-brand`}
                                 label="品牌"

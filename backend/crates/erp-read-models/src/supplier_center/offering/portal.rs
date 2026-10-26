@@ -233,9 +233,9 @@ impl PortalOfferingView {
 fn terms_from_view(view: &SupplierOfferingView) -> Option<SupplierOfferingTermsWrite> {
     Some(SupplierOfferingTermsWrite {
         dropship_supply_price_gross: view.dropship_supply_price_gross.clone()?,
-        bulk_supply_price_gross: view.bulk_supply_price_gross.clone()?,
+        bulk_supply_price_gross: view.bulk_supply_price_gross.clone(),
         input_tax_rate: view.input_tax_rate.clone()?,
-        bulk_minimum_order_quantity: view.bulk_minimum_order_quantity.clone()?,
+        bulk_minimum_order_quantity: view.bulk_minimum_order_quantity.clone(),
         product_capabilities: view.product_capabilities.clone(),
         valid_from: view.valid_from.clone()?,
         valid_to: view.valid_to.clone(),
@@ -250,9 +250,11 @@ impl PortalRevisionView {
             created_at: revision.base.created_at,
             terms: SupplierOfferingTermsWrite {
                 dropship_supply_price_gross: revision.dropship_supply_price_gross.to_string(),
-                bulk_supply_price_gross: revision.bulk_supply_price_gross.to_string(),
+                bulk_supply_price_gross: revision.bulk_supply_price_gross.map(|value| value.to_string()),
                 input_tax_rate: revision.input_tax_rate.to_string(),
-                bulk_minimum_order_quantity: revision.bulk_minimum_order_quantity.to_string(),
+                bulk_minimum_order_quantity: revision
+                    .bulk_minimum_order_quantity
+                    .map(|value| value.to_string()),
                 product_capabilities: revision.product_capabilities,
                 valid_from: revision.valid_from.to_string(),
                 valid_to: revision.valid_to.map(|date| date.to_string()),

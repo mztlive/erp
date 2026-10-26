@@ -20,7 +20,7 @@ use crate::core::middleware::with_permission;
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new()
+    execution_routes(rbac)
         .route(
             "/supplier-fulfillment-orders",
             with_permission(
@@ -117,4 +117,21 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 supplier_fulfillment::supplier_refund_fact_post_permission_key(),
             ),
         )
+}
+
+/// 将配送补充路由单独组装，保持读写各自既有动作授权。
+fn execution_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/supplier-fulfillment-orders/{id}/execution-setup",
+        with_permission(
+            get(supplier_fulfillment::execution_setup::supplier_order_execution_setup),
+            rbac,
+            supplier_fulfillment::execution_setup::supplier_order_execution_setup_permission_key(),
+        )
+        .merge(with_permission(
+            post(supplier_fulfillment::execution_setup::save_supplier_order_execution_setup),
+            rbac,
+            supplier_fulfillment::execution_setup::save_supplier_order_execution_setup_permission_key(),
+        )),
+    )
 }

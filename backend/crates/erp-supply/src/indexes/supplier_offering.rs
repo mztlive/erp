@@ -78,6 +78,10 @@ fn revision_indexes() -> Vec<IndexModel> {
 
 fn availability_indexes() -> Vec<IndexModel> {
     vec![
+        named_index(
+            "idx_supplier_availability_expiry",
+            doc! {"availability_status":1,"valid_until":1,"id":1},
+        ),
         unique_index("uk_supplier_offering_availabilities_id", doc! { "id": 1 }),
         unique_index("uk_supplier_offering_availabilities_offering", doc! { "supplier_offering_id": 1 }),
         named_index(

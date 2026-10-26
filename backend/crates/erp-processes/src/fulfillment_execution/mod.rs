@@ -3,11 +3,13 @@
 pub mod customer_acceptance;
 mod delivery;
 mod delivery_posting;
+pub(crate) use delivery_posting::post_observed_supplier_delivery;
 mod delivery_tracking;
 mod electronic_confirm;
 mod electronic_delivery;
 mod fulfillment_actual_cost;
 mod purchase_context;
+pub(crate) use purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
 mod purchase_receipt;
 mod purchase_receipt_posting;
 mod service_confirm;

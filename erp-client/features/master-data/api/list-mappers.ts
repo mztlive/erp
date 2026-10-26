@@ -155,6 +155,8 @@ export function mapProductRow(
         listingStatus,
         listedSkuCount: dto.listed_sku_count,
         skuCount: dto.sku_count,
+        sourceDiffCount: dto.source_diff_count,
+        sourceDiffFields: dto.source_diff_fields,
         revisionTiming: future ? "FUTURE" : "CURRENT",
         revisionTimingLabel: future ? "待生效" : "当前生效",
         currentRevisionId: revision?.id ?? dto.id,

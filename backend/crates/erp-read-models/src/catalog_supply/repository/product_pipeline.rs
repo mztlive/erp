@@ -52,6 +52,7 @@ fn product_candidate_matching_pipeline(filter: &ProductFilter) -> Vec<Document> 
         || filter.supply_coverage.is_some()
         || filter.sales_price_min.is_some()
         || filter.sales_price_max.is_some()
+        || filter.source_diff_pending.is_some()
     {
         return product_matching_pipeline(filter);
     }
@@ -75,6 +76,7 @@ fn product_matching_pipeline(filter: &ProductFilter) -> Vec<Document> {
         doc! { "$unwind": { "path": "$product_revision", "preserveNullAndEmptyArrays": true } },
     ];
     append_product_revision_filters(&mut pipeline, filter);
+    append_source_diff(&mut pipeline, filter);
     pipeline.extend([product_sku_lookup(not_deleted), product_sku_counts(), product_listing_status()]);
     append_product_aggregate_filters(&mut pipeline, filter);
     pipeline
@@ -336,6 +338,8 @@ fn product_facet(filter: &ProductFilter) -> Document {
                 "sku_count": 1,
                 "supplied_sku_count": 1,
                 "priced_sku_count": 1,
+                "source_diff_count": 1,
+                "source_diff_fields": 1,
                 "current_revision_id": 1,
                 "version": 1,
                 "created_at": 1,
@@ -359,6 +363,20 @@ fn product_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
         _ => "created_at",
     };
     sort_doc(field, sort_ascending)
+}
+
+/// 在分页和总数统计之前关联唯一来源，只收窄已经授权的商品集合。
+fn append_source_diff(pipeline: &mut Vec<Document>, filter: &ProductFilter) {
+    use erp_catalog::source_sync::repository::ProductSourceExt;
+    pipeline.push(doc!{"$lookup":{"from":<mongodb::Database as ProductSourceExt>::PRODUCT_SOURCES,"localField":"id","foreignField":"product_id","as":"source_sync"}});
+    pipeline.push(doc!{"$set":{"source_diff_count":{"$ifNull":[{"$arrayElemAt":["$source_sync.pending_count",0]},0]},"source_diff_fields":{"$ifNull":[{"$arrayElemAt":["$source_sync.pending_fields",0]},[]]}}});
+    if let Some(pending) = filter.source_diff_pending {
+        pipeline.push(if pending {
+            doc! {"$match":{"source_diff_count":{"$gt":0}}}
+        } else {
+            doc! {"$match":{"source_diff_count":0}}
+        });
+    }
 }
 
 #[cfg(test)]
@@ -425,6 +443,7 @@ mod tests {
             business_org_unit_ids: None,
             product_no: None,
             keyword: Some("礼盒.*".to_string()),
+            source_diff_pending: None,
             product_kind: Some(ProductKind::Physical),
             category_id: Some("category-1".to_string()),
             brand_id: Some("brand-1".to_string()),

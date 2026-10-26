@@ -155,10 +155,14 @@ export function PortalOfferingDetailPage({
                 </p>
                 <p>
                     集采起订量：
-                    <QuantityValue
-                        value={terms.bulk_minimum_order_quantity}
-                        unit={offering.unit_name ?? ""}
-                    />
+                    {terms.bulk_minimum_order_quantity != null ? (
+                        <QuantityValue
+                            value={terms.bulk_minimum_order_quantity}
+                            unit={offering.unit_name ?? ""}
+                        />
+                    ) : (
+                        "未提供"
+                    )}
                 </p>
                 <p>
                     有效期：{terms.valid_from} 起

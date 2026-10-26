@@ -253,14 +253,14 @@ fn offering_source(submission: &FrozenOfferingSubmission) -> ObjectBriefSource {
         push_section(
             &mut result.extra_sections,
             "申请集采含税价",
-            Some(&terms.bulk_supply_price_gross),
+            terms.bulk_supply_price_gross.as_deref(),
             true,
         );
         push_section(&mut result.extra_sections, "申请进项税率", Some(&terms.input_tax_rate), true);
         push_section(
             &mut result.extra_sections,
             "集采起订量",
-            Some(&terms.bulk_minimum_order_quantity),
+            terms.bulk_minimum_order_quantity.as_deref(),
             true,
         );
     }

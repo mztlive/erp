@@ -27,6 +27,7 @@ export type ProductFilterKey =
     | "revisionTiming"
     | "productListingStatus"
     | "productSupplyCoverage"
+    | "productSourceDiffPending"
     | "productCategoryId"
     | "productBrandId"
     | "productSupplierId"
@@ -78,6 +79,8 @@ export function useProductListFilters(
     const productSupplyCoverage = PRODUCT_COVERAGE_FILTER_OPTIONS.find(
         (option) => option.value === searchParams.get("productSupplyCoverage"),
     )?.value
+    const productSourceDiffPending =
+        searchParams.get("productSourceDiffPending") === "true"
     const productSalesPriceMin =
         searchParams.get("productSalesPriceMin")?.trim() || undefined
     const productSalesPriceMax =
@@ -95,6 +98,7 @@ export function useProductListFilters(
         productSupplierId ||
         productListingStatus ||
         productSupplyCoverage ||
+        productSourceDiffPending ||
         productSalesPriceMin ||
         productSalesPriceMax ||
         ownerUserIds ||
@@ -117,6 +121,8 @@ export function useProductListFilters(
         React.useState<ProductSkuCoverageFilter | "all">(
             productSupplyCoverage ?? "all",
         )
+    const [productSourceDiffPendingDraft, setProductSourceDiffPendingDraft] =
+        React.useState(productSourceDiffPending)
     const [productCategoryIdDraft, setProductCategoryIdDraft] = React.useState<
         string | null
     >(productCategoryId ?? null)
@@ -181,6 +187,9 @@ export function useProductListFilters(
                 productSupplyCoverageDraft === "all"
                     ? null
                     : productSupplyCoverageDraft,
+            productSourceDiffPending: productSourceDiffPendingDraft
+                ? "true"
+                : null,
             productCategoryId: productCategoryIdDraft,
             productBrandId: productBrandIdDraft,
             productSupplierId: productSupplierIdDraft,
@@ -203,6 +212,7 @@ export function useProductListFilters(
         productSalesPriceMinDraft,
         productSupplierIdDraft,
         productSupplyCoverageDraft,
+        productSourceDiffPendingDraft,
         ownerUserIdsDraft,
         procurementOwnerUserIdsDraft,
         resetPagination,
@@ -221,6 +231,9 @@ export function useProductListFilters(
             }
             if (key === "productSupplyCoverage") {
                 setProductSupplyCoverageDraft("all")
+            }
+            if (key === "productSourceDiffPending") {
+                setProductSourceDiffPendingDraft(false)
             }
             if (key === "productCategoryId") setProductCategoryIdDraft(null)
             if (key === "productBrandId") setProductBrandIdDraft(null)
@@ -253,6 +266,7 @@ export function useProductListFilters(
         setRevisionTimingDraft("all")
         setProductListingStatusDraft("all")
         setProductSupplyCoverageDraft("all")
+        setProductSourceDiffPendingDraft(false)
         setProductBrandIdDraft(null)
         setProductSupplierIdDraft(null)
         setProductSalesPriceMinDraft("")
@@ -267,6 +281,7 @@ export function useProductListFilters(
         setRevisionTimingDraft(revisionTiming)
         setProductListingStatusDraft(productListingStatus ?? "all")
         setProductSupplyCoverageDraft(productSupplyCoverage ?? "all")
+        setProductSourceDiffPendingDraft(productSourceDiffPending)
         setProductBrandIdDraft(productBrandId ?? null)
         setProductSupplierIdDraft(productSupplierId ?? null)
         setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
@@ -284,6 +299,7 @@ export function useProductListFilters(
         productSalesPriceMin,
         productSupplierId,
         productSupplyCoverage,
+        productSourceDiffPending,
         revisionTiming,
     ])
 
@@ -293,6 +309,7 @@ export function useProductListFilters(
         revisionTimingDraft !== revisionTiming ||
         productListingStatusDraft !== (productListingStatus ?? "all") ||
         productSupplyCoverageDraft !== (productSupplyCoverage ?? "all") ||
+        productSourceDiffPendingDraft !== productSourceDiffPending ||
         productCategoryIdDraft !== (productCategoryId ?? null) ||
         productBrandIdDraft !== (productBrandId ?? null) ||
         productSupplierIdDraft !== (productSupplierId ?? null) ||
@@ -307,6 +324,7 @@ export function useProductListFilters(
         setRevisionTimingDraft("all")
         setProductListingStatusDraft("all")
         setProductSupplyCoverageDraft("all")
+        setProductSourceDiffPendingDraft(false)
         setProductCategoryIdDraft(null)
         setProductBrandIdDraft(null)
         setProductSupplierIdDraft(null)
@@ -327,6 +345,7 @@ export function useProductListFilters(
             productSupplierId: null,
             productListingStatus: null,
             productSupplyCoverage: null,
+            productSourceDiffPending: null,
             productSalesPriceMin: null,
             productSalesPriceMax: null,
             ownerUserIds: null,
@@ -341,6 +360,7 @@ export function useProductListFilters(
         setRevisionTimingDraft(revisionTiming)
         setProductListingStatusDraft(productListingStatus ?? "all")
         setProductSupplyCoverageDraft(productSupplyCoverage ?? "all")
+        setProductSourceDiffPendingDraft(productSourceDiffPending)
         setProductCategoryIdDraft(productCategoryId ?? null)
         setProductBrandIdDraft(productBrandId ?? null)
         setProductSupplierIdDraft(productSupplierId ?? null)
@@ -359,6 +379,7 @@ export function useProductListFilters(
         productSalesPriceMin,
         productSupplierId,
         productSupplyCoverage,
+        productSourceDiffPending,
         ownerUserIds,
         procurementOwnerUserIds,
         revisionTiming,
@@ -374,6 +395,7 @@ export function useProductListFilters(
         productSupplierId,
         productListingStatus,
         productSupplyCoverage,
+        productSourceDiffPending,
         productSalesPriceMin,
         productSalesPriceMax,
         ownerUserIds,
@@ -392,6 +414,8 @@ export function useProductListFilters(
         setProductListingStatusDraft,
         productSupplyCoverageDraft,
         setProductSupplyCoverageDraft,
+        productSourceDiffPendingDraft,
+        setProductSourceDiffPendingDraft,
         productCategoryIdDraft,
         setProductCategoryIdDraft,
         productBrandIdDraft,

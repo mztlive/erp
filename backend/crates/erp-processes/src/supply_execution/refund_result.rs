@@ -45,6 +45,7 @@ impl SupplierFulfillmentProcess {
     ) -> Result<SupplierRefundFactView> {
         req.validate()?;
         let mut order = self.require_scoped_order(id, actor, "refund", &mut NoTransaction).await?;
+        self.ensure_legacy_order(id, &mut NoTransaction).await?;
         let connection_id = order.connection_id.clone();
         if let Some(view) = self.replayed_refund_result(id, &req, &connection_id, actor).await? {
             return Ok(view);

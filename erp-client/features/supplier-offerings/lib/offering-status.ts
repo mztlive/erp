@@ -69,12 +69,18 @@ export function statusRevisionBlocker(
     }
     if (
         !offering.dropship_supply_price_gross?.trim() ||
-        !offering.bulk_supply_price_gross?.trim() ||
         !offering.input_tax_rate?.trim() ||
-        !offering.bulk_minimum_order_quantity?.trim() ||
         !offering.valid_from?.trim()
     ) {
         return "当前条款不完整或看不到价格，请先修订条款。"
+    }
+    const bulk = offering.bulk_supply_price_gross?.trim()
+    const minimum = offering.bulk_minimum_order_quantity?.trim()
+    if (
+        Boolean(bulk) !== Boolean(minimum) ||
+        (offering.source_type !== "API" && !bulk)
+    ) {
+        return "集采条款不完整，请先修订条款。"
     }
     return null
 }

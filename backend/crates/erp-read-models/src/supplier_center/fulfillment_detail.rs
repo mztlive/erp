@@ -1,6 +1,8 @@
 //! 供应商履约详情的跨域只读装配，包括主体名称与 W26 正式任务授权。
 
 use application_core::AuditActor;
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_supply::api_order::ApiOrderExt;
 use erp_supply::dto::supplier_fulfillment::{
     SupplierFulfillmentOrderDetailParams, SupplierOrderActionBlockerView, SupplierOrderAddressView,
     SupplierOrderAllowedAction, SupplierOrderInvestigationEvidenceView, SupplierOrderInvestigationOutcome,
@@ -11,6 +13,7 @@ use erp_supply::entity::supplier_fulfillment::{
     SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
     SupplierOrderActionType, SupplierOrderStatusHistory,
 };
+use erp_supply::order_tracking::repository::OrderTrackingExt;
 use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use erp_workflow::WorkItemExt;
@@ -40,6 +43,18 @@ struct OrderActionProjection {
     target_supplier_action_id: Option<String>,
     last_investigation: Option<SupplierOrderInvestigationEvidenceView>,
     allowed_actions: Vec<SupplierOrderAllowedAction>,
+}
+
+impl OrderActionProjection {
+    /// 自动采购订单只使用持久化执行器，不开放旧网关的调查重放和结果确认。
+    fn automatic(blockers: &mut Vec<SupplierOrderActionBlockerView>) -> Self {
+        block_supplier_order_domain_actions(
+            blockers,
+            "AUTOMATIC_API_EXECUTION",
+            "此订单由采购 API 流程自动执行和补查，请使用接口配送资料或来源采购处理",
+        );
+        Self { target_supplier_action_id: None, last_investigation: None, allowed_actions: Vec::new() }
+    }
 }
 
 struct InvestigationAccess {
@@ -110,6 +125,7 @@ impl SupplierFulfillmentDetailReadService {
             .find_by_id(&order.connection_id, &mut NoTransaction)
             .await?
             .map(|connection| connection.connection_code);
+        let (tracking_error, purchase_order_id, purchase_order_no) = self.api_tracking_context(id).await?;
         Ok(SupplierFulfillmentOrderDetailView {
             order: order.into(),
             items: display_items,
@@ -129,7 +145,32 @@ impl SupplierFulfillmentDetailReadService {
             last_investigation: projection.last_investigation,
             allowed_actions: projection.allowed_actions,
             action_blockers,
+            tracking_error,
+            purchase_order_id,
+            purchase_order_no,
         })
+    }
+
+    async fn api_tracking_context(
+        &self,
+        id: &str,
+    ) -> Result<(Option<String>, Option<String>, Option<String>)> {
+        let tracking_error = self
+            .db
+            .supplier_order_tracking()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .and_then(|tracking| tracking.last_error);
+        let purchase_order = if let Some(execution) =
+            self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?
+        {
+            self.db.purchase_orders().find_by_id(&execution.purchase_order_id, &mut NoTransaction).await?
+        } else {
+            None
+        };
+        let purchase_order_id = purchase_order.as_ref().map(|order| order.base.id.clone());
+        let purchase_order_no = purchase_order.map(|order| order.purchase_no);
+        Ok((tracking_error, purchase_order_id, purchase_order_no))
     }
 
     async fn order_detail_facts(&self, order_id: &SupplierFulfillmentOrderId) -> Result<OrderDetailFacts> {
@@ -158,6 +199,15 @@ impl SupplierFulfillmentDetailReadService {
         task_auth: &dyn WorkItemAuthorizationReadPort,
         blockers: &mut Vec<SupplierOrderActionBlockerView>,
     ) -> Result<OrderActionProjection> {
+        if self
+            .db
+            .supplier_api_order_executions()
+            .find_by_id(&order.base.id, &mut NoTransaction)
+            .await?
+            .is_some()
+        {
+            return Ok(OrderActionProjection::automatic(blockers));
+        }
         let target = actions.iter().find(|action| action.action_type != SupplierOrderActionType::Query);
         let latest = target.and_then(|target| {
             actions.iter().find_map(|candidate| {

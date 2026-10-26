@@ -67,6 +67,7 @@ export function useProductListState(
         productSupplierId: filters.productSupplierId,
         productListingStatus: filters.productListingStatus,
         productSupplyCoverage: filters.productSupplyCoverage,
+        productSourceDiffPending: filters.productSourceDiffPending || undefined,
         productSalesPriceMin: filters.productSalesPriceMin,
         productSalesPriceMax: filters.productSalesPriceMax,
         ownerUserIds: filters.ownerUserIds,
@@ -189,6 +190,12 @@ export function useProductListState(
                 }`,
             })
         }
+        if (filters.productSourceDiffPending) {
+            chips.push({
+                key: "productSourceDiffPending",
+                label: "资料更新：待确认",
+            })
+        }
         if (filters.productCategoryId) {
             chips.push({
                 key: "productCategoryId",
@@ -237,6 +244,7 @@ export function useProductListState(
         filters.productSalesPriceMin,
         filters.productSupplierId,
         filters.productSupplyCoverage,
+        filters.productSourceDiffPending,
         filters.q,
         filters.revisionTiming,
         filters.ownerUserIds,
@@ -254,6 +262,7 @@ export function useProductListState(
                 productKind: filters.productKind,
                 productListingStatus: filters.productListingStatus,
                 productSupplyCoverage: filters.productSupplyCoverage,
+                productSourceDiffPending: filters.productSourceDiffPending,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
                 selectedCategoryLabel,
@@ -267,6 +276,7 @@ export function useProductListState(
             filters.productSalesPriceMax,
             filters.productSalesPriceMin,
             filters.productSupplyCoverage,
+            filters.productSourceDiffPending,
             filters.q,
             filters.revisionTiming,
             selectedBrandLabel,
@@ -288,6 +298,7 @@ export function useProductListState(
                 productKind: filters.productKind,
                 productListingStatus: filters.productListingStatus,
                 productSupplyCoverage: filters.productSupplyCoverage,
+                productSourceDiffPending: filters.productSourceDiffPending,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
                 selectedCategoryLabel,
@@ -301,6 +312,7 @@ export function useProductListState(
             filters.productSalesPriceMax,
             filters.productSalesPriceMin,
             filters.productSupplyCoverage,
+            filters.productSourceDiffPending,
             filters.q,
             filters.revisionTiming,
             selectedBrandLabel,
@@ -323,6 +335,8 @@ export function useProductListState(
                 productSupplierId: filters.productSupplierId,
                 productListingStatus: filters.productListingStatus,
                 productSupplyCoverage: filters.productSupplyCoverage,
+                productSourceDiffPending:
+                    filters.productSourceDiffPending || undefined,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
                 ownerUserIds: filters.ownerUserIds,

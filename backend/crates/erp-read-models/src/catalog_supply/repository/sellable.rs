@@ -3,7 +3,7 @@ use erp_catalog::entity::catalog::{EnableStatus, ListingStatus, SellablePriceKin
 use erp_catalog::repository::{
     CatalogExt, SellableSkuFilter, SellableSkuRow, SellableSort, SellableSortField,
 };
-use erp_core::common::time::BusinessDate;
+use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
 use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use erp_supply::repository::SupplierOfferingExt;
@@ -577,6 +577,10 @@ fn sellable_availability_lookup(not_deleted: i64) -> Document {
                     "$expr": { "$eq": ["$supplier_offering_id", "$$offering_id"] },
                     "deleted_at": not_deleted,
                     "availability_status": AvailabilityStatus::Available.as_str(),
+                    "$and": [{ "$or": [
+                        { "valid_until": null },
+                        { "valid_until": { "$gt": Instant::now().unix_secs() } },
+                    ] }],
                     "$or": [
                         { "available_quantity": null },
                         { "available_quantity": { "$gt": &zero_quantity } },

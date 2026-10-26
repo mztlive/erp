@@ -186,7 +186,7 @@ fn offering_source(
         push_section(
             &mut source.extra_sections,
             "供给更新时间",
-            Some(&format_instant_datetime(availability.source_updated_at)),
+            availability.source_updated_at.map(format_instant_datetime).as_deref(),
             false,
         );
     }

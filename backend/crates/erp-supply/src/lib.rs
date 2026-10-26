@@ -1,11 +1,14 @@
 //! 供应供给、连接能力、供应商履约和结算的领域规则与持久化。
 
+pub mod api_order;
+pub mod catalog_adoption;
 pub mod command_receipt;
 pub mod dto;
 pub mod entity;
 mod error;
 pub mod indexes;
 pub mod inquiry;
+pub mod order_tracking;
 pub mod portal;
 pub mod ports;
 pub mod repository;

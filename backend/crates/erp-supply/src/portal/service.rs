@@ -213,7 +213,7 @@ impl PortalOfferingService {
                 offering_id: id.to_string(),
                 availability_status: availability.availability_status,
                 availability_version: availability.base.version,
-                source_updated_at: availability.source_updated_at.unix_secs(),
+                source_updated_at: availability.source_updated_at.map(Instant::unix_secs),
                 safety_pause: None,
             },
         })

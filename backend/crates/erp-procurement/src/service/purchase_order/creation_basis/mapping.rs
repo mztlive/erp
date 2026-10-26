@@ -119,6 +119,12 @@ fn append_line_supplies(
             continue;
         }
         for &(fulfillment_responsibility, price_basis) in purchase_options(line.product_kind)? {
+            if price_basis == purchase_order::SupplyPriceBasis::Bulk
+                && (supply.revision.bulk_supply_price_gross.is_none()
+                    || supply.revision.bulk_minimum_order_quantity.is_none())
+            {
+                continue;
+            }
             let scope = BasisScope {
                 inquiry_quote_revision_id: None,
                 supplier_id: supplier_id.clone(),
@@ -334,10 +340,10 @@ mod tests {
                 supplier_offering_id: SupplierOfferingId::new("offering-1"),
                 valid_from: BusinessDate::today(),
                 valid_to: None,
-                bulk_supply_price_gross: UnitPrice::from_str("1").unwrap(),
+                bulk_supply_price_gross: Some(UnitPrice::from_str("1").unwrap()),
                 dropship_supply_price_gross: UnitPrice::from_str("2").unwrap(),
                 input_tax_rate: Rate::from_str("0").unwrap(),
-                bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
+                bulk_minimum_order_quantity: Some(Quantity::from_str("1").unwrap()),
             },
         );
         facts.availabilities.insert(

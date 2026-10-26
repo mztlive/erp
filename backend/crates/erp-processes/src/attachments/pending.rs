@@ -71,6 +71,24 @@ impl PendingFileAssets {
         Ok(Self { assets, references: PendingFileReferenceSet::new(references)?, audits, manifest })
     }
 
+    /// 为已完成真实内容核验的服务端文件准备资产，不登记恶意内容扫描通过。
+    /// # 参数
+    /// 已保存对象字节且完成解码或格式校验的请求，以及实际审计操作人。
+    /// # 返回
+    /// 内容已检查、等待业务事务提交的文件批次。
+    /// # 错误
+    /// 登记数据非法或状态不允许基础内容检查时返回错误。
+    pub fn prepare_content_checked(
+        requests: Vec<PendingFileAssetRequest>,
+        actor: &AuditActor,
+    ) -> Result<Self> {
+        let mut pending = Self::prepare(requests, actor)?;
+        for asset in &mut pending.assets {
+            asset.mark_content_checked()?;
+        }
+        Ok(pending)
+    }
+
     /// 消耗本批次，包装成 `'static` 的消费端口。
     ///
     /// # 参数
@@ -128,7 +146,7 @@ mod tests {
     use erp_core::ids::FileAssetId;
     use erp_support::{
         PendingAttachmentBatch, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass,
-        SensitivityClass,
+        SecurityScanStatus, SensitivityClass,
     };
 
     use super::PendingFileAssets;
@@ -158,6 +176,16 @@ mod tests {
         let pending = PendingFileAssets::prepare(Vec::new(), &actor()).unwrap();
         pending.ensure_all_used(&HashSet::new()).unwrap();
         assert!(!pending.contains_id(&FileAssetId::new("missing")));
+    }
+
+    #[test]
+    fn checked_preparation_marks_basic_content_without_claiming_security_scan_passed() {
+        let pending = PendingFileAssets::prepare_content_checked(
+            vec![request("pending-file:checked", &"a".repeat(64))],
+            &actor(),
+        )
+        .unwrap();
+        assert_eq!(pending.assets[0].security_scan_status, SecurityScanStatus::ContentChecked);
     }
 
     #[test]

@@ -8,6 +8,7 @@
 pub mod delivery_coverage;
 pub mod import;
 pub mod product;
+pub mod source_diff;
 
 use application_core::AuditActor;
 use axum::Extension;

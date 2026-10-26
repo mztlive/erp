@@ -1,6 +1,7 @@
 /** W14 基础资料 · 列表查询与结果视图类型。 */
 
 import type { PriceFilterKind } from "@/lib/price-filter"
+import type { ProductSourceField } from "./types-product-source"
 import type { SellableDeliveryExtent } from "@/features/master-data/lib/sellable-delivery-filter"
 import type { SellableSortField } from "@/features/master-data/lib/sellable-sort"
 import type { StatusTone } from "@/components/ui/status-badge"
@@ -30,6 +31,9 @@ export type MasterDataListItem = Readonly<{
     listedSkuCount?: number
     /** 商品列表专用：当前启用 SKU 总数。 */
     skuCount?: number
+    /** 商品列表的供应商展示资料差异，服务端按字段统计。 */
+    sourceDiffCount?: number
+    sourceDiffFields?: readonly ProductSourceField[]
     /** Only for FUTURE revisions that will change lifecycle. */
     scheduledLifecycleStatus?: LifecycleStatus
     scheduledLifecycleLabel?: string
@@ -148,6 +152,7 @@ export type MasterDataListQuery = Readonly<{
     sellableSupplyPreset?: SellableSupplyPreset
     productListingStatus?: ProductListingFilter
     productSupplyCoverage?: ProductSkuCoverageFilter
+    productSourceDiffPending?: boolean
     productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string

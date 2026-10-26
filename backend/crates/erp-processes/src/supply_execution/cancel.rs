@@ -89,6 +89,7 @@ impl SupplierFulfillmentProcess {
             _ => "cancel",
         };
         let order = self.require_scoped_order(id, actor, action_name, &mut NoTransaction).await?;
+        self.ensure_legacy_order(id, &mut NoTransaction).await?;
         let idempotency_key = format!("{}+{}", order.fulfillment_order_no, action_type.as_str(),);
         if let Some(existing) = self
             .db

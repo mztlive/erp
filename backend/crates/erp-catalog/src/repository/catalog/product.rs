@@ -26,47 +26,6 @@ use crate::repository::CatalogExt;
 /// `product_revision_media` 集合名（单一来源：`CatalogExt` 关联常量）。
 const PRODUCT_REVISION_MEDIAS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISION_MEDIAS;
 
-/// 商品列表投影行。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ProductRow {
-    /// 实体主键。
-    pub id: String,
-    /// 商品编号。
-    pub product_no: String,
-    /// 商品业务类型。
-    pub product_kind: ProductKind,
-    /// 当前商品名称。
-    pub name: Option<String>,
-    /// 当前商品分类 ID。
-    pub category_id: Option<String>,
-    /// 当前商品品牌 ID。
-    pub brand_id: Option<String>,
-    /// 当前维护人。
-    #[serde(default)]
-    pub maintainer_user_id: String,
-    /// 当前业务组织。
-    #[serde(default)]
-    pub business_org_unit_id: String,
-    /// 启停状态。
-    pub status: EnableStatus,
-    /// 从当前启用 SKU 继承的上架状态。
-    pub listing_status: ProductListingStatus,
-    /// 当前已上架 SKU 数。
-    pub listed_sku_count: u32,
-    /// 当前启用 SKU 总数。
-    pub sku_count: u32,
-    /// 当前存在有效供给关系的启用 SKU 数。
-    pub supplied_sku_count: u32,
-    /// 当前已填写销售价的启用 SKU 数。
-    pub priced_sku_count: u32,
-    /// 当前商品修订 ID。
-    pub current_revision_id: Option<String>,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-}
-
 /// 商品列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ProductFilter {
@@ -100,6 +59,8 @@ pub struct ProductFilter {
     pub sales_price_min: Option<Amount>,
     /// 当前启用 SKU 销售价上限（含）；`None` 表示无上限。
     pub sales_price_max: Option<Amount>,
+    /// 来源资料待确认筛选。
+    pub source_diff_pending: Option<bool>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -139,6 +100,7 @@ impl Default for ProductFilter {
             supply_coverage: None,
             sales_price_min: None,
             sales_price_max: None,
+            source_diff_pending: None,
             page,
             page_size,
             sort_by,

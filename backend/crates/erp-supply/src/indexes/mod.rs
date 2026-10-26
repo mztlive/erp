@@ -1,5 +1,6 @@
 //! 按原顺序登记四组供应链索引。
 
+use crate::catalog_adoption::ensure_indexes as ensure_catalog_adoption_indexes;
 use crate::inquiry::indexes as inquiry_indexes;
 use crate::portal::indexes as portal_indexes;
 
@@ -20,12 +21,15 @@ pub mod supplier_settlement;
 /// 数据冲突或数据库失败。
 pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     supplier_api::ensure(db).await?;
+    ensure_catalog_adoption_indexes(db).await?;
     supplier_offering::ensure(db).await?;
     supplier_fulfillment::ensure(db).await?;
+    crate::api_order::ensure_indexes(db).await?;
     supplier_settlement::ensure(db).await?;
     command_receipt::ensure(db).await?;
     handover_receipt::ensure(db).await?;
     portal_indexes::ensure(db).await?;
     inquiry_indexes::ensure(db).await?;
+    crate::order_tracking::ensure_indexes(db).await?;
     Ok(())
 }

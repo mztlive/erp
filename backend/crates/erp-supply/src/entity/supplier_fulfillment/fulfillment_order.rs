@@ -3,6 +3,8 @@
 //! 履约主线、取消与退款是三条正交状态机（§7.6），定义与邻接矩阵见 [`super::status`]；
 //! 明细见 [`super::fulfillment_item`]。`COMPLETED`/`REJECTED` 是终态，乱序或重复回调
 //! 经 [`erp_core::common::state::ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
+//! 外部只读观察通过 `apply_observed_fulfillment` 单调应用，缺失来源业务时间保留 None；
+//! ERP 查询时间单独保存在订单跟踪证据中，不用于伪造接单或完成时间。
 
 use std::fmt;
 
@@ -351,6 +353,22 @@ impl SupplierFulfillmentOrder {
     pub fn advance_refund(&mut self, to: RefundStatus) -> Result<()> {
         ensure_transition(self.refund_status, to)?;
         self.refund_status = to;
+        Ok(())
+    }
+
+    /// 核对本地订单尚无已发送或外部创建结果。
+    /// # 参数
+    /// 无；使用当前履约状态与外部订单号。
+    /// # 返回
+    /// 本地接收且没有外部订单号时允许随未发采购执行退役。
+    /// # 错误
+    /// 已发送、结果未知或已保存外部订单时拒绝。
+    pub fn ensure_unsubmitted(&self) -> Result<()> {
+        if self.external_order_no.is_some() || self.fulfillment_status != FulfillmentStatus::Received {
+            return Err(Error::from(
+                "原供应商订单已经发送或已有外部履约结果，请先处理原单，不能仅修改 ERP 采购单",
+            ));
+        }
         Ok(())
     }
 
@@ -709,6 +727,28 @@ mod tests {
         assert_eq!(order.refund_status, RefundStatus::None);
         assert_eq!(order.split_no, 1);
         assert!(order.external_order_no.is_none());
+    }
+
+    #[test]
+    fn only_unsubmitted_order_without_external_identity_can_retire() {
+        let mut order = sample_order();
+        assert!(order.ensure_unsubmitted().is_ok());
+        order.external_order_no = Some("supplier-original-order".into());
+        assert!(order.ensure_unsubmitted().is_err());
+        order.external_order_no = None;
+        for status in [
+            FulfillmentStatus::Submitting,
+            FulfillmentStatus::Accepted,
+            FulfillmentStatus::Rejected,
+            FulfillmentStatus::ResultUnknown,
+            FulfillmentStatus::Fulfilling,
+            FulfillmentStatus::Shipped,
+            FulfillmentStatus::Completed,
+            FulfillmentStatus::Exception,
+        ] {
+            order.fulfillment_status = status;
+            assert!(order.ensure_unsubmitted().is_err());
+        }
     }
 
     #[test]

@@ -207,8 +207,6 @@ export type SupplierOrderListQuery = {
     fulfillmentStatuses?: SupplierFulfillmentStatus[]
     cancelStatuses?: CancelStatus[]
     refundStatuses?: RefundStatus[]
-    paidFrom?: string
-    paidTo?: string
     page: number
     pageSize: number
     /** 售后待处理快捷筛选（与指标口径一致：取消/退款异常态任一命中） */
@@ -237,7 +235,7 @@ export type SupplierOrderListRow = {
     refundStatus: RefundStatus
     refundLabel: string
     refundTone: StatusTone
-    paidAt: string
+    createdAt: string
     updatedAt: string
     lastBusinessAt: string
     errorSummary?: string
@@ -434,8 +432,8 @@ export type SupplierOrderDetailView = {
     order: {
         id: string
         orderNo: string
-        paidAt: string
-        paymentFactKey: string
+        createdAt: string
+        submittedAt?: string
         fulfillmentChain: "ERP_AUTOMATED"
         supplierId: string
         supplierName: string
@@ -453,11 +451,13 @@ export type SupplierOrderDetailView = {
         refundLabel: string
         refundTone: StatusTone
         lockVersion: number
-        /** 始终强调：客户款项已收，履约独立记录 */
-        paymentOccurredNotice: string
+        executionNotice: string
         errorSummary?: string
     }
     items: SupplierOrderItemView[]
+    trackingError?: string
+    purchaseOrderId?: string
+    purchaseOrderNo?: string
     logistics: LogisticsView
     statusHistory: StatusHistoryItem[]
     afterSales: AfterSalesTrackView[]

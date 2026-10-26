@@ -69,6 +69,11 @@ export function SupplierOfferingRowActions({
                               id: `${idPrefix}-${rowId}-update-availability`,
                               label: "更新可供",
                               icon: PackageCheckIcon,
+                              disabled: offering.source_type === "API",
+                              disabledReason:
+                                  offering.source_type === "API"
+                                      ? "可供情况随供应商接口更新；停止使用请暂停供给"
+                                      : undefined,
                               onClick: () => onUpdateAvailability(offering),
                           },
                       ]
@@ -128,6 +133,12 @@ export function SupplierOfferingDetailActions({
                     size="sm"
                     variant="outline"
                     onClick={onUpdateAvailability}
+                    disabled={offering.source_type === "API"}
+                    reason={
+                        offering.source_type === "API"
+                            ? "可供情况随供应商接口更新；停止使用请暂停供给"
+                            : undefined
+                    }
                 >
                     <PackageCheckIcon
                         data-icon="inline-start"

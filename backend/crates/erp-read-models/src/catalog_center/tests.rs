@@ -47,6 +47,8 @@ fn sample_row() -> ProductRow {
         sku_count: 3,
         supplied_sku_count: 2,
         priced_sku_count: 1,
+        source_diff_count: 0,
+        source_diff_fields: Vec::new(),
         current_revision_id: None,
         version: 7,
         created_at: 123,

@@ -3,13 +3,14 @@
 use async_trait::async_trait;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::{Amount, Quantity, UnitPrice};
+use serde::{Deserialize, Serialize};
 
 use super::common::{ActionKey, ConnectorResult, Lookup, ReplayProtection, Snapshot, SupplierSku};
 use super::offer::DeliveryContext;
 use crate::entity::supplier_fulfillment::{CancelStatus, FulfillmentStatus, RefundStatus};
 
 /// 履约个人信息；禁止 Debug 或把整个请求写入普通日志。
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Recipient {
     pub name: String,
     pub phone: String,
@@ -20,7 +21,7 @@ pub struct Recipient {
 }
 
 /// 结构化地址与坐标基准；禁止从自由文本猜测区县或转换坐标。
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GeocodedAddress {
     pub city_name: String,
     pub district: String,
@@ -29,14 +30,14 @@ pub struct GeocodedAddress {
     pub coordinate_system: CoordinateSystem,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CoordinateSystem {
     Bd09,
     Gcj02,
     Wgs84,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderLine {
     /// 我方稳定明细身份，拆单和回执分摊均以此关联。
     pub line_id: String,
@@ -49,13 +50,13 @@ pub struct OrderLine {
     pub attributes: Vec<SelectedAttribute>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SelectedAttribute {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeliveryMethod {
     Courier,
     LocalDelivery { date: BusinessDate, slot: String },
@@ -63,7 +64,7 @@ pub enum DeliveryMethod {
 }
 
 /// 查询取得的选项，必须与连接、地址、明细、数量及有效期绑定后才可提交。
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryChoice {
     pub method: DeliveryMethod,
     pub shipping_fee: Amount,
@@ -72,7 +73,7 @@ pub struct DeliveryChoice {
 }
 
 /// 一个已确定拆单组；适配器不得在 create 中再次静默拆单。
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateOrder {
     pub action: ActionKey,
     /// 例如供应商 out_order_no；每个拆单组一个，重试时保持不变。
@@ -91,13 +92,13 @@ pub enum OrderKey {
     External(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderReference {
     pub merchant_order_no: String,
     pub external_order_no: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PaymentState {
     Pending,
     Confirmed,
@@ -186,7 +187,7 @@ pub trait Orders: Send + Sync {
 }
 
 /// 商城支付成功后，对已创建供应商订单确认渠道支付结果的独立动作。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfirmPayment {
     pub action: ActionKey,
     pub order: OrderReference,

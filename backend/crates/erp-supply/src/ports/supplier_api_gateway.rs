@@ -3,7 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use super::connector::common::{Page, Scan, Snapshot};
-use super::connector::offer::OfferChange;
+use super::connector::offer::{IncrementalSupport, OfferChange};
 use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckType};
 /// 一页标准商品来源记录。
@@ -29,6 +29,41 @@ pub struct ClassifiedError {
 /// 未注册的供应商以明确能力缺口失败；已注册协议使用当前服务端配置，
 /// 由 Process 保存分页目录，不允许协议客户端直接修改 ERP 数据。
 pub trait SupplierApiGateway: Send + Sync {
+    /// 声明当前连接实际可用的增量覆盖。
+    /// # 参数
+    /// `connection` 为服务端已核验连接。
+    /// # 返回
+    /// 未提供实现时明确返回不支持增量。
+    /// # 错误
+    /// 类型不明或部署不可用时可返回明确错误。
+    fn catalog_incremental_support(
+        &self,
+        _connection: &SupplierApiConnection,
+    ) -> Result<IncrementalSupport, ClassifiedError> {
+        Ok(IncrementalSupport::Unsupported)
+    }
+
+    /// 返回部署已核实的可供观察有效期。
+    /// # 参数
+    /// 当前连接。
+    /// # 返回
+    /// 秒数；未配置保持未知，不能伪造持续有效。
+    /// # 错误
+    /// 不返回错误；技术绑定仍由实际读取核验。
+    fn catalog_availability_validity(&self, _connection: &SupplierApiConnection) -> Option<u64> {
+        None
+    }
+
+    /// 返回部署规定的完整目录校对周期。
+    /// # 参数
+    /// 当前连接。
+    /// # 返回
+    /// 秒数；默认每天重新完整读取，不据缺项推断下架。
+    /// # 错误
+    /// 不返回错误。
+    fn catalog_full_sync_interval(&self, _connection: &SupplierApiConnection) -> u64 {
+        86_400
+    }
     /// 读取一页供应商商品；数据库写入由 Process 执行。
     /// # 参数
     /// `connection` 为当前连接，`scan` 为持久化游标和固定页大小。

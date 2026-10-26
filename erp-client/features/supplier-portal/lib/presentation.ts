@@ -35,10 +35,10 @@ export function offeringTerms(offering: PortalOffering): PortalTerms {
         offering.terms ?? {
             dropship_supply_price_gross:
                 offering.dropship_supply_price_gross ?? "",
-            bulk_supply_price_gross: offering.bulk_supply_price_gross ?? "",
+            bulk_supply_price_gross: offering.bulk_supply_price_gross ?? null,
             input_tax_rate: offering.input_tax_rate ?? "",
             bulk_minimum_order_quantity:
-                offering.bulk_minimum_order_quantity ?? "",
+                offering.bulk_minimum_order_quantity ?? null,
             product_capabilities: offering.product_capabilities ?? [],
             valid_from: offering.valid_from ?? "",
             valid_to: offering.valid_to ?? null,

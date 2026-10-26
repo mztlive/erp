@@ -472,6 +472,41 @@ impl Delivery {
         Ok(())
     }
 
+    /// 记录已核验外部全量发货，来源没有发货时间时保持未知。
+    /// # 参数
+    /// `source_shipped_at` 仅接受供应商明确提供的发货时间。
+    /// # 返回
+    /// 将草稿推进已发货，不生成签收或客户验收事实。
+    /// # 错误
+    /// 已签收或已冲正等非法状态拒绝应用。
+    pub fn mark_observed_shipped(&mut self, source_shipped_at: Option<Instant>) -> Result<()> {
+        ensure_transition(self.status, DeliveryState::Shipped)?;
+        self.shipped_at = source_shipped_at;
+        self.status = DeliveryState::Shipped;
+        Ok(())
+    }
+
+    /// 合并真实来源包裹，不清除内部已经登记的包裹关联。
+    /// # 参数
+    /// `entries` 为经过来源行映射的包裹关联；真实发货行须由用例继续核验。
+    /// # 返回
+    /// 校验并保存去重后的完整关联。
+    /// # 错误
+    /// 已冲正、包裹字段非法或累计数量超限时拒绝。
+    pub fn merge_observed_tracking(&mut self, entries: Vec<DeliveryTrackingEntry>) -> Result<()> {
+        if self.status == DeliveryState::Reversed {
+            return Err(Error::from("已冲正发货不能自动更新包裹"));
+        }
+        let mut merged = self.tracking_entries.clone();
+        for entry in entries {
+            if !merged.contains(&entry) {
+                merged.push(entry);
+            }
+        }
+        self.tracking_entries = DeliveryTrackingEntries::new(merged)?.into_entries();
+        Ok(())
+    }
+
     /// 登记签收（已发货 → 已签收）。
     ///
     /// # 参数

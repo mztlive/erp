@@ -56,8 +56,7 @@ export function ConnectionCenter({
     onBack: () => void
 }) {
     const centerQuery = useConnectionCenterQuery(connectionId)
-    const [page, setPage] = React.useState(1)
-    const catalogQuery = useCatalogQuery(connectionId, page)
+    const catalogQuery = useCatalogQuery(connectionId, 1)
     const [result, setResult] = React.useState<ResultState>(null)
     const [disableOpen, setDisableOpen] = React.useState(false)
     const [confirmEnableOpen, setConfirmEnableOpen] = React.useState(false)
@@ -157,8 +156,6 @@ export function ConnectionCenter({
                         <CatalogSection
                             conn={conn}
                             query={catalogQuery}
-                            page={page}
-                            onPageChange={setPage}
                             syncing={
                                 startCatalog.isPending ||
                                 catalogRunning(catalogQuery.data?.jobs[0])
@@ -174,7 +171,6 @@ export function ConnectionCenter({
                                         newIdempotencyKey("catalog"),
                                 })
                                 applyOutcome(outcome)
-                                setPage(1)
                             }}
                         />
                     ) : null}

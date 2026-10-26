@@ -47,7 +47,7 @@ pub struct PortalAvailabilityFact {
     pub availability_status: AvailabilityStatus,
     pub available_quantity: Option<String>,
     pub version: u64,
-    pub source_updated_at: i64,
+    pub source_updated_at: Option<i64>,
 }
 impl PortalAvailabilityFact {
     /// 从正式投影生成审计快照。
@@ -62,7 +62,7 @@ impl PortalAvailabilityFact {
             availability_status: value.availability_status,
             available_quantity: value.available_quantity.map(|q| q.to_string()),
             version: value.base.version,
-            source_updated_at: value.source_updated_at.unix_secs(),
+            source_updated_at: value.source_updated_at.map(Instant::unix_secs),
         }
     }
 }

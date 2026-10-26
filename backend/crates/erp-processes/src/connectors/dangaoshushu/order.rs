@@ -31,6 +31,13 @@ impl DangaoshushuConnector {
         valid_id(&request.merchant_order_no)?;
         let address = self.address_proof(&request.delivery_context)?;
         let choice: ChoiceProof = proof::decode(&self.settings.private_key, &request.delivery.reference)?;
+        if choice.expires_at <= now.unix_secs() {
+            return Err(error(
+                SupplierFailureClass::BusinessRejected,
+                "DGSS_DELIVERY_EXPIRED",
+                "配送选项已过期，须重新查询后提交",
+            ));
+        }
         if choice.connection_id != self.connection_id.as_ref()
             || choice.configuration_hash != self.binding
             || choice.context_hash
@@ -38,7 +45,6 @@ impl DangaoshushuConnector {
             || choice.lines_hash != proof::lines_hash(&self.settings.private_key, &request.lines)?
             || choice.method != proof::method_key(&request.delivery.method)
             || choice.shipping_fee != request.delivery.shipping_fee.to_string()
-            || choice.expires_at <= now.unix_secs()
             || address.recipient_hash
                 != proof::recipient_hash(&self.settings.private_key, &request.recipient)?
         {
@@ -515,7 +521,10 @@ mod tests {
         let request = request();
         let choice: ChoiceProof = proof::decode("test-key", &request.delivery.reference).unwrap();
         assert!(connector.order_payload_at(&request, Instant::from_unix_secs(choice.expires_at - 1)).is_ok());
-        assert!(connector.order_payload_at(&request, Instant::from_unix_secs(choice.expires_at)).is_err());
+        let error =
+            connector.order_payload_at(&request, Instant::from_unix_secs(choice.expires_at)).unwrap_err();
+        assert_eq!(error.class, SupplierFailureClass::BusinessRejected);
+        assert_eq!(error.code, "DGSS_DELIVERY_EXPIRED");
     }
     #[test]
     fn canceled_order_does_not_fabricate_refund_or_rejection() {

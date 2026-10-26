@@ -17,6 +17,7 @@
 
 - 商品、SKU、修订、上下架、品牌、分类、计量单位及卡券分类资料。
 - 规格属性、属性值、规格签名计算和可售 SKU 查询。
+- API 选品后的唯一资料来源、字段人工维护责任、三方基线及资料差异确认。商品名称、介绍、轮播图和详情图按商品跟踪，销售名称和主图按 SKU 跟踪；来源同步不得覆盖公司分类、销售价格或主动停用。
 
 ## 依赖与协作边界
 
@@ -32,6 +33,8 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/catalog/mod.rs](src/service/catalog/mod.rs) | CatalogService 与可售查询 |
+| [src/source_sync/mod.rs](src/source_sync/mod.rs) | 来源基线、字段责任、差异决策与确认回执 |
+| [src/service/catalog/source_sync.rs](src/service/catalog/source_sync.rs) | 真实商品修订应用、权限与版本核验、资料确认事务 |
 | [src/entity/catalog/mod.rs](src/entity/catalog/mod.rs) | 商品、SKU 和规格值对象 |
 | [src/ports/supply.rs](src/ports/supply.rs) | 可售供给查询合同 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
@@ -55,3 +58,5 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-catalog --lib --locked
 ```
 
 代码变更还须执行[统一质量门禁](../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
+
+供应商品库、选品入库、资料同步和自动履约按[供应商 API 商品与自动履约执行合同](../../../docs/supplier-api-product-contract.md)执行。新来源索引通过本域 `indexes::ensure` 增量登记；旧商品不自动取得来源关系，回滚保留基线、商品修订及确认回执。

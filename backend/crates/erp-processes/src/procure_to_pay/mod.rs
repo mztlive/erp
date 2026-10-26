@@ -48,7 +48,7 @@ mod inquiry_supply;
 mod payment_subject;
 mod procurement_task_sync;
 pub mod responsibility;
-mod review;
+pub(crate) mod review;
 mod shared;
 mod source_maintain;
 mod source_recheck;

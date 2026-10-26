@@ -9,6 +9,7 @@ use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierConnectorType, SupplierHealthCheckType,
 };
 use erp_supply::ports::connector::common::Scan;
+use erp_supply::ports::connector::offer::IncrementalSupport;
 use erp_supply::ports::supplier_api_gateway::{CatalogRead, ClassifiedError, SupplierApiGateway};
 use erp_supply::ports::supplier_reference_registry::{
     ResolvedSupplierReference, SupplierDeploymentConfig, SupplierReferenceKind, SupplierReferenceOption,
@@ -64,6 +65,23 @@ impl SupplierConnectorRegistry {
 }
 
 impl SupplierApiGateway for SupplierConnectorRegistry {
+    fn catalog_availability_validity(&self, connection: &SupplierApiConnection) -> Option<u64> {
+        self.adapter(connection.connector_type)
+            .ok()
+            .and_then(|adapter| adapter.gateway.catalog_availability_validity(connection))
+    }
+    fn catalog_full_sync_interval(&self, connection: &SupplierApiConnection) -> u64 {
+        self.adapter(connection.connector_type)
+            .map_or(86_400, |adapter| adapter.gateway.catalog_full_sync_interval(connection))
+    }
+
+    fn catalog_incremental_support(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<IncrementalSupport, ClassifiedError> {
+        self.adapter(connection.connector_type)?.gateway.catalog_incremental_support(connection)
+    }
+
     fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
         Box::pin(async move {
             self.adapter(connection.connector_type)?.gateway.catalog_page(connection, scan).await

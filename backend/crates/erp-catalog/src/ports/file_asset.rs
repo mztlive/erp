@@ -11,6 +11,8 @@ use crate::error::Result;
 pub struct FileAssetFact {
     /// File asset stable id.
     pub id: String,
+    /// 真实文件已通过图片内容核验且当前可用。
+    pub usable_image: bool,
 }
 
 /// Catalog reads media/logo existence through this consumer port.

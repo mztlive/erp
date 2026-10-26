@@ -97,9 +97,12 @@ mod tests {
         let input = SupplyImportInput::from_cells(&cells(), "2026-10-26".parse().unwrap()).unwrap();
         let request = input.request("supplier-1", "sku-1");
         assert_eq!(request.terms.dropship_supply_price_gross, "31.1234");
-        assert_eq!(request.terms.bulk_supply_price_gross.parse::<Decimal>().unwrap(), Decimal::new(295, 1));
+        assert_eq!(
+            request.terms.bulk_supply_price_gross.as_deref().unwrap().parse::<Decimal>().unwrap(),
+            Decimal::new(295, 1)
+        );
         assert_eq!(request.terms.input_tax_rate, "0.13");
-        assert_eq!(request.terms.bulk_minimum_order_quantity, "1");
+        assert_eq!(request.terms.bulk_minimum_order_quantity.as_deref().unwrap(), "1");
         assert_eq!(request.available_quantity.as_deref(), Some("999"));
         assert_eq!(request.availability_status, AvailabilityStatus::Available);
         assert_eq!(request.source_type, OfferingSourceType::Excel);

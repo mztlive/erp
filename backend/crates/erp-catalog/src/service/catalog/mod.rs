@@ -39,6 +39,8 @@ mod product_shared;
 mod product_update;
 mod sellable;
 mod sku_edit;
+mod source_sku;
+mod source_sync;
 mod support;
 mod unit;
 mod voucher;

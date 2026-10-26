@@ -5,6 +5,7 @@ use std::num::NonZeroU32;
 use std::time::Duration;
 
 use erp_core::common::time::Instant;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::entity::failure::SupplierFailureClass;
@@ -24,14 +25,14 @@ pub struct ConnectorError {
 }
 
 /// 外部商品身份。订货规格号必须非空；禁止按名称或条码自动绑定公司 SKU。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SupplierSku {
     pub product_id: Option<String>,
     pub spec_id: String,
 }
 
 /// 来源版本的比较能力；令牌只能判等，不能按字典序或接收次序排序。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SourceRevision {
     /// 相同连接、对象、字段组及 scope 内才允许比较序号。
     Sequence {
@@ -39,6 +40,7 @@ pub enum SourceRevision {
         value: u64,
     },
     EqualityToken(String),
+    #[default]
     Unversioned,
 }
 
@@ -112,7 +114,7 @@ pub struct Page<T> {
 }
 
 /// 调用方持久化的写动作身份；每个创建/支付/取消/退款步骤使用独立动作 ID。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActionKey {
     /// 重试不得更换；适配器必须明确映射到供应商支持的幂等字段。
     pub id: String,

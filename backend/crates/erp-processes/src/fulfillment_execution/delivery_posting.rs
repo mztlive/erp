@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_core::ids::DeliveryId;
 use erp_fulfillment::dto::{DeliveryView, PostDeliveryRequest};
@@ -78,8 +79,15 @@ impl FulfillmentProcess {
                     let occurred_at = Instant::now();
                     let delivery_type = delivery.delivery_type;
                     let line_count = lines.len();
-                    let mut posting =
-                        DeliveryPosting { db: &db, delivery_id, delivery, lines, occurred_at, actor };
+                    let mut posting = DeliveryPosting {
+                        db: &db,
+                        delivery_id,
+                        delivery,
+                        lines,
+                        occurred_at,
+                        actor,
+                        source_shipped_at: None,
+                    };
                     execute_posting(&mut posting, delivery_type, line_count, executor).await?;
                     Ok::<Delivery, Error>(posting.delivery)
                 })
@@ -134,6 +142,7 @@ struct DeliveryPosting<'a> {
     lines: Vec<DeliveryLine>,
     occurred_at: Instant,
     actor: AuditActor,
+    source_shipped_at: Option<Option<Instant>>,
 }
 
 #[async_trait]
@@ -147,9 +156,16 @@ impl PostingSteps for DeliveryPosting<'_> {
                 self.ensure_supplier_gate(executor).await?;
             },
             PostingStep::Delivery => {
-                FulfillmentService::new(self.db.clone())
-                    .persist_posted_delivery(&mut self.delivery, self.occurred_at, executor)
-                    .await?;
+                if let Some(source_time) = self.source_shipped_at {
+                    self.delivery.mark_observed_shipped(source_time)?;
+                    FulfillmentService::new(self.db.clone())
+                        .persist_delivery(&mut self.delivery, executor)
+                        .await?;
+                } else {
+                    FulfillmentService::new(self.db.clone())
+                        .persist_posted_delivery(&mut self.delivery, self.occurred_at, executor)
+                        .await?;
+                }
             },
             PostingStep::Task => {
                 complete_fulfillment_task(
@@ -169,20 +185,64 @@ impl PostingSteps for DeliveryPosting<'_> {
                 )
                 .await?;
             },
-            PostingStep::Audit => {
-                let audit = self.actor.clone().resource_log(
-                    "delivery.post",
-                    "delivery",
-                    self.delivery_id.to_string(),
-                )?;
-                persist_log(self.db, &audit, executor).await?;
-            },
+            PostingStep::Audit => self.persist_posting_audit(executor).await?,
         }
         Ok(())
     }
 }
 
+/// 在来源观察应用事务内复用直发的采购门槛、任务完成与验收待办。
+/// # 参数
+/// 数据库、已经校验全部数量与包裹关联的发货单、真实行、来源发货时间、责任人及同一执行器。
+/// # 返回
+/// 原子完成直发过账，不创建自有库存和客户验收事实。
+/// # 错误
+/// 非直发、采购/预付/任务权限门槛未满足或任一步写入失败时拒绝。
+pub(crate) async fn post_observed_supplier_delivery(
+    db: &Database,
+    delivery: Delivery,
+    lines: Vec<DeliveryLine>,
+    source_shipped_at: Option<Instant>,
+    actor: AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if delivery.delivery_type != DeliveryType::SupplierDirect {
+        return Err(Error::BusinessLogicError("供应商观察不能替代仓库出库".into()));
+    }
+    ensure_tracking_sources(db, &delivery, &lines, executor).await?;
+    let count = lines.len();
+    let mut posting = DeliveryPosting {
+        db,
+        delivery_id: DeliveryId::new(delivery.base.id.clone()),
+        delivery,
+        lines,
+        occurred_at: Instant::now(),
+        actor,
+        source_shipped_at: Some(source_shipped_at),
+    };
+    execute_posting(&mut posting, DeliveryType::SupplierDirect, count, executor).await
+}
+
 impl DeliveryPosting<'_> {
+    async fn persist_posting_audit(&self, executor: &mut dyn Executor) -> Result<()> {
+        let (actor, action) = if self.source_shipped_at.is_some() {
+            (
+                AuditActor::new(
+                    "system:supplier-order-tracking".into(),
+                    "system:supplier-order-tracking".into(),
+                    AccountKind::Admin,
+                ),
+                "supplier_fulfillment.observe_delivery",
+            )
+        } else {
+            (self.actor.clone(), "delivery.post")
+        };
+        let audit = actor.resource_log(action, "delivery", self.delivery_id.to_string())?;
+        persist_log(self.db, &audit, executor).await?;
+
+        Ok(())
+    }
+
     async fn post_warehouse_line(&self, index: usize, executor: &mut dyn Executor) -> Result<()> {
         let line = &self.lines[index];
         post_warehouse_ship_line(

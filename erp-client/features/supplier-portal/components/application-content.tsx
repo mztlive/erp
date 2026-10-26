@@ -59,10 +59,14 @@ export function PortalTermsContent({
                 <div>
                     <dt className="text-muted-foreground">集采起订量</dt>
                     <dd>
-                        <QuantityValue
-                            value={terms.bulk_minimum_order_quantity}
-                            unit=""
-                        />
+                        {terms.bulk_minimum_order_quantity != null ? (
+                            <QuantityValue
+                                value={terms.bulk_minimum_order_quantity}
+                                unit=""
+                            />
+                        ) : (
+                            "未提供"
+                        )}
                     </dd>
                 </div>
                 <div>

@@ -328,7 +328,7 @@ mod tests {
             .map(|row| {
                 let step = steps.iter().find(|step| step.key == row.supplier_id).unwrap();
                 let SeedRequest::Supplier(supplier) = &step.request else { panic!("供应商种子") };
-                assert_eq!(row.terms.bulk_minimum_order_quantity, "6");
+                assert_eq!(row.terms.bulk_minimum_order_quantity.as_deref().unwrap(), "6");
                 assert_ne!(row.terms.dropship_supply_price_gross, "129.00");
                 supplier.payment_term_snapshot.as_str()
             })
@@ -414,7 +414,7 @@ mod tests {
         invalid[0].source_connection_id = Some("unexpected-api-connection".into());
         assert!(validate(&invalid, &steps).is_err());
         invalid = rows;
-        invalid[0].terms.bulk_minimum_order_quantity = "0".into();
+        invalid[0].terms.bulk_minimum_order_quantity = Some("0".into());
         assert!(validate(&invalid, &steps).is_err());
     }
 

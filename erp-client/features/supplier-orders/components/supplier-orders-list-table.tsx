@@ -97,7 +97,7 @@ export function SupplierOrdersListTable({
                                 ? "已授权动作但没有可见订单。请联系管理员配置数据范围，或清除筛选后重试。"
                                 : hasActiveFilters
                                   ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                  : "调整视图、供应商或支付时间后重试。"
+                                  : "调整视图、供应商或履约状态后重试。"
                         }
                         action={
                             hasActiveFilters ? (

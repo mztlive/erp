@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use async_trait::async_trait;
@@ -83,7 +83,8 @@ impl DangaoshushuConnector {
     fn offer_value(&self, product: &Value, spec: &Value, detail: bool) -> ConnectorResult<Offer> {
         let spec_id = id(&spec[if detail { "id" } else { "spec_id" }])?;
         let unit = self.settings.spec_units.get(&spec_id).cloned();
-        let quote = if self.settings.clearing_price_is_tax_inclusive_cny && unit.is_some() {
+        let quote = if self.settings.clearing_price_is_tax_inclusive_cny && !spec["clearing_price"].is_null()
+        {
             let unit_price: UnitPrice = fixed(&spec["clearing_price"])?;
             if unit_price.to_decimal() < Decimal::ZERO {
                 return Err(mapping());
@@ -106,7 +107,37 @@ impl DangaoshushuConnector {
             specification: display_field(spec, "name")?,
             unit,
             quote,
+            details: super::catalog_details::details(product, spec, None)?,
         })
+    }
+
+    /// 读取一页并按商品补齐轮播、详情图和实际可供；同页同商品只查一次详情。
+    /// # 参数
+    /// 固定窗口、游标与页大小来自持久化检查点。
+    /// # 返回
+    /// 完整来源资料；部分接口未提供字段保持未知。
+    /// # 错误
+    /// 任一详情失败则当前页不提交，保留此前检查点。
+    pub(super) async fn scan_with_details(
+        &self,
+        scan: &Scan,
+    ) -> ConnectorResult<Page<Snapshot<OfferChange>>> {
+        let mut page = self.scan(scan).await?;
+        let mut products = BTreeMap::new();
+        for snapshot in &mut page.items {
+            let OfferChange::Upsert(offer) = &mut snapshot.value else { continue };
+            let product_id = offer.sku.product_id.clone().ok_or_else(mapping)?;
+            if !products.contains_key(&product_id) {
+                products.insert(product_id.clone(), self.product(&offer.sku, None).await?);
+            }
+            let root = products.get(&product_id).expect("当前商品已读取详情");
+            if let Some(spec) = spec_value(root, &offer.sku)? {
+                **offer = self.offer_value(&root["product"], spec, true)?;
+                offer.details = super::catalog_details::details(&root["product"], spec, Some(root))?;
+                snapshot.stamp.changed_at = source_time(&spec["updated_at"])?;
+            }
+        }
+        Ok(page)
     }
 
     fn query_city(&self, region: Option<&String>) -> ConnectorResult<Option<&str>> {
@@ -210,7 +241,7 @@ fn availability_value(query: &AvailabilityQuery, product: &Value) -> ConnectorRe
     ))
 }
 
-fn availability_state(
+pub(super) fn availability_state(
     product: &Value,
     spec: &Value,
     quantity: &AvailableQuantity,
@@ -266,7 +297,7 @@ impl OfferSource for DangaoshushuConnector {
                     );
                     failure
                 })?;
-                items.push(snapshot(OfferChange::Upsert(offer), None));
+                items.push(snapshot(OfferChange::Upsert(Box::new(offer)), None));
             }
         }
         let next = if products.len() >= usize::try_from(scan.limit.get()).map_err(|_| mapping())? {
@@ -282,10 +313,9 @@ impl OfferSource for DangaoshushuConnector {
         let Some(spec) = spec_value(&value, sku)? else {
             return Ok(Lookup::NotVisible);
         };
-        Ok(Lookup::Found(snapshot(
-            self.offer_value(&value["product"], spec, true)?,
-            source_time(&spec["updated_at"])?,
-        )))
+        let mut offer = self.offer_value(&value["product"], spec, true)?;
+        offer.details = super::catalog_details::details(&value["product"], spec, Some(&value))?;
+        Ok(Lookup::Found(snapshot(offer, source_time(&spec["updated_at"])?)))
     }
 }
 
@@ -306,7 +336,7 @@ impl AvailabilitySource for DangaoshushuConnector {
     }
 }
 
-fn stock(value: &Value) -> ConnectorResult<AvailableQuantity> {
+pub(super) fn stock(value: &Value) -> ConnectorResult<AvailableQuantity> {
     if value.is_null() {
         return Ok(AvailableQuantity::Unreported);
     }
@@ -397,7 +427,7 @@ mod tests {
         let Lookup::Found(detail) = connector.offer(&offer.sku).await.unwrap() else {
             panic!("商品详情")
         };
-        assert_eq!(detail.value, *offer);
+        assert_eq!(detail.value, **offer);
         assert_eq!(detail.stamp.changed_at, None);
     }
 
@@ -565,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn quotes_require_confirmed_currency_tax_basis_and_explicit_spec_unit() {
+    fn quotes_require_confirmed_currency_tax_basis_but_preserve_unknown_unit() {
         let mut connector = connector(vec![]);
         let product = json!({"id": "product-1", "title": "蛋糕"});
         let spec = json!({"id": "spec-1", "name": "6寸", "clearing_price": "100.25"});
@@ -575,7 +605,7 @@ mod tests {
         connector.settings.spec_units.clear();
         let offer = connector.offer_value(&product, &spec, true).unwrap();
         assert_eq!(offer.unit, None);
-        assert_eq!(offer.quote, None);
+        assert_eq!(offer.quote.as_ref().unwrap().dropship.as_ref().unwrap().unit_price.to_string(), "100.25");
         connector.settings.spec_units.insert("spec-1".into(), "个".into());
         let quote = connector.offer_value(&product, &spec, true).unwrap().quote.unwrap();
         assert_eq!(quote.dropship.unwrap().unit_price.to_string(), "100.25");

@@ -90,6 +90,7 @@ impl SupplierFulfillmentProcess {
         command.validate()?;
         self.require_scoped_order(command.order_id.as_ref(), actor, "investigate", &mut NoTransaction)
             .await?;
+        self.ensure_legacy_order(command.order_id.as_ref(), &mut NoTransaction).await?;
         let fingerprint = serialized_fingerprint(&command)?;
         let command_id = investigation_command_id(
             actor.id(),
@@ -145,6 +146,7 @@ impl SupplierFulfillmentProcess {
     ) -> Result<SupplierOrderInvestigationResultView> {
         command.validate()?;
         self.require_task_permissions(actor, &mut NoTransaction).await?;
+        self.ensure_legacy_order(command.action.order_id.as_ref(), &mut NoTransaction).await?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "任务版本")?;
         let fingerprint = serialized_fingerprint(&command)?;
         let command_id = investigation_command_id(

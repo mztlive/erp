@@ -3,6 +3,7 @@
 #![allow(async_fn_in_trait)]
 
 use super::*;
+use crate::ports::connector::order::OrderKey;
 
 /// 供应商履约订单列表投影行。
 ///
@@ -181,6 +182,20 @@ impl Pagination for SupplierFulfillmentOrderFilter {
 /// 供应商履约订单仓储的域查询。
 #[allow(async_fn_in_trait)]
 pub trait SupplierFulfillmentOrderRepositoryExt {
+    /// 在原连接内按我方单号或外部单号取得订单。
+    /// # 参数
+    /// 绑定连接、已核验的原单号类型和调用方执行器。
+    /// # 返回
+    /// 同连接的未删除订单，缺失时返回 None。
+    /// # 错误
+    /// 仓储查询失败时保留原分类。
+    async fn find_for_connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        key: &OrderKey,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierFulfillmentOrder>>;
+
     /// 分页检索供应商履约订单列表（投影查询）。
     ///
     /// 只返回 [`SupplierFulfillmentOrderRow`] 所需的列表字段，不加载整文档；
@@ -240,6 +255,20 @@ pub trait SupplierFulfillmentOrderRepositoryExt {
 }
 
 impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepository<'_> {
+    async fn find_for_connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        key: &OrderKey,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierFulfillmentOrder>> {
+        let mut filter = doc! {"connection_id":connection_id.to_string()};
+        match key {
+            OrderKey::Merchant(number) => filter.insert("fulfillment_order_no", number.clone()),
+            OrderKey::External(number) => filter.insert("external_order_no", number.clone()),
+        };
+        self.find_one(filter, executor).await
+    }
+
     async fn search_supplier_fulfillment_orders(
         &self,
         filter: &SupplierFulfillmentOrderFilter,

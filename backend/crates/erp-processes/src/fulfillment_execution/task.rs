@@ -23,6 +23,7 @@ use persistence_core::Executor;
 use crate::{Error, Result};
 
 mod command;
+pub(crate) mod supersede;
 
 const PURCHASE_ORDER_OWNER_ROLE: &str = "purchase_order_owner";
 const WAREHOUSE_INBOUND_ROLE: &str = "warehouse_inbound_handler";

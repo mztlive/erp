@@ -14,11 +14,13 @@ use erp_supply::dto::supplier_api::{
     SupplierApiConnectionView, SupplierConnectionCommand, SupplierConnectionCommandResult,
     UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
 };
+use erp_supply::entity::supplier_api::SupplierConnectionAction;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+pub mod adoptions;
 pub mod catalog;
 pub mod connector_types;
 pub mod dangaoshushu;
@@ -89,6 +91,11 @@ pub async fn supplier_api_connection_command(
     Path(id): Path<String>,
     Json(command): Json<SupplierConnectionCommand>,
 ) -> Result<SupplierConnectionCommandResult> {
+    let source_media = if command.action == SupplierConnectionAction::StartCatalogSync {
+        state.supplier_source_media_preparer()?
+    } else {
+        None
+    };
     let result =
         state.supplier_api_governance_process().execute_connection_command(&id, command, &actor).await?;
     if let Some(job_id) = result.job_id.clone() {
@@ -96,8 +103,11 @@ pub async fn supplier_api_connection_command(
         let actor = actor.clone();
         let connection_id = id.clone();
         tokio::spawn(async move {
-            if let Err(error) =
-                state.supplier_connection_execution_process().process_connection_job(&job_id, &actor).await
+            if let Err(error) = state
+                .supplier_connection_execution_process()
+                .with_source_media(source_media)
+                .process_connection_job(&job_id, &actor)
+                .await
             {
                 tracing::error!(
                     connection_id,

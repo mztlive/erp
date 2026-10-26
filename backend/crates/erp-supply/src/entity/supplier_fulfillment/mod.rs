@@ -14,6 +14,7 @@
 
 pub mod fulfillment_item;
 pub mod fulfillment_order;
+mod observation;
 pub mod order_action;
 pub mod refund;
 pub mod status;

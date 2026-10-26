@@ -450,7 +450,7 @@ async fn prepare_basis_submission(
         .get(&group.scope.supplier_id.to_string())
         .cloned()
         .unwrap_or_else(|| group.scope.supplier_id.to_string());
-    let computed = compute_selected_lines(input.selected_lines, group.scope.price_basis);
+    let computed = compute_selected_lines(input.selected_lines, group.scope.price_basis)?;
     let submission = build_draft_submission(
         &CreationBasisSupplierAdapter::from_facts(db.clone(), &group.scope.supplier_id, facts),
         &PurchaseOrderId::new(order.base.id.clone()),

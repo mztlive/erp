@@ -15,7 +15,7 @@ import {
     type SupplierFulfillmentStatus,
 } from "@/features/supplier-orders/types"
 
-/** 可被单独移除的已生效条件；paidRange 把支付时间上下界作为一个条件移除。 */
+/** 可被单独移除的已生效条件。 */
 export type SupplierOrdersFilterKey =
     | "q"
     | "supplierId"
@@ -23,7 +23,6 @@ export type SupplierOrdersFilterKey =
     | "cancelStatuses"
     | "refundStatuses"
     | "aftersalePending"
-    | "paidRange"
     | "ownerUserIds"
     | "handlerUserIds"
     | "orgUnitIds"
@@ -32,14 +31,6 @@ export type SupplierOrdersAppliedChip = Readonly<{
     key: SupplierOrdersFilterKey
     label: string
 }>
-
-/** 支付时间上下界校验；ISO 日期字符串可直接按字典序比较。 */
-function paidDateRangeError(from: string, to: string): string | null {
-    if (from && to && from > to) {
-        return "支付开始日期不能晚于结束日期"
-    }
-    return null
-}
 
 function sameCodeList(
     left: readonly string[],
@@ -72,8 +63,6 @@ export function useSupplierOrdersFilters(
         url.cancelStatuses?.length ||
         url.refundStatuses?.length ||
         url.aftersalePending ||
-        url.paidFrom ||
-        url.paidTo ||
         url.ownerUserIds ||
         url.handlerUserIds ||
         url.orgUnitIds,
@@ -85,8 +74,6 @@ export function useSupplierOrdersFilters(
         url.cancelStatuses?.length ||
         url.refundStatuses?.length ||
         url.aftersalePending ||
-        url.paidFrom ||
-        url.paidTo ||
         url.ownerUserIds ||
         url.handlerUserIds ||
         url.orgUnitIds,
@@ -111,8 +98,6 @@ export function useSupplierOrdersFilters(
     const [aftersalePendingDraft, setAftersalePendingDraft] = React.useState(
         Boolean(url.aftersalePending),
     )
-    const [paidFromDraft, setPaidFromDraft] = React.useState(url.paidFrom ?? "")
-    const [paidToDraft, setPaidToDraft] = React.useState(url.paidTo ?? "")
     const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(
         url.ownerUserIds ?? "",
     )
@@ -127,7 +112,6 @@ export function useSupplierOrdersFilters(
 
     /** 深链条件显示为标签，不自动打开浮层。 */
     const [panelOpen, setPanelOpen] = React.useState(false)
-    const [filterError, setFilterError] = React.useState<string | null>(null)
 
     // 供应商名称解析（chip 文案用业务名称，不展示内部 ID）；无 supplierId 时不请求。
     const supplierSelectorQuery = useSupplierSelectorQuery(
@@ -139,14 +123,6 @@ export function useSupplierOrdersFilters(
 
     /** 收起态 Enter / 搜索框尾部提交 / 主行「查询」共用同一提交。 */
     const applyFilters = React.useCallback(() => {
-        const from = paidFromDraft.trim()
-        const to = paidToDraft.trim()
-        const nextError = paidDateRangeError(from, to)
-        setFilterError(nextError)
-        if (nextError) {
-            setPanelOpen(true)
-            return
-        }
         updateUrl({
             q: searchDraft.trim() || undefined,
             supplierId: supplierIdDraft ?? undefined,
@@ -163,8 +139,6 @@ export function useSupplierOrdersFilters(
                     ? refundStatusesDraft
                     : undefined,
             aftersalePending: aftersalePendingDraft || undefined,
-            paidFrom: from || undefined,
-            paidTo: to || undefined,
             ownerUserIds: ownerUserIdsDraft.trim() || undefined,
             handlerUserIds: handlerUserIdsDraft.trim() || undefined,
             orgUnitIds: orgUnitIdsDraft.trim() || undefined,
@@ -183,15 +157,13 @@ export function useSupplierOrdersFilters(
         includeDescendantsDraft,
         orgUnitIdsDraft,
         ownerUserIdsDraft,
-        paidFromDraft,
-        paidToDraft,
         refundStatusesDraft,
         searchDraft,
         supplierIdDraft,
         updateUrl,
     ])
 
-    /** 移除单个已生效条件；支付时间上下界作为一个条件一起移除。 */
+    /** 移除单个已生效条件。 */
     const removeFilter = React.useCallback(
         (key: SupplierOrdersFilterKey) => {
             if (key === "q") setSearchDraft("")
@@ -205,11 +177,6 @@ export function useSupplierOrdersFilters(
             if (key === "orgUnitIds") {
                 setOrgUnitIdsDraft("")
                 setIncludeDescendantsDraft(false)
-            }
-            if (key === "paidRange") {
-                setPaidFromDraft("")
-                setPaidToDraft("")
-                setFilterError(null)
             }
             const patch: SupplierOrdersUrlPatch = { page: 1 }
             if (key === "q") patch.q = undefined
@@ -225,9 +192,6 @@ export function useSupplierOrdersFilters(
             else if (key === "orgUnitIds") {
                 patch.orgUnitIds = undefined
                 patch.includeDescendants = undefined
-            } else if (key === "paidRange") {
-                patch.paidFrom = undefined
-                patch.paidTo = undefined
             }
             updateUrl(patch)
         },
@@ -239,13 +203,10 @@ export function useSupplierOrdersFilters(
         setCancelStatusesDraft(url.cancelStatuses ?? [])
         setRefundStatusesDraft(url.refundStatuses ?? [])
         setAftersalePendingDraft(Boolean(url.aftersalePending))
-        setPaidFromDraft(url.paidFrom ?? "")
-        setPaidToDraft(url.paidTo ?? "")
         setOwnerUserIdsDraft(url.ownerUserIds ?? "")
         setHandlerUserIdsDraft(url.handlerUserIds ?? "")
         setOrgUnitIdsDraft(url.orgUnitIds ?? "")
         setIncludeDescendantsDraft(Boolean(url.includeDescendants))
-        setFilterError(null)
         setPanelOpen(false)
     }, [
         url.aftersalePending,
@@ -254,8 +215,6 @@ export function useSupplierOrdersFilters(
         url.includeDescendants,
         url.orgUnitIds,
         url.ownerUserIds,
-        url.paidFrom,
-        url.paidTo,
         url.refundStatuses,
     ])
 
@@ -264,13 +223,10 @@ export function useSupplierOrdersFilters(
         setCancelStatusesDraft([])
         setRefundStatusesDraft([])
         setAftersalePendingDraft(false)
-        setPaidFromDraft("")
-        setPaidToDraft("")
         setOwnerUserIdsDraft("")
         setHandlerUserIdsDraft("")
         setOrgUnitIdsDraft("")
         setIncludeDescendantsDraft(false)
-        setFilterError(null)
     }, [])
 
     const hasPendingChanges =
@@ -280,8 +236,6 @@ export function useSupplierOrdersFilters(
         !sameCodeList(cancelStatusesDraft, url.cancelStatuses) ||
         !sameCodeList(refundStatusesDraft, url.refundStatuses) ||
         aftersalePendingDraft !== Boolean(url.aftersalePending) ||
-        paidFromDraft.trim() !== (url.paidFrom ?? "") ||
-        paidToDraft.trim() !== (url.paidTo ?? "") ||
         ownerUserIdsDraft.trim() !== (url.ownerUserIds ?? "") ||
         handlerUserIdsDraft.trim() !== (url.handlerUserIds ?? "") ||
         orgUnitIdsDraft.trim() !== (url.orgUnitIds ?? "") ||
@@ -295,13 +249,10 @@ export function useSupplierOrdersFilters(
         setCancelStatusesDraft([])
         setRefundStatusesDraft([])
         setAftersalePendingDraft(false)
-        setPaidFromDraft("")
-        setPaidToDraft("")
         setOwnerUserIdsDraft("")
         setHandlerUserIdsDraft("")
         setOrgUnitIdsDraft("")
         setIncludeDescendantsDraft(false)
-        setFilterError(null)
         setPanelOpen(false)
         updateUrl({
             q: undefined,
@@ -310,8 +261,6 @@ export function useSupplierOrdersFilters(
             cancelStatuses: undefined,
             refundStatuses: undefined,
             aftersalePending: undefined,
-            paidFrom: undefined,
-            paidTo: undefined,
             ownerUserIds: undefined,
             handlerUserIds: undefined,
             orgUnitIds: undefined,
@@ -361,12 +310,6 @@ export function useSupplierOrdersFilters(
         if (url.aftersalePending) {
             chips.push({ key: "aftersalePending", label: "售后待处理" })
         }
-        if (url.paidFrom || url.paidTo) {
-            chips.push({
-                key: "paidRange",
-                label: `支付时间：${url.paidFrom ?? "不限"} 至 ${url.paidTo ?? "不限"}`,
-            })
-        }
         if (url.ownerUserIds) {
             chips.push({ key: "ownerUserIds", label: "跟进人已筛选" })
         }
@@ -391,8 +334,6 @@ export function useSupplierOrdersFilters(
         url.includeDescendants,
         url.orgUnitIds,
         url.ownerUserIds,
-        url.paidFrom,
-        url.paidTo,
         url.q,
         url.refundStatuses,
         url.supplierId,
@@ -406,13 +347,10 @@ export function useSupplierOrdersFilters(
         setCancelStatusesDraft(url.cancelStatuses ?? [])
         setRefundStatusesDraft(url.refundStatuses ?? [])
         setAftersalePendingDraft(Boolean(url.aftersalePending))
-        setPaidFromDraft(url.paidFrom ?? "")
-        setPaidToDraft(url.paidTo ?? "")
         setOwnerUserIdsDraft(url.ownerUserIds ?? "")
         setHandlerUserIdsDraft(url.handlerUserIds ?? "")
         setOrgUnitIdsDraft(url.orgUnitIds ?? "")
         setIncludeDescendantsDraft(Boolean(url.includeDescendants))
-        setFilterError(null)
     }, [
         url.aftersalePending,
         url.cancelStatuses,
@@ -421,8 +359,6 @@ export function useSupplierOrdersFilters(
         url.includeDescendants,
         url.orgUnitIds,
         url.ownerUserIds,
-        url.paidFrom,
-        url.paidTo,
         url.refundStatuses,
         url.supplierId,
     ])
@@ -446,10 +382,6 @@ export function useSupplierOrdersFilters(
         setRefundStatusesDraft,
         aftersalePendingDraft,
         setAftersalePendingDraft,
-        paidFromDraft,
-        setPaidFromDraft,
-        paidToDraft,
-        setPaidToDraft,
         ownerUserIdsDraft,
         setOwnerUserIdsDraft,
         handlerUserIdsDraft,
@@ -460,8 +392,6 @@ export function useSupplierOrdersFilters(
         setIncludeDescendantsDraft,
         panelOpen,
         setPanelOpen,
-        filterError,
-        setFilterError,
         appliedChips,
         applyFilters,
         removeFilter,

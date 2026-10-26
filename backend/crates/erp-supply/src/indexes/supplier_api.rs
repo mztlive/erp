@@ -10,7 +10,7 @@ use persistence_core::Result;
 use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::SupplierApiExt;
-use crate::repository::supplier_catalog::{ITEMS, RUNS};
+use crate::repository::supplier_catalog::{IDENTITY_REVIEWS, ITEMS, RUNS};
 
 /// `supplier_api_connection` 集合名。
 pub(crate) const SUPPLIER_API_CONNECTIONS: &str =
@@ -46,21 +46,42 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_API_BUSINESS_CONFIRMATIONS, business_confirmation_indexes()).await?;
     create_indexes(db, SUPPLIER_API_HEALTH_CHECK_RUNS, health_check_run_indexes()).await?;
     create_indexes(db, SUPPLIER_API_COMMAND_RECEIPTS, command_receipt_indexes()).await?;
+    create_indexes(db, ITEMS, catalog_item_indexes()).await?;
+    create_indexes(db, RUNS, vec![unique_index("uk_supplier_catalog_runs_id", doc! { "id": 1 })]).await?;
     create_indexes(
         db,
-        ITEMS,
-        vec![
-            unique_index("uk_supplier_catalog_items_id", doc! { "id": 1 }),
-            unique_index(
-                "uk_supplier_catalog_source",
-                doc! { "connection_id": 1, "product_id": 1, "spec_id": 1 },
-            ),
-            named_index("idx_supplier_catalog_page", doc! { "connection_id": 1, "name": 1, "id": 1 }),
-        ],
+        IDENTITY_REVIEWS,
+        vec![unique_index("uk_supplier_catalog_identity_reviews_id", doc! { "id": 1 })],
     )
     .await?;
-    create_indexes(db, RUNS, vec![unique_index("uk_supplier_catalog_runs_id", doc! { "id": 1 })]).await?;
     Ok(())
+}
+
+fn catalog_item_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index("uk_supplier_catalog_items_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_catalog_source",
+            doc! { "connection_id": 1, "product_id": 1, "spec_id": 1 },
+        ),
+        named_index("idx_supplier_catalog_page", doc! { "connection_id": 1, "name": 1, "id": 1 }),
+        named_index(
+            "idx_supplier_catalog_category",
+            doc! { "connection_id": 1, "category_id": 1, "name": 1, "id": 1 },
+        ),
+        named_index(
+            "idx_supplier_catalog_brand",
+            doc! { "connection_id": 1, "brand_id": 1, "name": 1, "id": 1 },
+        ),
+        named_index(
+            "idx_supplier_catalog_selection",
+            doc! { "connection_id": 1, "offering_id": 1, "name": 1, "id": 1 },
+        ),
+        named_index(
+            "idx_supplier_catalog_availability",
+            doc! { "connection_id": 1, "availability": 1, "name": 1, "id": 1 },
+        ),
+    ]
 }
 
 /// 为单个集合创建一组幂等命名索引。
@@ -74,6 +95,10 @@ fn supplier_api_connection_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_api_connections_id", doc! { "id": 1 }),
         unique_index("uk_supplier_api_connections_connection_code", doc! { "connection_code": 1 }),
+        named_index(
+            "idx_supplier_api_connections_catalog_scan",
+            doc! { "connector_type": 1, "deleted_at": 1, "id": 1 },
+        ),
         named_index("idx_supplier_api_connections_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
             "idx_supplier_api_connections_status_health",

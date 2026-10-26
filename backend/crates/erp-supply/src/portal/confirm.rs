@@ -402,7 +402,7 @@ impl<'a> CreateInput<'a> {
                 supplier_offering_id: id,
                 availability_status: self.availability_status.into(),
                 available_quantity: quantity,
-                source_updated_at: self.availability_reported_at,
+                source_updated_at: Some(self.availability_reported_at),
                 received_at,
                 source_revision_token: None,
                 updated_by: submitted_by,

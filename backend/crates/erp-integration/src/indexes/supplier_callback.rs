@@ -16,6 +16,14 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
         .keys(doc! {"connection_id":1,"status":1,"received_at":1,"id":1})
         .options(IndexOptions::builder().name("ix_supplier_callback_receipts_pending".to_string()).build())
         .build();
-    db.collection::<Document>(Database::SUPPLIER_CALLBACK_RECEIPTS).create_indexes([unique, pending]).await?;
+    let order_queue = IndexModel::builder()
+        .keys(doc! {"status":1,"route_kind":1,"next_attempt_at":1,"received_at":1,"id":1})
+        .options(
+            IndexOptions::builder().name("ix_supplier_callback_receipts_order_queue".to_string()).build(),
+        )
+        .build();
+    db.collection::<Document>(Database::SUPPLIER_CALLBACK_RECEIPTS)
+        .create_indexes([unique, pending, order_queue])
+        .await?;
     Ok(())
 }

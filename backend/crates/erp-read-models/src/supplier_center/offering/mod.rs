@@ -198,7 +198,7 @@ fn build_view(
     if let Some(availability) = availability {
         view.availability_status = Some(availability.availability_status);
         view.available_quantity = availability.available_quantity.map(|value| value.to_string());
-        view.availability_source_updated_at = Some(availability.source_updated_at.unix_secs());
+        view.availability_source_updated_at = availability.source_updated_at.map(|at| at.unix_secs());
         view.availability_version = Some(availability.base.version);
     }
     view

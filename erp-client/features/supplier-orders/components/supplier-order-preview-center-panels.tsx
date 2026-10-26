@@ -30,7 +30,6 @@ import {
     WORK_ITEM_STATUS_LABEL,
     WORK_ITEM_TYPE_LABEL,
 } from "@/features/supplier-orders/types"
-import { formatDateTime } from "@/lib/datetime"
 import type { SupplierOrderCenterResult } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
 
 export function WorkItemProcessPanel({
@@ -99,10 +98,12 @@ export function StatusAlertsPanel({
     order,
     lastInvestigation,
     noQueryCapability,
+    trackingError,
 }: {
     order: SupplierOrderDetailView["order"]
     lastInvestigation?: SupplierOrderDetailView["lastInvestigation"]
     noQueryCapability: boolean
+    trackingError?: string
 }) {
     const isResultUnknown = order.fulfillmentStatus === "RESULT_UNKNOWN"
 
@@ -141,20 +142,18 @@ export function StatusAlertsPanel({
             />
 
             <Alert variant="info">
-                <AlertTitle>客户款项已收</AlertTitle>
-                <AlertDescription>
-                    {order.paymentOccurredNotice} 支付凭证{" "}
-                    <span className="num">{order.paymentFactKey}</span> ·
-                    支付时间{" "}
-                    <span className="num">
-                        {formatDateTime(
-                            order.paidAt,
-                            "fullIntl",
-                            "passthrough",
-                        )}
-                    </span>
-                </AlertDescription>
+                <AlertTitle>供应商接口履约</AlertTitle>
+                <AlertDescription>{order.executionNotice}</AlertDescription>
             </Alert>
+            {trackingError ? (
+                <Alert variant="warning">
+                    <AlertTitle>供应商履约跟踪暂未完成</AlertTitle>
+                    <AlertDescription>
+                        {trackingError}
+                        。当前订单和物流状态保留最近已确认的结果，请刷新执行状态或按异常原因处理。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
 
             {isResultUnknown ? (
                 <Alert variant="warning" aria-live="polite">

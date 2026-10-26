@@ -222,7 +222,7 @@ fn packaging_price_and_base_unit_quantity_precision_reject_silent_rounding() {
     assert!(validate_portal_quantities(&terms(), Some("12.5"), 0).is_err());
     assert!(validate_portal_quantities(&terms(), Some("-1"), 6).is_err());
     let mut fractional = terms();
-    fractional.bulk_minimum_order_quantity = "1.5".into();
+    fractional.bulk_minimum_order_quantity = Some("1.5".into());
     assert!(validate_portal_quantities(&fractional, None, 0).is_err());
     validate_portal_quantities(&fractional, Some("1.25"), 2).unwrap();
     assert!(validate_portal_quantities(&fractional, None, 7).is_err());

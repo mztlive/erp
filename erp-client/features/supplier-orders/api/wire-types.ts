@@ -108,6 +108,9 @@ export type BackendInvestigationResult = {
 export type BackendDetail = {
     order: BackendOrder
     connection_code?: string | null
+    tracking_error?: string | null
+    purchase_order_id?: string | null
+    purchase_order_no?: string | null
     items: BackendItem[]
     status_history: BackendStatusHistory[]
     actions: BackendAction[]

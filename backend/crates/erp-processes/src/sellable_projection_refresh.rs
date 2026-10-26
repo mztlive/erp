@@ -10,7 +10,7 @@ use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::repository::{CatalogExt, SellableSkuProjectionState, SellableSkuRow};
 use erp_core::change_scan::ChangeWindow;
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_supply::repository::SupplierOfferingExt;
+use erp_supply::repository::{SupplierOfferingExt, supplier_catalog};
 use mongodb::Database;
 use persistence_core::dirty_marks::DirtyMark;
 use persistence_core::{NoTransaction, Result};
@@ -55,6 +55,7 @@ impl SellableProjectionRefresher {
     /// # 错误
     /// 读取或写入失败时返回错误；已完成的标记与保存保留，下一轮继续。
     pub async fn run_due(&self) -> Result<usize> {
+        supplier_catalog::expire_availability(&self.db, Instant::now(), &mut NoTransaction).await?;
         let (now, today) = (Instant::now().unix_secs(), BusinessDate::today());
         let store = self.db.sellable_sku_projections();
         let state = self.prepare_state(now, today).await?;

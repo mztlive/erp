@@ -7,8 +7,8 @@ use super::mapping::settlement_terms_for;
 use crate::entity::facts::{AvailabilityStatus, SalesOrderBasisFact};
 use crate::entity::purchase_order::{
     BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply, PurchaseInquiryAddress,
-    PurchaseInquiryQuoteSource, SalesProcurementCoverage, SalesProcurementCoverageLine, business_date_of,
-    maximum_create_quantity, purchase_options, purchase_type_from_product_kind,
+    PurchaseInquiryQuoteSource, SalesProcurementCoverage, SalesProcurementCoverageLine, SupplyPriceBasis,
+    business_date_of, maximum_create_quantity, purchase_options, purchase_type_from_product_kind,
 };
 use crate::{Error, Result};
 
@@ -94,6 +94,12 @@ fn append_groups(
 ) -> Result<()> {
     let settlement = settlement_terms_for(facts, &supply.offering.supplier_id);
     for &(fulfillment_responsibility, price_basis) in purchase_options(line.product_kind)? {
+        if price_basis == SupplyPriceBasis::Bulk
+            && (supply.revision.bulk_supply_price_gross.is_none()
+                || supply.revision.bulk_minimum_order_quantity.is_none())
+        {
+            continue;
+        }
         let scope = BasisScope {
             inquiry_quote_revision_id: Some(candidate.source.quote_revision_id.clone()),
             supplier_id: supply.offering.supplier_id.clone(),

@@ -14,6 +14,7 @@ use crate::entity::catalog::{
 };
 use crate::error::Result;
 use crate::repository::{ProductRevisionRow, ProductRow, SkuRow};
+use crate::source_sync::SourceField;
 
 /// 商品列表允许的排序字段白名单。
 pub(crate) const PRODUCT_SORT_FIELDS: &[&str] = &["created_at", "product_no"];
@@ -264,6 +265,10 @@ pub struct ProductView {
     pub supplied_sku_count: u32,
     /// 当前已填写销售价的启用 SKU 数。
     pub priced_sku_count: u32,
+    /// 供应商资料待确认字段数。
+    pub source_diff_count: u32,
+    /// 供应商资料待确认字段。
+    pub source_diff_fields: Vec<SourceField>,
     /// 当前商品修订 ID。
     pub current_revision_id: Option<String>,
     /// 创建时间（秒级时间戳）。
@@ -304,6 +309,8 @@ impl From<ProductRow> for ProductView {
             sku_count: row.sku_count,
             supplied_sku_count: row.supplied_sku_count,
             priced_sku_count: row.priced_sku_count,
+            source_diff_count: row.source_diff_count,
+            source_diff_fields: row.source_diff_fields,
             current_revision_id: row.current_revision_id,
             created_at: row.created_at,
             version: row.version,

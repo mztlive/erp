@@ -21,8 +21,6 @@ export type SupplierOrdersUrlState = {
     cancelStatuses?: CancelStatus[]
     refundStatuses?: RefundStatus[]
     aftersalePending?: boolean
-    paidFrom?: string
-    paidTo?: string
     page: number
     pageSize: number
     preview?: string
@@ -74,8 +72,6 @@ const codec = createUrlStateCodec<SupplierOrdersUrlState>([
         values: REFUND_STATUSES,
     },
     { key: "aftersalePending", type: "boolean", defaultValue: false },
-    { key: "paidFrom", type: "string" },
-    { key: "paidTo", type: "string" },
     { key: "page", type: "number", defaultValue: 1 },
     { key: "pageSize", type: "number", defaultValue: 50, min: 1, max: 100 },
     { key: "preview", type: "string", aliases: ["supplierOrderId"] },

@@ -90,6 +90,7 @@ export function buildProductFilterSnapshotLabel(input: {
     productKind?: ProductKind
     productListingStatus?: ProductListingFilter
     productSupplyCoverage?: ProductSkuCoverageFilter
+    productSourceDiffPending?: boolean
     productSalesPriceMin?: string
     productSalesPriceMax?: string
     selectedCategoryLabel?: string
@@ -103,6 +104,7 @@ export function buildProductFilterSnapshotLabel(input: {
         ...(input.productKind
             ? [`商品类型=${PRODUCT_KIND_LABELS[input.productKind]}`]
             : []),
+        ...(input.productSourceDiffPending ? ["资料更新=待确认"] : []),
         ...(input.selectedCategoryLabel
             ? [`商品分类=${input.selectedCategoryLabel}`]
             : []),
@@ -236,6 +238,7 @@ export function buildProductTableDescription(input: {
     productKind?: ProductKind
     productListingStatus?: ProductListingFilter
     productSupplyCoverage?: ProductSkuCoverageFilter
+    productSourceDiffPending?: boolean
     productSalesPriceMin?: string
     productSalesPriceMax?: string
     selectedCategoryLabel?: string
@@ -243,6 +246,7 @@ export function buildProductTableDescription(input: {
     selectedSupplierLabel?: string
 }): string {
     const active: string[] = []
+    if (input.productSourceDiffPending) active.push("资料更新待确认")
     if (input.q.trim()) active.push(`搜索「${input.q.trim()}」`)
     if (input.lifecycleStatus !== "all") {
         active.push(`启用状态 ${lifecycleFilterLabel(input.lifecycleStatus)}`)

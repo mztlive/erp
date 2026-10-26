@@ -175,7 +175,7 @@ export function PortalTermsForm({
                 id="supplier-portal-terms-recheck-conflict"
                 currentSummary={
                     offeringQuery.data
-                        ? `当前供给：${offeringQuery.data.name ?? offeringQuery.data.sku_name ?? "商品规格"}；代发含税价${offeringTerms(offeringQuery.data).dropship_supply_price_gross}，集采含税价${offeringTerms(offeringQuery.data).bulk_supply_price_gross}`
+                        ? `当前供给：${offeringQuery.data.name ?? offeringQuery.data.sku_name ?? "商品规格"}；代发含税价${offeringTerms(offeringQuery.data).dropship_supply_price_gross}，集采含税价${offeringTerms(offeringQuery.data).bulk_supply_price_gross ?? "未提供"}`
                         : catalog.data
                           ? `当前规格：${catalog.data.name} / ${catalog.data.specification} / ${catalog.data.unit_name}。请核对原报价仍适用于当前规格。`
                           : undefined

@@ -105,7 +105,7 @@ pub(super) async fn availability<P: OfferingWritePort>(
         offering_id: prepared.offering_id.to_string(),
         availability_status: prepared.availability.availability_status,
         availability_version: prepared.result_version,
-        source_updated_at: prepared.availability.source_updated_at.unix_secs(),
+        source_updated_at: prepared.availability.source_updated_at.map(Instant::unix_secs),
         safety_pause: None,
     };
     store_command(
@@ -216,9 +216,9 @@ mod tests {
             source_connection_id: None,
             terms: SupplierOfferingTermsWrite {
                 dropship_supply_price_gross: "10".into(),
-                bulk_supply_price_gross: "9".into(),
+                bulk_supply_price_gross: Some("9".into()),
                 input_tax_rate: "0.13".into(),
-                bulk_minimum_order_quantity: "1".into(),
+                bulk_minimum_order_quantity: Some("1".into()),
                 product_capabilities: vec![],
                 valid_from: "2026-01-01".into(),
                 valid_to: None,
@@ -308,7 +308,7 @@ mod tests {
                 };
                 availability(&port, &mut p, &mut executor).await.map(|result| {
                     assert_eq!(result.availability_version, p.availability.base.version);
-                    assert_eq!(result.source_updated_at, 100);
+                    assert_eq!(result.source_updated_at, Some(100));
                     assert_eq!(result.safety_pause, None);
                 })
             },

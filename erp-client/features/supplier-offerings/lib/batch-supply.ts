@@ -108,8 +108,12 @@ export function batchDefaults(
         applyAvailabilityStatus: false,
         applyQuantity: false,
         common,
-        rows: offerings.map(offeringBatchRow),
-        message: "",
+        rows: offerings
+            .filter((item) => item.source_type !== "API")
+            .map(offeringBatchRow),
+        message: offerings.some((item) => item.source_type === "API")
+            ? "已略过 API 来源供给，其采购报价和可供情况随供应商接口更新。"
+            : "",
     }
 }
 export const lockedRow = (row: BatchRow) =>

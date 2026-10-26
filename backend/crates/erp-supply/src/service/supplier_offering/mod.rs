@@ -25,8 +25,8 @@ use crate::dto::supplier_offering::{
     UpdateSupplierOfferingAvailabilityResult,
 };
 use crate::entity::supplier_offering::{
-    OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand,
-    SupplierOfferingRevision,
+    OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
+    SupplierOfferingCommand, SupplierOfferingRevision,
 };
 use crate::ports::offering_qualification::QualificationPort;
 use crate::ports::{FailClosedOfferingDataScopePort, OfferingDataScopePort};
@@ -36,6 +36,7 @@ use crate::{Error, Result};
 mod access;
 mod handover;
 mod recovery;
+mod source_observation;
 mod write;
 
 pub use access::{OfferingAccess, offering_scope};
@@ -172,7 +173,7 @@ impl SupplierOfferingService {
             executor,
         )
         .await?;
-        let revision_data = req.terms.try_into_revision_data(offering_id.clone(), 1)?;
+        let revision_data = req.try_into_initial_revision(offering_id.clone())?;
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
         qualification
@@ -279,10 +280,14 @@ impl SupplierOfferingService {
         let next_no = offering
             .next_revision_no(current_no, req.expected_revision_no)
             .map_err(|_| Error::ConflictError("供给版本已经变化，请刷新后重新保存".to_string()))?;
-        let revision_data =
-            req.terms.try_into_revision_data(SupplierOfferingId::new(offering.base.id.clone()), next_no)?;
+        let revision_data = req.terms.try_into_source_revision_data(
+            SupplierOfferingId::new(offering.base.id.clone()),
+            next_no,
+            offering.source_type,
+        )?;
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
+        self.ensure_api_revision_prices(&offering, &revision, executor).await?;
         let next_status = req.status.unwrap_or(offering.stable.status);
         if next_status == OfferingStatus::Active {
             qualification
@@ -357,6 +362,7 @@ impl SupplierOfferingService {
                 .map_err(|e| Error::Internal(e.to_string()));
         }
         let offering = self.access().require_offering(actor, "update", id, executor).await?;
+        offering.ensure_manual_availability_writable()?;
         if !offering.has_responsibility() {
             return Err(Error::BusinessLogicError("供给缺少维护人或主属组织，请先交接".into()));
         }
@@ -474,6 +480,30 @@ impl SupplierOfferingService {
         offering.assign_delivery_template(Some(SupplierDeliveryTemplateId::new(template.base.id)), actor);
         Ok(())
     }
+    async fn ensure_api_revision_prices(
+        &self,
+        offering: &SupplierOffering,
+        revision: &SupplierOfferingRevision,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if offering.source_type != OfferingSourceType::Api {
+            return Ok(());
+        }
+        let id = offering
+            .stable
+            .current_revision_id
+            .as_deref()
+            .ok_or_else(|| Error::BusinessLogicError("API 供给当前条款缺失".into()))?;
+        let current = self
+            .db
+            .supplier_offering_revisions()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("API 供给当前条款不存在".into()))?;
+        revision.ensure_api_prices_unchanged(&current)?;
+        Ok(())
+    }
+
     async fn current_revision_no(
         &self,
         offering: &SupplierOffering,
@@ -608,9 +638,9 @@ mod tests {
             source_connection_id: None,
             terms: crate::dto::supplier_offering::SupplierOfferingTermsWrite {
                 dropship_supply_price_gross: "10.00".to_string(),
-                bulk_supply_price_gross: "9.00".to_string(),
+                bulk_supply_price_gross: Some("9.00".to_string()),
                 input_tax_rate: "0.13".to_string(),
-                bulk_minimum_order_quantity: "10".to_string(),
+                bulk_minimum_order_quantity: Some("10".to_string()),
                 product_capabilities: vec!["DROP_SHIP".to_string()],
                 valid_from: "2026-01-01".to_string(),
                 valid_to: None,
@@ -635,7 +665,7 @@ mod tests {
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-1"), data).unwrap();
         assert_eq!(revision.revision.revision_no, 1);
         assert_eq!(revision.dropship_supply_price_gross.to_string(), "10.00");
-        assert_eq!(revision.bulk_minimum_order_quantity.to_string(), "10");
+        assert_eq!(revision.bulk_minimum_order_quantity.unwrap().to_string(), "10");
         assert_eq!(revision.valid_from.to_string(), "2026-01-01");
     }
 }

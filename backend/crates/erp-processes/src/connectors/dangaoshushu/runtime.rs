@@ -8,8 +8,9 @@ use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType, SupplierHealthCheckType,
 };
-use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Scan};
-use erp_supply::ports::connector::offer::OfferSource;
+use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Lookup, Scan, Snapshot};
+use erp_supply::ports::connector::offer::IncrementalSupport;
+use erp_supply::ports::connector::order::{OrderKey, OrderSnapshot, Orders};
 use erp_supply::ports::supplier_api_gateway::{CatalogRead, ClassifiedError, SupplierApiGateway};
 use erp_supply::ports::supplier_reference_registry::{
     ResolvedSupplierReference, SupplierDeploymentConfig, SupplierReferenceKind, SupplierReferenceOption,
@@ -100,6 +101,21 @@ impl DangaoshushuRuntime {
             &SupplierReferenceTarget::from(connection),
             Arc::clone(&self.transport),
         )
+    }
+
+    /// 按已登记订单原身份只读补查，连接停用不停止既有订单跟踪。
+    /// # 参数
+    /// `connection` 为服务器加载的绑定连接，`key` 为已持久化订单号。
+    /// # 返回
+    /// 核对渠道及原单号后的真实订单观察，或明确暂不可见。
+    /// # 错误
+    /// 技术绑定失效、协议类型不符或供应商查询失败时返回分类错误。
+    pub async fn observe_order(
+        &self,
+        connection: &SupplierApiConnection,
+        key: &OrderKey,
+    ) -> ConnectorResult<Lookup<Snapshot<OrderSnapshot>>> {
+        self.bound_connector(connection)?.order(key).await
     }
 
     /// 按当前后台连接读取协议目录；停用连接仍允许显式诊断查询。
@@ -278,9 +294,28 @@ fn reference_kind(kind: SupplierReferenceKind) -> ConnectorResult<&'static str> 
 }
 
 impl SupplierApiGateway for DangaoshushuRuntime {
+    fn catalog_availability_validity(&self, _: &SupplierApiConnection) -> Option<u64> {
+        self.settings.availability_validity_seconds
+    }
+    fn catalog_full_sync_interval(&self, _: &SupplierApiConnection) -> u64 {
+        self.settings.catalog_full_sync_interval_seconds
+    }
+
+    fn catalog_incremental_support(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<IncrementalSupport, ClassifiedError> {
+        self.bound_connector(connection).map_err(classified)?;
+        Ok(IncrementalSupport::Partial)
+    }
+
     fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
         Box::pin(async move {
-            self.bound_connector(connection).map_err(classified)?.scan(scan).await.map_err(classified)
+            self.bound_connector(connection)
+                .map_err(classified)?
+                .scan_with_details(scan)
+                .await
+                .map_err(classified)
         })
     }
 
@@ -373,9 +408,12 @@ mod tests {
     }
     #[tokio::test]
     async fn automatic_configuration_supports_catalog_before_business_enable_and_invalidates_on_rotation() {
-        let (connector, transport) = recording_connector(vec![Ok(json!({ "product_list": [
+        let (connector, transport) = recording_connector(vec![
+            Ok(json!({ "product_list": [
             { "id": "p1", "title": "蛋糕", "specs": [{ "spec_id": "s1", "name": "6寸" }] }
-        ] }))]);
+        ] })),
+            Ok(json!({"product":{"id":"p1","title":"蛋糕"}, "specs":[{"id":"s1","name":"6寸"}]})),
+        ]);
         let runtime = DangaoshushuRuntime { settings: connector.settings, transport: transport.clone() };
         let mut connection = connection();
         let config = runtime.deployment_config(&SupplierReferenceTarget::from(&connection)).unwrap();
@@ -393,7 +431,7 @@ mod tests {
             .unwrap();
         assert_eq!(page.items.len(), 1);
         assert!(page.next.is_none());
-        assert_eq!(transport.requests.lock().unwrap().len(), 1);
+        assert_eq!(transport.requests.lock().unwrap().len(), 2);
         connection.record_health(HealthCheckResult::Healthy, Instant::now());
         let mut rotated_settings = settings();
         rotated_settings.private_key = "rotated-secret".into();
@@ -611,5 +649,26 @@ mod tests {
             bind_from_options(&runtime, &mut connection).await;
             assert!(runtime.bound_connector(&connection).is_ok());
         }
+    }
+
+    #[tokio::test]
+    async fn disabled_connection_keeps_existing_order_queries_without_enabling_writes() {
+        let (connector, transport) = recording_connector(vec![Ok(json!({
+            "channel_no":"test-channel","out_order_no":"merchant-1","order_no":"external-1",
+            "status":"1"
+        }))]);
+        let runtime = DangaoshushuRuntime { settings: connector.settings, transport: transport.clone() };
+        let mut connection = connection();
+        bind_from_options(&runtime, &mut connection).await;
+        assert!(!connection.is_active());
+        assert_eq!(runtime.connector(&connection).err().unwrap().code, "DGSS_CONNECTION_DISABLED");
+        let result =
+            runtime.observe_order(&connection, &OrderKey::External("external-1".into())).await.unwrap();
+        let Lookup::Found(result) = result else {
+            panic!("known order must be returned");
+        };
+        assert_eq!(result.value.reference.merchant_order_no, "merchant-1");
+        assert_eq!(result.stamp.changed_at, None);
+        assert_eq!(transport.requests.lock().unwrap().len(), 1);
     }
 }

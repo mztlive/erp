@@ -7,7 +7,7 @@ use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductKind};
 use erp_core::common::time::BusinessDate;
 use erp_core::delivery_coverage::{DeliveryReach, delivery_reach};
-use erp_core::delivery_policy::DeliveryPolicy;
+use erp_core::delivery_policy::{DeliveryPolicy, DeliveryRuleSet, DeliveryTerm};
 use erp_core::ids::SkuId;
 use erp_core::region::RegionCode;
 use erp_procurement::entity::facts::{AvailabilityStatus, OfferingRevisionFact};
@@ -130,7 +130,7 @@ pub async fn sellable_delivery_coverage(
             items.push(DeliveryCoverageItemView {
                 sku_id: sku_id.to_string(),
                 region_code: region.to_string(),
-                hint: coverage_hint(line_policies, &region),
+                hint: coverage_hint(&line_policies.iter().collect::<Vec<_>>(), &region),
             });
             seen.push(region);
         }
@@ -166,8 +166,8 @@ pub async fn sku_delivery_inputs(
             let supply = supplies.remove(sku_id).unwrap_or_default();
             let mut policies: Vec<DeliveryPolicy> = Vec::new();
             for policy in supply.policies {
-                if !policies.contains(policy) {
-                    policies.push(policy.clone());
+                if !policies.contains(&policy) {
+                    policies.push(policy);
                 }
             }
             SkuDeliveryInput {
@@ -201,15 +201,15 @@ async fn restricted_skus(db: &Database, sku_ids: &[SkuId]) -> Result<HashMap<Str
 
 /// 一个 SKU 的有效供给汇总。
 #[derive(Default)]
-struct EffectiveSupply<'a> {
-    policies: Vec<&'a DeliveryPolicy>,
+struct EffectiveSupply {
+    policies: Vec<DeliveryPolicy>,
     supplier_ids: Vec<String>,
     next_change_date: Option<BusinessDate>,
 }
 
 /// 按 SKU 归集有效且当前可供供给的生效配送政策与供应商，并记录各供给条款最近一次按日期变化。
-fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<String, EffectiveSupply<'_>> {
-    let mut supplies: HashMap<String, EffectiveSupply<'_>> = HashMap::new();
+fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<String, EffectiveSupply> {
+    let mut supplies: HashMap<String, EffectiveSupply> = HashMap::new();
     for offering in &facts.offerings {
         let Some(revision) =
             offering.stable.current_revision_id.as_ref().and_then(|id| facts.revisions.get(id))
@@ -228,7 +228,11 @@ fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<
         if !today.is_within(revision.valid_from, revision.valid_to) || !available {
             continue;
         }
-        supply.policies.push(&delivery.policy);
+        let mut policy = delivery.policy.clone();
+        if revision.bulk_supply_price_gross.is_none() || revision.bulk_minimum_order_quantity.is_none() {
+            policy.bulk = DeliveryRuleSet::uniform(DeliveryTerm::NotDeliverable);
+        }
+        supply.policies.push(policy);
         let supplier_id = offering.supplier_id.to_string();
         if !supply.supplier_ids.contains(&supplier_id) {
             supply.supplier_ids.push(supplier_id);
@@ -300,6 +304,7 @@ mod tests {
         use erp_core::common::time::BusinessDate;
         use erp_core::delivery_policy::{DeliveryPolicy, DeliveryRuleSet, DeliveryTerm};
         use erp_core::ids::{SkuId, SupplierOfferingId};
+        use erp_core::region::RegionCode;
         use erp_procurement::entity::facts::{
             AvailabilityFact, AvailabilityStatus, CurrentRevisionFact, FactIdentity, OfferingFact,
             OfferingRevisionFact, VersionedFactIdentity,
@@ -328,10 +333,10 @@ mod tests {
                 supplier_offering_id: SupplierOfferingId::new(offer.id),
                 valid_from: date(offer.from),
                 valid_to: offer.to.map(date),
-                bulk_supply_price_gross: "10".parse().unwrap(),
+                bulk_supply_price_gross: Some("10".parse().unwrap()),
                 dropship_supply_price_gross: "11".parse().unwrap(),
                 input_tax_rate: "0.13".parse().unwrap(),
-                bulk_minimum_order_quantity: "1".parse().unwrap(),
+                bulk_minimum_order_quantity: Some("1".parse().unwrap()),
             }
         }
 
@@ -401,6 +406,25 @@ mod tests {
             assert_eq!(supply.supplier_ids, vec!["supplier-a".to_string()]);
             assert_eq!(supply.next_change_date, Some(date("2026-10-16")));
             assert!(effective_supply(&CreationBasisFacts::default(), date("2026-10-14")).is_empty());
+        }
+
+        #[test]
+        fn missing_bulk_terms_do_not_claim_bulk_delivery_coverage() {
+            let policy = DeliveryPolicy::new(
+                DeliveryRuleSet::uniform(DeliveryTerm::NotDeliverable),
+                DeliveryRuleSet::uniform(DeliveryTerm::FreightIncluded),
+            )
+            .unwrap();
+            let mut facts = facts(&[offer("api", "supplier", "2026-10-01", None)], &policy);
+            let revision = facts.revisions.get_mut("api-terms").unwrap();
+            revision.bulk_supply_price_gross = None;
+            revision.bulk_minimum_order_quantity = None;
+            let supplies = effective_supply(&facts, date("2026-10-14"));
+            let policies = supplies.get("sku-1").unwrap().policies.iter().collect::<Vec<_>>();
+            assert_eq!(
+                super::coverage_hint(&policies, &RegionCode::parse("440305").unwrap()),
+                super::DeliveryCoverageHint::NoSupply
+            );
         }
 
         #[test]

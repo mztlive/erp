@@ -60,8 +60,6 @@ export function SupplierOrdersListPage() {
             cancelStatuses: url.cancelStatuses,
             refundStatuses: url.refundStatuses,
             aftersalePending: url.aftersalePending,
-            paidFrom: url.paidFrom,
-            paidTo: url.paidTo,
             ownerUserIds: url.ownerUserIds,
             handlerUserIds: url.handlerUserIds,
             orgUnitIds: url.orgUnitIds,

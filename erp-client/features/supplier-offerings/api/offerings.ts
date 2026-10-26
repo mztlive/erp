@@ -162,7 +162,7 @@ export function updateSupplierOfferingAvailability(
         offering_id: string
         availability_status: string
         availability_version: number
-        source_updated_at: number
+        source_updated_at: number | null
     }>(
         `/admin/supplier-offerings/${encodeURIComponent(offeringId)}/availability`,
         body,

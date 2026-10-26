@@ -60,27 +60,27 @@ pub struct ComputedLine {
 /// 返回逐行已舍入金额及汇总。
 ///
 /// # 错误
-/// 无。
+/// 选择缺少集采条款的供给时拒绝，不回退另一种采购价。
 ///
 /// # 关键业务约束
 /// 表头只汇总逐行舍入后的金额。
 pub fn compute_selected_lines(
     selected_lines: &[SelectedLine],
     price_basis: SupplyPriceBasis,
-) -> ComputedSelection {
+) -> Result<ComputedSelection> {
     let mut gross_total = zero_amount();
     let mut net_total = zero_amount();
     let mut tax_total = zero_amount();
     let mut lines = Vec::with_capacity(selected_lines.len());
     for selected in selected_lines {
-        let cost = selected.basis.unit_cost(price_basis);
+        let cost = selected.basis.unit_cost(price_basis)?;
         let (gross, net, tax) = line_amounts(cost, selected.quantity, selected.basis.tax_rate());
         gross_total = gross_total.checked_add(gross);
         net_total = net_total.checked_add(net);
         tax_total = tax_total.checked_add(tax);
         lines.push(ComputedLine { selected: selected.clone(), cost, gross, net, tax });
     }
-    ComputedSelection { totals: (gross_total, net_total, tax_total), lines }
+    Ok(ComputedSelection { totals: (gross_total, net_total, tax_total), lines })
 }
 
 /// 构造单条采购草稿行。
@@ -297,12 +297,16 @@ pub fn judge_selected_delivery(
         let quantities = selected
             .iter()
             .filter(|line| line.basis.inquiry_quote.is_none())
-            .map(|line| BulkOrderQuantity {
-                offering_id: line.basis.supply.offering.base.id.as_str(),
-                quantity: line.quantity,
-                minimum: line.basis.supply.revision.bulk_minimum_order_quantity,
+            .map(|line| {
+                Ok(BulkOrderQuantity {
+                    offering_id: line.basis.supply.offering.base.id.as_str(),
+                    quantity: line.quantity,
+                    minimum: line.basis.supply.revision.bulk_minimum_order_quantity.ok_or_else(|| {
+                        Error::ValidationError("该供给未提供集采起订量，不能按集采采购".into())
+                    })?,
+                })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
         ensure_bulk_direct_minimum(&quantities).map_err(|error| Error::ValidationError(error.to_string()))?;
     }
     Ok(judgements)

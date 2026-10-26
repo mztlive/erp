@@ -110,9 +110,9 @@ export type CompleteSupplierSupplyExceptionTaskResult = Readonly<{
 
 export type SupplierOfferingTermsInput = Readonly<{
     dropship_supply_price_gross: string
-    bulk_supply_price_gross: string
+    bulk_supply_price_gross: string | null
     input_tax_rate: string
-    bulk_minimum_order_quantity: string
+    bulk_minimum_order_quantity: string | null
     product_capabilities: readonly string[]
     valid_from: string
     valid_to?: string | null

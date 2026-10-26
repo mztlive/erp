@@ -28,7 +28,7 @@ impl SupplierConnectionExecutionProcess {
     /// # 错误
     /// 任务缺少连接 ID、加载连接失败，或启动与结果事务失败时返回错误。
     pub(super) async fn process_catalog_job(&self, job: BackgroundJob, actor: &AuditActor) -> Result<()> {
-        execute(&CatalogExecution(self), job, actor).await
+        execute(&CatalogExecution { process: self, actor }, job, actor).await
     }
 
     async fn start_background_job(&self, job: BackgroundJob) -> Result<BackgroundJob> {
@@ -100,7 +100,10 @@ impl SupplierConnectionExecutionProcess {
 }
 
 /// 生产适配器：连接在启动事务之前读取，结果事务不增加配置复验。
-struct CatalogExecution<'a>(&'a SupplierConnectionExecutionProcess);
+struct CatalogExecution<'a> {
+    process: &'a SupplierConnectionExecutionProcess,
+    actor: &'a AuditActor,
+}
 impl ConnectionJobExecutionPort for CatalogExecution<'_> {
     type Job = BackgroundJob;
     type Started = (SupplierApiConnection, BackgroundJob);
@@ -110,16 +113,16 @@ impl ConnectionJobExecutionPort for CatalogExecution<'_> {
             .domain_job_id
             .clone()
             .ok_or_else(|| Error::BusinessLogicError("目录同步任务缺少连接ID".to_string()))?;
-        let connection = SupplierApiService::new(self.0.db.clone())
+        let connection = SupplierApiService::new(self.process.db.clone())
             .load_connection(&connection_id, &mut NoTransaction)
             .await?;
-        let started_job = self.0.start_background_job(job).await?;
+        let started_job = self.process.start_background_job(job).await?;
         Ok((connection, started_job))
     }
     async fn invoke(&self, started: &Self::Started) -> Self::Outcome {
-        self.0.scan_catalog(&started.0, &started.1).await
+        self.process.scan_catalog(&started.0, &started.1, self.actor).await
     }
     async fn finish(&self, started: Self::Started, outcome: Self::Outcome, actor: &AuditActor) -> Result<()> {
-        self.0.finish_catalog_job(started.1, started.0, outcome, actor).await
+        self.process.finish_catalog_job(started.1, started.0, outcome, actor).await
     }
 }

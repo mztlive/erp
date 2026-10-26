@@ -19,6 +19,7 @@ use crate::entity::catalog::{ListingStatus, Product, ProductListingStatus, Sku};
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
+use crate::source_sync::repository::ProductSourceExt;
 
 /// 商品上架汇总投影类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSummary;
@@ -252,6 +253,7 @@ impl CatalogService {
         let mut summaries = self.product_listing_views(std::slice::from_ref(&product_id)).await?;
         let summary =
             summaries.remove(product_id.as_ref()).unwrap_or(ProductListingView::new(product_id.to_string()));
+        let source = self.db.product_sources().find_by_id(&product.base.id, &mut NoTransaction).await?;
         Ok(ProductView {
             id: product.base.id,
             product_no: product.product_no,
@@ -265,6 +267,8 @@ impl CatalogService {
             sku_count: summary.sku_count,
             supplied_sku_count: 0,
             priced_sku_count: 0,
+            source_diff_count: source.as_ref().map_or(0, |s| s.pending_count),
+            source_diff_fields: source.map_or_else(Vec::new, |s| s.pending_fields),
             current_revision_id: product.stable.current_revision_id,
             created_at: product.base.created_at,
             version: product.base.version,

@@ -5,6 +5,7 @@ use std::num::NonZeroU32;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_core::money::{Quantity, Rate, UnitPrice};
+use serde::{Deserialize, Serialize};
 
 use super::common::{ActionKey, ConnectorResult, Lookup, Page, Scan, Snapshot, SupplierSku};
 use super::order::{DeliveryChoice, OrderLine, Recipient};
@@ -55,7 +56,7 @@ pub trait OfferSource: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OfferChange {
-    Upsert(Offer),
+    Upsert(Box<Offer>),
     /// 仅在来源明确表示撤回时返回；不能从分页缺失推导。
     Withdrawn(SupplierSku),
 }
@@ -70,6 +71,44 @@ pub struct Offer {
     pub unit: Option<String>,
     /// 当前完整供应报价；None 表示未取得，不得用零价替代。
     pub quote: Option<SupplyQuote>,
+    /// 来源展示资料及非预占可供观察；缺失字段不表示明确清空。
+    pub details: OfferDetails,
+}
+
+/// 供应商图片；URL 或图片编号本身不构成内容版本证明。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CatalogImage {
+    pub url: String,
+    pub content_fingerprint: Option<String>,
+    #[serde(default)]
+    pub file_asset_id: Option<String>,
+}
+
+/// 来源商品可供状态，明确撤回与暂不可供分别保存。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CatalogAvailability {
+    Available,
+    Unavailable,
+    Withdrawn,
+    #[default]
+    Unknown,
+}
+
+/// 商品来源资料；图片 None 为未提供，Some([]) 才是明确清空。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OfferDetails {
+    pub category_id: Option<String>,
+    pub category_name: Option<String>,
+    pub brand_id: Option<String>,
+    pub brand_name: Option<String>,
+    pub description: Option<String>,
+    pub images: Option<Vec<CatalogImage>>,
+    pub detail_images: Option<Vec<CatalogImage>>,
+    pub availability: CatalogAvailability,
+    /// 仅精确数量写入；未知不填，不设上限由独立标记表达。
+    pub available_quantity: Option<String>,
+    pub quantity_unbounded: bool,
 }
 
 /// 人民币含税采购报价；不承载供应商建议零售价或公司销售参考价。
@@ -181,7 +220,7 @@ pub trait AvailabilitySource: Send + Sync {
 }
 
 /// 地址及选项令牌属于供应商协议证据，按敏感数据保存，不派生 Debug。
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryContext {
     /// 仅用于绑定连接内恢复地址准备；不得夹带密钥，不能当成通用命令 JSON。
     pub reference: String,
@@ -195,7 +234,7 @@ pub struct DeliveryQuery {
 }
 
 /// 一份完整、可选择的拆单方案；各组无重叠并完整覆盖请求明细。
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryPlan {
     pub groups: Vec<DeliveryGroup>,
     /// 供应商承诺的选项有效期；未提供时消费方须采用显式配置的复核策略。
@@ -203,7 +242,7 @@ pub struct DeliveryPlan {
 }
 
 /// 同一组可以提交为一个外部订单；不同组必须分配不同的我方订单号。
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryGroup {
     pub line_ids: Vec<String>,
     pub choices: Vec<DeliveryChoice>,

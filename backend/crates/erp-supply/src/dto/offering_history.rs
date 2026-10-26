@@ -44,7 +44,7 @@ pub struct OfferingRevisionView {
     /// 进项税率。
     pub input_tax_rate: Option<String>,
     /// 集采起订量。
-    pub bulk_minimum_order_quantity: String,
+    pub bulk_minimum_order_quantity: Option<String>,
     /// 商品能力。
     pub product_capabilities: Vec<String>,
     /// 生效日期。
@@ -72,10 +72,10 @@ impl OfferingRevisionView {
             created_at: revision.base.created_at,
             dropship_supply_price_gross: Some(revision.dropship_supply_price_gross.to_string()),
             dropship_supply_price_net: Some(revision.dropship_supply_price_net.to_string()),
-            bulk_supply_price_gross: Some(revision.bulk_supply_price_gross.to_string()),
-            bulk_supply_price_net: Some(revision.bulk_supply_price_net.to_string()),
+            bulk_supply_price_gross: revision.bulk_supply_price_gross.map(|value| value.to_string()),
+            bulk_supply_price_net: revision.bulk_supply_price_net.map(|value| value.to_string()),
             input_tax_rate: Some(revision.input_tax_rate.to_string()),
-            bulk_minimum_order_quantity: revision.bulk_minimum_order_quantity.to_string(),
+            bulk_minimum_order_quantity: revision.bulk_minimum_order_quantity.map(|value| value.to_string()),
             product_capabilities: revision.product_capabilities,
             valid_from: revision.valid_from.to_string(),
             valid_to: revision.valid_to.map(|value| value.to_string()),
@@ -176,7 +176,7 @@ mod tests {
     fn history_redacts_all_cost_fields_without_losing_non_cost_terms() {
         let mut view = OfferingRevisionView::from_revision(revision(1), Some("revision-1"));
         assert!(view.dropship_supply_price_gross.is_some());
-        let minimum = view.bulk_minimum_order_quantity.clone();
+        let minimum = view.bulk_minimum_order_quantity.clone().unwrap();
         view.redact_costs();
         let json = serde_json::to_value(view).unwrap();
         for key in [

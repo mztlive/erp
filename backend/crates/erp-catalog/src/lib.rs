@@ -8,6 +8,7 @@ pub mod portal;
 pub mod ports;
 pub mod repository;
 pub mod service;
+pub mod source_sync;
 
 pub use dto::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest, CreateSkuAttributeRequest,
