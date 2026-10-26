@@ -23,6 +23,7 @@ export const SUPPLIER_SECTIONS: ReadonlyArray<{
     { id: "commercial", label: "商务合作" },
     { id: "contract", label: "合同资质" },
     { id: "invoice", label: "开票信息" },
+    { id: "delivery", label: "配送模板" },
     { id: "history", label: "历史引用" },
 ]
 

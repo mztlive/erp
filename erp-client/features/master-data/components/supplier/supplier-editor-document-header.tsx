@@ -14,6 +14,8 @@ import type { MasterDataCenterView } from "@/features/master-data/types"
 
 export function SupplierEditorDocumentHeader({
     back,
+    formId,
+    showSave,
     title,
     isCreate,
     data,
@@ -24,6 +26,8 @@ export function SupplierEditorDocumentHeader({
     disableBlocker,
     onDisable,
 }: {
+    formId: string
+    showSave: boolean
     back: DetailPageHeaderProps["back"]
     title: string
     isCreate: boolean
@@ -91,20 +95,23 @@ export function SupplierEditorDocumentHeader({
                 ) : null
             }
             primaryAction={
-                <LoadingButton
-                    id="master-data-supplier-document-header-submit"
-                    type="submit"
-                    size="sm"
-                    loading={pending}
-                    disabled={!canEdit || pending}
-                >
-                    <SaveIcon data-icon="inline-start" aria-hidden />
-                    {pending
-                        ? "提交中…"
-                        : isCreate
-                          ? masterDataCopy.createSubmit
-                          : masterDataCopy.reviseSubmit}
-                </LoadingButton>
+                showSave ? (
+                    <LoadingButton
+                        id="master-data-supplier-document-header-submit"
+                        type="submit"
+                        form={formId}
+                        size="sm"
+                        loading={pending}
+                        disabled={!canEdit || pending}
+                    >
+                        <SaveIcon data-icon="inline-start" aria-hidden />
+                        {pending
+                            ? "提交中…"
+                            : isCreate
+                              ? masterDataCopy.createSubmit
+                              : masterDataCopy.reviseSubmit}
+                    </LoadingButton>
+                ) : null
             }
         />
     )

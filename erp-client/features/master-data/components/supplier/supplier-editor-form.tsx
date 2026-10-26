@@ -1,5 +1,6 @@
 "use client"
 
+import { SupplierDeliveryTemplatesSection } from "@/features/supplier-offerings/components/delivery-templates/supplier-delivery-templates-section"
 import { PageScaffold, surfacePanelClassName } from "@/components/business"
 import { SupplierEditorBasicSection } from "@/features/master-data/components/supplier/supplier-editor-basic-section"
 import { SupplierEditorCommercialSection } from "@/features/master-data/components/supplier/supplier-editor-commercial-section"
@@ -59,6 +60,8 @@ export function SupplierEditorForm({
         canRevise,
         canDisable,
         canRevealSensitive,
+        canReadDeliveryTemplates,
+        canEditDeliveryTemplates,
         reviseBlocker,
         disableBlocker,
     } = editor
@@ -84,8 +87,10 @@ export function SupplierEditorForm({
 
     return (
         <PageScaffold density="compact">
-            <form id={formId} className="space-y-4" onSubmit={requestSave}>
+            <div className="space-y-4">
                 <SupplierEditorDocumentHeader
+                    formId={formId}
+                    showSave={activeSection !== "delivery"}
                     back={{
                         id: `${prefix}-back-list`,
                         label: "供应商列表",
@@ -120,68 +125,83 @@ export function SupplierEditorForm({
                     >
                         <SupplierSectionTabs
                             value={activeSection}
+                            canReadDeliveryTemplates={canReadDeliveryTemplates}
                             isCreate={isCreate}
                             onValueChange={setActiveSection}
                         />
 
                         <div className="p-4 md:p-5">
-                            {activeSection === "basic" && (
-                                <SupplierEditorBasicSection
-                                    values={values}
-                                    setFieldValue={setFieldValue}
-                                    canEdit={canEdit}
-                                    phoneSensitive={phoneSensitive}
-                                    addressSensitive={addressSensitive}
-                                    canRevealSensitive={canRevealSensitive}
-                                    refreshSensitiveToken={
-                                        refreshSensitiveToken
-                                    }
-                                    editedSensitiveRef={editedSensitiveRef}
-                                />
-                            )}
-
-                            {activeSection === "commercial" && (
-                                <SupplierEditorCommercialSection
-                                    values={values}
-                                    setFieldValue={setFieldValue}
-                                    canEdit={canEdit}
-                                />
-                            )}
-
-                            {activeSection === "contract" && (
-                                <SupplierEditorContractSection
-                                    values={values}
-                                    setFieldValue={setFieldValue}
-                                    canEdit={canEdit}
-                                    mediaUrlsFor={mediaUrlsFor}
-                                    mediaAssetIdsFor={mediaAssetIdsFor}
-                                    rememberMediaFiles={rememberMediaFiles}
-                                />
-                            )}
-
-                            {activeSection === "invoice" && (
-                                <SupplierEditorInvoiceSection
-                                    values={values}
-                                    setFieldValue={setFieldValue}
-                                    canEdit={canEdit}
-                                    bankSensitive={bankSensitive}
-                                    canRevealSensitive={canRevealSensitive}
-                                    refreshSensitiveToken={
-                                        refreshSensitiveToken
-                                    }
-                                    editedSensitiveRef={editedSensitiveRef}
-                                />
-                            )}
-
-                            {activeSection === "history" &&
-                                !isCreate &&
-                                data && (
-                                    <SupplierEditorHistorySection data={data} />
+                            <form id={formId} onSubmit={requestSave}>
+                                {activeSection === "basic" && (
+                                    <SupplierEditorBasicSection
+                                        values={values}
+                                        setFieldValue={setFieldValue}
+                                        canEdit={canEdit}
+                                        phoneSensitive={phoneSensitive}
+                                        addressSensitive={addressSensitive}
+                                        canRevealSensitive={canRevealSensitive}
+                                        refreshSensitiveToken={
+                                            refreshSensitiveToken
+                                        }
+                                        editedSensitiveRef={editedSensitiveRef}
+                                    />
                                 )}
+
+                                {activeSection === "commercial" && (
+                                    <SupplierEditorCommercialSection
+                                        values={values}
+                                        setFieldValue={setFieldValue}
+                                        canEdit={canEdit}
+                                    />
+                                )}
+
+                                {activeSection === "contract" && (
+                                    <SupplierEditorContractSection
+                                        values={values}
+                                        setFieldValue={setFieldValue}
+                                        canEdit={canEdit}
+                                        mediaUrlsFor={mediaUrlsFor}
+                                        mediaAssetIdsFor={mediaAssetIdsFor}
+                                        rememberMediaFiles={rememberMediaFiles}
+                                    />
+                                )}
+
+                                {activeSection === "invoice" && (
+                                    <SupplierEditorInvoiceSection
+                                        values={values}
+                                        setFieldValue={setFieldValue}
+                                        canEdit={canEdit}
+                                        bankSensitive={bankSensitive}
+                                        canRevealSensitive={canRevealSensitive}
+                                        refreshSensitiveToken={
+                                            refreshSensitiveToken
+                                        }
+                                        editedSensitiveRef={editedSensitiveRef}
+                                    />
+                                )}
+
+                                {activeSection === "history" &&
+                                    !isCreate &&
+                                    data && (
+                                        <SupplierEditorHistorySection
+                                            data={data}
+                                        />
+                                    )}
+                            </form>
+                            {activeSection === "delivery" &&
+                            !isCreate &&
+                            data &&
+                            canReadDeliveryTemplates ? (
+                                <SupplierDeliveryTemplatesSection
+                                    key={data.stableId}
+                                    supplierId={data.stableId}
+                                    canEdit={canEditDeliveryTemplates}
+                                />
+                            ) : null}
                         </div>
                     </div>
                 </div>
-            </form>
+            </div>
 
             <SupplierEditorDialogs
                 isCreate={isCreate}

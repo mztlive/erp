@@ -1,17 +1,13 @@
 "use client"
 
-import * as React from "react"
-import { PlusIcon } from "lucide-react"
-
 import { OptionCombobox } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 
 import { useSupplierDeliveryTemplatesQuery } from "../../hooks/queries"
 import { DeliveryRulesPreview } from "./delivery-rules-preview"
-import { DeliveryTemplateEditorDialog } from "./delivery-template-editor-dialog"
+import { SupplierDeliveryTemplatesLink } from "./supplier-delivery-templates-link"
 
 /** 跟随供应商默认模板的选项值；表单内以空字符串保存。 */
 const FOLLOW_DEFAULT = "__supplier_default__"
@@ -37,7 +33,6 @@ export function DeliveryTemplateField({
         account.data?.permissions,
         "supplier_offering:update",
     )
-    const [creating, setCreating] = React.useState(false)
     const list = templates.data ?? []
     const fallback = list.find((template) => template.is_default) ?? null
     const selected = value
@@ -62,17 +57,11 @@ export function DeliveryTemplateField({
             <div className="flex items-center justify-between gap-3">
                 <FieldLabel htmlFor={id}>配送模板</FieldLabel>
                 {canCreate ? (
-                    <Button
-                        id={`${id}-create`}
-                        type="button"
-                        variant="link"
-                        size="xs"
-                        disabled={!supplierId || disabled}
-                        onClick={() => setCreating(true)}
-                    >
-                        <PlusIcon data-icon="inline-start" aria-hidden />
-                        新建模板
-                    </Button>
+                    <SupplierDeliveryTemplatesLink
+                        id={`${id}-manage`}
+                        supplierId={supplierId}
+                        disabled={disabled}
+                    />
                 ) : null}
             </div>
             <OptionCombobox
@@ -112,16 +101,6 @@ export function DeliveryTemplateField({
                     决定哪些地区能配送、集采是否另付运费。未设置时按全国配送、包邮判定。
                 </FieldDescription>
             )}
-            {creating ? (
-                <DeliveryTemplateEditorDialog
-                    supplierId={supplierId}
-                    template={null}
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setCreating(false)
-                    }}
-                />
-            ) : null}
         </Field>
     )
 }

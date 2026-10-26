@@ -38,10 +38,12 @@ export function SupplierSummaryStrip({
 export function SupplierSectionTabs({
     value,
     isCreate,
+    canReadDeliveryTemplates,
     onValueChange,
 }: {
     value: string
     isCreate: boolean
+    canReadDeliveryTemplates: boolean
     onValueChange: (value: string) => void
 }) {
     return (
@@ -58,7 +60,10 @@ export function SupplierSectionTabs({
                 className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-6 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0"
             >
                 {SUPPLIER_SECTIONS.filter(
-                    (section) => !isCreate || section.id !== "history",
+                    (section) =>
+                        (!isCreate ||
+                            !["history", "delivery"].includes(section.id)) &&
+                        (section.id !== "delivery" || canReadDeliveryTemplates),
                 ).map((section) => (
                     <TabsTrigger
                         key={section.id}

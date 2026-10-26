@@ -9,7 +9,6 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { BatchSupplyDialog } from "../components/batch/batch-supply-dialog"
 import { AssignDeliveryTemplateDialog } from "../components/delivery-templates/assign-delivery-template-dialog"
-import { DeliveryTemplatesDialog } from "../components/delivery-templates/delivery-templates-dialog"
 import type { BatchMode } from "../lib/batch-supply"
 import { PlusIcon } from "lucide-react"
 
@@ -78,7 +77,6 @@ export const SupplierOfferingsPage = () => {
     )
     const canSelect =
         canBatchRevise || canBatchAvailability || canAssignTemplate
-    const [templatesOpen, setTemplatesOpen] = React.useState(false)
     const [assigning, setAssigning] = React.useState<
         SupplierOfferingView[] | null
     >(null)
@@ -201,16 +199,6 @@ export const SupplierOfferingsPage = () => {
                             render={<Link href={state.urlState.returnTo} />}
                         >
                             返回商品
-                        </Button>
-                    ) : null}
-                    {!state.taskMode ? (
-                        <Button
-                            id="supplier-offerings-page-delivery-templates"
-                            type="button"
-                            variant="outline"
-                            onClick={() => setTemplatesOpen(true)}
-                        >
-                            配送模板
                         </Button>
                     ) : null}
                     {!state.taskMode ? (
@@ -498,14 +486,6 @@ export const SupplierOfferingsPage = () => {
                 onClose={closePreview}
                 onClosed={restorePreviewFocus}
             />
-            {templatesOpen ? (
-                <DeliveryTemplatesDialog
-                    open
-                    onOpenChange={setTemplatesOpen}
-                    initialSupplierId={state.urlState.supplierId}
-                    canEdit={canAssignTemplate}
-                />
-            ) : null}
             {assigning ? (
                 <AssignDeliveryTemplateDialog
                     offerings={assigning}

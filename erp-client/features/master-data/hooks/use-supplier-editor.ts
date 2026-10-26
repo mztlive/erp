@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "@/lib/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
+import { SUPPLIER_SECTIONS } from "@/features/master-data/components/supplier/supplier-editor-fields"
 
 import { useAppForm, applyApiFormError } from "@/components/form"
 import { toast } from "@/components/ui/toast"
@@ -82,7 +83,32 @@ export function useSupplierEditor(stableId: string) {
     const [reasonDraft, setReasonDraft] = React.useState("")
     const [reasonError, setReasonError] = React.useState<string | null>(null)
     const [pendingNav, setPendingNav] = React.useState<string | null>(null)
-    const [activeSection, setActiveSection] = React.useState("basic")
+    const searchParams = useSearchParams()
+    const requestedSection = searchParams.get("section") ?? "basic"
+    const canReadDeliveryTemplates = hasPermission(
+        accountQuery.data?.permissions,
+        "supplier_offering:list",
+    )
+    const canEditDeliveryTemplates = hasPermission(
+        accountQuery.data?.permissions,
+        "supplier_offering:update",
+    )
+    const activeSection =
+        SUPPLIER_SECTIONS.some((section) => section.id === requestedSection) &&
+        (!isCreate || !["history", "delivery"].includes(requestedSection)) &&
+        (requestedSection !== "delivery" || canReadDeliveryTemplates)
+            ? requestedSection
+            : "basic"
+    const setActiveSection = (section: string) => {
+        const url = new URL(window.location.href)
+        if (section === "basic") url.searchParams.delete("section")
+        else url.searchParams.set("section", section)
+        window.history.replaceState(
+            null,
+            "",
+            `${url.pathname}${url.search}${url.hash}`,
+        )
+    }
     const errorRef = React.useRef<HTMLDivElement | null>(null)
     const hydratedKeyRef = React.useRef<string | null>(null)
     /** 弹窗确认的变更原因；保证 setFieldValue 与 handleSubmit 之间不丢值。 */
@@ -398,6 +424,8 @@ export function useSupplierEditor(stableId: string) {
         canRevise,
         canDisable,
         canRevealSensitive,
+        canReadDeliveryTemplates,
+        canEditDeliveryTemplates,
         reviseBlocker,
         disableBlocker,
     }

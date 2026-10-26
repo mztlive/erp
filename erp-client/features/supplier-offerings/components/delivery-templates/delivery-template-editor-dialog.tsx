@@ -224,6 +224,9 @@ export function DeliveryTemplateEditorDialog({
                             )}
                         </form.AppField>
                     </div>
+                    <p className="text-sm text-muted-foreground">
+                        保存后立即生效。修改规则会影响使用该模板的供给；设置或取消默认模板会影响跟随供应商默认的供给。
+                    </p>
                     <RuleSetEditor form={form} mode="dropship" title="代发" />
                     <RuleSetEditor form={form} mode="bulk" title="集采" />
                     {failure ? (

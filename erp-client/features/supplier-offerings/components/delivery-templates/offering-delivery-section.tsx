@@ -17,7 +17,7 @@ import { useSupplierDeliveryTemplatesQuery } from "../../hooks/queries"
 import type { SupplierOfferingView } from "../../types"
 import { AssignDeliveryTemplateDialog } from "./assign-delivery-template-dialog"
 import { DeliveryRulesPreview } from "./delivery-rules-preview"
-import { DeliveryTemplatesDialog } from "./delivery-templates-dialog"
+import { SupplierDeliveryTemplatesLink } from "./supplier-delivery-templates-link"
 
 /** 生效模板来自哪里，用一句话说清楚。 */
 function sourceText(offering: SupplierOfferingView): string {
@@ -37,7 +37,7 @@ export function OfferingDeliverySection({
     offering: SupplierOfferingView
     canEdit: boolean
 }) {
-    const [dialog, setDialog] = React.useState<"assign" | "manage" | null>(null)
+    const [dialog, setDialog] = React.useState<"assign" | null>(null)
     const templates = useSupplierDeliveryTemplatesQuery(offering.supplier_id)
     const current = offering.delivery_template
     const list = templates.data ?? []
@@ -63,15 +63,10 @@ export function OfferingDeliverySection({
                 <CardDescription>{sourceText(offering)}</CardDescription>
                 {canEdit ? (
                     <CardAction className="flex flex-wrap justify-end gap-2">
-                        <Button
+                        <SupplierDeliveryTemplatesLink
                             id="supplier-offering-detail-delivery-manage"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setDialog("manage")}
-                        >
-                            管理模板
-                        </Button>
+                            supplierId={offering.supplier_id}
+                        />
                         {empty ? null : (
                             <Button
                                 id="supplier-offering-detail-delivery-template"
@@ -103,14 +98,6 @@ export function OfferingDeliverySection({
                         <p className="text-sm text-muted-foreground">
                             该供应商还没有配送模板。新建后可标注不配送地区、集采运费另计地区。
                         </p>
-                        <Button
-                            id="supplier-offering-detail-delivery-create"
-                            type="button"
-                            size="sm"
-                            onClick={() => setDialog("manage")}
-                        >
-                            新建配送模板
-                        </Button>
                     </div>
                 ) : null}
             </CardContent>
@@ -120,16 +107,6 @@ export function OfferingDeliverySection({
                     onOpenChange={(open) => {
                         if (!open) setDialog(null)
                     }}
-                />
-            ) : null}
-            {dialog === "manage" ? (
-                <DeliveryTemplatesDialog
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setDialog(null)
-                    }}
-                    initialSupplierId={offering.supplier_id}
-                    canEdit={canEdit}
                 />
             ) : null}
         </Card>
