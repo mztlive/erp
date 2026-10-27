@@ -9,7 +9,7 @@ use erp_supply::ports::supplier_api_gateway::CatalogPage;
 use serde_json::Value;
 
 use super::catalog::{scan_parameters, spec_value};
-use super::parsing::{mapping, snapshot, source_time};
+use super::parsing::{context, mapping, snapshot, source_time};
 use super::transport::Request;
 use super::{DangaoshushuConnector, DangaoshushuOffer};
 
@@ -56,8 +56,11 @@ impl DangaoshushuConnector {
         };
         for (index, spec) in specs.iter().enumerate() {
             let position = format!("{position}第 {} 个规格", index + 1);
-            let Some(offer) =
-                collect_item(self.transform(DangaoshushuOffer::List { product, spec }), &position, page)?
+            let Some(offer) = collect_item(
+                self.transform(DangaoshushuOffer::List { product, spec }),
+                &format!("{position}（商品列表）"),
+                page,
+            )?
             else {
                 continue;
             };
@@ -69,7 +72,7 @@ impl DangaoshushuConnector {
             let root = details.get(product_id).expect("当前商品已补查详情");
             let result =
                 root.as_ref().map_err(Clone::clone).and_then(|root| self.detail_observation(offer, root));
-            if let Some(item) = collect_item(result, &position, page)? {
+            if let Some(item) = collect_item(result, &format!("{position}（商品详情）"), page)? {
                 page.items.push(item);
             }
         }
@@ -77,9 +80,12 @@ impl DangaoshushuConnector {
     }
 
     fn detail_observation(&self, offer: Offer, root: &Value) -> ConnectorResult<Snapshot<OfferChange>> {
-        let spec = spec_value(root, &offer.sku)?.ok_or_else(mapping)?;
+        let spec = spec_value(root, &offer.sku)?
+            .ok_or_else(|| context(mapping(), "商品详情 specs 中找不到列表对应的规格"))?;
         let offer = self.transform(DangaoshushuOffer::Detail { root, spec })?;
-        Ok(snapshot(OfferChange::Upsert(Box::new(offer)), source_time(&spec["updated_at"])?))
+        let updated_at = source_time(&spec["updated_at"])
+            .map_err(|e| context(e, "规格更新时间 updated_at 格式无效，应为 YYYY-MM-DD HH:MM:SS"))?;
+        Ok(snapshot(OfferChange::Upsert(Box::new(offer)), updated_at))
     }
 }
 
@@ -157,10 +163,37 @@ mod tests {
         ]);
         let page = connector.scan_with_details(&scan(5)).await.unwrap();
         assert_eq!(page.skipped.len(), 2);
+        assert!(page.skipped[0].contains("商品详情）"));
+        assert!(page.skipped[0].contains("clearing_price"));
+        assert!(page.skipped[1].contains("找不到列表对应的规格"));
         assert_eq!(page.items.len(), 1);
         let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("expected offer") };
         assert_eq!(offer.sku.spec_id, "s2");
         assert!(page.next.is_none());
+    }
+
+    #[tokio::test]
+    async fn scan_normalizes_supplier_image_and_reports_invalid_media_without_raw_url() {
+        let (connector, _) = recording_connector(vec![
+            Ok(json!({"product_list":[listed()]})),
+            Ok(json!({"product":{"id":"p1","title":"商品"},"specs":[{"id":"s1","name":"规格"}],
+                "images":[{"m_path":"//img31.hua.com/a.jpg"}]})),
+        ]);
+        let page = connector.scan_with_details(&scan(5)).await.unwrap();
+        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("expected offer") };
+        assert_eq!(offer.details.images.as_ref().unwrap()[0].url, "https://img31.hua.com/a.jpg");
+        assert!(page.skipped.is_empty());
+
+        let (connector, _) = recording_connector(vec![
+            Ok(json!({"product_list":[listed()]})),
+            Ok(json!({"product":{"id":"p1","title":"商品"},"specs":[{"id":"s1","name":"规格"}],
+                "images":[{"m_path":"file:///private"}]})),
+        ]);
+        let page = connector.scan_with_details(&scan(5)).await.unwrap();
+        assert!(page.items.is_empty());
+        assert!(page.skipped[0].contains("第 135 页第 1 个商品第 1 个规格（商品详情）"));
+        assert!(page.skipped[0].contains("图片字段 images 第 1 项地址缺失或无效"));
+        assert!(!page.skipped[0].contains("file:///private"));
     }
 
     #[tokio::test]

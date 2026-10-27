@@ -17,7 +17,7 @@ use erp_supply::ports::connector::transform::OfferTransform;
 use rust_decimal::Decimal;
 use serde_json::Value;
 
-use super::parsing::{fixed, flag, id, mapping, snapshot, source_time, valid_id};
+use super::parsing::{context, fixed, flag, id, mapping, snapshot, source_time, valid_id};
 use super::transport::Request;
 use super::{DangaoshushuConnector, DangaoshushuOffer, error};
 
@@ -74,8 +74,10 @@ impl DangaoshushuConnector {
             .transport
             .send(Request::Read { path: "/dsapi/product/get_product_details", parameters })
             .await?;
-        if id(&product["product"]["id"])? != product_id {
-            return Err(mapping());
+        if id(&product["product"]["id"]).map_err(|e| context(e, "商品详情 product.id 缺失或格式无效"))?
+            != product_id
+        {
+            return Err(context(mapping(), "商品详情 product.id 与请求商品编号不一致"));
         }
         Ok(product)
     }
@@ -142,12 +144,19 @@ pub(super) fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)>
 /// 规格集合或身份无法解析时返回映射错误。
 pub(super) fn spec_value<'a>(product: &'a Value, sku: &SupplierSku) -> ConnectorResult<Option<&'a Value>> {
     let mut found = None;
-    for spec in product["specs"].as_array().ok_or_else(mapping)? {
-        if id(&spec["id"])? == sku.spec_id {
-            if found.is_some()
-                || (!spec["product_id"].is_null() && Some(id(&spec["product_id"])?) != sku.product_id)
+    for spec in
+        product["specs"].as_array().ok_or_else(|| context(mapping(), "商品详情 specs 缺失或不是数组"))?
+    {
+        if id(&spec["id"]).map_err(|e| context(e, "商品详情中规格 id 缺失或格式无效"))? == sku.spec_id
+        {
+            if found.is_some() {
+                return Err(context(mapping(), "商品详情中规格 id 重复"));
+            }
+            if !spec["product_id"].is_null()
+                && Some(id(&spec["product_id"]).map_err(|e| context(e, "规格 product_id 格式无效"))?)
+                    != sku.product_id
             {
-                return Err(mapping());
+                return Err(context(mapping(), "规格 product_id 与商品编号不一致"));
             }
             found = Some(spec);
         }
@@ -190,12 +199,16 @@ pub(super) fn availability_state(
 ) -> ConnectorResult<AvailabilityState> {
     let mut reasons = Vec::new();
     for (enabled, reason) in [
-        (flag(&product["brand"]["status"])?, AvailabilityBlock::Brand),
+        (status_flag(&product["brand"]["status"], "brand.status")?, AvailabilityBlock::Brand),
         (
-            flag(&product["product"]["status"])? && flag(&product["product"]["can_buy"])?,
+            status_flag(&product["product"]["status"], "product.status")?
+                && status_flag(&product["product"]["can_buy"], "product.can_buy")?,
             AvailabilityBlock::Product,
         ),
-        (!flag(&spec["deleted"])? && flag(&spec["can_buy"])?, AvailabilityBlock::Specification),
+        (
+            !status_flag(&spec["deleted"], "spec.deleted")? && status_flag(&spec["can_buy"], "spec.can_buy")?,
+            AvailabilityBlock::Specification,
+        ),
     ] {
         if !enabled {
             reasons.push(reason);
@@ -209,6 +222,10 @@ pub(super) fn availability_state(
     } else {
         AvailabilityState::Unavailable { reasons }
     })
+}
+
+fn status_flag(value: &Value, field: &str) -> ConnectorResult<bool> {
+    flag(value).map_err(|e| context(e, &format!("状态字段 {field} 必须为 0 或 1")))
 }
 
 #[async_trait]

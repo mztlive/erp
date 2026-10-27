@@ -13,6 +13,13 @@ use super::error;
 pub(super) fn mapping() -> ConnectorError {
     error(SupplierFailureClass::MappingError, "DGSS_MAPPING", "供应商字段缺失或语义无法核实")
 }
+/// 为映射失败补充固定字段说明，不暴露供应商原始值。
+pub(super) fn context(mut failure: ConnectorError, message: &str) -> ConnectorError {
+    if failure.class == SupplierFailureClass::MappingError {
+        failure.summary = message.into();
+    }
+    failure
+}
 pub(super) fn text(value: &Value) -> ConnectorResult<String> {
     match value {
         Value::String(value) if !value.trim().is_empty() && value.trim() == value => Ok(value.clone()),

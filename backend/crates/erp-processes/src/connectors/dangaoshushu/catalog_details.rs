@@ -6,7 +6,7 @@ use erp_supply::ports::connector::offer::{
 use reqwest::Url;
 use serde_json::Value;
 
-use super::parsing::{id, mapping};
+use super::parsing::{context, id, mapping};
 
 /// 提取目录资料，并在必需状态完整时计算可供性；`is_up` 不参与完整性检查。
 /// # 参数
@@ -37,7 +37,7 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
             && !spec["deleted"].is_null()
             && !spec["can_buy"].is_null();
         details.availability = if complete_state {
-            match super::catalog::availability_state(root, spec, &super::catalog::stock(&spec["stock"])?)? {
+            match super::catalog::availability_state(root, spec, &catalog_stock(spec)?)? {
                 AvailabilityState::Available => CatalogAvailability::Available,
                 AvailabilityState::Unavailable { .. } => CatalogAvailability::Unavailable,
                 AvailabilityState::Unknown => CatalogAvailability::Unknown,
@@ -45,11 +45,15 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
         } else {
             CatalogAvailability::Unknown
         };
-        if let AvailableQuantity::Exact(quantity) = super::catalog::stock(&spec["stock"])? {
+        if let AvailableQuantity::Exact(quantity) = catalog_stock(spec)? {
             details.available_quantity = Some(quantity.to_string());
         }
     }
     Ok(details)
+}
+
+fn catalog_stock(spec: &Value) -> ConnectorResult<AvailableQuantity> {
+    super::catalog::stock(&spec["stock"]).map_err(|e| context(e, "规格库存 stock 格式无效或为不支持的负数"))
 }
 
 fn optional_id(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
@@ -57,7 +61,7 @@ fn optional_id(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(value)) if value.is_empty() || value == "0" => Ok(None),
         Some(Value::Number(value)) if value.as_u64() == Some(0) => Ok(None),
-        Some(value) => id(value).map(Some),
+        Some(value) => id(value).map(Some).map_err(|e| context(e, &format!("字段 {key} 编号格式无效"))),
     }
 }
 
@@ -65,7 +69,7 @@ fn optional_text(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
     match value.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(value)) => Ok(Some(value.trim().to_owned())),
-        _ => Err(mapping()),
+        _ => Err(context(mapping(), &format!("字段 {key} 必须为文本"))),
     }
 }
 
@@ -73,20 +77,23 @@ fn image_list(value: &Value, key: &str) -> ConnectorResult<Option<Vec<CatalogIma
     let Some(images) = value.get(key).filter(|value| !value.is_null()) else { return Ok(None) };
     images
         .as_array()
-        .ok_or_else(mapping)?
+        .ok_or_else(|| context(mapping(), &format!("图片字段 {key} 必须为数组")))?
         .iter()
-        .map(|image| {
-            let url = image["m_path"].as_str().or_else(|| image["l_path"].as_str()).ok_or_else(mapping)?;
-            let parsed = Url::parse(url).map_err(|_| mapping())?;
+        .enumerate()
+        .map(|(index, image)| {
+            let invalid = || context(mapping(), &format!("图片字段 {key} 第 {} 项地址缺失或无效", index + 1));
+            let url = image["m_path"].as_str().or_else(|| image["l_path"].as_str()).ok_or_else(invalid)?;
+            let url = if url.starts_with("//") { format!("https:{url}") } else { url.to_owned() };
+            let parsed = Url::parse(&url).map_err(|_| invalid())?;
             if !matches!(parsed.scheme(), "https" | "http")
                 || parsed.host_str().is_none()
                 || !parsed.username().is_empty()
                 || parsed.password().is_some()
                 || url.len() > 2048
             {
-                return Err(mapping());
+                return Err(invalid());
             }
-            Ok(CatalogImage { url: url.to_owned(), content_fingerprint: None, file_asset_id: None })
+            Ok(CatalogImage { url, content_fingerprint: None, file_asset_id: None })
         })
         .collect::<ConnectorResult<Vec<_>>>()
         .map(Some)
@@ -150,5 +157,17 @@ mod tests {
         let value = details(&json!({}), &spec, Some(&root)).unwrap();
         assert_eq!(value.available_quantity, None);
         assert!(!value.quantity_unbounded);
+    }
+
+    #[test]
+    fn protocol_relative_images_use_https_and_invalid_addresses_report_position() {
+        let images =
+            image_list(&json!({"images":[{"m_path":"//img31.hua.com/a.jpg"}]}), "images").unwrap().unwrap();
+        assert_eq!(images[0].url, "https://img31.hua.com/a.jpg");
+        for url in ["file:///secret", "//user:pass@example.com/a", "//", "https://user@example.com/a"] {
+            let error = image_list(&json!({"images":[{"m_path":url}]}), "images").unwrap_err();
+            assert_eq!(error.summary, "图片字段 images 第 1 项地址缺失或无效");
+            assert!(!error.summary.contains(url));
+        }
     }
 }

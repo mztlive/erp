@@ -7,7 +7,7 @@ use rust_decimal::Decimal;
 use serde_json::Value;
 
 use super::DangaoshushuConnector;
-use super::parsing::{field, fixed, id, mapping};
+use super::parsing::{context, field, fixed, id, mapping};
 
 /// 一个待转换的供应商规格；借用响应，不复制原始 JSON。
 pub enum DangaoshushuOffer<'a> {
@@ -23,12 +23,14 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
             DangaoshushuOffer::List { product, spec } => (product, spec, "spec_id", None),
             DangaoshushuOffer::Detail { root, spec } => (&root["product"], spec, "id", Some(root)),
         };
-        let spec_id = id(&spec[spec_id_field])?;
+        let spec_id = id(&spec[spec_id_field])
+            .map_err(|e| context(e, &format!("规格编号 {spec_id_field} 缺失或格式无效")))?;
         let unit = self.settings.spec_units.get(&spec_id).cloned();
         let quote = if !spec["clearing_price"].is_null() {
-            let unit_price: UnitPrice = fixed(&spec["clearing_price"])?;
+            let unit_price: UnitPrice = fixed(&spec["clearing_price"])
+                .map_err(|e| context(e, "规格结算价 clearing_price 格式或精度无效"))?;
             if unit_price.to_decimal() < Decimal::ZERO {
-                return Err(mapping());
+                return Err(context(mapping(), "规格结算价 clearing_price 不能为负数"));
             }
             Some(SupplyQuote {
                 dropship: Some(PriceTier {
@@ -43,7 +45,10 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
             None
         };
         Ok(Offer {
-            sku: SupplierSku { product_id: Some(id(&product["id"])?), spec_id },
+            sku: SupplierSku {
+                product_id: Some(id(&product["id"]).map_err(|e| context(e, "商品编号 id 缺失或格式无效"))?),
+                spec_id,
+            },
             name: display_field(product, "title")?,
             specification: display_field(spec, "name")?,
             unit,
