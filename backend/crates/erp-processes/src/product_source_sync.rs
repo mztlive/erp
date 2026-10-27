@@ -123,7 +123,7 @@ fn observation(item: &SupplierCatalogItem) -> Result<SourceObservation> {
     if let Some(description) = &item.description {
         values.push((SourceField::Description, None, SourceValue::Text(Some(description.clone()))));
     }
-    if let Some(images) = &item.images {
+    if let Some(images) = item.images.as_ref().filter(|images| images.len() <= 100) {
         let images = images
             .iter()
             .map(|i| SourceImage {
@@ -141,7 +141,7 @@ fn observation(item: &SupplierCatalogItem) -> Result<SourceObservation> {
             ));
         }
     }
-    if let Some(images) = &item.detail_images {
+    if let Some(images) = item.detail_images.as_ref().filter(|images| images.len() <= 100) {
         values.push((
             SourceField::DetailMedia,
             None,

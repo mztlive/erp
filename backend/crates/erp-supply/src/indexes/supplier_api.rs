@@ -66,6 +66,10 @@ fn catalog_item_indexes() -> Vec<IndexModel> {
         ),
         named_index("idx_supplier_catalog_page", doc! { "connection_id": 1, "name": 1, "id": 1 }),
         named_index(
+            "idx_supplier_catalog_media_retry",
+            doc! { "media_retry_at": 1, "deleted_at": 1, "id": 1 },
+        ),
+        named_index(
             "idx_supplier_catalog_category",
             doc! { "connection_id": 1, "category_id": 1, "name": 1, "id": 1 },
         ),

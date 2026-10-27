@@ -29,15 +29,7 @@ impl SupplierCatalogAdoptionProcess {
         row: &AdoptionRow,
         actor: &AuditActor,
     ) -> Result<PreparedAdoption> {
-        let media = match &self.media_preparer {
-            Some(preparer) => preparer.prepare_source_media(item, actor).await?,
-            None if item.images.as_ref().is_some_and(|images| !images.is_empty())
-                || item.detail_images.as_ref().is_some_and(|images| !images.is_empty()) =>
-            {
-                return Err(Error::BusinessLogicError("商品图片准备服务未配置，不能完成带图选品".into()));
-            },
-            None => PreparedSourceMedia::empty(),
-        };
+        let media = PreparedSourceMedia::from_archived(item);
         let cleanup = media.cleanup_handle();
         let outcome = self.prepare_row_with_media(item, row, actor, media).await;
         if outcome.is_err() {
@@ -154,12 +146,11 @@ impl SupplierCatalogAdoptionProcess {
             let mut input =
                 prepared.sku_input.take().ok_or_else(|| Error::Internal("新规格准备结果缺失".into()))?;
             input.main_image_asset_id = prepared
-                .materialized_item
-                .images
-                .as_ref()
-                .and_then(|images| images.first())
-                .and_then(|image| image.file_asset_id.as_ref())
-                .map(|id| id.clone().into());
+                .media
+                .carousel_media
+                .iter()
+                .find(|image| image.sort_order == 0)
+                .map(|image| image.file_asset_id.clone());
             return Ok(service.append_source_sku(&mapping.product_id, input, actor, executor).await?);
         }
         let draft = prepared

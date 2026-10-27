@@ -190,10 +190,9 @@ mod tests {
                 "images":[{"m_path":"file:///private"}]})),
         ]);
         let page = connector.scan_with_details(&scan(5)).await.unwrap();
-        assert!(page.items.is_empty());
-        assert!(page.skipped[0].contains("第 135 页第 1 个商品第 1 个规格（商品详情）"));
-        assert!(page.skipped[0].contains("图片字段 images 第 1 项地址缺失或无效"));
-        assert!(!page.skipped[0].contains("file:///private"));
+        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("expected offer") };
+        assert_eq!(offer.details.images.as_ref().unwrap()[0].url, "");
+        assert!(page.skipped.is_empty());
     }
 
     #[tokio::test]

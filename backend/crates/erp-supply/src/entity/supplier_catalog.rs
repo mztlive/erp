@@ -15,7 +15,7 @@ pub use crate::ports::connector::offer::{CatalogAvailability, CatalogImage};
 use crate::ports::connector::offer::{Offer, OfferDetails};
 use crate::{Error, Result};
 
-const CATALOG_MAPPING_VERSION: u32 = 1;
+const CATALOG_MAPPING_VERSION: u32 = 2;
 
 /// 一个连接内一个外部订货规格的最近观察；匹配只由人工操作改变。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
@@ -44,6 +44,12 @@ pub struct SupplierCatalogItem {
     pub images: Option<Vec<CatalogImage>>,
     #[serde(default)]
     pub detail_images: Option<Vec<CatalogImage>>,
+    /// 下次图片处理时间；空值表示没有待处理图片。
+    #[serde(default)]
+    pub media_retry_at: Option<i64>,
+    /// 最近一次图片处理失败的脱敏说明。
+    #[serde(default)]
+    pub media_errors: Vec<String>,
     #[serde(default)]
     pub availability: CatalogAvailability,
     #[serde(default)]
@@ -93,6 +99,10 @@ impl SupplierCatalogItem {
         self.sku_no = previous.sku_no;
         self.company_product_id = previous.company_product_id;
         self.offering_id = previous.offering_id;
+        if self.media_retry_at.is_none() && (self.images.is_none() || self.detail_images.is_none()) {
+            self.media_retry_at = previous.media_retry_at;
+            self.media_errors = previous.media_errors;
+        }
         self.description = self.description.take().or(previous.description);
         self.images = self.images.take().or(previous.images);
         self.detail_images = self.detail_images.take().or(previous.detail_images);
@@ -174,6 +184,8 @@ impl SupplierCatalogItem {
             description: details.description,
             images: details.images,
             detail_images: details.detail_images,
+            media_retry_at: None,
+            media_errors: Vec::new(),
             availability: details.availability,
             available_quantity: details.available_quantity,
             quantity_unbounded: details.quantity_unbounded,
@@ -632,6 +644,9 @@ mod tests {
         assert!(!run.supports_incremental(connection.technical_config_version));
         run.advance(None, 1).unwrap();
         assert!(run.supports_incremental(connection.technical_config_version));
+        let mut previous_mapping = run.clone();
+        previous_mapping.mapping_version = 1;
+        assert!(!previous_mapping.supports_incremental(connection.technical_config_version));
         assert!(!run.supports_incremental(connection.technical_config_version + 1));
         let mut legacy = serde_json::to_value(&run).unwrap();
         legacy.as_object_mut().unwrap().remove("mapping_version");

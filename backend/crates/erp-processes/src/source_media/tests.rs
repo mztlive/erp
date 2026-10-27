@@ -92,6 +92,19 @@ fn actor() -> AuditActor {
     AuditActor::new("actor".into(), "account".into(), AccountKind::Admin)
 }
 
+#[test]
+fn archived_selection_uses_only_verified_images_without_network() {
+    let mut verified = source("https://cdn.example/ok");
+    verified.content_fingerprint = Some("a".repeat(64));
+    verified.file_asset_id = Some("asset".into());
+    let item = item(Some(vec![source("https://cdn.example/missing"), verified]), None);
+    let prepared = PreparedSourceMedia::from_archived(&item);
+    assert_eq!(prepared.carousel_media.len(), 1);
+    assert_eq!(prepared.carousel_media[0].file_asset_id.as_ref(), "asset");
+    assert_eq!(prepared.carousel_media[0].sort_order, 1);
+    assert!(prepared.pending_assets.is_empty());
+}
+
 #[tokio::test]
 async fn prepares_real_pending_assets_and_keeps_order_and_absent_groups() {
     let (preparer, _, stored) = preparer(vec![png(1), png(2)]);
@@ -169,6 +182,23 @@ async fn observation_keeps_failed_image_unverified_and_prepares_other_images() {
     result.apply_to(&mut current).unwrap();
     assert_eq!(current.name, "name");
     assert_eq!(current.images.as_ref().unwrap()[1].url, "https://cdn.example/b");
+}
+
+#[tokio::test]
+async fn retries_only_unverified_images_and_preserves_completed_assets() {
+    let (first_preparer, transport, _) = preparer(vec![png(1), png(2)]);
+    let mut current =
+        item(Some(vec![source("https://cdn.example/a"), source("https://cdn.example/b")]), None);
+    let first = first_preparer.prepare_observation_media(&current, None, &actor()).await.unwrap();
+    first.apply_to(&mut current).unwrap();
+    let first_id = current.images.as_ref().unwrap()[0].file_asset_id.clone();
+    current.images.as_mut().unwrap()[1].file_asset_id = None;
+    current.images.as_mut().unwrap()[1].content_fingerprint = None;
+    let (retry, retry_transport, _) = preparer(vec![png(2)]);
+    let result = retry.prepare_pending_media(&current, &actor()).await.unwrap();
+    assert_eq!(transport.count.load(Ordering::Relaxed), 2);
+    assert_eq!(retry_transport.count.load(Ordering::Relaxed), 1);
+    assert_eq!(result.images.unwrap()[0].file_asset_id, first_id);
 }
 
 #[tokio::test]

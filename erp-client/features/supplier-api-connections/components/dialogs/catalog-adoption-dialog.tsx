@@ -20,6 +20,7 @@ import {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import type { AdoptionPreview, AdoptionResultRow } from "../../api/adoption"
+import { catalogMediaBlocker } from "../../lib/catalog-media"
 import { AdoptionBatchEditor } from "../catalog/adoption-batch-editor"
 
 function DialogState({
@@ -76,7 +77,7 @@ function BlockedAlert({
                     aria-hidden="true"
                 />
                 <span className="min-w-0 flex-1 font-medium">
-                    {rows.length} 项暂不可入库，请先重新同步核验图片
+                    {rows.length} 项暂不可入库，请查看原因
                 </span>
                 <ChevronRightIcon
                     className="mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-90"
@@ -88,8 +89,7 @@ function BlockedAlert({
                     <li key={row.item.id}>
                         {row.item.name} ·{" "}
                         {row.item.specification || "未标注规格"}：
-                        {row.blocking_reasons.join("；") ||
-                            "商品图片尚未同步完成"}
+                        {row.blocking_reasons.join("；") || "请刷新后重试"}
                     </li>
                 ))}
             </ul>
@@ -129,7 +129,7 @@ function ResultPanel({
                         <p className="text-sm text-muted-foreground">
                             {complete
                                 ? blockedCount
-                                    ? `${results.length} 项已入库，${blockedCount} 项待图片核验后重新选品。`
+                                    ? `${results.length} 项已入库，${blockedCount} 项需处理后重新选品。`
                                     : `${results.length} 项已入库，商品保持未上架。`
                                 : `已完成 ${results.length} 项，继续处理下一批。`}
                         </p>
@@ -206,6 +206,10 @@ export function CatalogAdoptionDialog({
     const adoptedCount = preview.rows.filter((row) => row.adopted).length
     const pendingRows = preview.rows.filter((row) => !row.adopted)
     const blockedRows = pendingRows.filter((row) => row.blocked)
+    const missingMedia = pendingRows.flatMap((row) => {
+        const message = catalogMediaBlocker(row.item)
+        return message ? [{ item: row.item, message }] : []
+    })
     const unselected = pendingRows.filter((row) => !row.blocked)
     const limit = Math.max(1, Math.min(preview.max_confirm_rows, 50))
     const batch = unselected.slice(offset, offset + limit)
@@ -257,7 +261,7 @@ export function CatalogAdoptionDialog({
                             <span className="block sm:hidden">
                                 {remainingPendingCount} 项待入库
                                 {blockedRows.length
-                                    ? ` · ${blockedRows.length} 项待图片核验`
+                                    ? ` · ${blockedRows.length} 项待处理`
                                     : ""}
                             </span>
                             <span className="hidden sm:block">
@@ -267,7 +271,7 @@ export function CatalogAdoptionDialog({
                                     ? ` · 已入库 ${adoptedCount + processedCount} 项`
                                     : ""}
                                 {blockedRows.length
-                                    ? ` · ${blockedRows.length} 项待图片核验`
+                                    ? ` · ${blockedRows.length} 项待处理`
                                     : ""}
                             </span>
                             <span className="hidden text-xs sm:block">
@@ -279,6 +283,20 @@ export function CatalogAdoptionDialog({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex min-h-0 flex-1 flex-col">
+                        {missingMedia.length ? (
+                            <div className="shrink-0 border-b border-warning-border bg-warning-soft px-6 py-3 text-xs text-warning-soft-foreground">
+                                <p>以下商品有缺少的图片，可以继续选品入库：</p>
+                                <ul className="max-h-24 overflow-y-auto">
+                                    {missingMedia.map(({ item, message }) => (
+                                        <li key={item.id}>
+                                            {item.name} ·{" "}
+                                            {item.specification || "未标注规格"}
+                                            ：{message}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ) : null}
                         {blockedRows.length ? (
                             <BlockedAlert
                                 rows={blockedRows}
@@ -334,7 +352,7 @@ export function CatalogAdoptionDialog({
                                     />
                                 }
                                 title="暂无可入库商品"
-                                description="以下商品图片尚未同步完成，请重新同步核验后再选品。"
+                                description="请查看商品不可入库的原因，处理后重试。"
                             />
                         )}
                     </div>
@@ -344,7 +362,7 @@ export function CatalogAdoptionDialog({
                                 {pendingRows.length === 0
                                     ? "本次选品已处理完成。"
                                     : blockedRows.length
-                                      ? `${blockedRows.length} 项待图片核验。`
+                                      ? `${blockedRows.length} 项待处理。`
                                       : "可入库商品已处理完成。"}
                             </p>
                             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">

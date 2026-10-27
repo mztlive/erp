@@ -69,11 +69,10 @@ pub(super) fn sku_input(
         base_unit_id: unit_id.clone().into(),
         barcode: None,
         main_image_asset_id: media
-            .images
-            .as_ref()
-            .and_then(|images| images.first())
-            .and_then(|image| image.file_asset_id.as_ref())
-            .map(|id| id.clone().into()),
+            .carousel_media
+            .iter()
+            .find(|image| image.sort_order == 0)
+            .map(|image| image.file_asset_id.clone()),
         weight_kg: None,
         volume_m3: None,
         sales_visible_price_gross: None,
@@ -287,17 +286,17 @@ mod tests {
 
         let mut media = PreparedSourceMedia::empty();
         media.carousel_media.push(ProductMediaInput {
-            file_asset_id: FileAssetId::new("pending-file:source-one"),
+            file_asset_id: FileAssetId::new("asset-one"),
             sort_order: 0,
             alt_text: None,
         });
         media.images = Some(vec![CatalogImage {
             url: "https://images.example/source.png".into(),
-            content_fingerprint: Some("sha256".into()),
+            content_fingerprint: Some("a".repeat(64)),
             file_asset_id: Some("asset-one".into()),
         }]);
         let request = product_request(&item(), &row(), &media).unwrap();
-        assert_eq!(request.carousel_media[0].file_asset_id.as_ref(), "pending-file:source-one");
+        assert_eq!(request.carousel_media[0].file_asset_id.as_ref(), "asset-one");
         assert_eq!(request.skus[0].main_image_asset_id.as_ref().unwrap().as_ref(), "asset-one");
     }
     #[test]

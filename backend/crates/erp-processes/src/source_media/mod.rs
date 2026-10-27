@@ -25,9 +25,11 @@ use crate::{Error, Result};
 mod cleanup;
 mod image;
 mod transport;
+mod worker;
 
 pub use cleanup::SourceMediaCleanup;
 pub use transport::HttpSourceImages;
+pub use worker::SourceMediaWorker;
 
 const MAX_SOURCE_IMAGES: usize = 100;
 const MEDIA_PREPARATION_TIMEOUT: Duration = Duration::from_secs(60);
@@ -119,6 +121,22 @@ impl PreparedSourceMedia {
         }
     }
 
+    /// 使用预览时已归档的图片，未完成的图片留待后台处理。
+    /// # 参数
+    /// `item` 为冻结的供应商商品资料。
+    /// # 返回
+    /// 已核验商品媒体及来源图片，不发起网络请求。
+    /// # 错误
+    /// 不返回错误。
+    pub fn from_archived(item: &SupplierCatalogItem) -> Self {
+        let mut media = Self::empty();
+        media.images = item.images.clone();
+        media.detail_images = item.detail_images.clone();
+        media.carousel_media = archived_group(&item.images);
+        media.detail_media = archived_group(&item.detail_images);
+        media
+    }
+
     /// 把已核验图片写入来源观察，保留未提供与明确清空的区别。
     /// # 参数
     /// `item` 为本次准备对应的目录观察。
@@ -145,6 +163,30 @@ impl PreparedSourceMedia {
     }
 }
 
+fn archived_group(group: &Option<Vec<CatalogImage>>) -> Vec<ProductMediaInput> {
+    group
+        .iter()
+        .flatten()
+        .enumerate()
+        .filter_map(|(index, image)| {
+            let hash = image.content_fingerprint.as_deref()?;
+            let id = image.file_asset_id.as_deref()?;
+            if hash.len() != 64
+                || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+                || id.trim().is_empty()
+                || id.starts_with("pending-file:")
+            {
+                return None;
+            }
+            Some(ProductMediaInput {
+                file_asset_id: FileAssetId::new(id),
+                sort_order: i32::try_from(index).ok()?,
+                alt_text: None,
+            })
+        })
+        .collect()
+}
+
 /// 可复用的媒体准备器；不在数据库事务内调用。
 #[derive(Clone)]
 pub struct SourceMediaPreparer {
@@ -159,6 +201,7 @@ struct MediaPreparation<'a> {
     verification_errors: Vec<String>,
     deadline: Instant,
     tolerate_unverified: bool,
+    only_missing: bool,
     cleanup: SourceMediaCleanup,
 }
 
@@ -204,7 +247,7 @@ impl SourceMediaPreparer {
         item: &SupplierCatalogItem,
         actor: &AuditActor,
     ) -> Result<PreparedSourceMedia> {
-        self.prepare(item, Some(item), actor, false).await
+        self.prepare(item, Some(item), actor, false, false).await
     }
 
     /// 核验持续同步图片；单图失败保留未核验来源，其他文字及图片仍可更新。
@@ -220,7 +263,22 @@ impl SourceMediaPreparer {
         previous: Option<&SupplierCatalogItem>,
         actor: &AuditActor,
     ) -> Result<PreparedSourceMedia> {
-        self.prepare(item, previous, actor, true).await
+        self.prepare(item, previous, actor, true, false).await
+    }
+
+    /// 仅处理尚未归档的图片，避免重试时重复下载已成功的图片。
+    /// # 参数
+    /// 当前目录观察及其已核验图片和原同步操作人。
+    /// # 返回
+    /// 图片准备结果及未完成项说明。
+    /// # 错误
+    /// 图片数量超限或资产准备失败时返回错误。
+    pub async fn prepare_pending_media(
+        &self,
+        item: &SupplierCatalogItem,
+        actor: &AuditActor,
+    ) -> Result<PreparedSourceMedia> {
+        self.prepare(item, Some(item), actor, true, true).await
     }
 
     async fn prepare(
@@ -229,6 +287,7 @@ impl SourceMediaPreparer {
         previous: Option<&SupplierCatalogItem>,
         actor: &AuditActor,
         tolerate_unverified: bool,
+        only_missing: bool,
     ) -> Result<PreparedSourceMedia> {
         let count =
             item.images.as_ref().map_or(0, Vec::len) + item.detail_images.as_ref().map_or(0, Vec::len);
@@ -245,6 +304,7 @@ impl SourceMediaPreparer {
             verification_errors: Vec::new(),
             deadline: Instant::now() + MEDIA_PREPARATION_TIMEOUT,
             tolerate_unverified,
+            only_missing,
             cleanup: SourceMediaCleanup::new(self.store.clone()),
         };
         let result = self.prepare_groups(item, actor, &mut preparation).await;
@@ -260,9 +320,10 @@ impl SourceMediaPreparer {
         actor: &AuditActor,
         preparation: &mut MediaPreparation<'_>,
     ) -> Result<PreparedSourceMedia> {
-        let (images, carousel_media) = self.prepare_group(item.images.as_deref(), preparation).await?;
+        let (images, carousel_media) =
+            self.prepare_group(item.images.as_deref(), "轮播图", preparation).await?;
         let (detail_images, detail_media) =
-            self.prepare_group(item.detail_images.as_deref(), preparation).await?;
+            self.prepare_group(item.detail_images.as_deref(), "详情图", preparation).await?;
         let pending_assets = CatalogPendingAttachments::from_support(
             PendingFileAssets::prepare_content_checked(take(&mut preparation.requests), actor)?.shared(),
         );
@@ -282,12 +343,22 @@ impl SourceMediaPreparer {
     async fn prepare_group(
         &self,
         images: Option<&[CatalogImage]>,
+        label: &str,
         preparation: &mut MediaPreparation<'_>,
     ) -> Result<(Option<Vec<CatalogImage>>, Vec<ProductMediaInput>)> {
         let Some(images) = images else { return Ok((None, Vec::new())) };
         let mut sources = Vec::with_capacity(images.len());
         let mut media = Vec::with_capacity(images.len());
         for (position, source) in images.iter().enumerate() {
+            if preparation.only_missing
+                && let Some(reference) = archived_group(&Some(vec![source.clone()])).first()
+            {
+                sources.push(source.clone());
+                let mut reference = reference.clone();
+                reference.sort_order = i32::try_from(position).expect("来源图片最多一百张");
+                media.push(reference);
+                continue;
+            }
             let checkpoint = preparation.cleanup.checkpoint();
             let result = timeout_at(
                 preparation.deadline,
@@ -305,7 +376,7 @@ impl SourceMediaPreparer {
                 Ok(prepared) => prepared,
                 Err(error) if preparation.tolerate_unverified => {
                     preparation.cleanup.discard_since(checkpoint).await;
-                    preparation.verification_errors.push(error.to_string());
+                    preparation.verification_errors.push(format!("{label}第 {} 张：{error}", position + 1));
                     sources.push(CatalogImage {
                         url: source.url.clone(),
                         content_fingerprint: None,

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table"
 import {
     BusinessEmptyState,
@@ -14,6 +15,11 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import {
+    HoverCard,
+    HoverCardContent,
+    HoverCardTrigger,
+} from "@/components/ui/hover-card"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     CatalogAvailability,
@@ -34,6 +40,38 @@ const availabilityLabels: Record<CatalogAvailability, string> = {
     UNAVAILABLE: "暂不可供",
     UNKNOWN: "待核验",
     WITHDRAWN: "已下架",
+}
+
+function CatalogMediaWarning({ item }: { item: CatalogItem }) {
+    const message = catalogMediaBlocker(item)
+    if (!message) return null
+
+    return (
+        <HoverCard>
+            <HoverCardTrigger
+                id={`supplier-catalog-media-warning-${toAutomationIdSegment(item.id)}`}
+                delay={150}
+                closeDelay={150}
+                aria-label={`${item.name}的图片异常`}
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded text-warning-soft-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={(event) => event.stopPropagation()}
+                render={
+                    <button
+                        type="button"
+                        aria-label={`${item.name}的图片异常`}
+                    />
+                }
+            >
+                <TriangleAlertIcon className="size-4" aria-hidden="true" />
+            </HoverCardTrigger>
+            <HoverCardContent
+                align="start"
+                className="max-h-64 max-w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl text-xs leading-relaxed break-words"
+            >
+                <p>{message}</p>
+            </HoverCardContent>
+        </HoverCard>
+    )
 }
 
 export function CatalogBrowser({
@@ -89,27 +127,28 @@ export function CatalogBrowser({
                 meta: { label: "商品" },
                 cell: ({ row }) => (
                     <div className="flex min-w-48 items-center gap-3">
-                        {row.original.images?.[0] ? (
-                            <CatalogSourceImage
-                                image={row.original.images[0]}
-                                alt=""
-                                width={44}
-                                height={44}
-                                className="size-11 shrink-0 rounded-md border object-cover"
-                            />
-                        ) : (
-                            <div className="size-11 shrink-0 rounded-md bg-muted" />
-                        )}
+                        <div className="size-11 shrink-0 overflow-hidden rounded-md bg-muted">
+                            {row.original.images?.[0] ? (
+                                <CatalogSourceImage
+                                    image={row.original.images[0]}
+                                    alt=""
+                                    width={44}
+                                    height={44}
+                                    compact
+                                    className="size-full rounded-md border object-cover"
+                                />
+                            ) : null}
+                        </div>
                         <div>
-                            <p className="font-medium">{row.original.name}</p>
+                            <div className="flex items-center gap-1">
+                                <p className="font-medium">
+                                    {row.original.name}
+                                </p>
+                                <CatalogMediaWarning item={row.original} />
+                            </div>
                             <p className="text-xs text-muted-foreground">
                                 {row.original.specification || "未标注规格"}
                             </p>
-                            {catalogMediaBlocker(row.original) ? (
-                                <p className="text-xs text-warning-soft-foreground">
-                                    {catalogMediaBlocker(row.original)}
-                                </p>
-                            ) : null}
                         </div>
                     </div>
                 ),
@@ -181,7 +220,7 @@ export function CatalogBrowser({
                                 {row.original.requires_identity_review
                                     ? "规格或单位有变，请核对供给"
                                     : catalogMediaBlocker(row.original)
-                                      ? "图片尚未同步完成，请同步后选品"
+                                      ? "部分图片尚未同步"
                                       : row.original.offering_id
                                         ? "已入库"
                                         : "已匹配，待入库"}
@@ -225,7 +264,6 @@ export function CatalogBrowser({
                         disabled={
                             !canAdopt ||
                             preview.isPending ||
-                            Boolean(catalogMediaBlocker(row.original)) ||
                             row.original.availability === "WITHDRAWN"
                         }
                         onClick={() =>
@@ -332,8 +370,7 @@ export function CatalogBrowser({
                             setPage(next.pageIndex + 1)
                         }
                         enableRowSelection={(row) =>
-                            row.original.availability !== "WITHDRAWN" &&
-                            !catalogMediaBlocker(row.original)
+                            row.original.availability !== "WITHDRAWN"
                         }
                         rowSelection={selection}
                         showToolbarSummary={false}

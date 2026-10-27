@@ -72,7 +72,6 @@ fn display_field(value: &Value, key: &str) -> ConnectorResult<String> {
 
 #[cfg(test)]
 mod tests {
-    use erp_supply::entity::failure::SupplierFailureClass;
     use serde_json::json;
 
     use super::super::test_support::recording_connector;
@@ -116,9 +115,8 @@ mod tests {
             "images":[{"m_path":"file:///private/image"}]
         });
         let spec = json!({"id":"s1","name":"规格"});
-        let error = connector.transform(DangaoshushuOffer::Detail { root: &root, spec: &spec }).unwrap_err();
-        assert_eq!(error.class, SupplierFailureClass::MappingError);
-        assert_eq!(error.code, "DGSS_MAPPING");
+        let offer = connector.transform(DangaoshushuOffer::Detail { root: &root, spec: &spec }).unwrap();
+        assert_eq!(offer.details.images.unwrap()[0].url, "");
         let spec = json!({"id":"s1","name":" "});
         let error = connector.transform(DangaoshushuOffer::Detail { root: &root, spec: &spec }).unwrap_err();
         assert_eq!(error.summary, "供应商名称字段 name 缺失、为空或类型无效");

@@ -164,7 +164,9 @@ impl ProductSource {
                 baseline: value.clone(),
                 baseline_confirmed: !value.verification_required(),
                 latest: value.clone(),
-                manually_maintained: !company.equivalent(&value),
+                manually_maintained: !company.equivalent(&value)
+                    && !(value.verification_required()
+                        && matches!(&company, SourceValue::Images(images) if images.is_empty())),
                 pending: value.verification_required() && !company.equivalent(&value),
                 company,
             });

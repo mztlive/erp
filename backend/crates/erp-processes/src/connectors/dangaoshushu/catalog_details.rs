@@ -75,28 +75,34 @@ fn optional_text(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
 
 fn image_list(value: &Value, key: &str) -> ConnectorResult<Option<Vec<CatalogImage>>> {
     let Some(images) = value.get(key).filter(|value| !value.is_null()) else { return Ok(None) };
-    images
-        .as_array()
-        .ok_or_else(|| context(mapping(), &format!("图片字段 {key} 必须为数组")))?
-        .iter()
-        .enumerate()
-        .map(|(index, image)| {
-            let invalid = || context(mapping(), &format!("图片字段 {key} 第 {} 项地址缺失或无效", index + 1));
-            let url = image["m_path"].as_str().or_else(|| image["l_path"].as_str()).ok_or_else(invalid)?;
-            let url = if url.starts_with("//") { format!("https:{url}") } else { url.to_owned() };
-            let parsed = Url::parse(&url).map_err(|_| invalid())?;
-            if !matches!(parsed.scheme(), "https" | "http")
-                || parsed.host_str().is_none()
-                || !parsed.username().is_empty()
-                || parsed.password().is_some()
-                || url.len() > 2048
-            {
-                return Err(invalid());
-            }
-            Ok(CatalogImage { url, content_fingerprint: None, file_asset_id: None })
-        })
-        .collect::<ConnectorResult<Vec<_>>>()
-        .map(Some)
+    let Some(images) = images.as_array() else {
+        return Ok(Some(vec![CatalogImage {
+            url: String::new(),
+            content_fingerprint: None,
+            file_asset_id: None,
+        }]));
+    };
+    Ok(Some(
+        images
+            .iter()
+            .map(|image| {
+                let url = image["m_path"].as_str().or_else(|| image["l_path"].as_str()).unwrap_or_default();
+                let url = if url.starts_with("//") { format!("https:{url}") } else { url.to_owned() };
+                let valid = Url::parse(&url).is_ok_and(|parsed| {
+                    matches!(parsed.scheme(), "https" | "http")
+                        && parsed.host_str().is_some()
+                        && parsed.username().is_empty()
+                        && parsed.password().is_none()
+                        && url.len() <= 2048
+                });
+                CatalogImage {
+                    url: if valid { url } else { String::new() },
+                    content_fingerprint: None,
+                    file_asset_id: None,
+                }
+            })
+            .collect(),
+    ))
 }
 
 #[cfg(test)]
@@ -151,7 +157,10 @@ mod tests {
 
     #[test]
     fn invalid_media_and_unreported_inventory_never_become_valid_facts() {
-        assert!(image_list(&json!({"images":[{"m_path":"file:///secret"}]}), "images").is_err());
+        assert_eq!(
+            image_list(&json!({"images":[{"m_path":"file:///secret"}]}), "images").unwrap().unwrap()[0].url,
+            ""
+        );
         let root = json!({"product":{"status":"1","can_buy":"1"},"brand":{"status":"1"}});
         let spec = json!({"deleted":"0","is_up":"1","can_buy":"1","stock":"-9999999"});
         let value = details(&json!({}), &spec, Some(&root)).unwrap();
@@ -165,9 +174,8 @@ mod tests {
             image_list(&json!({"images":[{"m_path":"//img31.hua.com/a.jpg"}]}), "images").unwrap().unwrap();
         assert_eq!(images[0].url, "https://img31.hua.com/a.jpg");
         for url in ["file:///secret", "//user:pass@example.com/a", "//", "https://user@example.com/a"] {
-            let error = image_list(&json!({"images":[{"m_path":url}]}), "images").unwrap_err();
-            assert_eq!(error.summary, "图片字段 images 第 1 项地址缺失或无效");
-            assert!(!error.summary.contains(url));
+            let image = image_list(&json!({"images":[{"m_path":url}]}), "images").unwrap().unwrap();
+            assert_eq!(image[0].url, "");
         }
     }
 }

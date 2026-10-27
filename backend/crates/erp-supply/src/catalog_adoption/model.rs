@@ -76,15 +76,17 @@ impl CatalogAdoptionPreview {
             .iter()
             .find(|item| item.base.id == current.base.id)
             .ok_or_else(|| Error::ValidationError("来源规格不属于本次冻结范围".into()))?;
-        let source_changed = if frozen.source_fingerprint.is_empty() || current.source_fingerprint.is_empty()
-        {
-            let (mut original, mut latest) = (frozen.clone(), current.clone());
-            original.refresh_fingerprint()?;
-            latest.refresh_fingerprint()?;
-            original.source_fingerprint != latest.source_fingerprint
-        } else {
-            frozen.source_fingerprint != current.source_fingerprint
-        };
+        let media_changed = frozen.images != current.images || frozen.detail_images != current.detail_images;
+        let (mut original, mut latest) = (frozen.clone(), current.clone());
+        preserve_unseen_media(&mut latest.images, &original.images);
+        preserve_unseen_media(&mut latest.detail_images, &original.detail_images);
+        original.refresh_fingerprint()?;
+        latest.refresh_fingerprint()?;
+        let source_changed = original.source_fingerprint != latest.source_fingerprint
+            || (!media_changed
+                && !frozen.source_fingerprint.is_empty()
+                && !current.source_fingerprint.is_empty()
+                && frozen.source_fingerprint != current.source_fingerprint);
         if frozen.connection_id != current.connection_id
             || frozen.product_id != current.product_id
             || frozen.spec_id != current.spec_id
@@ -141,6 +143,23 @@ impl CatalogAdoptionPreview {
             return Err(Error::ValidationError("确认行不属于本次冻结的选品范围".into()));
         }
         Ok(())
+    }
+}
+
+/// 尚未展示的图片完成归档时，不让后台处理阻断已冻结的选品。
+fn preserve_unseen_media(
+    current: &mut Option<Vec<crate::entity::supplier_catalog::CatalogImage>>,
+    frozen: &Option<Vec<crate::entity::supplier_catalog::CatalogImage>>,
+) {
+    if let (Some(current), Some(frozen)) = (current, frozen) {
+        for (current, frozen) in current.iter_mut().zip(frozen) {
+            if frozen.file_asset_id.is_none()
+                && frozen.content_fingerprint.is_none()
+                && current.url == frozen.url
+            {
+                *current = frozen.clone();
+            }
+        }
     }
 }
 
@@ -388,6 +407,34 @@ mod tests {
         assert!(preview.ensure_current_item(&current).is_err());
         current = item;
         current.offering_id = Some("new-adoption".into());
+        assert!(preview.ensure_current_item(&current).is_err());
+    }
+
+    #[test]
+    fn background_archive_of_unseen_image_does_not_invalidate_selection() {
+        use crate::ports::connector::offer::CatalogImage;
+        let mut item = source_item();
+        item.images = Some(vec![CatalogImage {
+            url: "https://example.com/a".into(),
+            content_fingerprint: None,
+            file_asset_id: None,
+        }]);
+        item.refresh_fingerprint().unwrap();
+        let preview = CatalogAdoptionPreview {
+            base: BaseModel::new("preview".into()),
+            connection_id: "c".into(),
+            actor_id: "actor".into(),
+            expires_at: Instant::from_unix_secs(200),
+            items: vec![item.clone()],
+        };
+        let mut current = item;
+        let image = &mut current.images.as_mut().unwrap()[0];
+        image.content_fingerprint = Some("a".repeat(64));
+        image.file_asset_id = Some("asset".into());
+        current.refresh_fingerprint().unwrap();
+        assert!(preview.ensure_current_item(&current).is_ok());
+        current.images.as_mut().unwrap()[0].url = "https://example.com/b".into();
+        current.refresh_fingerprint().unwrap();
         assert!(preview.ensure_current_item(&current).is_err());
     }
 

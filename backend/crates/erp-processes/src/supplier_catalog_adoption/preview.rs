@@ -87,11 +87,7 @@ impl SupplierCatalogAdoptionProcess {
                 } else {
                     vec!["公司分类".into(), "公司品牌".into(), "基础单位与规格核对".into(), "供给条款".into()]
                 };
-                let blocking_reasons = if item.offering_id.is_some() {
-                    vec![]
-                } else {
-                    CatalogAdoptionPreview::media_blockers(&item)
-                };
+                let blocking_reasons = vec![];
                 AdoptionPreviewRow {
                     adopted: item.offering_id.is_some(),
                     blocked: !blocking_reasons.is_empty(),

@@ -17,6 +17,27 @@ pub const ITEMS: &str = "supplier_catalog_items";
 pub const RUNS: &str = "supplier_catalog_runs";
 pub const IDENTITY_REVIEWS: &str = "supplier_catalog_identity_reviews";
 
+/// 有界读取到期的来源图片处理任务。
+/// # 参数
+/// `now` 为服务器当前秒数，执行器不跨外部请求。
+/// # 返回
+/// 按到期时间排序的最多十条目录记录。
+/// # 错误
+/// 数据库读取失败时返回错误。
+pub async fn due_media(
+    db: &Database,
+    now: i64,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierCatalogItem>> {
+    mongo_ops::find_many(
+        &db.collection::<SupplierCatalogItem>(ITEMS),
+        doc! {"media_retry_at": {"$type": "number", "$lte": now}, "deleted_at": 0_i64},
+        FindOptions::builder().sort(doc! {"media_retry_at": 1, "id": 1}).limit(10).build(),
+        executor,
+    )
+    .await
+}
+
 /// 供应商目录仓储访问入口。
 pub trait SupplierCatalogExt {
     /// 取得来源身份人工核对命令回执仓储。

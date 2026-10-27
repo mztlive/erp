@@ -210,9 +210,11 @@ fn spawn_background_runner(state: AppState) -> Result<()> {
         .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db())));
     if let Some(settings) = state.config_snapshot().dangaoshushu.as_ref().filter(|settings| settings.enabled)
     {
-        let execution = state
-            .supplier_connection_execution_process()
-            .with_source_media(state.supplier_source_media_preparer()?);
+        let source_media = state.supplier_source_media_preparer()?;
+        if let Some(preparer) = source_media.clone() {
+            erp_processes::source_media::SourceMediaWorker::new(state.db(), preparer).spawn();
+        }
+        let execution = state.supplier_connection_execution_process().with_source_media(source_media);
         runner = runner.register(SupplierCatalogTaskAdapter::new(
             state.db(),
             execution,

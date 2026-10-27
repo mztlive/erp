@@ -221,18 +221,13 @@ impl SupplierConnectionExecutionProcess {
             .and_then(|seconds| i64::try_from(seconds).ok())
             .and_then(|seconds| item.observed_at.unix_secs().checked_add(seconds))
             .map(Instant::from_unix_secs);
-        let media = if let Some(preparer) = &self.source_media {
-            let previous =
-                self.db.supplier_catalog_items().find_by_id(&item.base.id, &mut NoTransaction).await?;
-            let media = preparer.prepare_observation_media(&item, previous.as_ref(), actor).await?;
-            if let Err(error) = media.apply_to(&mut item) {
-                media.cleanup_handle().discard_uncommitted().await;
-                return Err(error);
-            }
-            media
-        } else {
-            PreparedSourceMedia::empty()
-        };
+        let _ = actor;
+        if item.images.as_ref().is_some_and(|images| !images.is_empty())
+            || item.detail_images.as_ref().is_some_and(|images| !images.is_empty())
+        {
+            item.media_retry_at = Some(Instant::now().unix_secs());
+        }
+        let media = PreparedSourceMedia::empty();
         Ok(PreparedObservation { item, media })
     }
 

@@ -166,13 +166,8 @@ impl SupplierCatalogAdoptionProcess {
         }
         let current = self.load_item(&preview.connection_id, &row.item_id, &mut NoTransaction).await?;
         preview.ensure_current_item(&current)?;
-        preview.ensure_item_media_verified(&current.base.id)?;
-        let prepared = self.prepare_row(&current, row, actor).await?;
+        let prepared = self.prepare_row(frozen, row, actor).await?;
         let cleanup = prepared.media.cleanup_handle();
-        if let Err(error) = preview.ensure_prepared_media(&prepared.materialized_item) {
-            cleanup.discard_uncommitted().await;
-            return Err(error.into());
-        }
         let process = self.clone();
         let (preview, row, command, actor) =
             (preview.clone(), row.clone(), command.to_owned(), actor.clone());
@@ -240,11 +235,17 @@ impl SupplierCatalogAdoptionProcess {
             result.product_id.clone(),
             result.offering_id.clone(),
         )?;
-        item.images = prepared.materialized_item.images;
-        item.detail_images = prepared.materialized_item.detail_images;
+        if item.images != prepared.materialized_item.images
+            || item.detail_images != prepared.materialized_item.detail_images
+        {
+            item.media_retry_at = Some(Instant::now().unix_secs());
+        }
         item.refresh_fingerprint()?;
         self.db.supplier_catalog_items().update(&mut item, executor).await?;
-        initialize_source(&self.db, &item, &result.product_id, actor, executor).await?;
+        let mut initial_source = item.clone();
+        initial_source.images = prepared.materialized_item.images;
+        initial_source.detail_images = prepared.materialized_item.detail_images;
+        initialize_source(&self.db, &initial_source, &result.product_id, actor, executor).await?;
         self.persist_result(&item.connection_id, &result, row, command, actor, executor).await?;
         Ok((result, true))
     }

@@ -399,6 +399,49 @@ fn newly_provided_unverified_images_remain_pending_until_a_real_decision() {
     state.observe(&content("原名"), obs).unwrap();
     assert_eq!(state.pending_count, 0);
 }
+
+#[test]
+fn initially_missing_image_applies_after_verification_unless_manually_edited() {
+    let empty = vec![(SourceField::DetailMedia, None, SourceValue::Images(vec![]))];
+    let missing = (SourceField::DetailMedia, None, image(None, None, "https://source/a"));
+    let mut state = ProductSource::new(
+        "p",
+        "s",
+        "c",
+        "i",
+        &empty,
+        SourceObservation { values: vec![missing], observed_at: 1 },
+    )
+    .unwrap();
+    let verified = (SourceField::DetailMedia, None, image(Some("hash"), Some("asset"), "https://source/a"));
+    assert_eq!(
+        state.observe(&empty, SourceObservation { values: vec![verified.clone()], observed_at: 2 }).unwrap(),
+        vec![verified.clone()]
+    );
+
+    let mut state = ProductSource::new(
+        "p",
+        "s",
+        "c",
+        "i",
+        &empty,
+        SourceObservation {
+            values: vec![(SourceField::DetailMedia, None, image(None, None, "https://source/a"))],
+            observed_at: 1,
+        },
+    )
+    .unwrap();
+    let edited =
+        vec![(SourceField::DetailMedia, None, image(Some("other"), Some("manual"), "https://company/a"))];
+    state.record_manual_edit(&edited);
+    assert!(
+        state
+            .observe(&edited, SourceObservation { values: vec![verified], observed_at: 2 })
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(state.pending_count, 1);
+}
 #[test]
 fn manually_editing_then_clearing_a_not_yet_provided_field_keeps_manual_responsibility() {
     let mut initial = content("原名");

@@ -180,7 +180,13 @@ export function useCatalogQuery(
         queryFn: () => fetchCatalog(connectionId, page, filters),
         enabled: Boolean(connectionId),
         refetchInterval: (query) =>
-            catalogRunning(query.state.data?.jobs[0]) ? 2000 : false,
+            catalogRunning(query.state.data?.jobs[0])
+                ? 2000
+                : query.state.data?.items.some(
+                        (item) => item.media_retry_at != null,
+                    )
+                  ? 10000
+                  : false,
     })
     const latest = query.data?.jobs[0]
     const jobId = latest?.job_id

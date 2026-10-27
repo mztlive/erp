@@ -1,6 +1,7 @@
 "use client"
 
 import Image from "next/image"
+import { ImageOffIcon } from "lucide-react"
 import { useFileAssetQuery } from "@/features/master-data/hooks/queries"
 import type { CatalogImage } from "../../api/catalog"
 import { hasVerifiedCatalogImage } from "../../lib/catalog-media"
@@ -12,29 +13,35 @@ export function CatalogSourceImage({
     width,
     height,
     className,
+    compact = false,
 }: {
     image: CatalogImage
     alt: string
     width: number
     height: number
     className?: string
+    compact?: boolean
 }) {
     const verified = hasVerifiedCatalogImage(image)
     const asset = useFileAssetQuery(
         verified ? (image.file_asset_id ?? undefined) : undefined,
     )
-    if (!verified)
-        return (
+    const placeholder = (message: string) =>
+        compact ? (
+            <span
+                className="flex size-full items-center justify-center rounded-md bg-muted text-muted-foreground"
+                aria-label={message}
+            >
+                <ImageOffIcon className="size-4" aria-hidden="true" />
+            </span>
+        ) : (
             <span className="block rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
-                图片尚未同步
+                {message}
             </span>
         )
+    if (!verified) return placeholder("图片尚未同步")
     if (!asset.data?.public_url)
-        return (
-            <span className="block rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
-                {asset.isFetching ? "图片读取中…" : "图片暂不可预览"}
-            </span>
-        )
+        return placeholder(asset.isFetching ? "图片读取中…" : "图片暂不可预览")
     return (
         <Image
             src={asset.data.public_url}

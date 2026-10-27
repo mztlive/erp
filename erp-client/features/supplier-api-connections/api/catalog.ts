@@ -45,6 +45,8 @@ export type CatalogItem = {
     description: string | null
     images: CatalogImage[] | null
     detail_images: CatalogImage[] | null
+    media_errors?: string[]
+    media_retry_at?: number | null
     availability: CatalogAvailability
     available_quantity: string | null
     quantity_unbounded: boolean
