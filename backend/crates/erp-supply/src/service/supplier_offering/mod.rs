@@ -34,6 +34,7 @@ use crate::repository::prelude::*;
 use crate::repository::{SupplierApiExt, SupplierOfferingExt};
 use crate::{Error, Result};
 mod access;
+mod api_price;
 mod handover;
 mod recovery;
 mod source_observation;
@@ -231,6 +232,7 @@ impl SupplierOfferingService {
         prepared: &PreparedCreate,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.ensure_api_create_price(&prepared.offering, &prepared.revision, executor).await?;
         write::created(
             &crate::repository::supplier_offering::write::MongoOfferingWrite::new(&self.db),
             prepared,
@@ -287,7 +289,7 @@ impl SupplierOfferingService {
         )?;
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
-        self.ensure_api_bulk_terms(&offering, &revision, executor).await?;
+        self.ensure_api_prices(&offering, &revision, executor).await?;
         let next_status = req.status.unwrap_or(offering.stable.status);
         if next_status == OfferingStatus::Active {
             qualification
@@ -477,7 +479,7 @@ impl SupplierOfferingService {
         offering.assign_delivery_template(Some(SupplierDeliveryTemplateId::new(template.base.id)), actor);
         Ok(())
     }
-    async fn ensure_api_bulk_terms(
+    async fn ensure_api_prices(
         &self,
         offering: &SupplierOffering,
         revision: &SupplierOfferingRevision,
@@ -497,7 +499,7 @@ impl SupplierOfferingService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("API 供给当前条款不存在".into()))?;
-        revision.ensure_api_bulk_terms_unchanged(&current)?;
+        revision.ensure_api_prices_unchanged(&current)?;
         Ok(())
     }
 

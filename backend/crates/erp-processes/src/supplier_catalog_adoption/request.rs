@@ -68,10 +68,13 @@ pub(super) fn sku_input(
             .map(|image| image.file_asset_id.clone()),
         weight_kg: None,
         volume_m3: None,
-        sales_visible_price_gross: None,
-        bulk_price_gross: None,
-        bulk_min_quantity: None,
-        market_price: None,
+        sales_visible_price_gross: row
+            .sales_prices
+            .as_ref()
+            .and_then(|prices| prices.sales_visible_price_gross),
+        bulk_price_gross: row.sales_prices.as_ref().and_then(|prices| prices.bulk_price_gross),
+        bulk_min_quantity: row.sales_prices.as_ref().and_then(|prices| prices.bulk_min_quantity),
+        market_price: row.sales_prices.as_ref().and_then(|prices| prices.market_price),
         spec_entries: spec_entries
             .iter()
             .map(|entry| SpecEntryInput {
@@ -114,6 +117,7 @@ pub(super) fn offering_request(
     sku_id: &str,
     command: &str,
 ) -> Result<CreateSupplierOfferingRequest> {
+    item.ensure_purchase_price(row.terms.dropship_supply_price_gross.trim().parse()?)?;
     let status = match item.availability {
         CatalogAvailability::Available
             if !item.requires_identity_review
@@ -149,8 +153,10 @@ pub(super) fn offering_request(
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::Instant;
-    use erp_supply::catalog_adoption::AdoptionSpecEntry;
+    use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
+    use erp_supply::catalog_adoption::{AdoptionSalesPrices, AdoptionSpecEntry};
     use erp_supply::dto::supplier_offering::SupplierOfferingTermsWrite;
+    use erp_supply::entity::supplier_offering::SupplierOfferingRevision;
     use erp_supply::ports::connector::common::{Snapshot, SourceRevision, SourceStamp, SupplierSku};
     use erp_supply::ports::connector::offer::{Offer, OfferDetails};
 
@@ -184,6 +190,15 @@ mod tests {
     }
 
     fn row() -> AdoptionRow {
+        let mut terms = SupplierOfferingTermsWrite::new(
+            "80.00".into(),
+            "75.00".into(),
+            "0.13".into(),
+            "10".into(),
+            "2026-10-26".into(),
+        );
+        terms.bulk_supply_price_gross = None;
+        terms.bulk_minimum_order_quantity = None;
         AdoptionRow {
             item_id: item().base.id,
             target: AdoptionTarget::Create {
@@ -200,13 +215,8 @@ mod tests {
                 unit_confirmed: true,
                 specification_confirmed: true,
             },
-            terms: SupplierOfferingTermsWrite::new(
-                "80.00".into(),
-                "75.00".into(),
-                "0.13".into(),
-                "10".into(),
-                "2026-10-26".into(),
-            ),
+            terms,
+            sales_prices: None,
             delivery_template_id: Some("delivery".into()),
         }
     }
@@ -229,6 +239,34 @@ mod tests {
         assert!(request.skus[0].bulk_price_gross.is_none());
         assert!(request.skus[0].market_price.is_none());
         assert_eq!(request.skus[0].spec_entries[0].attribute_value_code, "6寸");
+    }
+
+    #[test]
+    fn confirmed_sales_prices_are_independent_and_clearable_and_part_of_command_identity() {
+        let mut source = item();
+        source.purchase_price = Some("80.00".into());
+        source.market_price = Some("199.00".parse().unwrap());
+        let mut row = row();
+        let original = row.fingerprint().unwrap();
+        row.sales_prices = Some(AdoptionSalesPrices {
+            sales_visible_price_gross: Some("120.00".parse().unwrap()),
+            bulk_price_gross: Some("110.00".parse().unwrap()),
+            bulk_min_quantity: Some("10".parse().unwrap()),
+            market_price: Some("189.00".parse().unwrap()),
+        });
+        assert_ne!(original, row.fingerprint().unwrap());
+        let input = sku_input(&source, &row, &PreparedSourceMedia::empty()).unwrap();
+        assert_eq!(input.sales_visible_price_gross, Some("120.00".parse().unwrap()));
+        assert_eq!(input.bulk_price_gross, Some("110.00".parse().unwrap()));
+        assert_eq!(input.bulk_min_quantity, Some("10".parse().unwrap()));
+        assert_eq!(input.market_price, Some("189.00".parse().unwrap()));
+        assert_eq!(
+            offering_request(&source, &row, "sku", "command").unwrap().terms.dropship_supply_price_gross,
+            "80.00"
+        );
+        row.sales_prices = Some(AdoptionSalesPrices::default());
+        assert!(sku_input(&source, &row, &PreparedSourceMedia::empty()).unwrap().market_price.is_none());
+        assert_eq!(source.market_price, Some("199.00".parse().unwrap()));
     }
 
     #[test]
@@ -255,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    fn company_supply_price_is_independent_of_source_quote_and_source_identity_is_preserved() {
+    fn supplier_quote_is_required_and_cannot_be_changed_during_adoption() {
         let mut item = item();
         item.purchase_price = Some("80.0000".into());
         let request = offering_request(&item, &row(), "company-sku", "command").unwrap();
@@ -264,10 +302,15 @@ mod tests {
         assert_eq!(request.availability_status, AvailabilityStatus::Stale);
         assert!(request.available_quantity.is_none());
         assert!(request.source_updated_at.is_none());
+        let data = request.try_into_initial_revision(SupplierOfferingId::new("offering")).unwrap();
+        let mut revision =
+            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision"), data).unwrap();
+        assert!(item.ensure_supply_prices(&revision).is_ok());
+        revision.bulk_supply_price_gross = Some("75".parse().unwrap());
+        assert!(item.ensure_supply_prices(&revision).is_err());
         for quote in [Some("90.00".into()), None] {
             item.purchase_price = quote.clone();
-            let request = offering_request(&item, &row(), "company-sku", "command").unwrap();
-            assert_eq!(request.terms.dropship_supply_price_gross, "80.00");
+            assert!(offering_request(&item, &row(), "company-sku", "command").is_err());
             assert_eq!(item.purchase_price, quote);
         }
         item.availability = CatalogAvailability::Withdrawn;

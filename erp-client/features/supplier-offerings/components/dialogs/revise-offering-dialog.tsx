@@ -120,7 +120,7 @@ export function ReviseOfferingDialog({
                                 </FieldLegend>
                                 {offering.source_type === "API" ? (
                                     <p className="text-sm text-muted-foreground">
-                                        一件代发供给价由采购维护，接口同步不覆盖；未提供集采条件时仅支持一件代发采购。
+                                        供应商采购价格及集采条件由接口同步，不可修改。税率和有效期等内部补充信息可维护。
                                     </p>
                                 ) : null}
                                 <div className="grid gap-3 sm:grid-cols-2">
@@ -128,7 +128,11 @@ export function ReviseOfferingDialog({
                                         {(field) => (
                                             <field.TextField
                                                 id="supplier-offerings-dialog-revise-dropship-price"
-                                                label="一件代发供给价（含税）"
+                                                disabled={
+                                                    offering.source_type ===
+                                                    "API"
+                                                }
+                                                label="一件代发采购价（含税）"
                                                 required
                                             />
                                         )}
@@ -141,7 +145,7 @@ export function ReviseOfferingDialog({
                                                     offering.source_type ===
                                                     "API"
                                                 }
-                                                label="集采供给价（含税）"
+                                                label="集采采购价（含税）"
                                                 required={
                                                     offering.source_type !==
                                                     "API"

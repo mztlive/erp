@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_core::money::{Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 
 use super::common::{ActionKey, ConnectorResult, Lookup, Page, Scan, Snapshot, SupplierSku};
@@ -98,6 +98,9 @@ pub enum CatalogAvailability {
 /// 商品来源资料；图片 None 为未提供，Some([]) 才是明确清空。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferDetails {
+    /// 来源含税市场参考价，与采购报价独立；缺失不推断。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub market_price: Option<Amount>,
     /// 供应商明确提供的实际商品条码；字符串保留前导零，不推导外部订货编号。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub barcode: Option<String>,

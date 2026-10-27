@@ -38,6 +38,12 @@ export type AdoptionResolution = {
 export type AdoptionRowInput = {
     item_id: string
     target: { kind: "AUTO"; mapping: AdoptionMapping; expected_match: string }
+    sales_prices: {
+        sales_visible_price_gross: string | null
+        bulk_price_gross: string | null
+        bulk_min_quantity: string | null
+        market_price: string | null
+    } | null
     terms: SupplierOfferingTermsInput
     delivery_template_id?: string | null
 }

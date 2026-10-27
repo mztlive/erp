@@ -14,7 +14,7 @@ use crate::repository::CatalogExt;
 use crate::{EnableStatus, Error, ListingStatus, ProductSkuInput, Result, Sku};
 
 impl CatalogService {
-    /// 将经内部确认的新规格加入已有商品，保持未上架且不带入销售价。
+    /// 将经内部确认的新规格加入已有商品，保持未上架并保存采购确认的销售参考价。
     /// # 参数
     /// `product_id` 为已经绑定的公司商品；`input` 为新规格；`actor` 为当前操作人；
     /// `executor` 由选品用例提供，商品、供给和来源关系必须沿用同一事务。
@@ -47,7 +47,12 @@ impl CatalogService {
             return Err(Error::ConflictError("该公司商品已存在相同规格，请明确匹配已有 SKU".into()));
         }
         let sku_id = SkuId::new(next_id());
-        input.sku_no = format!("SKU-{}", sku_id.as_ref());
+        let existing = self.db.catalog().skus_for_product(&ProductId::new(product_id), executor).await?;
+        ProductSkuInput::fill_blank_sku_nos(
+            &product.product_no,
+            existing.into_iter().map(|sku| sku.sku_no),
+            std::slice::from_mut(&mut input),
+        );
         let revision = sku_revision_for_input(sku_id.clone(), 1, BusinessDate::today(), None, &input)?;
         let mut sku = Sku::new(
             sku_id,
@@ -75,12 +80,9 @@ fn ensure_source_input(input: &ProductSkuInput) -> Result<()> {
     if input.sku_id.is_some()
         || input.expected_sku_revision_id.is_some()
         || input.reenable
-        || input.sales_visible_price_gross.is_some()
-        || input.bulk_price_gross.is_some()
-        || input.market_price.is_some()
-        || input.bulk_min_quantity.is_some()
+        || !input.sku_no.trim().is_empty()
     {
-        return Err(Error::ValidationError("API 选品只允许新增未上架且无销售价的规格".into()));
+        return Err(Error::ValidationError("API 选品只允许新增未上架规格，编号由系统分配".into()));
     }
     Ok(())
 }
@@ -90,12 +92,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn append_source_only_accepts_fresh_unpriced_sku_intent() {
+    fn source_revision_keeps_confirmed_prices_and_rejects_invalid_values() {
+        let mut input: ProductSkuInput = serde_json::from_value(serde_json::json!({
+            "name":"来源规格", "base_unit_id":"unit", "sales_visible_price_gross":"120.00",
+            "bulk_price_gross":"110.00", "bulk_min_quantity":"10", "market_price":"199.00"
+        }))
+        .unwrap();
+        let revision =
+            sku_revision_for_input(SkuId::new("sku"), 1, BusinessDate::today(), None, &input).unwrap();
+        assert_eq!(revision.sales_visible_price_gross, input.sales_visible_price_gross);
+        assert_eq!(revision.bulk_price_gross, input.bulk_price_gross);
+        assert_eq!(revision.bulk_min_quantity, input.bulk_min_quantity);
+        assert_eq!(revision.market_price, input.market_price);
+        input.market_price = Some("-1.00".parse().unwrap());
+        assert!(sku_revision_for_input(SkuId::new("sku"), 1, BusinessDate::today(), None, &input).is_err());
+        input.market_price = None;
+        input.bulk_min_quantity = Some("0".parse().unwrap());
+        assert!(sku_revision_for_input(SkuId::new("sku"), 1, BusinessDate::today(), None, &input).is_err());
+    }
+
+    #[test]
+    fn append_source_accepts_confirmed_prices_but_rejects_existing_or_explicit_identity() {
         let mut input: ProductSkuInput =
             serde_json::from_value(serde_json::json!({"name":"来源规格","base_unit_id":"unit"})).unwrap();
         assert!(ensure_source_input(&input).is_ok());
         input.sales_visible_price_gross = Some("10.00".parse().unwrap());
+        assert!(ensure_source_input(&input).is_ok());
+        input.sku_no = "manual".into();
         assert!(ensure_source_input(&input).is_err());
+        input.sku_no.clear();
         input.sales_visible_price_gross = None;
         input.sku_id = Some(SkuId::new("existing"));
         assert!(ensure_source_input(&input).is_err());

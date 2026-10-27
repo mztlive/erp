@@ -1,5 +1,9 @@
 "use client"
 
+import {
+    AdoptionSalesPrices,
+    SALES_PRICE_LABELS,
+} from "./adoption-sales-prices"
 import { catalogUnitLabel } from "../../api/catalog"
 import { AUTO_UNIT } from "../../hooks/use-adoption-batch"
 
@@ -245,14 +249,15 @@ export function AdoptionBatchEditor({
         productKind: "商品类型",
     } as const
     const issueLabels: Record<string, string> = {
+        ...SALES_PRICE_LABELS,
         companyName: "公司展示名称",
         companyDescription: "公司商品介绍",
         categoryId: "公司分类",
         unitId: "公司计量单位",
         productKind: "商品类型",
         specification: "公司规格",
-        dropshipPrice: "一件代发含税供给价",
-        bulkPrice: "集采含税供给价",
+        dropshipPrice: "一件代发采购价（含税）",
+        bulkPrice: "集采采购价（含税）",
         minimumQuantity: "集采起订数量",
         inputTaxPercentage: "税率",
         validFrom: "生效日期",
@@ -260,6 +265,12 @@ export function AdoptionBatchEditor({
         deliveryTemplateId: "配送模板",
     }
     const targetIds: Record<string, string | undefined> = {
+        ...Object.fromEntries(
+            Object.keys(SALES_PRICE_LABELS).map((name) => [
+                name,
+                `${prefix}-${name}`,
+            ]),
+        ),
         companyName: `${prefix}-company-name`,
         companyDescription: `${prefix}-company-description`,
         categoryId: `${prefix}-categoryId`,
@@ -686,6 +697,21 @@ export function AdoptionBatchEditor({
                                 </div>
                             ) : null}
                         </EditorSection>
+                        <EditorSection title="公司销售参考价">
+                            {targetData?.kind === "EXISTING" ? (
+                                <p className="text-sm text-muted-foreground">
+                                    关联已有
+                                    SKU，保留其销售参考价；需要调整时请打开商品资料。
+                                </p>
+                            ) : (
+                                <AdoptionSalesPrices
+                                    form={form}
+                                    index={index}
+                                    prefix={prefix}
+                                    item={item}
+                                />
+                            )}
+                        </EditorSection>
                         <EditorSection title="采购供给">
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <form.AppField
@@ -696,11 +722,13 @@ export function AdoptionBatchEditor({
                                             <FieldLabel
                                                 htmlFor={`${prefix}-dropshipPrice`}
                                             >
-                                                一件代发含税供给价
+                                                一件代发采购价（含税）
                                                 <RequiredMark />
                                             </FieldLabel>
                                             <Input
                                                 id={`${prefix}-dropshipPrice`}
+                                                readOnly
+                                                placeholder="供应商暂未提供报价"
                                                 inputMode="decimal"
                                                 value={field.state.value}
                                                 onChange={(event) =>
@@ -715,7 +743,7 @@ export function AdoptionBatchEditor({
                                                 }
                                             />
                                             <FieldDescription>
-                                                采购供给销售的价格，可自行调整；供应商接口报价仅作参考。
+                                                供应商提供的含税采购价，由接口同步，不可修改。
                                             </FieldDescription>
                                             <FieldError
                                                 errors={field.state.meta.errors}
@@ -810,7 +838,7 @@ export function AdoptionBatchEditor({
                                                             {
                                                                 {
                                                                     bulkPrice:
-                                                                        "集采含税供给价",
+                                                                        "集采采购价（含税）",
                                                                     minimumQuantity:
                                                                         "集采起订数量",
                                                                     validTo:
@@ -847,6 +875,8 @@ export function AdoptionBatchEditor({
                                                         ) : (
                                                             <Input
                                                                 id={`${prefix}-${name}`}
+                                                                readOnly
+                                                                placeholder="接口未提供"
                                                                 inputMode="decimal"
                                                                 value={
                                                                     field.state
@@ -882,7 +912,7 @@ export function AdoptionBatchEditor({
                                         ))}
                                     </div>
                                     <p className="text-xs text-muted-foreground">
-                                        集采价与起订数量需同时填写，或同时留空。
+                                        接口未提供集采报价和起订量，本供给仅支持一件代发采购。
                                     </p>
                                     <form.AppField
                                         name={`rows[${index}].deliveryTemplateId`}

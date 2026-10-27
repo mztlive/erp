@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
+use erp_core::money::Amount;
 use erp_core::validation::normalize_optional_text;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -16,7 +17,7 @@ pub use crate::ports::connector::offer::{CatalogAvailability, CatalogImage};
 use crate::ports::connector::offer::{Offer, OfferDetails};
 use crate::{Error, Result};
 
-const CATALOG_MAPPING_VERSION: u32 = 2;
+const CATALOG_MAPPING_VERSION: u32 = 3;
 
 /// 一个连接内一个外部订货规格的最近观察；正式关联只由选品事务建立。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
@@ -33,6 +34,9 @@ pub struct SupplierCatalogItem {
     #[serde(default)]
     pub barcode: Option<String>,
     pub purchase_price: Option<String>,
+    /// 来源市场参考价，仅供新建公司 SKU 时预填。
+    #[serde(default)]
+    pub market_price: Option<Amount>,
     #[serde(default)]
     pub category_id: Option<String>,
     #[serde(default)]
@@ -157,30 +161,26 @@ impl SupplierCatalogItem {
     /// # 错误
     /// 身份缺失、名称为空或来源资料无法生成摘要时拒绝。
     pub fn observed(connection: &str, supplier: &str, job: &str, snapshot: Snapshot<Offer>) -> Result<Self> {
-        let offer = snapshot.value;
-        let product = offer
-            .sku
+        let Offer { sku, name, specification, unit, quote, details } = snapshot.value;
+        let product = sku
             .product_id
             .filter(|id| !id.trim().is_empty())
             .ok_or_else(|| Error::ValidationError("供应商商品编号缺失".into()))?;
-        if offer.sku.spec_id.trim().is_empty() || offer.name.trim().is_empty() {
+        if sku.spec_id.trim().is_empty() || name.trim().is_empty() {
             return Err(Error::ValidationError("供应商规格编号或商品名称缺失".into()));
         }
-        let details = offer.details;
         let mut item = Self {
-            base: BaseModel::new(catalog_item_id(connection, &product, &offer.sku.spec_id)),
+            base: BaseModel::new(catalog_item_id(connection, &product, &sku.spec_id)),
             connection_id: connection.into(),
             supplier_id: supplier.into(),
             product_id: product,
-            spec_id: offer.sku.spec_id,
-            name: offer.name,
-            specification: offer.specification,
-            unit: offer.unit,
+            spec_id: sku.spec_id,
+            name,
+            specification,
+            unit,
             barcode: normalize_optional_text(details.barcode, "供应商条码", 128)?,
-            purchase_price: offer
-                .quote
-                .and_then(|quote| quote.dropship)
-                .map(|price| price.unit_price.to_string()),
+            purchase_price: quote.and_then(|quote| quote.dropship).map(|price| price.unit_price.to_string()),
+            market_price: details.market_price,
             category_id: details.category_id,
             category_name: details.category_name,
             brand_id: details.brand_id,
@@ -370,6 +370,7 @@ impl SupplierCatalogItem {
     /// 内容无法序列化时返回错误。
     pub fn refresh_fingerprint(&mut self) -> Result<()> {
         let details = OfferDetails {
+            market_price: self.market_price,
             barcode: self.barcode.clone(),
             category_id: self.category_id.clone(),
             category_name: self.category_name.clone(),
@@ -589,6 +590,39 @@ mod tests {
         .unwrap()
     }
     #[test]
+    fn supplier_purchase_quote_rejects_missing_invalid_and_changed_manual_prices() {
+        let mut item = SupplierCatalogItem::observed("c", "s", "j", observation()).unwrap();
+        assert!(item.purchase_quote().is_err());
+        for invalid in ["", "-1", "invalid", "1.00001"] {
+            item.purchase_price = Some(invalid.into());
+            assert!(item.purchase_quote().is_err());
+        }
+        item.purchase_price = Some("827.0800".into());
+        assert!(item.ensure_purchase_price("827.08".parse().unwrap()).is_ok());
+        assert!(item.ensure_purchase_price("827.09".parse().unwrap()).is_err());
+        item.purchase_price = Some("0".into());
+        assert!(item.ensure_purchase_price("0.0000".parse().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn source_market_price_survives_storage_and_changes_preview_fingerprint() {
+        let prior = SupplierCatalogItem::observed("c", "s", "j1", observation()).unwrap();
+        let mut source = observation();
+        source.value.details.market_price = Some("129.50".parse().unwrap());
+        let mut fresh = SupplierCatalogItem::observed("c", "s", "j2", source).unwrap();
+        fresh.retain_match(prior.clone()).unwrap();
+        assert_eq!(fresh.market_price, Some("129.50".parse().unwrap()));
+        assert_ne!(fresh.source_fingerprint, prior.source_fingerprint);
+        assert!(fresh.purchase_price.is_none());
+        let encoded = serde_json::to_value(&fresh).unwrap();
+        let restored: SupplierCatalogItem = serde_json::from_value(encoded.clone()).unwrap();
+        assert_eq!(restored.market_price, fresh.market_price);
+        let mut legacy = encoded;
+        legacy.as_object_mut().unwrap().remove("market_price");
+        assert!(serde_json::from_value::<SupplierCatalogItem>(legacy).unwrap().market_price.is_none());
+    }
+
+    #[test]
     fn repeated_observations_keep_identity_without_inventing_price_time_or_sku() {
         let first = SupplierCatalogItem::observed("c1", "supplier", "j1", observation()).unwrap();
         let second = SupplierCatalogItem::observed("c1", "supplier", "j2", observation()).unwrap();
@@ -676,7 +710,7 @@ mod tests {
         run.advance(None, 1).unwrap();
         assert!(run.supports_incremental(connection.technical_config_version));
         let mut previous_mapping = run.clone();
-        previous_mapping.mapping_version = 1;
+        previous_mapping.mapping_version = CATALOG_MAPPING_VERSION - 1;
         assert!(!previous_mapping.supports_incremental(connection.technical_config_version));
         assert!(!run.supports_incremental(connection.technical_config_version + 1));
         let mut legacy = serde_json::to_value(&run).unwrap();

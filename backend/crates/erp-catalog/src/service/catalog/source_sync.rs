@@ -586,7 +586,7 @@ mod tests {
                 sales_visible_price_gross: Some("100.00".parse().unwrap()),
                 bulk_price_gross: None,
                 bulk_min_quantity: None,
-                market_price: None,
+                market_price: Some("199.00".parse().unwrap()),
                 status: EnableStatus::Active,
                 effective_from: BusinessDate::today(),
                 effective_to: None,
@@ -602,6 +602,7 @@ mod tests {
         assert_eq!(next.status, EnableStatus::Disabled);
         assert_eq!(sku.listing_status, ListingStatus::Unlisted);
         assert_eq!(next.sales_visible_price_gross, old.sales_visible_price_gross);
+        assert_eq!(next.market_price, old.market_price);
         assert_eq!(next.barcode, old.barcode);
     }
 }

@@ -10,6 +10,7 @@ mod command;
 mod delivery_template;
 mod offering;
 mod sku_delivery_coverage;
+mod source_price;
 mod types;
 pub mod write_data;
 

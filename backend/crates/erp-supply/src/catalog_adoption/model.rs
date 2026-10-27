@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
+use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -222,12 +223,24 @@ pub enum AdoptionTarget {
     },
 }
 
+/// 采购确认的新建 SKU 销售参考价；不用于更新已关联 SKU。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdoptionSalesPrices {
+    pub sales_visible_price_gross: Option<Amount>,
+    pub bulk_price_gross: Option<Amount>,
+    pub bulk_min_quantity: Option<Quantity>,
+    pub market_price: Option<Amount>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AdoptionRow {
     pub item_id: String,
     pub target: AdoptionTarget,
     pub terms: SupplierOfferingTermsWrite,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sales_prices: Option<AdoptionSalesPrices>,
     pub delivery_template_id: Option<String>,
 }
 
@@ -526,6 +539,7 @@ mod tests {
                 "10".into(),
                 "2026-10-26".into(),
             ),
+            sales_prices: None,
             delivery_template_id: None,
         };
         let mut legacy_json = serde_json::to_value(&row).unwrap();

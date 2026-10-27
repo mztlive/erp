@@ -36,6 +36,7 @@ export type CatalogItem = {
     suggested_unit?: string | null
     unit_inferred?: boolean
     purchase_price: string | null
+    market_price?: string | null
     observed_at: number
     sku_id: string | null
     sku_no: string | null

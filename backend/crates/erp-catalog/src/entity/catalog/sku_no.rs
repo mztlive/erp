@@ -82,6 +82,16 @@ mod tests {
     }
 
     #[test]
+    fn next_no_continues_product_sequence_with_legacy_source_codes_present() {
+        let mut sequence = SkuNoSequence::new(
+            "SPU20261027-000002",
+            vec!["SKU-legacy-internal-id".into(), "SPU20261027-000002-01".into()],
+        );
+        assert_eq!(sequence.next_no(), "SPU20261027-000002-02");
+        assert_eq!(sequence.next_no(), "SPU20261027-000002-03");
+    }
+
+    #[test]
     fn next_no_expands_beyond_two_digits() {
         let taken = (1..=99).map(|index| format!("P-{index:02}"));
         let mut sequence = SkuNoSequence::new("P", taken);

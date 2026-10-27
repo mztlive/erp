@@ -36,10 +36,15 @@ impl From<SupplierCatalogItem> for AdoptionPreviewRow {
             }
             fields
         };
+        let blocking_reasons = if item.offering_id.is_none() {
+            item.purchase_quote().err().map(|error| vec![error.to_string()]).unwrap_or_default()
+        } else {
+            vec![]
+        };
         Self {
             adopted: item.offering_id.is_some(),
-            blocked: false,
-            blocking_reasons: vec![],
+            blocked: !blocking_reasons.is_empty(),
+            blocking_reasons,
             item: item.into(),
             missing_fields,
         }

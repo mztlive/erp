@@ -2,7 +2,12 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowUpRightIcon, PackageIcon, PlusIcon } from "lucide-react"
+import {
+    ArrowUpRightIcon,
+    ChevronDownIcon,
+    ChevronUpIcon,
+    PlusIcon,
+} from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -11,6 +16,7 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
     Table,
     TableBody,
@@ -21,6 +27,7 @@ import {
 } from "@/components/ui/table"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toFixedSku } from "@/features/master-data/lib/product-fixed-sku"
+import { ProductSupplyIdentity } from "./product-supply-identity"
 import type {
     ProductFields,
     ProductSkuFields,
@@ -37,7 +44,7 @@ import { hasPermission } from "@/lib/permissions"
 
 const NO_COST = "当前账号无权查看采购成本"
 
-/** 当前能参与销售的供给：关系启用且已有条款版本。 */
+/** 有效供给关系：启用且已有条款版本，不代表供应商当前可供。 */
 function isActive(offering: SupplierOfferingView): boolean {
     return offering.status === "ACTIVE" && Boolean(offering.current_revision_id)
 }
@@ -66,7 +73,16 @@ function OfferingRows({
 }) {
     const hidden = canViewCosts ? undefined : NO_COST
     return (
-        <Table>
+        <Table className="min-w-5xl table-fixed">
+            <colgroup>
+                <col className="w-[28%]" />
+                <col className="w-[11%]" />
+                <col className="w-[10%]" />
+                <col className="w-[17%]" />
+                <col className="w-[19%]" />
+                <col className="w-[8%]" />
+                <col className="w-[7%]" />
+            </colgroup>
             <TableHeader>
                 <TableRow>
                     <TableHead className="min-w-52">供应商</TableHead>
@@ -83,7 +99,7 @@ function OfferingRows({
             <TableBody>
                 {offerings.map((offering) => (
                     <TableRow key={offering.id}>
-                        <TableCell className="whitespace-normal">
+                        <TableCell className="whitespace-normal wrap-anywhere">
                             <div className="font-medium">
                                 {offering.supplier_name ??
                                     offering.supplier_no ??
@@ -144,7 +160,7 @@ function OfferingRows({
                                 </span>
                             </div>
                         </TableCell>
-                        <TableCell className="max-w-48 truncate text-sm">
+                        <TableCell className="text-sm whitespace-normal wrap-anywhere">
                             {offering.delivery_template?.display_name ?? "—"}
                         </TableCell>
                         <TableCell>
@@ -185,21 +201,33 @@ function OfferingRows({
 
 function SkuSupplyGroup({
     sku,
+    fields,
+    productName,
+    differingDimensions,
+    collapsible,
     offerings,
     loading,
+    failed,
     canCreate,
     canViewCosts,
     unit,
     onAdd,
 }: {
     sku: ProductSkuFields & { skuId: string }
+    fields: ProductFields
+    productName: string
+    differingDimensions: readonly boolean[]
+    collapsible: boolean
     offerings: readonly SupplierOfferingView[]
     loading: boolean
+    failed: boolean
     canCreate: boolean
     canViewCosts: boolean
     unit: string
     onAdd: () => void
 }) {
+    const [collapsed, setCollapsed] = React.useState(false)
+    const expanded = !collapsible || !collapsed
     const segment = toAutomationIdSegment(sku.skuId)
     const activeSuppliers = new Set(
         offerings.filter(isActive).map((item) => item.supplier_id),
@@ -207,75 +235,88 @@ function SkuSupplyGroup({
     return (
         <section
             aria-labelledby={`master-data-product-supply-${segment}-title`}
-            className="overflow-hidden rounded-lg border bg-card"
+            className="min-w-0 overflow-hidden rounded-lg border bg-card"
         >
-            <header className="flex flex-wrap items-center gap-3 border-b bg-muted/30 px-4 py-3">
-                {sku.mainImagePreviewUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- 复用商品编辑页已解析的对象存储或本地预览地址。
-                    <img
-                        src={sku.mainImagePreviewUrl}
-                        alt=""
-                        className="size-10 shrink-0 rounded-md object-cover"
-                    />
-                ) : (
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                        <PackageIcon
-                            className="size-5 text-muted-foreground"
-                            aria-hidden
-                        />
-                    </span>
-                )}
-                <div className="min-w-0 flex-1">
-                    <h3
-                        id={`master-data-product-supply-${segment}-title`}
-                        className="truncate font-medium"
-                    >
-                        {sku.name || "未命名 SKU"}
-                        <span className="ml-2 text-sm font-normal text-muted-foreground">
-                            {sku.specLabel}
-                        </span>
-                    </h3>
-                    <p className="num text-xs text-muted-foreground">
-                        SKU {sku.skuNo}
-                    </p>
-                </div>
-                {loading ? null : (
-                    <Badge
-                        variant={activeSuppliers > 0 ? "success" : "warning"}
-                    >
-                        {activeSuppliers > 0
-                            ? `${activeSuppliers} 家供应商可供`
-                            : "暂无有效供给"}
-                    </Badge>
-                )}
-                {canCreate ? (
-                    <Button
-                        id={`master-data-product-sku-${segment}-add-supply`}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={onAdd}
-                    >
-                        <PlusIcon data-icon="inline-start" aria-hidden />
-                        添加供给
-                    </Button>
-                ) : null}
-            </header>
-            {loading ? (
-                <p className="px-4 py-6 text-sm text-muted-foreground">
-                    正在读取供给…
-                </p>
-            ) : offerings.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-muted-foreground">
-                    还没有供应商。没有有效供给的规格不能进入商品池销售。
-                </p>
-            ) : (
-                <OfferingRows
-                    offerings={offerings}
-                    canViewCosts={canViewCosts}
-                    unit={unit}
+            <header className="flex flex-col gap-4 bg-muted/30 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
+                <ProductSupplyIdentity
+                    sku={sku}
+                    fields={fields}
+                    productName={productName}
+                    titleId={`master-data-product-supply-${segment}-title`}
+                    differingDimensions={differingDimensions}
                 />
-            )}
+                <div className="flex shrink-0 flex-wrap items-center gap-3 lg:pt-1">
+                    {loading || failed ? null : (
+                        <Badge
+                            variant={
+                                activeSuppliers > 0 ? "outline" : "warning"
+                            }
+                        >
+                            {activeSuppliers > 0
+                                ? `有效供给：${activeSuppliers} 家`
+                                : offerings.length === 0
+                                  ? "尚未添加供给"
+                                  : "暂无有效供给"}
+                        </Badge>
+                    )}
+                    {canCreate ? (
+                        <Button
+                            id={`master-data-product-sku-${segment}-add-supply`}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={onAdd}
+                        >
+                            <PlusIcon data-icon="inline-start" aria-hidden />
+                            添加供给
+                        </Button>
+                    ) : null}
+                    {collapsible ? (
+                        <Button
+                            id={`master-data-product-supply-${segment}-toggle`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-expanded={expanded}
+                            aria-controls={`master-data-product-supply-${segment}-content`}
+                            aria-label={`${expanded ? "收起" : "展开"} ${sku.specLabel} 的供应商供给`}
+                            onClick={() => setCollapsed(!collapsed)}
+                        >
+                            {expanded ? "收起" : "展开"}
+                            {expanded ? (
+                                <ChevronUpIcon aria-hidden />
+                            ) : (
+                                <ChevronDownIcon aria-hidden />
+                            )}
+                        </Button>
+                    ) : null}
+                </div>
+            </header>
+            <div
+                id={`master-data-product-supply-${segment}-content`}
+                hidden={!expanded}
+                className="border-t"
+            >
+                {loading ? (
+                    <p className="px-4 py-6 text-sm text-muted-foreground">
+                        正在读取供给…
+                    </p>
+                ) : failed ? (
+                    <p className="px-5 py-6 text-sm text-muted-foreground">
+                        供给信息读取失败，请在上方重试。
+                    </p>
+                ) : offerings.length === 0 ? (
+                    <p className="px-4 py-6 text-sm text-muted-foreground">
+                        尚未添加供给。没有有效供给的规格不能进入商品池销售。
+                    </p>
+                ) : (
+                    <OfferingRows
+                        offerings={offerings}
+                        canViewCosts={canViewCosts}
+                        unit={unit}
+                    />
+                )}
+            </div>
         </section>
     )
 }
@@ -290,6 +331,7 @@ export function ProductSupplySection({
     name: string
     onRegisterSupply: (sku: FixedSku) => void
 }) {
+    const [search, setSearch] = React.useState("")
     const account = useAccountProfileQuery()
     const permissions = account.data?.permissions
     const canCreate = hasPermission(permissions, "supplier_offering:create")
@@ -302,6 +344,22 @@ export function ProductSupplySection({
             Boolean(sku.skuId),
     )
     const unsavedCount = fields.skus.length - savedSkus.length
+    const showSearch = savedSkus.length > 6
+    const searchTerm = showSearch ? search.trim().toLocaleLowerCase() : ""
+    const visibleSkus = savedSkus.filter((sku) =>
+        [sku.skuNo, sku.name, sku.specLabel, ...sku.attributeValues]
+            .join(" ")
+            .toLocaleLowerCase()
+            .includes(searchTerm),
+    )
+    const differingDimensions = fields.specs.map(
+        (_, index) =>
+            new Set(
+                savedSkus.map(
+                    (sku) => sku.attributeValues[index]?.trim() || "",
+                ),
+            ).size > 1,
+    )
     const query = useSupplierOfferingsForSkusQuery(
         savedSkus.map((sku) => sku.skuId),
     )
@@ -318,12 +376,17 @@ export function ProductSupplySection({
         (sku) => !(bySku.get(sku.skuId) ?? []).some(isActive),
     ).length
     return (
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
-                    <h2 className="text-base font-semibold">供应商供给</h2>
+                    <div className="flex flex-wrap items-baseline gap-3">
+                        <h2 className="text-base font-semibold">供应商供给</h2>
+                        <span className="text-sm text-muted-foreground">
+                            共 {savedSkus.length} 个已保存规格
+                        </span>
+                    </div>
                     <p className="text-sm text-muted-foreground">
-                        每个规格可以由多家供应商供货。供给单独保存，不随商品资料的「保存更新」提交。
+                        供给单独保存，不随商品资料的「保存更新」提交。
                     </p>
                 </div>
                 {query.isSuccess && savedSkus.length > 0 ? (
@@ -341,6 +404,35 @@ export function ProductSupplySection({
                     </p>
                 ) : null}
             </div>
+            {showSearch ? (
+                <div className="flex flex-wrap items-center gap-3">
+                    <Input
+                        id="master-data-product-supply-search"
+                        className="w-full sm:max-w-sm"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="搜索规格、SKU 名称或编号"
+                        aria-label="搜索规格、SKU 名称或编号"
+                    />
+                    {search ? (
+                        <Button
+                            id="master-data-product-supply-search-clear"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSearch("")}
+                        >
+                            清空搜索
+                        </Button>
+                    ) : null}
+                    <span
+                        role="status"
+                        className="text-sm text-muted-foreground"
+                    >
+                        显示 {visibleSkus.length} / {savedSkus.length} 个规格
+                    </span>
+                </div>
+            ) : null}
             {query.isError ? (
                 <BusinessFailureState
                     title="供给信息加载失败"
@@ -348,12 +440,17 @@ export function ProductSupplySection({
                     onRetry={() => void query.refetch()}
                 />
             ) : null}
-            {savedSkus.map((sku) => (
+            {visibleSkus.map((sku) => (
                 <SkuSupplyGroup
                     key={sku.skuId}
                     sku={sku}
+                    fields={fields}
+                    productName={name}
+                    differingDimensions={differingDimensions}
+                    collapsible={showSearch}
                     offerings={sortOfferings(bySku.get(sku.skuId) ?? [])}
                     loading={query.isPending}
+                    failed={query.isError}
                     canCreate={canCreate}
                     canViewCosts={canViewCosts}
                     unit={sku.baseUnit ?? fields.baseUnit}
@@ -362,6 +459,11 @@ export function ProductSupplySection({
                     }
                 />
             ))}
+            {searchTerm && visibleSkus.length === 0 ? (
+                <p className="py-6 text-sm text-muted-foreground">
+                    没有匹配的规格，请更换关键词或清空搜索。
+                </p>
+            ) : null}
             {unsavedCount > 0 ? (
                 <p className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
                     有 {unsavedCount}{" "}

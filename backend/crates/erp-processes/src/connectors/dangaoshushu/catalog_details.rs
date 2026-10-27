@@ -1,4 +1,5 @@
 //! 官方新版列表与详情字段归一；不将图片地址或来源编号冒充内容指纹。
+use erp_core::money::Amount;
 use erp_supply::ports::connector::common::ConnectorResult;
 use erp_supply::ports::connector::offer::{
     AvailabilityState, AvailableQuantity, CatalogAvailability, CatalogImage, OfferDetails,
@@ -6,7 +7,7 @@ use erp_supply::ports::connector::offer::{
 use reqwest::Url;
 use serde_json::Value;
 
-use super::parsing::{context, id, mapping};
+use super::parsing::{context, fixed, id, mapping};
 
 /// 提取目录资料，并在必需状态完整时计算可供性；`is_up` 不参与完整性检查。
 /// # 参数
@@ -21,6 +22,7 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
         .or(optional_id(product, "cat_id")?);
     let mut details = OfferDetails {
         barcode: optional_text(spec, "barcode")?,
+        market_price: market_price(spec)?,
         category_id,
         category_name: None, // 由独立分类字典补齐；label_name 是商品标签，不得冒充分类。
         brand_id: optional_id(product, "brand_id")?,
@@ -106,6 +108,19 @@ fn image_list(value: &Value, key: &str) -> ConnectorResult<Option<Vec<CatalogIma
     ))
 }
 
+/// 读取规格市场价；零价保留，缺失留空，非法值按单项映射错误暴露。
+fn market_price(spec: &Value) -> ConnectorResult<Option<Amount>> {
+    if spec["market_price"].is_null() {
+        return Ok(None);
+    }
+    let price: Amount =
+        fixed(&spec["market_price"]).map_err(|e| context(e, "规格市场价 market_price 格式或精度无效"))?;
+    if price.to_decimal().is_sign_negative() {
+        return Err(context(mapping(), "规格市场价 market_price 不能为负数"));
+    }
+    Ok(Some(price))
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -187,6 +202,16 @@ mod tests {
         for url in ["file:///secret", "//user:pass@example.com/a", "//", "https://user@example.com/a"] {
             let image = image_list(&json!({"images":[{"m_path":url}]}), "images").unwrap().unwrap();
             assert_eq!(image[0].url, "");
+        }
+    }
+    #[test]
+    fn source_market_price_is_optional_exact_and_independent_of_other_prices() {
+        assert_eq!(market_price(&json!({"price":"99", "clearing_price":"80"})).unwrap(), None);
+        for value in ["0", "129.50"] {
+            assert_eq!(market_price(&json!({"market_price":value})).unwrap(), Some(value.parse().unwrap()));
+        }
+        for value in ["-1", "1.001", "invalid", ""] {
+            assert!(market_price(&json!({"market_price":value})).is_err());
         }
     }
 }

@@ -36,6 +36,10 @@ type RowDraft = {
     companyName: string
     companyDescription: string
     specification: string
+    companyDropshipPrice: string
+    companyBulkPrice: string
+    companyMinimumQuantity: string
+    companyMarketPrice: string
     dropshipPrice: string
     bulkPrice: string
     minimumQuantity: string
@@ -60,6 +64,10 @@ export const rowSchema = z
         companyName: z.string(),
         companyDescription: z.string(),
         specification: z.string(),
+        companyDropshipPrice: z.string(),
+        companyBulkPrice: z.string(),
+        companyMinimumQuantity: z.string(),
+        companyMarketPrice: z.string(),
         dropshipPrice: z.string(),
         bulkPrice: z.string(),
         minimumQuantity: z.string(),
@@ -70,6 +78,28 @@ export const rowSchema = z
     })
     .superRefine((row, ctx) => {
         if (row.kind === "CREATE") {
+            for (const name of [
+                "companyDropshipPrice",
+                "companyBulkPrice",
+                "companyMinimumQuantity",
+                "companyMarketPrice",
+            ] as const) {
+                if (!row[name].trim()) continue
+                const quantity = name === "companyMinimumQuantity"
+                try {
+                    parseDecimal(row[name], { maxScale: quantity ? 6 : 2 })
+                    if (quantity && compareDecimal(row[name], "0", 6) <= 0)
+                        throw new Error()
+                } catch {
+                    ctx.addIssue({
+                        code: "custom",
+                        path: [name],
+                        message: quantity
+                            ? "请填写大于 0、最多 6 位小数的起订量"
+                            : "请填写非负、最多 2 位小数的销售参考价",
+                    })
+                }
+            }
             if (
                 !row.companyName.trim() ||
                 Array.from(row.companyName.trim()).length > 128
@@ -161,6 +191,17 @@ function rowInput(row: RowDraft, expectedMatch: string): AdoptionRowInput {
             mapping: rowMapping(row),
             expected_match: expectedMatch,
         },
+        sales_prices:
+            row.kind === "CREATE"
+                ? {
+                      sales_visible_price_gross:
+                          row.companyDropshipPrice.trim() || null,
+                      bulk_price_gross: row.companyBulkPrice.trim() || null,
+                      bulk_min_quantity:
+                          row.companyMinimumQuantity.trim() || null,
+                      market_price: row.companyMarketPrice.trim() || null,
+                  }
+                : null,
         terms: {
             dropship_supply_price_gross: row.dropshipPrice.trim(),
             bulk_supply_price_gross: row.bulkPrice.trim() || null,
@@ -211,6 +252,10 @@ export function useAdoptionBatch({
                 companyName: item.name,
                 companyDescription: item.description ?? "",
                 specification: item.specification,
+                companyDropshipPrice: "",
+                companyBulkPrice: "",
+                companyMinimumQuantity: "",
+                companyMarketPrice: item.market_price ?? "",
                 dropshipPrice: item.purchase_price ?? "",
                 bulkPrice: "",
                 minimumQuantity: "",
