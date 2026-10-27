@@ -93,3 +93,44 @@ fn error(class: SupplierFailureClass, code: &str, summary: &str) -> ConnectorErr
 
 #[cfg(test)]
 mod test_support;
+
+#[cfg(test)]
+mod tests {
+    use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
+    use erp_supply::ports::connector::SupplierConnector;
+
+    use super::test_support;
+
+    /// 治理能力声明必须与适配器实际实现的窄 trait 保持一致。
+    #[test]
+    fn declared_capabilities_match_implemented_connector_traits() {
+        let connector = test_support::connector(vec![]);
+        let port: &dyn SupplierConnector = &connector;
+        let declared = port.capabilities();
+
+        for (implemented, code, label) in [
+            (port.offers().is_some(), SupplierApiCapabilityCode::Product, "商品"),
+            (port.offers().is_some(), SupplierApiCapabilityCode::Price, "价格"),
+            (port.availability().is_some(), SupplierApiCapabilityCode::Stock, "库存"),
+            (port.service_areas().is_some(), SupplierApiCapabilityCode::ServiceAreas, "可售地区"),
+            (port.delivery().is_some(), SupplierApiCapabilityCode::Delivery, "配送"),
+            (
+                port.payment_confirmation().is_some(),
+                SupplierApiCapabilityCode::PaymentConfirmation,
+                "履约通知",
+            ),
+            (port.orders().is_some(), SupplierApiCapabilityCode::Order, "下单"),
+            (port.orders().is_some(), SupplierApiCapabilityCode::Query, "查询"),
+            (port.callbacks().is_some(), SupplierApiCapabilityCode::Callback, "回调"),
+        ] {
+            assert_eq!(implemented, declared.contains(&code), "{label}能力声明与适配器实现不一致");
+        }
+        assert_eq!(declared.iter().collect::<std::collections::HashSet<_>>().len(), declared.len());
+        assert!(!declared.contains(&SupplierApiCapabilityCode::Cancel));
+        assert!(!declared.contains(&SupplierApiCapabilityCode::Refund));
+        assert!(!declared.contains(&SupplierApiCapabilityCode::Settlement));
+        assert!(port.cancellations().is_none());
+        assert!(port.refunds().is_none());
+        assert!(port.settlements().is_none());
+    }
+}

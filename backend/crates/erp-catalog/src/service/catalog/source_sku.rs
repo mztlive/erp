@@ -75,7 +75,6 @@ fn ensure_source_input(input: &ProductSkuInput) -> Result<()> {
     if input.sku_id.is_some()
         || input.expected_sku_revision_id.is_some()
         || input.reenable
-        || input.barcode.is_some()
         || input.sales_visible_price_gross.is_some()
         || input.bulk_price_gross.is_some()
         || input.market_price.is_some()

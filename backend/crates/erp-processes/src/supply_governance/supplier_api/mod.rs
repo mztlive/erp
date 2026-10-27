@@ -2,12 +2,12 @@
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
-use erp_read_models::supplier_center::supplier_api::SupplierApiReadService;
+use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
 use mongodb::Database;
+mod activation;
 mod catalog_identity_review;
-mod catalog_match;
 mod catalog_recovery;
 mod command;
 mod context;
@@ -21,6 +21,7 @@ pub struct SupplierApiGovernanceProcess {
     db: Database,
     reference_registry: Arc<dyn SupplierReferenceRegistry>,
     rbac: Option<SharedRbacService>,
+    gateway: Option<Arc<dyn SupplierApiGateway>>,
 }
 impl SupplierApiGovernanceProcess {
     /// 复用应用数据库，未注入的授权和引用元数据保持失败关闭。
@@ -38,6 +39,7 @@ impl SupplierApiGovernanceProcess {
             db,
             reference_registry: Arc::new(crate::adapters::supplier_api::UnavailableSupplierReferenceRegistry),
             rbac: None,
+            gateway: None,
         }
     }
     /// 注入应用已有的权威 RBAC。消耗 `self`。
@@ -68,15 +70,19 @@ impl SupplierApiGovernanceProcess {
         self.reference_registry = registry;
         self
     }
+    /// 注入只读连接检查网关，开启自动下单时在事务外调用。
+    /// # 参数
+    /// `gateway` 为已注册的供应商技术网关。
+    /// # 返回
+    /// 绑定网关后的流程。
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_gateway(mut self, gateway: Arc<dyn SupplierApiGateway>) -> Self {
+        self.gateway = Some(gateway);
+        self
+    }
+
     fn domain(&self) -> SupplierApiService {
         SupplierApiService::new(self.db.clone())
-    }
-    fn reads(&self) -> SupplierApiReadService {
-        let service = SupplierApiReadService::new(self.db.clone())
-            .with_reference_registry(Arc::clone(&self.reference_registry));
-        match &self.rbac {
-            Some(rbac) => service.with_rbac(rbac.clone()),
-            None => service,
-        }
     }
 }

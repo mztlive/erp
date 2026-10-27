@@ -45,7 +45,7 @@ function connectionPresentation(
     const cancelled = job.status === "cancelled"
     const failed = job.status === "failed"
     const href = job.domain_job_id
-        ? `/supplier-api/connections/${encodeURIComponent(job.domain_job_id)}?section=${catalog ? "catalog" : "health"}`
+        ? `/supplier-api/catalog?connectionId=${encodeURIComponent(job.domain_job_id)}`
         : "/supplier-api/connections"
     return {
         title: completed

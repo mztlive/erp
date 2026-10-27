@@ -275,21 +275,10 @@ impl SupplierConnectionGovernance<'_> {
     fn disable_blockers(
         &self,
         action: SupplierConnectionAction,
-        impact: SupplierConnectionBusinessImpact,
+        _impact: SupplierConnectionBusinessImpact,
     ) -> Vec<SupplierGovernanceBlocker> {
         if self.connection.stable.status == SupplierApiConnectionStatus::Disabled {
             return vec![governance_blocker(action, "ALREADY_DISABLED", "连接已经停用", None)];
-        }
-        if impact.has_blockers() {
-            return vec![governance_blocker(
-                action,
-                "ACTIVE_BUSINESS_IMPACT",
-                &format!(
-                    "仍有{}条供给、{}张订单和{}个同步任务受影响",
-                    impact.active_offerings, impact.open_supplier_orders, impact.active_sync_jobs
-                ),
-                Some("W21"),
-            )];
         }
         Vec::new()
     }
@@ -313,49 +302,11 @@ impl SupplierConnectionGovernance<'_> {
                 None,
             )];
         }
-        let active: Vec<&SupplierApiCapability> =
-            self.capabilities.iter().filter(|capability| capability.is_active()).collect();
-        if active.is_empty() {
-            return vec![governance_blocker(action, "NO_ACTIVE_CAPABILITY", "至少启用一项连接能力", None)];
-        }
-        if active.iter().any(|capability| {
-            !self
-                .latest_confirmation(capability.capability_code)
-                .is_some_and(|confirmation| confirmation.covers(capability))
-        }) {
-            return vec![governance_blocker(
-                action,
-                "BUSINESS_CONFIRMATION_MISSING",
-                "启用能力必须有与当前配置匹配的采购业务确认",
-                None,
-            )];
-        }
-        let Some(health) = self.latest_successful_health_run() else {
+        if !self.connection.current_technical_config_is_healthy() {
             return vec![governance_blocker(
                 action,
                 "TECHNICAL_HEALTH_MISSING",
-                "当前技术配置尚无成功健康检查证据",
-                None,
-            )];
-        };
-        if health.technical_config_version != self.connection.technical_config_version
-            || active.iter().any(|capability| !health.verifies(capability))
-        {
-            return vec![governance_blocker(
-                action,
-                "TECHNICAL_HEALTH_STALE",
-                "技术配置或能力已变化，请重新执行健康检查",
-                None,
-            )];
-        }
-        if active.iter().any(|capability| {
-            self.latest_confirmation(capability.capability_code)
-                .is_some_and(|confirmation| confirmation.confirmed_by == health.requested_by)
-        }) {
-            return vec![governance_blocker(
-                action,
-                "DUAL_ROLE_REQUIRED",
-                "必须由不同人员完成采购业务确认与技术健康检查",
+                "当前接口配置尚未通过连接测试",
                 None,
             )];
         }
@@ -661,41 +612,32 @@ mod tests {
 
     /// 启用连接要求当前业务确认、健康证据及双人职责。
     #[test]
-    fn enable_governance_requires_current_evidence_and_distinct_actors() {
+    fn enable_requires_current_health_without_manual_capabilities_or_second_actor() {
+        let mut connection = governance_connection(SupplierApiConnectionStatus::Disabled);
+        let blockers = |connection: &SupplierApiConnection| {
+            SupplierConnectionGovernance {
+                connection,
+                capabilities: &[],
+                confirmations: &[],
+                health_runs: &[],
+            }
+            .blockers(SupplierConnectionAction::Enable, Default::default(), true)
+        };
+        assert_eq!(blockers(&connection)[0].code, "TECHNICAL_HEALTH_MISSING");
+        connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(4));
+        assert!(blockers(&connection).is_empty());
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
-        let confirmation = governance_confirmation(&capability, "operator-1");
-        let connection = governance_connection(SupplierApiConnectionStatus::Disabled);
-        let health = governance_health(&connection, &capability, "technician-1");
-        let governance = SupplierConnectionGovernance {
+        let confirmation = governance_confirmation(&capability, "same-operator");
+        let health = governance_health(&connection, &capability, "same-operator");
+        let historical = SupplierConnectionGovernance {
             connection: &connection,
-            capabilities: std::slice::from_ref(&capability),
-            confirmations: std::slice::from_ref(&confirmation),
-            health_runs: std::slice::from_ref(&health),
+            capabilities: &[capability],
+            confirmations: &[confirmation],
+            health_runs: &[health],
         };
-        assert!(governance
-            .blockers(
-                SupplierConnectionAction::Enable,
-                SupplierConnectionBusinessImpact::default(),
-                true,
-            )
-            .is_empty());
-
-        let health = governance_health(&connection, &capability, "operator-1");
-        let governance = SupplierConnectionGovernance {
-            connection: &connection,
-            capabilities: std::slice::from_ref(&capability),
-            confirmations: std::slice::from_ref(&confirmation),
-            health_runs: std::slice::from_ref(&health),
-        };
-        assert_eq!(
-            governance.blockers(
-                SupplierConnectionAction::Enable,
-                SupplierConnectionBusinessImpact::default(),
-                true,
-            )[0]
-            .code,
-            "DUAL_ROLE_REQUIRED"
-        );
+        assert!(historical.blockers(SupplierConnectionAction::Enable, Default::default(), true).is_empty());
+        connection.bind_credential_reference("new-config".into(), "same-operator").unwrap();
+        assert_eq!(blockers(&connection)[0].code, "TECHNICAL_HEALTH_MISSING");
     }
 
     /// 未指定接口类型的旧连接不得执行技术动作，仍可按原业务约束停用。
@@ -719,7 +661,7 @@ mod tests {
         }
     }
 
-    /// 停用连接拒绝活动业务影响，目录同步要求健康连接与商品能力。
+    /// 关闭自动下单不因活动供给或订单阻塞，目录同步仍可使用。
     #[test]
     fn disable_and_catalog_governance_use_current_business_facts() {
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
@@ -740,17 +682,18 @@ mod tests {
                 )
                 .is_empty()
         );
-        assert_eq!(
-            governance.blockers(
-                SupplierConnectionAction::Disable,
-                SupplierConnectionBusinessImpact {
-                    active_offerings: 1,
-                    ..SupplierConnectionBusinessImpact::default()
-                },
-                true,
-            )[0]
-            .code,
-            "ACTIVE_BUSINESS_IMPACT"
+        assert!(
+            governance
+                .blockers(
+                    SupplierConnectionAction::Disable,
+                    SupplierConnectionBusinessImpact {
+                        active_offerings: 1,
+                        open_supplier_orders: 1,
+                        active_sync_jobs: 1
+                    },
+                    true,
+                )
+                .is_empty()
         );
     }
 

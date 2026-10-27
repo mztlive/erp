@@ -370,6 +370,7 @@ impl AppState {
         erp_processes::supply_governance::SupplierApiGovernanceProcess::new(self.db())
             .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
             .with_rbac(self.rbac())
+            .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
     }
 
     /// 读取按原权限与引用配置投影的供应商连接详情。
@@ -451,6 +452,7 @@ impl AppState {
     /// 返回供应商履约的本域查询与持久化服务。
     pub fn supplier_fulfillment_service(&self) -> SupplierFulfillmentService {
         erp_processes::adapters::scoped_fulfillment_service(self.db(), self.rbac())
+            .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
     }
 
     /// 返回已注入原网关的供应商履约跨域执行入口。
@@ -463,6 +465,7 @@ impl AppState {
             erp_processes::adapters::MongoFulfillmentOrderDataScope::shared(self.db(), self.rbac()),
             erp_processes::adapters::MongoFulfillmentExceptionHandlers::shared(self.db()),
         )
+        .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
     }
 
     /// 返回连接器配置状态，供 readiness 暴露。

@@ -37,6 +37,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
+use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use erp_supply::{FulfillmentExceptionHandlerPort, FulfillmentOrderDataScopePort};
 use mongodb::Database;
@@ -49,6 +50,7 @@ use crate::Result;
 /// 本类型承接跨域写入与外部调用，纯列表由本域服务提供。
 pub struct SupplierFulfillmentProcess {
     db: Database,
+    registry: Option<Arc<dyn SupplierReferenceRegistry>>,
     gateway: Arc<dyn SupplierGateway>,
     data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
     handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
@@ -86,11 +88,26 @@ impl SupplierFulfillmentProcess {
         data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
         handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
     ) -> Self {
-        Self { db, gateway, data_scope, handlers }
+        Self { db, gateway, data_scope, handlers, registry: None }
+    }
+    /// 注入实际适配器能力来源。
+    /// # 参数
+    /// `registry` 为组合根共享注册表。
+    /// # 返回
+    /// 绑定后的流程。
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
+        self.registry = Some(registry);
+        self
     }
     fn domain(&self) -> SupplierFulfillmentService {
-        SupplierFulfillmentService::new(self.db.clone())
-            .with_scope(self.data_scope.clone(), self.handlers.clone())
+        let service = SupplierFulfillmentService::new(self.db.clone())
+            .with_scope(self.data_scope.clone(), self.handlers.clone());
+        match &self.registry {
+            Some(registry) => service.with_registry(registry.clone()),
+            None => service,
+        }
     }
     async fn load_order(&self, id: &str) -> Result<SupplierFulfillmentOrder> {
         Ok(self.domain().load_order(id).await?)

@@ -197,6 +197,20 @@ export function ConnectionCreateDialog({
                                         )}
                                     />
                                 ) : null}
+                                {(() => {
+                                    const selected = (
+                                        connectorTypes.data ?? []
+                                    ).find(
+                                        (option) =>
+                                            option.code === field.state.value,
+                                    )
+                                    if (!selected) return null
+                                    return (
+                                        <p className="text-xs text-muted-foreground">
+                                            创建后即可同步商品并选品。自动下单默认关闭，可在商品库的连接设置中开启。
+                                        </p>
+                                    )
+                                })()}
                             </Field>
                         )}
                     />

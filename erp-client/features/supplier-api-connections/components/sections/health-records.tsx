@@ -135,7 +135,7 @@ export function HealthRecords({ records }: { records: HealthRecordView[] }) {
                                 kind="no-data"
                                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                                 title="暂无健康记录"
-                                description="在连接设置中点击“测试连接”，结果会记录在本页。"
+                                description="点击“测试连接”后在此查看检查结果。"
                             />
                         }
                     />

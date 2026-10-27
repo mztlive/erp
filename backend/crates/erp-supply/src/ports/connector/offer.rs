@@ -98,6 +98,9 @@ pub enum CatalogAvailability {
 /// 商品来源资料；图片 None 为未提供，Some([]) 才是明确清空。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferDetails {
+    /// 供应商明确提供的实际商品条码；字符串保留前导零，不推导外部订货编号。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub barcode: Option<String>,
     pub category_id: Option<String>,
     pub category_name: Option<String>,
     pub brand_id: Option<String>,

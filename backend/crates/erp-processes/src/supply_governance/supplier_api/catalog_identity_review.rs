@@ -2,6 +2,7 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_audit::AuditActorLogs;
+use erp_catalog::SkuRevision;
 use erp_catalog::entity::catalog::{EnableStatus, Sku, UnitOfMeasure};
 use erp_catalog::repository::CatalogExt;
 use erp_identity::SharedRbacService;
@@ -116,6 +117,18 @@ async fn load_review(
         return Err(Error::BusinessLogicError("公司商品单位已停用".into()));
     }
     item.ensure_company_unit(&[&unit.unit_code, &unit.name, &unit.symbol])?;
+    let current = review_sku_content(db, &sku, &item, write, executor).await?;
+    let view = review_view(&item, &sku, &unit, offering.base.version, current.specification.as_deref())?;
+    Ok((item, view))
+}
+
+async fn review_sku_content(
+    db: &Database,
+    sku: &Sku,
+    item: &SupplierCatalogItem,
+    write: bool,
+    executor: &mut dyn Executor,
+) -> Result<SkuRevision> {
     let current_id = sku
         .stable
         .current_revision_id
@@ -126,8 +139,18 @@ async fn load_review(
         .find_by_id(current_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("公司规格资料不存在".into()))?;
-    let view = review_view(&item, &sku, &unit, offering.base.version, current.specification.as_deref())?;
-    Ok((item, view))
+    if write
+        && item
+            .barcode
+            .as_ref()
+            .zip(current.barcode.as_ref())
+            .is_some_and(|(source, company)| source != company)
+    {
+        return Err(Error::ConflictError(
+            "来源条码与公司 SKU 条码不一致，请先核对商品条码，不能按文案变化恢复供给".into(),
+        ));
+    }
+    Ok(current)
 }
 
 fn review_view(

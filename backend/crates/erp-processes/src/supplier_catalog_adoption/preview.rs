@@ -1,6 +1,5 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
-use erp_catalog::CatalogExt;
 use erp_core::common::time::Instant;
 use erp_identity::{Permission, subject};
 use erp_supply::catalog_adoption::{
@@ -14,7 +13,6 @@ use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
 use super::SupplierCatalogAdoptionProcess;
-use crate::adapters::catalog_access;
 use crate::{Error, Result};
 
 #[derive(Serialize)]
@@ -35,17 +33,6 @@ pub struct AdoptionPreviewView {
     pub max_confirm_rows: usize,
 }
 
-#[derive(Serialize)]
-pub struct AdoptionTargetView {
-    pub sku_id: String,
-    pub sku_no: String,
-    pub product_id: String,
-    pub sku_version: u64,
-    pub product_version: u64,
-    pub unit_id: String,
-    pub specification: String,
-}
-
 impl SupplierCatalogAdoptionProcess {
     /// 冻结勾选或完整筛选结果，禁止只冻结当前页面或截断超限结果。
     /// # 参数
@@ -63,8 +50,13 @@ impl SupplierCatalogAdoptionProcess {
         self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
         self.ensure_permission(actor, "supplier_offering_cost:detail").await?;
         request.validate()?;
-        SupplierApiService::new(self.db.clone()).load_connection(connection, &mut NoTransaction).await?;
+        let source =
+            SupplierApiService::new(self.db.clone()).load_connection(connection, &mut NoTransaction).await?;
+        self.ensure_source(&source)?;
         let items = self.selected_items(connection, request).await?;
+        for item in &items {
+            source.ensure_offering_source(&item.supplier_id)?;
+        }
         let encoded = serde_json::to_vec(&items).map_err(|_| Error::Internal("选品资料无法编码".into()))?;
         if encoded.len() > 8 * 1024 * 1024 {
             return Err(Error::ValidationError("本次选品资料过多，请缩小范围后分批预览".into()));
@@ -85,7 +77,7 @@ impl SupplierCatalogAdoptionProcess {
                 let missing_fields = if item.offering_id.is_some() {
                     vec![]
                 } else {
-                    vec!["公司分类".into(), "公司品牌".into(), "基础单位与规格核对".into(), "供给条款".into()]
+                    vec!["公司计量单位".into(), "新建时所需分类".into(), "供给条款".into()]
                 };
                 let blocking_reasons = vec![];
                 AdoptionPreviewRow {
@@ -138,44 +130,6 @@ impl SupplierCatalogAdoptionProcess {
             return Err(Error::ValidationError("当前筛选没有可选商品".into()));
         }
         Ok(items)
-    }
-
-    /// 读取现有 SKU 的公司身份和并发版本，用于明确匹配。
-    /// # 参数
-    /// 连接、目标 SKU 和认证操作人。
-    /// # 返回
-    /// 已按公司商品读取权限过滤的目标版本。
-    /// # 错误
-    /// 无权、连接或商品不存在、商品停用时拒绝。
-    pub async fn target(
-        &self,
-        connection: &str,
-        sku_id: &str,
-        actor: &AuditActor,
-    ) -> Result<AdoptionTargetView> {
-        self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
-        SupplierApiService::new(self.db.clone()).load_connection(connection, &mut NoTransaction).await?;
-        let sku = self
-            .db
-            .skus()
-            .find_by_id(sku_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("公司商品规格不存在".into()))?;
-        let product = catalog_access(self.db.clone(), self.rbac.clone())
-            .require_product(actor, "detail", sku.product_id.as_ref(), &mut NoTransaction)
-            .await?;
-        if !sku.is_active() || !product.is_active() {
-            return Err(Error::BusinessLogicError("请选择启用的公司商品规格".into()));
-        }
-        Ok(AdoptionTargetView {
-            sku_id: sku.base.id,
-            sku_no: sku.sku_no,
-            product_id: product.base.id,
-            sku_version: sku.base.version,
-            product_version: product.base.version,
-            unit_id: sku.base_unit_id.to_string(),
-            specification: sku.specification_signature,
-        })
     }
 
     pub(super) async fn load_item(

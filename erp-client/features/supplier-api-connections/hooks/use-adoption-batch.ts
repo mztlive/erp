@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useQueries } from "@tanstack/react-query"
+import { resolveAdoption, type AdoptionMapping } from "../api/adoption"
 import { useStore } from "@tanstack/react-form"
 import { format } from "date-fns"
 import { z } from "zod"
@@ -19,7 +21,7 @@ import type {
     AdoptionRowInput,
 } from "../api/adoption"
 import { newIdempotencyKey } from "../lib/operations"
-import { useAdoptionTargetQuery, useConfirmAdoptionMutation } from "./adoption"
+import { useConfirmAdoptionMutation } from "./adoption"
 
 export type AdoptionRowState = "SUCCEEDED" | "FAILED" | "READY" | "INCOMPLETE"
 
@@ -31,9 +33,6 @@ type RowDraft = {
     productKind: ProductKind
     companyName: string
     companyDescription: string
-    skuId: string
-    skuVersion: number
-    productVersion: number
     specification: string
     dropshipPrice: string
     bulkPrice: string
@@ -58,9 +57,6 @@ export const rowSchema = z
         ]),
         companyName: z.string(),
         companyDescription: z.string(),
-        skuId: z.string(),
-        skuVersion: z.number(),
-        productVersion: z.number(),
         specification: z.string(),
         dropshipPrice: z.string(),
         bulkPrice: z.string(),
@@ -87,18 +83,6 @@ export const rowSchema = z
                     path: ["companyDescription"],
                     message: "请将公司介绍整理为 512 个字符以内，或明确清空",
                 })
-            if (!row.categoryId)
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["categoryId"],
-                    message: "请选择公司分类",
-                })
-        } else if (!row.skuId || !row.skuVersion || !row.productVersion) {
-            ctx.addIssue({
-                code: "custom",
-                path: ["skuId"],
-                message: "请选择公司 SKU 并等待资料核对完成",
-            })
         }
         for (const name of [
             "dropshipPrice",
@@ -134,7 +118,7 @@ export const rowSchema = z
                             ? "请填写 0–100 的税率"
                             : name === "minimumQuantity"
                               ? "请填写大于 0 的起订量"
-                              : "请填写有效的非负采购价",
+                              : "请填写有效的非负供给价",
                 })
             }
         }
@@ -157,36 +141,24 @@ export const rowSchema = z
             })
     })
 
-function rowInput(row: RowDraft): AdoptionRowInput {
+function rowMapping(row: RowDraft): AdoptionMapping {
+    return {
+        category_id: row.categoryId,
+        unit_id: row.unitId,
+        product_kind: row.productKind,
+        company_name: row.companyName.trim(),
+        company_description: row.companyDescription.trim(),
+    }
+}
+
+function rowInput(row: RowDraft, expectedMatch: string): AdoptionRowInput {
     return {
         item_id: row.itemId,
-        target:
-            row.kind === "CREATE"
-                ? {
-                      kind: "CREATE",
-                      category_id: row.categoryId,
-                      brand_id: "",
-                      unit_id: row.unitId,
-                      product_kind: row.productKind,
-                      company_name: row.companyName.trim(),
-                      company_description: row.companyDescription.trim(),
-                      spec_entries: row.specification.trim()
-                          ? [
-                                {
-                                    attribute_code: "规格",
-                                    attribute_value_code:
-                                        row.specification.trim(),
-                                },
-                            ]
-                          : [],
-                  }
-                : {
-                      kind: "EXISTING",
-                      sku_id: row.skuId,
-                      expected_sku_version: row.skuVersion,
-                      expected_product_version: row.productVersion,
-                      unit_id: row.unitId,
-                  },
+        target: {
+            kind: "AUTO",
+            mapping: rowMapping(row),
+            expected_match: expectedMatch,
+        },
         terms: {
             dropship_supply_price_gross: row.dropshipPrice.trim(),
             bulk_supply_price_gross: row.bulkPrice.trim() || null,
@@ -215,7 +187,7 @@ export function useAdoptionBatch({
     const categoryPrefillDone = React.useRef(false)
     const editedCategories = React.useRef(new Set<string>())
     const requestIdentity = React.useRef<{
-        payload: string
+        rows: AdoptionRowInput[]
         key: string
     } | null>(null)
     const [rowResults, setRowResults] = React.useState<AdoptionResultRow[]>([])
@@ -230,15 +202,12 @@ export function useAdoptionBatch({
         defaultValues: {
             rows: rows.map(({ item }): RowDraft => ({
                 itemId: item.id,
-                kind: item.sku_id ? "EXISTING" : "CREATE",
+                kind: "CREATE",
                 categoryId: "",
                 unitId: "",
                 productKind: "PHYSICAL",
                 companyName: item.name,
                 companyDescription: item.description ?? "",
-                skuId: item.sku_id ?? "",
-                skuVersion: 0,
-                productVersion: 0,
                 specification: item.specification,
                 dropshipPrice: item.purchase_price ?? "",
                 bulkPrice: "",
@@ -249,7 +218,9 @@ export function useAdoptionBatch({
                 deliveryTemplateId: "",
             })),
         },
-        validators: { onSubmit: z.object({ rows: z.array(rowSchema) }) },
+        validators: {
+            onSubmit: z.object({ rows: z.array(z.custom<RowDraft>()) }),
+        },
         onSubmitInvalid: ({ formApi }) => {
             const index = formApi.state.values.rows.findIndex(
                 (row) => !rowSchema.safeParse(row).success,
@@ -264,13 +235,22 @@ export function useAdoptionBatch({
                 const succeededIds = new Set(
                     successes.map((row) => row.item_id),
                 )
-                const inputs = value.rows
-                    .filter((row) => !succeededIds.has(row.itemId))
-                    .map(rowInput)
-                const payload = JSON.stringify(inputs)
-                if (requestIdentity.current?.payload !== payload) {
+                const inputs = value.rows.flatMap((row, index) => {
+                    const resolution = resolutions[index]
+                    if (
+                        succeededIds.has(row.itemId) ||
+                        !rowSchema.safeParse(row).success ||
+                        !resolution?.data ||
+                        resolution.isError ||
+                        resolution.isFetching
+                    )
+                        return []
+                    return [rowInput(row, resolution.data.expected_match)]
+                })
+                if (!requestIdentity.current && inputs.length === 0) return
+                if (!requestIdentity.current) {
                     requestIdentity.current = {
-                        payload,
+                        rows: inputs,
                         key: newIdempotencyKey("catalog-adoption"),
                     }
                 }
@@ -279,9 +259,18 @@ export function useAdoptionBatch({
                     previewId: preview.preview_id,
                     expected_version: preview.version,
                     idempotency_key: requestIdentity.current.key,
-                    rows: inputs,
+                    rows: requestIdentity.current.rows,
                 })
-                const combined = [...successes, ...result.rows]
+                if (!result.rows.some((row) => row.retry_original))
+                    requestIdentity.current = null
+                const combined = Array.from(
+                    new Map(
+                        [...successes, ...result.rows].map((row) => [
+                            row.item_id,
+                            row,
+                        ]),
+                    ).values(),
+                )
                 setRowResults(combined)
                 if (
                     combined.length === value.rows.length &&
@@ -333,7 +322,61 @@ export function useAdoptionBatch({
         })
     }, [categories.data, form, rows])
 
+    const unitPrefillDone = React.useRef(false)
+    React.useEffect(() => {
+        if (!units.data || unitPrefillDone.current) return
+        unitPrefillDone.current = true
+        rows.forEach(({ item }, index) => {
+            if (form.state.values.rows[index]?.unitId || !item.unit?.trim())
+                return
+            const matches = units.data.filter(
+                (unit) => unit.label.trim() === item.unit?.trim(),
+            )
+            if (matches.length === 1)
+                form.setFieldValue(`rows[${index}].unitId`, matches[0].id, {
+                    dontUpdateMeta: true,
+                })
+        })
+    }, [units.data, rows, form])
+
     const values = useStore(form.store, (state) => state.values)
+    const resolutions = useQueries({
+        queries: values.rows.map((row) => ({
+            queryKey: [
+                "supplier-api-connections",
+                "adoption-resolution",
+                connectionId,
+                preview.preview_id,
+                row.itemId,
+                rowMapping(row),
+            ],
+            queryFn: () =>
+                resolveAdoption(
+                    connectionId,
+                    preview.preview_id,
+                    row.itemId,
+                    rowMapping(row),
+                ),
+            enabled:
+                Boolean(row.unitId) &&
+                !rowResults.some(
+                    (result) =>
+                        result.item_id === row.itemId &&
+                        result.status === "SUCCEEDED",
+                ),
+            retry: false,
+        })),
+    })
+    React.useEffect(() => {
+        resolutions.forEach((result, index) => {
+            const kind =
+                result.data?.kind === "EXISTING" ? "EXISTING" : "CREATE"
+            if (form.state.values.rows[index]?.kind !== kind)
+                form.setFieldValue(`rows[${index}].kind`, kind, {
+                    dontUpdateMeta: true,
+                })
+        })
+    }, [resolutions, form])
     const rowStates = React.useMemo<AdoptionRowState[]>(() => {
         const succeeded = new Set(
             rowResults
@@ -345,42 +388,20 @@ export function useAdoptionBatch({
                 .filter((row) => row.status === "FAILED")
                 .map((row) => row.item_id),
         )
-        return values.rows.map((row) => {
+        return values.rows.map((row, index) => {
             if (succeeded.has(row.itemId)) return "SUCCEEDED"
-            if (failed.has(row.itemId)) return "FAILED"
-            return rowSchema.safeParse(row).success ? "READY" : "INCOMPLETE"
+            return rowSchema.safeParse(row).success &&
+                resolutions[index]?.data &&
+                !resolutions[index]?.isFetching &&
+                !resolutions[index]?.isError
+                ? "READY"
+                : failed.has(row.itemId)
+                  ? "FAILED"
+                  : "INCOMPLETE"
         })
-    }, [rowResults, values.rows])
+    }, [rowResults, values.rows, resolutions])
     const active = values.rows[activeIndex]
-    const target = useAdoptionTargetQuery(
-        connectionId,
-        active?.kind === "EXISTING" ? active.skuId : "",
-    )
-    React.useEffect(() => {
-        if (
-            !target.data ||
-            active?.kind !== "EXISTING" ||
-            active.skuId !== target.data.sku_id
-        )
-            return
-        form.setFieldValue(`rows[${activeIndex}].unitId`, target.data.unit_id)
-        form.setFieldValue(
-            `rows[${activeIndex}].skuVersion`,
-            target.data.sku_version,
-        )
-        form.setFieldValue(
-            `rows[${activeIndex}].productVersion`,
-            target.data.product_version,
-        )
-    }, [
-        target.data,
-        active?.kind,
-        active?.skuId,
-        active?.skuVersion,
-        active?.productVersion,
-        activeIndex,
-        form,
-    ])
+    const target = resolutions[activeIndex]
     const markCategoryEdited = (itemId: string) => {
         editedCategories.current.add(itemId)
     }
@@ -434,5 +455,6 @@ export function useAdoptionBatch({
         applyShared,
         markCategoryEdited,
         rowResults,
+        hasUnresolvedRequest: requestIdentity.current !== null,
     }
 }

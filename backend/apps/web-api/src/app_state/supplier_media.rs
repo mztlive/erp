@@ -33,7 +33,8 @@ impl AppState {
     /// # 错误
     /// 已启用的素材配置非法时拒绝。
     pub fn supplier_catalog_adoption_process(&self) -> Result<SupplierCatalogAdoptionProcess> {
-        let process = SupplierCatalogAdoptionProcess::new(self.db(), self.rbac());
+        let process = SupplierCatalogAdoptionProcess::new(self.db(), self.rbac())
+            .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry));
         Ok(match self.supplier_source_media_preparer()? {
             Some(preparer) => process.with_media_preparer(preparer),
             None => process,

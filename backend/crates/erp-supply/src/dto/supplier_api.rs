@@ -102,7 +102,7 @@ pub struct CapabilityItemRequest {
     pub constraint_snapshot: Option<String>,
 }
 
-/// 供应商 API 连接创建请求（HTTP 契约：连接身份 + 能力清单原子建立）。
+/// 供应商 API 连接创建请求；自动下单默认关闭，能力由适配器提供。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateSupplierApiConnectionRequest {
     /// API 供应商（D09 `supplier_account`）。
@@ -121,7 +121,8 @@ pub struct CreateSupplierApiConnectionRequest {
     /// 启停/故障状态；缺省视为启用。
     #[serde(default)]
     pub status: Option<SupplierApiConnectionStatus>,
-    /// 初始能力声明清单。
+    /// 旧客户端兼容字段；只接受空清单，不登记人工能力。
+    #[serde(default)]
     pub capabilities: Vec<CapabilityItemRequest>,
 }
 
@@ -487,18 +488,15 @@ pub struct SupplierApiConnectionDetailView {
     pub deployment_ready: bool,
     /// 缺失或变化时面向操作人的下一步说明。
     pub deployment_message: String,
-
+    /// 接口适配器自报的可执行能力；不随连接启停变化。
+    pub declared_capabilities: Vec<SupplierApiCapabilityCode>,
     /// 连接身份（列表同款字段）。
     #[serde(flatten)]
     pub connection: SupplierApiConnectionView,
-    /// 连接下的能力声明清单。
-    pub capabilities: Vec<SupplierApiCapabilityView>,
     /// 最近健康检查运行记录。
     pub health_records: Vec<SupplierHealthCheckRunView>,
     /// 服务端健康检查白名单。
     pub health_check_types: Vec<SupplierHealthCheckType>,
-    /// 停用前关联业务影响。
-    pub related_impact: RelatedImpactView,
 }
 
 /// 能力响应视图。

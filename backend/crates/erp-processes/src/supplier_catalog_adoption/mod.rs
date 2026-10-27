@@ -3,15 +3,21 @@
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
+use erp_supply::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
+use erp_supply::ports::supplier_reference_registry::{SupplierReferenceRegistry, SupplierReferenceTarget};
 use mongodb::Database;
 
+use crate::{Error, Result};
+
 mod confirm;
+mod matching;
 mod preview;
 mod product;
 mod request;
 
 pub use confirm::{AdoptionBatchResult, AdoptionRowResult};
-pub use preview::{AdoptionPreviewView, AdoptionTargetView};
+pub use matching::AdoptionResolution;
+pub use preview::AdoptionPreviewView;
 
 use crate::source_media::SourceMediaPreparer;
 
@@ -21,6 +27,7 @@ pub struct SupplierCatalogAdoptionProcess {
     db: Database,
     rbac: SharedRbacService,
     media_preparer: Option<Arc<SourceMediaPreparer>>,
+    registry: Option<Arc<dyn SupplierReferenceRegistry>>,
 }
 
 impl SupplierCatalogAdoptionProcess {
@@ -32,7 +39,34 @@ impl SupplierCatalogAdoptionProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac, media_preparer: None }
+        Self { db, rbac, media_preparer: None, registry: None }
+    }
+
+    /// 注入供应商适配器注册表，选品不要求开启自动下单。
+    /// # 参数
+    /// `registry` 为组合根已配置注册表。
+    /// # 返回
+    /// 绑定后的流程。
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
+        self.registry = Some(registry);
+        self
+    }
+
+    /// 校验选品来源配置与商品读取能力，不发送网络请求。
+    fn ensure_source(&self, connection: &SupplierApiConnection) -> Result<()> {
+        connection.ensure_catalog_available()?;
+        let registry =
+            self.registry.as_ref().ok_or_else(|| Error::BusinessLogicError("供应商接口尚未配置".into()))?;
+        let target = SupplierReferenceTarget::from(connection);
+        registry.deployment_config(&target).map_err(|error| Error::BusinessLogicError(error.summary))?;
+        let capabilities =
+            registry.capabilities(&target).map_err(|error| Error::BusinessLogicError(error.summary))?;
+        if !capabilities.contains(&SupplierApiCapabilityCode::Product) {
+            return Err(Error::BusinessLogicError("供应商接口不支持商品同步".into()));
+        }
+        Ok(())
     }
 
     /// 注入事务外执行的受控来源图片准备器。

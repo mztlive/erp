@@ -21,9 +21,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { RequiredMark } from "@/components/ui/required-mark"
-import { CompanySkuSearchCombobox } from "@/features/entity-selectors"
 import { DeliveryTemplateField } from "@/features/supplier-offerings/components/delivery-templates/delivery-template-field"
 import { SupplierTaxRateField } from "@/features/supplier-offerings/components/supplier-tax-rate-field"
 import {
@@ -197,7 +195,7 @@ export function AdoptionBatchEditor({
     }, [index])
 
     const item = rows[index]?.item
-    const targetData = editor.target.data
+    const targetData = editor.target?.data
     if (!active || !item) return null
 
     const prefix = `supplier-catalog-adoption-${toAutomationIdSegment(item.id)}`
@@ -209,7 +207,6 @@ export function AdoptionBatchEditor({
     ).length
     const failedCount = rowStates.filter((state) => state === "FAILED").length
     const readyCount = rowStates.filter((state) => state === "READY").length
-    const remainingCount = rows.length - succeededCount
     const nextIssueIndex = rowStates.findIndex(
         (state) => state === "INCOMPLETE" || state === "FAILED",
     )
@@ -240,7 +237,6 @@ export function AdoptionBatchEditor({
         categoryId: "公司分类",
         unitId: "公司计量单位",
         productKind: "商品类型",
-        skuId: "公司商品规格",
         specification: "公司规格",
         dropshipPrice: "一件代发含税供给价",
         bulkPrice: "集采含税供给价",
@@ -254,12 +250,8 @@ export function AdoptionBatchEditor({
         companyName: `${prefix}-company-name`,
         companyDescription: `${prefix}-company-description`,
         categoryId: `${prefix}-categoryId`,
-        unitId:
-            active.kind === "EXISTING"
-                ? `${prefix}-company-sku`
-                : `${prefix}-unitId`,
+        unitId: `${prefix}-unitId`,
         productKind: `${prefix}-productKind`,
-        skuId: `${prefix}-company-sku`,
         specification: `${prefix}-specification`,
         dropshipPrice: `${prefix}-dropshipPrice`,
         bulkPrice: `${prefix}-bulkPrice`,
@@ -532,319 +524,192 @@ export function AdoptionBatchEditor({
                             />
                         ) : null}
 
-                        <EditorSection
-                            id={`${prefix}-target-kind-title`}
-                            title="入库方式"
-                        >
-                            <form.AppField name={`rows[${index}].kind`}>
-                                {(field) => (
-                                    <Field>
-                                        <RadioGroup
-                                            id={`${prefix}-target-kind`}
-                                            aria-labelledby={`${prefix}-target-kind-title`}
-                                            className="grid w-full max-w-lg grid-cols-2 gap-0"
-                                            value={field.state.value}
-                                            onValueChange={(next) => {
-                                                field.handleChange(
-                                                    next === "EXISTING"
-                                                        ? "EXISTING"
-                                                        : "CREATE",
-                                                )
-                                            }}
-                                        >
-                                            {[
-                                                {
-                                                    value: "CREATE",
-                                                    label: "创建公司商品及 SKU",
-                                                },
-                                                {
-                                                    value: "EXISTING",
-                                                    label: "关联已有公司 SKU",
-                                                },
-                                            ].map((option) => (
-                                                <RadioGroupItem
-                                                    key={option.value}
-                                                    id={`${prefix}-target-kind-${option.value.toLowerCase()}`}
-                                                    value={option.value}
-                                                    variant="segment"
-                                                    nativeButton
-                                                    render={
-                                                        <button
-                                                            type="button"
-                                                            aria-label={
-                                                                option.label
-                                                            }
-                                                        />
-                                                    }
-                                                >
-                                                    {option.label}
-                                                </RadioGroupItem>
-                                            ))}
-                                        </RadioGroup>
-                                    </Field>
-                                )}
-                            </form.AppField>
+                        <EditorSection title="自动匹配结果">
+                            <p
+                                id={`${prefix}-match-result`}
+                                className="text-sm"
+                                role="status"
+                            >
+                                {editor.target?.isFetching
+                                    ? "正在匹配公司 SKU…"
+                                    : editor.target?.isError
+                                      ? editor.target.error.message
+                                      : targetData
+                                        ? targetData.kind === "EXISTING"
+                                            ? `将关联已有 SKU：${targetData.sku_no}`
+                                            : targetData.kind === "CREATE_SKU"
+                                              ? "将在已有公司商品下新增规格"
+                                              : "未匹配到已有 SKU，将新建公司商品及规格"
+                                        : "请选择公司计量单位，系统将自动匹配已有 SKU。"}
+                            </p>
+                            {item.barcode ? (
+                                <p className="text-sm text-muted-foreground">
+                                    供应商条码：{item.barcode}
+                                </p>
+                            ) : null}
+                            {targetData ? (
+                                <p className="text-xs text-muted-foreground">
+                                    {targetData.reason}
+                                </p>
+                            ) : null}
+                            <Button
+                                id={`${prefix}-refresh-match`}
+                                type="button"
+                                variant="outline"
+                                disabled={
+                                    !active.unitId || editor.target?.isFetching
+                                }
+                                onClick={() => void editor.target?.refetch()}
+                            >
+                                重新匹配
+                            </Button>
                         </EditorSection>
 
-                        {active.kind === "CREATE" ? (
-                            <EditorSection title="商品建档">
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    {(
-                                        [
-                                            "categoryId",
-                                            "unitId",
-                                            "productKind",
-                                        ] as const
-                                    ).map((name) => {
-                                        const label = fieldLabels[name]
-                                        return (
-                                            <form.AppField
-                                                key={name}
-                                                name={`rows[${index}].${name}`}
-                                            >
-                                                {(field) => (
-                                                    <Field>
-                                                        <FieldLabel
-                                                            htmlFor={`${prefix}-${name}`}
-                                                        >
-                                                            {label}
-                                                            <RequiredMark />
-                                                        </FieldLabel>
-                                                        <OptionCombobox
-                                                            id={`${prefix}-${name}`}
-                                                            value={
-                                                                field.state
-                                                                    .value ||
-                                                                undefined
-                                                            }
-                                                            options={
-                                                                fieldOptions[
-                                                                    name
-                                                                ]
-                                                            }
-                                                            allowClear={
-                                                                name !==
+                        <EditorSection title="商品建档">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                {(
+                                    [
+                                        "categoryId",
+                                        "unitId",
+                                        "productKind",
+                                    ] as const
+                                ).map((name) => {
+                                    const label = fieldLabels[name]
+                                    return (
+                                        <form.AppField
+                                            key={name}
+                                            name={`rows[${index}].${name}`}
+                                        >
+                                            {(field) => (
+                                                <Field>
+                                                    <FieldLabel
+                                                        htmlFor={`${prefix}-${name}`}
+                                                    >
+                                                        {label}
+                                                        <RequiredMark />
+                                                    </FieldLabel>
+                                                    <OptionCombobox
+                                                        id={`${prefix}-${name}`}
+                                                        value={
+                                                            field.state.value ||
+                                                            undefined
+                                                        }
+                                                        options={
+                                                            fieldOptions[name]
+                                                        }
+                                                        allowClear={
+                                                            name !==
+                                                            "productKind"
+                                                        }
+                                                        onValueChange={(
+                                                            next,
+                                                        ) => {
+                                                            if (
+                                                                name ===
+                                                                "categoryId"
+                                                            )
+                                                                editor.markCategoryEdited(
+                                                                    item.id,
+                                                                )
+                                                            if (
+                                                                name ===
                                                                 "productKind"
-                                                            }
-                                                            onValueChange={(
-                                                                next,
-                                                            ) => {
-                                                                if (
-                                                                    name ===
-                                                                    "categoryId"
+                                                            )
+                                                                form.setFieldValue(
+                                                                    `rows[${index}].productKind`,
+                                                                    PRODUCT_KIND_VALUES.find(
+                                                                        (
+                                                                            kind,
+                                                                        ) =>
+                                                                            kind ===
+                                                                            next,
+                                                                    ) ??
+                                                                        "PHYSICAL",
                                                                 )
-                                                                    editor.markCategoryEdited(
-                                                                        item.id,
-                                                                    )
-                                                                if (
-                                                                    name ===
-                                                                    "productKind"
+                                                            else
+                                                                form.setFieldValue(
+                                                                    `rows[${index}].${name}`,
+                                                                    next ?? "",
                                                                 )
-                                                                    form.setFieldValue(
-                                                                        `rows[${index}].productKind`,
-                                                                        PRODUCT_KIND_VALUES.find(
-                                                                            (
-                                                                                kind,
-                                                                            ) =>
-                                                                                kind ===
-                                                                                next,
-                                                                        ) ??
-                                                                            "PHYSICAL",
-                                                                    )
-                                                                else
-                                                                    form.setFieldValue(
-                                                                        `rows[${index}].${name}`,
-                                                                        next ??
-                                                                            "",
-                                                                    )
-                                                            }}
-                                                            placeholder={`请选择${label}`}
-                                                            aria-invalid={
-                                                                field.state.meta
-                                                                    .errors
-                                                                    .length > 0
-                                                            }
-                                                        />
-                                                        <FieldError
-                                                            errors={
-                                                                field.state.meta
-                                                                    .errors
-                                                            }
-                                                        />
-                                                    </Field>
-                                                )}
-                                            </form.AppField>
-                                        )
-                                    })}
-                                </div>
-                                {editor.categories.isError ||
-                                editor.units.isError ? (
-                                    <div
-                                        className="flex items-center gap-2 text-sm text-destructive"
-                                        role="alert"
+                                                        }}
+                                                        placeholder={`请选择${label}`}
+                                                        aria-invalid={
+                                                            field.state.meta
+                                                                .errors.length >
+                                                            0
+                                                        }
+                                                    />
+                                                    <FieldError
+                                                        errors={
+                                                            field.state.meta
+                                                                .errors
+                                                        }
+                                                    />
+                                                </Field>
+                                            )}
+                                        </form.AppField>
+                                    )
+                                })}
+                            </div>
+                            {editor.categories.isError ||
+                            editor.units.isError ? (
+                                <div
+                                    className="flex items-center gap-2 text-sm text-destructive"
+                                    role="alert"
+                                >
+                                    公司字典读取失败，请重试后选择。
+                                    <Button
+                                        id={`${prefix}-retry-dictionaries`}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            void editor.categories.refetch()
+                                            void editor.units.refetch()
+                                        }}
                                     >
-                                        公司字典读取失败，请重试后选择。
-                                        <Button
-                                            id={`${prefix}-retry-dictionaries`}
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                void editor.categories.refetch()
-                                                void editor.units.refetch()
-                                            }}
-                                        >
-                                            重试
-                                        </Button>
-                                    </div>
-                                ) : null}
-                            </EditorSection>
-                        ) : (
-                            <EditorSection
-                                title="关联公司 SKU"
-                                description="搜索并核对要关联的公司商品规格。"
-                            >
-                                <div className="space-y-2">
-                                    <form.AppField
-                                        name={`rows[${index}].skuId`}
-                                    >
-                                        {(field) => (
-                                            <Field>
-                                                <FieldLabel
-                                                    htmlFor={`${prefix}-company-sku`}
-                                                >
-                                                    公司商品规格
-                                                    <RequiredMark />
-                                                </FieldLabel>
-                                                <CompanySkuSearchCombobox
-                                                    id={`${prefix}-company-sku`}
-                                                    value={
-                                                        field.state.value ||
-                                                        undefined
-                                                    }
-                                                    onValueChange={(next) => {
-                                                        field.handleChange(
-                                                            next ?? "",
-                                                        )
-                                                        form.setFieldValue(
-                                                            `rows[${index}].skuVersion`,
-                                                            0,
-                                                        )
-                                                        form.setFieldValue(
-                                                            `rows[${index}].productVersion`,
-                                                            0,
-                                                        )
-                                                    }}
-                                                    label="公司商品规格"
-                                                    placeholder="搜索商品名称或 SKU 编号"
-                                                />
-                                                <FieldError
-                                                    errors={
-                                                        field.state.meta.errors
-                                                    }
-                                                />
-                                            </Field>
-                                        )}
-                                    </form.AppField>
-                                    {editor.target.isFetching ? (
-                                        <p className="text-sm text-muted-foreground">
-                                            正在核对公司规格和单位…
-                                        </p>
-                                    ) : null}
-                                    {targetData ? (
-                                        <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
-                                            <span className="text-muted-foreground">
-                                                公司规格：
-                                            </span>
-                                            {targetData.specification ||
-                                                "未标注"}
-                                            <span className="text-muted-foreground">
-                                                {" "}
-                                                · SKU 编号：
-                                            </span>
-                                            {targetData.sku_no}
-                                            <span className="text-muted-foreground">
-                                                {" "}
-                                                · 单位：
-                                            </span>
-                                            {editor.units.data?.find(
-                                                (unit) =>
-                                                    unit.id ===
-                                                    targetData.unit_id,
-                                            )?.label ?? "请核对公司商品资料"}
-                                        </div>
-                                    ) : null}
-                                    {editor.target.isError ? (
-                                        <p
-                                            role="alert"
-                                            className="text-sm text-destructive"
-                                        >
-                                            {editor.target.error.message}
-                                        </p>
-                                    ) : null}
+                                        重试
+                                    </Button>
                                 </div>
-                            </EditorSection>
-                        )}
-
+                            ) : null}
+                        </EditorSection>
                         <EditorSection title="采购供给">
                             <div className="grid gap-4 sm:grid-cols-2">
-                                {item.purchase_price != null ? (
-                                    <Field>
-                                        <FieldLabel>
-                                            一件代发含税供给价
-                                            <RequiredMark />
-                                        </FieldLabel>
-                                        <div
-                                            id={`${prefix}-dropshipPrice`}
-                                            className="flex min-h-9 items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-1.5"
-                                        >
-                                            <MoneyValue
-                                                value={item.purchase_price}
-                                                display="exact"
+                                <form.AppField
+                                    name={`rows[${index}].dropshipPrice`}
+                                >
+                                    {(field) => (
+                                        <Field>
+                                            <FieldLabel
+                                                htmlFor={`${prefix}-dropshipPrice`}
+                                            >
+                                                一件代发含税供给价
+                                                <RequiredMark />
+                                            </FieldLabel>
+                                            <Input
+                                                id={`${prefix}-dropshipPrice`}
+                                                inputMode="decimal"
+                                                value={field.state.value}
+                                                onChange={(event) =>
+                                                    field.handleChange(
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                onBlur={field.handleBlur}
+                                                aria-invalid={
+                                                    field.state.meta.errors
+                                                        .length > 0
+                                                }
                                             />
-                                            <Badge variant="secondary">
-                                                来自供应商接口
-                                            </Badge>
-                                        </div>
-                                        <FieldDescription>
-                                            使用接口当前报价，不可手工覆盖。
-                                        </FieldDescription>
-                                    </Field>
-                                ) : (
-                                    <form.AppField
-                                        name={`rows[${index}].dropshipPrice`}
-                                    >
-                                        {(field) => (
-                                            <Field>
-                                                <FieldLabel
-                                                    htmlFor={`${prefix}-dropshipPrice`}
-                                                >
-                                                    一件代发含税供给价
-                                                    <RequiredMark />
-                                                </FieldLabel>
-                                                <Input
-                                                    id={`${prefix}-dropshipPrice`}
-                                                    inputMode="decimal"
-                                                    value={field.state.value}
-                                                    onChange={(event) =>
-                                                        field.handleChange(
-                                                            event.target.value,
-                                                        )
-                                                    }
-                                                    aria-invalid={
-                                                        field.state.meta.errors
-                                                            .length > 0
-                                                    }
-                                                />
-                                                <FieldError
-                                                    errors={
-                                                        field.state.meta.errors
-                                                    }
-                                                />
-                                            </Field>
-                                        )}
-                                    </form.AppField>
-                                )}
+                                            <FieldDescription>
+                                                采购供给销售的价格，可自行调整；供应商接口报价仅作参考。
+                                            </FieldDescription>
+                                            <FieldError
+                                                errors={field.state.meta.errors}
+                                            />
+                                        </Field>
+                                    )}
+                                </form.AppField>
                                 <form.AppField
                                     name={`rows[${index}].inputTaxPercentage`}
                                 >
@@ -1022,7 +887,7 @@ export function AdoptionBatchEditor({
                             </details>
                         </EditorSection>
 
-                        {active.kind === "CREATE" &&
+                        {targetData?.kind !== "EXISTING" &&
                         (Array.from(item.name.trim()).length > 128 ||
                             Array.from(item.description?.trim() ?? "").length >
                                 512) ? (
@@ -1106,9 +971,13 @@ export function AdoptionBatchEditor({
                         id="supplier-catalog-adoption-confirm-batch"
                         type="submit"
                         loading={mutation.isPending}
-                        disabled={remainingCount === 0}
+                        disabled={
+                            readyCount === 0 && !editor.hasUnresolvedRequest
+                        }
                     >
-                        确认入库（{remainingCount} 项）
+                        {editor.hasUnresolvedRequest
+                            ? "重试上次入库"
+                            : `确认入库（${readyCount} 项）`}
                     </LoadingButton>
                 </div>
             </DialogFooter>

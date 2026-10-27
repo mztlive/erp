@@ -22,7 +22,15 @@ impl SupplierApiOrderProcess {
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(&execution.connection_id, &mut NoTransaction)
             .await?;
-        self.runtime.connector(&connection).map_err(|failure| Error::BusinessLogicError(failure.summary))
+        let connector = if matches!(
+            execution.stage,
+            ApiOrderStage::ConfirmPayment | ApiOrderStage::PaymentUnknown | ApiOrderStage::Observe
+        ) {
+            self.runtime.tracking_connector(&connection)
+        } else {
+            self.runtime.connector(&connection)
+        };
+        connector.map_err(|failure| Error::BusinessLogicError(failure.summary))
     }
 
     pub(super) async fn claim(&self, execution: &mut ApiOrderExecution, stage: ApiOrderStage) -> Result<()> {
@@ -48,7 +56,7 @@ impl SupplierApiOrderProcess {
                         return Err(Error::ConflictError("采购版本已变化，接口执行已阻断".into()));
                     }
                     crate::fulfillment_execution::ensure_prepay_gate(&process.db, executor, &order).await?;
-                    process.fence_connection(&claimed.connection_id, executor).await?;
+                    process.fence_connection(&claimed.connection_id, claimed.stage, executor).await?;
                     if claimed.stage == ApiOrderStage::PaymentUnknown {
                         let supplier_order = db
                             .supplier_fulfillment_orders()
@@ -70,10 +78,20 @@ impl SupplierApiOrderProcess {
         Ok(())
     }
 
-    async fn fence_connection(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
+    async fn fence_connection(
+        &self,
+        id: &str,
+        stage: ApiOrderStage,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let service = SupplierApiService::new(self.db.clone());
         let mut connection = service.load_connection(id, executor).await?;
-        self.runtime.connector(&connection).map_err(|failure| Error::BusinessLogicError(failure.summary))?;
+        let client = if stage == ApiOrderStage::PaymentUnknown {
+            self.runtime.tracking_connector(&connection)
+        } else {
+            self.runtime.connector(&connection)
+        };
+        client.map_err(|failure| Error::BusinessLogicError(failure.summary))?;
         service.persist_connection(&mut connection, executor).await?;
         Ok(())
     }

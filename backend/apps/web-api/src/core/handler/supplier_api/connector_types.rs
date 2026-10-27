@@ -44,5 +44,6 @@ mod tests {
         let value: Value = from_slice(&body).unwrap();
         assert_eq!(value["data"][0]["code"], "dangaoshushu");
         assert_eq!(value["data"][0]["label"], "蛋糕叔叔 API");
+        assert!(value["data"][0].get("capabilities").is_none());
     }
 }

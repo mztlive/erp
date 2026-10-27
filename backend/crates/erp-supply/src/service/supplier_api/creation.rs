@@ -44,14 +44,14 @@ impl SupplierApiService {
         )?;
         Ok(connection)
     }
-    /// 在调用方事务中创建连接及能力集合，不构造审计或开启事务。
+    /// 在调用方事务中创建连接身份，不构造审计或开启事务。
     ///
     /// # 参数
     /// * `connection` - 待创建的连接。
     /// * `executor` - 调用方事务的执行器。
     ///
     /// # 返回
-    /// 无返回值。连接与空能力集合已写入。
+    /// 无返回值。连接身份已写入，不创建能力记录。
     ///
     /// # 错误
     /// 仓储写入失败时返回对应错误。
@@ -60,7 +60,7 @@ impl SupplierApiService {
         connection: &SupplierApiConnection,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db.supplier_api().create_connection_with_capabilities(connection, &[], executor).await?;
+        self.db.supplier_api_connections().create(connection, executor).await?;
         Ok(())
     }
     /// 在调用方事务中推进连接 CAS。

@@ -24,6 +24,12 @@ pub enum SupplierApiCapabilityCode {
     Price,
     /// 库存同步。
     Stock,
+    /// 可售地区。
+    ServiceAreas,
+    /// 地址与配送方案。
+    Delivery,
+    /// 供应商履约支付结果通知。
+    PaymentConfirmation,
     /// 下单。
     Order,
     /// 查询。
@@ -56,6 +62,9 @@ impl SupplierApiCapabilityCode {
             Self::Product => "商品",
             Self::Price => "价格",
             Self::Stock => "库存",
+            Self::ServiceAreas => "可售地区",
+            Self::Delivery => "配送校验",
+            Self::PaymentConfirmation => "履约支付通知",
             Self::Order => "下单",
             Self::Query => "查询",
             Self::Cancel => "取消",
@@ -81,6 +90,9 @@ impl SupplierApiCapabilityCode {
             Self::Product => "product",
             Self::Price => "price",
             Self::Stock => "stock",
+            Self::ServiceAreas => "service_areas",
+            Self::Delivery => "delivery",
+            Self::PaymentConfirmation => "payment_confirmation",
             Self::Order => "order",
             Self::Query => "query",
             Self::Cancel => "cancel",

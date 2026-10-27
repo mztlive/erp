@@ -1,5 +1,3 @@
-import type { ConnectionSection } from "@/features/supplier-api-connections/types"
-import { SECTIONS } from "@/features/supplier-api-connections/types"
 import { createUrlStateCodec } from "@/lib/url-state"
 
 export type ConnectionsUrlState = {
@@ -27,25 +25,6 @@ const codec = createUrlStateCodec<ConnectionsUrlState>([
 export const parseConnectionsSearchParams = codec.parse
 export const buildConnectionsSearchParams = codec.build
 
-const detailCodec = createUrlStateCodec<{ section: ConnectionSection }>([
-    {
-        key: "section",
-        type: "enum",
-        values: SECTIONS,
-        defaultValue: "catalog",
-    },
-])
-
-export const parseConnectionDetailSearchParams = detailCodec.parse
-
-export function buildConnectionDetailHref(
-    connectionId: string,
-    listState: ConnectionsUrlState,
-    section: ConnectionSection = "catalog",
-): string {
-    const params = new URLSearchParams(buildConnectionsSearchParams(listState))
-    if (section !== "catalog") params.set("section", section)
-    const query = params.toString()
-    const path = `/supplier-api/connections/${encodeURIComponent(connectionId)}`
-    return query ? `${path}?${query}` : path
+export function buildSupplierCatalogHref(connectionId: string): string {
+    return `/supplier-api/catalog?connectionId=${encodeURIComponent(connectionId)}`
 }

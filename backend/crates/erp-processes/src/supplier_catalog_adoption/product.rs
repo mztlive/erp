@@ -21,6 +21,7 @@ pub(super) struct PreparedAdoption {
     pub media: PreparedSourceMedia,
     pub materialized_item: SupplierCatalogItem,
     pub draft: Option<ProductDraft>,
+    pub creates_product: bool,
     pub sku_input: Option<ProductSkuInput>,
     pub resolved_row: AdoptionRow,
 }
@@ -31,10 +32,11 @@ impl SupplierCatalogAdoptionProcess {
         item: &SupplierCatalogItem,
         row: &AdoptionRow,
         actor: &AuditActor,
+        command: &str,
     ) -> Result<PreparedAdoption> {
         let media = PreparedSourceMedia::from_archived(item);
         let cleanup = media.cleanup_handle();
-        let outcome = self.prepare_row_with_media(item, row, actor, media).await;
+        let outcome = self.prepare_row_with_media(item, row, actor, command, media).await;
         if outcome.is_err() {
             cleanup.discard_uncommitted().await;
         }
@@ -46,11 +48,12 @@ impl SupplierCatalogAdoptionProcess {
         item: &SupplierCatalogItem,
         row: &AdoptionRow,
         actor: &AuditActor,
+        command: &str,
         media: PreparedSourceMedia,
     ) -> Result<PreparedAdoption> {
         let mut materialized_item = item.clone();
         media.apply_to(&mut materialized_item)?;
-        let mut resolved_row = row.clone();
+        let mut resolved_row = self.automatic_row(item, row, actor, command, &mut NoTransaction).await?;
         if let AdoptionTarget::Create { brand_id, .. } = &mut resolved_row.target
             && brand_id.is_empty()
         {
@@ -76,7 +79,14 @@ impl SupplierCatalogAdoptionProcess {
         } else {
             (None, None)
         };
-        Ok(PreparedAdoption { media, materialized_item, draft, sku_input: input, resolved_row })
+        Ok(PreparedAdoption {
+            media,
+            materialized_item,
+            creates_product: draft.is_some(),
+            draft,
+            sku_input: input,
+            resolved_row,
+        })
     }
 
     async fn resolve_source_brand(&self, item: &SupplierCatalogItem, actor: &AuditActor) -> Result<String> {
@@ -117,32 +127,9 @@ impl SupplierCatalogAdoptionProcess {
         let mapping =
             self.db.catalog_adoption_products().find_by_id(&product_binding_id(item), executor).await?;
         let sku = match &row.target {
-            AdoptionTarget::Existing {
-                sku_id,
-                expected_sku_version,
-                expected_product_version,
-                unit_id,
-                ..
-            } => {
-                let sku = self
-                    .db
-                    .skus()
-                    .find_by_id(sku_id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("公司商品规格不存在".into()))?;
-                let product = catalog_access(self.db.clone(), self.rbac.clone())
-                    .require_product(actor, "update", sku.product_id.as_ref(), executor)
-                    .await?;
-                if !sku.is_active()
-                    || !product.is_active()
-                    || sku.base.version != *expected_sku_version
-                    || product.base.version != *expected_product_version
-                    || sku.base_unit_id.as_ref() != unit_id
-                {
-                    return Err(Error::ConflictError("公司商品规格、单位或版本已变化".into()));
-                }
-                prepared.media.pending_assets.persist(&self.db, executor).await?;
-                sku
+            AdoptionTarget::Auto { .. } => return Err(Error::Internal("自动匹配尚未解析".into())),
+            AdoptionTarget::Existing { .. } => {
+                self.reuse_target(item, &row.target, prepared, actor, executor).await?
             },
             AdoptionTarget::Create { .. } => {
                 self.create_target(mapping.as_ref(), item, row, prepared, actor, executor).await?
@@ -161,6 +148,52 @@ impl SupplierCatalogAdoptionProcess {
             };
             self.db.catalog_adoption_products().create(&mapping, executor).await?;
         }
+        Ok(sku)
+    }
+
+    async fn reuse_target(
+        &self,
+        item: &SupplierCatalogItem,
+        target: &AdoptionTarget,
+        prepared: &PreparedAdoption,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Sku> {
+        let AdoptionTarget::Existing {
+            sku_id, expected_sku_version, expected_product_version, unit_id, ..
+        } = target
+        else {
+            return Err(Error::Internal("复用目标缺失".into()));
+        };
+        let sku = self
+            .db
+            .skus()
+            .find_by_id(sku_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("公司商品规格不存在".into()))?;
+        let product = catalog_access(self.db.clone(), self.rbac.clone())
+            .require_product(actor, "update", sku.product_id.as_ref(), executor)
+            .await?;
+        if !sku.is_active()
+            || !product.is_active()
+            || sku.base.version != *expected_sku_version
+            || product.base.version != *expected_product_version
+            || sku.base_unit_id.as_ref() != unit_id
+        {
+            return Err(Error::ConflictError("公司商品规格、单位或版本已变化".into()));
+        }
+        if let Some(barcode) = &item.barcode {
+            let mut revision = self
+                .db
+                .catalog()
+                .current_sku_revision(&sku, executor)
+                .await?
+                .ok_or_else(|| Error::ConflictError("公司 SKU 缺少当前资料".into()))?;
+            revision.barcode = Some(barcode.clone());
+            self.db.catalog().claim_sku_barcode(&revision, executor).await?;
+        }
+        self.db.catalog().lock_match_target(&product, &sku, executor).await?;
+        prepared.media.pending_assets.persist(&self.db, executor).await?;
         Ok(sku)
     }
 
@@ -256,7 +289,7 @@ impl SupplierCatalogAdoptionProcess {
     }
 }
 
-fn product_binding_id(item: &SupplierCatalogItem) -> String {
+pub(super) fn product_binding_id(item: &SupplierCatalogItem) -> String {
     adoption_identity(&[&item.connection_id, &item.product_id])
 }
 

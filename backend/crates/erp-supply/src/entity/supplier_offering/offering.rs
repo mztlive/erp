@@ -494,19 +494,18 @@ impl SupplierOfferingRevision {
         })
     }
 
-    /// 阻止管理端手工覆盖 API 来源的采购价格与集采支持范围。
+    /// 保护 API 来源的集采支持范围，代发供给价由采购维护。
     /// # 参数
     /// `prior` 为同供给的当前正式条款。
     /// # 返回
-    /// 仅状态、公司确认条件等变更时成功。
+    /// 代发供给价及其他公司确认条件变更时成功。
     /// # 错误
-    /// 采购价格或集采起订量变化时拒绝；来源同步使用独立流程追加修订。
-    pub fn ensure_api_prices_unchanged(&self, prior: &Self) -> Result<()> {
-        if self.dropship_supply_price_gross != prior.dropship_supply_price_gross
-            || self.bulk_supply_price_gross != prior.bulk_supply_price_gross
+    /// 集采报价或起订量变化时拒绝。
+    pub fn ensure_api_bulk_terms_unchanged(&self, prior: &Self) -> Result<()> {
+        if self.bulk_supply_price_gross != prior.bulk_supply_price_gross
             || self.bulk_minimum_order_quantity != prior.bulk_minimum_order_quantity
         {
-            return Err(Error::from("API 来源采购价格和集采条件由供应商同步，不允许手工覆盖"));
+            return Err(Error::from("API 来源集采条件不允许手工覆盖"));
         }
         Ok(())
     }
@@ -656,7 +655,7 @@ mod tests {
 
     use super::{
         FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
-        SupplierOfferingRevision, SupplierOfferingRevisionData,
+        SupplierOfferingRevision, SupplierOfferingRevisionData, net_price,
     };
     use crate::entity::supplier_offering::{OfferingRevisionImpact, OfferingSourceType};
 
@@ -708,17 +707,25 @@ mod tests {
     }
 
     #[test]
-    fn legacy_scalar_bulk_values_remain_readable_and_api_prices_are_protected() {
+    fn api_dropship_price_is_editable_while_bulk_terms_remain_protected() {
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("r"), revision_data()).unwrap();
         let stored = serde_json::to_value(&revision).unwrap();
         assert_eq!(stored["bulk_supply_price_gross"], "9.04");
         let restored: SupplierOfferingRevision = serde_json::from_value(stored).unwrap();
         assert_eq!(restored.bulk_supply_price_gross, Some("9.04".parse().unwrap()));
-        assert!(restored.ensure_api_prices_unchanged(&revision).is_ok());
+        assert!(restored.ensure_api_bulk_terms_unchanged(&revision).is_ok());
+        let mut data = revision_data();
+        data.dropship_supply_price_gross = "22.60".parse().unwrap();
+        data.dropship_supply_price_net = net_price(data.dropship_supply_price_gross, data.input_tax_rate);
+        let edited = SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("edited"), data).unwrap();
+        assert!(edited.ensure_api_bulk_terms_unchanged(&revision).is_ok());
         let mut changed = restored;
+        changed.bulk_minimum_order_quantity = Some("999".parse().unwrap());
+        assert!(changed.ensure_api_bulk_terms_unchanged(&revision).is_err());
+        changed.bulk_minimum_order_quantity = revision.bulk_minimum_order_quantity;
         changed.bulk_supply_price_gross = None;
-        assert!(changed.ensure_api_prices_unchanged(&revision).is_err());
+        assert!(changed.ensure_api_bulk_terms_unchanged(&revision).is_err());
     }
 
     #[test]

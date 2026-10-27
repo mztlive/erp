@@ -54,6 +54,13 @@ impl CatalogRepository<'_> {
         revision: &SkuRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        let sku = self
+            .db
+            .skus()
+            .find_by_id(revision.sku_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("公司 SKU 不存在".into()))?;
+        self.lock_product_match(sku.product_id.as_ref(), executor).await?;
         self.claim_sku_barcode(revision, executor).await?;
         mongo_ops::insert_one(&self.db.sku_revisions().collection(), revision, executor).await?;
         Ok(())

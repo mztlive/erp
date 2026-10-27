@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
-    SupplierApiConnection, SupplierConnectorType, SupplierHealthCheckType,
+    SupplierApiCapabilityCode, SupplierApiConnection, SupplierConnectorType, SupplierHealthCheckType,
 };
 use erp_supply::ports::connector::common::Scan;
 use erp_supply::ports::connector::offer::IncrementalSupport;
@@ -100,6 +100,13 @@ impl SupplierApiGateway for SupplierConnectorRegistry {
 }
 
 impl SupplierReferenceRegistry for SupplierConnectorRegistry {
+    fn capabilities(
+        &self,
+        target: &SupplierReferenceTarget,
+    ) -> Result<Vec<SupplierApiCapabilityCode>, ClassifiedError> {
+        self.adapter(target.connector_type)?.references.capabilities(target)
+    }
+
     fn deployment_config(
         &self,
         target: &SupplierReferenceTarget,

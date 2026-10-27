@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import type { SupplierOfferingTermsInput } from "@/features/supplier-offerings/types"
 import type { ProductKind } from "@/features/master-data/types"
 import type { CatalogFilters, CatalogItem } from "./catalog"
@@ -21,39 +21,23 @@ export type AdoptionPreview = {
     max_confirm_rows: number
 }
 
-export type AdoptionTarget = {
-    sku_id: string
-    sku_no: string
-    product_id: string
-    sku_version: number
-    product_version: number
+export type AdoptionMapping = {
+    category_id: string
     unit_id: string
-    specification: string
+    product_kind: ProductKind
+    company_name?: string
+    company_description?: string
 }
-
+export type AdoptionResolution = {
+    kind: "EXISTING" | "CREATE_SKU" | "CREATE_PRODUCT"
+    expected_match: string
+    sku_no: string | null
+    product_id: string | null
+    reason: string
+}
 export type AdoptionRowInput = {
     item_id: string
-    target:
-        | {
-              kind: "CREATE"
-              category_id: string
-              brand_id: string
-              unit_id: string
-              product_kind: ProductKind
-              company_name?: string
-              company_description?: string
-              spec_entries: Array<{
-                  attribute_code: string
-                  attribute_value_code: string
-              }>
-          }
-        | {
-              kind: "EXISTING"
-              sku_id: string
-              expected_sku_version: number
-              expected_product_version: number
-              unit_id: string
-          }
+    target: { kind: "AUTO"; mapping: AdoptionMapping; expected_match: string }
     terms: SupplierOfferingTermsInput
     delivery_template_id?: string | null
 }
@@ -61,6 +45,7 @@ export type AdoptionRowInput = {
 export type AdoptionResultRow = {
     item_id: string
     status: "SUCCEEDED" | "FAILED"
+    retry_original?: boolean
     product_id?: string | null
     sku_id?: string | null
     offering_id?: string | null
@@ -91,8 +76,14 @@ export function confirmAdoption(input: {
     )
 }
 
-export function fetchAdoptionTarget(connectionId: string, skuId: string) {
-    return apiGet<AdoptionTarget>(
-        `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/catalog/adoption-targets/${encodeURIComponent(skuId)}`,
+export function resolveAdoption(
+    connectionId: string,
+    previewId: string,
+    itemId: string,
+    mapping: AdoptionMapping,
+) {
+    return apiPost<AdoptionResolution>(
+        `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/catalog/adoptions/${encodeURIComponent(previewId)}/resolve`,
+        { item_id: itemId, mapping },
     )
 }

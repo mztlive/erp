@@ -5,4 +5,4 @@ mod model;
 mod repository;
 
 pub use model::*;
-pub use repository::{CatalogAdoptionExt, ensure_indexes};
+pub use repository::{CatalogAdoptionExt, ensure_indexes, has_product_receipt};

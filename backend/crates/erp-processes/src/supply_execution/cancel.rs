@@ -164,11 +164,7 @@ impl SupplierFulfillmentProcess {
             .find_by_id(&order.connection_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商连接不存在".to_string()))?;
-        let capabilities = self
-            .db
-            .supplier_api_capabilities()
-            .find_capabilities_by_connection(&order.connection_id, &mut NoTransaction)
-            .await?;
+        let capabilities = self.domain().capabilities(&connection)?;
         let needed = match action_type {
             SupplierOrderActionType::Cancel => SupplierApiCapabilityCode::Cancel,
             SupplierOrderActionType::Refund => SupplierApiCapabilityCode::Refund,

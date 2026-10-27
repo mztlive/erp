@@ -3,10 +3,7 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_read_models::supplier_center::supplier_api::{CatalogQuery, CatalogView};
-use erp_supply::dto::supplier_catalog::{
-    CatalogIdentityReviewView, MatchCatalogItemRequest, ReviewCatalogIdentityRequest,
-};
-use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
+use erp_supply::dto::supplier_catalog::{CatalogIdentityReviewView, ReviewCatalogIdentityRequest};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -34,31 +31,6 @@ pub async fn list(
     Query(query): Query<CatalogQuery>,
 ) -> Result<CatalogView> {
     Ok(ApiResponse::ok_with_data(state.supplier_api_read_service().catalog(&id, query, &actor).await?))
-}
-
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "同步供应商商品目录",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
-/// 保存人工商品匹配。
-/// # 参数
-/// 路径为连接和目录记录；请求为公司 SKU 与预期版本；actor 为认证操作人。
-/// # 返回
-/// 已保存的匹配记录。
-/// # 错误
-/// 权限、范围、版本或商品状态不满足时拒绝。
-pub async fn match_item(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path((id, item)): Path<(String, String)>,
-    Json(request): Json<MatchCatalogItemRequest>,
-) -> Result<SupplierCatalogItem> {
-    Ok(ApiResponse::ok_with_data(
-        state.supplier_api_governance_process().match_catalog_item(&id, &item, request, &actor).await?,
-    ))
 }
 
 #[permission_macros::permission(

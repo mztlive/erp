@@ -695,7 +695,8 @@ impl<'a> CatalogRepository<'a> {
         revision: &ProductRevision,
         medias: &[ProductRevisionMedia],
         executor: &mut dyn Executor,
-    ) -> Result<()> {
+    ) -> crate::Result<()> {
+        self.lock_match_name(&revision.name, executor).await?;
         mongo_ops::insert_one(&self.db.collection::<ProductRevision>(PRODUCT_REVISIONS), revision, executor)
             .await?;
         mongo_ops::insert_many(

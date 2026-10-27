@@ -287,7 +287,7 @@ impl SupplierOfferingService {
         )?;
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
-        self.ensure_api_revision_prices(&offering, &revision, executor).await?;
+        self.ensure_api_bulk_terms(&offering, &revision, executor).await?;
         let next_status = req.status.unwrap_or(offering.stable.status);
         if next_status == OfferingStatus::Active {
             qualification
@@ -450,12 +450,9 @@ impl SupplierOfferingService {
             .find_by_id(connection_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商 API 连接不存在，请重新选择有效连接".to_string()))?;
-        if connection.supplier_id != offering.supplier_id || !connection.is_active() {
-            return Err(Error::BusinessLogicError(
-                "供应商 API 连接不属于该供应商或未启用，请核对连接归属和启用状态".to_string(),
-            ));
-        }
-        Ok(())
+        connection
+            .ensure_offering_source(offering.supplier_id.as_ref())
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))
     }
     /// 新增时指定的配送模板必须存在且属于本供应商；未指定时跟随供应商默认模板。
     async fn assign_requested_template(
@@ -480,7 +477,7 @@ impl SupplierOfferingService {
         offering.assign_delivery_template(Some(SupplierDeliveryTemplateId::new(template.base.id)), actor);
         Ok(())
     }
-    async fn ensure_api_revision_prices(
+    async fn ensure_api_bulk_terms(
         &self,
         offering: &SupplierOffering,
         revision: &SupplierOfferingRevision,
@@ -500,7 +497,7 @@ impl SupplierOfferingService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("API 供给当前条款不存在".into()))?;
-        revision.ensure_api_prices_unchanged(&current)?;
+        revision.ensure_api_bulk_terms_unchanged(&current)?;
         Ok(())
     }
 

@@ -5185,38 +5185,6 @@
       "reason": "用例或步骤 decision 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
-      "path": "crates/erp-processes/src/supply_governance/supplier_api/command.rs",
-      "function": "persist_confirmation",
-      "policy": "Audited",
-      "stage": "Transaction",
-      "boundaries": [
-        ".resource_log_with_id",
-        "persist_log"
-      ],
-      "call_counts": {
-        ".resource_log_with_id": 1,
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "能力要求确认步骤接收已推进连接版本的准备结果，沿用命令入口的 Executor，依次构造 .resource_log_with_id、保存确认事实和 persist_log。"
-    },
-    {
-      "path": "crates/erp-processes/src/supply_governance/supplier_api/command.rs",
-      "function": "persist_capability_event",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        ".resource_log_with_id",
-        "persist_log"
-      ],
-      "call_counts": {
-        ".resource_log_with_id": 1,
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "用例或步骤 persist_capability_event 通过 .resource_log_with_id、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
-    },
-    {
       "path": "crates/erp-processes/src/supply_governance/supplier_api/catalog_match.rs",
       "function": "match_catalog_item",
       "policy": "Audited",

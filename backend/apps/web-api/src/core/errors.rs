@@ -912,14 +912,20 @@ mod tests {
     #[tokio::test]
     async fn supply_errors_keep_connection_and_settlement_recovery_instructions() {
         for source in [
+            erp_supply::Error::from(erp_core::Error::LogicError(
+                "供应商 API 连接已停用，请先启用连接后重试".into(),
+            )),
+            erp_supply::Error::BusinessLogicError("供应商 API 连接不属于该供应商，请核对连接归属".into()),
+            erp_supply::Error::BusinessLogicError("供应商 API 连接已停用，请先启用连接后重试".into()),
             erp_supply::Error::BusinessLogicError(
-                "供应商 API 连接不属于该供应商或未启用，请核对连接归属和启用状态".into(),
+                "供应商 API 连接处于故障状态，请先排查故障并恢复启用后重试".into(),
             ),
             erp_supply::Error::ConflictError("结算依据已变化，请刷新详情并重新核对结算明细".into()),
         ] {
             let error = Error::from(source);
             let expected = match &error {
                 Error::Unprocessable(message) | Error::Conflict(message) => message.clone(),
+                Error::Logic(error) => error.to_string(),
                 _ => panic!("unexpected supply error mapping"),
             };
             let status = error.http_status();

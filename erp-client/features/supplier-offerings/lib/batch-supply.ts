@@ -112,7 +112,7 @@ export function batchDefaults(
             .filter((item) => item.source_type !== "API")
             .map(offeringBatchRow),
         message: offerings.some((item) => item.source_type === "API")
-            ? "已略过 API 来源供给，其采购报价和可供情况随供应商接口更新。"
+            ? "已略过 API 来源供给，请逐项维护供给价；可供情况仍随供应商接口更新。"
             : "",
     }
 }

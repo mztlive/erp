@@ -15,6 +15,7 @@
 //!
 //! 规格签名与身份排序位是跨行判定逻辑，封装在 [`specification`] 值对象。
 
+pub mod auto_match;
 pub mod product;
 pub mod product_brand;
 pub mod product_category;

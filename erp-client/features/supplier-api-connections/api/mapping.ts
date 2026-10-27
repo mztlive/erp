@@ -98,15 +98,9 @@ export type BackendHealthRun = {
 export type BackendConnectionDetail = BackendConnection & {
     deployment_ready: boolean
     deployment_message: string
-    capabilities: BackendCapability[]
+    declared_capabilities: string[]
     health_records: BackendHealthRun[]
     health_check_types: BackendHealthCheckType[]
-    related_impact: {
-        active_offerings: number
-        active_publications: number
-        open_supplier_orders: number
-        active_sync_jobs: number
-    }
 }
 
 export type BackendCommandResult = {
@@ -116,14 +110,6 @@ export type BackendCommandResult = {
     connection_version: number
     job_id?: string | null
     job_no?: string | null
-    audit_event_id: string
-}
-
-export type BackendCapabilityUpdateResult = {
-    outcome: "SUCCEEDED" | "PROCESSING" | "REJECTED" | "UNKNOWN"
-    operation_id: string
-    connection_version: number
-    capabilities: BackendCapability[]
     audit_event_id: string
 }
 
@@ -152,6 +138,9 @@ export function mapCapabilityCode(raw: string): CapabilityCode {
         catalog: "CATALOG",
         price: "PRICE",
         stock: "STOCK",
+        service_areas: "SERVICE_AREAS",
+        delivery: "DELIVERY",
+        payment_confirmation: "PAYMENT_CONFIRMATION",
         order: "ORDER",
         query: "QUERY",
         cancel: "CANCEL",
@@ -160,11 +149,9 @@ export function mapCapabilityCode(raw: string): CapabilityCode {
         callback: "CALLBACK",
         settlement: "SETTLEMENT",
     }
-    return table[raw.toLowerCase()] ?? "CATALOG"
-}
-
-export function toBackendCapabilityCode(code: CapabilityCode): string {
-    return code === "CATALOG" ? "product" : code.toLowerCase()
+    const code = table[raw.toLowerCase()]
+    if (!code) throw new Error("接口能力类型已变化，请刷新页面后重试。")
+    return code
 }
 
 function mapBlocker(blocker: BackendActionBlocker) {
@@ -186,38 +173,6 @@ function mapReference(reference: BackendSafeReference) {
         alias: reference.alias ?? undefined,
         version: reference.version ?? undefined,
         visible: reference.visible,
-    }
-}
-
-function mapCapability(capability: BackendCapability) {
-    const code = mapCapabilityCode(capability.capability_code)
-    const enabled = capability.status === "active"
-    const requirement: "REQUIRED" | "NOT_REQUIRED" | "UNCONFIRMED" =
-        capability.business_requirement ?? "UNCONFIRMED"
-    const verified = capability.technically_verified === true
-    return {
-        capabilityCode: code,
-        capabilityLabel: CAPABILITY_LABEL[code],
-        status: (enabled ? "ENABLED" : "DISABLED") as "ENABLED" | "DISABLED",
-        statusLabel: enabled ? "启用" : "停用",
-        constraintSummary: capability.constraint_summary ?? undefined,
-        verification: (verified ? "SUCCESS" : "UNVERIFIED") as
-            | "SUCCESS"
-            | "UNVERIFIED",
-        verificationLabel: verified ? "已验证" : "未验证",
-        verifiedAt: secsToIso(capability.verified_at),
-        businessRequirement: requirement,
-        businessRequirementLabel:
-            requirement === "REQUIRED"
-                ? "业务必需"
-                : requirement === "NOT_REQUIRED"
-                  ? "业务不需要"
-                  : "未确认",
-        version: String(capability.version),
-        allowedActions: capability.allowed_actions ?? [],
-        actionBlockers: (capability.action_blockers ?? []).map(mapBlocker),
-        productLevelNote:
-            "连接级能力声明 ≠ 每条供给可用；供给/发布级能力见供应商供给 / 商品发布",
     }
 }
 
@@ -244,16 +199,18 @@ export function toListItem(
         statusLabel: STATUS_LABEL[status],
         statusTone: STATUS_TONE[status],
         capabilitySummary:
-            enabledCapabilities.length === 0
-                ? "未配置能力"
-                : enabledCapabilities
-                      .map(
-                          (item) =>
-                              CAPABILITY_LABEL[
-                                  mapCapabilityCode(item.capability_code)
-                              ],
-                      )
-                      .join("、"),
+            capabilities.length === 0
+                ? "接口未配置"
+                : enabledCapabilities.length === 0
+                  ? "暂无可用能力"
+                  : enabledCapabilities
+                        .map(
+                            (item) =>
+                                CAPABILITY_LABEL[
+                                    mapCapabilityCode(item.capability_code)
+                                ],
+                        )
+                        .join("、"),
         healthResult: health,
         healthLabel: HEALTH_LABEL[health],
         healthTone: HEALTH_TONE[health],
@@ -262,7 +219,9 @@ export function toListItem(
         catalogLabel: "打开连接查看",
         nextStep:
             connection.action_blockers[0]?.message ??
-            (status === "ENABLED" ? "连接已启用" : "打开连接，开始同步商品"),
+            (status === "ENABLED"
+                ? "自动下单已开启"
+                : "打开连接，开始同步商品"),
         allowedActions: connection.allowed_actions,
         actionBlockers: connection.action_blockers.map(mapBlocker),
     }
@@ -311,15 +270,14 @@ export function toCenter(
         }
     })
     const latest = records[0]
-    const relatedImpact = {
-        activeOfferings: detail.related_impact.active_offerings,
-        activePublications: detail.related_impact.active_publications,
-        openSupplierOrders: detail.related_impact.open_supplier_orders,
-        activeSyncJobs: detail.related_impact.active_sync_jobs,
-    }
     return {
         deploymentReady: detail.deployment_ready,
         deploymentMessage: detail.deployment_message,
+        declaredCapabilities: Array.from(
+            new Set(
+                (detail.declared_capabilities ?? []).map(mapCapabilityCode),
+            ),
+        ),
         connectionId: detail.id,
         connectionCode: detail.connection_code,
         connectorType: detail.connector_type ?? undefined,
@@ -337,7 +295,6 @@ export function toCenter(
             endpoint: mapReference(detail.safe_references.endpoint),
             credential: mapReference(detail.safe_references.credential),
         },
-        capabilities: detail.capabilities.map(mapCapability),
         lastHealth: latest
             ? {
                   at: latest.at,
@@ -355,7 +312,6 @@ export function toCenter(
             state: "NEVER",
             stateLabel: CATALOG_LABEL.NEVER,
         },
-        relatedImpact,
         auditEvents: [],
         allowedActions: detail.allowed_actions,
         actionBlockers: detail.action_blockers.map(mapBlocker),
@@ -371,7 +327,9 @@ export function toCenter(
             })),
         nextStep:
             detail.action_blockers[0]?.message ??
-            (status === "ENABLED" ? "连接已启用" : "打开连接，开始同步商品"),
+            (status === "ENABLED"
+                ? "自动下单已开启"
+                : "打开连接，开始同步商品"),
     }
 }
 

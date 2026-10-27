@@ -1,7 +1,7 @@
 use mongodb::Database;
 use mongodb::bson::doc;
 use persistence_core::indexes::{named_index, unique_index};
-use persistence_core::{Repository, Result};
+use persistence_core::{Executor, Repository, Result};
 
 use super::{CatalogAdoptionCommand, CatalogAdoptionPreview, CatalogAdoptionProduct, CatalogAdoptionReceipt};
 
@@ -61,6 +61,24 @@ impl CatalogAdoptionExt for Database {
     }
 }
 
+/// 查询指定操作号是否已有该公司商品的成功选品回执。
+/// # 参数
+/// `db` 为当前数据库，`command` 为操作号，`product` 为公司商品身份，`executor` 为调用方执行器。
+/// # 返回
+/// 存在匹配回执时返回 true。
+/// # 错误
+/// 数据库查询失败时透传错误。
+pub async fn has_product_receipt(
+    db: &Database,
+    command: &str,
+    product: &str,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    db.catalog_adoption_receipts()
+        .exists(doc! {"command_id": command, "result.product_id": product}, executor)
+        .await
+}
+
 /// 增量创建选品唯一身份及预览归属查询索引。
 /// # 参数
 /// `db` 为目标数据库。
@@ -83,6 +101,7 @@ pub async fn ensure_indexes(db: &Database) -> Result<()> {
         .await?;
     db.collection::<CatalogAdoptionReceipt>(RECEIPTS)
         .create_indexes([
+            named_index("idx_catalog_adoption_command_product", doc! {"command_id":1,"result.product_id":1}),
             unique_index("uk_catalog_adoption_receipt_id", doc! {"id":1}),
             unique_index("uk_catalog_adoption_source_item", doc! {"connection_id":1,"item_id":1}),
             unique_index("uk_catalog_adoption_command_item", doc! {"actor_id":1,"command_id":1,"item_id":1}),

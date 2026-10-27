@@ -6113,8 +6113,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "GET",
-                path: "/admin/supplier-api-connections/{id}/catalog/adoption-targets/{sku}",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/catalog/adoptions/{preview}/resolve",
                 description: "同步供应商商品目录",
                 permission: {
                     resource: "supplier_api_connection",
@@ -6203,42 +6203,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "POST",
-                path: "/admin/supplier-api-connections/{id}/business-capability-confirmations",
-                description: "确认供应商 API 业务能力需求",
-                permission: {
-                    resource: "supplier_api_capability",
-                    action: "confirm_requirement",
-                },
-            },
-            {
-                module: "admin",
-                method: "PUT",
-                path: "/admin/supplier-api-connections/{id}/capabilities",
-                description: "配置供应商 API 能力",
-                permission: {
-                    resource: "supplier_api_capability",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-api-connections/{id}/jobs/{job_id}",
                 description: "查询供应商 API 连接后台任务",
                 permission: {
                     resource: "supplier_api_connection",
                     action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-api-capabilities",
-                description: "查询连接能力列表",
-                permission: {
-                    resource: "supplier_api_capability",
-                    action: "list",
                 },
             },
             {
@@ -6255,16 +6225,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/supplier-api-connections/{id}/catalog/{item}/identity-review",
-                description: "同步供应商商品目录",
-                permission: {
-                    resource: "supplier_api_connection",
-                    action: "catalog_sync",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-api-connections/{id}/catalog/{item}/match",
                 description: "同步供应商商品目录",
                 permission: {
                     resource: "supplier_api_connection",

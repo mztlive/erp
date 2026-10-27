@@ -8,11 +8,9 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use erp_read_models::supplier_center::supplier_api::dto::SupplierConnectionJobView;
 use erp_supply::dto::supplier_api::{
-    ConfirmBusinessCapabilityRequirementCommand, ConfirmBusinessCapabilityRequirementResult,
-    CreateSupplierApiConnectionRequest, PageView, SupplierApiCapabilityListParams, SupplierApiCapabilityView,
-    SupplierApiConnectionDetailView, SupplierApiConnectionListItemView, SupplierApiConnectionListParams,
-    SupplierApiConnectionView, SupplierConnectionCommand, SupplierConnectionCommandResult,
-    UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
+    CreateSupplierApiConnectionRequest, PageView, SupplierApiConnectionDetailView,
+    SupplierApiConnectionListItemView, SupplierApiConnectionListParams, SupplierApiConnectionView,
+    SupplierConnectionCommand, SupplierConnectionCommandResult,
 };
 use erp_supply::entity::supplier_api::SupplierConnectionAction;
 
@@ -124,45 +122,6 @@ pub async fn supplier_api_connection_command(
 #[permission_macros::permission(
     group = "API 供应商连接",
     group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "确认供应商 API 业务能力需求",
-    resource = "supplier_api_capability",
-    action = "confirm_requirement"
-)]
-/// 追加采购业务能力确认事实。
-pub async fn supplier_api_business_capability_confirm(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(command): Json<ConfirmBusinessCapabilityRequirementCommand>,
-) -> Result<ConfirmBusinessCapabilityRequirementResult> {
-    let result = state
-        .supplier_api_governance_process()
-        .confirm_business_capability_requirement(&id, command, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(result))
-}
-
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "配置供应商 API 能力",
-    resource = "supplier_api_capability",
-    action = "update"
-)]
-/// 使用连接版本与逐能力版本原子配置能力。
-pub async fn supplier_api_capabilities_update(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(command): Json<UpdateSupplierCapabilitiesCommand>,
-) -> Result<UpdateSupplierCapabilitiesResult> {
-    let result = state.supplier_api_governance_process().update_capabilities(&id, command, &actor).await?;
-    Ok(ApiResponse::ok_with_data(result))
-}
-
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
     desc = "查询供应商 API 连接后台任务",
     resource = "supplier_api_connection",
     action = "detail"
@@ -174,20 +133,4 @@ pub async fn supplier_api_connection_job_detail(
 ) -> Result<SupplierConnectionJobView> {
     let result = state.supplier_api_read_service().connection_job(&id, &job_id).await?;
     Ok(ApiResponse::ok_with_data(result))
-}
-
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询连接能力列表",
-    resource = "supplier_api_capability",
-    action = "list"
-)]
-/// 查询连接能力声明列表。
-pub async fn supplier_api_capability_list(
-    State(state): State<AppState>,
-    Query(params): Query<SupplierApiCapabilityListParams>,
-) -> Result<PageView<SupplierApiCapabilityView>> {
-    let page = state.supplier_api_service().capability_list(&params).await?;
-    Ok(ApiResponse::ok_with_data(page))
 }

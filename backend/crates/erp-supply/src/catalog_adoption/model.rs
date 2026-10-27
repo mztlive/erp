@@ -169,15 +169,34 @@ pub struct AdoptionSpecEntry {
     pub attribute_value_code: String,
 }
 
-// 兼容历史成功请求的序列化指纹，确认字段不再参与业务校验。
-fn legacy_confirmation_default() -> bool {
-    true
+/// 采购只维护建档字典和展示内容，目标 SKU 由服务器决定。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdoptionMapping {
+    pub category_id: String,
+    pub unit_id: String,
+    pub product_kind: String,
+    pub company_name: Option<String>,
+    pub company_description: Option<String>,
+}
+
+/// 冻结预览内单项的自动匹配请求。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResolveAdoptionRequest {
+    pub item_id: String,
+    pub mapping: AdoptionMapping,
 }
 
 /// 新建时只接收公司映射；名称和介绍从冻结来源取得。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "UPPERCASE", deny_unknown_fields)]
 pub enum AdoptionTarget {
+    Auto {
+        mapping: AdoptionMapping,
+        expected_match: String,
+    },
+    #[serde(skip_deserializing)]
     Create {
         #[serde(default)]
         company_name: Option<String>,
@@ -189,17 +208,15 @@ pub enum AdoptionTarget {
         product_kind: String,
         #[serde(default)]
         spec_entries: Vec<AdoptionSpecEntry>,
-        #[serde(default = "legacy_confirmation_default")]
         unit_confirmed: bool,
-        #[serde(default = "legacy_confirmation_default")]
         specification_confirmed: bool,
     },
+    #[serde(skip_deserializing)]
     Existing {
         sku_id: String,
         expected_sku_version: u64,
         expected_product_version: u64,
         unit_id: String,
-        #[serde(default = "legacy_confirmation_default")]
         specification_confirmed: bool,
     },
 }
@@ -367,6 +384,21 @@ mod tests {
     }
 
     #[test]
+    fn only_auto_targets_are_accepted_from_clients() {
+        let value = serde_json::json!({"kind":"AUTO","mapping":{"category_id":"cat","unit_id":"unit","product_kind":"PHYSICAL","company_name":null,"company_description":null},"expected_match":"reviewed"});
+        assert!(matches!(
+            serde_json::from_value::<AdoptionTarget>(value).unwrap(),
+            AdoptionTarget::Auto { .. }
+        ));
+        for kind in ["CREATE", "EXISTING"] {
+            assert!(
+                serde_json::from_value::<AdoptionTarget>(serde_json::json!({"kind":kind,"sku_id":"forced"}))
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
     fn selection_rejects_ambiguous_empty_duplicate_and_oversized_requests() {
         for ids in [vec![], vec!["a".into(), "a".into()], vec!["".into()], vec!["a".into(); 501]] {
             assert!(PreviewAdoptionRequest { item_ids: Some(ids), filter: None }.validate().is_err());
@@ -476,8 +508,7 @@ mod tests {
         };
         let mut legacy_json = serde_json::to_value(&row).unwrap();
         legacy_json["target"].as_object_mut().unwrap().remove("specification_confirmed");
-        let without_confirmation: AdoptionRow = serde_json::from_value(legacy_json).unwrap();
-        assert_eq!(without_confirmation.fingerprint().unwrap(), row.fingerprint().unwrap());
+        assert!(serde_json::from_value::<AdoptionRow>(legacy_json).is_err());
         let mut request = ConfirmAdoptionRequest {
             expected_version: preview.base.version,
             idempotency_key: "key".into(),

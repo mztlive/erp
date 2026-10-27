@@ -9,10 +9,9 @@ use persistence_core::{Executor, NoTransaction};
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
 use crate::entity::failure::SupplierFailureClass;
-use crate::entity::supplier_api::{SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection};
+use crate::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use crate::entity::supplier_fulfillment::*;
 use crate::ports::supplier_gateway::DispatchOutcome;
-use crate::repository::prelude::*;
 use crate::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use crate::{Error, Result};
 /// 本域状态更新后需要的集成消息结果，错误政策由调用方给出。
@@ -53,11 +52,7 @@ impl SupplierFulfillmentService {
         if connection.supplier_id != req.supplier_id {
             return Err(Error::BusinessLogicError("供应商连接不属于下单供应商".to_string()));
         }
-        let capabilities = self
-            .db
-            .supplier_api_capabilities()
-            .find_capabilities_by_connection(&req.connection_id, &mut NoTransaction)
-            .await?;
+        let capabilities = self.capabilities(&connection)?;
         ensure_capability(&capabilities, SupplierApiCapabilityCode::Order)?;
         let mut revision_ids =
             req.items.iter().map(|item| item.supplier_offering_revision_id.clone()).collect::<Vec<_>>();
@@ -250,11 +245,10 @@ impl SupplierFulfillmentService {
 /// # 错误
 /// 能力缺失或未启用时返回 `BusinessLogicError`。
 pub fn ensure_capability(
-    capabilities: &[SupplierApiCapability],
+    capabilities: &[SupplierApiCapabilityCode],
     needed: SupplierApiCapabilityCode,
 ) -> Result<()> {
-    let supported =
-        capabilities.iter().any(|capability| capability.capability_code == needed && capability.is_active());
+    let supported = capabilities.contains(&needed);
     if !supported {
         return Err(Error::BusinessLogicError(format!("供应商连接缺少能力: {}", needed.as_str())));
     }

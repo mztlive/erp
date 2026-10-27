@@ -6,8 +6,10 @@ use config::DangaoshushuConfig;
 use erp_core::common::time::Instant;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
-    SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType, SupplierHealthCheckType,
+    SupplierApiCapabilityCode, SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType,
+    SupplierHealthCheckType,
 };
+use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Lookup, Scan, Snapshot};
 use erp_supply::ports::connector::offer::IncrementalSupport;
 use erp_supply::ports::connector::order::{OrderKey, OrderSnapshot, Orders};
@@ -80,7 +82,7 @@ impl DangaoshushuRuntime {
             return Err(error(
                 SupplierFailureClass::BusinessRejected,
                 "DGSS_CONNECTION_DISABLED",
-                "请先在后台启用供应商 API 连接",
+                "请先开启该供应商的自动下单",
             ));
         }
         let connector = self.bound_connector(connection)?;
@@ -92,6 +94,20 @@ impl DangaoshushuRuntime {
             ));
         }
         Ok(connector)
+    }
+
+    /// 为已有订单跟踪、回调及后续履约提供客户端，不受新增下单开关限制。
+    /// # 参数
+    /// `connection` 为服务端读取的连接。
+    /// # 返回
+    /// 当前配置绑定的客户端。
+    /// # 错误
+    /// 删除、身份不符或配置绑定陈旧时拒绝。
+    pub fn tracking_connector(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> ConnectorResult<DangaoshushuConnector> {
+        self.bound_connector(connection)
     }
 
     fn bound_connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<DangaoshushuConnector> {
@@ -339,6 +355,16 @@ impl SupplierApiGateway for DangaoshushuRuntime {
     }
 }
 impl SupplierReferenceRegistry for DangaoshushuRuntime {
+    fn capabilities(
+        &self,
+        target: &SupplierReferenceTarget,
+    ) -> Result<Vec<SupplierApiCapabilityCode>, ClassifiedError> {
+        self.validate_target(target).map_err(classified)?;
+        let connector = DangaoshushuConnector::bind(self.settings.clone(), target, self.transport.clone())
+            .map_err(classified)?;
+        Ok(connector.capabilities())
+    }
+
     fn deployment_config(
         &self,
         target: &SupplierReferenceTarget,
@@ -594,6 +620,13 @@ mod tests {
         assert!(runtime.connector(&connection).is_ok());
         connection.stable.status = SupplierApiConnectionStatus::Disabled;
         assert!(runtime.connector(&connection).is_err());
+        assert!(runtime.tracking_connector(&connection).is_ok());
+        assert!(
+            runtime
+                .capabilities(&SupplierReferenceTarget::from(&connection))
+                .unwrap()
+                .contains(&SupplierApiCapabilityCode::Order)
+        );
         let mut changed_settings = settings();
         changed_settings.private_key = "rotated-secret".into();
         let changed = DangaoshushuRuntime::new(changed_settings).unwrap();

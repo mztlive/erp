@@ -1,11 +1,7 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-    confirmAdoption,
-    fetchAdoptionTarget,
-    previewAdoption,
-} from "../api/adoption"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { confirmAdoption, previewAdoption } from "../api/adoption"
 
 export function usePreviewAdoptionMutation() {
     return useMutation({ mutationFn: previewAdoption })
@@ -27,19 +23,5 @@ export function useConfirmAdoptionMutation() {
                 ),
             )
         },
-    })
-}
-
-export function useAdoptionTargetQuery(connectionId: string, skuId: string) {
-    return useQuery({
-        queryKey: [
-            "supplier-api-connections",
-            "adoption-target",
-            connectionId,
-            skuId,
-        ],
-        queryFn: () => fetchAdoptionTarget(connectionId, skuId),
-        enabled: Boolean(connectionId && skuId),
-        staleTime: 0,
     })
 }

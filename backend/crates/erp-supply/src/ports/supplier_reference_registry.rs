@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::supplier_api_gateway::ClassifiedError;
 use crate::entity::failure::SupplierFailureClass;
-use crate::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
+use crate::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection, SupplierConnectorType};
 
 /// 本次绑定命令预检的目标身份；禁止以票据携带的身份替代目标连接。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +69,24 @@ pub struct SupplierDeploymentConfig {
 
 /// 服务端不透明引用注册表端口。
 pub trait SupplierReferenceRegistry: Send + Sync {
+    /// 读取适配器实际提供的操作，不以历史数据库能力记录为依据。
+    /// # 参数
+    /// `target` 为服务端读取的连接身份。
+    /// # 返回
+    /// 适配器的只读能力清单。
+    /// # 错误
+    /// 未装配适配器时返回明确错误。
+    fn capabilities(
+        &self,
+        _target: &SupplierReferenceTarget,
+    ) -> Result<Vec<SupplierApiCapabilityCode>, ClassifiedError> {
+        Err(ClassifiedError {
+            class: SupplierFailureClass::CapabilityGap,
+            code: "SUPPLIER_CONNECTOR_UNAVAILABLE".into(),
+            summary: "供应商接口未配置，无法读取能力".into(),
+        })
+    }
+
     /// 按后台身份取得当前部署配置，无需用户选择地址或凭据。
     /// # 参数
     /// `target` 是服务器读取的连接身份。

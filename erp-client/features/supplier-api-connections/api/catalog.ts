@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/lib/api"
+import { apiGet } from "@/lib/api"
 
 export type CatalogImage = {
     url: string
@@ -31,6 +31,7 @@ export type CatalogItem = {
     spec_id: string
     name: string
     specification: string
+    barcode?: string | null
     unit: string | null
     purchase_price: string | null
     observed_at: number
@@ -105,19 +106,5 @@ export function fetchCatalog(
     return apiGet<CatalogResult>(
         `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/catalog`,
         { page, page_size: 20, ...filters },
-    )
-}
-export function matchCatalog(input: {
-    connectionId: string
-    itemId: string
-    skuId: string
-    expectedVersion: number
-}) {
-    return apiPost<CatalogItem>(
-        `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}/catalog/${encodeURIComponent(input.itemId)}/match`,
-        {
-            sku_id: input.skuId,
-            expected_version: input.expectedVersion,
-        },
     )
 }

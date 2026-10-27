@@ -32,6 +32,9 @@ export type CapabilityCode =
     | "CATALOG"
     | "PRICE"
     | "STOCK"
+    | "SERVICE_AREAS"
+    | "DELIVERY"
+    | "PAYMENT_CONFIRMATION"
     | "ORDER"
     | "QUERY"
     | "CANCEL"
@@ -39,12 +42,6 @@ export type CapabilityCode =
     | "LOGISTICS"
     | "CALLBACK"
     | "SETTLEMENT"
-
-type CapabilityStatus = "ENABLED" | "DISABLED"
-
-type CapabilityVerification = "SUCCESS" | "FAILED" | "UNVERIFIED" | "STALE"
-
-export type ConnectionSection = "catalog" | "settings" | "records"
 
 type EmptyReason =
     | "NO_PERMISSION"
@@ -65,24 +62,6 @@ type SafeReferenceView = {
     alias?: string
     version?: string
     visible: boolean
-}
-
-export type CapabilityView = {
-    capabilityCode: CapabilityCode
-    capabilityLabel: string
-    status: CapabilityStatus
-    statusLabel: string
-    constraintSummary?: string
-    verification: CapabilityVerification
-    verificationLabel: string
-    verifiedAt?: string
-    businessRequirement?: "REQUIRED" | "NOT_REQUIRED" | "UNCONFIRMED"
-    businessRequirementLabel: string
-    version: string
-    allowedActions: string[]
-    actionBlockers: ActionBlocker[]
-    /** 连接级能力 ≠ 商品级可用 */
-    productLevelNote: string
 }
 
 export type HealthRecordView = {
@@ -114,13 +93,6 @@ type CatalogSyncView = {
         succeeded: number
         failed: number
     }
-}
-
-type RelatedImpactView = {
-    activeOfferings: number
-    activePublications: number
-    openSupplierOrders: number
-    activeSyncJobs: number
 }
 
 type AuditEventView = {
@@ -158,6 +130,8 @@ export type ConnectionListItem = {
 export type ConnectionCenterView = {
     deploymentReady: boolean
     deploymentMessage: string
+    /** 接口适配器自报的可执行能力；不随连接启停变化。 */
+    declaredCapabilities: CapabilityCode[]
     connectionId: string
     connectionCode: string
     connectorType?: string
@@ -175,7 +149,6 @@ export type ConnectionCenterView = {
         endpoint: SafeReferenceView
         credential: SafeReferenceView
     }
-    capabilities: CapabilityView[]
     lastHealth?: {
         at: string
         result: HealthResult
@@ -192,7 +165,6 @@ export type ConnectionCenterView = {
         "CONNECTIVITY" | "AUTHENTICATION" | "CAPABILITY_METADATA"
     >
     catalog: CatalogSyncView
-    relatedImpact: RelatedImpactView
     auditEvents: AuditEventView[]
     allowedActions: string[]
     actionBlockers: ActionBlocker[]
@@ -263,8 +235,8 @@ export type FormalOutcome =
       }
 
 export const STATUS_LABEL: Record<ConnectionStatus, string> = {
-    ENABLED: "启用",
-    DISABLED: "停用",
+    ENABLED: "自动下单已开启",
+    DISABLED: "自动下单已关闭",
     FAULTED: "故障",
     PENDING_CONFIG: "待配置",
 }
@@ -308,6 +280,9 @@ export const CAPABILITY_LABEL: Record<CapabilityCode, string> = {
     CATALOG: "商品目录",
     PRICE: "价格",
     STOCK: "库存",
+    SERVICE_AREAS: "可售地区",
+    DELIVERY: "配送校验",
+    PAYMENT_CONFIRMATION: "履约支付通知",
     ORDER: "下单",
     QUERY: "查询",
     CANCEL: "取消",
@@ -323,12 +298,6 @@ export const REFERENCE_STATE_LABEL: Record<ReferenceState, string> = {
     ROTATION_DUE: "需轮换",
 }
 
-export const SECTION_LABEL: Record<ConnectionSection, string> = {
-    catalog: "商品同步",
-    settings: "连接设置",
-    records: "运行记录",
-}
-
 /** 审计动作中文映射（动作码只在代码与审计数据结构中使用） */
 export const AUDIT_ACTION_LABEL: Record<string, string> = {
     CREATE_CONNECTION: "创建连接",
@@ -342,5 +311,3 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
     ENABLE: "启用连接",
     HEALTH_AUTH_FAILED: "鉴权/签名失败",
 }
-
-export const SECTIONS: ConnectionSection[] = ["catalog", "settings", "records"]

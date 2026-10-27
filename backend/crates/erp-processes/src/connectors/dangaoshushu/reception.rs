@@ -33,7 +33,7 @@ pub async fn receive(
     let connection =
         SupplierApiService::new(db.clone()).load_connection(connection_id, &mut NoTransaction).await?;
     let connector =
-        runtime.connector(&connection).map_err(|failure| Error::Unauthenticated(failure.summary))?;
+        runtime.tracking_connector(&connection).map_err(|failure| Error::Unauthenticated(failure.summary))?;
     let verified = connector.verify(request).map_err(|failure| {
         if failure.class == SupplierFailureClass::AuthSignature {
             Error::Unauthenticated(failure.summary)

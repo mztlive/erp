@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use erp_core::common::time::Instant;
-use erp_core::ids::{SupplierApiCapabilityId, SupplierApiConnectionId};
+use erp_core::ids::{SupplierAccountId, SupplierApiCapabilityId, SupplierApiConnectionId};
 
 use super::command::{CommandIdentity, apply_validated_changes, map_capability_change_rejection};
 use super::map_command_shape_rejection;
@@ -10,8 +10,9 @@ use crate::dto::supplier_api::SupplierConnectionCommand;
 use crate::entity::supplier_api::{
     BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, BusinessCapabilityRequirement,
     CapabilityChangeInput, CapabilityChangeSet, CapabilityChangeSetRejection, SupplierApiCapability,
-    SupplierApiCapabilityCode, SupplierApiCapabilityData, SupplierApiCapabilityStatus,
-    SupplierCommandShapeRejection, SupplierConnectionAction, SupplierHealthCheckType,
+    SupplierApiCapabilityCode, SupplierApiCapabilityData, SupplierApiCapabilityStatus, SupplierApiConnection,
+    SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierCommandShapeRejection,
+    SupplierConnectionAction, SupplierConnectorType, SupplierHealthCheckType,
 };
 
 #[test]
@@ -167,4 +168,46 @@ fn apply_validated_changes_rejects_version_conflict_and_missing_confirmation() {
         ),
         Err(Error::ConflictError(_))
     ));
+}
+
+#[test]
+fn new_connection_starts_without_auto_order_permission() {
+    let connection = SupplierApiConnection::new(
+        SupplierApiConnectionId::new("conn-declared"),
+        SupplierApiConnectionData {
+            supplier_id: SupplierAccountId::new("supplier-1"),
+            connection_code: "DGSS-DECLARED".to_string(),
+            connector_type: SupplierConnectorType::Dangaoshushu,
+            endpoint_reference: String::new(),
+            credential_reference: None,
+            rate_limit_policy: None,
+            status: SupplierApiConnectionStatus::Disabled,
+        },
+        "admin-1",
+    )
+    .unwrap();
+
+    assert!(!connection.is_active());
+    connection.ensure_catalog_available().unwrap();
+}
+
+#[test]
+fn legacy_connection_without_connector_type_cannot_adopt_catalog() {
+    let mut connection = SupplierApiConnection::new(
+        SupplierApiConnectionId::new("conn-legacy"),
+        SupplierApiConnectionData {
+            supplier_id: SupplierAccountId::new("supplier-1"),
+            connection_code: "LEGACY".to_string(),
+            connector_type: SupplierConnectorType::Dangaoshushu,
+            endpoint_reference: String::new(),
+            credential_reference: None,
+            rate_limit_policy: None,
+            status: SupplierApiConnectionStatus::Disabled,
+        },
+        "admin-1",
+    )
+    .unwrap();
+    connection.connector_type = None;
+
+    assert!(connection.ensure_catalog_available().is_err());
 }

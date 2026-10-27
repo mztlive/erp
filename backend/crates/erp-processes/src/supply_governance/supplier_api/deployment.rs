@@ -29,22 +29,6 @@ impl SupplierApiGovernanceProcess {
     }
 }
 impl Deployment {
-    /// 确认启用使用已通过测试的当前配置，不把旧证据用于新部署。
-    /// # 参数
-    /// `connection` 为事务内重读的连接。
-    /// # 返回
-    /// 配置身份一致时通过。
-    /// # 错误
-    /// 引用或连接身份变化时拒绝。
-    pub(super) fn ensure_current(&self, connection: &SupplierApiConnection) -> Result<()> {
-        if SupplierReferenceTarget::from(connection) != self.target
-            || connection.endpoint_reference != self.config.endpoint
-            || connection.credential_reference.as_ref() != Some(&self.config.credential)
-        {
-            return Err(Error::ConflictError("接口配置尚未验证或已变化，请先测试连接".into()));
-        }
-        Ok(())
-    }
     /// 提交前核对连接身份，禁止将预检配置绑定给已变化的连接。
     /// # 参数
     /// `connection` 为当前事务连接，`actor` 为操作人。

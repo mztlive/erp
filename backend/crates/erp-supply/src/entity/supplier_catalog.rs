@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
+use erp_core::validation::normalize_optional_text;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -17,7 +18,7 @@ use crate::{Error, Result};
 
 const CATALOG_MAPPING_VERSION: u32 = 2;
 
-/// 一个连接内一个外部订货规格的最近观察；匹配只由人工操作改变。
+/// 一个连接内一个外部订货规格的最近观察；正式关联只由选品事务建立。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
 pub struct SupplierCatalogItem {
     #[serde(flatten)]
@@ -29,6 +30,8 @@ pub struct SupplierCatalogItem {
     pub name: String,
     pub specification: String,
     pub unit: Option<String>,
+    #[serde(default)]
+    pub barcode: Option<String>,
     pub purchase_price: Option<String>,
     #[serde(default)]
     pub category_id: Option<String>,
@@ -76,11 +79,11 @@ pub struct SupplierCatalogItem {
     pub requires_identity_review: bool,
 }
 impl SupplierCatalogItem {
-    /// 合并最新观察时保留同身份记录的人工匹配与持久化版本。
+    /// 合并最新观察时保留同身份记录的既有关联与持久化版本。
     /// # 参数
     /// `previous` 为同一来源身份的既有目录记录。
     /// # 返回
-    /// 将既有身份和人工匹配复制到当前观察。
+    /// 将既有身份和关联复制到当前观察。
     /// # 错误
     /// 来源身份不相同则拒绝，禁止跨连接沿用匹配。
     pub fn retain_match(&mut self, previous: Self) -> Result<()> {
@@ -94,7 +97,9 @@ impl SupplierCatalogItem {
         self.base = previous.base;
         self.requires_identity_review = previous.requires_identity_review
             || (previous.offering_id.is_some()
-                && (self.specification != previous.specification || self.unit != previous.unit));
+                && (self.specification != previous.specification
+                    || self.unit != previous.unit
+                    || (self.barcode.is_some() && self.barcode != previous.barcode)));
         self.sku_id = previous.sku_id;
         self.sku_no = previous.sku_no;
         self.company_product_id = previous.company_product_id;
@@ -103,6 +108,7 @@ impl SupplierCatalogItem {
             self.media_retry_at = previous.media_retry_at;
             self.media_errors = previous.media_errors;
         }
+        self.barcode = self.barcode.take().or(previous.barcode);
         self.description = self.description.take().or(previous.description);
         self.images = self.images.take().or(previous.images);
         self.detail_images = self.detail_images.take().or(previous.detail_images);
@@ -162,10 +168,7 @@ impl SupplierCatalogItem {
         }
         let details = offer.details;
         let mut item = Self {
-            base: BaseModel::new(format!(
-                "sc-{}",
-                catalog_identity(&[connection, &product, &offer.sku.spec_id])
-            )),
+            base: BaseModel::new(catalog_item_id(connection, &product, &offer.sku.spec_id)),
             connection_id: connection.into(),
             supplier_id: supplier.into(),
             product_id: product,
@@ -173,6 +176,7 @@ impl SupplierCatalogItem {
             name: offer.name,
             specification: offer.specification,
             unit: offer.unit,
+            barcode: normalize_optional_text(details.barcode, "供应商条码", 128)?,
             purchase_price: offer
                 .quote
                 .and_then(|quote| quote.dropship)
@@ -366,6 +370,7 @@ impl SupplierCatalogItem {
     /// 内容无法序列化时返回错误。
     pub fn refresh_fingerprint(&mut self) -> Result<()> {
         let details = OfferDetails {
+            barcode: self.barcode.clone(),
             category_id: self.category_id.clone(),
             category_name: self.category_name.clone(),
             brand_id: self.brand_id.clone(),
@@ -383,6 +388,10 @@ impl SupplierCatalogItem {
         self.source_fingerprint = hex::encode(Sha256::digest(bytes));
         Ok(())
     }
+}
+
+fn catalog_item_id(connection: &str, product: &str, spec: &str) -> String {
+    format!("sc-{}", catalog_identity(&[connection, product, spec]))
 }
 
 /// 分页检查点与连接配置快照；与每页目录及任务进度同事务保存。
@@ -541,6 +550,28 @@ mod tests {
             },
         }
     }
+    #[test]
+    fn barcode_is_literal_optional_and_identity_changes_require_review() {
+        let mut snapshot = observation();
+        snapshot.value.details.barcode = Some(" 0012345678905 ".into());
+        let mut prior = SupplierCatalogItem::observed("c", "supplier", "job", snapshot.clone()).unwrap();
+        assert_eq!(prior.barcode.as_deref(), Some("0012345678905"));
+        prior.offering_id = Some("offering".into());
+        let mut missing = snapshot.clone();
+        missing.value.details.barcode = None;
+        let mut next = SupplierCatalogItem::observed("c", "supplier", "job", missing).unwrap();
+        next.retain_match(prior.clone()).unwrap();
+        assert_eq!(next.barcode, prior.barcode);
+        assert!(!next.requires_identity_review);
+        snapshot.value.details.barcode = Some("0012345678906".into());
+        let mut changed = SupplierCatalogItem::observed("c", "supplier", "job", snapshot.clone()).unwrap();
+        changed.retain_match(prior.clone()).unwrap();
+        assert!(changed.requires_identity_review);
+        assert_ne!(changed.source_fingerprint, prior.source_fingerprint);
+        snapshot.value.details.barcode = Some("x".repeat(129));
+        assert!(SupplierCatalogItem::observed("c", "supplier", "job", snapshot).is_err());
+    }
+
     fn connection() -> SupplierApiConnection {
         SupplierApiConnection::new(
             SupplierApiConnectionId::new("c1"),

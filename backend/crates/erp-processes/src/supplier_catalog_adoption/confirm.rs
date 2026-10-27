@@ -1,14 +1,15 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_audit::AuditActorLogs;
+use erp_catalog::CatalogExt;
+use erp_catalog::source_sync::repository::ProductSourceExt;
 use erp_core::common::time::Instant;
 use erp_supply::catalog_adoption::{
-    AdoptionResult, AdoptionRow, CatalogAdoptionCommand, CatalogAdoptionExt, CatalogAdoptionPreview,
-    CatalogAdoptionReceipt, ConfirmAdoptionRequest, adoption_identity,
+    AdoptionResult, AdoptionRow, AdoptionTarget, CatalogAdoptionCommand, CatalogAdoptionExt,
+    CatalogAdoptionPreview, CatalogAdoptionReceipt, ConfirmAdoptionRequest, adoption_identity,
 };
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
-use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_offering::CommandPreparation;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
@@ -31,6 +32,7 @@ pub struct AdoptionRowResult {
     pub sku_id: Option<String>,
     pub offering_id: Option<String>,
     pub message: Option<String>,
+    pub retry_original: bool,
 }
 
 #[derive(Serialize)]
@@ -43,6 +45,7 @@ impl From<AdoptionResult> for AdoptionRowResult {
         Self {
             item_id: result.item_id,
             status: "SUCCEEDED",
+            retry_original: false,
             product_id: Some(result.product_id),
             sku_id: Some(result.sku_id),
             offering_id: Some(result.offering_id),
@@ -92,6 +95,7 @@ impl SupplierCatalogAdoptionProcess {
                 Err(error) => AdoptionRowResult {
                     item_id: row.item_id,
                     status: "FAILED",
+                    retry_original: matches!(error, Error::OutcomeUnknown(_)),
                     product_id: None,
                     sku_id: None,
                     offering_id: None,
@@ -166,7 +170,7 @@ impl SupplierCatalogAdoptionProcess {
         }
         let current = self.load_item(&preview.connection_id, &row.item_id, &mut NoTransaction).await?;
         preview.ensure_current_item(&current)?;
-        let prepared = self.prepare_row(frozen, row, actor).await?;
+        let prepared = self.prepare_row(frozen, row, actor, command).await?;
         let cleanup = prepared.media.cleanup_handle();
         let process = self.clone();
         let (preview, row, command, actor) =
@@ -208,7 +212,8 @@ impl SupplierCatalogAdoptionProcess {
         }
         let mut item = self.load_item(&preview.connection_id, &row.item_id, executor).await?;
         preview.ensure_current_item(&item)?;
-        SupplierApiService::new(self.db.clone()).load_connection(&preview.connection_id, executor).await?;
+        self.db.catalog().lock_match_name(&item.name, executor).await?;
+        self.automatic_row(&item, row, actor, command, executor).await?;
         let resolved_row = prepared.resolved_row.clone();
         let sku = self.materialize_target(&item, &resolved_row, &mut prepared, actor, executor).await?;
         let per_item_command = adoption_identity(&[command, &row.item_id]);
@@ -236,19 +241,37 @@ impl SupplierCatalogAdoptionProcess {
             result.product_id.clone(),
             result.offering_id.clone(),
         )?;
+        self.record_source(&mut item, prepared, &result, &resolved_row.target, actor, executor).await?;
+        self.persist_result(&item.connection_id, &result, row, command, actor, executor).await?;
+        Ok((result, true))
+    }
+
+    async fn record_source(
+        &self,
+        item: &mut SupplierCatalogItem,
+        prepared: PreparedAdoption,
+        result: &AdoptionResult,
+        target: &AdoptionTarget,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         if item.images != prepared.materialized_item.images
             || item.detail_images != prepared.materialized_item.detail_images
         {
             item.media_retry_at = Some(Instant::now().unix_secs());
         }
         item.refresh_fingerprint()?;
-        self.db.supplier_catalog_items().update(&mut item, executor).await?;
+        self.db.supplier_catalog_items().update(item, executor).await?;
         let mut initial_source = item.clone();
         initial_source.images = prepared.materialized_item.images;
         initial_source.detail_images = prepared.materialized_item.detail_images;
-        initialize_source(&self.db, &initial_source, &result.product_id, actor, executor).await?;
-        self.persist_result(&item.connection_id, &result, row, command, actor, executor).await?;
-        Ok((result, true))
+        if matches!(target, AdoptionTarget::Create { .. })
+            && (prepared.creates_product
+                || self.db.product_sources().find_by_id(&result.product_id, executor).await?.is_some())
+        {
+            initialize_source(&self.db, &initial_source, &result.product_id, actor, executor).await?;
+        }
+        Ok(())
     }
 
     async fn persist_result(

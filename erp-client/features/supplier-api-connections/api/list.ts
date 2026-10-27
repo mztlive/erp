@@ -3,7 +3,7 @@
  */
 
 import { apiGet, type Page } from "@/lib/api"
-import type { ConnectionListView } from "@/features/supplier-api-connections/types"
+import { type ConnectionListView } from "@/features/supplier-api-connections/types"
 import {
     type BackendConnectionListItem,
     secsToIso,

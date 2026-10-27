@@ -20,6 +20,7 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
         .or(optional_id(product, "cat_id2")?)
         .or(optional_id(product, "cat_id")?);
     let mut details = OfferDetails {
+        barcode: optional_text(spec, "barcode")?,
         category_id,
         category_name: None, // 由独立分类字典补齐；label_name 是商品标签，不得冒充分类。
         brand_id: optional_id(product, "brand_id")?,
@@ -110,6 +111,16 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn optional_spec_barcode_preserves_zeroes_and_rejects_numeric_codes() {
+        assert_eq!(
+            details(&json!({}), &json!({"barcode":"0012345678905"}), None).unwrap().barcode.as_deref(),
+            Some("0012345678905")
+        );
+        assert_eq!(details(&json!({}), &json!({}), None).unwrap().barcode, None);
+        assert!(details(&json!({}), &json!({"barcode":123456}), None).is_err());
+    }
 
     #[test]
     fn official_detail_fields_preserve_order_missing_and_explicit_clear() {

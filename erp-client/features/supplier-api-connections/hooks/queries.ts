@@ -4,8 +4,6 @@ import { useEffect } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-    bindCredentialReference,
-    bindEndpointReference,
     createConnection,
     disableConnection,
     enableConnection,
@@ -13,14 +11,12 @@ import {
     fetchConnectionList,
     runHealthCheck,
     startCatalogSync,
-    updateCapabilities,
     type ListQueryInput,
 } from "@/features/supplier-api-connections/api/connections"
 
 import {
     fetchCatalog,
     catalogRunning,
-    matchCatalog,
     type CatalogFilters,
 } from "@/features/supplier-api-connections/api/catalog"
 
@@ -76,36 +72,6 @@ export function useCreateConnectionMutation() {
     const invalidate = useInvalidateAll()
     return useMutation({
         mutationFn: createConnection,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") await invalidate()
-        },
-    })
-}
-
-export function useBindCredentialMutation() {
-    const invalidate = useInvalidateAll()
-    return useMutation({
-        mutationFn: bindCredentialReference,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") await invalidate()
-        },
-    })
-}
-
-export function useBindEndpointMutation() {
-    const invalidate = useInvalidateAll()
-    return useMutation({
-        mutationFn: bindEndpointReference,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") await invalidate()
-        },
-    })
-}
-
-export function useUpdateCapabilitiesMutation() {
-    const invalidate = useInvalidateAll()
-    return useMutation({
-        mutationFn: updateCapabilities,
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
         },
@@ -198,8 +164,4 @@ export function useCatalogQuery(
         }
     }, [connectionId, jobId, latest?.status, latest?.stalled, queryClient])
     return query
-}
-export function useMatchCatalogMutation() {
-    const invalidate = useInvalidateAll()
-    return useMutation({ mutationFn: matchCatalog, onSuccess: invalidate })
 }

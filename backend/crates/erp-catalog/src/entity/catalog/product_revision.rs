@@ -13,6 +13,7 @@ use erp_core::ids::{ProductBrandId, ProductCategoryId, ProductId, ProductRevisio
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use serde::{Deserialize, Serialize};
 
+use super::auto_match::match_text;
 use super::revision::{ensure_effective_window, ensure_revision_no};
 use crate::entity::catalog::status::EnableStatus;
 
@@ -59,6 +60,9 @@ pub struct ProductRevision {
     pub product_id: ProductId,
     /// 公司审核后的商品名称（结构化快照）。
     pub name: String,
+    /// 自动匹配的索引字段；历史资料须执行回填。
+    #[serde(default)]
+    pub match_name: String,
     /// 公司审核后的描述。
     pub description: Option<String>,
     /// 公司审核后的规格或服务内容。
@@ -101,6 +105,7 @@ impl ProductRevision {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
             product_id: data.product_id,
+            match_name: match_text(&name),
             name,
             description,
             specification,

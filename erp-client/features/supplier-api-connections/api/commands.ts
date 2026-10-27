@@ -3,19 +3,12 @@
  * 治理结果、动作和阻塞原因只消费服务端事实，不在客户端伪造成功或递增版本。
  */
 
-import { apiPost, apiPut } from "@/lib/api"
-import type {
-    CapabilityCode,
-    FormalOutcome,
-} from "@/features/supplier-api-connections/types"
-import { CAPABILITY_LABEL } from "@/features/supplier-api-connections/types"
+import { apiPost } from "@/lib/api"
+import type { FormalOutcome } from "@/features/supplier-api-connections/types"
 import {
-    type BackendCapabilityUpdateResult,
     type BackendCommandResult,
     type BackendConnection,
     type BackendHealthCheckType,
-    mapCapabilityCode,
-    toBackendCapabilityCode,
 } from "@/features/supplier-api-connections/api/mapping"
 
 export async function createConnection(input: {
@@ -124,92 +117,6 @@ function commandOutcome(
     }
 }
 
-export async function bindCredentialReference(input: {
-    connectionId: string
-    opaqueReferenceId: string
-    expectedVersion: string
-    idempotencyKey: string
-}): Promise<FormalOutcome> {
-    const result = await runCommand({
-        connectionId: input.connectionId,
-        action: "BIND_CREDENTIAL_REFERENCE",
-        expectedVersion: input.expectedVersion,
-        idempotencyKey: input.idempotencyKey,
-        payloadReference: input.opaqueReferenceId,
-    })
-    return commandOutcome(result, input.idempotencyKey, {
-        title: "密钥引用已绑定",
-        message: "已绑定密钥管理系统引用；响应不包含密钥正文。",
-    })
-}
-
-export async function bindEndpointReference(input: {
-    connectionId: string
-    opaqueReferenceId: string
-    expectedVersion: string
-    idempotencyKey: string
-}): Promise<FormalOutcome> {
-    const result = await runCommand({
-        connectionId: input.connectionId,
-        action: "BIND_ENDPOINT_REFERENCE",
-        expectedVersion: input.expectedVersion,
-        idempotencyKey: input.idempotencyKey,
-        payloadReference: input.opaqueReferenceId,
-    })
-    return commandOutcome(result, input.idempotencyKey, {
-        title: "地址引用已绑定",
-        message: "地址配置引用已绑定，可继续检查连接状态。",
-    })
-}
-
-export async function updateCapabilities(input: {
-    connectionId: string
-    changes: Array<{ code: CapabilityCode; enabled: boolean }>
-    expectedConnectionVersion: string
-    expectedCapabilityVersions: Record<string, string>
-    reasonCode: string
-    operationId: string
-    idempotencyKey: string
-}): Promise<FormalOutcome> {
-    const expectedVersions: Record<string, number> = {}
-    for (const change of input.changes) {
-        expectedVersions[toBackendCapabilityCode(change.code)] = Number(
-            input.expectedCapabilityVersions[change.code] ?? 0,
-        )
-    }
-    const result = await apiPut<BackendCapabilityUpdateResult>(
-        `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}/capabilities`,
-        {
-            capability_changes: input.changes.map((change) => ({
-                code: toBackendCapabilityCode(change.code),
-                enabled: change.enabled,
-                constraint_snapshot: null,
-            })),
-            expected_connection_version: Number(
-                input.expectedConnectionVersion,
-            ),
-            expected_capability_versions: expectedVersions,
-            reason_code: input.reasonCode,
-            operation_id: input.operationId,
-            idempotency_key: input.idempotencyKey,
-        },
-    )
-    return {
-        status: "succeeded",
-        title: "能力配置已更新",
-        message: "能力配置已更新，请按最新连接状态继续操作。",
-        reference: result.operation_id,
-        connectionVersion: String(result.connection_version),
-        auditEventId: result.audit_event_id,
-        facts: result.capabilities.map((capability) => ({
-            label: CAPABILITY_LABEL[
-                mapCapabilityCode(capability.capability_code)
-            ],
-            value: capability.status === "active" ? "启用" : "停用",
-        })),
-    }
-}
-
 export async function runHealthCheck(input: {
     connectionId: string
     expectedVersion: string
@@ -260,8 +167,8 @@ export async function disableConnection(input: {
         reasonCode: input.reasonCode,
     })
     return commandOutcome(result, input.idempotencyKey, {
-        title: "连接已停用",
-        message: "连接状态已停用；历史版本与业务事实保持不变。",
+        title: "自动下单已关闭",
+        message: "不再新增发单；商品同步、选品和已有订单跟踪继续运行。",
     })
 }
 
@@ -277,7 +184,8 @@ export async function enableConnection(input: {
         idempotencyKey: input.idempotencyKey,
     })
     return commandOutcome(result, input.idempotencyKey, {
-        title: "连接已启用",
-        message: "连接已启用，采购业务确认、连接健康和关联影响均已重新核对。",
+        title: "自动下单已开启",
+        message:
+            "连接检查已通过，符合现有采购审批与执行条件的订单可以自动发单。",
     })
 }

@@ -4,14 +4,11 @@
  */
 
 export {
-    bindCredentialReference,
-    bindEndpointReference,
     createConnection,
     disableConnection,
     enableConnection,
     runHealthCheck,
     startCatalogSync,
-    updateCapabilities,
 } from "./commands"
 export { fetchConnectionCenter } from "./center"
 export {

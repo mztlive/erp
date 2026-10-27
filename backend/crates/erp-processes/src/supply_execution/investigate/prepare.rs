@@ -5,8 +5,9 @@ use erp_identity::SharedRbacService;
 use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
 use erp_supply::dto::supplier_fulfillment::SupplierOrderInvestigationAction;
 use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
-use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
-use erp_supply::repository::prelude::SupplierApiCapabilityRepositoryExt;
+use erp_supply::entity::supplier_fulfillment::{
+    SupplierFulfillmentOrder, SupplierOrderAction, SupplierOrderActionType,
+};
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
 use erp_supply::service::supplier_fulfillment::investigate::{
     PreparedInvestigation, capability_for_action, create_action, ensure_replay_safe,
@@ -159,14 +160,7 @@ impl SupplierFulfillmentProcess {
             .find_by_id(&order.connection_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商连接不存在".to_string()))?;
-        if !connection.is_active() {
-            return Err(Error::BusinessLogicError("供应商连接未启用".to_string()));
-        }
-        let capabilities = self
-            .db
-            .supplier_api_capabilities()
-            .find_capabilities_by_connection(&order.connection_id, &mut NoTransaction)
-            .await?;
+        let capabilities = self.domain().capabilities(&connection)?;
         match action {
             SupplierOrderInvestigationAction::QueryResult => {
                 ensure_capability(&capabilities, SupplierApiCapabilityCode::Query)?;
@@ -175,6 +169,9 @@ impl SupplierFulfillmentProcess {
                 ))
             },
             SupplierOrderInvestigationAction::Replay => {
+                if target_action.action_type == SupplierOrderActionType::Place {
+                    connection.ensure_active()?;
+                }
                 ensure_capability(&capabilities, capability_for_action(target_action.action_type)?)?;
                 Ok(PreparedInvestigation::Replayed(
                     self.gateway.dispatch(target_action, order, &connection).await,

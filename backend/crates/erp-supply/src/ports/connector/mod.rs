@@ -1,4 +1,4 @@
-//! 已确认的供应商协议适配合同；尚未装配运行。
+//! 供应商协议适配合同；具体适配器由组合层装配。
 //!
 //! 每个实例绑定一个已授权连接；只转换协议和返回外部事实，不访问 ERP 仓储。
 //! Process 持久化动作后在事务外调用，每次写调用至多发送一次；超时或取消后
@@ -19,8 +19,38 @@ use offer::{AvailabilitySource, DeliverySource, OfferSource, ServiceAreas};
 use order::{Cancellations, Orders, PaymentConfirmation, Refunds};
 use settlement::Settlements;
 
+use crate::entity::supplier_api::SupplierApiCapabilityCode;
+
 /// 已绑定连接的供应商适配器；所有可选能力默认缺失，禁止伪造成功。
 pub trait SupplierConnector: Send + Sync {
+    /// 从实际提供的窄接口生成只读能力，不读取连接上的历史能力配置。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前适配器实际支持的操作。
+    /// # 错误
+    /// 不返回错误。
+    fn capabilities(&self) -> Vec<SupplierApiCapabilityCode> {
+        use SupplierApiCapabilityCode as Code;
+        [
+            (self.offers().is_some(), Code::Product),
+            (self.offers().is_some(), Code::Price),
+            (self.availability().is_some(), Code::Stock),
+            (self.service_areas().is_some(), Code::ServiceAreas),
+            (self.delivery().is_some(), Code::Delivery),
+            (self.payment_confirmation().is_some(), Code::PaymentConfirmation),
+            (self.orders().is_some(), Code::Order),
+            (self.orders().is_some(), Code::Query),
+            (self.cancellations().is_some(), Code::Cancel),
+            (self.refunds().is_some(), Code::Refund),
+            (self.callbacks().is_some(), Code::Callback),
+            (self.settlements().is_some(), Code::Settlement),
+        ]
+        .into_iter()
+        .filter_map(|(supported, code)| supported.then_some(code))
+        .collect()
+    }
+
     /// 返回装配时绑定的连接身份，所有返回的外部标识均在此连接内解释。
     ///
     /// # 参数
@@ -169,6 +199,7 @@ mod tests {
         let connector = Unconfigured(SupplierApiConnectionId::new("review-only"));
         let port: &dyn SupplierConnector = &connector;
         assert_eq!(port.connection_id(), &connector.0);
+        assert!(port.capabilities().is_empty());
         assert!(port.offers().is_none());
         assert!(port.availability().is_none());
         assert!(port.service_areas().is_none());

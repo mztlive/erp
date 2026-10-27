@@ -1,6 +1,5 @@
 use erp_catalog::{CreateProductRequest, EnableStatus, ProductKind, ProductSkuInput, SpecEntryInput};
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::money::UnitPrice;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_supply::catalog_adoption::{AdoptionRow, AdoptionTarget};
 use erp_supply::dto::supplier_offering::CreateSupplierOfferingRequest;
@@ -61,7 +60,7 @@ pub(super) fn sku_input(
         sku_no: String::new(),
         name: company_display_texts(item, &row.target)?.0,
         base_unit_id: unit_id.clone().into(),
-        barcode: None,
+        barcode: item.barcode.clone(),
         main_image_asset_id: media
             .carousel_media
             .iter()
@@ -115,18 +114,6 @@ pub(super) fn offering_request(
     sku_id: &str,
     command: &str,
 ) -> Result<CreateSupplierOfferingRequest> {
-    if let Some(price) = &item.purchase_price {
-        let source: UnitPrice =
-            price.parse().map_err(|_| Error::ValidationError("来源采购报价无效".into()))?;
-        let confirmed: UnitPrice = row
-            .terms
-            .dropship_supply_price_gross
-            .parse()
-            .map_err(|_| Error::ValidationError("采购报价无效".into()))?;
-        if source != confirmed {
-            return Err(Error::ConflictError("接口采购报价不得手工覆盖，请按当前来源报价确认".into()));
-        }
-    }
     let status = match item.availability {
         CatalogAvailability::Available
             if !item.requires_identity_review
@@ -225,6 +212,14 @@ mod tests {
     }
 
     #[test]
+    fn created_sku_keeps_supplier_barcode_without_numeric_conversion() {
+        let mut source = item();
+        source.barcode = Some("0012345678905".into());
+        let input = sku_input(&source, &row(), &PreparedSourceMedia::empty()).unwrap();
+        assert_eq!(input.barcode.as_deref(), Some("0012345678905"));
+    }
+
+    #[test]
     fn new_company_product_uses_source_content_without_sales_prices_or_guessed_dictionaries() {
         let request = product_request(&item(), &row(), &PreparedSourceMedia::empty()).unwrap();
         assert_eq!(request.name, "供应商原名");
@@ -260,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn source_identity_price_unknown_availability_and_missing_source_time_are_preserved() {
+    fn company_supply_price_is_independent_of_source_quote_and_source_identity_is_preserved() {
         let mut item = item();
         item.purchase_price = Some("80.0000".into());
         let request = offering_request(&item, &row(), "company-sku", "command").unwrap();
@@ -269,9 +264,12 @@ mod tests {
         assert_eq!(request.availability_status, AvailabilityStatus::Stale);
         assert!(request.available_quantity.is_none());
         assert!(request.source_updated_at.is_none());
-        item.purchase_price = Some("90.00".into());
-        assert!(offering_request(&item, &row(), "company-sku", "command").is_err());
-        item.purchase_price = None;
+        for quote in [Some("90.00".into()), None] {
+            item.purchase_price = quote.clone();
+            let request = offering_request(&item, &row(), "company-sku", "command").unwrap();
+            assert_eq!(request.terms.dropship_supply_price_gross, "80.00");
+            assert_eq!(item.purchase_price, quote);
+        }
         item.availability = CatalogAvailability::Withdrawn;
         assert!(offering_request(&item, &row(), "company-sku", "command").is_err());
     }

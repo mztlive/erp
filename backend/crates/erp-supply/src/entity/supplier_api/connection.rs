@@ -579,6 +579,62 @@ impl SupplierApiConnection {
         self.stable.status().is_active()
     }
 
+    /// 校验连接是否允许继续建立供应商供给。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 启用连接返回成功。
+    ///
+    /// # 错误
+    /// 停用或故障时返回对应状态及恢复指引。
+    pub fn ensure_active(&self) -> Result<()> {
+        match self.stable.status() {
+            SupplierApiConnectionStatus::Active => Ok(()),
+            SupplierApiConnectionStatus::Disabled => {
+                Err(Error::LogicError("供应商 API 连接已停用，请先启用连接后重试".into()))
+            },
+            SupplierApiConnectionStatus::Fault => {
+                Err(Error::LogicError("供应商 API 连接处于故障状态，请先排查故障并恢复启用后重试".into()))
+            },
+        }
+    }
+
+    /// 校验选品连接；关闭自动下单不影响商品入库。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 连接存在且未标记故障时通过。
+    /// # 错误
+    /// 已删除、未选择协议或故障连接拒绝选品。
+    pub fn ensure_catalog_available(&self) -> Result<()> {
+        if self.base.is_deleted() || self.connector_type.is_none() {
+            return Err(Error::LogicError("供应商接口不可用，请检查连接配置".into()));
+        }
+        if self.stable.status == SupplierApiConnectionStatus::Fault {
+            return Err(Error::LogicError("供应商接口处于故障状态，请检查连接配置".into()));
+        }
+        Ok(())
+    }
+
+    /// 校验供给来源连接的供应商归属与可用状态。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 来源商品或供给所属供应商。
+    ///
+    /// # 返回
+    /// 归属一致且连接启用时返回成功。
+    ///
+    /// # 错误
+    /// 优先返回归属不一致；归属一致时返回具体状态错误。
+    pub fn ensure_offering_source(&self, supplier_id: &str) -> Result<()> {
+        if self.supplier_id.as_ref() != supplier_id {
+            return Err(Error::LogicError("供应商 API 连接不属于该供应商，请核对连接归属".into()));
+        }
+        self.ensure_catalog_available()
+    }
+
     /// 应用地址配置引用更新。
     ///
     /// # 参数
@@ -680,6 +736,7 @@ impl SupplierApiConnection {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::Error;
     use erp_core::common::time::Instant;
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use serde_json::{from_value, to_value};
@@ -698,6 +755,43 @@ mod tests {
             credential_reference: Some(" kms://prod/erp/sup-001 ".to_string()),
             rate_limit_policy: None,
             status: SupplierApiConnectionStatus::Active,
+        }
+    }
+
+    #[test]
+    fn offering_source_ignores_auto_order_switch_but_rejects_fault_and_wrong_supplier() {
+        for (status, expected) in [
+            (SupplierApiConnectionStatus::Active, None),
+            (SupplierApiConnectionStatus::Disabled, Some("供应商 API 连接已停用，请先启用连接后重试")),
+            (
+                SupplierApiConnectionStatus::Fault,
+                Some("供应商 API 连接处于故障状态，请先排查故障并恢复启用后重试"),
+            ),
+        ] {
+            let mut data = connection_data();
+            data.status = status;
+            let connection =
+                SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), data, "admin-1").unwrap();
+            for result in [connection.ensure_active()] {
+                match expected {
+                    None => result.unwrap(),
+                    Some(expected) => {
+                        assert!(matches!(result, Err(Error::LogicError(message)) if message == expected))
+                    },
+                }
+            }
+            if status == SupplierApiConnectionStatus::Fault {
+                assert!(connection.ensure_offering_source("sup-1").is_err());
+            } else {
+                connection.ensure_offering_source("sup-1").unwrap();
+            }
+            for supplier in ["sup-2", ""] {
+                assert!(matches!(
+                    connection.ensure_offering_source(supplier),
+                    Err(Error::LogicError(message))
+                        if message == "供应商 API 连接不属于该供应商，请核对连接归属"
+                ));
+            }
         }
     }
 

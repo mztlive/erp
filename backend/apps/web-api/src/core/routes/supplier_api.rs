@@ -1,7 +1,7 @@
 //! 域 D25 `supplier_api` 管理端路由。
 
 use axum::Router;
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
@@ -36,11 +36,11 @@ fn adoption_routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/supplier-api-connections/{id}/catalog/adoption-targets/{sku}",
+            "/supplier-api-connections/{id}/catalog/adoptions/{preview}/resolve",
             with_permission(
-                get(supplier_api::adoptions::target),
+                post(supplier_api::adoptions::resolve),
                 rbac,
-                supplier_api::adoptions::target_permission_key(),
+                supplier_api::adoptions::resolve_permission_key(),
             ),
         )
 }
@@ -118,39 +118,14 @@ fn connection_routes(rbac: &SharedRbacService) -> Router<AppState> {
 }
 
 fn governance_routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/supplier-api-connections/{id}/business-capability-confirmations",
-            with_permission(
-                post(supplier_api::supplier_api_business_capability_confirm),
-                rbac,
-                supplier_api::supplier_api_capability_list_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-api-connections/{id}/capabilities",
-            with_permission(
-                put(supplier_api::supplier_api_capabilities_update),
-                rbac,
-                supplier_api::supplier_api_connection_detail_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-api-connections/{id}/jobs/{job_id}",
-            with_permission(
-                get(supplier_api::supplier_api_connection_job_detail),
-                rbac,
-                supplier_api::supplier_api_connection_detail_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-api-capabilities",
-            with_permission(
-                get(supplier_api::supplier_api_capability_list),
-                rbac,
-                supplier_api::supplier_api_capability_list_permission_key(),
-            ),
-        )
+    Router::new().route(
+        "/supplier-api-connections/{id}/jobs/{job_id}",
+        with_permission(
+            get(supplier_api::supplier_api_connection_job_detail),
+            rbac,
+            supplier_api::supplier_api_connection_detail_permission_key(),
+        ),
+    )
 }
 
 fn catalog_routes(rbac: &SharedRbacService) -> Router<AppState> {
@@ -167,14 +142,6 @@ fn catalog_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 rbac,
                 supplier_api::catalog::confirm_identity_review_permission_key(),
             )),
-        )
-        .route(
-            "/supplier-api-connections/{id}/catalog/{item}/match",
-            with_permission(
-                post(supplier_api::catalog::match_item),
-                rbac,
-                supplier_api::catalog::match_item_permission_key(),
-            ),
         )
         .route(
             "/supplier-api-connections/{id}/catalog",

@@ -174,6 +174,7 @@ fn product_indexes() -> Vec<IndexModel> {
 /// 返回 `product_revision` 的聚合修订唯一约束。
 fn product_revision_indexes() -> Vec<IndexModel> {
     vec![
+        named_index("idx_product_revisions_match_name", doc! { "match_name": 1, "brand_id": 1 }),
         unique_index("uk_product_revisions_id", doc! { "id": 1 }),
         unique_index("uk_product_revisions_revision", doc! { "product_id": 1, "revision_no": 1 }),
         named_index("idx_product_revisions_updated_at", doc! { "updated_at": 1 }),

@@ -76,7 +76,13 @@ export function CatalogSection({
     ].every((permission) =>
         hasPermission(account.data?.permissions, permission),
     )
+    const adoptionBlocker = !conn.deploymentReady
+        ? "供应商接口尚未配置，请联系管理员。"
+        : conn.status === "FAULTED"
+          ? "供应商接口处于故障状态，请检查连接配置。"
+          : undefined
     const canAdopt =
+        !adoptionBlocker &&
         hasPermission(
             account.data?.permissions,
             "supplier_api_connection:catalog_sync",
@@ -146,7 +152,7 @@ export function CatalogSection({
                         variant="outline"
                         onClick={onSettings}
                     >
-                        接口设置
+                        连接诊断
                     </Button>
                     <LoadingButton
                         id="supplier-api-connections-catalog-sync"
@@ -263,7 +269,7 @@ export function CatalogSection({
                                 ? "商品正在后台读取，完成后会显示在这里。你可以先处理其他工作，稍后回来选品。"
                                 : syncInterrupted
                                   ? (latest?.error_summary ??
-                                    "上次同步已中断，请继续同步；若仍无法完成，可检查接口设置或查看同步记录。")
+                                    "上次同步已中断，请继续同步；若仍无法完成，可检查连接或查看同步记录。")
                                   : latest
                                     ? "本次同步未获取到商品，请检查供应商授权的商品范围与同步记录，再重新同步。"
                                     : `已选择${conn.supplier.name}。同步供应商授权的商品目录后，即可查看商品并选择需要经营的商品入库。`
@@ -292,7 +298,7 @@ export function CatalogSection({
                                             variant="outline"
                                             onClick={onSettings}
                                         >
-                                            检查接口设置
+                                            检查连接
                                         </Button>
                                     ) : null}
                                 </div>
@@ -316,6 +322,8 @@ export function CatalogSection({
                     connectionId={conn.connectionId}
                     supplierId={conn.supplier.id}
                     canAdopt={canAdopt}
+                    adoptionBlocker={adoptionBlocker}
+                    onSettings={onSettings}
                     canReadCost={canReadCost}
                     canReview={canReview}
                 />

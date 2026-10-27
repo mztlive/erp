@@ -440,6 +440,7 @@ impl<'a> CatalogRepository<'a> {
         attribute_values: &[SkuRevisionAttributeValue],
         executor: &mut dyn Executor,
     ) -> CatalogResult<()> {
+        self.lock_product_match(sku.product_id.as_ref(), executor).await?;
         self.claim_sku_barcode(revision, executor).await?;
         mongo_ops::insert_one(&self.db.collection::<Sku>(SKUS), sku, executor).await?;
         mongo_ops::insert_one(&self.db.collection::<SkuRevision>(SKU_REVISIONS), revision, executor).await?;

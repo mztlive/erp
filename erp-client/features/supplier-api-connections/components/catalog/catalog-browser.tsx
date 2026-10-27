@@ -80,6 +80,8 @@ export function CatalogBrowser({
     supplierFilter,
     supplierId,
     canAdopt,
+    adoptionBlocker,
+    onSettings,
     canReadCost,
     canReview,
 }: {
@@ -88,6 +90,8 @@ export function CatalogBrowser({
     supplierFilter?: React.ReactNode
     supplierId: string
     canAdopt: boolean
+    adoptionBlocker?: string
+    onSettings: () => void
     canReadCost: boolean
     canReview: boolean
 }) {
@@ -107,6 +111,7 @@ export function CatalogBrowser({
         .map(([id]) => id)
     const openAdoption = React.useCallback(
         async (choice: AdoptionSelection) => {
+            if (!canAdopt) return
             try {
                 const result = await preview.mutateAsync({
                     connectionId,
@@ -117,7 +122,7 @@ export function CatalogBrowser({
                 // 显示服务端的预览错误，保留原筛选及勾选。
             }
         },
-        [connectionId, preview],
+        [canAdopt, connectionId, preview],
     )
     const columns = React.useMemo<ColumnDef<CatalogItem>[]>(
         () => [
@@ -260,6 +265,11 @@ export function CatalogBrowser({
                         id={`supplier-catalog-adopt-${toAutomationIdSegment(row.original.id)}`}
                         size="sm"
                         variant="outline"
+                        aria-describedby={
+                            adoptionBlocker
+                                ? "supplier-catalog-adoption-blocker"
+                                : undefined
+                        }
                         loading={preview.isPending}
                         disabled={
                             !canAdopt ||
@@ -275,7 +285,14 @@ export function CatalogBrowser({
                 ),
             },
         ],
-        [canAdopt, canReadCost, canReview, preview.isPending, openAdoption],
+        [
+            canAdopt,
+            adoptionBlocker,
+            canReadCost,
+            canReview,
+            preview.isPending,
+            openAdoption,
+        ],
     )
     const closePreview = () => {
         setPreviewRow(null)
@@ -289,6 +306,24 @@ export function CatalogBrowser({
     }
     return (
         <>
+            {adoptionBlocker ? (
+                <div
+                    role="alert"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-soft p-4 text-sm text-warning-soft-foreground"
+                >
+                    <p id="supplier-catalog-adoption-blocker">
+                        {adoptionBlocker}
+                    </p>
+                    <Button
+                        id="supplier-catalog-adoption-settings"
+                        variant="outline"
+                        size="sm"
+                        onClick={onSettings}
+                    >
+                        打开接口设置
+                    </Button>
+                </div>
+            ) : null}
             <BusinessTableFrame
                 title={`${supplierName} · 商品库`}
                 toolbar={
@@ -324,6 +359,11 @@ export function CatalogBrowser({
                                 </Button>
                                 <LoadingButton
                                     id="supplier-catalog-adopt-selected"
+                                    aria-describedby={
+                                        adoptionBlocker
+                                            ? "supplier-catalog-adoption-blocker"
+                                            : undefined
+                                    }
                                     disabled={!canAdopt || preview.isPending}
                                     loading={preview.isPending}
                                     onClick={() =>
@@ -340,6 +380,11 @@ export function CatalogBrowser({
                 }
                 tableActions={
                     <LoadingButton
+                        aria-describedby={
+                            adoptionBlocker
+                                ? "supplier-catalog-adoption-blocker"
+                                : undefined
+                        }
                         id="supplier-catalog-adopt-filtered"
                         variant="outline"
                         disabled={

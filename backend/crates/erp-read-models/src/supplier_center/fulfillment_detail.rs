@@ -347,18 +347,13 @@ impl SupplierFulfillmentDetailReadService {
         let connection =
             self.db.supplier_api_connections().find_by_id(&order.connection_id, &mut NoTransaction).await?;
         let connection_active = connection.as_ref().is_some_and(SupplierApiConnection::is_active);
-        let capabilities = if connection_active {
-            self.db
-                .supplier_api_capabilities()
-                .find_capabilities_by_connection(&order.connection_id, &mut NoTransaction)
-                .await?
-        } else {
-            Vec::new()
-        };
+        let capabilities = connection
+            .as_ref()
+            .and_then(|connection| self.fulfillment.capabilities(connection).ok())
+            .unwrap_or_default();
 
         if order.verified_resolution(target).is_some()
-            || (connection_active
-                && ensure_capability(&capabilities, SupplierApiCapabilityCode::Query).is_ok())
+            || ensure_capability(&capabilities, SupplierApiCapabilityCode::Query).is_ok()
         {
             allowed_actions.push(SupplierOrderAllowedAction::QueryResult);
         } else {
@@ -370,9 +365,9 @@ impl SupplierFulfillmentDetailReadService {
                     "SUPPLIER_CONNECTION_UNAVAILABLE"
                 },
                 if connection_active {
-                    "供应商连接未声明启用的结果查询能力"
+                    "供应商接口不支持结果查询"
                 } else {
-                    "供应商连接不存在或未启用，且当前业务事实尚不能证明终态"
+                    "供应商接口未配置，且当前业务事实尚不能证明终态"
                 },
             ));
         }
@@ -380,7 +375,7 @@ impl SupplierFulfillmentDetailReadService {
         let replay_capability_ready = capability_for_action(target.action_type)
             .ok()
             .is_some_and(|needed| ensure_capability(&capabilities, needed).is_ok());
-        if connection_active
+        if (connection_active || target.action_type != SupplierOrderActionType::Place)
             && replay_capability_ready
             && ensure_replay_safe(&self.db, order, target, &mut NoTransaction).await.is_ok()
         {

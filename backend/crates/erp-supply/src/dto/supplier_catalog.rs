@@ -61,13 +61,6 @@ impl CatalogFilter {
         Ok(())
     }
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct MatchCatalogItemRequest {
-    pub sku_id: String,
-    pub expected_version: u64,
-}
-
 /// 人工确认来源文案变化未改变实际销售项；禁止通过此命令换 SKU 或单位。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
