@@ -95,3 +95,5 @@ impl<'a> CatalogRepository<'a> {
 }
 
 pub use product_row::ProductRow;
+
+mod source_unit;

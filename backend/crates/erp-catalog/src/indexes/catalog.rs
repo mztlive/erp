@@ -119,6 +119,8 @@ fn unit_of_measure_indexes() -> Vec<IndexModel> {
         unique_index("uk_unit_of_measures_id", doc! { "id": 1 }),
         unique_index("uk_unit_of_measures_unit_code", doc! { "unit_code": 1 }),
         named_index("idx_unit_of_measures_status", doc! { "status": 1 }),
+        named_index("idx_unit_of_measures_name", doc! { "name": 1 }),
+        named_index("idx_unit_of_measures_symbol", doc! { "symbol": 1 }),
     ]
 }
 

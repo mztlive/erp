@@ -33,6 +33,8 @@ export type CatalogItem = {
     specification: string
     barcode?: string | null
     unit: string | null
+    suggested_unit?: string | null
+    unit_inferred?: boolean
     purchase_price: string | null
     observed_at: number
     sku_id: string | null
@@ -107,4 +109,10 @@ export function fetchCatalog(
         `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/catalog`,
         { page, page_size: 20, ...filters },
     )
+}
+
+export function catalogUnitLabel(item: CatalogItem): string {
+    if (item.suggested_unit)
+        return `${item.suggested_unit}${item.unit_inferred ? "（推断）" : ""}`
+    return item.unit || "待确认单位"
 }

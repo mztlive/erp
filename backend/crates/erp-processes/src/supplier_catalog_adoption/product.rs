@@ -54,6 +54,7 @@ impl SupplierCatalogAdoptionProcess {
         let mut materialized_item = item.clone();
         media.apply_to(&mut materialized_item)?;
         let mut resolved_row = self.automatic_row(item, row, actor, command, &mut NoTransaction).await?;
+        self.prepare_source_unit(item, row, &resolved_row, actor).await?;
         if let AdoptionTarget::Create { brand_id, .. } = &mut resolved_row.target
             && brand_id.is_empty()
         {
@@ -87,6 +88,30 @@ impl SupplierCatalogAdoptionProcess {
             sku_input: input,
             resolved_row,
         })
+    }
+
+    async fn prepare_source_unit(
+        &self,
+        item: &SupplierCatalogItem,
+        row: &AdoptionRow,
+        resolved: &AdoptionRow,
+        actor: &AuditActor,
+    ) -> Result<()> {
+        if !matches!(&row.target, AdoptionTarget::Auto { mapping, .. } if mapping.unit_id.is_empty()) {
+            return Ok(());
+        }
+        let unit_id = match &resolved.target {
+            AdoptionTarget::Existing { unit_id, .. } | AdoptionTarget::Create { unit_id, .. } => unit_id,
+            AdoptionTarget::Auto { .. } => return Err(Error::Internal("计量单位尚未解析".into())),
+        };
+        if matches!(&resolved.target, AdoptionTarget::Create { brand_id, .. } if brand_id.is_empty()) {
+            catalog_access(self.db.clone(), self.rbac.clone())
+                .resolve(actor, "create", &mut NoTransaction)
+                .await?;
+        }
+        let name = item.suggested_unit().ok_or_else(|| Error::ValidationError("无法确定商品单位".into()))?;
+        catalog_service(self.db.clone()).ensure_source_unit(&name, unit_id, actor).await?;
+        Ok(())
     }
 
     async fn resolve_source_brand(&self, item: &SupplierCatalogItem, actor: &AuditActor) -> Result<String> {

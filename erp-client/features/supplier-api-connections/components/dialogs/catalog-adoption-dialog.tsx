@@ -3,11 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import {
+    ArrowUpRightIcon,
     CircleCheckIcon,
     ChevronRightIcon,
     TriangleAlertIcon,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
@@ -70,7 +71,10 @@ function BlockedAlert({
             onToggle={(event) => setOpen(event.currentTarget.open)}
             className="group shrink-0 border-b border-warning-border bg-warning-soft text-sm text-warning-soft-foreground"
         >
-            <summary className="flex cursor-pointer list-none items-start gap-2 px-6 py-3 [&::-webkit-details-marker]:hidden">
+            <summary
+                id="supplier-catalog-adoption-blocked-toggle"
+                className="flex cursor-pointer list-none items-start gap-2 px-6 py-3 [&::-webkit-details-marker]:hidden"
+            >
                 <TriangleAlertIcon
                     className="mt-0.5 size-4 shrink-0"
                     aria-hidden="true"
@@ -108,79 +112,86 @@ function ResultPanel({
     blockedCount: number
 }) {
     return (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-2xl space-y-5 px-6 py-8">
-                <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="flex size-12 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground">
-                        <CircleCheckIcon
-                            className="size-6"
-                            aria-hidden="true"
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <h3 className="text-base font-semibold">
-                            {complete
-                                ? blockedCount
-                                    ? "可入库商品已完成"
-                                    : "本次选品已入库"
-                                : "本批商品已入库"}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                            {complete
-                                ? blockedCount
-                                    ? `${results.length} 项已入库，${blockedCount} 项需处理后重新选品。`
-                                    : `${results.length} 项已入库，商品保持未上架。`
-                                : `已完成 ${results.length} 项，继续处理下一批。`}
-                        </p>
-                    </div>
+        <section className="shrink-0 px-6 pt-6 pb-5">
+            <div className="flex items-start gap-3 pr-10">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground">
+                    <CircleCheckIcon className="size-5" aria-hidden="true" />
                 </div>
-                <div className="space-y-2">
-                    {results.map((row) => {
-                        const item = preview.rows.find(
-                            (entry) => entry.item.id === row.item_id,
-                        )?.item
-                        return (
-                            <div
-                                key={row.item_id}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
-                            >
-                                <span className="min-w-0">
-                                    <span className="font-medium">
-                                        {item?.name ?? row.item_id}
-                                    </span>
-                                    {item?.specification ? (
-                                        <span className="text-muted-foreground">
-                                            {" "}
-                                            · {item.specification}
-                                        </span>
-                                    ) : null}
-                                </span>
-                                <div className="flex shrink-0 gap-3">
-                                    {row.product_id ? (
-                                        <Link
-                                            id={`supplier-catalog-adoption-product-${toAutomationIdSegment(row.item_id)}`}
-                                            className="text-primary underline"
-                                            href={`/master-data/products/${encodeURIComponent(row.product_id)}`}
-                                        >
-                                            打开公司商品
-                                        </Link>
-                                    ) : null}
-                                    {row.offering_id ? (
-                                        <Link
-                                            id={`supplier-catalog-adoption-offering-${toAutomationIdSegment(row.item_id)}`}
-                                            className="text-primary underline"
-                                            href={`/procurement/supplier-offerings/${encodeURIComponent(row.offering_id)}`}
-                                        >
-                                            查看供给
-                                        </Link>
-                                    ) : null}
-                                </div>
-                            </div>
-                        )
-                    })}
+                <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-lg font-semibold tracking-tight">
+                        {complete ? "选品入库完成" : "本批入库完成"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                        已入库{" "}
+                        <span className="font-medium text-foreground">
+                            {results.length}
+                        </span>{" "}
+                        项
+                        {blockedCount
+                            ? ` · ${blockedCount} 项需处理后重新选品`
+                            : ""}
+                        {!complete ? " · 可继续配置下一批" : ""}
+                    </p>
                 </div>
             </div>
-        </div>
+            <p className="mt-4 text-sm text-muted-foreground">
+                商品保持未上架，维护销售价格并上架后可销售。
+            </p>
+            <ul className="mt-5 divide-y divide-border overflow-hidden rounded-xl border">
+                {results.map((row) => {
+                    const item = preview.rows.find(
+                        (entry) => entry.item.id === row.item_id,
+                    )?.item
+                    return (
+                        <li
+                            key={row.item_id}
+                            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3.5"
+                        >
+                            <div className="min-w-0 flex-1 basis-48 space-y-1">
+                                <p className="text-sm font-medium break-words">
+                                    {item?.name ?? "已入库商品"}
+                                </p>
+                                {item?.specification ? (
+                                    <p className="text-xs break-words text-muted-foreground">
+                                        {item.specification}
+                                    </p>
+                                ) : null}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {row.offering_id ? (
+                                    <Link
+                                        id={`supplier-catalog-adoption-offering-${toAutomationIdSegment(row.item_id)}`}
+                                        className={buttonVariants({
+                                            variant: "ghost",
+                                            size: "sm",
+                                        })}
+                                        href={`/procurement/supplier-offerings/${encodeURIComponent(row.offering_id)}`}
+                                    >
+                                        查看供给
+                                    </Link>
+                                ) : null}
+                                {row.product_id ? (
+                                    <Link
+                                        id={`supplier-catalog-adoption-product-${toAutomationIdSegment(row.item_id)}`}
+                                        className={buttonVariants({
+                                            variant: "outline",
+                                            size: "sm",
+                                        })}
+                                        href={`/master-data/products/${encodeURIComponent(row.product_id)}`}
+                                    >
+                                        打开公司商品
+                                        <ArrowUpRightIcon
+                                            data-icon="inline-end"
+                                            aria-hidden="true"
+                                        />
+                                    </Link>
+                                ) : null}
+                            </div>
+                        </li>
+                    )
+                })}
+            </ul>
+        </section>
     )
 }
 
@@ -240,9 +251,20 @@ export function CatalogAdoptionDialog({
                     forceOverlay
                     closeButtonId="supplier-catalog-adoption-close"
                     showCloseButton={!pending}
-                    className="flex h-[min(92dvh,56rem)] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                    className={cn(
+                        "flex w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0",
+                        editing
+                            ? "h-[min(92dvh,56rem)] sm:max-w-5xl"
+                            : "max-h-[min(85dvh,44rem)] sm:max-w-2xl",
+                    )}
                 >
-                    <DialogHeader className="shrink-0 border-b border-grid px-6 py-4 pr-16 sm:py-5">
+                    <DialogHeader
+                        className={
+                            batchDone
+                                ? "sr-only"
+                                : "shrink-0 border-b border-grid px-6 py-4 pr-16 sm:py-5"
+                        }
+                    >
                         <DialogTitle>选品入库</DialogTitle>
                         <DialogDescription className="space-y-1">
                             <span className="block sm:hidden">
@@ -269,17 +291,49 @@ export function CatalogAdoptionDialog({
                             </span>
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex min-h-0 flex-1 flex-col">
+                    <div
+                        className={cn(
+                            "flex min-h-0 flex-col",
+                            editing
+                                ? "flex-1"
+                                : "overflow-y-auto overscroll-contain",
+                        )}
+                    >
+                        {batchDone ? (
+                            <ResultPanel
+                                results={results}
+                                preview={preview}
+                                complete={complete}
+                                blockedCount={blockedRows.length}
+                            />
+                        ) : null}
                         {missingMedia.length ? (
-                            <details className="shrink-0 border-b border-warning-border bg-warning-soft px-6 py-2 text-xs text-warning-soft-foreground">
+                            <details
+                                className={cn(
+                                    "group shrink-0 text-xs text-warning-soft-foreground",
+                                    editing
+                                        ? "border-b border-warning-border bg-warning-soft px-6 py-2"
+                                        : "mx-6 mb-5 rounded-lg border border-warning-border bg-warning-soft px-3 py-3",
+                                )}
+                            >
                                 <summary
                                     id="supplier-catalog-adoption-missing-media-toggle"
-                                    className="cursor-pointer font-medium"
+                                    className="flex cursor-pointer list-none items-center gap-2 font-medium [&::-webkit-details-marker]:hidden"
                                 >
-                                    {missingMedia.length}{" "}
-                                    项图片未完成，不影响入库 · 查看详情
+                                    <TriangleAlertIcon
+                                        className="size-4 shrink-0"
+                                        aria-hidden="true"
+                                    />
+                                    <span className="flex-1">
+                                        {missingMedia.length}{" "}
+                                        项商品图片待补齐，不影响入库
+                                    </span>
+                                    <ChevronRightIcon
+                                        className="size-4 shrink-0 transition-transform group-open:rotate-90"
+                                        aria-hidden="true"
+                                    />
                                 </summary>
-                                <ul className="max-h-24 overflow-y-auto">
+                                <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto pl-6 break-words">
                                     {missingMedia.map(({ item, message }) => (
                                         <li key={item.id}>
                                             {item.name} ·{" "}
@@ -326,14 +380,7 @@ export function CatalogAdoptionDialog({
                                     setPending(false)
                                 }}
                             />
-                        ) : batchDone ? (
-                            <ResultPanel
-                                results={results}
-                                preview={preview}
-                                complete={complete}
-                                blockedCount={blockedRows.length}
-                            />
-                        ) : (
+                        ) : batchDone ? null : (
                             <DialogState
                                 tone="warning"
                                 icon={
@@ -348,14 +395,7 @@ export function CatalogAdoptionDialog({
                         )}
                     </div>
                     {!editing ? (
-                        <DialogFooter className="shrink-0 flex-col items-stretch gap-3 border-t border-grid px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                            <p className="text-xs text-muted-foreground">
-                                {pendingRows.length === 0
-                                    ? "本次选品已处理完成。"
-                                    : blockedRows.length
-                                      ? `${blockedRows.length} 项待处理。`
-                                      : "可入库商品已处理完成。"}
-                            </p>
+                        <DialogFooter className="shrink-0 border-t border-grid bg-muted/20 px-6 py-4">
                             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                                 {batchDone && !complete ? (
                                     <>

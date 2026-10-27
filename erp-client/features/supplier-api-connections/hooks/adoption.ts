@@ -18,6 +18,7 @@ export function useConfirmAdoptionMutation() {
                     ["master-data"],
                     ["supplier-offerings"],
                     ["entity-selectors"],
+                    ["options", "units"],
                 ].map((queryKey) =>
                     queryClient.invalidateQueries({ queryKey }),
                 ),

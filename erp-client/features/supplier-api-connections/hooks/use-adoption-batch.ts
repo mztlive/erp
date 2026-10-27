@@ -23,6 +23,8 @@ import type {
 import { newIdempotencyKey } from "../lib/operations"
 import { useConfirmAdoptionMutation } from "./adoption"
 
+export const AUTO_UNIT = "__AUTO_UNIT__"
+
 export type AdoptionRowState = "SUCCEEDED" | "FAILED" | "READY" | "INCOMPLETE"
 
 type RowDraft = {
@@ -144,7 +146,7 @@ export const rowSchema = z
 function rowMapping(row: RowDraft): AdoptionMapping {
     return {
         category_id: row.categoryId,
-        unit_id: row.unitId,
+        unit_id: row.unitId === AUTO_UNIT ? "" : row.unitId,
         product_kind: row.productKind,
         company_name: row.companyName.trim(),
         company_description: row.companyDescription.trim(),
@@ -204,7 +206,7 @@ export function useAdoptionBatch({
                 itemId: item.id,
                 kind: "CREATE",
                 categoryId: "",
-                unitId: "",
+                unitId: item.suggested_unit || item.unit ? AUTO_UNIT : "",
                 productKind: "PHYSICAL",
                 companyName: item.name,
                 companyDescription: item.description ?? "",
@@ -321,23 +323,6 @@ export function useAdoptionBatch({
             }
         })
     }, [categories.data, form, rows])
-
-    const unitPrefillDone = React.useRef(false)
-    React.useEffect(() => {
-        if (!units.data || unitPrefillDone.current) return
-        unitPrefillDone.current = true
-        rows.forEach(({ item }, index) => {
-            if (form.state.values.rows[index]?.unitId || !item.unit?.trim())
-                return
-            const matches = units.data.filter(
-                (unit) => unit.label.trim() === item.unit?.trim(),
-            )
-            if (matches.length === 1)
-                form.setFieldValue(`rows[${index}].unitId`, matches[0].id, {
-                    dontUpdateMeta: true,
-                })
-        })
-    }, [units.data, rows, form])
 
     const values = useStore(form.store, (state) => state.values)
     const resolutions = useQueries({

@@ -1,5 +1,8 @@
 "use client"
 
+import { catalogUnitLabel } from "../../api/catalog"
+import { AUTO_UNIT } from "../../hooks/use-adoption-batch"
+
 import * as React from "react"
 import Link from "next/link"
 import { ChevronRightIcon, LayersIcon, PackageIcon } from "lucide-react"
@@ -215,10 +218,20 @@ export function AdoptionBatchEditor({
             value: row.stableId,
             label: row.name,
         })),
-        unitId: (editor.units.data ?? []).map((row) => ({
-            value: row.id,
-            label: row.label,
-        })),
+        unitId: [
+            ...(item.suggested_unit || item.unit
+                ? [
+                      {
+                          value: AUTO_UNIT,
+                          label: `${item.suggested_unit || item.unit}（自动匹配，缺少时创建）`,
+                      },
+                  ]
+                : []),
+            ...(editor.units.data ?? []).map((row) => ({
+                value: row.id,
+                label: row.label,
+            })),
+        ],
         productKind: PRODUCT_KIND_VALUES.filter(
             (kind) => kind !== "VOUCHER",
         ).map((kind) => ({
@@ -405,10 +418,10 @@ export function AdoptionBatchEditor({
                                     </div>
                                     <div className="min-w-0">
                                         <dt className="text-xs text-muted-foreground">
-                                            来源单位
+                                            商品单位
                                         </dt>
                                         <dd className="mt-0.5 break-words">
-                                            {item.unit || "供应商未提供"}
+                                            {catalogUnitLabel(item)}
                                         </dd>
                                     </div>
                                     <div className="min-w-0">

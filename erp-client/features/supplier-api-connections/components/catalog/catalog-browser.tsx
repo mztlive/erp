@@ -1,5 +1,7 @@
 "use client"
 
+import { catalogUnitLabel } from "../../api/catalog"
+
 import * as React from "react"
 import Link from "next/link"
 import { TriangleAlertIcon } from "lucide-react"
@@ -173,9 +175,9 @@ export function CatalogBrowser({
             },
             {
                 accessorKey: "unit",
-                header: "来源单位",
-                meta: { label: "来源单位" },
-                cell: ({ row }) => row.original.unit || "供应商未提供",
+                header: "商品单位",
+                meta: { label: "商品单位" },
+                cell: ({ row }) => catalogUnitLabel(row.original),
             },
             {
                 accessorKey: "purchase_price",
@@ -557,11 +559,8 @@ export function CatalogBrowser({
                             <dd>{previewRow.category_name || "未提供"}</dd>
                             <dt className="text-muted-foreground">品牌</dt>
                             <dd>{previewRow.brand_name || "未提供"}</dd>
-                            <dt className="text-muted-foreground">来源单位</dt>
-                            <dd>
-                                {previewRow.unit ||
-                                    "供应商未提供，入库时选择公司单位"}
-                            </dd>
+                            <dt className="text-muted-foreground">商品单位</dt>
+                            <dd>{catalogUnitLabel(previewRow)}</dd>
                             <dt className="text-muted-foreground">可供数量</dt>
                             <dd>
                                 {previewRow.quantity_unbounded

@@ -1,9 +1,8 @@
 //! 连接商品目录、真实后台任务与检查点的组合查询。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_supply::dto::supplier_catalog::{CatalogFilter, CatalogSyncMode};
+use erp_supply::dto::supplier_catalog::{CatalogFilter, CatalogItemView, CatalogSyncMode};
 use erp_supply::entity::supplier_api::SupplierConnectorType;
-use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_support::repository::prelude::*;
 use erp_support::{BulkJobExt, JobStatus};
@@ -30,7 +29,7 @@ fn page_size() -> u32 {
 }
 #[derive(Serialize)]
 pub struct CatalogView {
-    pub items: Vec<SupplierCatalogItem>,
+    pub items: Vec<CatalogItemView>,
     pub total: u64,
     pub page: u32,
     pub page_size: u32,
@@ -100,7 +99,7 @@ impl SupplierApiReadService {
         };
         let sync_mode = jobs.first().map_or(CatalogSyncMode::Full, |job| job.sync_mode);
         Ok(CatalogView {
-            items,
+            items: items.into_iter().map(CatalogItemView::from).collect(),
             total,
             page: query.page,
             page_size: query.page_size,

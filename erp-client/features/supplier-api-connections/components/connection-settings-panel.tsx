@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Button } from "@/components/ui/button"
+import { PlugZapIcon, ShoppingCartIcon } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -28,13 +29,23 @@ export function ConnectionSettingsPanel({
     const test = useRunHealthCheckMutation()
     const [message, setMessage] = React.useState<string | null>(null)
     const [failed, setFailed] = React.useState(false)
+    const [messageTarget, setMessageTarget] = React.useState<"order" | "test">(
+        "order",
+    )
     const pending = enable.isPending || disable.isPending || test.isPending
     const enabled = conn.status === "ENABLED"
     const action = enabled ? "DISABLE" : "ENABLE"
     const canChange = conn.allowedActions.includes(action)
     const blocker = conn.actionBlockers.find((item) => item.action === action)
     const segment = toAutomationIdSegment(conn.connectionId)
-    const run = async (operation: () => Promise<FormalOutcome>) => {
+    const testBlocker = conn.actionBlockers.find(
+        (item) => item.action === "RUN_HEALTH_CHECK",
+    )
+    const run = async (
+        target: "order" | "test",
+        operation: () => Promise<FormalOutcome>,
+    ) => {
+        setMessageTarget(target)
         setMessage(null)
         setFailed(false)
         try {
@@ -50,112 +61,160 @@ export function ConnectionSettingsPanel({
             )
         }
     }
+    const feedback = message ? (
+        <p
+            role={failed ? "alert" : "status"}
+            className={
+                failed
+                    ? "text-sm text-destructive"
+                    : "text-sm text-muted-foreground"
+            }
+        >
+            {message}
+        </p>
+    ) : null
     return (
-        <div className="max-w-3xl space-y-5">
-            <section
-                aria-label="自动下单"
-                className="space-y-3 rounded-xl border bg-card p-5"
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+            <div className="min-w-0 divide-y rounded-xl border bg-card">
+                <section aria-label="自动下单" className="space-y-4 p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="min-w-0 space-y-2">
+                            <h2 className="flex items-center gap-2 text-base font-semibold">
+                                <ShoppingCartIcon
+                                    className="size-4 text-muted-foreground"
+                                    aria-hidden="true"
+                                />
+                                自动下单
+                            </h2>
+                            <p className="text-sm text-muted-foreground">
+                                {enabled
+                                    ? "允许向供应商发送新的采购订单。"
+                                    : "已暂停向供应商发送新的采购订单。"}
+                            </p>
+                        </div>
+                        <LoadingButton
+                            id={`supplier-api-connection-${segment}-auto-order-toggle`}
+                            loading={enable.isPending || disable.isPending}
+                            disabled={!canChange || pending}
+                            onClick={() =>
+                                void run("order", () =>
+                                    enabled
+                                        ? disable.mutateAsync({
+                                              connectionId: conn.connectionId,
+                                              expectedVersion: conn.version,
+                                              reasonCode: "PAUSE_NEW_ORDERS",
+                                              idempotencyKey:
+                                                  newIdempotencyKey("disable"),
+                                          })
+                                        : enable.mutateAsync({
+                                              connectionId: conn.connectionId,
+                                              expectedVersion: conn.version,
+                                              idempotencyKey:
+                                                  newIdempotencyKey("enable"),
+                                          }),
+                                )
+                            }
+                        >
+                            {enable.isPending
+                                ? "正在检查连接并开启…"
+                                : enabled
+                                  ? "关闭自动下单"
+                                  : "允许自动下单"}
+                        </LoadingButton>
+                    </div>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        开启前自动验证连接，采购审批与执行条件仍须满足。
+                        关闭不影响商品同步、选品和已有订单跟踪。
+                    </p>
+                    {messageTarget === "order" ? feedback : null}
+                    {!canChange ? (
+                        <p className="text-sm text-muted-foreground">
+                            {blocker?.message ??
+                                "当前账号没有修改自动下单设置的权限。"}
+                        </p>
+                    ) : null}
+                </section>
+                <section aria-label="连接测试" className="space-y-4 p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="min-w-0 space-y-2">
+                            <h2 className="flex items-center gap-2 text-base font-semibold">
+                                <PlugZapIcon
+                                    className="size-4 text-muted-foreground"
+                                    aria-hidden="true"
+                                />
+                                连接测试
+                            </h2>
+                            <p className="text-sm text-muted-foreground">
+                                验证供应商接口访问权限，不会创建订单。
+                            </p>
+                        </div>
+                        <LoadingButton
+                            id={`supplier-api-connection-${segment}-run-health`}
+                            variant="outline"
+                            loading={test.isPending}
+                            disabled={
+                                !conn.allowedActions.includes(
+                                    "RUN_HEALTH_CHECK",
+                                ) || pending
+                            }
+                            onClick={() =>
+                                void run("test", () =>
+                                    test.mutateAsync({
+                                        connectionId: conn.connectionId,
+                                        expectedVersion: conn.version,
+                                        checkType: "AUTHENTICATION",
+                                        idempotencyKey:
+                                            newIdempotencyKey("health"),
+                                    }),
+                                )
+                            }
+                        >
+                            {test.isPending ? "正在提交…" : "测试连接"}
+                        </LoadingButton>
+                    </div>
+                    {messageTarget === "test" ? feedback : null}
+                    {!conn.allowedActions.includes("RUN_HEALTH_CHECK") ? (
+                        <p className="text-sm text-muted-foreground">
+                            {testBlocker?.message ??
+                                "当前账号没有测试连接的权限。"}
+                        </p>
+                    ) : null}
+                    <HealthRecords
+                        records={conn.healthRecords}
+                        idPrefix={`supplier-api-connection-${segment}-health`}
+                    />
+                </section>
+            </div>
+            <aside
+                aria-label="接口信息"
+                className="min-w-0 space-y-5 rounded-xl bg-muted/40 p-6"
             >
                 <div className="space-y-2">
-                    <p className="text-sm font-medium">
-                        自动下单{enabled ? "已开启" : "已关闭"}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                        开启时自动检查连接，现有采购审批与执行条件继续生效。关闭后停止新增发单，商品同步、选品与已有订单跟踪继续运行。
-                    </p>
+                    <h2 className="text-sm font-semibold">
+                        {conn.connectorTypeLabel}
+                    </h2>
+                    {conn.deploymentMessage ? (
+                        <p className="text-sm leading-6 text-muted-foreground">
+                            {conn.deploymentMessage}
+                        </p>
+                    ) : null}
                 </div>
-                <LoadingButton
-                    id={`supplier-api-connection-${segment}-auto-order-toggle`}
-                    loading={enable.isPending || disable.isPending}
-                    disabled={!canChange || pending}
-                    onClick={() =>
-                        void run(() =>
-                            enabled
-                                ? disable.mutateAsync({
-                                      connectionId: conn.connectionId,
-                                      expectedVersion: conn.version,
-                                      reasonCode: "PAUSE_NEW_ORDERS",
-                                      idempotencyKey:
-                                          newIdempotencyKey("disable"),
-                                  })
-                                : enable.mutateAsync({
-                                      connectionId: conn.connectionId,
-                                      expectedVersion: conn.version,
-                                      idempotencyKey:
-                                          newIdempotencyKey("enable"),
-                                  }),
-                        )
-                    }
-                >
-                    {enable.isPending
-                        ? "正在检查连接并开启…"
-                        : enabled
-                          ? "关闭自动下单"
-                          : "允许自动下单"}
-                </LoadingButton>
-                {!canChange ? (
-                    <p className="text-sm text-muted-foreground">
-                        {blocker?.message ??
-                            "当前账号没有修改自动下单设置的权限。"}
-                    </p>
-                ) : null}
-            </section>
-            <section
-                aria-label="接口支持的操作"
-                className="space-y-2 rounded-xl border bg-card p-5"
-            >
-                <p className="text-sm font-medium">接口支持的操作</p>
-                <p className="text-sm text-muted-foreground">
-                    {conn.declaredCapabilities
-                        .map((code) => CAPABILITY_LABEL[code])
-                        .join("、") || "接口未配置，暂时无法读取能力。"}
-                </p>
-            </section>
-            <section
-                aria-label="连接测试"
-                className="space-y-3 rounded-xl border bg-card p-5"
-            >
-                <div className="space-y-2">
-                    <p className="text-sm font-medium">连接测试</p>
-                    <p className="text-sm text-muted-foreground">
-                        检查当前配置的只读鉴权是否可用。
-                    </p>
+                <div className="space-y-3 border-t pt-5">
+                    <h3 className="text-sm font-medium">支持的功能</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {conn.declaredCapabilities.map((code) => (
+                            <Badge key={code} variant="outline">
+                                {CAPABILITY_LABEL[code]}
+                            </Badge>
+                        ))}
+                    </div>
+                    {conn.declaredCapabilities.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            接口未配置，暂时无法读取能力。
+                        </p>
+                    ) : null}
                 </div>
-                <Button
-                    id={`supplier-api-connection-${segment}-run-health`}
-                    variant="outline"
-                    disabled={
-                        !conn.allowedActions.includes("RUN_HEALTH_CHECK") ||
-                        pending
-                    }
-                    onClick={() =>
-                        void run(() =>
-                            test.mutateAsync({
-                                connectionId: conn.connectionId,
-                                expectedVersion: conn.version,
-                                checkType: "AUTHENTICATION",
-                                idempotencyKey: newIdempotencyKey("health"),
-                            }),
-                        )
-                    }
-                >
-                    {test.isPending ? "正在提交…" : "测试连接"}
-                </Button>
-                {message ? (
-                    <p
-                        role={failed ? "alert" : "status"}
-                        className={
-                            failed ? "text-sm text-destructive" : "text-sm"
-                        }
-                    >
-                        {message}
-                    </p>
-                ) : null}
-            </section>
-            <HealthRecords
-                records={conn.healthRecords}
-                idPrefix={`supplier-api-connection-${segment}-health`}
-            />
+            </aside>
         </div>
     )
 }

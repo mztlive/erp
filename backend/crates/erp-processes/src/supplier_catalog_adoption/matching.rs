@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 
 use super::SupplierCatalogAdoptionProcess;
 use super::product::product_binding_id;
-use crate::adapters::catalog_access;
+use crate::adapters::{catalog_access, catalog_service};
 use crate::{Error, Result};
 
 #[derive(Debug, Serialize)]
@@ -132,8 +132,9 @@ impl SupplierCatalogAdoptionProcess {
         }
         let kind = serde_json::from_value(serde_json::Value::String(mapping.product_kind.clone()))
             .map_err(|_| Error::ValidationError("商品类型无效".into()))?;
-        let original = self.create_resolution(item, mapping, None, kind, actor, executor).await?;
-        Ok(resolution_digest(item, mapping, &original)? == *expected)
+        let mapping = self.resolve_unit_mapping(item, mapping, actor, executor).await?;
+        let original = self.create_resolution(item, &mapping, None, kind, actor, executor).await?;
+        Ok(resolution_digest(item, &mapping, &original)? == *expected)
     }
 
     async fn resolve_item(
@@ -158,7 +159,8 @@ impl SupplierCatalogAdoptionProcess {
                 "来源规格缺失、发生变化或商品类型不支持，请先核对来源商品".into(),
             ));
         }
-        self.match_unit(item, mapping, executor).await?;
+        let mapping = self.resolve_unit_mapping(item, mapping, actor, executor).await?;
+        let mapping = &mapping;
         let binding =
             self.db.catalog_adoption_products().find_by_id(&product_binding_id(item), executor).await?;
         let bound_id = binding.as_ref().map(|b| b.product_id.as_str());
@@ -178,19 +180,26 @@ impl SupplierCatalogAdoptionProcess {
         Ok(resolution)
     }
 
-    async fn match_unit(
+    async fn resolve_unit_mapping(
         &self,
         item: &SupplierCatalogItem,
         mapping: &AdoptionMapping,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let unit = self
-            .db
-            .unit_of_measures()
-            .find_by_id(&mapping.unit_id, executor)
-            .await?
-            .filter(|u| u.is_active())
-            .ok_or_else(|| Error::ValidationError("请选择启用的公司计量单位".into()))?;
+    ) -> Result<AdoptionMapping> {
+        let unit = if mapping.unit_id.is_empty() {
+            let name = item
+                .suggested_unit()
+                .ok_or_else(|| Error::ValidationError("无法确定商品单位，请选择公司计量单位".into()))?;
+            catalog_service(self.db.clone()).source_unit(&name, actor, executor).await?
+        } else {
+            self.db
+                .unit_of_measures()
+                .find_by_id(&mapping.unit_id, executor)
+                .await?
+                .filter(|u| u.is_active() && !u.base.is_deleted())
+                .ok_or_else(|| Error::ValidationError("请选择启用的公司计量单位".into()))?
+        };
         if let Some(source) = item.unit.as_deref().filter(|u| !u.trim().is_empty())
             && ![unit.name.as_str(), unit.symbol.as_str(), unit.unit_code.as_str()]
                 .iter()
@@ -200,7 +209,9 @@ impl SupplierCatalogAdoptionProcess {
                 "来源单位与公司单位不一致，不支持自动换算，请核对单位字典".into(),
             ));
         }
-        Ok(())
+        let mut mapping = mapping.clone();
+        mapping.unit_id = unit.base.id;
+        Ok(mapping)
     }
 
     async fn find_match(

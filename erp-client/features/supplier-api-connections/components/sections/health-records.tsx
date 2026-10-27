@@ -1,17 +1,57 @@
 "use client"
 
-import * as React from "react"
-import type { ColumnDef } from "@tanstack/react-table"
-
+import { ChevronDownIcon } from "lucide-react"
+import { BusinessStatusBadge } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import {
-    BusinessEmptyState,
-    BusinessStatusBadge,
-    BusinessTableFrame,
-    DataTable,
-} from "@/components/business"
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import type { HealthRecordView } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
 
+function CheckResult({ record }: { record: HealthRecordView }) {
+    return (
+        <div className="min-w-0 space-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <BusinessStatusBadge
+                    context="list"
+                    label={record.resultLabel}
+                    tone={record.resultTone}
+                />
+                <span className="text-muted-foreground">
+                    {formatDateTime(record.at, "default")}
+                </span>
+                <span className="text-muted-foreground">
+                    {record.checkType}
+                </span>
+                {record.latencyMs != null ? (
+                    <span className="num text-xs text-muted-foreground">
+                        {record.latencyMs} ms
+                    </span>
+                ) : null}
+            </div>
+            {record.errorSummary ? (
+                <p className="break-words text-destructive">
+                    {record.errorSummary}
+                </p>
+            ) : null}
+            {record.autoRetryStopped ? (
+                <p className="text-destructive">
+                    自动重试已停止，请检查接口配置后重新测试。
+                </p>
+            ) : null}
+            {record.result === "UNKNOWN" ? (
+                <p className="text-muted-foreground">
+                    结果待确认，页面将自动更新。
+                </p>
+            ) : null}
+        </div>
+    )
+}
+
+/** 最近检查直接显示，历史结果仅在排查时展开。 */
 export function HealthRecords({
     records,
     idPrefix = "supplier-api-connections-health",
@@ -19,134 +59,41 @@ export function HealthRecords({
     records: HealthRecordView[]
     idPrefix?: string
 }) {
-    const columns = React.useMemo<ColumnDef<HealthRecordView>[]>(
-        () => [
-            {
-                id: "at",
-                accessorFn: (r) => r.at,
-                header: "时间",
-                meta: { label: "时间" },
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {formatDateTime(row.original.at, "default")}
-                    </span>
-                ),
-            },
-            {
-                id: "type",
-                accessorFn: (r) => r.checkType,
-                header: "检查类型",
-                meta: { label: "检查类型" },
-            },
-            {
-                id: "result",
-                header: "检查结果",
-                meta: { label: "结果", width: "status" },
-                cell: ({ row }) => (
-                    <div className="space-y-0.5">
-                        <BusinessStatusBadge
-                            context="list"
-                            label={row.original.resultLabel}
-                            tone={row.original.resultTone}
-                        />
-                        {row.original.autoRetryStopped ? (
-                            <div
-                                className="text-xs text-destructive"
-                                role="status"
-                            >
-                                自动重试已停止
-                            </div>
-                        ) : null}
-                        {row.original.result === "UNKNOWN" ? (
-                            <div
-                                className="text-xs text-warning-soft-foreground"
-                                role="status"
-                            >
-                                结果待确认
-                            </div>
-                        ) : null}
-                    </div>
-                ),
-            },
-            {
-                id: "latency",
-                header: "耗时",
-                meta: { label: "耗时", numeric: true },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.latencyMs != null
-                            ? `${row.original.latencyMs} ms`
-                            : "—"}
-                    </span>
-                ),
-            },
-            {
-                id: "job",
-                header: "任务号",
-                meta: { label: "任务号" },
-                cell: ({ row }) => (
-                    <span className="font-mono text-xs">
-                        {row.original.jobNo ?? "—"}
-                    </span>
-                ),
-            },
-            {
-                id: "trace",
-                header: "追踪号",
-                meta: { label: "追踪号" },
-                cell: ({ row }) => (
-                    <span className="font-mono text-xs">
-                        {row.original.traceId ?? "—"}
-                    </span>
-                ),
-            },
-            {
-                id: "summary",
-                header: "说明",
-                meta: { label: "摘要" },
-                cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
-                        {row.original.errorSummary ?? "—"}
-                    </span>
-                ),
-            },
-        ],
-        [],
-    )
+    const [latest, ...history] = records
+    if (!latest) {
+        return <p className="text-sm text-muted-foreground">尚未测试连接</p>
+    }
 
     return (
-        <div className="space-y-3">
-            <h3 className="text-lg font-semibold">检查记录</h3>
-            <BusinessTableFrame
-                title="检查记录"
-                description="保留每次检查结果；可通过列设置查看检查类型、耗时等信息。"
-                table={
-                    <DataTable
-                        id={`${idPrefix}-table`}
-                        data={records}
-                        columns={columns}
-                        defaultColumnVisibility={{
-                            type: false,
-                            latency: false,
-                            job: false,
-                            trace: false,
-                        }}
-                        getRowId={(r) => r.recordId}
-                        rowCount={records.length}
-                        caption="健康检查记录"
-                        layout="flush"
-                        manualPagination={false}
-                        emptyState={
-                            <BusinessEmptyState
-                                kind="no-data"
-                                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                                title="暂无健康记录"
-                                description="点击“测试连接”后在此查看检查结果。"
-                            />
-                        }
-                    />
-                }
-            />
+        <div className="space-y-3 border-t pt-4">
+            <div className="space-y-2" aria-live="polite">
+                <p className="text-xs text-muted-foreground">最近检查</p>
+                <CheckResult record={latest} />
+            </div>
+            {history.length > 0 ? (
+                <Collapsible>
+                    <CollapsibleTrigger
+                        id={`${idPrefix}-history-toggle`}
+                        render={<Button variant="ghost" size="sm" />}
+                        className="group text-muted-foreground"
+                    >
+                        历史检查（{history.length}）
+                        <ChevronDownIcon
+                            className="size-4 transition-transform group-data-panel-open:rotate-180"
+                            aria-hidden="true"
+                        />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <ul className="divide-y pt-2">
+                            {history.map((record) => (
+                                <li key={record.recordId} className="py-3">
+                                    <CheckResult record={record} />
+                                </li>
+                            ))}
+                        </ul>
+                    </CollapsibleContent>
+                </Collapsible>
+            ) : null}
         </div>
     )
 }

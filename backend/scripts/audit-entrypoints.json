@@ -6845,6 +6845,22 @@
       },
       "location_count": 1,
       "reason": "联合导入在同一行事务中写入商品、SKU、供给和审计；已存在供给只复用，不重复写审计或重置价格和数量。"
+    },
+    {
+      "path": "crates/erp-catalog/src/service/catalog/source_unit.rs",
+      "function": "ensure_source_unit",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "audit.persist"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "audit.persist": 1
+      },
+      "location_count": 1,
+      "reason": "确认选品后以稳定单位身份创建缺少的基础资料，单位和创建审计沿同一事务执行；已有单位不重复写入或记录创建审计，未知提交结果不自动重放。"
     }
   ]
 }

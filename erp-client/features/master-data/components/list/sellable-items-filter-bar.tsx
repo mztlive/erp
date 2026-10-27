@@ -249,12 +249,11 @@ export function SellableItemsFilterBar({
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
                             价格筛选
+                            <span className="ml-2 font-normal text-muted-foreground">
+                                含税 · 元
+                            </span>
                         </legend>
-                        <ListWorkspaceFilterField
-                            className="mb-3"
-                            htmlFor={`${prefix}-price-kind`}
-                            label="价格类型"
-                        >
+                        <div className="grid min-w-0 gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
                             <OptionCombobox
                                 id={`${prefix}-price-kind`}
                                 className="w-full"
@@ -269,8 +268,6 @@ export function SellableItemsFilterBar({
                                 options={PRICE_FILTER_OPTIONS}
                                 placeholder="一件代发价"
                             />
-                        </ListWorkspaceFilterField>
-                        <ListWorkspaceFilterField label="含税价格 · 元">
                             <div className="flex min-w-0 items-center gap-2">
                                 <Input
                                     id={`${prefix}-price-min`}
@@ -323,16 +320,16 @@ export function SellableItemsFilterBar({
                                     }
                                 />
                             </div>
-                            {f.productSalesPriceError ? (
-                                <p
-                                    id={priceErrorId}
-                                    role="alert"
-                                    className="text-xs text-destructive"
-                                >
-                                    {f.productSalesPriceError}
-                                </p>
-                            ) : null}
-                        </ListWorkspaceFilterField>
+                        </div>
+                        {f.productSalesPriceError ? (
+                            <p
+                                id={priceErrorId}
+                                role="alert"
+                                className="mt-1.5 text-xs text-destructive"
+                            >
+                                {f.productSalesPriceError}
+                            </p>
+                        ) : null}
                     </fieldset>
                 </div>
             }

@@ -5,6 +5,7 @@ use erp_identity::{Permission, subject};
 use erp_supply::catalog_adoption::{
     CatalogAdoptionExt, CatalogAdoptionPreview, MAX_CONFIRM_ROWS, MAX_PREVIEW_ROWS, PreviewAdoptionRequest,
 };
+use erp_supply::dto::supplier_catalog::CatalogItemView;
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_supply::service::supplier_api::SupplierApiService;
@@ -17,11 +18,32 @@ use crate::{Error, Result};
 
 #[derive(Serialize)]
 pub struct AdoptionPreviewRow {
-    pub item: SupplierCatalogItem,
+    pub item: CatalogItemView,
     pub adopted: bool,
     pub missing_fields: Vec<String>,
     pub blocked: bool,
     pub blocking_reasons: Vec<String>,
+}
+
+impl From<SupplierCatalogItem> for AdoptionPreviewRow {
+    fn from(item: SupplierCatalogItem) -> Self {
+        let missing_fields = if item.offering_id.is_some() {
+            vec![]
+        } else {
+            let mut fields = vec!["新建时所需分类".into(), "供给条款".into()];
+            if item.suggested_unit().is_none() {
+                fields.insert(0, "公司计量单位".into());
+            }
+            fields
+        };
+        Self {
+            adopted: item.offering_id.is_some(),
+            blocked: false,
+            blocking_reasons: vec![],
+            item: item.into(),
+            missing_fields,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -70,25 +92,7 @@ impl SupplierCatalogAdoptionProcess {
             items,
         };
         self.db.catalog_adoption_previews().create(&preview, &mut NoTransaction).await?;
-        let rows = preview
-            .items
-            .into_iter()
-            .map(|item| {
-                let missing_fields = if item.offering_id.is_some() {
-                    vec![]
-                } else {
-                    vec!["公司计量单位".into(), "新建时所需分类".into(), "供给条款".into()]
-                };
-                let blocking_reasons = vec![];
-                AdoptionPreviewRow {
-                    adopted: item.offering_id.is_some(),
-                    blocked: !blocking_reasons.is_empty(),
-                    blocking_reasons,
-                    item,
-                    missing_fields,
-                }
-            })
-            .collect();
+        let rows = preview.items.into_iter().map(AdoptionPreviewRow::from).collect();
         Ok(AdoptionPreviewView {
             preview_id: preview.base.id,
             version: preview.base.version,

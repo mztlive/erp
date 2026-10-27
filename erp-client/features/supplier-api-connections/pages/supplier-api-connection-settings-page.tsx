@@ -13,7 +13,6 @@ import { useParams } from "@/lib/navigation"
 import { ConnectionPageNav } from "../components/connection-page-nav"
 import { ConnectionSettingsPanel } from "../components/connection-settings-panel"
 import { useConnectionCenterQuery } from "../hooks/queries"
-import { buildSupplierCatalogHref } from "../lib/url-state"
 
 export function SupplierApiConnectionSettingsPage() {
     const { connectionId } = useParams<{ connectionId: string }>()
@@ -75,29 +74,13 @@ export function SupplierApiConnectionSettingsPage() {
                     label: conn.statusLabel,
                     tone: conn.statusTone,
                 }}
-                meta={[conn.connectorTypeLabel, conn.deploymentMessage]
-                    .filter(Boolean)
-                    .join(" · ")}
-                primaryAction={
-                    <Button
-                        id={`supplier-api-connection-${segment}-open-catalog`}
-                        render={
-                            <Link
-                                href={buildSupplierCatalogHref(
-                                    conn.connectionId,
-                                )}
-                            />
-                        }
-                    >
-                        进入商品库
-                    </Button>
-                }
+                meta={conn.connectorTypeLabel}
             />
             <ConnectionPageNav
                 connectionId={conn.connectionId}
                 active="settings"
             />
-            <ConnectionSettingsPanel conn={conn} />
+            <ConnectionSettingsPanel key={conn.connectionId} conn={conn} />
         </PageScaffold>
     )
 }

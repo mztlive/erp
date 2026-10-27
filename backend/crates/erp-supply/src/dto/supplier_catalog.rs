@@ -2,6 +2,7 @@
 use erp_core::money::UnitPrice;
 use serde::{Deserialize, Serialize};
 
+use crate::entity::supplier_catalog::SupplierCatalogItem;
 use crate::ports::connector::offer::CatalogAvailability;
 use crate::{Error, Result};
 
@@ -112,5 +113,23 @@ impl CatalogIdentityReviewView {
             return Err(Error::ValidationError("核对操作不得更换公司SKU单位".into()));
         }
         Ok(())
+    }
+}
+
+/// 目录展示保留原始单位，并提供可用于选品的单位建议。
+#[derive(Debug, Serialize)]
+pub struct CatalogItemView {
+    #[serde(flatten)]
+    pub item: SupplierCatalogItem,
+    pub suggested_unit: Option<String>,
+    pub unit_inferred: bool,
+}
+
+impl From<SupplierCatalogItem> for CatalogItemView {
+    fn from(item: SupplierCatalogItem) -> Self {
+        let suggested_unit = item.suggested_unit();
+        let unit_inferred =
+            suggested_unit.is_some() && item.unit.as_deref().is_none_or(|unit| unit.trim().is_empty());
+        Self { item, suggested_unit, unit_inferred }
     }
 }

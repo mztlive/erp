@@ -174,6 +174,7 @@ pub struct AdoptionSpecEntry {
 #[serde(deny_unknown_fields)]
 pub struct AdoptionMapping {
     pub category_id: String,
+    /// 空字符串表示采用服务器推断的来源单位，确认时复用或自动创建。
     pub unit_id: String,
     pub product_kind: String,
     pub company_name: Option<String>,
@@ -381,6 +382,27 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn catalog_unit_suggestion_preserves_raw_source_and_frozen_identity() {
+        use crate::dto::supplier_catalog::CatalogItemView;
+
+        let mut item = source_item();
+        item.specification = "3磅".into();
+        item.refresh_fingerprint().unwrap();
+        let original_fingerprint = item.source_fingerprint.clone();
+        let view = CatalogItemView::from(item);
+        let encoded = serde_json::to_value(&view).unwrap();
+        assert!(encoded["unit"].is_null());
+        assert_eq!(encoded["suggested_unit"], "磅");
+        assert_eq!(encoded["unit_inferred"], true);
+        assert_eq!(view.item.source_fingerprint, original_fingerprint);
+        let mut item = view.item;
+        item.unit = Some("个".into());
+        let view = CatalogItemView::from(item);
+        assert_eq!(view.suggested_unit.as_deref(), Some("个"));
+        assert!(!view.unit_inferred);
     }
 
     #[test]
