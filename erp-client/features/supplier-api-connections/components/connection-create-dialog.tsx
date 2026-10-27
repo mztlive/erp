@@ -82,7 +82,7 @@ export function ConnectionCreateDialog({
                                           onOpen(outcome.connectionId!)
                                       }
                                   >
-                                      打开连接详情
+                                      打开 API 设置
                                   </Button>
                               ),
                           }
@@ -207,7 +207,8 @@ export function ConnectionCreateDialog({
                                     if (!selected) return null
                                     return (
                                         <p className="text-xs text-muted-foreground">
-                                            创建后即可同步商品并选品。自动下单默认关闭，可在商品库的连接设置中开启。
+                                            创建后即可同步商品并选品。自动下单默认关闭，可在
+                                            API 设置中开启。
                                         </p>
                                     )
                                 })()}

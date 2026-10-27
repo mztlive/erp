@@ -12,7 +12,13 @@ import {
 import type { HealthRecordView } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
 
-export function HealthRecords({ records }: { records: HealthRecordView[] }) {
+export function HealthRecords({
+    records,
+    idPrefix = "supplier-api-connections-health",
+}: {
+    records: HealthRecordView[]
+    idPrefix?: string
+}) {
     const columns = React.useMemo<ColumnDef<HealthRecordView>[]>(
         () => [
             {
@@ -116,7 +122,7 @@ export function HealthRecords({ records }: { records: HealthRecordView[] }) {
                 description="保留每次检查结果；可通过列设置查看检查类型、耗时等信息。"
                 table={
                     <DataTable
-                        id="supplier-api-connections-health-table"
+                        id={`${idPrefix}-table`}
                         data={records}
                         columns={columns}
                         defaultColumnVisibility={{

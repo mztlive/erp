@@ -28,3 +28,9 @@ export const buildConnectionsSearchParams = codec.build
 export function buildSupplierCatalogHref(connectionId: string): string {
     return `/supplier-api/catalog?connectionId=${encodeURIComponent(connectionId)}`
 }
+
+export function buildSupplierConnectionSettingsHref(
+    connectionId: string,
+): string {
+    return `/supplier-api/connections/${encodeURIComponent(connectionId)}`
+}

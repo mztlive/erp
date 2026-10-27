@@ -419,10 +419,10 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     },
     {
         id: "W20",
-        name: "供应商品库",
+        name: "API 连接与商品库",
         mode: "M2+M4",
-        mainRoute: "/supplier-api/catalog",
-        navHref: "/supplier-api/catalog",
+        mainRoute: "/supplier-api/connections",
+        navHref: "/supplier-api/connections",
     },
     {
         id: "W21",
@@ -677,7 +677,8 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             items: [
                 {
                     routeId: "W20",
-                    label: "供应商品库",
+                    href: "/supplier-api/connections",
+                    label: "API 连接",
                     icon: PlugIcon,
                 },
                 {

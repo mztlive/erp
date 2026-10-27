@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowUpRightIcon } from "lucide-react"
+import { PackageSearchIcon, Settings2Icon } from "lucide-react"
 
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -14,6 +14,7 @@ import { freshnessText } from "@/lib/ui-text"
 
 export function useConnectionListColumns(
     onOpen: (connectionId: string) => void,
+    onOpenCatalog: (connectionId: string) => void,
 ) {
     return React.useMemo<ColumnDef<ConnectionListItem>[]>(
         () => [
@@ -140,8 +141,8 @@ export function useConnectionListColumns(
             },
             {
                 id: "actions",
-                size: 104,
-                minSize: 104,
+                size: 200,
+                minSize: 200,
                 header: "操作",
                 meta: { label: "操作", width: "status", align: "end" },
                 enableSorting: false,
@@ -153,11 +154,21 @@ export function useConnectionListColumns(
                         <TableRowActions
                             moreId={`supplier-api-connections-list-row-${segment}-more`}
                             moreLabel={`${row.original.connectionCode} 更多操作`}
+                            maxInline={2}
                             actions={[
                                 {
-                                    id: `supplier-api-connections-list-row-${segment}-open`,
-                                    label: "打开",
-                                    icon: ArrowUpRightIcon,
+                                    id: `supplier-api-connections-list-row-${segment}-open-catalog`,
+                                    label: "商品库",
+                                    icon: PackageSearchIcon,
+                                    onClick: () =>
+                                        onOpenCatalog(
+                                            row.original.connectionId,
+                                        ),
+                                },
+                                {
+                                    id: `supplier-api-connections-list-row-${segment}-open-settings`,
+                                    label: "API 设置",
+                                    icon: Settings2Icon,
                                     onClick: () =>
                                         onOpen(row.original.connectionId),
                                 },
@@ -167,6 +178,6 @@ export function useConnectionListColumns(
                 },
             },
         ],
-        [onOpen],
+        [onOpen, onOpenCatalog],
     )
 }

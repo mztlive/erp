@@ -32,10 +32,12 @@ export function ConnectionList({
     urlState,
     patchUrl,
     onOpen,
+    onOpenCatalog,
 }: {
     urlState: ConnectionsUrlState
     patchUrl: (patch: Partial<ConnectionsUrlState>) => void
     onOpen: (connectionId: string) => void
+    onOpenCatalog: (connectionId: string) => void
 }) {
     const filters = useConnectionListFilters(urlState, patchUrl)
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -76,7 +78,7 @@ export function ConnectionList({
         }))
     }, [urlState.page, urlState.pageSize])
 
-    const columns = useConnectionListColumns(onOpen)
+    const columns = useConnectionListColumns(onOpen, onOpenCatalog)
 
     // chip 展示供应商业务名称，不展示内部 ID（§4.5）
     const supplierNameLabel = React.useMemo(
@@ -95,8 +97,8 @@ export function ConnectionList({
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
                 eyebrow="供应商"
-                title="API 供应商连接"
-                description="查看供应商接口连接与健康状态。"
+                title="API 连接"
+                description="选择供应商连接，进入 API 设置或商品库。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button

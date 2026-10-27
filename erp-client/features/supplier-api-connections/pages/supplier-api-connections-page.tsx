@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "@/lib/navigation"
 import { ConnectionList } from "@/features/supplier-api-connections/components/connection-list"
 import {
     buildSupplierCatalogHref,
+    buildSupplierConnectionSettingsHref,
     buildConnectionsSearchParams,
     parseConnectionsSearchParams,
     type ConnectionsUrlState,
@@ -35,7 +36,10 @@ export function SupplierApiConnectionsPage() {
         <ConnectionList
             urlState={urlState}
             patchUrl={patchUrl}
-            onOpen={(id) => router.push(buildSupplierCatalogHref(id))}
+            onOpen={(id) =>
+                router.push(buildSupplierConnectionSettingsHref(id))
+            }
+            onOpenCatalog={(id) => router.push(buildSupplierCatalogHref(id))}
         />
     )
 }

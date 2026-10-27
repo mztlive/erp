@@ -122,14 +122,14 @@
 | W16  | 实际经营盈亏                         | `/analytics/profit-loss`                                   | M6       |
 | W18  | 导入与期初                           | `/governance/imports`                                      | M7       |
 | W19  | 权限与审计                           | `/system/access-audit`                                     | M2       |
-| W20  | API 供应商连接                       | `/supplier-api/connections`                                | M2+M4    |
+| W20  | API 连接与商品库                     | `/supplier-api/connections`                                | M2+M4    |
 | W21  | 供应商供给                           | `/procurement/supplier-offerings`                          | M2+M4    |
 | W24  | 审批流程配置                         | `/system/approval-processes`                               | M2+M4    |
 | W26  | 供应商订单                           | `/supplier-api/orders`                                     | M2+M4    |
 | W27  | API 结算                             | `/supplier-api/settlements`                                | M2+M4    |
 | W29  | 接口错误与对账中心                   | `/governance/integration-errors`                           | M7       |
 
-W20 连接列表使用 `/supplier-api/connections`，连接详情必须使用独立路由 `/supplier-api/connections/[connectionId]`。列表行及新建成功入口打开独立工作页签，保留来源列表的筛选、分页和滚动状态。同一连接的 `section` 变化只切换当前详情分区，不新增工作页签。旧 `?connectionId=`（含 `?id=`）地址只负责跳转到独立详情路由，不在列表组件内挂载详情；跳转须保留分区及来源筛选、分页。详情按路径 ID 读取，复制地址和刷新均须恢复当前连接。未指定 `section` 时默认进入健康记录；显式 `section=overview` 进入概览。详情页头以供应商名称为主标题，连接代码与接口类型为次级信息；健康检查为主操作，启停动作置于“更多”，继续遵守服务端操作权限及阻断原因。健康记录区依次展示最近检查结论、逐项能力验证与处理建议、历史检查记录；连接检查与能力验证分别展示真实结果及各自时间，不得互相替代。未配置、未验证、失败和结果待确认必须分别呈现，不得使用示例结果填补数据。
+W20 在「供应商 API」导航下提供「API 连接」列表 `/supplier-api/connections`。连接详情使用独立路由 `/supplier-api/connections/[connectionId]` 作为 API 设置页；连接内以「API 设置 / 商品库」两个页签切换，商品库地址为 `/supplier-api/catalog?connectionId=...`。列表行及新建成功入口打开 API 设置页，保留来源列表的筛选、分页和滚动状态。商品库只承担同步、筛选与选品入库，不混入连接设置。详情按路径 ID 读取，复制地址和刷新均须恢复当前连接。API 设置页头以供应商名称为主标题，连接代码与接口类型为次级信息；自动下单、只读能力和连接测试在该页维护，继续遵守服务端操作权限及阻断原因。健康记录展示真实检查结果；未配置、未验证、失败和结果待确认必须分别呈现，不得使用示例结果填补数据。
 
 工作面编号不等于独立菜单。选品册、后台任务、主数据子目录及治理子页面通过 registry 中的导航条目挂接。对象 ID 必须来自当前业务对象，不得将登记示例 ID 用作固定入口。
 

@@ -31,10 +31,13 @@ const navigationItems = WORKSPACE_NAV_GROUPS.flatMap(
 
 function tabIcon(href: string) {
     const pathname = href.split(/[?#]/)[0]
+    const navPathname = pathname.startsWith("/supplier-api/catalog")
+        ? "/supplier-api/connections"
+        : pathname
     return (
         navigationItems.find((item) => {
             const path = item.href.split("?")[0]
-            return pathname === path || pathname.startsWith(`${path}/`)
+            return navPathname === path || navPathname.startsWith(`${path}/`)
         })?.icon ?? FileTextIcon
     )
 }

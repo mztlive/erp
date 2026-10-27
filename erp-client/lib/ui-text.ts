@@ -141,7 +141,7 @@ const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
     W16: "实际经营盈亏",
     W18: "导入与期初",
     W19: "权限与审计",
-    W20: "供应商品库",
+    W20: "API 连接与商品库",
     W21: "商品供给",
     W26: "供应商订单",
     W27: "API 结算",

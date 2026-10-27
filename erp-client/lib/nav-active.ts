@@ -51,6 +51,12 @@ export function isNavItemActive(
             pathname.startsWith("/system/roles/")
         )
             pathname = "/system/access-audit"
+        // 商品库是供应商连接的子页面，侧栏沿用「API 连接」高亮。
+        if (
+            pathname.startsWith("/supplier-api/catalog") &&
+            allHrefs.includes("/supplier-api/connections")
+        )
+            pathname = "/supplier-api/connections"
     }
     const { path: hrefPath, params: hrefParams } = splitHref(href)
     if (!pathMatches(pathname, hrefPath)) return false

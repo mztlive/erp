@@ -77,21 +77,19 @@ function CatalogMediaWarning({ item }: { item: CatalogItem }) {
 export function CatalogBrowser({
     connectionId,
     supplierName,
-    supplierFilter,
     supplierId,
     canAdopt,
     adoptionBlocker,
-    onSettings,
+    settingsHref,
     canReadCost,
     canReview,
 }: {
     connectionId: string
     supplierName: string
-    supplierFilter?: React.ReactNode
     supplierId: string
     canAdopt: boolean
     adoptionBlocker?: string
-    onSettings: () => void
+    settingsHref: string
     canReadCost: boolean
     canReview: boolean
 }) {
@@ -318,9 +316,9 @@ export function CatalogBrowser({
                         id="supplier-catalog-adoption-settings"
                         variant="outline"
                         size="sm"
-                        onClick={onSettings}
+                        render={<Link href={settingsHref} />}
                     >
-                        打开接口设置
+                        前往 API 设置
                     </Button>
                 </div>
             ) : null}
@@ -328,7 +326,6 @@ export function CatalogBrowser({
                 title={`${supplierName} · 商品库`}
                 toolbar={
                     <CatalogFilterForm
-                        supplierFilter={supplierFilter}
                         value={filters}
                         options={query.data?.filters}
                         loading={query.isFetching}
