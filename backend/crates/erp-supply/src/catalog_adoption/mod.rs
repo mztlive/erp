@@ -2,7 +2,9 @@
 
 mod media;
 mod model;
+mod pricing;
 mod repository;
 
 pub use model::*;
+pub use pricing::{BatchPricing, FillPolicy, PriceRule, ValueOrigin};
 pub use repository::{CatalogAdoptionExt, ensure_indexes, has_product_receipt};
