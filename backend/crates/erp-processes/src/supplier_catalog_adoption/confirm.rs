@@ -209,7 +209,8 @@ impl SupplierCatalogAdoptionProcess {
         let mut item = self.load_item(&preview.connection_id, &row.item_id, executor).await?;
         preview.ensure_current_item(&item)?;
         SupplierApiService::new(self.db.clone()).load_connection(&preview.connection_id, executor).await?;
-        let sku = self.materialize_target(&item, row, &mut prepared, actor, executor).await?;
+        let resolved_row = prepared.resolved_row.clone();
+        let sku = self.materialize_target(&item, &resolved_row, &mut prepared, actor, executor).await?;
         let per_item_command = adoption_identity(&[command, &row.item_id]);
         let req = offering_request(&item, row, &sku.base.id, &per_item_command)?;
         let service = scoped_offering_service(self.db.clone(), self.rbac.clone());

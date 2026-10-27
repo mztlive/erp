@@ -11,8 +11,8 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { DialogFooter } from "@/components/ui/dialog"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
     Field,
     FieldDescription,
@@ -139,7 +139,7 @@ function EditorSection({
     return (
         <section
             aria-labelledby={id}
-            className="space-y-4 border-t border-grid pt-5"
+            className="space-y-3 border-t border-grid pt-4"
         >
             <div className="space-y-0.5">
                 <h3 id={id} className="text-sm font-semibold">
@@ -163,7 +163,6 @@ export function AdoptionBatchEditor({
     preview,
     onComplete,
     onPendingChange,
-    onDirtyChange,
     onCancel,
 }: {
     connectionId: string
@@ -172,7 +171,6 @@ export function AdoptionBatchEditor({
     preview: AdoptionPreview
     onComplete: (rows: AdoptionResultRow[]) => void
     onPendingChange: (pending: boolean) => void
-    onDirtyChange: (dirty: boolean) => void
     onCancel: () => void
 }) {
     const editor = useAdoptionBatch({
@@ -184,21 +182,15 @@ export function AdoptionBatchEditor({
     const { form, active, activeIndex: index, mutation, rowStates } = editor
     const detailRef = React.useRef<HTMLDivElement>(null)
     const [attempted, setAttempted] = React.useState(false)
+    const [submitCount, setSubmitCount] = React.useState(0)
 
     React.useEffect(() => {
         onPendingChange(mutation.isPending)
     }, [mutation.isPending, onPendingChange])
 
     React.useEffect(() => {
-        onDirtyChange(editor.isDirty)
-    }, [editor.isDirty, onDirtyChange])
-
-    React.useEffect(() => {
-        return () => {
-            onPendingChange(false)
-            onDirtyChange(false)
-        }
-    }, [onPendingChange, onDirtyChange])
+        return () => onPendingChange(false)
+    }, [onPendingChange])
 
     React.useEffect(() => {
         detailRef.current?.scrollTo({ top: 0 })
@@ -221,14 +213,8 @@ export function AdoptionBatchEditor({
     const nextIssueIndex = rowStates.findIndex(
         (state) => state === "INCOMPLETE" || state === "FAILED",
     )
-    const sourceImageCount =
-        (item.images?.length ?? 0) + (item.detail_images?.length ?? 0)
     const fieldOptions = {
         categoryId: (editor.categories.data?.rows ?? []).map((row) => ({
-            value: row.stableId,
-            label: row.name,
-        })),
-        brandId: (editor.brands.data?.rows ?? []).map((row) => ({
             value: row.stableId,
             label: row.name,
         })),
@@ -245,7 +231,6 @@ export function AdoptionBatchEditor({
     } as const
     const fieldLabels = {
         categoryId: "公司分类",
-        brandId: "公司品牌",
         unitId: "公司计量单位",
         productKind: "商品类型",
     } as const
@@ -253,12 +238,10 @@ export function AdoptionBatchEditor({
         companyName: "公司展示名称",
         companyDescription: "公司商品介绍",
         categoryId: "公司分类",
-        brandId: "公司品牌",
         unitId: "公司计量单位",
         productKind: "商品类型",
         skuId: "公司商品规格",
         specification: "公司规格",
-        confirmed: "核对确认",
         dropshipPrice: "一件代发含税供给价",
         bulkPrice: "集采含税供给价",
         minimumQuantity: "集采起订数量",
@@ -271,7 +254,6 @@ export function AdoptionBatchEditor({
         companyName: `${prefix}-company-name`,
         companyDescription: `${prefix}-company-description`,
         categoryId: `${prefix}-categoryId`,
-        brandId: `${prefix}-brandId`,
         unitId:
             active.kind === "EXISTING"
                 ? `${prefix}-company-sku`
@@ -279,7 +261,6 @@ export function AdoptionBatchEditor({
         productKind: `${prefix}-productKind`,
         skuId: `${prefix}-company-sku`,
         specification: `${prefix}-specification`,
-        confirmed: `${prefix}-confirmed`,
         dropshipPrice: `${prefix}-dropshipPrice`,
         bulkPrice: `${prefix}-bulkPrice`,
         minimumQuantity: `${prefix}-minimumQuantity`,
@@ -313,6 +294,7 @@ export function AdoptionBatchEditor({
             onSubmit={(event) => {
                 event.preventDefault()
                 setAttempted(true)
+                setSubmitCount((count) => count + 1)
                 detailRef.current?.scrollTo({ top: 0 })
                 void form.handleSubmit()
             }}
@@ -399,10 +381,10 @@ export function AdoptionBatchEditor({
                     </nav>
                 ) : null}
                 <div ref={detailRef} className="min-h-0 flex-1 overflow-y-auto">
-                    <div className="space-y-6 px-5 py-4 sm:px-6 sm:py-5">
+                    <div className="space-y-4 px-5 py-4 sm:px-6">
                         <header className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                            <ProductThumb item={item} size="lg" />
-                            <div className="min-w-0 flex-1 space-y-2.5">
+                            <ProductThumb item={item} />
+                            <div className="min-w-0 flex-1 space-y-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h2 className="text-base leading-6 font-semibold">
                                         {item.name}
@@ -420,7 +402,7 @@ export function AdoptionBatchEditor({
                                         </Badge>
                                     ) : null}
                                 </div>
-                                <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
+                                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
                                     <div className="min-w-0">
                                         <dt className="text-xs text-muted-foreground">
                                             来源规格
@@ -445,7 +427,11 @@ export function AdoptionBatchEditor({
                                             <MoneyValue
                                                 value={item.purchase_price}
                                                 display="exact"
-                                                unavailableReason="未提供"
+                                                unavailableReason={
+                                                    item.purchase_price == null
+                                                        ? "未提供"
+                                                        : undefined
+                                                }
                                             />
                                         </dd>
                                     </div>
@@ -458,12 +444,6 @@ export function AdoptionBatchEditor({
                                         </dd>
                                     </div>
                                 </dl>
-                                {rows[index]?.missing_fields.length ? (
-                                    <p className="text-xs text-warning-soft-foreground">
-                                        本项需确认：
-                                        {rows[index].missing_fields.join("、")}
-                                    </p>
-                                ) : null}
                                 {rows.length > 1 ? (
                                     <div className="space-y-1">
                                         <Button
@@ -480,76 +460,12 @@ export function AdoptionBatchEditor({
                                             应用当前设置到本批
                                         </Button>
                                         <p className="text-xs text-muted-foreground">
-                                            将分类、品牌、单位、商品类型和共同采购条件应用到其他商品，每项核对状态会重置。
+                                            将分类、单位、商品类型和共同采购条件应用到其他商品。
                                         </p>
                                     </div>
                                 ) : null}
                             </div>
                         </header>
-
-                        {sourceImageCount ? (
-                            <details className="group rounded-lg border bg-muted/20">
-                                <summary
-                                    id={`${prefix}-source-images-toggle`}
-                                    className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden"
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <ChevronRightIcon
-                                            className="size-4 text-muted-foreground transition-transform group-open:rotate-90"
-                                            aria-hidden="true"
-                                        />
-                                        查看商品轮播图和详情图
-                                    </span>
-                                    <span className="text-xs font-normal text-muted-foreground">
-                                        {sourceImageCount} 张
-                                    </span>
-                                </summary>
-                                <div className="space-y-4 border-t p-3">
-                                    {[
-                                        {
-                                            title: "商品轮播图",
-                                            images: item.images,
-                                            detail: false,
-                                        },
-                                        {
-                                            title: "商品详情图",
-                                            images: item.detail_images,
-                                            detail: true,
-                                        },
-                                    ].map((group) =>
-                                        group.images?.length ? (
-                                            <section
-                                                key={group.title}
-                                                className="space-y-2"
-                                            >
-                                                <h4 className="text-xs text-muted-foreground">
-                                                    {group.title}
-                                                </h4>
-                                                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                                                    {group.images.map(
-                                                        (image, position) => (
-                                                            <CatalogSourceImage
-                                                                key={`${image.file_asset_id ?? image.url}-${position}`}
-                                                                image={image}
-                                                                alt={`${group.title} ${position + 1}`}
-                                                                width={240}
-                                                                height={240}
-                                                                className={cn(
-                                                                    "w-full rounded-md border bg-muted/30",
-                                                                    group.detail
-                                                                        ? "aspect-[4/3] object-contain"
-                                                                        : "aspect-square object-cover",
-                                                                )}
-                                                            />
-                                                        ),
-                                                    )}
-                                                </div>
-                                            </section>
-                                        ) : null,
-                                    )}
-                                </div>
-                            </details>
-                        ) : null}
 
                         {editor.rowResults.length ? (
                             <div className="rounded-lg border bg-muted/20 p-3 text-sm">
@@ -619,7 +535,6 @@ export function AdoptionBatchEditor({
                         <EditorSection
                             id={`${prefix}-target-kind-title`}
                             title="入库方式"
-                            description="新建公司商品，或关联已有公司 SKU。"
                         >
                             <form.AppField name={`rows[${index}].kind`}>
                                 {(field) => (
@@ -634,10 +549,6 @@ export function AdoptionBatchEditor({
                                                     next === "EXISTING"
                                                         ? "EXISTING"
                                                         : "CREATE",
-                                                )
-                                                form.setFieldValue(
-                                                    `rows[${index}].confirmed`,
-                                                    false,
                                                 )
                                             }}
                                         >
@@ -670,40 +581,17 @@ export function AdoptionBatchEditor({
                                                 </RadioGroupItem>
                                             ))}
                                         </RadioGroup>
-                                        <FieldDescription>
-                                            来源商品尚未匹配公司 SKU
-                                            时默认新建；已匹配时可改为关联。
-                                        </FieldDescription>
                                     </Field>
                                 )}
                             </form.AppField>
                         </EditorSection>
 
                         {active.kind === "CREATE" ? (
-                            <EditorSection
-                                title="公司资料"
-                                description="供应商原文保留只读，这里维护公司商品展示内容。"
-                            >
-                                <AdoptionProductText
-                                    key={item.id}
-                                    form={form}
-                                    item={item}
-                                    index={index}
-                                    prefix={prefix}
-                                />
-                            </EditorSection>
-                        ) : null}
-
-                        {active.kind === "CREATE" ? (
-                            <EditorSection
-                                title="商品归属"
-                                description="公司商品按这里的分类、品牌和单位建档。"
-                            >
+                            <EditorSection title="商品建档">
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     {(
                                         [
                                             "categoryId",
-                                            "brandId",
                                             "unitId",
                                             "productKind",
                                         ] as const
@@ -743,6 +631,13 @@ export function AdoptionBatchEditor({
                                                             ) => {
                                                                 if (
                                                                     name ===
+                                                                    "categoryId"
+                                                                )
+                                                                    editor.markCategoryEdited(
+                                                                        item.id,
+                                                                    )
+                                                                if (
+                                                                    name ===
                                                                     "productKind"
                                                                 )
                                                                     form.setFieldValue(
@@ -762,10 +657,6 @@ export function AdoptionBatchEditor({
                                                                         next ??
                                                                             "",
                                                                     )
-                                                                form.setFieldValue(
-                                                                    `rows[${index}].confirmed`,
-                                                                    false,
-                                                                )
                                                             }}
                                                             placeholder={`请选择${label}`}
                                                             aria-invalid={
@@ -785,38 +676,8 @@ export function AdoptionBatchEditor({
                                             </form.AppField>
                                         )
                                     })}
-                                    <form.AppField
-                                        name={`rows[${index}].specification`}
-                                    >
-                                        {(field) => (
-                                            <Field className="sm:col-span-2">
-                                                <FieldLabel
-                                                    htmlFor={`${prefix}-specification`}
-                                                >
-                                                    公司规格
-                                                </FieldLabel>
-                                                <Input
-                                                    id={`${prefix}-specification`}
-                                                    value={field.state.value}
-                                                    onChange={(event) => {
-                                                        field.handleChange(
-                                                            event.target.value,
-                                                        )
-                                                        form.setFieldValue(
-                                                            `rows[${index}].confirmed`,
-                                                            false,
-                                                        )
-                                                    }}
-                                                />
-                                                <FieldDescription>
-                                                    须与供应商实际供货内容一致；来源未标注规格时，确认无规格后可留空。
-                                                </FieldDescription>
-                                            </Field>
-                                        )}
-                                    </form.AppField>
                                 </div>
                                 {editor.categories.isError ||
-                                editor.brands.isError ||
                                 editor.units.isError ? (
                                     <div
                                         className="flex items-center gap-2 text-sm text-destructive"
@@ -830,7 +691,6 @@ export function AdoptionBatchEditor({
                                             size="sm"
                                             onClick={() => {
                                                 void editor.categories.refetch()
-                                                void editor.brands.refetch()
                                                 void editor.units.refetch()
                                             }}
                                         >
@@ -873,10 +733,6 @@ export function AdoptionBatchEditor({
                                                         form.setFieldValue(
                                                             `rows[${index}].productVersion`,
                                                             0,
-                                                        )
-                                                        form.setFieldValue(
-                                                            `rows[${index}].confirmed`,
-                                                            false,
                                                         )
                                                     }}
                                                     label="公司商品规格"
@@ -930,10 +786,7 @@ export function AdoptionBatchEditor({
                             </EditorSection>
                         )}
 
-                        <EditorSection
-                            title="采购供给"
-                            description="报价、税率和有效期写入本次供给；供应商未提供的集采条件可以留空。"
-                        >
+                        <EditorSection title="采购供给">
                             <div className="grid gap-4 sm:grid-cols-2">
                                 {item.purchase_price != null ? (
                                     <Field>
@@ -1007,137 +860,183 @@ export function AdoptionBatchEditor({
                                         />
                                     )}
                                 </form.AppField>
-                                {(
-                                    [
-                                        "bulkPrice",
-                                        "minimumQuantity",
-                                        "validFrom",
-                                        "validTo",
-                                    ] as const
-                                ).map((name) => {
-                                    const label = {
-                                        bulkPrice: "集采含税供给价（可不填）",
-                                        minimumQuantity:
-                                            "集采起订数量（可不填）",
-                                        validFrom: "生效日期",
-                                        validTo: "失效日期（可不填）",
-                                    }[name]
-                                    return (
-                                        <form.AppField
-                                            key={name}
-                                            name={`rows[${index}].${name}`}
-                                        >
-                                            {(field) => (
-                                                <Field>
-                                                    <FieldLabel
-                                                        htmlFor={`${prefix}-${name}`}
-                                                    >
-                                                        {label}
-                                                        {name ===
-                                                        "validFrom" ? (
-                                                            <RequiredMark />
-                                                        ) : null}
-                                                    </FieldLabel>
-                                                    <Input
-                                                        id={`${prefix}-${name}`}
-                                                        type={
-                                                            name ===
-                                                                "validFrom" ||
-                                                            name === "validTo"
-                                                                ? "date"
-                                                                : "text"
-                                                        }
-                                                        inputMode={
-                                                            name ===
-                                                                "validFrom" ||
-                                                            name === "validTo"
-                                                                ? undefined
-                                                                : "decimal"
-                                                        }
-                                                        value={
-                                                            field.state.value
-                                                        }
-                                                        onChange={(event) =>
-                                                            field.handleChange(
-                                                                event.target
-                                                                    .value,
-                                                            )
-                                                        }
-                                                        aria-invalid={
-                                                            field.state.meta
-                                                                .errors.length >
-                                                            0
-                                                        }
-                                                    />
-                                                    <FieldError
-                                                        errors={
-                                                            field.state.meta
-                                                                .errors
-                                                        }
-                                                    />
-                                                </Field>
-                                            )}
-                                        </form.AppField>
-                                    )
-                                })}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                集采价与集采起订数量需同时填写，或同时留空。
-                            </p>
-                            <form.AppField
-                                name={`rows[${index}].deliveryTemplateId`}
-                            >
-                                {(field) => (
-                                    <DeliveryTemplateField
-                                        id={`${prefix}-delivery-template`}
-                                        supplierId={supplierId}
-                                        value={field.state.value}
-                                        onChange={field.handleChange}
-                                    />
-                                )}
-                            </form.AppField>
-                        </EditorSection>
-
-                        <section className="rounded-lg border bg-muted/20 p-4">
-                            <form.AppField name={`rows[${index}].confirmed`}>
-                                {(field) => (
-                                    <Field>
-                                        <div className="flex items-start gap-3">
-                                            <Checkbox
-                                                id={`${prefix}-confirmed`}
-                                                checked={field.state.value}
-                                                onCheckedChange={(next) =>
-                                                    field.handleChange(
-                                                        next === true,
-                                                    )
+                                <form.AppField
+                                    name={`rows[${index}].validFrom`}
+                                >
+                                    {(field) => (
+                                        <Field>
+                                            <FieldLabel
+                                                htmlFor={`${prefix}-validFrom`}
+                                            >
+                                                生效日期
+                                                <RequiredMark />
+                                            </FieldLabel>
+                                            <DatePicker
+                                                id={`${prefix}-validFrom`}
+                                                size="default"
+                                                value={
+                                                    field.state.value ||
+                                                    undefined
                                                 }
-                                                disabled={
-                                                    active.kind ===
-                                                        "EXISTING" &&
-                                                    (!editor.target.data ||
-                                                        editor.target
-                                                            .isFetching)
+                                                onValueChange={(value) => {
+                                                    field.handleChange(
+                                                        value ?? "",
+                                                    )
+                                                    field.handleBlur()
+                                                }}
+                                                aria-invalid={
+                                                    field.state.meta.errors
+                                                        .length > 0
                                                 }
                                             />
-                                            <div className="space-y-1">
-                                                <FieldLabel
-                                                    htmlFor={`${prefix}-confirmed`}
-                                                    className="leading-5"
-                                                >
-                                                    已核对本项规格、包装数量和单位，与供应商实际供货一致
-                                                </FieldLabel>
-                                                <p className="text-xs text-muted-foreground">
-                                                    每项需单独核对；确认后才会提交本项。
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <FieldError
-                                            errors={field.state.meta.errors}
-                                        />
-                                    </Field>
-                                )}
-                            </form.AppField>
-                        </section>
+                                            <FieldError
+                                                errors={field.state.meta.errors}
+                                            />
+                                        </Field>
+                                    )}
+                                </form.AppField>
+                            </div>
+                            <details
+                                key={`${item.id}-${submitCount}`}
+                                open={attempted}
+                                className="group rounded-lg border bg-muted/20"
+                            >
+                                <summary
+                                    id={`${prefix}-supply-options-toggle`}
+                                    className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden"
+                                >
+                                    <ChevronRightIcon
+                                        className="size-4 text-muted-foreground transition-transform group-open:rotate-90"
+                                        aria-hidden="true"
+                                    />
+                                    更多供给条件
+                                </summary>
+                                <div className="space-y-3 border-t p-3">
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        {(
+                                            [
+                                                "bulkPrice",
+                                                "minimumQuantity",
+                                                "validTo",
+                                            ] as const
+                                        ).map((name) => (
+                                            <form.AppField
+                                                key={name}
+                                                name={`rows[${index}].${name}`}
+                                            >
+                                                {(field) => (
+                                                    <Field>
+                                                        <FieldLabel
+                                                            htmlFor={`${prefix}-${name}`}
+                                                        >
+                                                            {
+                                                                {
+                                                                    bulkPrice:
+                                                                        "集采含税供给价",
+                                                                    minimumQuantity:
+                                                                        "集采起订数量",
+                                                                    validTo:
+                                                                        "失效日期",
+                                                                }[name]
+                                                            }
+                                                        </FieldLabel>
+                                                        {name === "validTo" ? (
+                                                            <DatePicker
+                                                                id={`${prefix}-${name}`}
+                                                                size="default"
+                                                                value={
+                                                                    field.state
+                                                                        .value ||
+                                                                    undefined
+                                                                }
+                                                                onValueChange={(
+                                                                    value,
+                                                                ) => {
+                                                                    field.handleChange(
+                                                                        value ??
+                                                                            "",
+                                                                    )
+                                                                    field.handleBlur()
+                                                                }}
+                                                                aria-invalid={
+                                                                    field.state
+                                                                        .meta
+                                                                        .errors
+                                                                        .length >
+                                                                    0
+                                                                }
+                                                            />
+                                                        ) : (
+                                                            <Input
+                                                                id={`${prefix}-${name}`}
+                                                                inputMode="decimal"
+                                                                value={
+                                                                    field.state
+                                                                        .value
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    field.handleChange(
+                                                                        event
+                                                                            .target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                aria-invalid={
+                                                                    field.state
+                                                                        .meta
+                                                                        .errors
+                                                                        .length >
+                                                                    0
+                                                                }
+                                                            />
+                                                        )}
+                                                        <FieldError
+                                                            errors={
+                                                                field.state.meta
+                                                                    .errors
+                                                            }
+                                                        />
+                                                    </Field>
+                                                )}
+                                            </form.AppField>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        集采价与起订数量需同时填写，或同时留空。
+                                    </p>
+                                    <form.AppField
+                                        name={`rows[${index}].deliveryTemplateId`}
+                                    >
+                                        {(field) => (
+                                            <DeliveryTemplateField
+                                                id={`${prefix}-delivery-template`}
+                                                supplierId={supplierId}
+                                                value={field.state.value}
+                                                onChange={field.handleChange}
+                                            />
+                                        )}
+                                    </form.AppField>
+                                </div>
+                            </details>
+                        </EditorSection>
+
+                        {active.kind === "CREATE" &&
+                        (Array.from(item.name.trim()).length > 128 ||
+                            Array.from(item.description?.trim() ?? "").length >
+                                512) ? (
+                            <EditorSection title="整理供应商资料">
+                                <AdoptionProductText
+                                    key={`${item.id}-${submitCount}`}
+                                    form={form}
+                                    item={item}
+                                    index={index}
+                                    prefix={prefix}
+                                    attempted={attempted}
+                                />
+                            </EditorSection>
+                        ) : null}
                     </div>
                 </div>
             </fieldset>

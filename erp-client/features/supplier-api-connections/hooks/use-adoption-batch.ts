@@ -9,7 +9,10 @@ import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { rateFromPercentage } from "@/features/supplier-offerings/lib/offering-forms"
-import type { ProductKind } from "@/features/master-data/types"
+import {
+    PRODUCT_KIND_LABELS,
+    type ProductKind,
+} from "@/features/master-data/types"
 import type {
     AdoptionPreview,
     AdoptionResultRow,
@@ -24,7 +27,6 @@ type RowDraft = {
     itemId: string
     kind: "CREATE" | "EXISTING"
     categoryId: string
-    brandId: string
     unitId: string
     productKind: ProductKind
     companyName: string
@@ -33,7 +35,6 @@ type RowDraft = {
     skuVersion: number
     productVersion: number
     specification: string
-    confirmed: boolean
     dropshipPrice: string
     bulkPrice: string
     minimumQuantity: string
@@ -48,7 +49,6 @@ export const rowSchema = z
         itemId: z.string(),
         kind: z.enum(["CREATE", "EXISTING"]),
         categoryId: z.string(),
-        brandId: z.string(),
         unitId: z.string().min(1, "请选择公司计量单位"),
         productKind: z.enum([
             "PHYSICAL",
@@ -62,7 +62,6 @@ export const rowSchema = z
         skuVersion: z.number(),
         productVersion: z.number(),
         specification: z.string(),
-        confirmed: z.boolean().refine(Boolean, "请核对来源规格、包装及单位"),
         dropshipPrice: z.string(),
         bulkPrice: z.string(),
         minimumQuantity: z.string(),
@@ -93,12 +92,6 @@ export const rowSchema = z
                     code: "custom",
                     path: ["categoryId"],
                     message: "请选择公司分类",
-                })
-            if (!row.brandId)
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["brandId"],
-                    message: "请选择公司品牌",
                 })
         } else if (!row.skuId || !row.skuVersion || !row.productVersion) {
             ctx.addIssue({
@@ -172,7 +165,7 @@ function rowInput(row: RowDraft): AdoptionRowInput {
                 ? {
                       kind: "CREATE",
                       category_id: row.categoryId,
-                      brand_id: row.brandId,
+                      brand_id: "",
                       unit_id: row.unitId,
                       product_kind: row.productKind,
                       company_name: row.companyName.trim(),
@@ -186,8 +179,6 @@ function rowInput(row: RowDraft): AdoptionRowInput {
                                 },
                             ]
                           : [],
-                      unit_confirmed: row.confirmed,
-                      specification_confirmed: row.confirmed,
                   }
                 : {
                       kind: "EXISTING",
@@ -195,7 +186,6 @@ function rowInput(row: RowDraft): AdoptionRowInput {
                       expected_sku_version: row.skuVersion,
                       expected_product_version: row.productVersion,
                       unit_id: row.unitId,
-                      specification_confirmed: row.confirmed,
                   },
         terms: {
             dropship_supply_price_gross: row.dropshipPrice.trim(),
@@ -222,6 +212,8 @@ export function useAdoptionBatch({
     onComplete: (rows: AdoptionResultRow[]) => void
 }) {
     const [activeIndex, setActiveIndex] = React.useState(0)
+    const categoryPrefillDone = React.useRef(false)
+    const editedCategories = React.useRef(new Set<string>())
     const requestIdentity = React.useRef<{
         payload: string
         key: string
@@ -233,11 +225,6 @@ export function useAdoptionBatch({
         lifecycleStatus: "enabled",
         revisionTiming: "current",
     })
-    const brands = useMasterDataListQuery({
-        resource: "brands",
-        lifecycleStatus: "enabled",
-        revisionTiming: "current",
-    })
     const units = useUnitOptionsQuery()
     const form = useAppForm({
         defaultValues: {
@@ -245,7 +232,6 @@ export function useAdoptionBatch({
                 itemId: item.id,
                 kind: item.sku_id ? "EXISTING" : "CREATE",
                 categoryId: "",
-                brandId: "",
                 unitId: "",
                 productKind: "PHYSICAL",
                 companyName: item.name,
@@ -254,11 +240,10 @@ export function useAdoptionBatch({
                 skuVersion: 0,
                 productVersion: 0,
                 specification: item.specification,
-                confirmed: false,
                 dropshipPrice: item.purchase_price ?? "",
                 bulkPrice: "",
                 minimumQuantity: "",
-                inputTaxPercentage: "",
+                inputTaxPercentage: "13",
                 validFrom: format(new Date(), "yyyy-MM-dd"),
                 validTo: "",
                 deliveryTemplateId: "",
@@ -317,8 +302,38 @@ export function useAdoptionBatch({
             }
         },
     })
+    React.useEffect(() => {
+        if (!categories.data || categoryPrefillDone.current) return
+        categoryPrefillDone.current = true
+        const currentRows = form.state.values.rows
+        rows.forEach(({ item }, index) => {
+            const row = currentRows[index]
+            const name = item.category_name?.trim()
+            if (
+                !row ||
+                !name ||
+                row.kind !== "CREATE" ||
+                row.categoryId ||
+                editedCategories.current.has(item.id)
+            )
+                return
+            const matches = categories.data.rows.filter(
+                (category) =>
+                    category.name.trim() === name &&
+                    category.productKind ===
+                        PRODUCT_KIND_LABELS[row.productKind],
+            )
+            if (matches.length === 1) {
+                form.setFieldValue(
+                    `rows[${index}].categoryId`,
+                    matches[0].stableId,
+                    { dontUpdateMeta: true },
+                )
+            }
+        })
+    }, [categories.data, form, rows])
+
     const values = useStore(form.store, (state) => state.values)
-    const isDirty = useStore(form.store, (state) => state.isDirty)
     const rowStates = React.useMemo<AdoptionRowState[]>(() => {
         const succeeded = new Set(
             rowResults
@@ -348,13 +363,6 @@ export function useAdoptionBatch({
             active.skuId !== target.data.sku_id
         )
             return
-        if (
-            (active.skuVersion !== 0 &&
-                active.skuVersion !== target.data.sku_version) ||
-            (active.productVersion !== 0 &&
-                active.productVersion !== target.data.product_version)
-        )
-            form.setFieldValue(`rows[${activeIndex}].confirmed`, false)
         form.setFieldValue(`rows[${activeIndex}].unitId`, target.data.unit_id)
         form.setFieldValue(
             `rows[${activeIndex}].skuVersion`,
@@ -373,11 +381,14 @@ export function useAdoptionBatch({
         activeIndex,
         form,
     ])
+    const markCategoryEdited = (itemId: string) => {
+        editedCategories.current.add(itemId)
+    }
     const applyShared = () => {
         if (!active) return
+        for (const row of form.state.values.rows) markCategoryEdited(row.itemId)
         const shared = [
             "categoryId",
-            "brandId",
             "unitId",
             "productKind",
             "bulkPrice",
@@ -398,7 +409,7 @@ export function useAdoptionBatch({
                     )
                 )
                     return row
-                const next = { ...row, confirmed: false }
+                const next = { ...row }
                 for (const field of shared) {
                     if (field === "productKind")
                         next.productKind = active.productKind
@@ -412,17 +423,16 @@ export function useAdoptionBatch({
     return {
         form,
         values,
-        isDirty,
         rowStates,
         active,
         activeIndex,
         setActiveIndex,
         mutation,
         categories,
-        brands,
         units,
         target,
         applyShared,
+        markCategoryEdited,
         rowResults,
     }
 }

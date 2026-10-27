@@ -169,6 +169,11 @@ pub struct AdoptionSpecEntry {
     pub attribute_value_code: String,
 }
 
+// 兼容历史成功请求的序列化指纹，确认字段不再参与业务校验。
+fn legacy_confirmation_default() -> bool {
+    true
+}
+
 /// 新建时只接收公司映射；名称和介绍从冻结来源取得。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "UPPERCASE", deny_unknown_fields)]
@@ -184,7 +189,9 @@ pub enum AdoptionTarget {
         product_kind: String,
         #[serde(default)]
         spec_entries: Vec<AdoptionSpecEntry>,
+        #[serde(default = "legacy_confirmation_default")]
         unit_confirmed: bool,
+        #[serde(default = "legacy_confirmation_default")]
         specification_confirmed: bool,
     },
     Existing {
@@ -192,6 +199,7 @@ pub enum AdoptionTarget {
         expected_sku_version: u64,
         expected_product_version: u64,
         unit_id: String,
+        #[serde(default = "legacy_confirmation_default")]
         specification_confirmed: bool,
     },
 }
@@ -466,6 +474,10 @@ mod tests {
             ),
             delivery_template_id: None,
         };
+        let mut legacy_json = serde_json::to_value(&row).unwrap();
+        legacy_json["target"].as_object_mut().unwrap().remove("specification_confirmed");
+        let without_confirmation: AdoptionRow = serde_json::from_value(legacy_json).unwrap();
+        assert_eq!(without_confirmation.fingerprint().unwrap(), row.fingerprint().unwrap());
         let mut request = ConfirmAdoptionRequest {
             expected_version: preview.base.version,
             idempotency_key: "key".into(),

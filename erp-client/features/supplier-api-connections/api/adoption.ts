@@ -46,8 +46,6 @@ export type AdoptionRowInput = {
                   attribute_code: string
                   attribute_value_code: string
               }>
-              unit_confirmed: boolean
-              specification_confirmed: boolean
           }
         | {
               kind: "EXISTING"
@@ -55,7 +53,6 @@ export type AdoptionRowInput = {
               expected_sku_version: number
               expected_product_version: number
               unit_id: string
-              specification_confirmed: boolean
           }
     terms: SupplierOfferingTermsInput
     delivery_template_id?: string | null

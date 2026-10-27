@@ -48,17 +48,11 @@ pub(super) fn sku_input(
     row: &AdoptionRow,
     media: &PreparedSourceMedia,
 ) -> Result<ProductSkuInput> {
-    let AdoptionTarget::Create { unit_id, spec_entries, unit_confirmed, specification_confirmed, .. } =
-        &row.target
-    else {
+    let AdoptionTarget::Create { unit_id, spec_entries, .. } = &row.target else {
         return Err(Error::ValidationError("请选择新建规格".into()));
     };
-    if !unit_confirmed
-        || !specification_confirmed
-        || unit_id.trim().is_empty()
-        || (!item.specification.trim().is_empty() && spec_entries.is_empty())
-    {
-        return Err(Error::ValidationError("必须明确核对来源单位及规格映射".into()));
+    if unit_id.trim().is_empty() || (!item.specification.trim().is_empty() && spec_entries.is_empty()) {
+        return Err(Error::ValidationError("请选择单位并填写来源规格映射".into()));
     }
     Ok(ProductSkuInput {
         sku_id: None,
@@ -243,19 +237,23 @@ mod tests {
     }
 
     #[test]
-    fn required_unit_and_specification_confirmation_and_voucher_boundary_are_enforced() {
+    fn missing_unit_or_source_specification_and_voucher_are_rejected_without_confirmation_flags() {
         let mut row = row();
-        if let AdoptionTarget::Create { specification_confirmed, .. } = &mut row.target {
+        if let AdoptionTarget::Create { unit_confirmed, specification_confirmed, .. } = &mut row.target {
+            *unit_confirmed = false;
             *specification_confirmed = false;
         }
-        assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_err());
-        if let AdoptionTarget::Create { specification_confirmed, unit_confirmed, .. } = &mut row.target {
-            *specification_confirmed = true;
-            *unit_confirmed = false;
+        assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_ok());
+        if let AdoptionTarget::Create { unit_id, .. } = &mut row.target {
+            *unit_id = String::new();
         }
         assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_err());
-        if let AdoptionTarget::Create { unit_confirmed, product_kind, .. } = &mut row.target {
-            *unit_confirmed = true;
+        if let AdoptionTarget::Create { unit_id, spec_entries, .. } = &mut row.target {
+            *unit_id = "unit".into();
+            spec_entries.clear();
+        }
+        assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_err());
+        if let AdoptionTarget::Create { product_kind, .. } = &mut row.target {
             *product_kind = "VOUCHER".into();
         }
         assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_err());

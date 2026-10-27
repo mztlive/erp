@@ -7,7 +7,6 @@ import {
     ChevronRightIcon,
     TriangleAlertIcon,
 } from "lucide-react"
-import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -197,9 +196,6 @@ export function CatalogAdoptionDialog({
     onClose: (completed: boolean) => void
 }) {
     const [pending, setPending] = React.useState(false)
-    const [dirty, setDirty] = React.useState(false)
-    const [discardOpen, setDiscardOpen] = React.useState(false)
-    const [closeCompleted, setCloseCompleted] = React.useState(false)
     const [results, setResults] = React.useState<AdoptionResultRow[]>([])
     const [offset, setOffset] = React.useState(0)
     const [batchDone, setBatchDone] = React.useState(false)
@@ -225,21 +221,11 @@ export function CatalogAdoptionDialog({
     )
     const editing =
         pendingRows.length > 0 && unselected.length > 0 && !batchDone
-    const handleDirtyChange = React.useCallback((next: boolean) => {
-        setDirty(next)
-    }, [])
-
     const requestClose = React.useCallback(
         (completed: boolean) => {
-            if (pending) return
-            setCloseCompleted(completed)
-            if (dirty) {
-                setDiscardOpen(true)
-                return
-            }
-            onClose(completed)
+            if (!pending) onClose(completed)
         },
-        [dirty, onClose, pending],
+        [onClose, pending],
     )
 
     return (
@@ -251,6 +237,7 @@ export function CatalogAdoptionDialog({
                 }}
             >
                 <DialogContent
+                    forceOverlay
                     closeButtonId="supplier-catalog-adoption-close"
                     showCloseButton={!pending}
                     className="flex h-[min(92dvh,56rem)] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
@@ -284,8 +271,14 @@ export function CatalogAdoptionDialog({
                     </DialogHeader>
                     <div className="flex min-h-0 flex-1 flex-col">
                         {missingMedia.length ? (
-                            <div className="shrink-0 border-b border-warning-border bg-warning-soft px-6 py-3 text-xs text-warning-soft-foreground">
-                                <p>以下商品有缺少的图片，可以继续选品入库：</p>
+                            <details className="shrink-0 border-b border-warning-border bg-warning-soft px-6 py-2 text-xs text-warning-soft-foreground">
+                                <summary
+                                    id="supplier-catalog-adoption-missing-media-toggle"
+                                    className="cursor-pointer font-medium"
+                                >
+                                    {missingMedia.length}{" "}
+                                    项图片未完成，不影响入库 · 查看详情
+                                </summary>
                                 <ul className="max-h-24 overflow-y-auto">
                                     {missingMedia.map(({ item, message }) => (
                                         <li key={item.id}>
@@ -295,7 +288,7 @@ export function CatalogAdoptionDialog({
                                         </li>
                                     ))}
                                 </ul>
-                            </div>
+                            </details>
                         ) : null}
                         {blockedRows.length ? (
                             <BlockedAlert
@@ -323,7 +316,6 @@ export function CatalogAdoptionDialog({
                                 rows={batch}
                                 preview={preview}
                                 onPendingChange={setPending}
-                                onDirtyChange={handleDirtyChange}
                                 onCancel={() => requestClose(allCompleted)}
                                 onComplete={(rows) => {
                                     setResults((current) => [
@@ -332,7 +324,6 @@ export function CatalogAdoptionDialog({
                                     ])
                                     setBatchDone(true)
                                     setPending(false)
-                                    setDirty(false)
                                 }}
                             />
                         ) : batchDone ? (
@@ -416,19 +407,6 @@ export function CatalogAdoptionDialog({
                     ) : null}
                 </DialogContent>
             </Dialog>
-            <DiscardConfirmDialog
-                open={discardOpen}
-                onOpenChange={setDiscardOpen}
-                onConfirm={() => {
-                    setDiscardOpen(false)
-                    onClose(closeCompleted)
-                }}
-                idPrefix="supplier-catalog-adoption-discard"
-                title="放弃本次入库填写？"
-                description="当前填写尚未提交，关闭后会丢失。已入库的商品不受影响。"
-                confirmLabel="放弃并关闭"
-                cancelLabel="继续填写"
-            />
         </>
     )
 }
