@@ -5,6 +5,7 @@ import { getErrorMessage } from "@/lib/api/errors"
  */
 
 import type {
+    BackendFileAsset,
     ProductBrandDto,
     ProductCategoryDto,
     ProductDto,
@@ -42,6 +43,38 @@ export function parseSpecificationSignature(
         const attributeCode = entry.slice(0, separator).trim()
         const valueCode = entry.slice(separator + 1).trim()
         return attributeCode && valueCode ? [{ attributeCode, valueCode }] : []
+    })
+}
+
+/** 编辑表单以名称关联媒体；同名资产分配独立名称，保留各自的预览和保存引用。 */
+function namedProductMedia(
+    media: NonNullable<ProductRevisionDto["media"]>,
+    assets: ReadonlyMap<string, BackendFileAsset>,
+) {
+    const entries = media.map((item) => {
+        const asset = assets.get(item.file_asset_id)
+        return {
+            media: item,
+            asset,
+            name: asset?.file_name ?? item.file_asset_id,
+        }
+    })
+    // 先保留全部原名，避免生成的序号名称占用另一张图片的真实文件名。
+    const reserved = new Set(entries.map((entry) => entry.name))
+    const used = new Set<string>()
+    return entries.map((entry) => {
+        let name = entry.name
+        if (used.has(name)) {
+            const dot = name.lastIndexOf(".")
+            const stem = dot > 0 ? name.slice(0, dot) : name
+            const extension = dot > 0 ? name.slice(dot) : ""
+            let suffix = 2
+            do {
+                name = `${stem} (${suffix++})${extension}`
+            } while (reserved.has(name) || used.has(name))
+        }
+        used.add(name)
+        return { ...entry, name }
     })
 }
 
@@ -130,19 +163,17 @@ export async function centerProduct(
     const detailFileAssetIds: Record<string, string> = {}
     const carouselImages: string[] = []
     const detailImages: string[] = []
-    for (const media of carouselMedia) {
-        const asset = resolvedAssets.get(media.file_asset_id)
-        const name = asset?.file_name ?? media.file_asset_id
-        carouselImages.push(name)
-        if (asset?.public_url) carouselPreviewUrls[name] = asset.public_url
-        carouselFileAssetIds[name] = media.file_asset_id
-    }
-    for (const media of detailMedia) {
-        const asset = resolvedAssets.get(media.file_asset_id)
-        const name = asset?.file_name ?? media.file_asset_id
-        detailImages.push(name)
-        if (asset?.public_url) detailPreviewUrls[name] = asset.public_url
-        detailFileAssetIds[name] = media.file_asset_id
+    for (const { media, asset, name } of namedProductMedia(
+        [...carouselMedia, ...detailMedia],
+        resolvedAssets,
+    )) {
+        const isCarousel = media.media_role === "carousel"
+        const names = isCarousel ? carouselImages : detailImages
+        const previews = isCarousel ? carouselPreviewUrls : detailPreviewUrls
+        const assetIds = isCarousel ? carouselFileAssetIds : detailFileAssetIds
+        names.push(name)
+        if (asset?.public_url) previews[name] = asset.public_url
+        assetIds[name] = media.file_asset_id
     }
 
     const skuFields: ProductSkuFields[] = []

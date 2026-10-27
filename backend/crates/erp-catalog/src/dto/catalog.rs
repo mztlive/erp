@@ -253,12 +253,12 @@ mod tests {
 
     #[test]
     fn fill_blank_sku_nos_skips_existing_and_explicit_numbers() {
-        let mut skus = vec![sku_input(""), sku_input("SPU1-02"), sku_input("  ")];
+        let mut skus = vec![sku_input(""), sku_input("SPU1-02"), sku_input("  "), sku_input("SKU1-04")];
 
         super::ProductSkuInput::fill_blank_sku_nos("SPU1", vec!["SPU1-01".to_string()], &mut skus);
 
         let numbers = skus.iter().map(|sku| sku.sku_no.as_str()).collect::<Vec<_>>();
-        assert_eq!(numbers, ["SPU1-03", "SPU1-02", "SPU1-04"]);
+        assert_eq!(numbers, ["SKU1-03", "SPU1-02", "SKU1-05", "SKU1-04"]);
     }
 
     #[test]

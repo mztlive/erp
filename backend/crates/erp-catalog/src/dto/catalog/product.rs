@@ -61,7 +61,7 @@ pub struct ProductSkuInput {
     /// 历史停用签名是否明确重新启用。
     #[serde(default)]
     pub reenable: bool,
-    /// SKU 编号（全局唯一业务编码）；新增 SKU 留空时由服务端按 `{product_no}-NN` 编号，
+    /// SKU 编号（全局唯一业务编码）；新增 SKU 留空时由服务端生成 `SKU` 前缀编号，
     /// 既有 SKU 必须回传原编号。
     #[serde(default)]
     pub sku_no: String,
@@ -95,7 +95,7 @@ pub struct ProductSkuInput {
 }
 
 impl ProductSkuInput {
-    /// 为未填写编号的 SKU 行按 `{product_no}-NN` 补齐编号。
+    /// 为未填写编号的 SKU 行按 `SkuNoSequence` 补齐 `SKU` 前缀编号。
     ///
     /// 先登记既有编号与本次已填写的编号，再按行序为空白行取号，
     /// 保证自动编号不与同一请求中的显式编号冲突。

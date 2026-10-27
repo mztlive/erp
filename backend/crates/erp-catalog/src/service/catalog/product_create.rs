@@ -37,7 +37,7 @@ impl CatalogService {
     ///
     /// 数据模型 §6.3：`product_no`/`sku_no`/`(product_id, specification_signature)`
     /// 唯一由唯一索引兜底（`DuplicateKey` → 409）；未指定 `product_no` 时自动取号，
-    /// 未填写编号的 SKU 按 `{product_no}-NN` 编号；新签名分配新 `sku_id`；
+    /// 未填写编号的 SKU 按 `SkuNoSequence` 生成 `SKU` 前缀编号；新签名分配新 `sku_id`；
     /// 条码冲突阻断；分类必须允许商品类型；规格名和值在所属 SPU 内直接生效。
     ///
     /// # 参数

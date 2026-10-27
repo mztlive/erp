@@ -401,7 +401,7 @@ mod tests {
         let occupied = (1..=3).map(|index| format!("{}-{index:02}", product.product_no));
         ProductSkuInput::fill_blank_sku_nos(&product.product_no, occupied, &mut request.skus);
         assert_eq!(request.skus[0].sku_no, format!("{}-02", product.product_no));
-        assert_eq!(request.skus[1].sku_no, format!("{}-04", product.product_no));
+        assert_eq!(request.skus[1].sku_no, "SKU20261026-000001-04");
     }
 
     /// 无可继承单位时明确失败，不创建缺少单位的新 SKU。
