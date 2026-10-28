@@ -164,7 +164,9 @@ impl IntoResponse for RequestError {
 #[cfg(test)]
 mod tests {
     use axum::body::{Body, to_bytes};
+    use erp_processes::supplier_catalog_adoption::SaveBatchRequest;
     use serde::Deserialize;
+    use serde_json::json;
 
     use super::*;
 
@@ -187,6 +189,41 @@ mod tests {
             assert_eq!(json["code"], "REQUEST_FIELD_INVALID");
             assert!(json["fieldErrors"]["count"].is_string());
             assert!(!String::from_utf8_lossy(&bytes).contains("private-value"));
+        }
+    }
+
+    #[tokio::test]
+    async fn batch_pricing_accepts_incomplete_inactive_input_but_rejects_invalid_active_prices() {
+        let mut payload = json!({
+            "expected_version":1,
+            "rules":{"mode":"SAME","rule":{"method":"FIXED","value":"200"},"minimum_quantity":"100"},
+            "inactive_pricing":{
+                "mode":"SEPARATE",
+                "dropship":{"method":"FIXED","value":"200"},
+                "bulk":{"method":"PERCENTAGE","value":""},
+                "minimum_quantity":""
+            },
+            "step":"DETAILS"
+        });
+        let request = |body: String| {
+            Request::builder().header("content-type", "application/json").body(Body::from(body)).unwrap()
+        };
+        let decoded =
+            Json::<SaveBatchRequest>::from_request(request(payload.to_string()), &()).await.unwrap().0;
+        assert_eq!(decoded.step.as_deref(), Some("DETAILS"));
+        assert!(decoded.inactive_pricing.is_some());
+
+        for invalid in [json!(""), json!("200.001"), json!(200)] {
+            payload["rules"]["rule"]["value"] = invalid;
+            let response = Json::<SaveBatchRequest>::from_request(request(payload.to_string()), &())
+                .await
+                .unwrap_err()
+                .into_response();
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+            let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(body["code"], "REQUEST_FIELD_INVALID");
+            assert!(body["fieldErrors"]["rules"].is_string());
         }
     }
 

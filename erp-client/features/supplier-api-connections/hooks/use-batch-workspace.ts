@@ -20,6 +20,13 @@ import {
 
 export type PricingMode = BatchPricing["mode"]
 export type RuleMethod = PriceRule["method"]
+const DEFAULT_INPUTS = {
+    input_tax_rate: "inputTaxPercentage",
+    valid_from: "validFrom",
+    valid_to: "validTo",
+    delivery_template_id: "deliveryTemplateId",
+} as const
+export type BatchClearField = keyof typeof DEFAULT_INPUTS | "category_id"
 export type BatchWorkspaceDraft = {
     mode: PricingMode
     inactivePricing: BatchPricing | null
@@ -376,6 +383,20 @@ export function useBatchWorkspace(view: BatchView) {
         acceptSaved(checked)
         setReviewedVersion(checked.batch.preview_version)
     }
+    const setDefaultClear = (field: BatchClearField, clear: boolean) => {
+        form.setFieldValue("clearFields", (current) => {
+            const retained = current.filter((entry) => entry !== field)
+            return clear ? [...retained, field] : retained
+        })
+        if (!clear) return
+        if (field === "category_id") {
+            form.setFieldValue("categoryMappings", (current) =>
+                current.map((row) => ({ ...row, categoryId: "" })),
+            )
+        } else {
+            form.setFieldValue(DEFAULT_INPUTS[field], "")
+        }
+    }
     return {
         form,
         values,
@@ -383,6 +404,7 @@ export function useBatchWorkspace(view: BatchView) {
         persist,
         acceptSaved,
         acceptPreview,
+        setDefaultClear,
         requireReview: () => setReviewedVersion(null),
         hasCurrentReview:
             reviewedVersion != null &&

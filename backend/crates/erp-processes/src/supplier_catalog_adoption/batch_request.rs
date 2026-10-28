@@ -3,8 +3,9 @@
 use std::collections::HashSet;
 
 use erp_supply::catalog_adoption::{
-    AdoptionMapping, BatchConfirmation, BatchCounts, BatchDefaults, BatchPricing, BatchSalesEdit,
-    BatchValuePatch, CatalogAdoptionBatch, CatalogAdoptionBatchItem, FillPolicy, adoption_identity,
+    AdoptionMapping, BatchConfirmation, BatchCounts, BatchDefaults, BatchPricing, BatchPricingDraft,
+    BatchSalesEdit, BatchValuePatch, CatalogAdoptionBatch, CatalogAdoptionBatchItem, FillPolicy,
+    adoption_identity,
 };
 use erp_supply::dto::supplier_catalog::CatalogFilter;
 use erp_supply::dto::supplier_offering::SupplierOfferingTermsWrite;
@@ -60,7 +61,7 @@ impl BatchItemEdit {
 pub struct SaveBatchRequest {
     pub expected_version: u64,
     pub rules: Option<BatchPricing>,
-    pub inactive_pricing: Option<BatchPricing>,
+    pub inactive_pricing: Option<BatchPricingDraft>,
     pub fill_policy: Option<FillPolicy>,
     pub defaults: Option<BatchDefaults>,
     pub step: Option<String>,
@@ -183,6 +184,61 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn pricing_step_accepts_browser_payload_with_unfilled_details() {
+        let request: SaveBatchRequest = serde_json::from_str(
+            r#"{
+            "expected_version":1,
+            "rules":{
+                "mode":"SEPARATE",
+                "dropship":{"method":"FIXED","value":"200"},
+                "bulk":{"method":"FIXED","value":"200"},
+                "minimum_quantity":"100"
+            },
+            "inactive_pricing":{"mode":"SAME","rule":{"method":"UNSET"},"minimum_quantity":null},
+            "fill_policy":{"overwrite":true,"preserve_manual":true},
+            "defaults":{
+                "category_id":null,"category_mappings":[],"input_tax_rate":null,
+                "valid_from":null,"valid_to":null,"delivery_template_id":null,"clear_fields":[]
+            },
+            "step":"DETAILS",
+            "items":[]
+        }"#,
+        )
+        .unwrap();
+        assert_eq!(request.step.as_deref(), Some("DETAILS"));
+        let BatchPricing::Separate { dropship, bulk, minimum_quantity } = request.rules.unwrap() else {
+            panic!("separate pricing must retain both rules");
+        };
+        assert_eq!(dropship.calculate(None).unwrap().unwrap().to_string(), "200");
+        assert_eq!(bulk.calculate(None).unwrap().unwrap().to_string(), "200");
+        assert_eq!(minimum_quantity.unwrap().to_string(), "100");
+        assert!(request.defaults.unwrap().category_mappings.is_empty());
+    }
+
+    #[test]
+    fn pricing_step_preserves_unfilled_inactive_rules_without_applying_them() {
+        let inactive = json!({
+            "mode":"SEPARATE",
+            "dropship":{"method":"FIXED","value":"200"},
+            "bulk":{"method":"PERCENTAGE","value":""},
+            "minimum_quantity":""
+        });
+        let request: SaveBatchRequest = serde_json::from_value(json!({
+            "expected_version":1,
+            "rules":{"mode":"SAME","rule":{"method":"FIXED","value":"200"},"minimum_quantity":"100"},
+            "inactive_pricing":inactive,
+            "step":"DETAILS"
+        }))
+        .unwrap();
+        assert_eq!(serde_json::to_value(request.inactive_pricing.unwrap()).unwrap(), inactive);
+        let BatchPricing::Same { rule, minimum_quantity } = request.rules.unwrap() else {
+            panic!("only the active same-price rule may apply");
+        };
+        assert_eq!(rule.calculate(None).unwrap().unwrap().to_string(), "200");
+        assert_eq!(minimum_quantity.unwrap().to_string(), "100");
+    }
 
     #[test]
     fn unaccepted_identity_is_stable_and_distinct_from_a_normal_command() {

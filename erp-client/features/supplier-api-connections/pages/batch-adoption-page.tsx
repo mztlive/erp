@@ -1,6 +1,12 @@
 "use client"
 
 import * as React from "react"
+import {
+    ArrowLeftIcon,
+    ArrowRightIcon,
+    CheckIcon,
+    SaveIcon,
+} from "lucide-react"
 import { useParams, useRouter, useSearchParams } from "@/lib/navigation"
 import {
     BusinessFailureState,
@@ -25,6 +31,7 @@ import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { isApiError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 import { divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 import {
     useAdoptionBatchQuery,
@@ -469,8 +476,11 @@ function BatchWorkspace({
         querySubmission.error,
     ].filter(Boolean)
     const completed = view.counts.succeeded + view.counts.skipped
+    const activeStepIndex = STEPS.findIndex(
+        (entry) => entry.step === (step === "RECOVERY" ? "DETAILS" : step),
+    )
     return (
-        <PageScaffold density="compact" className="min-w-0 gap-6 pb-24">
+        <PageScaffold density="compact" className="min-w-0 gap-5 pb-8">
             <DetailPageHeader
                 title={
                     step === "PRICING"
@@ -498,31 +508,98 @@ function BatchWorkspace({
                         SKU · {view.product_count} 个来源商品
                     </span>
                 }
+                secondaryActions={
+                    <div className="flex flex-wrap items-center gap-4">
+                        <details className="text-xs text-muted-foreground">
+                            <summary
+                                id="supplier-catalog-batch-information"
+                                className="cursor-pointer"
+                            >
+                                批次信息
+                            </summary>
+                            <p className="num pt-2">
+                                入库批次：{view.batch.batch_no}
+                            </p>
+                        </details>
+                        {step === "PRICING" ? (
+                            <Button
+                                id="supplier-catalog-batch-return-catalog"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                    workspace.dirty
+                                        ? setLeaveOpen(true)
+                                        : returnToCatalog()
+                                }
+                            >
+                                <ArrowLeftIcon aria-hidden />
+                                返回商品库
+                            </Button>
+                        ) : null}
+                    </div>
+                }
             />
             <ol
-                className="grid grid-cols-2 gap-3 md:grid-cols-4"
+                className="flex items-center border-b pb-4"
                 aria-label="批量入库步骤"
             >
-                {STEPS.map((entry, index) => (
-                    <li key={entry.step} className="flex items-center gap-3">
-                        <span
-                            className={`num flex size-8 shrink-0 items-center justify-center rounded-full ${entry.step === step || (step === "RECOVERY" && entry.step === "DETAILS") ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                {STEPS.map((entry, index) => {
+                    const isCurrent = index === activeStepIndex
+                    const isComplete = index < activeStepIndex
+                    return (
+                        <li
+                            key={entry.step}
+                            aria-current={isCurrent ? "step" : undefined}
+                            className="flex min-w-0 flex-1 items-center last:flex-none"
                         >
-                            {index + 1}
-                        </span>
-                        <span className="text-sm">{entry.label}</span>
-                    </li>
-                ))}
+                            <div className="flex shrink-0 flex-col items-center gap-2 sm:flex-row">
+                                <span
+                                    className={cn(
+                                        "num flex size-7 shrink-0 items-center justify-center rounded-full text-sm",
+                                        isCurrent || isComplete
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-muted text-muted-foreground",
+                                    )}
+                                >
+                                    {isComplete ? (
+                                        <>
+                                            <CheckIcon
+                                                className="size-4"
+                                                aria-hidden
+                                            />
+                                            <span className="sr-only">
+                                                已完成
+                                            </span>
+                                        </>
+                                    ) : (
+                                        index + 1
+                                    )}
+                                </span>
+                                <span
+                                    className={cn(
+                                        "whitespace-nowrap text-xs sm:text-sm",
+                                        isCurrent
+                                            ? "font-medium"
+                                            : "text-muted-foreground",
+                                    )}
+                                >
+                                    {entry.label}
+                                </span>
+                            </div>
+                            {index < STEPS.length - 1 ? (
+                                <span
+                                    aria-hidden
+                                    className={cn(
+                                        "mx-2 mt-3.5 h-0.5 min-w-2 flex-1 self-start sm:mx-4 sm:mt-0 sm:self-auto",
+                                        isComplete ? "bg-primary" : "bg-border",
+                                    )}
+                                />
+                            ) : null}
+                        </li>
+                    )
+                })}
             </ol>
-            <details className="text-xs text-muted-foreground">
-                <summary
-                    id="supplier-catalog-batch-information"
-                    className="cursor-pointer"
-                >
-                    批次信息
-                </summary>
-                <p className="num pt-2">入库批次：{view.batch.batch_no}</p>
-            </details>
             {!canWrite ? (
                 <p
                     role="status"
@@ -611,23 +688,24 @@ function BatchWorkspace({
                             void workspace.persist()
                         }}
                     >
-                        <fieldset
-                            disabled={!editable || busy}
-                            className="min-w-0 disabled:opacity-70"
-                        >
-                            {step === "PRICING" ? (
-                                <BatchPricingPanel
-                                    workspace={workspace}
-                                    view={view}
-                                />
-                            ) : (
+                        {step === "PRICING" ? (
+                            <BatchPricingPanel
+                                workspace={workspace}
+                                view={view}
+                                disabled={!editable || busy}
+                            />
+                        ) : (
+                            <fieldset
+                                disabled={!editable || busy}
+                                className="min-w-0 disabled:opacity-70"
+                            >
                                 <BatchDetailsPanel
                                     workspace={workspace}
                                     supplierId={view.batch.supplier_id}
                                     categories={categoryOptions}
                                 />
-                            )}
-                        </fieldset>
+                            </fieldset>
+                        )}
                     </form>
                 </form.AppForm>
             ) : (
@@ -820,21 +898,24 @@ function BatchWorkspace({
                                     : void workspace.persist()
                             }
                         >
+                            <SaveIcon aria-hidden />
                             保存草稿
                         </Button>
                     ) : null}
-                    <Button
-                        id="supplier-catalog-batch-return-catalog"
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                            workspace.dirty
-                                ? setLeaveOpen(true)
-                                : returnToCatalog()
-                        }
-                    >
-                        返回商品库
-                    </Button>
+                    {step !== "PRICING" ? (
+                        <Button
+                            id="supplier-catalog-batch-return-catalog"
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                                workspace.dirty
+                                    ? setLeaveOpen(true)
+                                    : returnToCatalog()
+                            }
+                        >
+                            返回商品库
+                        </Button>
+                    ) : null}
                     {step === "PRICING" ? (
                         <Button
                             id="supplier-catalog-batch-next-details"
@@ -843,6 +924,10 @@ function BatchWorkspace({
                             onClick={() => void workspace.persist("DETAILS")}
                         >
                             下一步：补齐资料
+                            <ArrowRightIcon
+                                data-icon="inline-end"
+                                aria-hidden
+                            />
                         </Button>
                     ) : step === "DETAILS" ? (
                         <>
@@ -1036,6 +1121,7 @@ function BatchWorkspace({
                                     setLeaveOpen(false)
                             }}
                         >
+                            <SaveIcon aria-hidden />
                             保存草稿
                         </Button>
                     </DialogFooter>

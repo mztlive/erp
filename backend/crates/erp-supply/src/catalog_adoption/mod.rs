@@ -8,6 +8,7 @@ mod batch_values;
 mod media;
 mod model;
 mod pricing;
+mod pricing_draft;
 mod repository;
 
 pub use batch::*;
@@ -19,6 +20,7 @@ pub use batch_repository::{
 pub use batch_values::{BatchPriceWarning, BatchSalesEdit, BatchSalesValues, BatchValue, BatchValuePatch};
 pub use model::*;
 pub use pricing::{BatchPricing, FillPolicy, PriceRule, ValueOrigin};
+pub use pricing_draft::{BatchPricingDraft, DraftPriceValue, PriceRuleDraft};
 pub use repository::{CatalogAdoptionExt, ensure_indexes, has_product_receipt};
 
 mod batch_conflicts;

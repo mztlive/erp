@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { OptionCombobox } from "@/components/business"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -19,6 +20,7 @@ export function DeliveryTemplateField({
     value,
     onChange,
     disabled = false,
+    labelAction,
 }: {
     id: string
     supplierId: string
@@ -26,6 +28,7 @@ export function DeliveryTemplateField({
     value: string
     onChange: (value: string) => void
     disabled?: boolean
+    labelAction?: ReactNode
 }) {
     const templates = useSupplierDeliveryTemplatesQuery(supplierId)
     const account = useAccountProfileQuery()
@@ -54,14 +57,19 @@ export function DeliveryTemplateField({
     ]
     return (
         <Field className="min-w-0 gap-2">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <FieldLabel htmlFor={id}>配送模板</FieldLabel>
-                {canCreate ? (
-                    <SupplierDeliveryTemplatesLink
-                        id={`${id}-manage`}
-                        supplierId={supplierId}
-                        disabled={disabled}
-                    />
+                {labelAction || canCreate ? (
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                        {labelAction}
+                        {canCreate ? (
+                            <SupplierDeliveryTemplatesLink
+                                id={`${id}-manage`}
+                                supplierId={supplierId}
+                                disabled={disabled}
+                            />
+                        ) : null}
+                    </div>
                 ) : null}
             </div>
             <OptionCombobox
