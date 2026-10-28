@@ -1,9 +1,10 @@
 //! API 批量选品的公司售价规则；来源采购报价始终只读。
 
 use erp_core::money::{Amount, Quantity, UnitPrice};
-use rust_decimal::{Decimal, RoundingStrategy};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use super::batch_pricing;
 use crate::{Error, Result};
 
 /// 公司售价的计算方法；比例按百分数输入，不能当作毛利率。
@@ -56,18 +57,10 @@ impl PriceRule {
         let value = match self {
             Self::Unset => return Ok(None),
             Self::Fixed(value) => return Ok(Some(*value)),
-            Self::Add(value) => source.checked_add(value.to_decimal()),
-            Self::Percentage(rate) => {
-                let factor = rate
-                    .to_decimal()
-                    .checked_div(Decimal::ONE_HUNDRED)
-                    .and_then(|ratio| ratio.checked_add(Decimal::ONE));
-                factor.and_then(|factor| source.checked_mul(factor))
-            },
+            Self::Add(value) => batch_pricing::add(source, value.to_decimal())?,
+            Self::Percentage(rate) => batch_pricing::percentage(source, rate.to_decimal())?,
         };
-        let value = value.ok_or_else(|| Error::ValidationError("批量售价计算超出金额范围".into()))?;
-        // 批量选品合同 §5.1 明确采用非负数半入；不改变财务金额的银行家舍入。
-        Ok(Some(Amount::try_from(value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero))?))
+        Ok(Some(value))
     }
 }
 
@@ -104,6 +97,7 @@ pub enum ValueOrigin {
     Rule,
     Manual,
     Cleared,
+    Preserved,
 }
 
 /// 规则应用时的覆盖范围；已有公司 SKU 不进入此操作。
@@ -133,6 +127,7 @@ impl FillPolicy {
             ValueOrigin::Unset => true,
             ValueOrigin::Manual | ValueOrigin::Cleared => self.overwrite && !self.preserve_manual,
             ValueOrigin::Source | ValueOrigin::Rule => self.overwrite,
+            ValueOrigin::Preserved => false,
         }
     }
 }
@@ -195,5 +190,43 @@ mod tests {
         assert!(!overwrite.allows(ValueOrigin::Manual));
         assert!(!overwrite.allows(ValueOrigin::Cleared));
         assert!(FillPolicy { overwrite: true, preserve_manual: false }.allows(ValueOrigin::Cleared));
+    }
+
+    #[test]
+    fn large_percentage_does_not_round_an_intermediate_decimal() {
+        let rule = PriceRule::Percentage("60".parse().unwrap());
+        assert_eq!(
+            rule.calculate(Some("10000000000000000000000000.003".parse().unwrap())).unwrap(),
+            Some("16000000000000000000000000.00".parse().unwrap())
+        );
+        // 未除比例尺度的原始乘积大于 i128；按商余数分解后最终整数金额仍可准确表示。
+        let rule = PriceRule::Percentage("999900.0001".parse().unwrap());
+        assert_eq!(
+            rule.calculate(Some("7000000000000000000000000.0001".parse().unwrap())).unwrap(),
+            Some("70000000007000000000000000001.00".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn large_addition_still_uses_half_up_at_final_cent_only() {
+        let rule = PriceRule::Add("10000000000000000000000000".parse().unwrap());
+        assert_eq!(
+            rule.calculate(Some("70000000000000000000000000.005".parse().unwrap())).unwrap(),
+            Some("80000000000000000000000000.01".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn insignificant_source_and_rule_zeroes_do_not_expand_internal_scale() {
+        let rule = PriceRule::Percentage("15.0000000000000000000".parse().unwrap());
+        assert_eq!(
+            rule.calculate(Some("10.1000000000000000000".parse().unwrap())).unwrap(),
+            Some("11.62".parse().unwrap())
+        );
+        let rule = PriceRule::Add("10.0000000000000000000".parse().unwrap());
+        assert_eq!(
+            rule.calculate(Some("0.0000000000000000000000000000".parse().unwrap())).unwrap(),
+            Some("10.00".parse().unwrap())
+        );
     }
 }

@@ -1,7 +1,7 @@
 //! 域 D25 `supplier_api` 管理端路由。
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
@@ -15,6 +15,83 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .merge(dangaoshushu_routes(rbac))
         .merge(catalog_routes(rbac))
         .merge(adoption_routes(rbac))
+        .merge(adoption_batch_routes(rbac))
+}
+
+fn adoption_batch_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    adoption_batch_query_routes(rbac).merge(adoption_batch_command_routes(rbac))
+}
+
+fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}/submission-result",
+            with_permission(
+                post(supplier_api::adoption_batches::submission_result),
+                rbac,
+                supplier_api::adoption_batches::submission_result_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches",
+            with_permission(
+                post(supplier_api::adoption_batches::create),
+                rbac,
+                supplier_api::adoption_batches::create_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches",
+            with_permission(
+                get(supplier_api::adoption_batches::list),
+                rbac,
+                supplier_api::adoption_batches::list_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}",
+            with_permission(
+                get(supplier_api::adoption_batches::detail),
+                rbac,
+                supplier_api::adoption_batches::detail_permission_key(),
+            ),
+        )
+}
+
+fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}",
+            with_permission(
+                put(supplier_api::adoption_batches::save),
+                rbac,
+                supplier_api::adoption_batches::save_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}/preview",
+            with_permission(
+                post(supplier_api::adoption_batches::preview),
+                rbac,
+                supplier_api::adoption_batches::preview_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}/submit",
+            with_permission(
+                post(supplier_api::adoption_batches::submit),
+                rbac,
+                supplier_api::adoption_batches::submit_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}/reconcile",
+            with_permission(
+                post(supplier_api::adoption_batches::reconcile),
+                rbac,
+                supplier_api::adoption_batches::reconcile_permission_key(),
+            ),
+        )
 }
 
 fn adoption_routes(rbac: &SharedRbacService) -> Router<AppState> {

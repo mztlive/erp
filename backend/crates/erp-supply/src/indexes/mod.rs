@@ -1,6 +1,6 @@
 //! 按原顺序登记四组供应链索引。
 
-use crate::catalog_adoption::ensure_indexes as ensure_catalog_adoption_indexes;
+use crate::catalog_adoption::{ensure_batch_indexes, ensure_indexes as ensure_catalog_adoption_indexes};
 use crate::inquiry::indexes as inquiry_indexes;
 use crate::portal::indexes as portal_indexes;
 
@@ -22,6 +22,7 @@ pub mod supplier_settlement;
 pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     supplier_api::ensure(db).await?;
     ensure_catalog_adoption_indexes(db).await?;
+    ensure_batch_indexes(db).await?;
     supplier_offering::ensure(db).await?;
     supplier_fulfillment::ensure(db).await?;
     crate::api_order::ensure_indexes(db).await?;

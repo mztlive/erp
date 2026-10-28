@@ -6094,6 +6094,86 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/submission-result",
+                description: "查证供应商批量入库原确认",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches",
+                description: "创建供应商批量入库作业",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches",
+                description: "查询可恢复的供应商批量入库作业",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}",
+                description: "查询供应商批量入库作业",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}",
+                description: "保存供应商批量入库草稿",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/preview",
+                description: "核对供应商批量入库结果",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/submit",
+                description: "确认供应商批量入库作业",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/reconcile",
+                description: "核实供应商批量入库原操作结果",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/supplier-api-connections/{id}/catalog/adoptions/preview",
                 description: "同步供应商商品目录",
                 permission: {

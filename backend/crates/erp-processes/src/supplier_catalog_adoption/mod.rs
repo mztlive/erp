@@ -9,12 +9,24 @@ use mongodb::Database;
 
 use crate::{Error, Result};
 
+mod batch;
+mod batch_draft;
+mod batch_execution;
+mod batch_matching;
+mod batch_mutation;
+mod batch_preview;
+mod batch_request;
+mod batch_submission;
 mod confirm;
 mod matching;
 mod preview;
 mod product;
 mod request;
 
+pub use batch_request::{
+    BatchItemEdit, BatchSubmissionView, BatchVersionRequest, BatchView, CreateBatchRequest, SaveBatchRequest,
+    SubmitBatchRequest,
+};
 pub use confirm::{AdoptionBatchResult, AdoptionRowResult};
 pub use matching::AdoptionResolution;
 pub use preview::AdoptionPreviewView;

@@ -5,7 +5,8 @@ use erp_catalog::service::catalog::ProductDraft;
 use erp_catalog::{CatalogExt, CreateProductBrandRequest, ProductSkuInput, Sku};
 use erp_core::ids::ProductId;
 use erp_supply::catalog_adoption::{
-    AdoptionRow, AdoptionTarget, CatalogAdoptionExt, CatalogAdoptionProduct, adoption_identity,
+    AdoptionRow, AdoptionTarget, BatchMatchAnchor, CatalogAdoptionExt, CatalogAdoptionProduct,
+    adoption_identity,
 };
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use persistence_core::{Executor, NoTransaction};
@@ -24,19 +25,21 @@ pub(super) struct PreparedAdoption {
     pub creates_product: bool,
     pub sku_input: Option<ProductSkuInput>,
     pub resolved_row: AdoptionRow,
+    pub parent_product_id: Option<String>,
 }
 
 impl SupplierCatalogAdoptionProcess {
-    pub(super) async fn prepare_row(
+    pub(super) async fn prepare_row_with_anchor(
         &self,
         item: &SupplierCatalogItem,
         row: &AdoptionRow,
         actor: &AuditActor,
         command: &str,
+        anchor: Option<&BatchMatchAnchor>,
     ) -> Result<PreparedAdoption> {
         let media = PreparedSourceMedia::from_archived(item);
         let cleanup = media.cleanup_handle();
-        let outcome = self.prepare_row_with_media(item, row, actor, command, media).await;
+        let outcome = self.prepare_row_with_media(item, row, actor, command, media, anchor).await;
         if outcome.is_err() {
             cleanup.discard_uncommitted().await;
         }
@@ -50,10 +53,12 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
         command: &str,
         media: PreparedSourceMedia,
+        anchor: Option<&BatchMatchAnchor>,
     ) -> Result<PreparedAdoption> {
         let mut materialized_item = item.clone();
         media.apply_to(&mut materialized_item)?;
-        let mut resolved_row = self.automatic_row(item, row, actor, command, &mut NoTransaction).await?;
+        let mut resolved_row =
+            self.automatic_row_with_anchor(item, row, actor, command, anchor, &mut NoTransaction).await?;
         self.prepare_source_unit(item, row, &resolved_row, actor).await?;
         if let AdoptionTarget::Create { brand_id, .. } = &mut resolved_row.target
             && brand_id.is_empty()
@@ -70,11 +75,12 @@ impl SupplierCatalogAdoptionProcess {
                 .await?;
             let draft = match mapping {
                 Some(_) => None,
-                None => Some(
+                None if anchor.is_none() => Some(
                     scoped_catalog_service(self.db.clone(), self.rbac.clone())
                         .prepare_product_create(request, &media.pending_assets, actor)
                         .await?,
                 ),
+                None => None,
             };
             (draft, Some(input))
         } else {
@@ -87,6 +93,7 @@ impl SupplierCatalogAdoptionProcess {
             draft,
             sku_input: input,
             resolved_row,
+            parent_product_id: anchor.map(|value| value.target.product_id.clone()),
         })
     }
 
@@ -151,13 +158,26 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<Sku> {
         let mapping =
             self.db.catalog_adoption_products().find_by_id(&product_binding_id(item), executor).await?;
+        if let (Some(mapping), Some(expected)) = (&mapping, &prepared.parent_product_id)
+            && mapping.product_id != *expected
+        {
+            return Err(Error::ConflictError("来源商品的公司归属已变化，请重新核对".into()));
+        }
+        let effective_mapping = mapping.clone().or_else(|| {
+            prepared.parent_product_id.as_ref().map(|id| CatalogAdoptionProduct {
+                base: BaseModel::new(product_binding_id(item)),
+                connection_id: item.connection_id.clone(),
+                source_product_id: item.product_id.clone(),
+                product_id: id.clone(),
+            })
+        });
         let sku = match &row.target {
             AdoptionTarget::Auto { .. } => return Err(Error::Internal("自动匹配尚未解析".into())),
             AdoptionTarget::Existing { .. } => {
                 self.reuse_target(item, &row.target, prepared, actor, executor).await?
             },
             AdoptionTarget::Create { .. } => {
-                self.create_target(mapping.as_ref(), item, row, prepared, actor, executor).await?
+                self.create_target(effective_mapping.as_ref(), item, row, prepared, actor, executor).await?
             },
         };
         if let Some(mapping) = mapping {

@@ -85,6 +85,9 @@ pub enum DocumentNumberKind {
 
     /// 公司商品（SPU），对应内部建档未指定编号时的 `product.product_no`。
     Product,
+
+    /// API 供应商批量入库作业，对应 `supplier_catalog_adoption_batches.batch_no`。
+    SupplierCatalogAdoption,
 }
 
 impl Display for DocumentNumberKind {
@@ -149,6 +152,7 @@ impl DocumentNumberKind {
             Self::SupplierFulfillment => ("SF", "supplier_fulfillment"),
             Self::SupplierSettlement => ("SS", "supplier_settlement"),
             Self::Product => ("SPU", "product"),
+            Self::SupplierCatalogAdoption => ("SCA", "supplier_catalog_adoption"),
         }
     }
 }
@@ -284,7 +288,7 @@ mod tests {
 
     use super::{COUNTER_COLLECTION, DocumentNumberKind, SEQ_WIDTH, format_number};
 
-    const KIND_TABLE: [(DocumentNumberKind, &str); 14] = [
+    const KIND_TABLE: [(DocumentNumberKind, &str); 15] = [
         (DocumentNumberKind::SalesOrder, "SO"),
         (DocumentNumberKind::PurchaseOrder, "PO"),
         (DocumentNumberKind::PurchaseReceipt, "GRN"),
@@ -299,6 +303,7 @@ mod tests {
         (DocumentNumberKind::SupplierFulfillment, "SF"),
         (DocumentNumberKind::SupplierSettlement, "SS"),
         (DocumentNumberKind::Product, "SPU"),
+        (DocumentNumberKind::SupplierCatalogAdoption, "SCA"),
     ];
 
     #[test]
@@ -315,6 +320,7 @@ mod tests {
             (DocumentNumberKind::CustomerReceipt, "customer_receipt"),
             (DocumentNumberKind::SupplierSettlement, "supplier_settlement"),
             (DocumentNumberKind::Invoice, "invoice"),
+            (DocumentNumberKind::SupplierCatalogAdoption, "supplier_catalog_adoption"),
         ];
         for (kind, expected) in cases {
             let serialized = serialize_to_bson(&kind).expect("kind should serialize");
@@ -343,6 +349,7 @@ mod tests {
         assert_eq!(format_number(DocumentNumberKind::SalesOrder, date, 123), "SO20260701-000123");
         assert_eq!(format_number(DocumentNumberKind::Invoice, date, 1), "INV20260701-000001");
         assert_eq!(format_number(DocumentNumberKind::Product, date, 7), "SPU20260701-000007");
+        assert_eq!(format_number(DocumentNumberKind::SupplierCatalogAdoption, date, 8), "SCA20260701-000008");
     }
 
     #[test]

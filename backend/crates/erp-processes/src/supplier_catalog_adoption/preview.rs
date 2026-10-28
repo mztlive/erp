@@ -8,7 +8,6 @@ use erp_supply::catalog_adoption::{
 use erp_supply::dto::supplier_catalog::CatalogItemView;
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
-use erp_supply::service::supplier_api::SupplierApiService;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
@@ -77,8 +76,7 @@ impl SupplierCatalogAdoptionProcess {
         self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
         self.ensure_permission(actor, "supplier_offering_cost:detail").await?;
         request.validate()?;
-        let source =
-            SupplierApiService::new(self.db.clone()).load_connection(connection, &mut NoTransaction).await?;
+        let source = self.batch_access(connection, actor, &mut NoTransaction).await?;
         self.ensure_source(&source)?;
         let items = self.selected_items(connection, request).await?;
         for item in &items {

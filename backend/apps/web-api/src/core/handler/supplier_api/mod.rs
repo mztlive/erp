@@ -18,6 +18,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+pub mod adoption_batches;
 pub mod adoptions;
 pub mod catalog;
 pub mod connector_types;

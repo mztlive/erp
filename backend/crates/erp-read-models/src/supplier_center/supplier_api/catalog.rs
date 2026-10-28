@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_supply::dto::supplier_catalog::{CatalogFilter, CatalogItemView, CatalogSyncMode};
-use erp_supply::entity::supplier_api::SupplierConnectorType;
+use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
 use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_support::repository::prelude::*;
 use erp_support::{BulkJobExt, JobStatus};
@@ -31,6 +31,8 @@ fn page_size() -> u32 {
 pub struct CatalogView {
     pub items: Vec<CatalogItemView>,
     pub total: u64,
+    pub product_total: u64,
+    pub can_read_cost: bool,
     pub page: u32,
     pub page_size: u32,
     pub jobs: Vec<CatalogJobView>,
@@ -43,6 +45,8 @@ pub struct CatalogView {
 pub struct CatalogFilterOptions {
     pub categories: Vec<supplier_catalog::CatalogFilterOption>,
     pub brands: Vec<supplier_catalog::CatalogFilterOption>,
+    pub category_hierarchy_supported: bool,
+    pub category_hierarchy_reason: &'static str,
 }
 #[derive(Serialize)]
 pub struct CatalogJobView {
@@ -73,10 +77,8 @@ impl SupplierApiReadService {
         }
         query.filter.validate()?;
         let can_read_cost = self.has_permission(actor, "supplier_offering_cost:detail").await?;
-        if !can_read_cost && (query.filter.price_min.is_some() || query.filter.price_max.is_some()) {
-            return Err(Error::Forbidden("当前账号不能按采购报价筛选供应商商品".into()));
-        }
-        let connection = self.domain().load_connection(id, &mut NoTransaction).await?;
+        query.filter.ensure_cost_access(can_read_cost)?;
+        let connection = self.catalog_connection(id, actor).await?;
         let (mut items, total) = supplier_catalog::filtered_page(
             &self.db,
             id,
@@ -86,6 +88,8 @@ impl SupplierApiReadService {
             &mut NoTransaction,
         )
         .await?;
+        let counts =
+            supplier_catalog::filtered_counts(&self.db, id, &query.filter, &mut NoTransaction).await?;
         if !can_read_cost {
             for item in &mut items {
                 item.purchase_price = None;
@@ -93,14 +97,13 @@ impl SupplierApiReadService {
             }
         }
         let jobs = self.catalog_jobs(id).await?;
-        let filters = CatalogFilterOptions {
-            categories: supplier_catalog::filter_options(&self.db, id, true, &mut NoTransaction).await?,
-            brands: supplier_catalog::filter_options(&self.db, id, false, &mut NoTransaction).await?,
-        };
+        let filters = self.catalog_filters(id).await?;
         let sync_mode = jobs.first().map_or(CatalogSyncMode::Full, |job| job.sync_mode);
         Ok(CatalogView {
             items: items.into_iter().map(CatalogItemView::from).collect(),
             total,
+            product_total: counts.product_total,
+            can_read_cost,
             page: query.page,
             page_size: query.page_size,
             jobs,
@@ -109,6 +112,26 @@ impl SupplierApiReadService {
             coverage: "PARTIAL",
             incremental_supported: connection.connector_type == Some(SupplierConnectorType::Dangaoshushu),
         })
+    }
+
+    async fn catalog_filters(&self, id: &str) -> Result<CatalogFilterOptions> {
+        Ok(CatalogFilterOptions {
+            categories: supplier_catalog::filter_options(&self.db, id, true, &mut NoTransaction).await?,
+            brands: supplier_catalog::filter_options(&self.db, id, false, &mut NoTransaction).await?,
+            category_hierarchy_supported: false,
+            category_hierarchy_reason: "来源未提供可靠分类层级，暂不支持包含子分类",
+        })
+    }
+
+    async fn catalog_connection(&self, id: &str, actor: &AuditActor) -> Result<SupplierApiConnection> {
+        if !self.has_permission(actor, "supplier_api_connection:detail").await? {
+            return Err(Error::Forbidden("当前账号无权查看供应商商品库".into()));
+        }
+        let access =
+            self.supplier_access.as_ref().ok_or_else(|| Error::Internal("供应商范围服务未接线".into()))?;
+        let connection = self.domain().load_connection(id, &mut NoTransaction).await?;
+        access.require_with(actor, "detail", &connection.supplier_id, &mut NoTransaction).await?;
+        Ok(connection)
     }
     async fn catalog_jobs(&self, id: &str) -> Result<Vec<CatalogJobView>> {
         let records = self.db.background_jobs().recent_catalog_jobs(id, &mut NoTransaction).await?;

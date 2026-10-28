@@ -8,12 +8,12 @@ use erp_identity::SharedRbacService;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_party::SensitiveDataCodec;
 use erp_processes::ApprovalActionRegistry;
-use erp_processes::adapters::contract_template_service;
 use erp_processes::adapters::supplier_api::{
     UnavailableSupplierApiGateway, UnavailableSupplierReferenceRegistry,
 };
 use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGateway;
 use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth, workflow_object_facts};
+use erp_processes::adapters::{contract_template_service, supplier_access};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::connectors::dangaoshushu::DangaoshushuRuntime;
 use erp_processes::connectors::registry::SupplierConnectorRegistry;
@@ -380,6 +380,7 @@ impl AppState {
         erp_read_models::supplier_center::supplier_api::SupplierApiReadService::new(self.db())
             .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
             .with_rbac(self.rbac())
+            .with_supplier_access(supplier_access(self.db(), self.rbac()))
     }
 
     /// 注入实际任务授权读取，构造不执行授权或查询。

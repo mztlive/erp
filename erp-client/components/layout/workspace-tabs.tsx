@@ -35,6 +35,10 @@ export type WorkspaceTab = WorkspaceFrameState & {
 
 function newTab(url: URL): WorkspaceTab {
     const key = workspaceTabKey(url)
+    // Chromium blocks an iframe whose document URL equals its ancestor URL.
+    // Keep the frame address distinct while exposing only the business URL.
+    const frameUrl = new URL(url)
+    frameUrl.searchParams.set("_workspace_frame", "1")
     return {
         id: toAutomationIdSegment(
             Array.from(key, (character) =>
@@ -42,7 +46,7 @@ function newTab(url: URL): WorkspaceTab {
             ).join("-"),
         ),
         key,
-        src: tabHref(url),
+        src: `${frameUrl.pathname}${frameUrl.search}${frameUrl.hash}`,
         href: tabHref(url),
         title: workspaceTabTitle(url),
         dirty: false,

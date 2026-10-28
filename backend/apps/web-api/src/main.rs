@@ -12,7 +12,8 @@ use erp_identity::service::iam::ensure_identity_foundation;
 use erp_identity::{AdminService, InitializeSuperAdminParams};
 use erp_processes::background::{
     BackgroundRunner, DeliveryCoverageRefreshAdapter, ProductImportTaskAdapter, SalesSelectionTaskAdapter,
-    SellableProjectionRefreshAdapter, SupplierCatalogTaskAdapter, SupplierImportTaskAdapter,
+    SellableProjectionRefreshAdapter, SupplierCatalogAdoptionTaskAdapter, SupplierCatalogTaskAdapter,
+    SupplierImportTaskAdapter,
 };
 use erp_processes::delivery_coverage_refresh::DeliveryCoverageRefreshProcess;
 use erp_processes::sellable_projection_refresh::SellableProjectionRefresher;
@@ -201,6 +202,10 @@ fn spawn_background_runner(state: AppState) -> Result<()> {
     let mut runner = BackgroundRunner::new(std::time::Duration::from_secs(2))
         .register(ProductImportTaskAdapter::new(state.product_import_process()))
         .register(SupplierImportTaskAdapter::new(state.supplier_import_process()))
+        .register(SupplierCatalogAdoptionTaskAdapter::new(
+            state.db(),
+            state.supplier_catalog_adoption_process()?,
+        ))
         .register(SalesSelectionTaskAdapter::new(erp_processes::sales_selection::SalesSelectionProcess::new(
             state.db(),
             state.storage().clone(),

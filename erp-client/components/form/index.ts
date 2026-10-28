@@ -96,4 +96,7 @@ export const useAppForm: typeof useBaseAppForm = (options) => {
     useWorkspaceFormGuard(form)
     return form
 }
+/** 即时生效的查询条件不属于待保存业务资料，不注册工作页离开保护。 */
+export const useAppFilterForm: typeof useBaseAppForm = useBaseAppForm
+
 export { withForm, withFieldGroup, applyApiFormError }

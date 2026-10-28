@@ -5,7 +5,7 @@ import { catalogUnitLabel } from "../../api/catalog"
 import * as React from "react"
 import Link from "next/link"
 import { TriangleAlertIcon } from "lucide-react"
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table"
+import type { ColumnDef } from "@tanstack/react-table"
 import {
     BusinessEmptyState,
     BusinessFailureState,
@@ -28,14 +28,16 @@ import type {
     CatalogFilters,
     CatalogItem,
 } from "../../api/catalog"
-import type { AdoptionPreview, AdoptionSelection } from "../../api/adoption"
 import { useCatalogQuery } from "../../hooks/queries"
-import { usePreviewAdoptionMutation } from "../../hooks/adoption"
+import {
+    catalogFilterKey,
+    useCatalogBatchSelection,
+} from "../../hooks/use-catalog-batch-selection"
 import { CatalogFilterForm } from "./catalog-filter-form"
-import { CatalogAdoptionDialog } from "../dialogs/catalog-adoption-dialog"
 import { CatalogSourceImage } from "./catalog-source-image"
 import { catalogMediaBlocker } from "../../lib/catalog-media"
 import { CatalogIdentityReviewDialog } from "../dialogs/catalog-identity-review-dialog"
+import { CatalogBatchHistory } from "./catalog-batch-history"
 
 const availabilityLabels: Record<CatalogAvailability, string> = {
     AVAILABLE: "可供",
@@ -79,7 +81,6 @@ function CatalogMediaWarning({ item }: { item: CatalogItem }) {
 export function CatalogBrowser({
     connectionId,
     supplierName,
-    supplierId,
     canAdopt,
     adoptionBlocker,
     settingsHref,
@@ -97,33 +98,26 @@ export function CatalogBrowser({
 }) {
     const [filters, setFilters] = React.useState<CatalogFilters>({})
     const [page, setPage] = React.useState(1)
-    const [selection, setSelection] = React.useState<RowSelectionState>({})
     const [previewRow, setPreviewRow] = React.useState<CatalogItem | null>(null)
-    const [adoption, setAdoption] = React.useState<AdoptionPreview | null>(null)
     const [identityItemId, setIdentityItemId] = React.useState<string | null>(
         null,
     )
     const lastFocusedRowId = React.useRef<string | null>(null)
     const query = useCatalogQuery(connectionId, page, filters)
-    const preview = usePreviewAdoptionMutation()
-    const selectedIds = Object.entries(selection)
-        .filter(([, selected]) => selected)
-        .map(([id]) => id)
-    const openAdoption = React.useCallback(
-        async (choice: AdoptionSelection) => {
-            if (!canAdopt) return
-            try {
-                const result = await preview.mutateAsync({
-                    connectionId,
-                    selection: choice,
-                })
-                setAdoption(result)
-            } catch {
-                // 显示服务端的预览错误，保留原筛选及勾选。
-            }
-        },
-        [canAdopt, connectionId, preview],
-    )
+    const choice = useCatalogBatchSelection(connectionId)
+    const selectionBlocker =
+        adoptionBlocker ??
+        (!canReadCost || query.data?.can_read_cost === false
+            ? "当前账号没有接口采购报价权限，不能配置入库。"
+            : !canAdopt
+              ? "当前账号没有选品入库权限，请联系管理员。"
+              : undefined)
+    const canConfigure =
+        !selectionBlocker &&
+        canAdopt &&
+        canReadCost &&
+        query.isSuccess &&
+        query.data.can_read_cost !== false
     const columns = React.useMemo<ColumnDef<CatalogItem>[]>(
         () => [
             {
@@ -182,9 +176,9 @@ export function CatalogBrowser({
             {
                 accessorKey: "purchase_price",
                 header: "接口采购报价",
-                meta: { label: "接口采购报价" },
+                meta: { label: "接口采购报价", align: "end", numeric: true },
                 cell: ({ row }) =>
-                    !canReadCost ? (
+                    !canReadCost || query.data?.can_read_cost === false ? (
                         "无查看权限"
                     ) : row.original.purchase_price == null ? (
                         "暂无接口报价"
@@ -219,7 +213,9 @@ export function CatalogBrowser({
                 header: "公司商品",
                 meta: { label: "公司商品" },
                 cell: ({ row }) =>
-                    row.original.company_product_id ? (
+                    choice.isExcluded(row.original.id) ? (
+                        <Badge variant="secondary">已排除</Badge>
+                    ) : row.original.company_product_id ? (
                         <div className="space-y-1">
                             <p className="text-xs text-muted-foreground">
                                 {row.original.requires_identity_review
@@ -266,32 +262,26 @@ export function CatalogBrowser({
                         size="sm"
                         variant="outline"
                         aria-describedby={
-                            adoptionBlocker
+                            selectionBlocker
                                 ? "supplier-catalog-adoption-blocker"
                                 : undefined
                         }
-                        loading={preview.isPending}
-                        disabled={
-                            !canAdopt ||
-                            preview.isPending ||
-                            row.original.availability === "WITHDRAWN"
-                        }
-                        onClick={() =>
-                            void openAdoption({ item_ids: [row.original.id] })
-                        }
+                        loading={choice.creating}
+                        disabled={!canConfigure || choice.busy}
+                        onClick={() => void choice.configure([row.original.id])}
                     >
-                        选品入库
+                        配置入库
                     </LoadingButton>
                 ),
             },
         ],
         [
-            canAdopt,
-            adoptionBlocker,
+            canConfigure,
+            selectionBlocker,
             canReadCost,
             canReview,
-            preview.isPending,
-            openAdoption,
+            query.data?.can_read_cost,
+            choice,
         ],
     )
     const closePreview = () => {
@@ -306,13 +296,13 @@ export function CatalogBrowser({
     }
     return (
         <>
-            {adoptionBlocker ? (
+            {selectionBlocker ? (
                 <div
                     role="alert"
                     className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-soft p-4 text-sm text-warning-soft-foreground"
                 >
                     <p id="supplier-catalog-adoption-blocker">
-                        {adoptionBlocker}
+                        {selectionBlocker}
                     </p>
                     <Button
                         id="supplier-catalog-adoption-settings"
@@ -328,76 +318,119 @@ export function CatalogBrowser({
                 title={`${supplierName} · 商品库`}
                 toolbar={
                     <CatalogFilterForm
+                        key={catalogFilterKey(filters)}
                         value={filters}
                         options={query.data?.filters}
-                        loading={query.isFetching}
-                        canReadCost={canReadCost}
+                        loading={query.isFetching || choice.busy}
+                        canReadCost={
+                            canReadCost && query.data?.can_read_cost !== false
+                        }
                         onApply={(next) => {
-                            setFilters(next)
-                            setPage(1)
-                            setSelection({})
+                            if (
+                                catalogFilterKey(filters) !==
+                                catalogFilterKey(next)
+                            ) {
+                                choice.clear(
+                                    choice.selectedIds.length || choice.frozen
+                                        ? "筛选条件已变更，原选择与排除项已清空，请重新选择。"
+                                        : undefined,
+                                )
+                                setFilters(next)
+                                setPage(1)
+                            }
                         }}
                     />
                 }
                 selectionBar={
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">
-                            共 {query.data?.total ?? 0} 项
-                            {selectedIds.length
-                                ? `，已选 ${selectedIds.length} 项`
+                        <span className="font-medium">
+                            共{" "}
+                            {query.data?.product_total != null
+                                ? `${query.data.product_total} 个商品 · `
                                 : ""}
+                            {query.data?.total ?? "—"} 个 SKU
                         </span>
-                        {selectedIds.length ? (
-                            <>
-                                <Button
-                                    id="supplier-catalog-clear-selection"
-                                    variant="ghost"
-                                    onClick={() => setSelection({})}
-                                >
-                                    清空勾选
-                                </Button>
-                                <LoadingButton
-                                    id="supplier-catalog-adopt-selected"
-                                    aria-describedby={
-                                        adoptionBlocker
-                                            ? "supplier-catalog-adoption-blocker"
-                                            : undefined
-                                    }
-                                    disabled={!canAdopt || preview.isPending}
-                                    loading={preview.isPending}
-                                    onClick={() =>
-                                        void openAdoption({
-                                            item_ids: selectedIds,
-                                        })
-                                    }
-                                >
-                                    勾选商品入库
-                                </LoadingButton>
-                            </>
+                        <span className="text-muted-foreground">
+                            本页 {query.data?.items.length ?? 0} 个 SKU
+                        </span>
+                        {choice.frozen ? (
+                            <span className="rounded-md bg-success-soft px-3 py-2 text-success-soft-foreground">
+                                已选择全部筛选结果 {choice.frozen.rows.length}{" "}
+                                个 SKU · 已排除 {choice.excludedRows.length} 个
+                                · 最终选中 {choice.selectedIds.length} 个
+                            </span>
+                        ) : choice.selectedIds.length ? (
+                            <span>
+                                已选 {choice.productCount} 个商品 ·{" "}
+                                {choice.selectedIds.length} 个 SKU
+                            </span>
+                        ) : null}
+                        {!choice.frozen && query.data?.total ? (
+                            <LoadingButton
+                                id="supplier-catalog-batch-select-filtered"
+                                variant="outline"
+                                disabled={
+                                    !canConfigure ||
+                                    query.isFetching ||
+                                    choice.busy
+                                }
+                                loading={choice.creating}
+                                onClick={() => void choice.freezeAll(filters)}
+                            >
+                                选择全部 {query.data.total} 个 SKU
+                            </LoadingButton>
+                        ) : null}
+                        {choice.excludedRows.length ? (
+                            <Button
+                                id="supplier-catalog-batch-view-excluded"
+                                variant="ghost"
+                                onClick={() =>
+                                    choice.setShowExcluded(!choice.showExcluded)
+                                }
+                            >
+                                {choice.showExcluded
+                                    ? "收起排除项"
+                                    : `查看排除项（${choice.excludedRows.length}）`}
+                            </Button>
+                        ) : null}
+                        {choice.selectedIds.length || choice.frozen ? (
+                            <Button
+                                id="supplier-catalog-clear-selection"
+                                variant="ghost"
+                                disabled={choice.busy}
+                                onClick={() => choice.clear()}
+                            >
+                                清空选择
+                            </Button>
+                        ) : null}
+                        {choice.saving ? (
+                            <span
+                                role="status"
+                                className="text-muted-foreground"
+                            >
+                                正在保存选择…
+                            </span>
                         ) : null}
                     </div>
                 }
                 tableActions={
                     <LoadingButton
                         aria-describedby={
-                            adoptionBlocker
+                            selectionBlocker
                                 ? "supplier-catalog-adoption-blocker"
                                 : undefined
                         }
-                        id="supplier-catalog-adopt-filtered"
-                        variant="outline"
+                        id="supplier-catalog-batch-configure"
                         disabled={
-                            !canAdopt ||
-                            !query.data?.total ||
-                            query.isFetching ||
-                            preview.isPending
+                            !canConfigure ||
+                            !choice.selectedIds.length ||
+                            choice.needsReload ||
+                            choice.busy
                         }
-                        loading={preview.isPending}
-                        onClick={() => void openAdoption({ filter: filters })}
+                        loading={choice.creating}
+                        onClick={() => void choice.configure()}
                     >
-                        {filters.category_id
-                            ? "当前分类及筛选结果入库"
-                            : "当前筛选结果入库"}
+                        配置入库（{choice.selectedIds.length}）
                     </LoadingButton>
                 }
                 table={
@@ -414,11 +447,16 @@ export function CatalogBrowser({
                             setPage(next.pageIndex + 1)
                         }
                         enableRowSelection={(row) =>
-                            row.original.availability !== "WITHDRAWN"
+                            canConfigure &&
+                            !choice.busy &&
+                            !choice.needsReload &&
+                            choice.isFrozenMember(row.original.id)
                         }
-                        rowSelection={selection}
+                        rowSelection={choice.rowSelection}
                         showToolbarSummary={false}
-                        onRowSelectionChange={setSelection}
+                        onRowSelectionChange={(next) =>
+                            choice.change(next, query.data?.items ?? [])
+                        }
                         onRowPreview={(row) => {
                             lastFocusedRowId.current = row.id
                             setPreviewRow(row)
@@ -439,12 +477,20 @@ export function CatalogBrowser({
                             <BusinessEmptyState
                                 kind="no-data"
                                 title={
-                                    Object.values(filters).some(Boolean)
+                                    Object.values(filters).some((value) =>
+                                        Array.isArray(value)
+                                            ? value.length > 0
+                                            : Boolean(value),
+                                    )
                                         ? "当前筛选没有商品"
                                         : "尚未同步商品"
                                 }
                                 description={
-                                    Object.values(filters).some(Boolean)
+                                    Object.values(filters).some((value) =>
+                                        Array.isArray(value)
+                                            ? value.length > 0
+                                            : Boolean(value),
+                                    )
                                         ? "调整分类、品牌或其它筛选条件后重试。"
                                         : "完成接口配置后同步供应商商品，再选择需要经营的商品入库。"
                                 }
@@ -453,33 +499,96 @@ export function CatalogBrowser({
                     />
                 }
                 footer={
-                    <p className="text-xs text-muted-foreground">
-                        勾选跨页保留，变更筛选会清空勾选。当前筛选结果由系统确定完整范围后预览，最多
-                        500 项；超过时请缩小分类或其它条件。
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>
+                            {choice.productCount} 个商品 ·{" "}
+                            {choice.selectedIds.length} 个 SKU 已选
+                        </span>
+                        <span>
+                            表头只选择当前页；翻页保留选择，变更筛选将清空选择与排除项。
+                        </span>
+                    </div>
                 }
             />
-            {preview.error ? (
-                <p role="alert" className="text-sm text-destructive">
-                    {preview.error.message}
+            {canConfigure ? (
+                <CatalogBatchHistory connectionId={connectionId} />
+            ) : null}
+            {choice.notice ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    {choice.notice}
                 </p>
+            ) : null}
+            {choice.error ? (
+                <div
+                    role="alert"
+                    className="flex flex-wrap items-center justify-between gap-3 text-sm"
+                >
+                    <p className="text-destructive">
+                        选择保存或读取失败：{choice.error.message}
+                        。页面保留上次确认的选择，
+                        {choice.frozen
+                            ? "请重新读取后核对。"
+                            : "请重试刚才的选择。"}
+                    </p>
+                    {choice.frozen ? (
+                        <Button
+                            id="supplier-catalog-batch-selection-reload"
+                            variant="outline"
+                            size="sm"
+                            disabled={choice.busy}
+                            onClick={() => void choice.refreshFrozen()}
+                        >
+                            重新读取选择
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
+            {choice.showExcluded ? (
+                <section
+                    aria-labelledby="supplier-catalog-batch-excluded-title"
+                    className="space-y-3 rounded-lg border p-4"
+                >
+                    <h3
+                        id="supplier-catalog-batch-excluded-title"
+                        className="text-sm font-medium"
+                    >
+                        已排除 {choice.excludedRows.length} 个 SKU
+                    </h3>
+                    <div className="max-h-80 space-y-2 overflow-y-auto">
+                        {choice.excludedRows.map((row) => (
+                            <div
+                                key={row.source.id}
+                                className="flex flex-wrap items-center justify-between gap-3 border-b pb-2 text-sm"
+                            >
+                                <div>
+                                    <p>{row.source.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {row.source.specification ||
+                                            "未标注规格"}{" "}
+                                        · 订货编码 {row.source.spec_id}
+                                    </p>
+                                </div>
+                                <Button
+                                    id={`supplier-catalog-batch-restore-${toAutomationIdSegment(row.source.id)}`}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={choice.busy}
+                                    onClick={() =>
+                                        void choice.restore(row.source.id)
+                                    }
+                                >
+                                    恢复选择
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                </section>
             ) : null}
             {identityItemId ? (
                 <CatalogIdentityReviewDialog
                     connectionId={connectionId}
                     itemId={identityItemId}
                     onClose={() => setIdentityItemId(null)}
-                />
-            ) : null}
-            {adoption ? (
-                <CatalogAdoptionDialog
-                    connectionId={connectionId}
-                    supplierId={supplierId}
-                    preview={adoption}
-                    onClose={(completed) => {
-                        setAdoption(null)
-                        if (completed) setSelection({})
-                    }}
                 />
             ) : null}
             <QuickPreviewSheet
@@ -545,7 +654,8 @@ export function CatalogBrowser({
                             <MoneyValue
                                 value={previewRow.purchase_price}
                                 unavailableReason={
-                                    !canReadCost
+                                    !canReadCost ||
+                                    query.data?.can_read_cost === false
                                         ? "无采购报价查看权限"
                                         : previewRow.purchase_price == null
                                           ? "暂无接口报价"

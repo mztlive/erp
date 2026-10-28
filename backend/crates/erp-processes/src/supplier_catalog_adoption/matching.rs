@@ -5,11 +5,10 @@ use erp_catalog::entity::catalog::auto_match::{MatchIdentity, match_text, same_s
 use erp_catalog::{CatalogExt, Product, ProductKind, Sku};
 use erp_core::common::time::Instant;
 use erp_supply::catalog_adoption::{
-    AdoptionMapping, AdoptionRow, AdoptionSpecEntry, AdoptionTarget, CatalogAdoptionExt,
+    AdoptionMapping, AdoptionRow, AdoptionSpecEntry, AdoptionTarget, BatchMatchAnchor, CatalogAdoptionExt,
     ResolveAdoptionRequest, has_product_receipt,
 };
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
-use erp_supply::service::supplier_api::SupplierApiService;
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -35,6 +34,8 @@ pub struct AdoptionResolution {
     pub product_id: Option<String>,
     pub reason: String,
     #[serde(skip)]
+    pub(super) group_anchor: Option<BatchMatchAnchor>,
+    #[serde(skip)]
     pub(super) target: AdoptionTarget,
 }
 
@@ -46,11 +47,42 @@ impl AdoptionResolution {
             sku_no: Some(sku.sku_no),
             product_id: Some(product.base.id),
             reason: String::new(),
+            group_anchor: None,
             target: AdoptionTarget::Existing {
                 sku_id: sku.base.id,
                 expected_sku_version: sku.base.version,
                 expected_product_version: product.base.version,
                 unit_id,
+                specification_confirmed: true,
+            },
+        }
+    }
+    fn created(
+        item: &SupplierCatalogItem,
+        mapping: &AdoptionMapping,
+        category_id: String,
+        brand_id: String,
+        bound_id: Option<&str>,
+    ) -> Self {
+        Self {
+            kind: if bound_id.is_some() { MatchKind::CreateSku } else { MatchKind::CreateProduct },
+            expected_match: String::new(),
+            sku_no: None,
+            product_id: bound_id.map(str::to_owned),
+            reason: String::new(),
+            group_anchor: None,
+            target: AdoptionTarget::Create {
+                category_id,
+                brand_id,
+                unit_id: mapping.unit_id.clone(),
+                product_kind: mapping.product_kind.clone(),
+                company_name: mapping.company_name.clone(),
+                company_description: mapping.company_description.clone(),
+                spec_entries: vec![AdoptionSpecEntry {
+                    attribute_code: "规格".into(),
+                    attribute_value_code: item.specification.clone(),
+                }],
+                unit_confirmed: true,
                 specification_confirmed: true,
             },
         }
@@ -72,8 +104,7 @@ impl SupplierCatalogAdoptionProcess {
         request: ResolveAdoptionRequest,
         actor: &AuditActor,
     ) -> Result<AdoptionResolution> {
-        self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
-        self.ensure_permission(actor, "supplier_offering_cost:detail").await?;
+        self.batch_access(connection, actor, &mut NoTransaction).await?;
         let preview = self
             .db
             .catalog_adoption_previews()
@@ -92,18 +123,20 @@ impl SupplierCatalogAdoptionProcess {
         self.resolve_item(item, &request.mapping, actor, &mut NoTransaction).await
     }
 
-    pub(super) async fn automatic_row(
+    pub(super) async fn automatic_row_with_anchor(
         &self,
         item: &SupplierCatalogItem,
         row: &AdoptionRow,
         actor: &AuditActor,
         command: &str,
+        anchor: Option<&BatchMatchAnchor>,
         executor: &mut dyn Executor,
     ) -> Result<AdoptionRow> {
         let AdoptionTarget::Auto { mapping, expected_match } = &row.target else {
             return Err(Error::ValidationError("选品已改为自动匹配，请刷新页面后重新预览".into()));
         };
-        let resolution = self.resolve_item(item, mapping, actor, executor).await?;
+        let resolution =
+            self.resolve_batch_item(item, mapping, anchor, Some(command), actor, executor).await?;
         if resolution.expected_match != *expected_match
             && !self.created_in_batch(item, row, &resolution, command, actor, executor).await?
         {
@@ -137,15 +170,25 @@ impl SupplierCatalogAdoptionProcess {
         Ok(resolution_digest(item, &mapping, &original)? == *expected)
     }
 
-    async fn resolve_item(
+    pub(super) async fn resolve_item(
         &self,
         item: &SupplierCatalogItem,
         mapping: &AdoptionMapping,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<AdoptionResolution> {
-        let connection =
-            SupplierApiService::new(self.db.clone()).load_connection(&item.connection_id, executor).await?;
+        self.resolve_item_with_parent(item, mapping, None, actor, executor).await
+    }
+
+    pub(super) async fn resolve_item_with_parent(
+        &self,
+        item: &SupplierCatalogItem,
+        mapping: &AdoptionMapping,
+        parent: Option<&str>,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<AdoptionResolution> {
+        let connection = self.batch_access(&item.connection_id, actor, executor).await?;
         self.ensure_source(&connection)?;
         connection.ensure_offering_source(&item.supplier_id)?;
         let kind: ProductKind =
@@ -164,6 +207,10 @@ impl SupplierCatalogAdoptionProcess {
         let binding =
             self.db.catalog_adoption_products().find_by_id(&product_binding_id(item), executor).await?;
         let bound_id = binding.as_ref().map(|b| b.product_id.as_str());
+        if matches!((bound_id, parent), (Some(existing), Some(expected)) if existing != expected) {
+            return Err(Error::ConflictError("同一来源商品的公司商品归属已变化，请重新核对".into()));
+        }
+        let bound_id = bound_id.or(parent);
         let (sku, reason) = self.find_match(item, mapping, bound_id, kind, executor).await?;
         let mut resolution = if let Some(sku) = sku {
             if bound_id.is_some_and(|id| id != sku.product_id.as_ref()) {
@@ -180,7 +227,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(resolution)
     }
 
-    async fn resolve_unit_mapping(
+    pub(super) async fn resolve_unit_mapping(
         &self,
         item: &SupplierCatalogItem,
         mapping: &AdoptionMapping,
@@ -391,49 +438,40 @@ impl SupplierCatalogAdoptionProcess {
             .ok_or_else(|| {
                 Error::ValidationError("没有匹配的 SKU，请选择适用于当前商品类型的启用公司分类".into())
             })?;
-        Ok(AdoptionResolution {
-            kind: if bound_id.is_some() { MatchKind::CreateSku } else { MatchKind::CreateProduct },
-            expected_match: String::new(),
-            sku_no: None,
-            product_id: bound_id.map(str::to_owned),
-            reason: String::new(),
-            target: AdoptionTarget::Create {
-                category_id,
-                brand_id,
-                unit_id: mapping.unit_id.clone(),
-                product_kind: mapping.product_kind.clone(),
-                company_name: mapping.company_name.clone(),
-                company_description: mapping.company_description.clone(),
-                spec_entries: vec![AdoptionSpecEntry {
-                    attribute_code: "规格".into(),
-                    attribute_value_code: item.specification.clone(),
-                }],
-                unit_confirmed: true,
-                specification_confirmed: true,
-            },
-        })
+        Ok(AdoptionResolution::created(item, mapping, category_id, brand_id, bound_id))
     }
 }
 
-fn resolution_digest(
+pub(super) fn resolution_digest(
     item: &SupplierCatalogItem,
     mapping: &AdoptionMapping,
     resolution: &AdoptionResolution,
 ) -> Result<String> {
-    let encoded = serde_json::to_vec(&(
+    let mut target = resolution.target.clone();
+    if let (Some(anchor), AdoptionTarget::Existing { expected_product_version, .. }) =
+        (&resolution.group_anchor, &mut target)
+    {
+        *expected_product_version = anchor.target.product_version;
+    }
+    let identity = (
         &item.base.id,
         (&item.name, &item.specification, &item.unit, &item.brand_name, &item.barcode),
         mapping,
         &resolution.kind,
         &resolution.product_id,
-        &resolution.target,
-    ))
+        &target,
+    );
+    let encoded = match &resolution.group_anchor {
+        Some(anchor) => serde_json::to_vec(&(identity, anchor)),
+        None => serde_json::to_vec(&identity),
+    }
     .map_err(|_| Error::Internal("匹配结果无法编码".into()))?;
     Ok(hex::encode(Sha256::digest(encoded)))
 }
 
 #[cfg(test)]
 mod tests {
+    use erp_supply::catalog_adoption::BatchAnchorTarget;
     use erp_supply::ports::connector::common::{Snapshot, SourceRevision, SourceStamp, SupplierSku};
     use erp_supply::ports::connector::offer::{Offer, OfferDetails};
 
@@ -475,6 +513,7 @@ mod tests {
             sku_no: Some("SKU-1".into()),
             product_id: Some("company".into()),
             reason: String::new(),
+            group_anchor: None,
             target: AdoptionTarget::Existing {
                 sku_id: "sku".into(),
                 expected_sku_version: 1,
@@ -496,5 +535,78 @@ mod tests {
             *expected_sku_version = 2;
         }
         assert_ne!(original, resolution_digest(&item, &mapping, &resolution).unwrap());
+    }
+
+    #[test]
+    fn grouped_preview_fixes_server_proof_and_ignores_only_parent_counter_changes() {
+        let item = SupplierCatalogItem::observed(
+            "connection",
+            "supplier",
+            "sync",
+            Snapshot {
+                stamp: SourceStamp {
+                    revision: SourceRevision::Unversioned,
+                    changed_at: None,
+                    observed_at: Instant::from_unix_secs(1),
+                },
+                value: Offer {
+                    sku: SupplierSku { product_id: Some("source".into()), spec_id: "5kg".into() },
+                    name: "大米".into(),
+                    specification: "5kg".into(),
+                    unit: Some("袋".into()),
+                    quote: None,
+                    details: OfferDetails::default(),
+                },
+            },
+        )
+        .unwrap();
+        let mapping = AdoptionMapping {
+            category_id: "food".into(),
+            unit_id: "bag".into(),
+            product_kind: "PHYSICAL".into(),
+            company_name: None,
+            company_description: None,
+        };
+        let mut resolution = AdoptionResolution {
+            kind: MatchKind::Existing,
+            expected_match: String::new(),
+            sku_no: Some("SKU-1".into()),
+            product_id: Some("company".into()),
+            reason: String::new(),
+            target: AdoptionTarget::Existing {
+                sku_id: "sku".into(),
+                expected_sku_version: 1,
+                expected_product_version: 2,
+                unit_id: "bag".into(),
+                specification_confirmed: true,
+            },
+            group_anchor: Some(BatchMatchAnchor {
+                source: item.clone(),
+                mapping: mapping.clone(),
+                target: BatchAnchorTarget {
+                    product_id: "company".into(),
+                    sku_id: "anchor".into(),
+                    sku_version: 1,
+                    product_version: 2,
+                    product_revision_id: "revision".into(),
+                },
+            }),
+        };
+        let initial = resolution_digest(&item, &mapping, &resolution).unwrap();
+        if let AdoptionTarget::Existing { expected_product_version, .. } = &mut resolution.target {
+            *expected_product_version += 1;
+        }
+        assert_eq!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
+        if let AdoptionTarget::Existing { expected_sku_version, .. } = &mut resolution.target {
+            *expected_sku_version += 1;
+        }
+        assert_ne!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
+        if let AdoptionTarget::Existing { expected_sku_version, .. } = &mut resolution.target {
+            *expected_sku_version = 1;
+        }
+        resolution.group_anchor.as_mut().unwrap().target.product_revision_id = "new-revision".into();
+        assert_ne!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
+        resolution.group_anchor = None;
+        assert_ne!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
     }
 }

@@ -90,6 +90,7 @@ export function isWorkspaceFrame(): boolean {
 
 export function workspaceUrl(href: string, base: string): URL | null {
     const url = new URL(href, base)
+    url.searchParams.delete("_workspace_frame")
     if (url.origin !== new URL(base).origin) return null
     url.pathname = url.pathname.replace(/\/+$/, "") || "/"
     const root = url.pathname.split("/")[1]
@@ -111,7 +112,9 @@ export function workspaceUrl(href: string, base: string): URL | null {
 }
 
 export function tabHref(url: URL): string {
-    return `${url.pathname}${url.search}${url.hash}`
+    const businessUrl = new URL(url)
+    businessUrl.searchParams.delete("_workspace_frame")
+    return `${businessUrl.pathname}${businessUrl.search}${businessUrl.hash}`
 }
 
 /** Filters belong to a tab; separately named fulfillment lanes belong to different tabs. */
@@ -165,6 +168,8 @@ export function workspaceTabKey(url: URL): string {
 }
 
 export function workspaceTabTitle(url: URL): string {
+    if (/^\/supplier-api\/catalog\/adoptions\/[^/]+$/.test(url.pathname))
+        return "批量选品入库"
     if (url.pathname === "/finance/customer-accounts/receipts/new")
         return "登记回款"
     if (url.pathname === "/finance/supplier-accounts/invoices/new")

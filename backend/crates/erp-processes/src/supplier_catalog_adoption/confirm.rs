@@ -5,8 +5,9 @@ use erp_catalog::CatalogExt;
 use erp_catalog::source_sync::repository::ProductSourceExt;
 use erp_core::common::time::Instant;
 use erp_supply::catalog_adoption::{
-    AdoptionResult, AdoptionRow, AdoptionTarget, CatalogAdoptionCommand, CatalogAdoptionExt,
-    CatalogAdoptionPreview, CatalogAdoptionReceipt, ConfirmAdoptionRequest, adoption_identity,
+    AdoptionResult, AdoptionRow, AdoptionTarget, BatchMatchAnchor, CatalogAdoptionCommand,
+    CatalogAdoptionExt, CatalogAdoptionPreview, CatalogAdoptionReceipt, ConfirmAdoptionRequest,
+    adoption_identity,
 };
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
@@ -38,6 +39,14 @@ pub struct AdoptionRowResult {
 #[derive(Serialize)]
 pub struct AdoptionBatchResult {
     pub rows: Vec<AdoptionRowResult>,
+}
+
+pub(super) struct AdoptionExecution {
+    pub preview: CatalogAdoptionPreview,
+    pub source: SupplierCatalogItem,
+    pub row: AdoptionRow,
+    pub command: String,
+    pub group_anchor: Option<BatchMatchAnchor>,
 }
 
 impl From<AdoptionResult> for AdoptionRowResult {
@@ -78,6 +87,7 @@ impl SupplierCatalogAdoptionProcess {
             .await?
             .ok_or_else(|| Error::NotFound("选品预览不存在".into()))?;
         preview.ensure_request(connection, actor.id(), &request)?;
+        self.batch_access(connection, actor, &mut NoTransaction).await?;
         let command_id = self.freeze_command(connection, preview_id, &request, actor).await?;
         if preview.expires_at <= Instant::now() {
             return self.replay_expired_batch(&request, actor).await;
@@ -157,7 +167,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(id)
     }
 
-    async fn confirm_row(
+    pub(super) async fn confirm_row(
         &self,
         preview: &CatalogAdoptionPreview,
         frozen: &SupplierCatalogItem,
@@ -165,24 +175,42 @@ impl SupplierCatalogAdoptionProcess {
         command: &str,
         actor: &AuditActor,
     ) -> Result<AdoptionResult> {
+        self.confirm_execution(
+            AdoptionExecution {
+                preview: preview.clone(),
+                source: frozen.clone(),
+                row: row.clone(),
+                command: command.into(),
+                group_anchor: None,
+            },
+            actor,
+        )
+        .await
+    }
+
+    pub(super) async fn confirm_execution(
+        &self,
+        execution: AdoptionExecution,
+        actor: &AuditActor,
+    ) -> Result<AdoptionResult> {
+        let AdoptionExecution { preview, source: frozen, row, command, group_anchor } = &execution;
+        self.batch_access(&preview.connection_id, actor, &mut NoTransaction).await?;
         if let Some(result) = self.replay(&frozen.base.id, row, actor, &mut NoTransaction).await? {
             return Ok(result);
         }
         let current = self.load_item(&preview.connection_id, &row.item_id, &mut NoTransaction).await?;
         preview.ensure_current_item(&current)?;
-        let prepared = self.prepare_row(frozen, row, actor, command).await?;
+        let prepared =
+            self.prepare_row_with_anchor(frozen, row, actor, command, group_anchor.as_ref()).await?;
         let cleanup = prepared.media.cleanup_handle();
         let process = self.clone();
-        let (preview, row, command, actor) =
-            (preview.clone(), row.clone(), command.to_owned(), actor.clone());
+        let actor = actor.clone();
         let outcome = self
             .db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    process.commit_row(&preview, &row, &command, prepared, &actor, executor).await
-                })
+                Box::pin(async move { process.commit_row(execution, prepared, &actor, executor).await })
             })
             .await;
         cleanup.after_transaction(&outcome).await;
@@ -199,22 +227,30 @@ impl SupplierCatalogAdoptionProcess {
 
     async fn commit_row(
         &self,
-        preview: &CatalogAdoptionPreview,
-        row: &AdoptionRow,
-        command: &str,
+        execution: AdoptionExecution,
         mut prepared: PreparedAdoption,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(AdoptionResult, bool)> {
-        self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
+        let AdoptionExecution { preview, row, command, group_anchor, .. } = &execution;
+        self.batch_access(&preview.connection_id, actor, executor).await?;
         if let Some(result) = self.replay(&row.item_id, row, actor, executor).await? {
             return Ok((result, false));
         }
         let mut item = self.load_item(&preview.connection_id, &row.item_id, executor).await?;
         preview.ensure_current_item(&item)?;
         self.db.catalog().lock_match_name(&item.name, executor).await?;
-        self.automatic_row(&item, row, actor, command, executor).await?;
-        let resolved_row = prepared.resolved_row.clone();
+        let mut resolved_row = self
+            .automatic_row_with_anchor(&item, row, actor, command, group_anchor.as_ref(), executor)
+            .await?;
+        if let (
+            AdoptionTarget::Create { brand_id, .. },
+            AdoptionTarget::Create { brand_id: prepared_brand, .. },
+        ) = (&mut resolved_row.target, &prepared.resolved_row.target)
+            && brand_id.is_empty()
+        {
+            *brand_id = prepared_brand.clone();
+        }
         let sku = self.materialize_target(&item, &resolved_row, &mut prepared, actor, executor).await?;
         let per_item_command = adoption_identity(&[command, &row.item_id]);
         let req = offering_request(&item, row, &sku.base.id, &per_item_command)?;
@@ -299,7 +335,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(())
     }
 
-    async fn replay(
+    pub(super) async fn replay(
         &self,
         item_id: &str,
         row: &AdoptionRow,

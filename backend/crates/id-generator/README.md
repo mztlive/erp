@@ -48,6 +48,7 @@
 | `SupplierFulfillment` | `SF`  | 供应商履约单 | 二期（仅预声明） | `supplier_fulfillment_order`               |
 | `SupplierSettlement`  | `SS`  | 供应商结算单 | 二期（仅预声明） | `supplier_settlement_statement`            |
 | `Product`             | `SPU` | 公司商品     | 一期             | `product.product_no`（内部建档未指定时）   |
+| `SupplierCatalogAdoption` | `SCA` | API 供应商批量入库 | 二期 | `supplier_catalog_adoption_batches.batch_no` |
 
 数据模型未定义前缀时按业务缩写设计（SO=Sales Order、PO=Purchase Order、
 GRN=Goods Receipt Note、DN=Delivery Note、CA=Customer Acceptance、
@@ -90,8 +91,10 @@ SS=Supplier Settlement、SPU=Standard Product Unit）。**前缀一经启用不�
 - 因此"事务内取号 → 回滚 → 再取号"得到 `SO20260701-000001` 与 `SO20260701-000002`，
   1 号不再被回收，正式单据序列允许出现空缺；
 - 已消费序号不得回收或复用；调用方必须允许失败操作产生跳号。
-- 取号时机约定：只在正式化（提交/过账/登记）时取正式号；草稿不预占正式号，
+- 单据正式编号的取号时机：只在正式化（提交/过账/登记）时取正式号；草稿不预占正式号，
   逻辑删除的草稿不进入编号连续性（数据模型 4.5 第 2 条）。
+- API 供应商批量入库使用作业编号：创建选择快照时取号，草稿和后续执行沿用同一编号；
+  作业编号不表示商品已入库，选择快照创建失败时已消费序号不得回收。
 
 ## 5. 使用示例
 

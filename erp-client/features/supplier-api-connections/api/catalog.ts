@@ -14,6 +14,10 @@ export type CatalogFilters = {
     keyword?: string
     category_id?: string
     brand_id?: string
+    category_ids?: string[]
+    brand_ids?: string[]
+    include_descendants?: boolean
+    only_unadopted?: boolean
     price_min?: string
     price_max?: string
     availability?: CatalogAvailability
@@ -22,6 +26,8 @@ export type CatalogFilters = {
 export type CatalogFilterOptions = {
     categories: Array<{ id: string; name: string }>
     brands: Array<{ id: string; name: string }>
+    category_hierarchy_supported?: boolean
+    category_hierarchy_reason?: string | null
 }
 
 export type CatalogItem = {
@@ -80,6 +86,8 @@ export type CatalogJob = {
 export type CatalogResult = {
     items: CatalogItem[]
     total: number
+    product_total?: number
+    can_read_cost?: boolean
     page: number
     page_size: number
     jobs: CatalogJob[]
@@ -108,7 +116,17 @@ export function fetchCatalog(
 ) {
     return apiGet<CatalogResult>(
         `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/catalog`,
-        { page, page_size: 20, ...filters },
+        {
+            page,
+            page_size: 20,
+            ...filters,
+            category_ids: filters.category_ids?.length
+                ? JSON.stringify(filters.category_ids)
+                : undefined,
+            brand_ids: filters.brand_ids?.length
+                ? JSON.stringify(filters.brand_ids)
+                : undefined,
+        },
     )
 }
 

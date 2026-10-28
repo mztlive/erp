@@ -2,6 +2,7 @@
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
+use erp_supplier::SupplierAccess;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
 use mongodb::Database;
@@ -17,6 +18,7 @@ pub struct SupplierApiReadService {
     db: Database,
     rbac: Option<SharedRbacService>,
     reference_registry: Option<Arc<dyn SupplierReferenceRegistry>>,
+    supplier_access: Option<SupplierAccess>,
 }
 impl SupplierApiReadService {
     /// 复用应用数据库，未注入的授权和引用元数据保持失败关闭。
@@ -30,7 +32,19 @@ impl SupplierApiReadService {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database) -> Self {
-        Self { db, rbac: None, reference_registry: None }
+        Self { db, rbac: None, reference_registry: None, supplier_access: None }
+    }
+
+    /// 注入供应商对象范围，目录读取不得因具有连接角色而扩大数据范围。
+    /// # 参数
+    /// `access` 为组合根装配的当前供应商范围服务。
+    /// # 返回
+    /// 保留当前配置并绑定供应商对象授权。
+    /// # 错误
+    /// 不返回错误；实际读取时重新检查授权。
+    pub fn with_supplier_access(mut self, access: SupplierAccess) -> Self {
+        self.supplier_access = Some(access);
+        self
     }
     /// 注入应用已有的权威 RBAC。
     ///
