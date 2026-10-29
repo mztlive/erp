@@ -6,7 +6,9 @@ use mongodb::options::FindOptions;
 use persistence_core::indexes::{named_index, unique_index};
 use persistence_core::{Executor, Repository, Result, mongo_ops};
 
-use super::{CatalogAdoptionBatch, CatalogAdoptionBatchItem};
+use super::{
+    CatalogAdoptionBatch, CatalogAdoptionBatchItem, ensure_preparation_indexes, ensure_work_indexes,
+};
 
 const BATCHES: &str = "supplier_catalog_adoption_batches";
 const ITEMS: &str = "supplier_catalog_adoption_batch_items";
@@ -105,7 +107,7 @@ pub async fn runnable_batches(
 ) -> Result<Vec<CatalogAdoptionBatch>> {
     mongo_ops::find_many(
         &db.collection::<CatalogAdoptionBatch>(BATCHES),
-        doc! {"$or":[{"submitted":true,"selection_complete":true,"execution_pending":true},{"preparation.status":{"$in":["QUEUED","PREPARING"]}}],"id":{"$gt":after},"deleted_at":0_i64},
+        doc! {"$or":[{"submitted":true,"selection_complete":true,"execution_pending":true},{"preparation.status":{"$in":["QUEUED","PREPARING"]}},{"work.status":"RUNNING"}],"id":{"$gt":after},"deleted_at":0_i64},
         FindOptions::builder().sort(doc! {"id":1}).limit(20).build(),
         executor,
     )
@@ -211,7 +213,8 @@ pub async fn ensure_batch_indexes(db: &Database) -> Result<()> {
             ),
         ])
         .await?;
-    super::ensure_preparation_indexes(db).await?;
+    ensure_preparation_indexes(db).await?;
+    ensure_work_indexes(db).await?;
     Ok(())
 }
 

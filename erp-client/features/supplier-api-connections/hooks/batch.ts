@@ -6,6 +6,7 @@ import {
     fetchBatchPreparation,
     fetchBatchSelection,
     controlBatchPreparation,
+    controlBatchWork,
     fetchAdoptionBatch,
     fetchAdoptionBatches,
     previewAdoptionBatch,
@@ -38,17 +39,22 @@ export function useAdoptionBatchQuery(identity: BatchIdentity, enabled = true) {
     return useQuery({
         queryKey: adoptionBatchKeys.detail(identity),
         queryFn: () => fetchAdoptionBatch(identity),
+        staleTime: 0,
         enabled: enabled && Boolean(identity.connectionId && identity.batchId),
         refetchInterval: (query) =>
-            query.state.data?.batch.draft_operation ||
-            query.state.data?.batch.execution_pending ||
-            query.state.data?.rows.some(
-                (row) =>
-                    row.status === "PROCESSING" ||
-                    (row.status === "READY" && Boolean(row.operation_id)),
-            )
-                ? 2000
-                : false,
+            query.state.data?.batch.work &&
+            query.state.data.batch.work.status !== "COMPLETED"
+                ? false
+                : query.state.data?.batch.draft_operation ||
+                    query.state.data?.batch.execution_pending ||
+                    query.state.data?.rows.some(
+                        (row) =>
+                            row.status === "PROCESSING" ||
+                            (row.status === "READY" &&
+                                Boolean(row.operation_id)),
+                    )
+                  ? 2000
+                  : false,
     })
 }
 function useBatchResult() {
@@ -59,7 +65,30 @@ function useBatchResult() {
                 connectionId: view.batch.connection_id,
                 batchId: view.batch.id,
             }),
-            view,
+            (previous: BatchView | undefined) =>
+                view.rows_complete === false && previous
+                    ? {
+                          ...previous,
+                          batch: view.batch,
+                          rows_complete:
+                              view.batch.work &&
+                              (previous.batch.work?.status !== "COMPLETED" ||
+                                  previous.batch.work?.id !==
+                                      view.batch.work.id)
+                                  ? false
+                                  : previous.rows_complete,
+                      }
+                    : view,
+        )
+        queryClient.setQueryData(
+            [
+                ...adoptionBatchKeys.detail({
+                    connectionId: view.batch.connection_id,
+                    batchId: view.batch.id,
+                }),
+                "preparation",
+            ],
+            view.batch,
         )
         void queryClient.invalidateQueries({
             queryKey: [
@@ -104,6 +133,7 @@ export function useBatchPreparationQuery(identity: BatchIdentity) {
         queryFn: () => fetchBatchPreparation(identity),
         enabled: Boolean(identity.connectionId && identity.batchId),
         refetchInterval: (query) =>
+            query.state.data?.work?.status === "RUNNING" ||
             ["QUEUED", "PREPARING"].includes(
                 query.state.data?.preparation?.status ?? "",
             )
@@ -178,6 +208,16 @@ export function useBatchSelectionQuery(
     return useQuery({
         queryKey: [...adoptionBatchKeys.detail(identity), "selection"],
         queryFn: () => fetchBatchSelection(identity),
+        staleTime: 0,
         enabled: enabled && Boolean(identity.batchId && identity.connectionId),
+    })
+}
+
+export function useControlBatchWorkMutation() {
+    const onSuccess = useBatchResult()
+    return useMutation({
+        mutationFn: controlBatchWork,
+        retry: false,
+        onSuccess,
     })
 }

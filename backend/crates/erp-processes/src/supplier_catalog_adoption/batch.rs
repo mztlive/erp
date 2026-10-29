@@ -28,8 +28,8 @@ impl SupplierCatalogAdoptionProcess {
     /// 越权、批次不存在或查询失败时拒绝。
     pub async fn batch(&self, connection: &str, id: &str, actor: &AuditActor) -> Result<BatchView> {
         let batch = self.preparation_batch(connection, id, actor, &mut NoTransaction).await?;
-        if !batch.selection_complete {
-            return Ok(batch_view(batch, vec![]));
+        if !batch.selection_complete || batch.work.as_ref().is_some_and(|work| work.blocking()) {
+            return Ok(batch_summary(batch));
         }
         let rows = self.all_batch_items(id, &mut NoTransaction).await?;
         self.ensure_batch_rows_access(actor, &rows, &mut NoTransaction).await?;
@@ -205,5 +205,25 @@ pub(super) fn batch_view(batch: CatalogAdoptionBatch, rows: Vec<CatalogAdoptionB
                 || row.field_origins.values().any(|origin| *origin == ValueOrigin::Manual)
         })
         .count();
-    BatchView { counts: BatchCounts::from_items(&rows), batch, rows, product_count, manual_count }
+    BatchView {
+        rows_complete: true,
+        counts: BatchCounts::from_items(&rows),
+        batch,
+        rows,
+        product_count,
+        manual_count,
+    }
+}
+
+/// 返回只含批次头的受理/进度回执，客户端须保留已有明细或等待完成后读取。
+/// # 参数
+/// 已授权批次。
+/// # 返回
+/// 明确标注明细不完整的响应。
+/// # 错误
+/// 不返回错误。
+pub(super) fn batch_summary(batch: CatalogAdoptionBatch) -> BatchView {
+    let mut view = batch_view(batch, vec![]);
+    view.rows_complete = false;
+    view
 }

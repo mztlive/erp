@@ -9,8 +9,8 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierAccountId, SupplierOfferingId, SupplierOfferingRevisionId};
 use erp_supply::catalog_adoption::{
     AdoptionRow, AdoptionSalesPrices, AdoptionTarget, BatchAdoptionExt, BatchItemStatus, BatchMatchAnchor,
-    BatchResolution, BatchSalesValues, CatalogAdoptionBatch, CatalogAdoptionBatchItem,
-    CatalogAdoptionPreview, mark_product_mapping_conflicts,
+    BatchResolution, BatchSalesValues, BatchWorkPhase, BatchWorkStatus, CatalogAdoptionBatch,
+    CatalogAdoptionBatchItem, CatalogAdoptionPreview, mark_product_mapping_conflicts,
 };
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::entity::supplier_offering::SupplierOfferingRevision;
@@ -18,6 +18,7 @@ use erp_supply::repository::SupplierOfferingExt;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::batch::batch_view;
+use super::batch_work::WorkPayload;
 use super::matching::MatchKind;
 use super::request::{offering_request, product_request};
 use super::{AdoptionResolution, BatchVersionRequest, BatchView, SupplierCatalogAdoptionProcess};
@@ -29,7 +30,7 @@ impl SupplierCatalogAdoptionProcess {
     /// # 参数
     /// 来源连接、批次、页面已读版本、可选重新核对集合和当前认证用户。
     /// # 返回
-    /// 带逐项匹配、售价、提示及新预览版本的批次。
+    /// 已受理的核对任务摘要；全部完成后才能读取新预览版本。
     /// # 错误
     /// 批次越权、版本过期、范围无效或存储失败时拒绝；失败不发布部分预览。
     pub async fn preview_batch(
@@ -39,15 +40,11 @@ impl SupplierCatalogAdoptionProcess {
         request: BatchVersionRequest,
         actor: &AuditActor,
     ) -> Result<BatchView> {
-        let (batch, token) = self.begin_batch_draft(connection, id, request.expected_version, actor).await?;
-        let outcome = self.preview_batch_members(&batch, &token, request.item_ids.as_deref(), actor).await;
-        if outcome.is_err() {
-            self.release_batch_draft(connection, id, &token, actor).await?;
-        }
-        outcome
+        self.enqueue_batch_work(connection, id, WorkPayload::Review(request), actor).await
     }
 
-    async fn preview_batch_members(
+    /// 沿原任务游标继续核对，全部一致性检查完成后才发布结果。
+    pub(super) async fn preview_batch_members(
         &self,
         batch: &CatalogAdoptionBatch,
         token: &str,
@@ -55,30 +52,38 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
     ) -> Result<BatchView> {
         let mut rows = self.all_batch_items(&batch.base.id, &mut NoTransaction).await?;
-        let anchors = self.preview_group_anchor_candidates(&rows, actor, &mut NoTransaction).await?;
-        let selection = item_ids.map(|ids| ids.iter().collect::<HashSet<_>>());
-        if let Some(selected) = &selection {
-            let ids = item_ids.expect("显式选择已由 Some 分支确认");
-            if selected.is_empty()
-                || selected.len() != ids.len()
-                || selected.iter().any(|id| {
-                    !rows.iter().any(|row| {
-                        &row.source.base.id == *id
-                            && row.editable()
-                            && row.status != BatchItemStatus::Excluded
-                    })
-                })
-            {
-                return Err(Error::ValidationError("重新核对项必须为本批可编辑且不重复的来源规格".into()));
+        let work = batch.work.as_ref().ok_or_else(|| Error::Internal("核对任务缺失".into()))?;
+        let selection = review_selection(&rows, item_ids, &work.after)?;
+        let anchors = if work.phase == BatchWorkPhase::Finalizing {
+            Default::default()
+        } else {
+            self.preview_group_anchor_candidates(&rows, actor, &mut NoTransaction, Some((batch, token)))
+                .await?
+        };
+        if work.phase != BatchWorkPhase::Finalizing {
+            let mut scanned = 0;
+            let mut after = work.after.clone();
+            for row in &mut rows {
+                if row.base.id <= work.after {
+                    continue;
+                }
+                scanned += 1;
+                after = row.base.id.clone();
+                let recheck = selection.as_ref().is_none_or(|ids| ids.contains(&row.source.base.id));
+                if row.editable() && row.status != BatchItemStatus::Excluded && recheck {
+                    *row = self
+                        .preview_batch_member(
+                            batch,
+                            token,
+                            row,
+                            (anchors.get(&row.source.product_id), scanned),
+                            actor,
+                        )
+                        .await?;
+                    scanned = 0;
+                }
             }
-        }
-        for row in &mut rows {
-            let recheck = selection.as_ref().is_none_or(|ids| ids.contains(&row.source.base.id));
-            if row.editable() && row.status != BatchItemStatus::Excluded && recheck {
-                *row = self
-                    .preview_batch_member(batch, token, row, anchors.get(&row.source.product_id), actor)
-                    .await?;
-            }
+            self.finish_review_scan(batch, token, scanned, &after, actor).await?;
         }
         self.persist_batch_conflicts(batch, token, &mut rows, actor).await?;
         self.ensure_batch_rows_access(actor, &rows, &mut NoTransaction).await?;
@@ -90,7 +95,7 @@ impl SupplierCatalogAdoptionProcess {
         batch: &CatalogAdoptionBatch,
         token: &str,
         row: &CatalogAdoptionBatchItem,
-        anchor: Option<&BatchMatchAnchor>,
+        progress: (Option<&BatchMatchAnchor>, usize),
         actor: &AuditActor,
     ) -> Result<CatalogAdoptionBatchItem> {
         let (process, connection, id, token, actor, mut row, generation) = (
@@ -100,9 +105,9 @@ impl SupplierCatalogAdoptionProcess {
             token.to_owned(),
             actor.clone(),
             row.clone(),
-            batch.base.version,
+            batch.work.as_ref().ok_or_else(|| Error::Internal("核对任务缺失".into()))?.generation,
         );
-        let anchor = anchor.cloned();
+        let (anchor, scanned) = (progress.0.cloned(), progress.1);
         self.db
             .client()
             .clone()
@@ -120,10 +125,52 @@ impl SupplierCatalogAdoptionProcess {
                         row.preview_version = None;
                         row.frozen_row = None;
                     }
+                    current
+                        .work
+                        .as_mut()
+                        .ok_or_else(|| Error::Internal("核对任务缺失".into()))?
+                        .advance(scanned, row.base.id.clone())?;
                     current.draft_started_at = Some(Instant::now().unix_secs());
                     process.db.catalog_adoption_batches().update(&mut current, executor).await?;
                     process.db.catalog_adoption_batch_items().update(&mut row, executor).await?;
                     Ok(row)
+                })
+            })
+            .await
+    }
+
+    /// 保存跳过项的进度并进入全批一致性校验，尚不发布可提交结果。
+    async fn finish_review_scan(
+        &self,
+        batch: &CatalogAdoptionBatch,
+        token: &str,
+        scanned: usize,
+        after: &str,
+        actor: &AuditActor,
+    ) -> Result<()> {
+        let (process, connection, id, token, after, actor) = (
+            self.clone(),
+            batch.connection_id.clone(),
+            batch.base.id.clone(),
+            token.to_owned(),
+            after.to_owned(),
+            actor.clone(),
+        );
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let mut current =
+                        process.check_batch_draft(&connection, &id, &token, &actor, executor).await?;
+                    let work = current.work.as_mut().ok_or_else(|| Error::Internal("核对任务缺失".into()))?;
+                    if scanned > 0 {
+                        work.advance(scanned, after)?;
+                    }
+                    work.phase = BatchWorkPhase::Finalizing;
+                    current.draft_started_at = Some(Instant::now().unix_secs());
+                    process.db.catalog_adoption_batches().update(&mut current, executor).await?;
+                    Ok(())
                 })
             })
             .await
@@ -183,7 +230,7 @@ impl SupplierCatalogAdoptionProcess {
             batch.base.id.clone(),
             token.to_owned(),
             actor.clone(),
-            batch.base.version,
+            batch.work.as_ref().ok_or_else(|| Error::Internal("核对任务缺失".into()))?.generation,
         );
         self.db
             .client()
@@ -192,6 +239,11 @@ impl SupplierCatalogAdoptionProcess {
                 Box::pin(async move {
                     let mut current =
                         process.check_batch_draft(&connection, &id, &token, &actor, executor).await?;
+                    let work = current.work.as_mut().ok_or_else(|| Error::Internal("核对任务缺失".into()))?;
+                    if work.completed != work.total {
+                        return Err(Error::ConflictError("本批商品尚未核对完成".into()));
+                    }
+                    work.status = BatchWorkStatus::Completed;
                     current.preview_version = Some(generation);
                     current.step = "REVIEW".into();
                     current.draft_operation = None;
@@ -391,4 +443,27 @@ pub(super) fn batch_preview(
         expires_at: Instant::now(),
         items: vec![row.source.clone()],
     }
+}
+
+/// 在后台匹配前验证显式核对集合，保留原请求的选择边界。
+pub(super) fn review_selection<'a>(
+    rows: &[CatalogAdoptionBatchItem],
+    item_ids: Option<&'a [String]>,
+    completed_through: &str,
+) -> Result<Option<HashSet<&'a String>>> {
+    let Some(ids) = item_ids else { return Ok(None) };
+    let selected: HashSet<_> = ids.iter().collect();
+    if selected.is_empty()
+        || selected.len() != ids.len()
+        || selected.iter().any(|id| {
+            !rows.iter().any(|row| {
+                &row.source.base.id == *id
+                    && (row.base.id.as_str() <= completed_through
+                        || (row.editable() && row.status != BatchItemStatus::Excluded))
+            })
+        })
+    {
+        return Err(Error::ValidationError("重新核对项必须为本批可编辑且不重复的来源规格".into()));
+    }
+    Ok(Some(selected))
 }

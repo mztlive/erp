@@ -491,6 +491,7 @@ mod tests {
 
     use super::super::batch_preview::batch_preview;
     use super::*;
+    use crate::supplier_catalog_adoption::batch_preview::review_selection;
 
     fn row() -> CatalogAdoptionBatchItem {
         let source = SupplierCatalogItem::observed(
@@ -560,6 +561,20 @@ mod tests {
             preview_version: Some(2),
             submitted_by: None,
         }
+    }
+
+    #[test]
+    fn resumed_review_accepts_already_checked_skips_without_accepting_new_members() {
+        let mut completed = row();
+        completed.status = BatchItemStatus::Skipped;
+        let ids = [completed.source.base.id.clone()];
+        let after = completed.base.id.clone();
+        let rows = [completed];
+        assert!(review_selection(&rows, Some(&ids), "").is_err());
+        assert!(review_selection(&rows, Some(&ids), &after).is_ok());
+        let duplicate = [ids[0].clone(), ids[0].clone()];
+        assert!(review_selection(&rows, Some(&duplicate), &after).is_err());
+        assert!(review_selection(&rows, Some(&["unknown".into()]), &after).is_err());
     }
 
     #[test]

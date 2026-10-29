@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     AdoptionMapping, AdoptionResult, AdoptionRow, BatchMatchAnchor, BatchPreparation, BatchPricing,
-    BatchPricingDraft, BatchSalesValues, FillPolicy, ValueOrigin,
+    BatchPricingDraft, BatchSalesValues, BatchWork, FillPolicy, ValueOrigin,
 };
 use crate::dto::supplier_catalog::CatalogFilter;
 use crate::dto::supplier_offering::SupplierOfferingTermsWrite;
@@ -130,6 +130,8 @@ pub struct CatalogAdoptionBatch {
     #[serde(default)]
     pub preparation: Option<BatchPreparation>,
     #[serde(default)]
+    pub work: Option<BatchWork>,
+    #[serde(default)]
     pub execution_pending: bool,
     #[serde(default)]
     pub confirmations: Vec<BatchConfirmation>,
@@ -148,12 +150,13 @@ impl CatalogAdoptionBatch {
     /// # 参数
     /// `now` 为服务器当前 Unix 秒数。
     /// # 返回
-    /// 未被占用、缺少起始时间或已达到三百秒时允许接管。
+    /// 持久化任务必须完成；旧版临时操作未占用或达到三百秒时允许修改。
     /// # 错误
     /// 草稿操作仍有效或起始时间位于未来时拒绝。
     pub fn ensure_draft_available(&self, now: i64) -> Result<()> {
-        if self.draft_operation.is_some()
-            && self.draft_started_at.is_some_and(|started| now.saturating_sub(started) < 300)
+        if self.work.as_ref().is_some_and(BatchWork::blocking)
+            || (self.draft_operation.is_some()
+                && self.draft_started_at.is_some_and(|started| now.saturating_sub(started) < 300))
         {
             return Err(Error::ConflictError("批次正在保存或核对，请稍后重试".into()));
         }
@@ -209,6 +212,7 @@ impl CatalogAdoptionBatch {
     pub fn ensure_submission(&self, preview_version: u64, item_ids: &[String]) -> Result<()> {
         if !self.selection_complete
             || self.draft_operation.is_some()
+            || self.work.as_ref().is_some_and(BatchWork::blocking)
             || self.preview_version != Some(preview_version)
         {
             return Err(Error::ConflictError("预览已失效，请重新核对后确认入库".into()));
@@ -903,6 +907,7 @@ mod tests {
             submitted: false,
             selection_complete: false,
             preparation: None,
+            work: None,
             execution_pending: false,
             confirmations: vec![],
             draft_operation: None,
@@ -965,6 +970,29 @@ mod tests {
         assert!(batch.ensure_draft_available(i64::MAX).is_ok());
         batch.draft_operation = None;
         assert!(batch.ensure_draft_available(i64::MIN).is_ok());
+    }
+
+    #[test]
+    fn persisted_work_blocks_expired_lease_and_submission_until_completed() {
+        let mut batch = batch();
+        batch.selection_complete = true;
+        batch.preview_version = Some(4);
+        batch.work = Some(
+            serde_json::from_value(serde_json::json!({
+                "id":"work", "claimed":true, "actor_id":"actor", "phase":"REVIEWING",
+                "status":"RUNNING", "completed":0, "total":1, "after":"", "generation":4,
+                "previous_preview":null, "review_after_save":false, "error":null
+            }))
+            .unwrap(),
+        );
+        for status in ["RUNNING", "FAILED"] {
+            batch.work.as_mut().unwrap().status = serde_json::from_value(serde_json::json!(status)).unwrap();
+            assert!(batch.ensure_draft_available(i64::MAX).is_err());
+            assert!(batch.ensure_submission(4, &["sku".into()]).is_err());
+        }
+        batch.work.as_mut().unwrap().status = crate::catalog_adoption::BatchWorkStatus::Completed;
+        assert!(batch.ensure_draft_available(i64::MAX).is_ok());
+        assert!(batch.ensure_submission(4, &["sku".into()]).is_ok());
     }
 
     #[test]

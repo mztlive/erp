@@ -6163,6 +6163,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/work",
+                description: "恢复供应商批次保存与核对",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}",
                 description: "保存供应商批量入库草稿",

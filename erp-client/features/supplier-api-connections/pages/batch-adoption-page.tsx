@@ -28,6 +28,10 @@ import {
 } from "@/components/ui/dialog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
+import {
+    buildCategoryForest,
+    flattenCategoryForest,
+} from "@/features/master-data/lib/category-tree-model"
 import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { isApiError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
@@ -56,6 +60,7 @@ import { BatchPricingPanel } from "../components/batch/batch-pricing"
 import { BatchResultSummary } from "../components/batch/batch-result-summary"
 import { BatchReviewSummary } from "../components/batch/batch-review-summary"
 import { BatchDetailsPanel } from "../components/batch/batch-details"
+import type { CategoryMappingListHandle } from "../components/batch/batch-category-mappings"
 import {
     BatchItemDialog,
     type BatchItemDraft,
@@ -66,6 +71,7 @@ import {
     isBatchRowSelectable,
 } from "../components/batch/batch-review-table"
 
+import { BatchWorkStatus } from "../components/batch/batch-work-status"
 import { BatchPreparationStatus } from "../components/batch/batch-preparation"
 
 const STEPS: Array<{ step: BatchStep; label: string }> = [
@@ -194,9 +200,26 @@ export function BatchAdoptionPage() {
         batchId: params.batchId,
     }
     const preparation = useBatchPreparationQuery(identity)
+    const [observedReview, setObservedReview] = React.useState<{
+        batchId: string
+        version: number
+    } | null>(null)
+    React.useEffect(() => {
+        const work = preparation.data?.work
+        if (
+            work?.status === "RUNNING" &&
+            (work.phase !== "SAVING" || work.review_after_save)
+        )
+            setObservedReview({
+                batchId: identity.batchId,
+                version: work.generation,
+            })
+    }, [preparation.data?.work, identity.batchId])
     const query = useAdoptionBatchQuery(
         identity,
-        Boolean(preparation.data?.selection_complete),
+        Boolean(preparation.data?.selection_complete) &&
+            (!preparation.data?.work ||
+                preparation.data.work.status === "COMPLETED"),
     )
     const account = useAccountProfileQuery()
     if (!identity.connectionId)
@@ -228,7 +251,22 @@ export function BatchAdoptionPage() {
                 <BatchPreparationStatus batch={preparation.data} inWorkspace />
             </PageScaffold>
         )
-    if (query.isPending || account.isPending)
+    if (preparation.data?.work && preparation.data.work.status !== "COMPLETED")
+        return (
+            <PageScaffold>
+                <DetailPageHeader
+                    title={`入库批次 · ${preparation.data.batch_no}`}
+                />
+                <BatchWorkStatus batch={preparation.data} />
+            </PageScaffold>
+        )
+    const waitingForResult =
+        !query.isError &&
+        preparation.data?.work?.status === "COMPLETED" &&
+        (query.data?.rows_complete === false ||
+            query.data?.batch.work?.id !== preparation.data.work.id ||
+            query.data?.batch.work?.status !== "COMPLETED")
+    if (query.isPending || account.isPending || waitingForResult)
         return (
             <PageScaffold>
                 <p role="status" className="text-sm text-muted-foreground">
@@ -251,6 +289,12 @@ export function BatchAdoptionPage() {
         <BatchWorkspace
             key={query.data.batch.id}
             view={query.data}
+            reviewedVersion={
+                observedReview?.batchId === identity.batchId &&
+                observedReview.version === query.data.batch.preview_version
+                    ? query.data.batch.preview_version
+                    : null
+            }
             actorId={account.data?.userid ?? ""}
             onRefresh={() => query.refetch()}
         />
@@ -258,15 +302,17 @@ export function BatchAdoptionPage() {
 }
 function BatchWorkspace({
     view,
+    reviewedVersion,
     actorId,
     onRefresh,
 }: {
     view: BatchView
+    reviewedVersion: number | null
     actorId: string
     onRefresh: () => Promise<unknown>
 }) {
     const router = useRouter()
-    const workspace = useBatchWorkspace(view)
+    const workspace = useBatchWorkspace(view, reviewedVersion)
     const { form } = workspace
     const identity = {
         connectionId: view.batch.connection_id,
@@ -289,9 +335,14 @@ function BatchWorkspace({
         revisionTiming: "current",
     })
     const units = useUnitOptionsQuery()
-    const categoryOptions = (categories.data?.rows ?? [])
-        .filter((row) => row.productKind === "实物")
-        .map((row) => ({ value: row.stableId, label: row.name }))
+    const categoryOptions = flattenCategoryForest(
+        buildCategoryForest(categories.data?.rows ?? []),
+    )
+        .filter(({ item }) => item.productKind === "实物")
+        .map(({ item, pathLabel }) => ({
+            value: item.stableId,
+            label: pathLabel,
+        }))
     const unitOptions = (units.data ?? []).map((unit) => ({
         value: unit.id,
         label: unit.label,
@@ -307,6 +358,10 @@ function BatchWorkspace({
     const [editingId, setEditingId] = React.useState<string | null>(null)
     const [selectedIds, setSelectedIds] = React.useState<string[]>([])
     const [leaveOpen, setLeaveOpen] = React.useState(false)
+    const categoryListRef = React.useRef<CategoryMappingListHandle>(null)
+    const missingCategoryCount = workspace.values.categoryMappings.filter(
+        (row) => !row.categoryId,
+    ).length
     const storageKey = `supplier-catalog-batch-submission-${actorId}-${view.batch.connection_id}-${view.batch.id}`
     const originalSubmission = restoredSubmission(
         storageKey,
@@ -512,7 +567,9 @@ function BatchWorkspace({
             density="compact"
             className={cn(
                 "min-w-0 pb-8",
-                step === "REVIEW" || step === "RESULT" ? "gap-3" : "gap-5",
+                step === "REVIEW" || step === "RESULT" || step === "DETAILS"
+                    ? "gap-3"
+                    : "gap-5",
             )}
         >
             <DetailPageHeader
@@ -745,6 +802,8 @@ function BatchWorkspace({
                                     workspace={workspace}
                                     supplierId={view.batch.supplier_id}
                                     categories={categoryOptions}
+                                    categoryListRef={categoryListRef}
+                                    disabled={!editable || busy}
                                 />
                             </fieldset>
                         )}
@@ -858,23 +917,39 @@ function BatchWorkspace({
             )}
             {step !== "RESULT" ? (
                 <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t bg-background px-1 py-3">
-                    <DraftSaveIndicator
-                        idPrefix="supplier-catalog-batch-draft-status"
-                        state={
-                            workspace.save.isPending
-                                ? "saving"
-                                : workspace.save.isError
-                                  ? "failed"
-                                  : workspace.dirty
-                                    ? "dirty"
-                                    : "saved"
-                        }
-                        message={
-                            step === "REVIEW"
-                                ? `已选 ${selectedReady.length} 个 SKU${view.counts.draft + view.counts.failed + view.counts.unknown > 0 ? ` · 待处理 ${view.counts.draft + view.counts.failed + view.counts.unknown}` : ""}`
-                                : undefined
-                        }
-                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                        <DraftSaveIndicator
+                            idPrefix="supplier-catalog-batch-draft-status"
+                            state={
+                                workspace.save.isPending
+                                    ? "saving"
+                                    : workspace.save.isError
+                                      ? "failed"
+                                      : workspace.dirty
+                                        ? "dirty"
+                                        : "saved"
+                            }
+                            message={
+                                step === "REVIEW"
+                                    ? `已选 ${selectedReady.length} 个 SKU${view.counts.draft + view.counts.failed + view.counts.unknown > 0 ? ` · 待处理 ${view.counts.draft + view.counts.failed + view.counts.unknown}` : ""}`
+                                    : undefined
+                            }
+                        />
+                        {step === "DETAILS" && missingCategoryCount > 0 ? (
+                            <Button
+                                id="supplier-catalog-batch-show-missing-categories"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={!editable || busy}
+                                onClick={() =>
+                                    categoryListRef.current?.showMissing()
+                                }
+                            >
+                                {missingCategoryCount} 类未设置映射
+                            </Button>
+                        ) : null}
+                    </div>
                     <div className="flex flex-wrap justify-end gap-2">
                         {step === "PRICING" ||
                         step === "DETAILS" ||

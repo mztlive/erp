@@ -300,6 +300,41 @@ pub async fn control_preparation(
     Ok(ApiResponse::ok_with_data(batch))
 }
 
+/// 失败处理的恢复动作；任务身份防止旧页面覆盖后续操作。
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkControlRequest {
+    pub work_id: String,
+    pub retry: bool,
+}
+
+#[permission_macros::permission(
+    group = "API 供应商连接",
+    group_desc = "供应商 API 连接与能力治理（W20）",
+    desc = "恢复供应商批次保存与核对",
+    resource = "supplier_api_connection",
+    action = "catalog_sync"
+)]
+/// 恢复原保存/核对任务，或结束尚未产生部分保存的失败任务。
+/// # 参数
+/// 路径、原任务身份及认证用户。
+/// # 返回
+/// 最新批次摘要。
+/// # 错误
+/// 越权、任务变化或试图丢弃部分保存时拒绝。
+pub async fn control_work(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path((connection, batch)): Path<(String, String)>,
+    Json(request): Json<WorkControlRequest>,
+) -> Result<BatchView> {
+    let result = state
+        .supplier_catalog_adoption_process()?
+        .control_batch_work(&connection, &batch, &request.work_id, request.retry, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
 #[cfg(test)]
 mod tests {
     use axum::body::Body;

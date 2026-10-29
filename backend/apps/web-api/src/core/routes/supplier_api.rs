@@ -89,6 +89,14 @@ fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}/work",
+            with_permission(
+                post(supplier_api::adoption_batches::control_work),
+                rbac,
+                supplier_api::adoption_batches::control_work_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-api-connections/{id}/adoption-batches/{batch}",
             with_permission(
                 put(supplier_api::adoption_batches::save),

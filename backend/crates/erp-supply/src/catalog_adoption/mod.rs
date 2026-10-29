@@ -1,6 +1,10 @@
 //! 供应商品库选品的冻结预览、逐项命令与原子结果。
 
 mod batch;
+mod batch_work;
+mod work_repository;
+pub use batch_work::{BatchWork, BatchWorkPhase, BatchWorkRequest, BatchWorkStatus};
+pub use work_repository::{ensure_work_indexes, update_draft_chunk, work_requests};
 mod batch_anchor;
 mod batch_history;
 mod batch_preparation;

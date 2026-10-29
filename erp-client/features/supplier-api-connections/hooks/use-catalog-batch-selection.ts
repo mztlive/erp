@@ -55,16 +55,19 @@ export function useCatalogBatchSelection(connectionId: string) {
     const identity = { connectionId, batchId: frozenSeed?.batch.id ?? "" }
     const preparationQuery = useBatchPreparationQuery(identity)
     const batch = preparationQuery.data ?? frozenSeed?.batch
-    const preparing = Boolean(batch && !batch.selection_complete)
+    const activeWork = Boolean(batch?.work && batch.work.status !== "COMPLETED")
+    const preparing = Boolean(
+        batch && (!batch.selection_complete || activeWork),
+    )
     const batchQuery = useBatchSelectionQuery(
         identity,
-        Boolean(batch?.selection_complete),
+        Boolean(batch?.selection_complete && !activeWork),
     )
     const frozen = frozenSeed
-        ? (batchQuery.data ?? {
-              ...frozenSeed,
+        ? {
+              ...(batchQuery.data ?? frozenSeed),
               batch: batch ?? frozenSeed.batch,
-          })
+          }
         : null
     const busy = create.isPending || save.isPending || batchQuery.isFetching
     const needsReload = Boolean(
@@ -138,8 +141,9 @@ export function useCatalogBatchSelection(connectionId: string) {
                     excluded_ids: excludedIds,
                 },
             })
-            setFrozen(result)
-            await batchQuery.refetch()
+            setFrozen({ ...frozen, batch: result.batch })
+            if (!result.batch.work || result.batch.work.status === "COMPLETED")
+                await batchQuery.refetch()
         } catch {
             // 保存失败时继续展示最后已保存的选择，保留失败原因和重试操作。
         }
@@ -191,7 +195,13 @@ export function useCatalogBatchSelection(connectionId: string) {
     }
     const refreshFrozen = async () => {
         const preparation = await preparationQuery.refetch()
-        if (preparation.isError || !preparation.data?.selection_complete) return
+        if (
+            preparation.isError ||
+            !preparation.data?.selection_complete ||
+            (preparation.data.work &&
+                preparation.data.work.status !== "COMPLETED")
+        )
+            return
         const result = await batchQuery.refetch()
         if (result.data && !result.isError) {
             setFrozen(result.data)

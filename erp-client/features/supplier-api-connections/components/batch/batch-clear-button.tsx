@@ -11,10 +11,12 @@ export function BatchClearButton({
     workspace,
     field,
     label = "清除",
+    disabled = false,
 }: {
     workspace: ReturnType<typeof useBatchWorkspace>
     field: BatchClearField
     label?: string
+    disabled?: boolean
 }) {
     const active = workspace.values.clearFields.includes(field)
     const reset = field === "delivery_template_id"
@@ -27,6 +29,7 @@ export function BatchClearButton({
             size="xs"
             className="shrink-0 text-muted-foreground"
             aria-pressed={active}
+            disabled={disabled}
             onClick={() => workspace.setDefaultClear(field, !active)}
         >
             <Icon aria-hidden />

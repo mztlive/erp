@@ -177,6 +177,7 @@ fn selection_batch(
         submitted: false,
         selection_complete: false,
         preparation: Some(BatchPreparation::new(registration.request_key, registration.fingerprint)),
+        work: None,
         execution_pending: false,
         draft_operation: None,
         draft_started_at: None,

@@ -131,11 +131,24 @@ export function CatalogBatchHistory({
                                                 {batch.batch_no}
                                             </p>
                                             <Badge variant={status.variant}>
-                                                {status.label}
+                                                {batch.work?.status ===
+                                                "RUNNING"
+                                                    ? batch.work.phase ===
+                                                      "SAVING"
+                                                        ? "保存中"
+                                                        : "核对中"
+                                                    : batch.work?.status ===
+                                                        "FAILED"
+                                                      ? "处理已中断"
+                                                      : status.label}
                                             </Badge>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
                                             {batch.selected_count} 个 SKU
+                                            {batch.work &&
+                                            batch.work.status !== "COMPLETED"
+                                                ? ` · 已处理 ${batch.work.completed} 个`
+                                                : ""}
                                             {batch.preparation &&
                                             !batch.selection_complete
                                                 ? ` · 已准备 ${batch.preparation.completed} 个`

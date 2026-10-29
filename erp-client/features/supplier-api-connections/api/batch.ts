@@ -109,7 +109,18 @@ export type BatchPreparation = {
     next_page: number
     error: string | null
 }
+export type BatchWork = {
+    id: string
+    generation: number
+    review_after_save: boolean
+    phase: "SAVING" | "REVIEWING" | "FINALIZING"
+    status: "RUNNING" | "FAILED" | "COMPLETED"
+    completed: number
+    total: number
+    error: string | null
+}
 export type AdoptionBatch = {
+    work?: BatchWork | null
     id: string
     version: number
     batch_no: string
@@ -134,6 +145,7 @@ export type AdoptionBatch = {
     selected_count: number
 }
 export type BatchView = {
+    rows_complete?: boolean
     batch: AdoptionBatch
     rows: BatchRow[]
     counts: BatchCounts
@@ -158,6 +170,7 @@ export type CreateBatchRequest = {
     excluded_ids?: string[]
 }
 export type SaveBatchRequest = {
+    review_after_save?: boolean
     expected_version: number
     rules?: BatchPricing
     inactive_pricing?: BatchPricing | null
@@ -191,21 +204,17 @@ export function saveAdoptionBatch({
     request,
     ...identity
 }: BatchIdentity & { request: SaveBatchRequest }) {
-    return apiPut<BatchView>(path(identity), request, { timeoutMs: 300000 })
+    return apiPut<BatchView>(path(identity), request)
 }
 export function previewAdoptionBatch({
     expected_version,
     item_ids,
     ...identity
 }: BatchIdentity & { expected_version: number; item_ids?: string[] }) {
-    return apiPost<BatchView>(
-        `${path(identity)}/preview`,
-        {
-            expected_version,
-            item_ids,
-        },
-        { timeoutMs: 300000 },
-    )
+    return apiPost<BatchView>(`${path(identity)}/preview`, {
+        expected_version,
+        item_ids,
+    })
 }
 export function submitAdoptionBatch({
     request,
@@ -262,4 +271,12 @@ export type BatchSelectionView = {
 }
 export function fetchBatchSelection(identity: BatchIdentity) {
     return apiGet<BatchSelectionView>(`${path(identity)}/selection`)
+}
+
+export function controlBatchWork({
+    work_id,
+    retry,
+    ...identity
+}: BatchIdentity & { work_id: string; retry: boolean }) {
+    return apiPost<BatchView>(`${path(identity)}/work`, { work_id, retry })
 }

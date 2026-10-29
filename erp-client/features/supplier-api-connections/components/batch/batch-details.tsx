@@ -1,11 +1,15 @@
 "use client"
 
+import type * as React from "react"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { DeliveryTemplateField } from "@/features/supplier-offerings/components/delivery-templates/delivery-template-field"
 import type { useBatchWorkspace } from "../../hooks/use-batch-workspace"
-import { BatchCategoryMappings } from "./batch-category-mappings"
+import {
+    BatchCategoryMappings,
+    type CategoryMappingListHandle,
+} from "./batch-category-mappings"
 import { BatchClearButton } from "./batch-clear-button"
 
 const DATES = [
@@ -27,20 +31,26 @@ export function BatchDetailsPanel({
     workspace,
     supplierId,
     categories,
+    categoryListRef,
+    disabled = false,
 }: {
     workspace: ReturnType<typeof useBatchWorkspace>
     supplierId: string
     categories: Array<{ value: string; label: string }>
+    categoryListRef?: React.Ref<CategoryMappingListHandle>
+    disabled?: boolean
 }) {
     const { form, values } = workspace
     return (
-        <div className="min-w-0 space-y-6">
+        <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,7fr)_minmax(19rem,3fr)]">
             <BatchCategoryMappings
                 workspace={workspace}
                 categories={categories}
+                listRef={categoryListRef}
+                disabled={disabled}
             />
             <section
-                className="space-y-4 rounded-lg border p-4"
+                className="min-w-0 space-y-4 rounded-lg border p-4"
                 aria-labelledby="supplier-catalog-batch-terms-title"
             >
                 <h2
@@ -49,7 +59,7 @@ export function BatchDetailsPanel({
                 >
                     供给条件
                 </h2>
-                <div className="grid gap-5 border-t pt-4 lg:grid-cols-2">
+                <div className="grid min-w-0 gap-5 border-t pt-4 md:grid-cols-2 xl:grid-cols-1">
                     <div className="space-y-4">
                         <form.AppField name="inputTaxPercentage">
                             {(field) => (
@@ -61,11 +71,13 @@ export function BatchDetailsPanel({
                                         <BatchClearButton
                                             workspace={workspace}
                                             field="input_tax_rate"
+                                            disabled={disabled}
                                         />
                                     </div>
                                     <Input
                                         id="supplier-catalog-batch-input-tax"
                                         inputMode="decimal"
+                                        disabled={disabled}
                                         placeholder="请输入"
                                         value={field.state.value}
                                         onChange={(event) => {
@@ -105,10 +117,12 @@ export function BatchDetailsPanel({
                                             <BatchClearButton
                                                 workspace={workspace}
                                                 field={date.wire}
+                                                disabled={disabled}
                                             />
                                         </div>
                                         <DatePicker
                                             id={date.id}
+                                            disabled={disabled}
                                             value={
                                                 field.state.value || undefined
                                             }
@@ -154,12 +168,14 @@ export function BatchDetailsPanel({
                             <DeliveryTemplateField
                                 id="supplier-catalog-batch-delivery-template"
                                 supplierId={supplierId}
+                                disabled={disabled}
                                 value={field.state.value}
                                 labelAction={
                                     <BatchClearButton
                                         workspace={workspace}
                                         field="delivery_template_id"
                                         label="恢复默认"
+                                        disabled={disabled}
                                     />
                                 }
                                 onChange={(next) => {

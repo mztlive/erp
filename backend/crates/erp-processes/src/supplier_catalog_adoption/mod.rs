@@ -19,6 +19,7 @@ mod batch_preview;
 mod batch_request;
 mod batch_selection;
 mod batch_submission;
+mod batch_work;
 mod confirm;
 mod matching;
 mod preview;

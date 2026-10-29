@@ -54,7 +54,7 @@ impl CreateBatchRequest {
 }
 
 /// 单项调整不接收目标 SKU 或字段来源标记。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BatchItemEdit {
     pub item_id: String,
@@ -86,9 +86,11 @@ impl BatchItemEdit {
 }
 
 /// 已保存服务端草稿的局部更新；缺失字段保持原值。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SaveBatchRequest {
+    #[serde(default)]
+    pub review_after_save: bool,
     pub expected_version: u64,
     pub rules: Option<BatchPricing>,
     pub inactive_pricing: Option<BatchPricingDraft>,
@@ -101,7 +103,7 @@ pub struct SaveBatchRequest {
 }
 
 /// 当前页面最后读取到的服务端版本。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BatchVersionRequest {
     pub expected_version: u64,
@@ -109,7 +111,7 @@ pub struct BatchVersionRequest {
 }
 
 /// 明确确认就绪子集，固定本次操作号和最后核对版本。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitBatchRequest {
     pub expected_version: u64,
@@ -177,6 +179,7 @@ pub struct BatchSubmissionView {
 /// 完整冻结范围及互斥统计，刷新后直接恢复服务端真实状态。
 #[derive(Debug, Serialize)]
 pub struct BatchView {
+    pub rows_complete: bool,
     pub batch: CatalogAdoptionBatch,
     #[serde(serialize_with = "serialize_batch_rows")]
     pub rows: Vec<CatalogAdoptionBatchItem>,

@@ -8,7 +8,7 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, Result};
 use serde::{Deserialize, Serialize};
 
-use super::{BatchItemStatus, CatalogAdoptionBatch, PreparationStatus, recent_batches};
+use super::{BatchItemStatus, BatchWorkStatus, CatalogAdoptionBatch, PreparationStatus, recent_batches};
 
 /// 可重开的批次及基于当前成员状态计算的列表状态。
 #[derive(Debug, Serialize)]
@@ -105,17 +105,25 @@ pub async fn batch_history(
     Ok(batches
         .into_iter()
         .map(|batch| {
-            let history_status = match batch.preparation.as_ref().map(|state| state.status) {
-                Some(PreparationStatus::Queued | PreparationStatus::Preparing) => {
-                    BatchHistoryStatus::Preparing
-                },
-                Some(PreparationStatus::Failed) => BatchHistoryStatus::PreparationFailed,
-                Some(PreparationStatus::Cancelled) => BatchHistoryStatus::Cancelled,
-                _ => BatchHistoryStatus::from_states(
-                    batch.submitted,
-                    batch.execution_pending,
-                    states.get(&batch.base.id).map(Vec::as_slice).unwrap_or_default(),
-                ),
+            let history_status = if let Some(work) = batch.work.as_ref().filter(|work| work.blocking()) {
+                if work.status == BatchWorkStatus::Failed {
+                    BatchHistoryStatus::Pending
+                } else {
+                    BatchHistoryStatus::Processing
+                }
+            } else {
+                match batch.preparation.as_ref().map(|state| state.status) {
+                    Some(PreparationStatus::Queued | PreparationStatus::Preparing) => {
+                        BatchHistoryStatus::Preparing
+                    },
+                    Some(PreparationStatus::Failed) => BatchHistoryStatus::PreparationFailed,
+                    Some(PreparationStatus::Cancelled) => BatchHistoryStatus::Cancelled,
+                    _ => BatchHistoryStatus::from_states(
+                        batch.submitted,
+                        batch.execution_pending,
+                        states.get(&batch.base.id).map(Vec::as_slice).unwrap_or_default(),
+                    ),
+                }
             };
             BatchHistoryEntry { batch, history_status }
         })

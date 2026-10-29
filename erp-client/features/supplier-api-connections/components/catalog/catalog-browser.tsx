@@ -1,5 +1,6 @@
 "use client"
 
+import { BatchWorkStatus } from "../batch/batch-work-status"
 import { BatchPreparationStatus } from "../batch/batch-preparation"
 
 import { catalogUnitLabel } from "../../api/catalog"
@@ -353,9 +354,17 @@ export function CatalogBrowser({
                             本页 {query.data?.items.length ?? 0} 个 SKU
                         </span>
                         {choice.preparing && choice.frozen ? (
-                            <BatchPreparationStatus
-                                batch={choice.frozen.batch}
-                            />
+                            choice.frozen.batch.work &&
+                            choice.frozen.batch.work.status !== "COMPLETED" ? (
+                                <BatchWorkStatus
+                                    batch={choice.frozen.batch}
+                                    inCatalog
+                                />
+                            ) : (
+                                <BatchPreparationStatus
+                                    batch={choice.frozen.batch}
+                                />
+                            )
                         ) : choice.frozen ? (
                             <span className="rounded-md bg-success-soft px-3 py-2 text-success-soft-foreground">
                                 已选择全部筛选结果 {choice.frozen.rows.length}{" "}

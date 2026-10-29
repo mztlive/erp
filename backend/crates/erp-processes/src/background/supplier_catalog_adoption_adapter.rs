@@ -67,6 +67,8 @@ impl BackgroundTaskAdapter for SupplierCatalogAdoptionTaskAdapter {
                 let _permit = permit;
                 let outcome = if batch.preparation.as_ref().is_some_and(|state| state.runnable()) {
                     process.prepare_batch(&batch.base.id).await
+                } else if batch.work.as_ref().is_some_and(|work| work.blocking()) {
+                    process.process_batch_work(&batch.base.id).await
                 } else {
                     process.process_batch(&batch.base.id).await.map(|_| ())
                 };

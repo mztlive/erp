@@ -24,9 +24,15 @@ impl SupplierCatalogAdoptionProcess {
         rows: &[CatalogAdoptionBatchItem],
         actor: &AuditActor,
         executor: &mut dyn Executor,
+        work: Option<(&CatalogAdoptionBatch, &str)>,
     ) -> Result<HashMap<String, BatchMatchAnchor>> {
         let (mut anchors, mut ambiguous) = (HashMap::<String, BatchMatchAnchor>::new(), HashSet::new());
-        for row in rows {
+        for (index, row) in rows.iter().enumerate() {
+            if index % 100 == 0
+                && let Some((batch, token)) = work
+            {
+                self.renew_batch_work(batch, token, actor).await?;
+            }
             if !row.editable() || row.status == BatchItemStatus::Excluded {
                 continue;
             }

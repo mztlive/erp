@@ -248,7 +248,10 @@ const draftSchema = z
                 message: "失效日期须晚于生效日期",
             })
     })
-export function useBatchWorkspace(view: BatchView) {
+export function useBatchWorkspace(
+    view: BatchView,
+    initialReview: number | null = null,
+) {
     const identity = {
         connectionId: view.batch.connection_id,
         batchId: view.batch.id,
@@ -256,7 +259,7 @@ export function useBatchWorkspace(view: BatchView) {
     const save = useSaveAdoptionBatchMutation()
     const preview = usePreviewAdoptionBatchMutation()
     const [reviewedVersion, setReviewedVersion] = React.useState<number | null>(
-        null,
+        initialReview,
     )
     const nextStep = React.useRef<BatchStep | undefined>(undefined)
     const previewAfterSave = React.useRef(false)
@@ -287,6 +290,7 @@ export function useBatchWorkspace(view: BatchView) {
             }
             const request: SaveBatchRequest = {
                 expected_version: view.batch.version,
+                review_after_save: previewAfterSave.current,
                 rules: draftPricing(value),
                 inactive_pricing: value.inactivePricing,
                 fill_policy: {
@@ -352,15 +356,48 @@ export function useBatchWorkspace(view: BatchView) {
                               }))
                         : [],
             }
+            // 只发送发生变化的规则；步骤切换不得触发全批重算。
+            const baseline = draftFrom(view)
+            if (
+                JSON.stringify(request.rules) ===
+                JSON.stringify(draftPricing(baseline))
+            )
+                delete request.rules
+            if (
+                JSON.stringify(value.inactivePricing) ===
+                JSON.stringify(baseline.inactivePricing)
+            )
+                delete request.inactive_pricing
+            if (
+                value.overwrite === baseline.overwrite &&
+                value.preserveManual === baseline.preserveManual
+            )
+                delete request.fill_policy
+            const detailValues = (draft: BatchWorkspaceDraft) => [
+                draft.categoryMappings.map((row) => [
+                    row.sourceId,
+                    row.categoryId,
+                ]),
+                draft.inputTaxPercentage,
+                draft.validFrom,
+                draft.validTo,
+                draft.deliveryTemplateId,
+                draft.clearFields,
+            ]
+            if (
+                JSON.stringify(detailValues(value)) ===
+                JSON.stringify(detailValues(baseline))
+            )
+                delete request.defaults
             const saved = await save.mutateAsync({ ...identity, request })
-            form.reset(draftFrom(saved))
-            if (previewAfterSave.current) {
-                const checked = await preview.mutateAsync({
-                    ...identity,
-                    expected_version: saved.batch.version,
-                })
-                form.reset(draftFrom(checked))
-                setReviewedVersion(checked.batch.preview_version)
+            if (!saved.batch.work || saved.batch.work.status === "COMPLETED") {
+                form.reset(
+                    draftFrom(
+                        saved.rows_complete === false
+                            ? { ...view, batch: saved.batch }
+                            : saved,
+                    ),
+                )
             }
             savedSuccessfully.current = true
         },
@@ -378,8 +415,19 @@ export function useBatchWorkspace(view: BatchView) {
         }
         return savedSuccessfully.current
     }
-    const acceptSaved = (saved: BatchView) => form.reset(draftFrom(saved))
+    const acceptSaved = (saved: BatchView) => {
+        if (saved.batch.work && saved.batch.work.status !== "COMPLETED") return
+        form.reset(
+            draftFrom(
+                saved.rows_complete === false
+                    ? { ...view, batch: saved.batch }
+                    : saved,
+            ),
+        )
+    }
     const acceptPreview = (checked: BatchView) => {
+        if (checked.batch.work && checked.batch.work.status !== "COMPLETED")
+            return
         acceptSaved(checked)
         setReviewedVersion(checked.batch.preview_version)
     }
