@@ -8,8 +8,8 @@ use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
     SupplierApiCapabilityCode, SupplierApiConnection, SupplierConnectorType, SupplierHealthCheckType,
 };
+use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
 use erp_supply::ports::connector::common::Scan;
-use erp_supply::ports::connector::offer::IncrementalSupport;
 use erp_supply::ports::supplier_api_gateway::{CatalogRead, ClassifiedError, SupplierApiGateway};
 use erp_supply::ports::supplier_reference_registry::{
     ResolvedSupplierReference, SupplierDeploymentConfig, SupplierReferenceKind, SupplierReferenceOption,
@@ -70,16 +70,18 @@ impl SupplierApiGateway for SupplierConnectorRegistry {
             .ok()
             .and_then(|adapter| adapter.gateway.catalog_availability_validity(connection))
     }
-    fn catalog_full_sync_interval(&self, connection: &SupplierApiConnection) -> u64 {
-        self.adapter(connection.connector_type)
-            .map_or(86_400, |adapter| adapter.gateway.catalog_full_sync_interval(connection))
+    fn catalog_connector_types(&self) -> Vec<SupplierConnectorType> {
+        self.adapters.keys().copied().collect()
     }
 
-    fn catalog_incremental_support(
+    fn catalog_policy(
         &self,
         connection: &SupplierApiConnection,
-    ) -> Result<IncrementalSupport, ClassifiedError> {
-        self.adapter(connection.connector_type)?.gateway.catalog_incremental_support(connection)
+    ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError> {
+        let Some(adapter) = connection.connector_type.and_then(|kind| self.adapters.get(&kind)) else {
+            return Ok(None);
+        };
+        adapter.gateway.catalog_policy(connection)
     }
 
     fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
@@ -147,6 +149,7 @@ mod tests {
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
     use erp_supply::ports::connector::common::ScanWindow;
+    use erp_supply::ports::connector::offer::IncrementalSupport;
     use erp_supply::ports::supplier_api_gateway::CatalogPage;
 
     use super::*;
@@ -155,6 +158,21 @@ mod tests {
     struct RecordingAdapter(Mutex<Vec<&'static str>>);
 
     impl SupplierApiGateway for RecordingAdapter {
+        fn catalog_policy(
+            &self,
+            _: &SupplierApiConnection,
+        ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError> {
+            self.0.lock().unwrap().push("policy");
+            Ok(Some(CatalogSyncPolicy {
+                mapping_version: 99,
+                sync_interval_seconds: 300,
+                full_sync_interval_seconds: 1000,
+                overlap_seconds: 120,
+                page_size: NonZeroU32::new(20).unwrap(),
+                incremental: IncrementalSupport::Complete,
+            }))
+        }
+
         fn health_check<'a>(
             &'a self,
             _: &'a SupplierApiConnection,
@@ -222,6 +240,25 @@ mod tests {
             "actor",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn scheduling_and_capability_queries_use_registered_provider_policy() {
+        let mut registry = SupplierConnectorRegistry::default();
+        let mut connection = connection();
+        assert!(registry.catalog_connector_types().is_empty());
+        assert!(registry.catalog_policy(&connection).unwrap().is_none());
+        let adapter = Arc::new(RecordingAdapter::default());
+        registry.register(SupplierConnectorType::Dangaoshushu, adapter.clone()).unwrap();
+        assert_eq!(registry.catalog_connector_types(), vec![SupplierConnectorType::Dangaoshushu]);
+        let policy = registry.catalog_policy(&connection).unwrap().unwrap();
+        assert_eq!((policy.mapping_version, policy.overlap_seconds, policy.page_size.get()), (99, 120, 20));
+        assert_eq!(policy.sync_interval_seconds, 300);
+        assert_eq!(policy.incremental, IncrementalSupport::Complete);
+        assert_eq!(*adapter.0.lock().unwrap(), vec!["policy"]);
+        connection.connector_type = None;
+        assert!(registry.catalog_policy(&connection).unwrap().is_none());
+        assert_eq!(*adapter.0.lock().unwrap(), vec!["policy"]);
     }
 
     #[tokio::test]

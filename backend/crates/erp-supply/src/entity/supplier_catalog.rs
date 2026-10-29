@@ -17,7 +17,8 @@ pub use crate::ports::connector::offer::{CatalogAvailability, CatalogImage};
 use crate::ports::connector::offer::{Offer, OfferDetails};
 use crate::{Error, Result};
 
-const CATALOG_MAPPING_VERSION: u32 = 3;
+/// 共用检查点格式；旧程序写回缺失格式标记时不得恢复或建立基线。
+pub const CATALOG_CHECKPOINT_VERSION: u32 = 1;
 
 /// 一个连接内一个外部订货规格的最近观察；正式关联只由选品事务建立。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
@@ -405,6 +406,9 @@ pub struct SupplierCatalogRun {
     /// 目录映射版本；旧检查点缺省为零，升级后须重新完成一次全量同步。
     #[serde(default)]
     pub mapping_version: u32,
+    /// 检查点格式版本；旧程序写回会丢弃该字段，必须拒绝跨格式续页。
+    #[serde(default)]
+    pub checkpoint_version: u32,
     pub cursor: Option<String>,
     pub pages: u32,
     pub observed_count: u64,
@@ -414,6 +418,15 @@ pub struct SupplierCatalogRun {
     #[serde(default)]
     pub skipped_samples: Vec<String>,
     pub finished: bool,
+    /// 仅由任务成功结算事务写入；旧记录默认不可作为增量基线。
+    #[serde(default)]
+    pub succeeded: bool,
+    /// 正常发布主动交接，可绕过周期等待立即续跑。
+    #[serde(default)]
+    pub resume_requested: bool,
+    /// 不兼容恢复必须从头全量，不能复用更早的同版本基线。
+    #[serde(default)]
+    pub restart_required: bool,
     #[serde(default)]
     pub sync_mode: CatalogSyncMode,
     #[serde(default)]
@@ -436,23 +449,31 @@ pub struct CatalogIdentityReviewReceipt {
 impl SupplierCatalogRun {
     /// 为任务冻结技术配置和初始游标。
     /// # 参数
-    /// `job` 为任务 ID，`connection` 为已自动配置的连接。
+    /// `job` 为任务 ID，`connection` 为已自动配置的连接，`mapping_version` 来自适配器。
     /// # 返回
     /// 尚未扫描的检查点。
     /// # 错误
     /// 不返回错误。
-    pub fn new(job: &str, connection: &super::supplier_api::SupplierApiConnection) -> Self {
+    pub fn new(
+        job: &str,
+        connection: &super::supplier_api::SupplierApiConnection,
+        mapping_version: u32,
+    ) -> Self {
         Self {
             base: BaseModel::new(job.into()),
             connection_id: connection.base.id.clone(),
             technical_config_version: connection.technical_config_version,
-            mapping_version: CATALOG_MAPPING_VERSION,
+            mapping_version,
+            checkpoint_version: CATALOG_CHECKPOINT_VERSION,
             cursor: None,
             pages: 0,
             observed_count: 0,
             skipped_count: 0,
             skipped_samples: Vec::new(),
             finished: false,
+            succeeded: false,
+            resume_requested: false,
+            restart_required: false,
             sync_mode: CatalogSyncMode::Full,
             scan_since: None,
             scan_through: Instant::now(),
@@ -460,16 +481,16 @@ impl SupplierCatalogRun {
     }
     /// 判断完成的检查点能否作为当前配置和映射版本的增量依据。
     /// # 参数
-    /// `config_version` 为当前连接技术配置版本。
+    /// `config_version` 为当前连接技术配置版本，`mapping_version` 为适配器当前版本。
     /// # 返回
     /// 已完整处理且没有跳过项，并与当前配置和映射版本一致时返回 true。
     /// # 错误
     /// 不返回错误。
-    pub fn supports_incremental(&self, config_version: u64) -> bool {
+    pub fn supports_incremental(&self, config_version: u64, mapping_version: u32) -> bool {
         self.finished
+            && self.succeeded
             && self.skipped_count == 0
-            && self.technical_config_version == config_version
-            && self.mapping_version == CATALOG_MAPPING_VERSION
+            && self.compatible(config_version, mapping_version)
     }
     /// 累计跳过数量并保留最近一百条原因，与页面推进同事务保存。
     /// # 参数
@@ -669,7 +690,7 @@ mod tests {
     }
     #[test]
     fn skipped_observations_are_counted_bounded_and_old_checkpoints_default_to_empty() {
-        let mut run = SupplierCatalogRun::new("job", &connection());
+        let mut run = SupplierCatalogRun::new("job", &connection(), 7);
         run.record_skipped((0..105).map(|n| format!("异常 {n}")).collect()).unwrap();
         assert_eq!(run.skipped_count, 105);
         assert_eq!(run.skipped_samples.len(), 100);
@@ -680,9 +701,17 @@ mod tests {
         let mut legacy = serde_json::to_value(&run).unwrap();
         legacy.as_object_mut().unwrap().remove("skipped_count");
         legacy.as_object_mut().unwrap().remove("skipped_samples");
+        legacy.as_object_mut().unwrap().remove("succeeded");
+        legacy.as_object_mut().unwrap().remove("resume_requested");
+        legacy.as_object_mut().unwrap().remove("restart_required");
+        legacy.as_object_mut().unwrap().remove("checkpoint_version");
         let restored: SupplierCatalogRun = serde_json::from_value(legacy).unwrap();
         assert_eq!(restored.skipped_count, 0);
         assert!(restored.skipped_samples.is_empty());
+        assert!(!restored.succeeded);
+        assert!(!restored.resume_requested);
+        assert!(!restored.restart_required);
+        assert_eq!(restored.checkpoint_version, 0);
         run.skipped_count = u64::MAX;
         let samples = run.skipped_samples.clone();
         assert!(run.record_skipped(vec!["overflow".into()]).is_err());
@@ -691,7 +720,7 @@ mod tests {
 
     #[test]
     fn page_checkpoint_counts_empty_pages_and_rejects_repeat_cursor() {
-        let mut run = SupplierCatalogRun::new("job", &connection());
+        let mut run = SupplierCatalogRun::new("job", &connection(), 7);
         run.advance(Some("2".into()), 3).unwrap();
         let previous = (run.cursor.clone(), run.observed_count, run.pages);
         assert!(run.advance(Some("2".into()), 7).is_err());
@@ -705,20 +734,22 @@ mod tests {
     #[test]
     fn incremental_sync_requires_a_completed_current_mapping_checkpoint() {
         let connection = connection();
-        let mut run = SupplierCatalogRun::new("job", &connection);
-        assert!(!run.supports_incremental(connection.technical_config_version));
+        let mut run = SupplierCatalogRun::new("job", &connection, 7);
+        assert!(!run.supports_incremental(connection.technical_config_version, 7));
         run.advance(None, 1).unwrap();
-        assert!(run.supports_incremental(connection.technical_config_version));
+        assert!(!run.supports_incremental(connection.technical_config_version, 7));
+        run.succeeded = true;
+        assert!(run.supports_incremental(connection.technical_config_version, 7));
         let mut previous_mapping = run.clone();
-        previous_mapping.mapping_version = CATALOG_MAPPING_VERSION - 1;
-        assert!(!previous_mapping.supports_incremental(connection.technical_config_version));
-        assert!(!run.supports_incremental(connection.technical_config_version + 1));
+        previous_mapping.mapping_version = 6;
+        assert!(!previous_mapping.supports_incremental(connection.technical_config_version, 7));
+        assert!(!run.supports_incremental(connection.technical_config_version + 1, 7));
         let mut legacy = serde_json::to_value(&run).unwrap();
         legacy.as_object_mut().unwrap().remove("mapping_version");
         let restored: SupplierCatalogRun = serde_json::from_value(legacy).unwrap();
-        assert!(!restored.supports_incremental(connection.technical_config_version));
+        assert!(!restored.supports_incremental(connection.technical_config_version, 7));
         run.record_skipped(vec!["来源字段错误".into()]).unwrap();
-        assert!(!run.supports_incremental(connection.technical_config_version));
+        assert!(!run.supports_incremental(connection.technical_config_version, 7));
     }
     #[test]
     fn source_merge_preserves_adoption_and_omitted_media_and_blocks_identity_changes() {

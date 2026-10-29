@@ -3,20 +3,54 @@ use std::str::FromStr;
 
 use futures_util::TryStreamExt;
 use mongodb::Database;
-use mongodb::bson::{Bson, Decimal128, Document, doc};
+use mongodb::bson::{Bson, Decimal128, Document, doc, serialize_to_bson};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, Repository, Result, insert_literal_regex_filter, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use crate::dto::supplier_catalog::{CatalogFilter, CatalogSelectionStatus};
+use crate::entity::supplier_api::SupplierConnectorType;
 use crate::entity::supplier_catalog::{
-    CatalogIdentityReviewReceipt, SupplierCatalogItem, SupplierCatalogRun,
+    CATALOG_CHECKPOINT_VERSION, CatalogIdentityReviewReceipt, SupplierCatalogItem, SupplierCatalogRun,
 };
 use crate::ports::connector::offer::CatalogAvailability;
 
 pub const ITEMS: &str = "supplier_catalog_items";
 pub const RUNS: &str = "supplier_catalog_runs";
 pub const IDENTITY_REVIEWS: &str = "supplier_catalog_identity_reviews";
+
+/// 直接读取当前配置与映射版本的成功检查点，不受任务展示条数限制。
+/// # 参数
+/// `full_only` 只读取无跳过项的成功全量；普通查询保留跳过项以阻止错误增量。
+/// # 返回
+/// 冻结截止时间最近的一条已成功结算记录，缺失返回 None。
+/// # 错误
+/// 数据库读取失败时返回错误。
+pub async fn successful_run(
+    db: &Database,
+    connection: &str,
+    config_version: u64,
+    mapping_version: u32,
+    full_only: bool,
+    executor: &mut dyn Executor,
+) -> Result<Option<SupplierCatalogRun>> {
+    let config_version = i64::try_from(config_version)
+        .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("技术配置版本超限"))?;
+    let mut filter = doc! { "connection_id": connection, "technical_config_version": config_version,
+    "mapping_version": i64::from(mapping_version), "checkpoint_version": i64::from(CATALOG_CHECKPOINT_VERSION), "succeeded": true, "finished": true, "deleted_at": 0_i64 };
+    if full_only {
+        filter.insert("sync_mode", "FULL");
+        filter.insert("skipped_count", 0_i64);
+    }
+    let mut runs = mongo_ops::find_many(
+        &db.collection::<SupplierCatalogRun>(RUNS),
+        filter,
+        FindOptions::builder().sort(doc! { "scan_through": -1, "id": -1 }).limit(1).build(),
+        executor,
+    )
+    .await?;
+    Ok(runs.pop())
+}
 
 /// 有界读取到期的来源图片处理任务。
 /// # 参数
@@ -307,7 +341,7 @@ pub async fn filter_options(
 
 /// 有界遍历已明确类型的供应商连接，调度方继续核对既往采集授权。
 /// # 参数
-/// `after` 为上一批最后连接主键，空串从头开始。
+/// `after` 为上一批最后连接主键，`kinds` 为注册表提供的候选协议；空集合不查询。
 /// # 返回
 /// 主键升序的最多二十条当前连接。
 /// # 错误
@@ -315,15 +349,21 @@ pub async fn filter_options(
 pub async fn connection_page(
     db: &Database,
     after: &str,
+    kinds: &[SupplierConnectorType],
     executor: &mut dyn Executor,
 ) -> Result<Vec<crate::entity::supplier_api::SupplierApiConnection>> {
+    if kinds.is_empty() {
+        return Ok(Vec::new());
+    }
+    let kinds =
+        kinds.iter().map(|kind| serialize_to_bson(kind).expect("协议枚举可序列化")).collect::<Vec<_>>();
     use crate::repository::SupplierApiExt;
     let collection = db.collection::<crate::entity::supplier_api::SupplierApiConnection>(
         <Database as SupplierApiExt>::SUPPLIER_API_CONNECTIONS,
     );
     mongo_ops::find_many(
         &collection,
-        doc! {"id": {"$gt": after}, "deleted_at":0_i64, "connector_type":"dangaoshushu"},
+        doc! {"id": {"$gt": after}, "deleted_at":0_i64, "connector_type": {"$in": kinds}},
         FindOptions::builder().sort(doc! {"id":1}).limit(20).build(),
         executor,
     )

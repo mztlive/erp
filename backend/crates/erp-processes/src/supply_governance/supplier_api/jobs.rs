@@ -15,7 +15,7 @@ use persistence_core::{Executor, Transactional};
 use super::SupplierApiGovernanceProcess;
 use super::catalog_recovery::{clear_stalled, next_run};
 use super::receipt::{CommandReceiptWrite, persist_command_receipt};
-use crate::Result;
+use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
     /// 在一个事务内登记健康检查后台任务、运行记录和命令回执。
     ///
@@ -114,6 +114,8 @@ impl SupplierApiGovernanceProcess {
         let client = db.client().clone();
         let actor = actor.clone();
         let connection_id_value = id.to_string();
+        let gateway =
+            self.gateway.clone().ok_or_else(|| Error::BusinessLogicError("目录网关未配置".into()))?;
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -136,7 +138,12 @@ impl SupplierApiGovernanceProcess {
                         &actor,
                         &identity,
                     )?;
-                    let run = next_run(&db, &job.base.id, &connection, executor).await?;
+                    let policy = gateway
+                        .catalog_policy(&connection)
+                        .map_err(|error| Error::BusinessLogicError(error.summary))?
+                        .ok_or_else(|| Error::BusinessLogicError("当前接口尚不支持商品同步".into()))?;
+                    let run =
+                        next_run(&db, &job.base.id, &connection, policy.mapping_version, executor).await?;
                     db.supplier_catalog_runs().create(&run, executor).await?;
                     db.background_jobs().create(&job, executor).await?;
                     processing_receipt(

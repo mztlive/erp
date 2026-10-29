@@ -3,7 +3,10 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
+use erp_supply::entity::failure::SupplierFailureClass;
+use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
+use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
+use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
 use erp_support::{BulkJobExt, SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE};
 use mongodb::Database;
 use persistence_core::NoTransaction;
@@ -11,6 +14,8 @@ use persistence_core::NoTransaction;
 use crate::source_media::SourceMediaPreparer;
 use crate::{Error, Result};
 
+mod control;
+pub use control::CatalogTaskControl;
 mod catalog;
 mod catalog_scan;
 mod catalog_supply;
@@ -24,6 +29,7 @@ pub struct SupplierConnectionExecutionProcess {
     db: Database,
     gateway: Arc<dyn SupplierApiGateway>,
     source_media: Option<Arc<SourceMediaPreparer>>,
+    control: CatalogTaskControl,
 }
 
 impl SupplierConnectionExecutionProcess {
@@ -39,7 +45,44 @@ impl SupplierConnectionExecutionProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, gateway: Arc<dyn SupplierApiGateway>) -> Self {
-        Self { db, gateway, source_media: None }
+        Self { db, gateway, source_media: None, control: CatalogTaskControl::default() }
+    }
+
+    /// 绑定应用退出时使用的目录任务控制器。
+    /// # 参数
+    /// `control` 为同进程调度器与关闭流程共享的控制器。
+    /// # 返回
+    /// 使用共享停止状态的执行流程。
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_control(mut self, control: CatalogTaskControl) -> Self {
+        self.control = control;
+        self
+    }
+
+    /// 读取已登记的目录候选协议。
+    pub(crate) fn catalog_connector_types(&self) -> Vec<SupplierConnectorType> {
+        self.gateway.catalog_connector_types()
+    }
+
+    /// 从适配器取得当前连接策略，缺少目录能力时拒绝执行。
+    pub(crate) fn catalog_policy(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> std::result::Result<CatalogSyncPolicy, ClassifiedError> {
+        self.gateway.catalog_policy(connection)?.ok_or_else(|| ClassifiedError {
+            class: SupplierFailureClass::CapabilityGap,
+            code: "CATALOG_SYNC_ADAPTER_UNAVAILABLE".into(),
+            summary: "当前接口尚不支持商品同步".into(),
+        })
+    }
+
+    /// 读取调度策略；无目录能力的候选连接可被跳过。
+    pub(crate) fn scheduled_policy(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> std::result::Result<Option<CatalogSyncPolicy>, ClassifiedError> {
+        self.gateway.catalog_policy(connection)
     }
 
     /// 注入事务外来源图片准备器，不改变网关或业务启用状态。

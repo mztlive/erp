@@ -4,6 +4,7 @@ use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
+use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::context::digest;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
@@ -74,15 +75,27 @@ impl SupplierConnectionExecutionProcess {
                     if job.is_terminal() {
                         return Ok(());
                     }
+                    let mut run = db
+                        .supplier_catalog_runs()
+                        .find_by_id(&job.base.id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("同步记录不存在".into()))?;
                     let at = Instant::now();
+                    run.resume_requested =
+                        outcome.as_ref().is_err_and(|error| error.code == "CATALOG_SHUTDOWN");
                     if let Err(error) = &outcome {
                         job.record_progress(0, 0, 1, at)?;
                         job.mark_failed(Some(format!("{}: {}", error.code, error.summary)), at)?;
-                        persist_health_failure_task(&db, &connection, &job, error, &actor, executor).await?;
+                        if !run.resume_requested {
+                            persist_health_failure_task(&db, &connection, &job, error, &actor, executor)
+                                .await?;
+                        }
                     } else {
                         job.record_progress(1, 0, 0, at)?;
                         job.mark_succeeded(at)?;
+                        run.complete()?;
                     }
+                    db.supplier_catalog_runs().update(&mut run, executor).await?;
                     db.background_jobs().update(&mut job, executor).await?;
                     let audit = actor.clone().resource_log_with_id(
                         format!("w20-catalog-audit-{}", digest(&[&job.base.id])),

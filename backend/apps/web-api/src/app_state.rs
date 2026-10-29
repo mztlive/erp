@@ -380,6 +380,7 @@ impl AppState {
         erp_read_models::supplier_center::supplier_api::SupplierApiReadService::new(self.db())
             .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
             .with_rbac(self.rbac())
+            .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
             .with_supplier_access(supplier_access(self.db(), self.rbac()))
     }
 

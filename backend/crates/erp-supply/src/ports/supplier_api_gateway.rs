@@ -2,10 +2,11 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use super::catalog_sync::CatalogSyncPolicy;
 use super::connector::common::{Scan, Snapshot};
-use super::connector::offer::{IncrementalSupport, OfferChange};
+use super::connector::offer::OfferChange;
 use crate::entity::failure::SupplierFailureClass;
-use crate::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckType};
+use crate::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType, SupplierHealthCheckType};
 /// 一页标准商品来源记录。
 #[derive(Debug)]
 pub struct CatalogPage {
@@ -35,18 +36,29 @@ pub struct ClassifiedError {
 /// 未注册的供应商以明确能力缺口失败；已注册协议使用当前服务端配置，
 /// 由 Process 保存分页目录，不允许协议客户端直接修改 ERP 数据。
 pub trait SupplierApiGateway: Send + Sync {
-    /// 声明当前连接实际可用的增量覆盖。
+    /// 返回已登记、可供调度器检查的协议类型。
     /// # 参数
-    /// `connection` 为服务端已核验连接。
+    /// 无。
     /// # 返回
-    /// 未提供实现时明确返回不支持增量。
+    /// 候选类型；每条连接仍须核对目录策略、业务授权和部署绑定。
     /// # 错误
-    /// 类型不明或部署不可用时可返回明确错误。
-    fn catalog_incremental_support(
+    /// 不返回错误；未注册实现返回空集合。
+    fn catalog_connector_types(&self) -> Vec<SupplierConnectorType> {
+        Vec::new()
+    }
+
+    /// 读取当前连接的协议策略；无目录能力时明确返回 None。
+    /// # 参数
+    /// `connection` 为待核验的业务连接。
+    /// # 返回
+    /// 适配器声明的版本、调度周期、页长及增量语义。
+    /// # 错误
+    /// 部署或连接绑定无效时返回分类错误。
+    fn catalog_policy(
         &self,
         _connection: &SupplierApiConnection,
-    ) -> Result<IncrementalSupport, ClassifiedError> {
-        Ok(IncrementalSupport::Unsupported)
+    ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError> {
+        Ok(None)
     }
 
     /// 返回部署已核实的可供观察有效期。
@@ -60,16 +72,6 @@ pub trait SupplierApiGateway: Send + Sync {
         None
     }
 
-    /// 返回部署规定的完整目录校对周期。
-    /// # 参数
-    /// 当前连接。
-    /// # 返回
-    /// 秒数；默认每天重新完整读取，不据缺项推断下架。
-    /// # 错误
-    /// 不返回错误。
-    fn catalog_full_sync_interval(&self, _connection: &SupplierApiConnection) -> u64 {
-        86_400
-    }
     /// 读取一页供应商商品；数据库写入由 Process 执行。
     /// # 参数
     /// `connection` 为当前连接，`scan` 为持久化游标和固定页大小。

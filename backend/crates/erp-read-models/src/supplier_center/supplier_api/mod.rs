@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
 use erp_supplier::SupplierAccess;
+use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
 use mongodb::Database;
@@ -19,6 +20,7 @@ pub struct SupplierApiReadService {
     rbac: Option<SharedRbacService>,
     reference_registry: Option<Arc<dyn SupplierReferenceRegistry>>,
     supplier_access: Option<SupplierAccess>,
+    gateway: Option<Arc<dyn SupplierApiGateway>>,
 }
 impl SupplierApiReadService {
     /// 复用应用数据库，未注入的授权和引用元数据保持失败关闭。
@@ -32,7 +34,7 @@ impl SupplierApiReadService {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database) -> Self {
-        Self { db, rbac: None, reference_registry: None, supplier_access: None }
+        Self { db, rbac: None, reference_registry: None, supplier_access: None, gateway: None }
     }
 
     /// 注入供应商对象范围，目录读取不得因具有连接角色而扩大数据范围。
@@ -74,6 +76,18 @@ impl SupplierApiReadService {
         self.reference_registry = Some(registry);
         self
     }
+    /// 注入与执行器相同的协议能力读取网关。
+    /// # 参数
+    /// `gateway` 为组合根注册表，不执行外部网络请求。
+    /// # 返回
+    /// 能力展示使用适配器策略的读取服务。
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_gateway(mut self, gateway: Arc<dyn SupplierApiGateway>) -> Self {
+        self.gateway = Some(gateway);
+        self
+    }
+
     fn domain(&self) -> SupplierApiService {
         SupplierApiService::new(self.db.clone())
     }

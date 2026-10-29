@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::num::NonZeroU32;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -9,6 +10,7 @@ use erp_supply::entity::supplier_api::{
     SupplierApiCapabilityCode, SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType,
     SupplierHealthCheckType,
 };
+use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
 use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Lookup, Scan, Snapshot};
 use erp_supply::ports::connector::offer::IncrementalSupport;
@@ -313,16 +315,19 @@ impl SupplierApiGateway for DangaoshushuRuntime {
     fn catalog_availability_validity(&self, _: &SupplierApiConnection) -> Option<u64> {
         self.settings.availability_validity_seconds
     }
-    fn catalog_full_sync_interval(&self, _: &SupplierApiConnection) -> u64 {
-        self.settings.catalog_full_sync_interval_seconds
-    }
-
-    fn catalog_incremental_support(
+    fn catalog_policy(
         &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<IncrementalSupport, ClassifiedError> {
-        self.bound_connector(connection).map_err(classified)?;
-        Ok(IncrementalSupport::Partial)
+        _connection: &SupplierApiConnection,
+    ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError> {
+        Ok(Some(CatalogSyncPolicy {
+            // 第四版拒绝沿用可能混合旧映射的中断检查点。
+            mapping_version: 4,
+            sync_interval_seconds: self.settings.catalog_sync_interval_seconds,
+            full_sync_interval_seconds: self.settings.catalog_full_sync_interval_seconds,
+            overlap_seconds: 86_400,
+            page_size: NonZeroU32::new(5).expect("5 非零"),
+            incremental: IncrementalSupport::Partial,
+        }))
     }
 
     fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
@@ -432,6 +437,21 @@ mod tests {
         )
         .unwrap()
     }
+    #[test]
+    fn catalog_policy_uses_deployment_intervals_without_requiring_bound_credentials() {
+        let mut config = settings();
+        config.catalog_sync_interval_seconds = 600;
+        config.catalog_full_sync_interval_seconds = 7200;
+        let runtime = DangaoshushuRuntime::new(config).unwrap();
+        let policy = runtime.catalog_policy(&connection()).unwrap().unwrap();
+        assert_eq!(policy.mapping_version, 4);
+        assert_eq!(policy.sync_interval_seconds, 600);
+        assert_eq!(policy.full_sync_interval_seconds, 7200);
+        assert_eq!(policy.overlap_seconds, 86_400);
+        assert_eq!(policy.page_size.get(), 5);
+        assert_eq!(policy.incremental, IncrementalSupport::Partial);
+    }
+
     #[tokio::test]
     async fn automatic_configuration_supports_catalog_before_business_enable_and_invalidates_on_rotation() {
         let (connector, transport) = recording_connector(vec![

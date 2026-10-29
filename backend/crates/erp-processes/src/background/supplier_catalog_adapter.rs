@@ -6,15 +6,15 @@ use erp_core::common::time::Instant;
 use erp_identity::AccessControlExt;
 use erp_supply::dto::supplier_api::SupplierConnectionCommand;
 use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectionAction};
-use erp_supply::repository::supplier_catalog;
+use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Mutex;
 
 use super::BackgroundTaskAdapter;
-use crate::supplier_connection_execution::SupplierConnectionExecutionProcess;
+use crate::supplier_connection_execution::{CatalogTaskControl, SupplierConnectionExecutionProcess};
 use crate::supply_governance::supplier_api::SupplierApiGovernanceProcess;
 use crate::{Error, Result};
 
@@ -23,15 +23,14 @@ pub struct SupplierCatalogTaskAdapter {
     db: Database,
     execution: Arc<SupplierConnectionExecutionProcess>,
     governance: SupplierApiGovernanceProcess,
-    interval_seconds: u64,
+    control: CatalogTaskControl,
     cursor: Mutex<String>,
-    permits: Arc<Semaphore>,
 }
 
 impl SupplierCatalogTaskAdapter {
     /// 复用应用已经装配的技术网关、授权与媒体准备器。
     /// # 参数
-    /// 数据库、执行流程、治理流程及明确部署的采集周期秒数。
+    /// 数据库、执行流程、治理流程及应用共享的停止控制器。
     /// # 返回
     /// 可登记到统一后台执行器的适配器。
     /// # 错误
@@ -40,15 +39,14 @@ impl SupplierCatalogTaskAdapter {
         db: Database,
         execution: SupplierConnectionExecutionProcess,
         governance: SupplierApiGovernanceProcess,
-        interval_seconds: u64,
+        control: CatalogTaskControl,
     ) -> Self {
         Self {
             db,
-            execution: Arc::new(execution),
+            execution: Arc::new(execution.with_control(control.clone())),
             governance,
-            interval_seconds,
+            control,
             cursor: Mutex::new(String::new()),
-            permits: Arc::new(Semaphore::new(2)),
         }
     }
 
@@ -56,6 +54,13 @@ impl SupplierCatalogTaskAdapter {
         &self,
         connection: &SupplierApiConnection,
     ) -> Result<Option<(String, AuditActor)>> {
+        let Some(policy) = self
+            .execution
+            .scheduled_policy(connection)
+            .map_err(|error| Error::BusinessLogicError(error.summary))?
+        else {
+            return Ok(None);
+        };
         let active =
             self.db.background_jobs().active_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
         if let Some(pending) =
@@ -70,8 +75,18 @@ impl SupplierCatalogTaskAdapter {
         let history =
             self.db.background_jobs().recent_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
         let Some(latest) = history.first() else { return Ok(None) };
+        let handoff = if latest.status == JobStatus::Failed {
+            self.db
+                .supplier_catalog_runs()
+                .find_by_id(&latest.base.id, &mut NoTransaction)
+                .await?
+                .is_some_and(|run| run.resume_requested)
+        } else {
+            false
+        };
         if active.is_empty()
-            && !is_due(latest.base.created_at, Instant::now().unix_secs(), self.interval_seconds)
+            && !handoff
+            && !is_due(latest.base.created_at, Instant::now().unix_secs(), policy.sync_interval_seconds)
         {
             return Ok(None);
         }
@@ -108,15 +123,20 @@ impl BackgroundTaskAdapter for SupplierCatalogTaskAdapter {
     }
 
     async fn run_due(&self) -> Result<usize> {
+        if self.control.stopping() {
+            return Ok(0);
+        }
         let mut cursor = self.cursor.lock().await;
-        let connections = supplier_catalog::connection_page(&self.db, &cursor, &mut NoTransaction).await?;
+        let kinds = self.execution.catalog_connector_types();
+        let connections =
+            supplier_catalog::connection_page(&self.db, &cursor, &kinds, &mut NoTransaction).await?;
         if connections.is_empty() {
             cursor.clear();
             return Ok(0);
         }
         let mut claimed = 0;
         for connection in connections {
-            let Ok(permit) = Arc::clone(&self.permits).try_acquire_owned() else { break };
+            let Some(permit) = self.control.claim() else { break };
             *cursor = connection.base.id.clone();
             match self.scheduled_job(&connection).await {
                 Ok(Some((id, actor))) => {

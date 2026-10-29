@@ -17,6 +17,7 @@ use erp_processes::background::{
 };
 use erp_processes::delivery_coverage_refresh::DeliveryCoverageRefreshProcess;
 use erp_processes::sellable_projection_refresh::SellableProjectionRefresher;
+use erp_processes::supplier_connection_execution::CatalogTaskControl;
 use storage::{S3Storage, S3StorageConfig};
 use tracing::{info, warn};
 use web_api::app_state::{AppState, ExternalConnectorPorts};
@@ -141,9 +142,12 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 
     let outbox_worker = state.start_approval_outbox_worker();
     let supplier_order_worker = web_api::core::supplier_order_worker::spawn(state.clone());
-    spawn_background_runner(state.clone())?;
+    let catalog_control = spawn_background_runner(state.clone())?;
     web_api::core::data_transfer::spawn(state.clone());
-    let result = run_app(app_port, state).await;
+    let result = run_app(app_port, state, catalog_control.clone()).await;
+    if !catalog_control.drain(std::time::Duration::from_secs(20)).await {
+        warn!("目录任务未在发布等待期内退出，将由心跳超时恢复");
+    }
     supplier_order_worker.stop().await;
     outbox_worker.stop().await;
     result
@@ -194,12 +198,13 @@ async fn bootstrap_initial_admin(state: &AppState, password: Option<&str>) -> Re
 /// * `state` - 应用状态
 ///
 /// # 返回
-/// 后台适配器装配成功返回 `Ok(())`，运行失败由各适配器保留结果并记录。
+/// 返回目录关闭控制器；运行失败由各适配器保留结果并记录。
 ///
 /// # 错误
 /// 来源素材准备配置非法时拒绝启动目录调度。
-fn spawn_background_runner(state: AppState) -> Result<()> {
-    let mut runner = BackgroundRunner::new(std::time::Duration::from_secs(2))
+fn spawn_background_runner(state: AppState) -> Result<CatalogTaskControl> {
+    let control = CatalogTaskControl::default();
+    let runner = BackgroundRunner::new(std::time::Duration::from_secs(2))
         .register(ProductImportTaskAdapter::new(state.product_import_process()))
         .register(SupplierImportTaskAdapter::new(state.supplier_import_process()))
         .register(SupplierCatalogAdoptionTaskAdapter::new(
@@ -213,22 +218,19 @@ fn spawn_background_runner(state: AppState) -> Result<()> {
         )))
         .register(DeliveryCoverageRefreshAdapter::new(DeliveryCoverageRefreshProcess::new(state.db())))
         .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db())));
-    if let Some(settings) = state.config_snapshot().dangaoshushu.as_ref().filter(|settings| settings.enabled)
-    {
-        let source_media = state.supplier_source_media_preparer()?;
-        if let Some(preparer) = source_media.clone() {
-            erp_processes::source_media::SourceMediaWorker::new(state.db(), preparer).spawn();
-        }
-        let execution = state.supplier_connection_execution_process().with_source_media(source_media);
-        runner = runner.register(SupplierCatalogTaskAdapter::new(
-            state.db(),
-            execution,
-            state.supplier_api_governance_process(),
-            settings.catalog_sync_interval_seconds,
-        ));
+    let source_media = state.supplier_source_media_preparer()?;
+    if let Some(preparer) = source_media.clone() {
+        erp_processes::source_media::SourceMediaWorker::new(state.db(), preparer).spawn();
     }
+    let execution = state.supplier_connection_execution_process().with_source_media(source_media);
+    let runner = runner.register(SupplierCatalogTaskAdapter::new(
+        state.db(),
+        execution,
+        state.supplier_api_governance_process(),
+        control.clone(),
+    ));
     Arc::new(runner).spawn();
-    Ok(())
+    Ok(control)
 }
 
 /// 启动前穷尽校验全部固定单据类型政策。
@@ -394,35 +396,37 @@ fn jwt_secret_changed(current: &str, requested: &str) -> bool {
 /// # 参数
 /// * `app_port` - 应用程序监听的端口号
 /// * `state` - 应用程序状态，包含数据库连接、配置等信息
+/// * `catalog_control` - 共享目录停止领取和页边界交接控制器
 ///
 /// # 示例
 ///
 /// ```
 /// let state = /* 通过数据库、配置与权限映射构建 AppState */;
-/// run_app(3000, state).await;
+/// run_app(3000, state, CatalogTaskControl::default()).await;
 /// ```
 ///
 /// # 错误
 /// 如果无法绑定到指定端口或无法启动服务，此函数将返回错误。
-async fn run_app(app_port: u16, state: AppState) -> Result<()> {
+async fn run_app(app_port: u16, state: AppState, catalog_control: CatalogTaskControl) -> Result<()> {
     let app = routes::create(state);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", app_port)).await?;
 
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal(catalog_control))
         .await?;
     Ok(())
 }
 
 /// 等待进程终止信号，使 HTTP 服务、后台任务和 telemetry 按顺序关闭。
-async fn shutdown_signal() {
+async fn shutdown_signal(catalog_control: CatalogTaskControl) {
     #[cfg(unix)]
     wait_for_unix_shutdown().await;
 
     #[cfg(not(unix))]
     wait_for_ctrl_c().await;
 
+    catalog_control.request_stop();
     info!("Shutdown signal received");
 }
 

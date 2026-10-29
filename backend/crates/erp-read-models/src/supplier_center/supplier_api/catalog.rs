@@ -2,7 +2,8 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_supply::dto::supplier_catalog::{CatalogFilter, CatalogItemView, CatalogSyncMode};
-use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
+use erp_supply::entity::supplier_api::SupplierApiConnection;
+use erp_supply::ports::connector::offer::IncrementalSupport;
 use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_support::repository::prelude::*;
 use erp_support::{BulkJobExt, JobStatus};
@@ -99,6 +100,14 @@ impl SupplierApiReadService {
         let jobs = self.catalog_jobs(id).await?;
         let filters = self.catalog_filters(id).await?;
         let sync_mode = jobs.first().map_or(CatalogSyncMode::Full, |job| job.sync_mode);
+        let support = self
+            .gateway
+            .as_ref()
+            .map(|gateway| gateway.catalog_policy(&connection))
+            .transpose()
+            .map_err(|error| Error::BusinessLogicError(error.summary))?
+            .flatten()
+            .map_or(IncrementalSupport::Unsupported, |policy| policy.incremental);
         Ok(CatalogView {
             items: items.into_iter().map(CatalogItemView::from).collect(),
             total,
@@ -109,8 +118,8 @@ impl SupplierApiReadService {
             jobs,
             filters,
             sync_mode,
-            coverage: "PARTIAL",
-            incremental_supported: connection.connector_type == Some(SupplierConnectorType::Dangaoshushu),
+            coverage: if support == IncrementalSupport::Complete { "COMPLETE" } else { "PARTIAL" },
+            incremental_supported: support != IncrementalSupport::Unsupported,
         })
     }
 

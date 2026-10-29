@@ -18,7 +18,7 @@ impl AppState {
     /// 客户端初始化失败或内容密钥无效时返回错误。
     pub fn supplier_source_media_preparer(&self) -> Result<Option<Arc<SourceMediaPreparer>>> {
         let config = self.config_snapshot();
-        if !config.dangaoshushu.as_ref().is_some_and(|settings| settings.enabled) {
+        if self.external_connectors.supplier_api.catalog_connector_types().is_empty() {
             return Ok(None);
         }
         SourceMediaPreparer::new(self.storage().clone(), config.app.secret.as_bytes().to_vec())

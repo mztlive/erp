@@ -1,19 +1,17 @@
 //! 分页读取及素材准备在事务外；来源、公司资料、检查点与任务心跳同事务。
 use std::cmp::Ordering;
-use std::num::NonZeroU32;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_supply::dto::supplier_catalog::CatalogSyncMode;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_catalog::{SupplierCatalogItem, SupplierCatalogRun};
+use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
 use erp_supply::ports::connector::common::{Scan, ScanWindow, Snapshot, SourceStamp, SupplierSku};
-use erp_supply::ports::connector::offer::{IncrementalSupport, Offer, OfferChange};
+use erp_supply::ports::connector::offer::{Offer, OfferChange};
 use erp_supply::ports::supplier_api_gateway::{CatalogPage, ClassifiedError};
-use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
+use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_supply::service::supplier_api::SupplierApiService;
-use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -52,7 +50,8 @@ impl SupplierConnectionExecutionProcess {
         job: &BackgroundJob,
         actor: &AuditActor,
     ) -> std::result::Result<(), ClassifiedError> {
-        self.prepare_scan(connection, &job.base.id).await.map_err(classify)?;
+        let policy = self.catalog_policy(connection)?;
+        self.prepare_scan(connection, &job.base.id, policy).await.map_err(classify)?;
         loop {
             let run = self
                 .db
@@ -63,6 +62,13 @@ impl SupplierConnectionExecutionProcess {
                 .ok_or_else(storage_error)?;
             if run.finished {
                 return Ok(());
+            }
+            if self.control.stopping() {
+                return Err(ClassifiedError {
+                    class: SupplierFailureClass::TransientFailure,
+                    code: "CATALOG_SHUTDOWN".into(),
+                    summary: "服务发布交接，将从已保存页面继续".into(),
+                });
             }
             let current = SupplierApiService::new(self.db.clone())
                 .load_connection(&connection.base.id, &mut NoTransaction)
@@ -75,7 +81,7 @@ impl SupplierConnectionExecutionProcess {
                     through: run.scan_through,
                 }),
                 cursor: run.cursor.clone(),
-                limit: NonZeroU32::new(5).expect("5 非零"),
+                limit: policy.page_size,
             };
             let page = self.gateway.catalog_page(&current, &scan).await?;
             let prepared = self.prepare_page(&current, &run.base.id, page, actor).await.map_err(classify)?;
@@ -83,73 +89,45 @@ impl SupplierConnectionExecutionProcess {
         }
     }
 
-    async fn prepare_scan(&self, connection: &SupplierApiConnection, job: &str) -> Result<()> {
-        let support = self
-            .gateway
-            .catalog_incremental_support(connection)
-            .map_err(|error| Error::BusinessLogicError(error.summary))?;
+    async fn prepare_scan(
+        &self,
+        connection: &SupplierApiConnection,
+        job: &str,
+        policy: CatalogSyncPolicy,
+    ) -> Result<()> {
         let mut run = self
             .db
             .supplier_catalog_runs()
             .find_by_id(job, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("同步记录不存在".into()))?;
-        if run.pages != 0 || run.scan_since.is_some() || support == IncrementalSupport::Unsupported {
+        if !run.compatible(connection.technical_config_version, policy.mapping_version) {
+            return Err(Error::ConflictError("同步配置、映射或检查点格式已变化，请重新同步".into()));
+        }
+        if run.pages != 0 || run.scan_since.is_some() {
             return Ok(());
         }
-        let history =
-            self.db.background_jobs().recent_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
-        let full_interval = i64::try_from(self.gateway.catalog_full_sync_interval(connection))
-            .map_err(|_| Error::ValidationError("完整同步周期超限".into()))?;
-        let full_since = run.scan_through.unix_secs().saturating_sub(full_interval);
-        if !self.full_scan_is_recent(connection, &history, full_since).await? {
-            return Ok(());
-        }
-        for previous in history
-            .into_iter()
-            .filter(|record| record.status == JobStatus::Succeeded && record.base.id != job)
-        {
-            let Some(prior) =
-                self.db.supplier_catalog_runs().find_by_id(&previous.base.id, &mut NoTransaction).await?
-            else {
-                continue;
-            };
-            if prior.skipped_count > 0 {
-                return Ok(());
-            }
-            if prior.supports_incremental(connection.technical_config_version) {
-                // 日粒度来源保留一天重叠；适配器继续向外扩展 through 当日。
-                run.scan_since =
-                    Some(Instant::from_unix_secs(prior.scan_through.unix_secs().saturating_sub(86_400)));
-                run.sync_mode = if support == IncrementalSupport::Complete {
-                    CatalogSyncMode::IncrementalComplete
-                } else {
-                    CatalogSyncMode::IncrementalPartial
-                };
-                self.db.supplier_catalog_runs().update(&mut run, &mut NoTransaction).await?;
-                break;
-            }
-        }
+        let latest = supplier_catalog::successful_run(
+            &self.db,
+            &connection.base.id,
+            connection.technical_config_version,
+            policy.mapping_version,
+            false,
+            &mut NoTransaction,
+        )
+        .await?;
+        let full = supplier_catalog::successful_run(
+            &self.db,
+            &connection.base.id,
+            connection.technical_config_version,
+            policy.mapping_version,
+            true,
+            &mut NoTransaction,
+        )
+        .await?;
+        run.plan(policy, latest.as_ref(), full.as_ref());
+        self.db.supplier_catalog_runs().update(&mut run, &mut NoTransaction).await?;
         Ok(())
-    }
-
-    async fn full_scan_is_recent(
-        &self,
-        connection: &SupplierApiConnection,
-        history: &[BackgroundJob],
-        since: i64,
-    ) -> Result<bool> {
-        for prior_job in history.iter().filter(|job| job.status == JobStatus::Succeeded) {
-            if let Some(prior) =
-                self.db.supplier_catalog_runs().find_by_id(&prior_job.base.id, &mut NoTransaction).await?
-                && prior.supports_incremental(connection.technical_config_version)
-                && prior.sync_mode == CatalogSyncMode::Full
-                && prior.scan_through.unix_secs() >= since
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
     }
 
     async fn prepare_page(

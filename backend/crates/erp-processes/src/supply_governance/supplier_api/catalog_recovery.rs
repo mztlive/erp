@@ -48,23 +48,15 @@ pub(super) async fn next_run(
     db: &Database,
     job: &str,
     connection: &SupplierApiConnection,
+    mapping_version: u32,
     executor: &mut dyn Executor,
 ) -> Result<SupplierCatalogRun> {
-    let mut next = SupplierCatalogRun::new(job, connection);
+    let mut next = SupplierCatalogRun::new(job, connection, mapping_version);
     let history = db.background_jobs().recent_catalog_jobs(&connection.base.id, executor).await?;
     if let Some(previous) = history.first().filter(|job| job.status == JobStatus::Failed)
         && let Some(run) = db.supplier_catalog_runs().find_by_id(&previous.base.id, executor).await?
-        && !run.finished
-        && run.technical_config_version == connection.technical_config_version
     {
-        next.scan_since = run.scan_since;
-        next.scan_through = run.scan_through;
-        next.sync_mode = run.sync_mode;
-        next.cursor = run.cursor;
-        next.pages = run.pages;
-        next.observed_count = run.observed_count;
-        next.skipped_count = run.skipped_count;
-        next.skipped_samples = run.skipped_samples;
+        next.resume(&run);
     }
     Ok(next)
 }

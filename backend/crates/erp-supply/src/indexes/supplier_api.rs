@@ -47,7 +47,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_API_HEALTH_CHECK_RUNS, health_check_run_indexes()).await?;
     create_indexes(db, SUPPLIER_API_COMMAND_RECEIPTS, command_receipt_indexes()).await?;
     create_indexes(db, ITEMS, catalog_item_indexes()).await?;
-    create_indexes(db, RUNS, vec![unique_index("uk_supplier_catalog_runs_id", doc! { "id": 1 })]).await?;
+    create_indexes(db, RUNS, catalog_run_indexes()).await?;
     create_indexes(
         db,
         IDENTITY_REVIEWS,
@@ -55,6 +55,27 @@ pub async fn ensure(db: &Database) -> Result<()> {
     )
     .await?;
     Ok(())
+}
+
+fn catalog_run_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index("uk_supplier_catalog_runs_id", doc! { "id": 1 }),
+        named_index(
+            "idx_supplier_catalog_success",
+            doc! {
+                "connection_id":1, "technical_config_version":1, "mapping_version":1, "checkpoint_version":1,
+                "succeeded":1, "finished":1, "deleted_at":1, "scan_through":-1, "id":-1
+            },
+        ),
+        named_index(
+            "idx_supplier_catalog_full_success",
+            doc! {
+                "connection_id":1, "technical_config_version":1, "mapping_version":1, "checkpoint_version":1,
+                "succeeded":1, "finished":1, "deleted_at":1, "sync_mode":1,
+                "skipped_count":1, "scan_through":-1, "id":-1
+            },
+        ),
+    ]
 }
 
 fn catalog_item_indexes() -> Vec<IndexModel> {
