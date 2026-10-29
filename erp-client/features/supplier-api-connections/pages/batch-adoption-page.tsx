@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils"
 import { divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 import {
     useAdoptionBatchQuery,
+    useBatchPreparationQuery,
     usePreviewAdoptionBatchMutation,
     useReconcileAdoptionBatchMutation,
     useQueryAdoptionBatchSubmissionMutation,
@@ -52,6 +53,8 @@ import type {
 } from "../api/batch"
 import { newIdempotencyKey } from "../lib/operations"
 import { BatchPricingPanel } from "../components/batch/batch-pricing"
+import { BatchResultSummary } from "../components/batch/batch-result-summary"
+import { BatchReviewSummary } from "../components/batch/batch-review-summary"
 import { BatchDetailsPanel } from "../components/batch/batch-details"
 import {
     BatchItemDialog,
@@ -62,6 +65,8 @@ import {
     BatchReviewTable,
     isBatchRowSelectable,
 } from "../components/batch/batch-review-table"
+
+import { BatchPreparationStatus } from "../components/batch/batch-preparation"
 
 const STEPS: Array<{ step: BatchStep; label: string }> = [
     { step: "PRICING", label: "设置售价" },
@@ -188,7 +193,11 @@ export function BatchAdoptionPage() {
         connectionId: search.get("connectionId") ?? "",
         batchId: params.batchId,
     }
-    const query = useAdoptionBatchQuery(identity)
+    const preparation = useBatchPreparationQuery(identity)
+    const query = useAdoptionBatchQuery(
+        identity,
+        Boolean(preparation.data?.selection_complete),
+    )
     const account = useAccountProfileQuery()
     if (!identity.connectionId)
         return (
@@ -197,6 +206,26 @@ export function BatchAdoptionPage() {
                     title="缺少供应商连接"
                     description="请从供应商品库重新打开入库批次。"
                 />
+            </PageScaffold>
+        )
+    if (preparation.isError)
+        return (
+            <PageScaffold>
+                <BusinessFailureState
+                    idPrefix="supplier-catalog-preparation-load"
+                    title="准备进度读取失败"
+                    description={preparation.error.message}
+                    onRetry={() => void preparation.refetch()}
+                />
+            </PageScaffold>
+        )
+    if (preparation.data && !preparation.data.selection_complete)
+        return (
+            <PageScaffold>
+                <DetailPageHeader
+                    title={`入库批次 · ${preparation.data.batch_no}`}
+                />
+                <BatchPreparationStatus batch={preparation.data} inWorkspace />
             </PageScaffold>
         )
     if (query.isPending || account.isPending)
@@ -323,11 +352,6 @@ function BatchWorkspace({
     const unsubmittedReady = view.rows.filter(
         (row) => row.status === "READY" && !row.operation_id,
     ).length
-    const pendingCount =
-        view.counts.draft +
-        view.counts.failed +
-        view.counts.unknown +
-        unsubmittedReady
     const readyIds = view.rows
         .filter(
             (row) =>
@@ -336,6 +360,10 @@ function BatchWorkspace({
         )
         .map((row) => row.source.id)
     const selectedReady = selectedIds.filter((id) => readyIds.includes(id))
+    const needsRecheck =
+        workspace.dirty ||
+        !workspace.hasCurrentReview ||
+        view.batch.preview_version == null
     const warningRows = view.rows.filter(
         (row) =>
             row.warnings.length &&
@@ -480,7 +508,13 @@ function BatchWorkspace({
         (entry) => entry.step === (step === "RECOVERY" ? "DETAILS" : step),
     )
     return (
-        <PageScaffold density="compact" className="min-w-0 gap-5 pb-8">
+        <PageScaffold
+            density="compact"
+            className={cn(
+                "min-w-0 pb-8",
+                step === "REVIEW" || step === "RESULT" ? "gap-3" : "gap-5",
+            )}
+        >
             <DetailPageHeader
                 title={
                     step === "PRICING"
@@ -490,23 +524,31 @@ function BatchWorkspace({
                           : step === "RECOVERY"
                             ? "待处理商品"
                             : step === "RESULT"
-                              ? processing || view.batch.execution_pending
-                                  ? "本批入库处理中"
-                                  : pendingCount
-                                    ? "本批入库部分完成"
-                                    : "本批入库已完成"
+                              ? "入库结果"
                               : "批量选品入库"
                 }
                 titleExtra={
-                    <Badge variant="secondary">
-                        {center.data?.supplier.name ?? "供应商商品库"}
-                    </Badge>
+                    <>
+                        <Badge variant="secondary">
+                            {center.data?.supplier.name ?? "供应商商品库"}
+                        </Badge>
+                        {step === "REVIEW" || step === "RESULT" ? (
+                            <span className="text-sm text-muted-foreground">
+                                {view.product_count} 个商品 /{" "}
+                                {view.batch.selected_count -
+                                    view.counts.excluded}{" "}
+                                个 SKU
+                            </span>
+                        ) : null}
+                    </>
                 }
                 meta={
-                    <span>
-                        {view.batch.selected_count - view.counts.excluded} 个
-                        SKU · {view.product_count} 个来源商品
-                    </span>
+                    step !== "REVIEW" && step !== "RESULT" ? (
+                        <span>
+                            {view.batch.selected_count - view.counts.excluded}{" "}
+                            个 SKU · {view.product_count} 个来源商品
+                        </span>
+                    ) : undefined
                 }
                 secondaryActions={
                     <div className="flex flex-wrap items-center gap-4">
@@ -521,7 +563,7 @@ function BatchWorkspace({
                                 入库批次：{view.batch.batch_no}
                             </p>
                         </details>
-                        {step === "PRICING" ? (
+                        {step !== "RESULT" ? (
                             <Button
                                 id="supplier-catalog-batch-return-catalog"
                                 type="button"
@@ -540,66 +582,73 @@ function BatchWorkspace({
                     </div>
                 }
             />
-            <ol
-                className="flex items-center border-b pb-4"
-                aria-label="批量入库步骤"
-            >
-                {STEPS.map((entry, index) => {
-                    const isCurrent = index === activeStepIndex
-                    const isComplete = index < activeStepIndex
-                    return (
-                        <li
-                            key={entry.step}
-                            aria-current={isCurrent ? "step" : undefined}
-                            className="flex min-w-0 flex-1 items-center last:flex-none"
-                        >
-                            <div className="flex shrink-0 flex-col items-center gap-2 sm:flex-row">
-                                <span
-                                    className={cn(
-                                        "num flex size-7 shrink-0 items-center justify-center rounded-full text-sm",
-                                        isCurrent || isComplete
-                                            ? "bg-primary text-primary-foreground"
-                                            : "bg-muted text-muted-foreground",
-                                    )}
-                                >
-                                    {isComplete ? (
-                                        <>
-                                            <CheckIcon
-                                                className="size-4"
-                                                aria-hidden
-                                            />
-                                            <span className="sr-only">
-                                                已完成
-                                            </span>
-                                        </>
-                                    ) : (
-                                        index + 1
-                                    )}
-                                </span>
-                                <span
-                                    className={cn(
-                                        "whitespace-nowrap text-xs sm:text-sm",
-                                        isCurrent
-                                            ? "font-medium"
-                                            : "text-muted-foreground",
-                                    )}
-                                >
-                                    {entry.label}
-                                </span>
-                            </div>
-                            {index < STEPS.length - 1 ? (
-                                <span
-                                    aria-hidden
-                                    className={cn(
-                                        "mx-2 mt-3.5 h-0.5 min-w-2 flex-1 self-start sm:mx-4 sm:mt-0 sm:self-auto",
-                                        isComplete ? "bg-primary" : "bg-border",
-                                    )}
-                                />
-                            ) : null}
-                        </li>
-                    )
-                })}
-            </ol>
+            {step !== "RESULT" ? (
+                <ol
+                    className={cn(
+                        "flex items-center border-b",
+                        step === "REVIEW" ? "pb-3" : "pb-4",
+                    )}
+                    aria-label="批量入库步骤"
+                >
+                    {STEPS.map((entry, index) => {
+                        const isCurrent = index === activeStepIndex
+                        const isComplete = index < activeStepIndex
+                        return (
+                            <li
+                                key={entry.step}
+                                aria-current={isCurrent ? "step" : undefined}
+                                className="flex min-w-0 flex-1 items-center last:flex-none"
+                            >
+                                <div className="flex shrink-0 flex-col items-center gap-2 sm:flex-row">
+                                    <span
+                                        className={cn(
+                                            "num flex size-7 shrink-0 items-center justify-center rounded-full text-sm",
+                                            isCurrent || isComplete
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted text-muted-foreground",
+                                        )}
+                                    >
+                                        {isComplete ? (
+                                            <>
+                                                <CheckIcon
+                                                    className="size-4"
+                                                    aria-hidden
+                                                />
+                                                <span className="sr-only">
+                                                    已完成
+                                                </span>
+                                            </>
+                                        ) : (
+                                            index + 1
+                                        )}
+                                    </span>
+                                    <span
+                                        className={cn(
+                                            "whitespace-nowrap text-xs sm:text-sm",
+                                            isCurrent
+                                                ? "font-medium"
+                                                : "text-muted-foreground",
+                                        )}
+                                    >
+                                        {entry.label}
+                                    </span>
+                                </div>
+                                {index < STEPS.length - 1 ? (
+                                    <span
+                                        aria-hidden
+                                        className={cn(
+                                            "mx-2 mt-3.5 h-0.5 min-w-2 flex-1 self-start sm:mx-4 sm:mt-0 sm:self-auto",
+                                            isComplete
+                                                ? "bg-primary"
+                                                : "bg-border",
+                                        )}
+                                    />
+                                ) : null}
+                            </li>
+                        )
+                    })}
+                </ol>
+            ) : null}
             {!canWrite ? (
                 <p
                     role="status"
@@ -650,13 +699,6 @@ function BatchWorkspace({
             {submissionNotice ? (
                 <p role="status" className="rounded-lg border p-3 text-sm">
                     {submissionNotice}
-                </p>
-            ) : null}
-            {step === "REVIEW" &&
-            view.batch.preview_version != null &&
-            !workspace.hasCurrentReview ? (
-                <p role="status" className="rounded-lg border p-3 text-sm">
-                    已恢复保存的草稿，请点击“重新核对”，查看最新结果后再确认入库。
                 </p>
             ) : null}
             {uncertainSubmission ? (
@@ -710,109 +752,62 @@ function BatchWorkspace({
                 </form.AppForm>
             ) : (
                 <>
-                    <MetricStrip columns={5}>
-                        <MetricItem
-                            label={step === "RESULT" ? "已成功" : "本批 SKU"}
-                            value={
-                                step === "RESULT"
-                                    ? view.counts.succeeded
-                                    : view.counts.total - view.counts.excluded
-                            }
-                        />
-                        <MetricItem
-                            label={
-                                step === "RESULT"
-                                    ? "明确失败"
-                                    : step === "RECOVERY"
-                                      ? "待重新核对"
-                                      : "可入库"
-                            }
-                            value={
-                                step === "RESULT"
-                                    ? view.counts.failed
-                                    : step === "RECOVERY"
-                                      ? unsubmittedReady
-                                      : readyIds.length
-                            }
-                        />
-                        <MetricItem
-                            label="结果待核实"
-                            value={view.counts.unknown}
-                        />
-                        <MetricItem
-                            label={step === "RESULT" ? "待提交" : "待补齐"}
-                            value={
-                                view.counts.draft +
-                                (step === "RESULT" ? unsubmittedReady : 0)
-                            }
-                            detail={
-                                step === "RESULT"
-                                    ? `可入库 ${unsubmittedReady} · 待补齐 ${view.counts.draft}`
-                                    : undefined
-                            }
-                        />
-                        <MetricItem
-                            label="已完成跳过"
-                            value={
-                                step === "RESULT"
-                                    ? view.counts.skipped
-                                    : completed
-                            }
-                        />
-                    </MetricStrip>
-                    {step === "RESULT" ? (
-                        <p className="text-sm text-muted-foreground">
-                            本批 {view.counts.total} 个 SKU · 已完成 {completed}{" "}
-                            个 · 处理中 {processing} 个 · 待处理 {pendingCount}{" "}
-                            个 · 已排除 {view.counts.excluded} 个
-                        </p>
-                    ) : null}
                     {step === "REVIEW" ? (
-                        <p className="text-sm text-muted-foreground">
-                            就绪项：新建 SKU{" "}
-                            {
-                                view.rows.filter(
-                                    (row) =>
-                                        readyIds.includes(row.source.id) &&
-                                        row.resolution?.kind ===
-                                            "CREATE_PRODUCT",
-                                ).length
+                        <BatchReviewSummary
+                            view={view}
+                            readyIds={readyIds}
+                            needsRecheck={needsRecheck}
+                        />
+                    ) : step === "RESULT" ? (
+                        <BatchResultSummary
+                            view={view}
+                            processing={processing}
+                            preparing={preparing}
+                            unsubmittedReady={unsubmittedReady}
+                            busy={busy}
+                            canWrite={canWrite}
+                            onRefresh={() => void onRefresh()}
+                            onRecovery={() => void updateStep("RECOVERY")}
+                            onReconcile={() => void verifyOriginal()}
+                            onReturn={() =>
+                                workspace.dirty
+                                    ? setLeaveOpen(true)
+                                    : returnToCatalog()
                             }
-                            {" · "}新增规格{" "}
-                            {
-                                view.rows.filter(
-                                    (row) =>
-                                        readyIds.includes(row.source.id) &&
-                                        row.resolution?.kind === "CREATE_SKU",
-                                ).length
-                            }
-                            {" · "}关联已有 SKU{" "}
-                            {
-                                view.rows.filter(
-                                    (row) =>
-                                        readyIds.includes(row.source.id) &&
-                                        row.resolution?.kind === "EXISTING",
-                                ).length
-                            }
-                        </p>
-                    ) : null}
-                    {preparing && !processing ? (
+                        />
+                    ) : (
+                        <MetricStrip columns={5}>
+                            <MetricItem
+                                label="本批 SKU"
+                                value={view.counts.total - view.counts.excluded}
+                            />
+                            <MetricItem
+                                label="待重新核对"
+                                value={unsubmittedReady}
+                            />
+                            <MetricItem
+                                label="结果待核实"
+                                value={view.counts.unknown}
+                            />
+                            <MetricItem
+                                label="待补齐"
+                                value={view.counts.draft}
+                            />
+                            <MetricItem label="已完成跳过" value={completed} />
+                        </MetricStrip>
+                    )}
+                    {step !== "RESULT" && preparing && !processing ? (
                         <p role="status" className="text-sm">
                             本次确认范围已保存，后台正在准备入库。可以离开页面后继续查看。
                         </p>
                     ) : null}
-                    {processing ? (
+                    {step !== "RESULT" && processing ? (
                         <p role="status" className="text-sm">
                             后台正在处理 {processing} 个 SKU；已完成 {completed}{" "}
                             个，可离开页面后继续查看。
                         </p>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            新建 SKU 保持未上架；关联已有 SKU
-                            保留原价格、资料和上架状态。
-                        </p>
-                    )}
-                    {warningRows.length ? (
+                    ) : null}
+                    {step !== "RESULT" && warningRows.length ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
                             <p className="text-sm">
                                 {warningRows.length}{" "}
@@ -848,15 +843,11 @@ function BatchWorkspace({
                             </Button>
                         </div>
                     ) : null}
-                    {view.batch.preview_version == null && step === "REVIEW" ? (
-                        <p className="text-sm text-warning">
-                            草稿已恢复或内容已调整，请重新核对后再确认入库。
-                        </p>
-                    ) : null}
                     <BatchReviewTable
                         key={tableMode}
                         view={view}
                         mode={tableMode}
+                        needsRecheck={step === "REVIEW" && needsRecheck}
                         selectedIds={selectedIds}
                         onSelectionChange={setSelectedIds}
                         onEdit={(row) => setEditingId(row.source.id)}
@@ -865,185 +856,163 @@ function BatchWorkspace({
                     />
                 </>
             )}
-            <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t bg-background px-1 py-4">
-                <DraftSaveIndicator
-                    idPrefix="supplier-catalog-batch-draft-status"
-                    state={
-                        workspace.save.isPending
-                            ? "saving"
-                            : workspace.save.isError
-                              ? "failed"
-                              : workspace.dirty
-                                ? "dirty"
-                                : "saved"
-                    }
-                    message={
-                        step === "REVIEW"
-                            ? `将入库 ${selectedReady.length} 个 SKU，${view.counts.draft + view.counts.failed + view.counts.unknown} 个待处理，${view.counts.skipped + view.counts.succeeded} 个已完成跳过`
-                            : undefined
-                    }
-                />
-                <div className="flex flex-wrap justify-end gap-2">
-                    {step === "PRICING" ||
-                    step === "DETAILS" ||
-                    step === "REVIEW" ? (
-                        <Button
-                            id="supplier-catalog-batch-save-draft"
-                            type="button"
-                            variant="outline"
-                            disabled={!editable || busy}
-                            onClick={() =>
-                                step === "REVIEW"
-                                    ? void updateStep("REVIEW")
-                                    : void workspace.persist()
-                            }
-                        >
-                            <SaveIcon aria-hidden />
-                            保存草稿
-                        </Button>
-                    ) : null}
-                    {step !== "PRICING" ? (
-                        <Button
-                            id="supplier-catalog-batch-return-catalog"
-                            type="button"
-                            variant="outline"
-                            onClick={() =>
-                                workspace.dirty
-                                    ? setLeaveOpen(true)
-                                    : returnToCatalog()
-                            }
-                        >
-                            返回商品库
-                        </Button>
-                    ) : null}
-                    {step === "PRICING" ? (
-                        <Button
-                            id="supplier-catalog-batch-next-details"
-                            type="button"
-                            disabled={!editable || busy}
-                            onClick={() => void workspace.persist("DETAILS")}
-                        >
-                            下一步：补齐资料
-                            <ArrowRightIcon
-                                data-icon="inline-end"
-                                aria-hidden
-                            />
-                        </Button>
-                    ) : step === "DETAILS" ? (
-                        <>
+            {step !== "RESULT" ? (
+                <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t bg-background px-1 py-3">
+                    <DraftSaveIndicator
+                        idPrefix="supplier-catalog-batch-draft-status"
+                        state={
+                            workspace.save.isPending
+                                ? "saving"
+                                : workspace.save.isError
+                                  ? "failed"
+                                  : workspace.dirty
+                                    ? "dirty"
+                                    : "saved"
+                        }
+                        message={
+                            step === "REVIEW"
+                                ? `已选 ${selectedReady.length} 个 SKU${view.counts.draft + view.counts.failed + view.counts.unknown > 0 ? ` · 待处理 ${view.counts.draft + view.counts.failed + view.counts.unknown}` : ""}`
+                                : undefined
+                        }
+                    />
+                    <div className="flex flex-wrap justify-end gap-2">
+                        {step === "PRICING" ||
+                        step === "DETAILS" ||
+                        step === "REVIEW" ? (
                             <Button
-                                id="supplier-catalog-batch-back-pricing"
+                                id="supplier-catalog-batch-save-draft"
                                 type="button"
                                 variant="outline"
                                 disabled={!editable || busy}
                                 onClick={() =>
-                                    void workspace.persist("PRICING")
+                                    step === "REVIEW"
+                                        ? void updateStep("REVIEW")
+                                        : void workspace.persist()
                                 }
                             >
-                                上一步
+                                <SaveIcon aria-hidden />
+                                保存草稿
                             </Button>
+                        ) : null}
+                        {step === "PRICING" ? (
                             <Button
-                                id="supplier-catalog-batch-next-review"
+                                id="supplier-catalog-batch-next-details"
                                 type="button"
                                 disabled={!editable || busy}
                                 onClick={() =>
-                                    void workspace.persist("REVIEW", true)
+                                    void workspace.persist("DETAILS")
                                 }
                             >
-                                下一步：核对入库
+                                下一步：补齐资料
+                                <ArrowRightIcon
+                                    data-icon="inline-end"
+                                    aria-hidden
+                                />
                             </Button>
-                        </>
-                    ) : step === "REVIEW" ? (
-                        <>
-                            <Button
-                                id={
-                                    view.batch.submitted
-                                        ? "supplier-catalog-batch-back-recovery"
-                                        : "supplier-catalog-batch-back-details"
-                                }
-                                type="button"
-                                variant="outline"
-                                disabled={!editable || busy}
-                                onClick={() =>
-                                    void updateStep(
+                        ) : step === "DETAILS" ? (
+                            <>
+                                <Button
+                                    id="supplier-catalog-batch-back-pricing"
+                                    type="button"
+                                    variant="outline"
+                                    disabled={!editable || busy}
+                                    onClick={() =>
+                                        void workspace.persist("PRICING")
+                                    }
+                                >
+                                    上一步
+                                </Button>
+                                <Button
+                                    id="supplier-catalog-batch-next-review"
+                                    type="button"
+                                    disabled={!editable || busy}
+                                    onClick={() =>
+                                        void workspace.persist("REVIEW", true)
+                                    }
+                                >
+                                    下一步：核对入库
+                                </Button>
+                            </>
+                        ) : step === "REVIEW" ? (
+                            <>
+                                <Button
+                                    id={
                                         view.batch.submitted
-                                            ? "RECOVERY"
-                                            : "DETAILS",
-                                    )
-                                }
-                            >
-                                {view.batch.submitted ? "返回待处理" : "上一步"}
-                            </Button>
-                            <Button
-                                id="supplier-catalog-batch-recheck"
-                                type="button"
-                                variant="outline"
-                                disabled={!editable || busy}
-                                onClick={() => void recheck()}
-                            >
-                                重新核对
-                            </Button>
-                            <Button
-                                id="supplier-catalog-batch-submit"
-                                type="button"
-                                disabled={
-                                    !editable ||
-                                    busy ||
-                                    workspace.dirty ||
-                                    !workspace.hasCurrentReview ||
-                                    uncertainSubmission ||
-                                    view.batch.preview_version == null ||
-                                    !selectedReady.length
-                                }
-                                onClick={() => void confirm()}
-                            >
-                                确认入库 {selectedReady.length} 个 SKU
-                            </Button>
-                        </>
-                    ) : step === "RECOVERY" ? (
-                        <>
-                            <Button
-                                id="supplier-catalog-batch-back-result"
-                                type="button"
-                                variant="outline"
-                                disabled={busy}
-                                onClick={() => void updateStep("RESULT")}
-                            >
-                                返回入库结果
-                            </Button>
-                            <Button
-                                id="supplier-catalog-batch-recovery-preview"
-                                type="button"
-                                disabled={
-                                    !editable || busy || !selectedIds.length
-                                }
-                                onClick={() => void recheck()}
-                            >
-                                重新核对 {selectedIds.length} 项
-                            </Button>
-                        </>
-                    ) : pendingCount && !processing ? (
-                        <Button
-                            id="supplier-catalog-batch-open-recovery"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void updateStep("RECOVERY")}
-                        >
-                            处理待办（{pendingCount}）
-                        </Button>
-                    ) : (
-                        <Button
-                            id="supplier-catalog-batch-refresh-results"
-                            type="button"
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() => void onRefresh()}
-                        >
-                            刷新结果
-                        </Button>
-                    )}
+                                            ? "supplier-catalog-batch-back-recovery"
+                                            : "supplier-catalog-batch-back-details"
+                                    }
+                                    type="button"
+                                    variant="outline"
+                                    disabled={!editable || busy}
+                                    onClick={() =>
+                                        void updateStep(
+                                            view.batch.submitted
+                                                ? "RECOVERY"
+                                                : "DETAILS",
+                                        )
+                                    }
+                                >
+                                    {view.batch.submitted
+                                        ? "返回待处理"
+                                        : "上一步"}
+                                </Button>
+                                <Button
+                                    id="supplier-catalog-batch-recheck"
+                                    type="button"
+                                    variant={
+                                        needsRecheck ? "default" : "outline"
+                                    }
+                                    disabled={!editable || busy}
+                                    onClick={() => void recheck()}
+                                >
+                                    重新核对
+                                </Button>
+                                <Button
+                                    id="supplier-catalog-batch-submit"
+                                    type="button"
+                                    variant={
+                                        needsRecheck ? "outline" : "default"
+                                    }
+                                    disabled={
+                                        !editable ||
+                                        busy ||
+                                        workspace.dirty ||
+                                        !workspace.hasCurrentReview ||
+                                        uncertainSubmission ||
+                                        view.batch.preview_version == null ||
+                                        !selectedReady.length
+                                    }
+                                    onClick={() => void confirm()}
+                                >
+                                    确认入库 {selectedReady.length} 个 SKU
+                                </Button>
+                            </>
+                        ) : step === "RECOVERY" ? (
+                            <>
+                                <Button
+                                    id="supplier-catalog-batch-back-result"
+                                    type="button"
+                                    variant="outline"
+                                    disabled={busy}
+                                    onClick={() => void updateStep("RESULT")}
+                                >
+                                    返回入库结果
+                                </Button>
+                                <Button
+                                    id="supplier-catalog-batch-recovery-preview"
+                                    type="button"
+                                    disabled={
+                                        !editable || busy || !selectedIds.length
+                                    }
+                                    onClick={() => void recheck()}
+                                >
+                                    重新核对 {selectedIds.length} 项
+                                </Button>
+                            </>
+                        ) : null}
+                    </div>
                 </div>
-            </div>
+            ) : null}
             {editing ? (
                 <BatchItemDialog
                     key={`${editing.source.id}-${view.batch.version}`}

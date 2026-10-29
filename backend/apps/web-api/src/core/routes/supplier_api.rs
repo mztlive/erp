@@ -19,7 +19,35 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 }
 
 fn adoption_batch_routes(rbac: &SharedRbacService) -> Router<AppState> {
-    adoption_batch_query_routes(rbac).merge(adoption_batch_command_routes(rbac))
+    adoption_batch_query_routes(rbac)
+        .merge(adoption_batch_command_routes(rbac))
+        .merge(adoption_preparation_routes(rbac))
+}
+
+/// 注册准备摘要、轻量选择及任务控制入口。
+fn adoption_preparation_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}/selection",
+            with_permission(
+                get(supplier_api::adoption_batches::selection),
+                rbac,
+                supplier_api::adoption_batches::selection_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-api-connections/{id}/adoption-batches/{batch}/preparation",
+            with_permission(
+                get(supplier_api::adoption_batches::preparation),
+                rbac,
+                supplier_api::adoption_batches::preparation_permission_key(),
+            )
+            .merge(with_permission(
+                post(supplier_api::adoption_batches::control_preparation),
+                rbac,
+                supplier_api::adoption_batches::control_preparation_permission_key(),
+            )),
+        )
 }
 
 fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<AppState> {

@@ -6093,6 +6093,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/selection",
+                description: "读取供应商批次选择集合",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/preparation",
+                description: "查询供应商选品准备进度",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/preparation",
+                description: "重试或取消供应商选品准备",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "catalog_sync",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/submission-result",
                 description: "查证供应商批量入库原确认",

@@ -270,6 +270,8 @@ interface QuickPreviewSheetProps extends Omit<
     readonly identity?: React.ReactNode
     /** 多维状态等头部摘要。 */
     readonly summary?: React.ReactNode
+    /** 商品等对象的缩略图；提供时使用紧凑图文头部，默认头部保持原样。 */
+    readonly headerMedia?: React.ReactNode
     readonly trigger?: React.ReactNode
     readonly children: React.ReactNode
     readonly footer?: React.ReactNode
@@ -295,6 +297,7 @@ function QuickPreviewSheet({
     description,
     identity,
     summary,
+    headerMedia,
     trigger,
     children,
     footer,
@@ -309,6 +312,31 @@ function QuickPreviewSheet({
     const isDetail = size === "detail"
     const baseId = idPrefix ?? id
     const closeButtonId = baseId ? `${baseId}-close` : undefined
+    const heading = (
+        <>
+            {identity ? (
+                <div
+                    data-slot="quick-preview-identity"
+                    className="text-xs text-muted-foreground"
+                >
+                    {identity}
+                </div>
+            ) : null}
+            <SheetTitle
+                className={headerMedia ? "text-base leading-6" : undefined}
+            >
+                {title}
+            </SheetTitle>
+            {description ? (
+                <SheetDescription>{description}</SheetDescription>
+            ) : null}
+            {summary ? (
+                <div data-slot="quick-preview-summary" className="pt-1">
+                    {summary}
+                </div>
+            ) : null}
+        </>
+    )
 
     return (
         <Sheet {...props} open={open} onOpenChange={onOpenChange}>
@@ -321,24 +349,24 @@ function QuickPreviewSheet({
                 closeButtonId={closeButtonId}
                 finalFocus={finalFocus}
             >
-                <SheetHeader className="border-b border-border">
-                    {identity ? (
-                        <div
-                            data-slot="quick-preview-identity"
-                            className="text-xs text-muted-foreground"
-                        >
-                            {identity}
+                <SheetHeader
+                    className={cn(
+                        "border-b border-border",
+                        headerMedia && "pt-6 pr-14 pb-5",
+                    )}
+                >
+                    {headerMedia ? (
+                        <div className="flex items-start gap-3">
+                            <div className="size-20 shrink-0">
+                                {headerMedia}
+                            </div>
+                            <div className="flex min-w-0 flex-1 flex-col gap-2">
+                                {heading}
+                            </div>
                         </div>
-                    ) : null}
-                    <SheetTitle>{title}</SheetTitle>
-                    {description ? (
-                        <SheetDescription>{description}</SheetDescription>
-                    ) : null}
-                    {summary ? (
-                        <div data-slot="quick-preview-summary" className="pt-1">
-                            {summary}
-                        </div>
-                    ) : null}
+                    ) : (
+                        heading
+                    )}
                 </SheetHeader>
 
                 {isDetail ? (

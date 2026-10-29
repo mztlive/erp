@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { PackageIcon, TruckIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import {
@@ -14,6 +15,7 @@ import { useAppFilterForm } from "@/components/form"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { compactFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { BatchRow, BatchRowStatus, BatchView } from "../../api/batch"
 import { catalogUnitLabel } from "../../api/catalog"
@@ -24,6 +26,7 @@ export type BatchReviewMode = "REVIEW" | "RESULT" | "RECOVERY"
 type BatchReviewTableProps = {
     view: BatchView
     mode: BatchReviewMode
+    needsRecheck?: boolean
     selectedIds: string[]
     onSelectionChange: (ids: string[]) => void
     onEdit: (row: BatchRow) => void
@@ -80,14 +83,23 @@ function manuallyAdjusted(row: BatchRow): boolean {
     )
 }
 
-function RowStatus({ row }: { row: BatchRow }) {
+function RowStatus({
+    row,
+    needsRecheck,
+}: {
+    row: BatchRow
+    needsRecheck: boolean
+}) {
     const state = statusMeta[row.status]
+    const stale = needsRecheck && row.status === "READY" && !row.operation_id
     return (
         <div className="space-y-1">
-            <Badge variant={state.variant}>
+            <Badge variant={stale ? "secondary" : state.variant}>
                 {row.status === "READY" && row.operation_id
                     ? "等待入库"
-                    : state.label}
+                    : stale
+                      ? "待重新核对"
+                      : state.label}
             </Badge>
             {row.status === "UNKNOWN" ? (
                 <p className="text-xs text-warning-soft-foreground">
@@ -128,48 +140,63 @@ function MatchKind({ row }: { row: BatchRow }) {
                         ? "新建商品与 SKU"
                         : "待自动核对"}
             </span>
-            {kind === "EXISTING" ? (
-                <p className="text-xs text-muted-foreground">
-                    保留原价、上架状态与资料
-                </p>
-            ) : row.status === "SUCCEEDED" && kind ? (
-                <p className="text-xs text-muted-foreground">
-                    新建 SKU 保持未上架
-                </p>
-            ) : null}
         </div>
     )
 }
 
+/** 报价格式差异不算来源变化，只有真实变化才进入对比列。 */
+function sourceChangeFlags(row: BatchRow) {
+    const previous = row.previous_source
+    if (!previous) return null
+    const flags = {
+        price:
+            (previous.purchase_price == null
+                ? null
+                : compactFixed(previous.purchase_price)) !==
+            (row.source.purchase_price == null
+                ? null
+                : compactFixed(row.source.purchase_price)),
+        specification: previous.specification !== row.source.specification,
+        unit: catalogUnitLabel(previous) !== catalogUnitLabel(row.source),
+    }
+    return Object.values(flags).some(Boolean) ? flags : null
+}
+
 function SourceChanges({ row }: { row: BatchRow }) {
     const previous = row.previous_source
-    if (!previous) return <span className="text-muted-foreground">—</span>
+    const changes = sourceChangeFlags(row)
+    if (!previous || !changes)
+        return <span className="text-muted-foreground">—</span>
     const previousUnit = catalogUnitLabel(previous)
     const currentUnit = catalogUnitLabel(row.source)
     return (
         <div className="min-w-48 space-y-1 text-xs">
-            <p className="text-muted-foreground">接口采购报价</p>
-            <p className="flex flex-wrap items-baseline gap-1">
-                {previous.purchase_price !== null ? (
-                    <MoneyValue value={previous.purchase_price} />
-                ) : (
-                    "未提供"
-                )}
-                <span aria-label="变更为">→</span>
-                {row.source.purchase_price !== null ? (
-                    <MoneyValue value={row.source.purchase_price} />
-                ) : (
-                    "未提供"
-                )}
-            </p>
-            {previous.specification !== row.source.specification ? (
+            {changes.price ? (
+                <>
+                    <p className="text-muted-foreground">接口采购报价</p>
+                    <p className="flex flex-wrap items-baseline gap-1">
+                        {previous.purchase_price !== null ? (
+                            <MoneyValue value={previous.purchase_price} />
+                        ) : (
+                            "未提供"
+                        )}
+                        <span aria-label="变更为">→</span>
+                        {row.source.purchase_price !== null ? (
+                            <MoneyValue value={row.source.purchase_price} />
+                        ) : (
+                            "未提供"
+                        )}
+                    </p>
+                </>
+            ) : null}
+            {changes.specification ? (
                 <p className="break-words">
                     <span className="text-muted-foreground">规格：</span>
                     {previous.specification || "未标注"} →{" "}
                     {row.source.specification || "未标注"}
                 </p>
             ) : null}
-            {previousUnit !== currentUnit ? (
+            {changes.unit ? (
                 <p className="break-words">
                     <span className="text-muted-foreground">单位：</span>
                     {previousUnit} → {currentUnit}
@@ -183,6 +210,7 @@ function SourceChanges({ row }: { row: BatchRow }) {
 export function BatchReviewTable({
     view,
     mode,
+    needsRecheck = false,
     selectedIds,
     onSelectionChange,
     onEdit,
@@ -217,6 +245,16 @@ export function BatchReviewTable({
         () => Array.from(new Set(baseRows.flatMap(rowMessages))),
         [baseRows],
     )
+    const allDropshipOnly =
+        baseRows.length > 0 &&
+        baseRows.every((row) => !row.terms?.bulk_supply_price_gross)
+    const hasActiveFilters =
+        filters.status !== "ALL" || filters.reason !== "ALL"
+    const showFilters =
+        mode === "RECOVERY" ||
+        new Set(baseRows.map((row) => row.status)).size > 1 ||
+        reasons.length > 0 ||
+        hasActiveFilters
     const filteredRows = React.useMemo(
         () =>
             baseRows.filter(
@@ -268,43 +306,51 @@ export function BatchReviewTable({
                 id: "product",
                 header: "商品与规格",
                 enableHiding: false,
-                meta: { label: "商品与规格", width: "flex" },
+                meta: {
+                    label: "商品与规格",
+                    width: mode === "RESULT" ? "flex" : "reference",
+                },
                 cell: ({ row }) => (
                     <div className="flex min-w-52 items-start gap-3">
-                        <span className="size-11 shrink-0 overflow-hidden rounded-md bg-muted">
-                            {row.original.source.images?.[0] ? (
-                                <CatalogSourceImage
-                                    image={row.original.source.images[0]}
-                                    alt=""
-                                    width={44}
-                                    height={44}
-                                    compact
-                                    className="size-full object-cover"
-                                />
-                            ) : null}
-                        </span>
+                        {mode !== "RESULT" ? (
+                            <span className="size-11 shrink-0 overflow-hidden rounded-md bg-muted">
+                                {row.original.source.images?.[0] ? (
+                                    <CatalogSourceImage
+                                        image={row.original.source.images[0]}
+                                        alt=""
+                                        width={44}
+                                        height={44}
+                                        compact
+                                        className="size-full object-cover"
+                                    />
+                                ) : null}
+                            </span>
+                        ) : null}
                         <div className="min-w-0 space-y-1">
                             <p className="font-medium">
-                                {row.original.source.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
                                 {row.original.source.specification ||
-                                    "未标注规格"}
+                                    row.original.source.name}
                             </p>
+                            {row.original.source.specification ? (
+                                <p className="text-xs text-muted-foreground">
+                                    {row.original.source.name}
+                                </p>
+                            ) : null}
                             {manuallyAdjusted(row.original) ? (
                                 <Badge variant="warning">已单独调整</Badge>
                             ) : null}
-                            {!row.original.terms?.bulk_supply_price_gross ? (
+                            {mode !== "RESULT" &&
+                            !allDropshipOnly &&
+                            !row.original.terms?.bulk_supply_price_gross ? (
                                 <p className="text-xs text-muted-foreground">
-                                    本供给仅支持代发
+                                    供货：仅代发
                                 </p>
                             ) : null}
                         </div>
                     </div>
                 ),
             },
-            ...(mode === "RECOVERY" ||
-            view.rows.some((row) => row.previous_source)
+            ...(view.rows.some((row) => sourceChangeFlags(row))
                 ? [
                       {
                           id: "sourceChanges",
@@ -318,8 +364,8 @@ export function BatchReviewTable({
                 : []),
             {
                 id: "match",
-                header: "自动匹配",
-                meta: { label: "自动匹配" },
+                header: mode === "RESULT" ? "入库方式" : "自动匹配",
+                meta: { label: mode === "RESULT" ? "入库方式" : "自动匹配" },
                 cell: ({ row }) => <MatchKind row={row.original} />,
             },
             {
@@ -327,7 +373,10 @@ export function BatchReviewTable({
                 header: "接口采购报价",
                 meta: { label: "接口采购报价", align: "end", numeric: true },
                 cell: ({ row }) => (
-                    <MoneyValue value={row.original.source.purchase_price} />
+                    <MoneyValue
+                        className="font-normal"
+                        value={row.original.source.purchase_price}
+                    />
                 ),
             },
             {
@@ -337,6 +386,7 @@ export function BatchReviewTable({
                 cell: ({ row }) => (
                     <div>
                         <MoneyValue
+                            className="font-semibold"
                             value={row.original.sales_prices.dropship.value}
                         />
                         {row.original.sales_prices.dropship.origin ===
@@ -364,6 +414,7 @@ export function BatchReviewTable({
                 cell: ({ row }) => (
                     <div className="space-y-1">
                         <MoneyValue
+                            className="font-semibold"
                             value={row.original.sales_prices.bulk.value}
                         />
                         {row.original.sales_prices.minimum_quantity.value !==
@@ -401,9 +452,13 @@ export function BatchReviewTable({
             },
             {
                 id: "status",
-                header: "状态与待处理原因",
-                meta: { label: "状态与待处理原因" },
-                cell: ({ row }) => <RowStatus row={row.original} />,
+                header: mode === "RESULT" ? "入库结果" : "状态与待处理原因",
+                meta: {
+                    label: mode === "RESULT" ? "入库结果" : "状态与待处理原因",
+                },
+                cell: ({ row }) => (
+                    <RowStatus row={row.original} needsRecheck={needsRecheck} />
+                ),
             },
             {
                 id: "sourceCategory",
@@ -425,6 +480,10 @@ export function BatchReviewTable({
             {
                 id: "actions",
                 header: "操作",
+                meta: {
+                    width: mode === "RESULT" ? "reference" : "default",
+                    align: "end",
+                },
                 enableHiding: false,
                 enableSorting: false,
                 cell: ({ row: tableRow }) => {
@@ -453,7 +512,7 @@ export function BatchReviewTable({
                         const offeringId =
                             row.result?.offering_id || row.source.offering_id
                         return (
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap justify-end gap-1">
                                 {productId ? (
                                     <Link
                                         id={`${prefix}-product-${key}`}
@@ -463,7 +522,8 @@ export function BatchReviewTable({
                                             size: "sm",
                                         })}
                                     >
-                                        打开公司商品
+                                        <PackageIcon aria-hidden />
+                                        查看商品
                                     </Link>
                                 ) : null}
                                 {offeringId ? (
@@ -475,6 +535,7 @@ export function BatchReviewTable({
                                             size: "sm",
                                         })}
                                     >
+                                        <TruckIcon aria-hidden />
                                         查看供给
                                     </Link>
                                 ) : null}
@@ -510,7 +571,16 @@ export function BatchReviewTable({
                 },
             },
         ],
-        [prefix, mode, busy, onEdit, onReconcile, view.rows],
+        [
+            prefix,
+            mode,
+            busy,
+            onEdit,
+            onReconcile,
+            view.rows,
+            needsRecheck,
+            allDropshipOnly,
+        ],
     )
     return (
         <div className="min-w-0 space-y-3">
@@ -540,69 +610,93 @@ export function BatchReviewTable({
                           ? "入库结果明细"
                           : "逐项核对入库"
                 }
+                className={mode !== "RECOVERY" ? "gap-2" : undefined}
+                tableActions={
+                    allDropshipOnly && mode !== "RESULT" ? (
+                        <span className="text-xs text-muted-foreground">
+                            供应商供货：仅代发
+                        </span>
+                    ) : undefined
+                }
                 toolbar={
-                    <form
-                        className="flex min-w-0 flex-wrap items-end gap-3"
-                        onSubmit={(event) => event.preventDefault()}
-                    >
-                        <form.AppField name="status">
-                            {(field) => (
-                                <field.SelectField
-                                    id={`${prefix}-status-filter`}
-                                    label="状态"
-                                    options={[
-                                        {
-                                            value: "ALL",
-                                            label: `全部（${baseRows.length}）`,
-                                        },
-                                        ...Object.entries(statusMeta)
-                                            .filter(([status]) =>
-                                                baseRows.some(
-                                                    (row) =>
-                                                        row.status === status,
-                                                ),
-                                            )
-                                            .map(([value, state]) => ({
-                                                value,
-                                                label: `${state.label}（${baseRows.filter((row) => row.status === value).length}）`,
-                                            })),
-                                    ]}
-                                    allowClear={false}
-                                    className="w-44"
-                                />
-                            )}
-                        </form.AppField>
-                        <form.AppField name="reason">
-                            {(field) => (
-                                <field.SelectField
-                                    id={`${prefix}-reason-filter`}
-                                    label="待处理原因"
-                                    options={[
-                                        { value: "ALL", label: "全部原因" },
-                                        ...reasons.map((reason) => ({
-                                            value: reason,
-                                            label: reason,
-                                        })),
-                                    ]}
-                                    allowClear={false}
-                                    className="w-64 max-w-full"
-                                />
-                            )}
-                        </form.AppField>
-                        <Button
-                            id={`${prefix}-reset-filters`}
-                            type="button"
-                            variant="ghost"
-                            onClick={() =>
-                                form.reset({ status: "ALL", reason: "ALL" })
-                            }
+                    showFilters ? (
+                        <form
+                            className="flex min-w-0 flex-wrap items-end gap-3"
+                            onSubmit={(event) => event.preventDefault()}
                         >
-                            重置筛选
-                        </Button>
-                    </form>
+                            <form.AppField name="status">
+                                {(field) => (
+                                    <field.SelectField
+                                        id={`${prefix}-status-filter`}
+                                        label="状态"
+                                        options={[
+                                            {
+                                                value: "ALL",
+                                                label: `全部（${baseRows.length}）`,
+                                            },
+                                            ...Object.entries(statusMeta)
+                                                .filter(([status]) =>
+                                                    baseRows.some(
+                                                        (row) =>
+                                                            row.status ===
+                                                            status,
+                                                    ),
+                                                )
+                                                .map(([value, state]) => ({
+                                                    value,
+                                                    label: `${needsRecheck && value === "READY" ? "上次可入库" : state.label}（${baseRows.filter((row) => row.status === value).length}）`,
+                                                })),
+                                        ]}
+                                        allowClear={false}
+                                        className="w-44"
+                                    />
+                                )}
+                            </form.AppField>
+                            {reasons.length > 0 || filters.reason !== "ALL" ? (
+                                <form.AppField name="reason">
+                                    {(field) => (
+                                        <field.SelectField
+                                            id={`${prefix}-reason-filter`}
+                                            label="待处理原因"
+                                            options={[
+                                                {
+                                                    value: "ALL",
+                                                    label: "全部原因",
+                                                },
+                                                ...reasons.map((reason) => ({
+                                                    value: reason,
+                                                    label: reason,
+                                                })),
+                                            ]}
+                                            allowClear={false}
+                                            className="w-64 max-w-full"
+                                        />
+                                    )}
+                                </form.AppField>
+                            ) : null}
+                            {hasActiveFilters ? (
+                                <Button
+                                    id={`${prefix}-reset-filters`}
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() =>
+                                        form.reset({
+                                            status: "ALL",
+                                            reason: "ALL",
+                                        })
+                                    }
+                                >
+                                    重置筛选
+                                </Button>
+                            ) : null}
+                        </form>
+                    ) : undefined
                 }
                 selectionBar={
                     <div className="flex flex-wrap items-center gap-3 text-sm">
+                        {mode === "RESULT" ? (
+                            <h2 className="font-semibold">入库明细</h2>
+                        ) : null}
                         <span className="num">
                             当前 {filteredRows.length} 个 SKU
                             {mode !== "RESULT"
@@ -633,7 +727,7 @@ export function BatchReviewTable({
                             `${row.source.name} ${row.source.specification}`
                         }
                         rowCount={filteredRows.length}
-                        caption="批量入库逐项核对，金额为公司销售参考价（含税）"
+                        caption="批量入库逐项核对，接口采购报价为供应商报价，公司售价为含税销售参考价"
                         manualPagination
                         manualSorting={false}
                         pagination={pagination}
@@ -642,6 +736,8 @@ export function BatchReviewTable({
                         defaultColumnVisibility={{
                             sourceCategory: false,
                             market: false,
+                            purchase: mode !== "RESULT",
+                            match: mode !== "RESULT",
                         }}
                         showToolbarSummary={false}
                         rowSelection={rowSelection}

@@ -1,5 +1,7 @@
 "use client"
 
+import { BatchPreparationStatus } from "../batch/batch-preparation"
+
 import { catalogUnitLabel } from "../../api/catalog"
 
 import * as React from "react"
@@ -12,7 +14,6 @@ import {
     BusinessTableFrame,
     DataTable,
     MoneyValue,
-    QuickPreviewSheet,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,10 +35,10 @@ import {
     useCatalogBatchSelection,
 } from "../../hooks/use-catalog-batch-selection"
 import { CatalogFilterForm } from "./catalog-filter-form"
+import { CatalogPreviewSheet } from "./catalog-preview-sheet"
 import { CatalogSourceImage } from "./catalog-source-image"
 import { catalogMediaBlocker } from "../../lib/catalog-media"
 import { CatalogIdentityReviewDialog } from "../dialogs/catalog-identity-review-dialog"
-import { CatalogBatchHistory } from "./catalog-batch-history"
 
 const availabilityLabels: Record<CatalogAvailability, string> = {
     AVAILABLE: "可供",
@@ -266,8 +267,10 @@ export function CatalogBrowser({
                                 ? "supplier-catalog-adoption-blocker"
                                 : undefined
                         }
-                        loading={choice.creating}
-                        disabled={!canConfigure || choice.busy}
+                        loading={choice.configuring}
+                        disabled={
+                            !canConfigure || choice.busy || choice.preparing
+                        }
                         onClick={() => void choice.configure([row.original.id])}
                     >
                         配置入库
@@ -330,11 +333,7 @@ export function CatalogBrowser({
                                 catalogFilterKey(filters) !==
                                 catalogFilterKey(next)
                             ) {
-                                choice.clear(
-                                    choice.selectedIds.length || choice.frozen
-                                        ? "筛选条件已变更，原选择与排除项已清空，请重新选择。"
-                                        : undefined,
-                                )
+                                choice.clear()
                                 setFilters(next)
                                 setPage(1)
                             }
@@ -353,7 +352,11 @@ export function CatalogBrowser({
                         <span className="text-muted-foreground">
                             本页 {query.data?.items.length ?? 0} 个 SKU
                         </span>
-                        {choice.frozen ? (
+                        {choice.preparing && choice.frozen ? (
+                            <BatchPreparationStatus
+                                batch={choice.frozen.batch}
+                            />
+                        ) : choice.frozen ? (
                             <span className="rounded-md bg-success-soft px-3 py-2 text-success-soft-foreground">
                                 已选择全部筛选结果 {choice.frozen.rows.length}{" "}
                                 个 SKU · 已排除 {choice.excludedRows.length} 个
@@ -374,7 +377,7 @@ export function CatalogBrowser({
                                     query.isFetching ||
                                     choice.busy
                                 }
-                                loading={choice.creating}
+                                loading={choice.selecting}
                                 onClick={() => void choice.freezeAll(filters)}
                             >
                                 选择全部 {query.data.total} 个 SKU
@@ -423,11 +426,12 @@ export function CatalogBrowser({
                         id="supplier-catalog-batch-configure"
                         disabled={
                             !canConfigure ||
+                            choice.preparing ||
                             !choice.selectedIds.length ||
                             choice.needsReload ||
                             choice.busy
                         }
-                        loading={choice.creating}
+                        loading={choice.configuring}
                         onClick={() => void choice.configure()}
                     >
                         配置入库（{choice.selectedIds.length}）
@@ -449,6 +453,7 @@ export function CatalogBrowser({
                         enableRowSelection={(row) =>
                             canConfigure &&
                             !choice.busy &&
+                            !choice.preparing &&
                             !choice.needsReload &&
                             choice.isFrozenMember(row.original.id)
                         }
@@ -498,26 +503,7 @@ export function CatalogBrowser({
                         }
                     />
                 }
-                footer={
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span>
-                            {choice.productCount} 个商品 ·{" "}
-                            {choice.selectedIds.length} 个 SKU 已选
-                        </span>
-                        <span>
-                            表头只选择当前页；翻页保留选择，变更筛选将清空选择与排除项。
-                        </span>
-                    </div>
-                }
             />
-            {canConfigure ? (
-                <CatalogBatchHistory connectionId={connectionId} />
-            ) : null}
-            {choice.notice ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                    {choice.notice}
-                </p>
-            ) : null}
             {choice.error ? (
                 <div
                     role="alert"
@@ -591,134 +577,19 @@ export function CatalogBrowser({
                     onClose={() => setIdentityItemId(null)}
                 />
             ) : null}
-            <QuickPreviewSheet
-                idPrefix="supplier-catalog-preview"
-                open={Boolean(previewRow)}
-                onOpenChange={(open) => {
-                    if (!open) closePreview()
-                }}
-                size="preview"
-                title={previewRow?.name ?? "供应商商品"}
-                description={previewRow?.specification || undefined}
-                identity={
-                    previewRow ? (
-                        <span className="num">
-                            供应商订货编码：{previewRow.spec_id}
-                        </span>
-                    ) : null
-                }
-                summary={
-                    previewRow ? (
-                        <Badge
-                            variant={
-                                previewRow.availability === "AVAILABLE"
-                                    ? "success"
-                                    : "secondary"
-                            }
-                        >
-                            {availabilityLabels[previewRow.availability] ??
-                                "待核验"}
-                        </Badge>
-                    ) : null
-                }
-                footer={
-                    <>
-                        <Button
-                            id="supplier-catalog-preview-close"
-                            variant="outline"
-                            onClick={closePreview}
-                        >
-                            关闭
-                        </Button>
-                        {previewRow?.company_product_id ? (
-                            <Button
-                                id="supplier-catalog-preview-open-company"
-                                render={
-                                    <Link
-                                        href={`/master-data/products/${encodeURIComponent(previewRow.company_product_id)}`}
-                                    />
-                                }
-                            >
-                                打开公司商品
-                            </Button>
-                        ) : null}
-                    </>
-                }
-            >
-                {previewRow ? (
-                    <div className="space-y-5">
-                        <div>
-                            <p className="text-xs text-muted-foreground">
-                                接口采购报价
-                            </p>
-                            <MoneyValue
-                                value={previewRow.purchase_price}
-                                unavailableReason={
-                                    !canReadCost ||
-                                    query.data?.can_read_cost === false
-                                        ? "无采购报价查看权限"
-                                        : previewRow.purchase_price == null
-                                          ? "暂无接口报价"
-                                          : undefined
-                                }
-                                size="section"
-                            />
-                        </div>
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                            <dt className="text-muted-foreground">分类</dt>
-                            <dd>{previewRow.category_name || "未提供"}</dd>
-                            <dt className="text-muted-foreground">品牌</dt>
-                            <dd>{previewRow.brand_name || "未提供"}</dd>
-                            <dt className="text-muted-foreground">商品单位</dt>
-                            <dd>{catalogUnitLabel(previewRow)}</dd>
-                            <dt className="text-muted-foreground">可供数量</dt>
-                            <dd>
-                                {previewRow.quantity_unbounded
-                                    ? "供应商未设数量上限"
-                                    : (previewRow.available_quantity ??
-                                      "未提供")}
-                            </dd>
-                        </dl>
-                        {previewRow.description ? (
-                            <section className="space-y-2">
-                                <h3 className="text-sm font-medium">
-                                    商品介绍
-                                </h3>
-                                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
-                                    {previewRow.description}
-                                </p>
-                            </section>
-                        ) : null}
-                        {[
-                            { title: "商品轮播图", images: previewRow.images },
-                            {
-                                title: "商品详情图",
-                                images: previewRow.detail_images,
-                            },
-                        ].map(({ title, images }) =>
-                            images?.length ? (
-                                <section key={title} className="space-y-2">
-                                    <h3 className="text-sm font-medium">
-                                        {title}
-                                    </h3>
-                                    <div className="space-y-2">
-                                        {images.map((image, index) => (
-                                            <CatalogSourceImage
-                                                key={`${image.url}-${index}`}
-                                                image={image}
-                                                alt={`${title} ${index + 1}`}
-                                                width={800}
-                                                height={800}
-                                                className="h-auto w-full rounded-md border object-contain"
-                                            />
-                                        ))}
-                                    </div>
-                                </section>
-                            ) : null,
-                        )}
-                    </div>
-                ) : null}
-            </QuickPreviewSheet>
+            {previewRow ? (
+                <CatalogPreviewSheet
+                    key={previewRow.id}
+                    item={previewRow}
+                    onClose={closePreview}
+                    canReadCost={
+                        canReadCost && query.data?.can_read_cost !== false
+                    }
+                    canConfigure={canConfigure}
+                    selectionBlocker={selectionBlocker}
+                    choice={choice}
+                />
+            ) : null}
         </>
     )
 }

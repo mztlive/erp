@@ -3,6 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     createAdoptionBatch,
+    fetchBatchPreparation,
+    fetchBatchSelection,
+    controlBatchPreparation,
     fetchAdoptionBatch,
     fetchAdoptionBatches,
     previewAdoptionBatch,
@@ -23,18 +26,19 @@ export const adoptionBatchKeys = {
             identity.batchId,
         ] as const,
 }
-export function useAdoptionBatchesQuery(connectionId: string) {
+export function useAdoptionBatchesQuery(connectionId: string, refresh = false) {
     return useQuery({
         queryKey: [...adoptionBatchKeys.all, connectionId, "list"],
         queryFn: () => fetchAdoptionBatches(connectionId),
         enabled: Boolean(connectionId),
+        refetchInterval: refresh ? 5000 : false,
     })
 }
-export function useAdoptionBatchQuery(identity: BatchIdentity) {
+export function useAdoptionBatchQuery(identity: BatchIdentity, enabled = true) {
     return useQuery({
         queryKey: adoptionBatchKeys.detail(identity),
         queryFn: () => fetchAdoptionBatch(identity),
-        enabled: Boolean(identity.connectionId && identity.batchId),
+        enabled: enabled && Boolean(identity.connectionId && identity.batchId),
         refetchInterval: (query) =>
             query.state.data?.batch.draft_operation ||
             query.state.data?.batch.execution_pending ||
@@ -69,8 +73,69 @@ function useBatchResult() {
     }
 }
 export function useCreateAdoptionBatchMutation() {
-    const onSuccess = useBatchResult()
-    return useMutation({ mutationFn: createAdoptionBatch, onSuccess })
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: createAdoptionBatch,
+        retry: false,
+        onSuccess: (view) => {
+            queryClient.setQueryData(
+                [
+                    ...adoptionBatchKeys.detail({
+                        connectionId: view.batch.connection_id,
+                        batchId: view.batch.id,
+                    }),
+                    "preparation",
+                ],
+                view.batch,
+            )
+            void queryClient.invalidateQueries({
+                queryKey: [
+                    ...adoptionBatchKeys.all,
+                    view.batch.connection_id,
+                    "list",
+                ],
+            })
+        },
+    })
+}
+export function useBatchPreparationQuery(identity: BatchIdentity) {
+    return useQuery({
+        queryKey: [...adoptionBatchKeys.detail(identity), "preparation"],
+        queryFn: () => fetchBatchPreparation(identity),
+        enabled: Boolean(identity.connectionId && identity.batchId),
+        refetchInterval: (query) =>
+            ["QUEUED", "PREPARING"].includes(
+                query.state.data?.preparation?.status ?? "",
+            )
+                ? 2000
+                : false,
+    })
+}
+export function useControlBatchPreparationMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: controlBatchPreparation,
+        retry: false,
+        onSuccess: (batch) => {
+            queryClient.setQueryData(
+                [
+                    ...adoptionBatchKeys.detail({
+                        connectionId: batch.connection_id,
+                        batchId: batch.id,
+                    }),
+                    "preparation",
+                ],
+                batch,
+            )
+            void queryClient.invalidateQueries({
+                queryKey: [
+                    ...adoptionBatchKeys.all,
+                    batch.connection_id,
+                    "list",
+                ],
+            })
+        },
+    })
 }
 export function useSaveAdoptionBatchMutation() {
     const onSuccess = useBatchResult()
@@ -103,5 +168,16 @@ export function useQueryAdoptionBatchSubmissionMutation() {
         mutationFn: queryAdoptionBatchSubmission,
         onSuccess: (result) => onSuccess(result.view),
         retry: false,
+    })
+}
+
+export function useBatchSelectionQuery(
+    identity: BatchIdentity,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: [...adoptionBatchKeys.detail(identity), "selection"],
+        queryFn: () => fetchBatchSelection(identity),
+        enabled: enabled && Boolean(identity.batchId && identity.connectionId),
     })
 }

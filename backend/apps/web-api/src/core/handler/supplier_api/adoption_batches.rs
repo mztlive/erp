@@ -7,7 +7,11 @@ use erp_processes::supplier_catalog_adoption::{
     BatchSubmissionView, BatchVersionRequest, BatchView, CreateBatchRequest, SaveBatchRequest,
     SubmitBatchRequest,
 };
-use erp_supply::catalog_adoption::CatalogAdoptionBatch;
+use erp_supply::catalog_adoption::{
+    BatchHistoryEntry, CatalogAdoptionBatch, PreparationAction, SelectionView,
+};
+use persistence_core::NoTransaction;
+use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -49,14 +53,14 @@ pub async fn create(
 /// # 参数
 /// 路径指定连接，操作人来自认证上下文。
 /// # 返回
-/// 可重新打开的最近批次列表。
+/// 可重新打开的最近批次及执行、待处理、草稿或完成状态。
 /// # 错误
 /// 权限已变更、连接不存在或超出供应商范围时拒绝。
 pub async fn list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(connection): Path<String>,
-) -> Result<Vec<CatalogAdoptionBatch>> {
+) -> Result<Vec<BatchHistoryEntry>> {
     let batches = state.supplier_catalog_adoption_process()?.batches(&connection, &actor).await?;
     Ok(ApiResponse::ok_with_data(batches))
 }
@@ -212,6 +216,90 @@ pub async fn submission_result(
     Ok(ApiResponse::ok_with_data(result))
 }
 
+#[permission_macros::permission(
+    group = "API 供应商连接",
+    group_desc = "供应商 API 连接与能力治理（W20）",
+    desc = "读取供应商批次选择集合",
+    resource = "supplier_api_connection",
+    action = "catalog_sync"
+)]
+/// 读取商品库选择所需身份与展示字段。
+/// # 参数
+/// 已认证用户及连接、批次路径。
+/// # 返回
+/// 不含全量草稿载荷的选择集合。
+/// # 错误
+/// 未准备完成、越权或批次不存在时拒绝。
+pub async fn selection(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path((connection, batch)): Path<(String, String)>,
+) -> Result<SelectionView> {
+    let view =
+        state.supplier_catalog_adoption_process()?.batch_selection_view(&connection, &batch, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 对准备任务的明确控制载荷。
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreparationRequest {
+    pub action: PreparationAction,
+}
+
+#[permission_macros::permission(
+    group = "API 供应商连接",
+    group_desc = "供应商 API 连接与能力治理（W20）",
+    desc = "查询供应商选品准备进度",
+    resource = "supplier_api_connection",
+    action = "catalog_sync"
+)]
+/// 只返回准备摘要，不加载全批成员。
+/// # 参数
+/// 路径指定连接与批次，用户来自认证上下文。
+/// # 返回
+/// 批次身份、准备状态及已提交数量。
+/// # 错误
+/// 越权或批次不存在时拒绝。
+pub async fn preparation(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path((connection, batch)): Path<(String, String)>,
+) -> Result<CatalogAdoptionBatch> {
+    let batch = state
+        .supplier_catalog_adoption_process()?
+        .preparation_batch(&connection, &batch, &actor, &mut NoTransaction)
+        .await?;
+    Ok(ApiResponse::ok_with_data(batch))
+}
+
+#[permission_macros::permission(
+    group = "API 供应商连接",
+    group_desc = "供应商 API 连接与能力治理（W20）",
+    desc = "重试或取消供应商选品准备",
+    resource = "supplier_api_connection",
+    action = "catalog_sync"
+)]
+/// 重试保留原范围，取消停止后续准备。
+/// # 参数
+/// 路径指定连接与批次，载荷仅含动作。
+/// # 返回
+/// 操作后的准备摘要。
+/// # 错误
+/// 越权、状态或并发冲突时拒绝。
+pub async fn control_preparation(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path((connection, batch)): Path<(String, String)>,
+    Json(request): Json<PreparationRequest>,
+) -> Result<CatalogAdoptionBatch> {
+    let batch = state
+        .supplier_catalog_adoption_process()?
+        .control_preparation(&connection, &batch, request.action, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(batch))
+}
+
 #[cfg(test)]
 mod tests {
     use axum::body::Body;
@@ -226,6 +314,33 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(value.to_string()))
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn selection_requires_operation_identity_and_preparation_accepts_only_control_actions() {
+        assert!(Json::<CreateBatchRequest>::from_request(request(json!({"filter":{}})), &()).await.is_err());
+        assert!(
+            Json::<CreateBatchRequest>::from_request(
+                request(json!({"idempotency_key":"selection", "filter":{}})),
+                &()
+            )
+            .await
+            .is_ok()
+        );
+        for action in ["RETRY", "CANCEL"] {
+            assert!(
+                Json::<PreparationRequest>::from_request(request(json!({"action":action})), &())
+                    .await
+                    .is_ok()
+            );
+        }
+        for value in [
+            json!({"action":"COMPLETE"}),
+            json!({"action":"RETRY", "completed":100}),
+            json!({"action":"CANCEL", "item_ids":["other"]}),
+        ] {
+            assert!(Json::<PreparationRequest>::from_request(request(value), &()).await.is_err());
+        }
     }
 
     #[tokio::test]

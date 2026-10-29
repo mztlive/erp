@@ -78,7 +78,7 @@ pub async fn recent_batches(
     before: Option<&str>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CatalogAdoptionBatch>> {
-    let mut filter = doc! {"connection_id":connection,"selection_complete":true,"deleted_at":0_i64};
+    let mut filter = doc! {"connection_id":connection,"$or":[{"selection_complete":true},{"preparation":{"$type":"object"}}],"deleted_at":0_i64};
     if let Some(before) = before {
         filter.insert("id", doc! {"$lt":before});
     }
@@ -91,11 +91,11 @@ pub async fn recent_batches(
     .await
 }
 
-/// 有界读取已确认且需后台检查的批次。
+/// 有界读取需要准备草稿或执行已确认入库的批次。
 /// # 参数
 /// `after` 为上轮最后处理批次的主键，空串从头读取。
 /// # 返回
-/// 稳定顺序的最多二十个已完成成员冻结且仍有执行任务的批次。
+/// 稳定顺序的最多二十个准备任务或已确认执行任务。
 /// # 错误
 /// 数据库查询失败时返回错误。
 pub async fn runnable_batches(
@@ -105,7 +105,7 @@ pub async fn runnable_batches(
 ) -> Result<Vec<CatalogAdoptionBatch>> {
     mongo_ops::find_many(
         &db.collection::<CatalogAdoptionBatch>(BATCHES),
-        doc! {"submitted":true,"selection_complete":true,"execution_pending":true,"id":{"$gt":after},"deleted_at":0_i64},
+        doc! {"$or":[{"submitted":true,"selection_complete":true,"execution_pending":true},{"preparation.status":{"$in":["QUEUED","PREPARING"]}}],"id":{"$gt":after},"deleted_at":0_i64},
         FindOptions::builder().sort(doc! {"id":1}).limit(20).build(),
         executor,
     )
@@ -211,6 +211,7 @@ pub async fn ensure_batch_indexes(db: &Database) -> Result<()> {
             ),
         ])
         .await?;
+    super::ensure_preparation_indexes(db).await?;
     Ok(())
 }
 

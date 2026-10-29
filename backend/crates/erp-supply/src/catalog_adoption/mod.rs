@@ -2,8 +2,18 @@
 
 mod batch;
 mod batch_anchor;
+mod batch_history;
+mod batch_preparation;
 mod batch_pricing;
 mod batch_repository;
+mod selection_repository;
+mod selection_view;
+pub use batch_preparation::{BatchPreparation, PreparationAction, PreparationStatus};
+pub use selection_repository::{
+    SELECTION_PAGE_SIZE, SelectionPage, ensure_preparation_indexes, insert_prepared_items,
+    insert_selection_pages, selection_by_request, selection_page,
+};
+pub use selection_view::{SelectionView, selection_view};
 mod batch_values;
 mod media;
 mod model;
@@ -13,6 +23,7 @@ mod repository;
 
 pub use batch::*;
 pub use batch_anchor::{BatchAnchorTarget, BatchMatchAnchor};
+pub use batch_history::{BatchHistoryEntry, BatchHistoryStatus, batch_history};
 pub use batch_repository::{
     BatchAdoptionExt, batch_item_by_source, batch_items, due_batch_items, ensure_batch_indexes,
     has_inflight_batch_items, recent_batches, runnable_batches, uncertain_batch_items,

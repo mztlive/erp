@@ -3,13 +3,16 @@
 import * as React from "react"
 import type { RowSelectionState } from "@tanstack/react-table"
 import { useRouter } from "@/lib/navigation"
-import type { BatchView } from "../api/batch"
+import type { BatchSelectionView, CreateBatchRequest } from "../api/batch"
 import type { CatalogFilters, CatalogItem } from "../api/catalog"
 import {
     useCreateAdoptionBatchMutation,
     useSaveAdoptionBatchMutation,
-    useAdoptionBatchQuery,
+    useBatchSelectionQuery,
+    useBatchPreparationQuery,
 } from "./batch"
+
+import { newIdempotencyKey } from "../lib/operations"
 
 export function catalogFilterKey(filters: CatalogFilters) {
     return JSON.stringify({
@@ -41,20 +44,71 @@ export function useCatalogBatchSelection(connectionId: string) {
     const [explicit, setExplicit] = React.useState<Record<string, CatalogItem>>(
         {},
     )
-    const [frozen, setFrozen] = React.useState<BatchView | null>(null)
-    const [notice, setNotice] = React.useState<string | null>(null)
+    const [frozenSeed, setFrozen] = React.useState<BatchSelectionView | null>(
+        null,
+    )
     const [showExcluded, setShowExcluded] = React.useState(false)
-    const batchQuery = useAdoptionBatchQuery({
-        connectionId,
-        batchId: frozen?.batch.id ?? "",
-    })
+    const generation = React.useRef(0)
+    const pendingCreate = React.useRef<{ payload: string; key: string } | null>(
+        null,
+    )
+    const identity = { connectionId, batchId: frozenSeed?.batch.id ?? "" }
+    const preparationQuery = useBatchPreparationQuery(identity)
+    const batch = preparationQuery.data ?? frozenSeed?.batch
+    const preparing = Boolean(batch && !batch.selection_complete)
+    const batchQuery = useBatchSelectionQuery(
+        identity,
+        Boolean(batch?.selection_complete),
+    )
+    const frozen = frozenSeed
+        ? (batchQuery.data ?? {
+              ...frozenSeed,
+              batch: batch ?? frozenSeed.batch,
+          })
+        : null
     const busy = create.isPending || save.isPending || batchQuery.isFetching
-    const needsReload = Boolean(frozen && (save.error || batchQuery.error))
+    const needsReload = Boolean(
+        frozen && (save.error || batchQuery.error || preparationQuery.error),
+    )
+    const createSelection = async (
+        request: Omit<CreateBatchRequest, "idempotency_key">,
+    ) => {
+        const payload = JSON.stringify(request)
+        const storageKey = `supplier-catalog-selection:${connectionId}`
+        let pending = pendingCreate.current
+        if (!pending) {
+            try {
+                pending = JSON.parse(
+                    window.sessionStorage.getItem(storageKey) ?? "null",
+                )
+            } catch {
+                /* 使用本次内存中的原操作号。 */
+            }
+        }
+        if (pending?.payload !== payload || !pending.key)
+            pending = { payload, key: newIdempotencyKey("selection") }
+        pendingCreate.current = pending
+        try {
+            window.sessionStorage.setItem(storageKey, JSON.stringify(pending))
+        } catch {
+            /* 当前页面仍保留原操作号用于重试。 */
+        }
+        const result = await create.mutateAsync({
+            connectionId,
+            request: { ...request, idempotency_key: pending.key },
+        })
+        pendingCreate.current = null
+        try {
+            window.sessionStorage.removeItem(storageKey)
+        } catch {
+            /* 已受理批次可从历史入口恢复。 */
+        }
+        return result
+    }
+    const excludedIds = new Set(frozen?.batch.excluded_ids ?? [])
     const selectedIds = frozen
         ? frozen.rows
-              .filter(
-                  (row) => !frozen.batch.excluded_ids.includes(row.source.id),
-              )
+              .filter((row) => !excludedIds.has(row.source.id))
               .map((row) => row.source.id)
         : Object.keys(explicit)
     const rowSelection: RowSelectionState = Object.fromEntries(
@@ -64,19 +118,17 @@ export function useCatalogBatchSelection(connectionId: string) {
         ? frozen.product_count
         : new Set(Object.values(explicit).map((row) => row.product_id)).size
     const excludedRows =
-        frozen?.rows.filter((row) =>
-            frozen.batch.excluded_ids.includes(row.source.id),
-        ) ?? []
-    const clear = (message?: string) => {
+        frozen?.rows.filter((row) => excludedIds.has(row.source.id)) ?? []
+    const clear = () => {
+        generation.current += 1
         setExplicit({})
         setFrozen(null)
         setShowExcluded(false)
-        setNotice(message ?? null)
         create.reset()
         save.reset()
     }
     const saveExclusions = async (excludedIds: string[]) => {
-        if (!frozen || busy || needsReload) return
+        if (!frozen || busy || needsReload || preparing) return
         try {
             const result = await save.mutateAsync({
                 connectionId,
@@ -87,13 +139,13 @@ export function useCatalogBatchSelection(connectionId: string) {
                 },
             })
             setFrozen(result)
+            await batchQuery.refetch()
         } catch {
             // 保存失败时继续展示最后已保存的选择，保留失败原因和重试操作。
         }
     }
     const change = (next: RowSelectionState, items: CatalogItem[]) => {
-        if (busy || needsReload) return
-        setNotice(null)
+        if (busy || needsReload || preparing) return
         if (frozen) {
             void saveExclusions(
                 frozen.rows
@@ -113,28 +165,23 @@ export function useCatalogBatchSelection(connectionId: string) {
     const freezeAll = async (filters: CatalogFilters) => {
         if (busy) return
         try {
-            const result = await create.mutateAsync({
-                connectionId,
-                request: { filter: filters },
-            })
+            const current = generation.current
+            const result = await createSelection({ filter: filters })
+            if (current !== generation.current) return
             setFrozen(result)
             setExplicit({})
-            setNotice("已保存全部筛选结果；之后新同步的商品不会加入本次选择。")
         } catch {
             // 保留跨页人工选择与筛选。
         }
     }
     const configure = async (itemIds?: string[]) => {
         const ids = itemIds ?? selectedIds
-        if (busy || needsReload || !ids.length) return
+        if (busy || needsReload || preparing || !ids.length) return
         try {
             const result =
                 frozen && !itemIds
                     ? frozen
-                    : await create.mutateAsync({
-                          connectionId,
-                          request: { item_ids: ids },
-                      })
+                    : await createSelection({ item_ids: ids })
             router.push(
                 `/supplier-api/catalog/adoptions/${encodeURIComponent(result.batch.id)}?connectionId=${encodeURIComponent(connectionId)}`,
             )
@@ -143,27 +190,35 @@ export function useCatalogBatchSelection(connectionId: string) {
         }
     }
     const refreshFrozen = async () => {
+        const preparation = await preparationQuery.refetch()
+        if (preparation.isError || !preparation.data?.selection_complete) return
         const result = await batchQuery.refetch()
         if (result.data && !result.isError) {
             setFrozen(result.data)
             save.reset()
-            setNotice("已重新读取已保存的选择，请核对后继续。")
         }
     }
     return {
         frozen,
+        preparing,
         busy,
         needsReload,
         creating: create.isPending,
+        selecting:
+            create.isPending && Boolean(create.variables?.request.filter),
+        configuring: create.isPending && !create.variables?.request.filter,
         saving: save.isPending,
-        error: save.error ?? create.error ?? batchQuery.error,
+        error:
+            save.error ??
+            create.error ??
+            preparationQuery.error ??
+            batchQuery.error,
         rowSelection,
         selectedIds,
         productCount,
         excludedRows,
         showExcluded,
         setShowExcluded,
-        notice,
         clear,
         change,
         freezeAll,
@@ -175,7 +230,6 @@ export function useCatalogBatchSelection(connectionId: string) {
             ),
         isFrozenMember: (itemId: string) =>
             !frozen || frozen.rows.some((row) => row.source.id === itemId),
-        isExcluded: (itemId: string) =>
-            frozen?.batch.excluded_ids.includes(itemId) ?? false,
+        isExcluded: (itemId: string) => excludedIds.has(itemId),
     }
 }

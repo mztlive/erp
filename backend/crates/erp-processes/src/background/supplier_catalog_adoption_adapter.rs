@@ -65,7 +65,12 @@ impl BackgroundTaskAdapter for SupplierCatalogAdoptionTaskAdapter {
             let process = Arc::clone(&self.process);
             tokio::spawn(async move {
                 let _permit = permit;
-                if let Err(error) = process.process_batch(&batch.base.id).await {
+                let outcome = if batch.preparation.as_ref().is_some_and(|state| state.runnable()) {
+                    process.prepare_batch(&batch.base.id).await
+                } else {
+                    process.process_batch(&batch.base.id).await.map(|_| ())
+                };
+                if let Err(error) = outcome {
                     tracing::warn!(batch_id=%batch.base.id,account=%batch.actor_id,error=%error,"supplier catalog adoption interrupted");
                 }
                 active.lock().await.remove(&batch.base.id);

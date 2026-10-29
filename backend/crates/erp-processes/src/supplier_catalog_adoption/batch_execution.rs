@@ -137,7 +137,7 @@ impl SupplierCatalogAdoptionProcess {
             .find(|value| value.operation_id == command)
             .cloned()
             .ok_or_else(|| Error::Internal("原入库确认记录缺失".into()))?;
-        let actor = self.batch_actor(&confirmation.actor_id).await?;
+        let actor = self.batch_actor(&confirmation.actor_id, &mut NoTransaction).await?;
         for item in &confirmation.item_ids {
             let (process, source, batch_id, item, command, actor, preview_version) = (
                 self.clone(),
@@ -338,14 +338,21 @@ impl SupplierCatalogAdoptionProcess {
             .submitted_by
             .as_deref()
             .ok_or_else(|| Error::Forbidden("入库确认人缺失，请人工核查原操作".into()))?;
-        self.batch_actor(id).await
+        self.batch_actor(id, &mut NoTransaction).await
     }
 
-    async fn batch_actor(&self, id: &str) -> Result<AuditActor> {
+    /// 恢复仍有效的后台任务操作人。
+    /// # 参数
+    /// 原操作人身份及当前授权读取执行器。
+    /// # 返回
+    /// 真实有效的后台账号上下文。
+    /// # 错误
+    /// 账号失效或数据库读取失败时拒绝。
+    pub(super) async fn batch_actor(&self, id: &str, executor: &mut dyn Executor) -> Result<AuditActor> {
         let account = self
             .db
             .accounts()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::Forbidden("入库确认账号已失效，请恢复授权后查询原操作".into()))?;

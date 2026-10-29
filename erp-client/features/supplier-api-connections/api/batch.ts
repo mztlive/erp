@@ -103,6 +103,12 @@ export type BatchCounts = {
     skipped: number
     excluded: number
 }
+export type BatchPreparation = {
+    status: "QUEUED" | "PREPARING" | "FAILED" | "CANCELLED" | "READY"
+    completed: number
+    next_page: number
+    error: string | null
+}
 export type AdoptionBatch = {
     id: string
     version: number
@@ -112,6 +118,7 @@ export type AdoptionBatch = {
     supplier_name?: string
     draft_operation?: string | null
     draft_started_at?: number | null
+    preparation?: BatchPreparation | null
     selection_complete?: boolean
     execution_pending?: boolean
     confirmations: Array<{ operation_id: string }>
@@ -133,7 +140,19 @@ export type BatchView = {
     product_count: number
     manual_count: number
 }
+export type BatchHistoryStatus =
+    | "PREPARING"
+    | "PREPARATION_FAILED"
+    | "CANCELLED"
+    | "PROCESSING"
+    | "PENDING"
+    | "DRAFT"
+    | "COMPLETED"
+export type BatchHistoryEntry = AdoptionBatch & {
+    history_status?: BatchHistoryStatus
+}
 export type CreateBatchRequest = {
+    idempotency_key: string
     item_ids?: string[]
     filter?: CatalogFilters
     excluded_ids?: string[]
@@ -154,7 +173,7 @@ const base = (connectionId: string) =>
 const path = ({ connectionId, batchId }: BatchIdentity) =>
     `${base(connectionId)}/${encodeURIComponent(batchId)}`
 export function fetchAdoptionBatches(connectionId: string) {
-    return apiGet<AdoptionBatch[]>(base(connectionId))
+    return apiGet<BatchHistoryEntry[]>(base(connectionId))
 }
 export function createAdoptionBatch({
     connectionId,
@@ -163,9 +182,7 @@ export function createAdoptionBatch({
     connectionId: string
     request: CreateBatchRequest
 }) {
-    return apiPost<BatchView>(base(connectionId), request, {
-        timeoutMs: 300000,
-    })
+    return apiPost<BatchView>(base(connectionId), request)
 }
 export function fetchAdoptionBatch(identity: BatchIdentity) {
     return apiGet<BatchView>(path(identity))
@@ -221,4 +238,28 @@ export function queryAdoptionBatchSubmission({
         status: "ACCEPTED" | "NOT_ACCEPTED"
         view: BatchView
     }>(`${path(identity)}/submission-result`, request)
+}
+
+export function fetchBatchPreparation(identity: BatchIdentity) {
+    return apiGet<AdoptionBatch>(`${path(identity)}/preparation`)
+}
+export function controlBatchPreparation({
+    action,
+    ...identity
+}: BatchIdentity & { action: "RETRY" | "CANCEL" }) {
+    return apiPost<AdoptionBatch>(`${path(identity)}/preparation`, { action })
+}
+
+export type BatchSelectionView = {
+    batch: AdoptionBatch
+    rows: Array<{
+        source: Pick<
+            CatalogItem,
+            "id" | "product_id" | "name" | "specification" | "spec_id"
+        >
+    }>
+    product_count: number
+}
+export function fetchBatchSelection(identity: BatchIdentity) {
+    return apiGet<BatchSelectionView>(`${path(identity)}/selection`)
 }

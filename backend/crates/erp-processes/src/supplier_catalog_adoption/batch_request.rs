@@ -14,13 +14,43 @@ use serde::{Deserialize, Serialize};
 use crate::{Error, Result};
 
 /// 在点击全筛选选择或配置入库时冻结来源成员。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateBatchRequest {
+    pub idempotency_key: String,
     pub item_ids: Option<Vec<String>>,
     pub filter: Option<CatalogFilter>,
     #[serde(default)]
     pub excluded_ids: Vec<String>,
+}
+
+impl CreateBatchRequest {
+    /// 验证选择结构并生成稳定的原请求摘要。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 不含操作号的请求摘要。
+    /// # 错误
+    /// 空操作号、重复身份、非法筛选或混用两种范围时拒绝。
+    pub(super) fn fingerprint(&self) -> Result<String> {
+        if self.idempotency_key.trim().is_empty() || self.idempotency_key.len() > 128 {
+            return Err(Error::ValidationError("选择操作号无效".into()));
+        }
+        match (&self.item_ids, &self.filter) {
+            (Some(ids), None)
+                if !ids.is_empty()
+                    && ids.iter().all(|id| !id.trim().is_empty())
+                    && ids.iter().collect::<HashSet<_>>().len() == ids.len() => {},
+            (None, Some(filter)) => filter.validate()?,
+            _ => return Err(Error::ValidationError("请选择不重复的来源规格或使用全部筛选结果".into())),
+        }
+        if self.excluded_ids.iter().collect::<HashSet<_>>().len() != self.excluded_ids.len() {
+            return Err(Error::ValidationError("排除项不能重复".into()));
+        }
+        let encoded = serde_json::to_string(&(&self.item_ids, &self.filter, &self.excluded_ids))
+            .map_err(|error| Error::Internal(error.to_string()))?;
+        Ok(adoption_identity(&[&encoded]))
+    }
 }
 
 /// 单项调整不接收目标 SKU 或字段来源标记。
@@ -184,6 +214,28 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn selection_identity_preserves_scope_and_rejects_invalid_requests() {
+        let mut value = json!({"idempotency_key":"selection-1", "filter":{"only_unadopted":true}});
+        let request: CreateBatchRequest = serde_json::from_value(value.clone()).unwrap();
+        let original = request.fingerprint().unwrap();
+        value["idempotency_key"] = json!("selection-2");
+        let same: CreateBatchRequest = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(same.fingerprint().unwrap(), original);
+        value["filter"]["only_unadopted"] = json!(false);
+        let changed: CreateBatchRequest = serde_json::from_value(value).unwrap();
+        assert_ne!(changed.fingerprint().unwrap(), original);
+        for value in [
+            json!({"idempotency_key":"", "filter":{}}),
+            json!({"idempotency_key":"key", "item_ids":[]}),
+            json!({"idempotency_key":"key", "item_ids":["a","a"]}),
+            json!({"idempotency_key":"key", "item_ids":["a"],"filter":{}}),
+            json!({"idempotency_key":"key", "filter":{},"excluded_ids":["a","a"]}),
+        ] {
+            assert!(serde_json::from_value::<CreateBatchRequest>(value).unwrap().fingerprint().is_err());
+        }
+    }
 
     #[test]
     fn pricing_step_accepts_browser_payload_with_unfilled_details() {

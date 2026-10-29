@@ -8,8 +8,8 @@ use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AdoptionMapping, AdoptionResult, AdoptionRow, BatchMatchAnchor, BatchPricing, BatchPricingDraft,
-    BatchSalesValues, FillPolicy, ValueOrigin,
+    AdoptionMapping, AdoptionResult, AdoptionRow, BatchMatchAnchor, BatchPreparation, BatchPricing,
+    BatchPricingDraft, BatchSalesValues, FillPolicy, ValueOrigin,
 };
 use crate::dto::supplier_catalog::CatalogFilter;
 use crate::dto::supplier_offering::SupplierOfferingTermsWrite;
@@ -127,6 +127,8 @@ pub struct CatalogAdoptionBatch {
     pub submitted: bool,
     #[serde(default)]
     pub selection_complete: bool,
+    #[serde(default)]
+    pub preparation: Option<BatchPreparation>,
     #[serde(default)]
     pub execution_pending: bool,
     #[serde(default)]
@@ -900,6 +902,7 @@ mod tests {
             preview_version: Some(4),
             submitted: false,
             selection_complete: false,
+            preparation: None,
             execution_pending: false,
             confirmations: vec![],
             draft_operation: None,

@@ -23,6 +23,7 @@ import type { CatalogResult } from "../../api/catalog"
 import type { ConnectionCenterView } from "../../types"
 import { ConnectionPageNav } from "../connection-page-nav"
 import { CatalogBrowser } from "../catalog/catalog-browser"
+import { CatalogBatchHistory } from "../catalog/catalog-batch-history"
 import { CatalogOnboarding } from "../catalog/catalog-onboarding"
 import { CatalogSyncRecords } from "../catalog/catalog-sync-records"
 
@@ -97,6 +98,17 @@ export function CatalogSection({
                 title={`${conn.supplier.name} · 商品库`}
                 description="同步供应商商品，选择需要经营的商品纳入公司商品库。"
             >
+                {canReadCost &&
+                hasPermission(
+                    account.data?.permissions,
+                    "supplier_api_connection:catalog_sync",
+                ) ? (
+                    <CatalogBatchHistory
+                        key={conn.connectionId}
+                        connectionId={conn.connectionId}
+                        supplierName={conn.supplier.name}
+                    />
+                ) : null}
                 <SheetTrigger
                     id="supplier-catalog-sync-records-trigger"
                     render={<Button variant="outline" />}

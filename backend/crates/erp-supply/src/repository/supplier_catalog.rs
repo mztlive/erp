@@ -358,6 +358,60 @@ pub async fn expire_availability(
     Ok(count)
 }
 
+/// 一致性读取只投影来源身份，用于受理时冻结成员集合。
+/// # 参数
+/// 筛选或明确身份只能提供一种，调用方已验证结构与连接权限。
+/// # 返回
+/// 当前事务快照中属于该连接的身份列表。
+/// # 错误
+/// 筛选转换或数据库查询失败。
+pub async fn selection_ids(
+    db: &Database,
+    connection: &str,
+    query: Option<&CatalogFilter>,
+    ids: Option<&[String]>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<String>> {
+    #[derive(Deserialize)]
+    struct Identity {
+        id: String,
+    }
+    let mut filter = catalog_filter(connection, query.unwrap_or(&CatalogFilter::default()))?;
+    if let Some(ids) = ids {
+        filter.insert("id", doc! {"$in":ids});
+    }
+    let rows = mongo_ops::find_many(
+        &db.collection::<Identity>(ITEMS),
+        filter,
+        FindOptions::builder().projection(doc! {"_id":0,"id":1}).sort(doc! {"id":1}).build(),
+        executor,
+    )
+    .await?;
+    Ok(rows.into_iter().map(|row| row.id).collect())
+}
+
+/// 按固定成员身份批量读取当前来源资料，不重跑原筛选。
+/// # 参数
+/// `ids` 为已保存的有限分块，连接由调用方授权。
+/// # 返回
+/// 当前仍有效的来源资料；调用方必须核对数量，不能跳过缺失成员。
+/// # 错误
+/// 数据库读取失败。
+pub async fn selection_sources(
+    db: &Database,
+    connection: &str,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierCatalogItem>> {
+    mongo_ops::find_many(
+        &db.collection::<SupplierCatalogItem>(ITEMS),
+        doc! {"connection_id":connection,"id":{"$in":ids},"deleted_at":0_i64},
+        FindOptions::builder().sort(doc! {"id":1}).build(),
+        executor,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::Instant;
