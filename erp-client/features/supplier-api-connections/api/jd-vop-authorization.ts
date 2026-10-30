@@ -1,6 +1,7 @@
 import { apiGet, apiPost } from "@/lib/api"
 import type {
     AuthorizeJdVopAccount,
+    ConfigureJdVopTokens,
     JdVopAuthorizationStatus,
 } from "../types/jd-vop-authorization"
 
@@ -29,5 +30,16 @@ export function authorizeJdVopAccount(
         {
             cache: "no-store",
         },
+    )
+}
+
+export function configureJdVopTokens(
+    connectionId: string,
+    input: ConfigureJdVopTokens,
+) {
+    return apiPost<JdVopAuthorizationStatus>(
+        `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/jd-vop-tokens`,
+        input,
+        { cache: "no-store" },
     )
 }

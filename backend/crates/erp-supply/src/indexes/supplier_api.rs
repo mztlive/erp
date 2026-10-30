@@ -81,6 +81,14 @@ fn catalog_run_indexes() -> Vec<IndexModel> {
 fn catalog_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_catalog_items_id", doc! { "id": 1 }),
+        named_index(
+            "idx_supplier_catalog_callback_product",
+            doc! {"connection_id":1,"product_id":1,"deleted_at":1,"id":1},
+        ),
+        named_index(
+            "idx_supplier_catalog_callback_brand",
+            doc! {"connection_id":1,"brand_id":1,"deleted_at":1,"id":1},
+        ),
         unique_index(
             "uk_supplier_catalog_source",
             doc! { "connection_id": 1, "product_id": 1, "spec_id": 1 },

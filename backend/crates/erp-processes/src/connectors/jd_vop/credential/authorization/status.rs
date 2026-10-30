@@ -9,19 +9,6 @@ pub(super) fn projection(
     crypto: &CredentialCrypto,
     now: Instant,
 ) -> JdVopAuthorizationStatus {
-    if !record.encrypted_payload.is_empty()
-        && record.account_identity_fingerprint.is_none()
-        && record.authorization_candidate_identity_fingerprint.is_none()
-    {
-        let mut status = JdVopAuthorizationStatus::empty(
-            "identity_unverified",
-            false,
-            "已有令牌尚未核实京东账号身份，请联系管理员处理，不能直接更换账号",
-        );
-        status.version = Some(record.base.version);
-        status.expires_at = Some(record.expires_at.unix_secs());
-        return status;
-    }
     let deadline = record.refresh.deadline().map(Instant::unix_secs);
     let Some((state, operation, can_authorize, message)) = phase(record, now) else {
         return ready(record, crypto, now);
@@ -94,6 +81,11 @@ pub(super) fn operation_projection(
     let Some(id) = operation_id else {
         return status;
     };
+    if record.configuration_history.iter().any(|event| event.operation_id == id) {
+        status.operation_id = Some(id.to_string());
+        status.operation_state = Some("completed");
+        return status;
+    }
     let event = record.authorization_history.iter().find(|event| event.operation_id == id);
     status.operation_id = event.map(|event| event.operation_id.clone());
     status.operation_state = event.map(|event| {
@@ -101,7 +93,11 @@ pub(super) fn operation_projection(
             "completed"
         } else if event.rejected_at.is_some() {
             "rejected"
-        } else if record.authorization_history.last().is_some_and(|latest| latest.operation_id != id) {
+        } else if record.authorization_history.last().is_some_and(|latest| latest.operation_id != id)
+            || record.configuration_history.last().is_some_and(|latest| {
+                latest.previous_version.is_some_and(|version| version > event.previous_version.unwrap_or(0))
+            })
+        {
             "superseded"
         } else if event.sent_at.is_some() {
             "sent_unknown"
@@ -119,6 +115,21 @@ fn ready(record: &SupplierCredential, crypto: &CredentialCrypto, now: Instant) -
             false,
             "已保存授权暂时无法读取，请联系管理员核对凭据配置",
         )
+    } else if record.manually_configured {
+        let can_authorize = record.account_identity_fingerprint.is_some();
+        if record.expires_at <= now {
+            JdVopAuthorizationStatus::empty(
+                "expired",
+                can_authorize,
+                "已配置令牌已到期，请配置新取得的有效令牌",
+            )
+        } else {
+            JdVopAuthorizationStatus::empty(
+                "configured",
+                can_authorize,
+                "令牌已配置，接口调用和自动续期使用此记录；请测试连接核验是否可用",
+            )
+        }
     } else if record.account_identity_fingerprint.is_none() {
         JdVopAuthorizationStatus::empty(
             "identity_unverified",

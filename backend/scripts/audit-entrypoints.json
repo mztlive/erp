@@ -7007,6 +7007,22 @@
       "reason": "选品结果、操作回执及商品关联审计使用原选品事务执行器，审计失败不得提交成功回执。"
     },
     {
+      "path": "crates/erp-processes/src/supplier_catalog_callbacks/store.rs",
+      "function": "apply_update",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "来源城市完整观察与回调逐规格检查点共用事务；审计失败回滚该规格应用，商品资料及供给更新复用既有来源应用审计。"
+    },
+    {
       "path": "crates/erp-processes/src/supplier_connection_execution/catalog_supply.rs",
       "function": "apply_source_supply",
       "policy": "Audited",
@@ -7133,6 +7149,22 @@
       },
       "location_count": 1,
       "reason": "页面授权的领取、发送、兑换、拒绝和完成状态与技术凭据审计在同一事务保存；密码、私钥、授权码及令牌不进入审计，京东请求在事务外执行。"
+    },
+    {
+      "path": "crates/erp-processes/src/connectors/jd_vop/credential/authorization/tokens.rs",
+      "function": "save_tokens",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "页面令牌配置在同一事务重新检查连接权限及部署绑定，按原版本保存密文和操作回执，并保存脱敏技术凭据审计；同操作重放不重复写入。"
     }
   ]
 }

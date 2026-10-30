@@ -18,6 +18,9 @@ pub use crate::ports::connector::offer::{CatalogAvailability, CatalogImage};
 use crate::ports::connector::offer::{Offer, OfferDetails};
 use crate::{Error, Result};
 
+mod regions;
+pub use regions::SourceServiceRegions;
+
 /// 共用检查点格式；旧程序写回缺失格式标记时不得恢复或建立基线。
 pub const CATALOG_CHECKPOINT_VERSION: u32 = 1;
 
@@ -70,6 +73,9 @@ pub struct SupplierCatalogItem {
     pub quantity_unbounded: bool,
     #[serde(default)]
     pub availability_valid_until: Option<Instant>,
+    /// 独立补查的完整来源可售地区；None 表示尚未核实，空集合表示不可售。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_service_regions: Option<SourceServiceRegions>,
     #[serde(default)]
     pub source_revision: SourceRevision,
     #[serde(default)]
@@ -126,6 +132,7 @@ impl SupplierCatalogItem {
         self.category_name = self.category_name.take().or(previous.category_name);
         self.brand_id = self.brand_id.take().or(previous.brand_id);
         self.brand_name = self.brand_name.take().or(previous.brand_name);
+        self.source_service_regions = previous.source_service_regions;
         self.refresh_fingerprint()?;
         Ok(())
     }
@@ -201,6 +208,7 @@ impl SupplierCatalogItem {
             available_quantity: details.available_quantity,
             quantity_unbounded: details.quantity_unbounded,
             availability_valid_until: None,
+            source_service_regions: None,
             source_revision: snapshot.stamp.revision,
             source_fingerprint: String::new(),
             observed_at: snapshot.stamp.observed_at,

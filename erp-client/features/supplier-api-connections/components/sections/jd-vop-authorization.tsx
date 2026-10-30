@@ -13,6 +13,7 @@ import {
     JD_VOP_AUTHORIZATION_LABEL,
     jdVopAuthorizationTime,
 } from "../../lib/jd-vop-authorization"
+import { JdVopTokenDialog } from "../dialogs/jd-vop-token-dialog"
 import { JdVopAuthorizationDialog } from "../dialogs/jd-vop-authorization-dialog"
 
 /** 本地授权状态与实际接口连接检查分别展示。 */
@@ -32,6 +33,7 @@ export function JdVopAuthorizationSection({
     )
     const query = useJdVopAuthorizationQuery(connectionId, canRead)
     const [open, setOpen] = useState(false)
+    const [tokensOpen, setTokensOpen] = useState(false)
     const [submissionUnknown, setSubmissionUnknown] = useState(false)
     const status = query.data
     const prefix = `supplier-api-connection-${toAutomationIdSegment(connectionId)}-jd-vop-authorization`
@@ -56,7 +58,7 @@ export function JdVopAuthorizationSection({
                         京东账号授权
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                        授权企业采购账号后，可继续测试京东接口连接。
+                        授权企业采购账号或配置已有令牌后，可继续测试京东接口连接。
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -70,6 +72,22 @@ export function JdVopAuthorizationSection({
                     >
                         刷新授权状态
                     </LoadingButton>
+                    <Button
+                        id={`${prefix}-configure-tokens`}
+                        type="button"
+                        variant="outline"
+                        disabled={
+                            !canAuthorize ||
+                            !status?.can_configure_tokens ||
+                            query.isError ||
+                            query.isFetching ||
+                            query.unconfirmed ||
+                            disabled
+                        }
+                        onClick={() => setTokensOpen(true)}
+                    >
+                        配置令牌
+                    </Button>
                     <Button
                         id={`${prefix}-authorize`}
                         type="button"
@@ -106,8 +124,9 @@ export function JdVopAuthorizationSection({
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <Badge
                             variant={
-                                status.state === "authorized" &&
-                                !query.unconfirmed
+                                ["authorized", "configured"].includes(
+                                    status.state,
+                                ) && !query.unconfirmed
                                     ? "success"
                                     : status.state === "missing"
                                       ? "secondary"
@@ -132,7 +151,8 @@ export function JdVopAuthorizationSection({
                             ? "本次授权结果待查询，请先刷新状态确认处理进度。"
                             : status.message}
                     </p>
-                    {status.state === "authorized" && !query.unconfirmed ? (
+                    {["authorized", "configured"].includes(status.state) &&
+                    !query.unconfirmed ? (
                         <p className="text-muted-foreground">
                             授权已保存，请测试连接。接口连接结果以最近一次测试为准，授权不会开启自动下单。
                         </p>
@@ -148,7 +168,7 @@ export function JdVopAuthorizationSection({
             ) : null}
             {submissionUnknown && query.unconfirmed ? (
                 <p role="alert" className="text-sm text-destructive">
-                    本次授权结果尚未查明，密码和私钥已清空。请刷新授权状态，不要重复提交；仍无法确认时请联系管理员核实。
+                    本次授权结果尚未查明，本次敏感输入已清空。请刷新授权状态，不要重复提交；仍无法确认时请联系管理员核实。
                 </p>
             ) : null}
             {pollExpired ? (
@@ -165,6 +185,20 @@ export function JdVopAuthorizationSection({
                 <p className="text-sm text-muted-foreground">
                     当前账号没有办理京东授权的权限，请联系管理员。
                 </p>
+            ) : null}
+            {tokensOpen && status ? (
+                <JdVopTokenDialog
+                    connectionId={connectionId}
+                    status={status}
+                    idPrefix={`${prefix}-tokens`}
+                    onClose={() => setTokensOpen(false)}
+                    onSubmitted={(operationId, uncertain) => {
+                        setTokensOpen(false)
+                        setSubmissionUnknown(uncertain)
+                        query.restartPolling(uncertain ? operationId : null)
+                        void query.refetch()
+                    }}
+                />
             ) : null}
             {open && status ? (
                 <JdVopAuthorizationDialog

@@ -1,6 +1,7 @@
 //! 技术凭据专用窄仓储；不暴露任意update或删除，所有状态变更均执行版本及身份CAS。
 
 mod authorization;
+mod configuration;
 mod filters;
 
 use erp_core::common::time::Instant;

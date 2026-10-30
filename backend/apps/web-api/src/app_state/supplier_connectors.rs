@@ -9,6 +9,7 @@ use erp_processes::connectors::jd_vop::credential::MongoJdVopTokenProvider;
 use erp_processes::connectors::jd_vop::http_transport::JdVopHttpTransport;
 use erp_processes::connectors::jd_vop::token::JdVopTokenProvider;
 use erp_processes::connectors::registry::SupplierConnectorRegistry;
+use erp_processes::supplier_catalog_callbacks::SupplierCatalogCallbackProcess;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::SupplierConnectorType;
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
@@ -65,6 +66,20 @@ impl JdVopCredentialMaintenance {
 }
 
 impl AppState {
+    /// 返回商品回调的补查及来源应用消费者。
+    /// # 参数
+    /// 无，复用当前部署的协议注册表与权限服务。
+    /// # 返回
+    /// 配置协议后返回流程，否则返回 None。
+    /// # 错误
+    /// 不返回错误。
+    pub fn supplier_catalog_callback_process(&self) -> Option<SupplierCatalogCallbackProcess> {
+        self.external_connectors
+            .order_connectors
+            .as_ref()
+            .map(|runtime| SupplierCatalogCallbackProcess::new(self.db(), Arc::clone(runtime), self.rbac()))
+    }
+
     /// 返回独立于新增下单开关的账号凭据维护任务。
     /// # 参数
     /// 无；仅使用技术启用时已装配的同一个凭据提供器。

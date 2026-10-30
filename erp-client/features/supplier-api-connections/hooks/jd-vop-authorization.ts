@@ -80,7 +80,8 @@ export function useJdVopAuthorizationQuery(
         pendingOperationId !== null &&
         query.data?.operation_id !== pendingOperationId
     const authorized =
-        query.data?.state === "authorized"
+        ["authorized", "configured"].includes(query.data?.state ?? "") &&
+        query.data
             ? `${connectionId}:${query.data.version}:${query.data.operation_id}`
             : null
     useEffect(() => {

@@ -7,6 +7,7 @@ export type JdVopAuthorizationState =
     | "authorizing"
     | "unknown"
     | "authorized"
+    | "configured"
     | "refreshing"
     | "reauthorization_required"
     | "rejected"
@@ -26,6 +27,7 @@ export type JdVopAuthorizationStatus = {
         | "superseded"
         | null
     can_authorize: boolean
+    can_configure_tokens: boolean
     recovery_after: number | null
     message: string
 }
@@ -39,4 +41,13 @@ export type AuthorizeJdVopAccount = {
     redirect_uri: string
     private_key: string
     evidence_reference?: string
+}
+
+/** 仅用于当前保存请求；禁止将token放进查询缓存、日志或本地存储。 */
+export type ConfigureJdVopTokens = {
+    operation_id: string
+    expected_version: number | null
+    access_token: string
+    refresh_token: string
+    expires_at: number
 }

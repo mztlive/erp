@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result};
 
+mod catalog;
+pub use catalog::CatalogCallbackProgress;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierRefreshHint {
     pub topic: String,
@@ -42,6 +45,9 @@ pub struct SupplierCallbackReceipt {
     pub processing_error: Option<String>,
     #[serde(default)]
     pub next_attempt_at: Option<Instant>,
+    /// 商品回调逐规格检查点；旧接收记录从首个提示开始。
+    #[serde(default)]
+    pub catalog_progress: CatalogCallbackProgress,
 }
 
 impl SupplierCallbackReceipt {
@@ -99,6 +105,7 @@ impl SupplierCallbackReceipt {
             processed_at: None,
             processing_error: None,
             next_attempt_at: None,
+            catalog_progress: CatalogCallbackProgress::default(),
         })
     }
 

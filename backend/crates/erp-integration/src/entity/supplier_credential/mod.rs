@@ -2,11 +2,13 @@
 
 mod authorization;
 mod authorization_types;
+mod configuration;
 mod refresh;
 
 use std::fmt;
 
 pub use authorization_types::{SupplierCredentialAuthorizationEvent, SupplierCredentialAuthorizationRequest};
+pub use configuration::{SupplierCredentialConfiguration, SupplierCredentialConfigurationEvent};
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
@@ -132,6 +134,10 @@ pub struct SupplierCredential {
     pub last_completed_authorization_operation_id: Option<String>,
     #[serde(default)]
     pub authorization_history: Vec<SupplierCredentialAuthorizationEvent>,
+    #[serde(default)]
+    pub manually_configured: bool,
+    #[serde(default)]
+    pub configuration_history: Vec<SupplierCredentialConfigurationEvent>,
 }
 
 impl fmt::Debug for SupplierCredential {
@@ -232,6 +238,8 @@ impl SupplierCredential {
             authorized_uid_fingerprint: None,
             last_completed_authorization_operation_id: None,
             authorization_history: vec![],
+            manually_configured: false,
+            configuration_history: vec![],
         })
     }
 

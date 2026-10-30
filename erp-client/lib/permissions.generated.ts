@@ -6103,6 +6103,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/jd-vop-tokens",
+                description: "配置京东访问及刷新令牌",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "authorize",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-api-connections/{id}/jd-vop-authorization",
                 description: "查询京东账号授权状态",

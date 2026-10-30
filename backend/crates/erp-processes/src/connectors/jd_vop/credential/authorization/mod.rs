@@ -7,6 +7,7 @@ mod protocol;
 mod status;
 mod store;
 mod tasks;
+mod tokens;
 
 use std::sync::Arc;
 
@@ -15,10 +16,12 @@ use application_core::AuditActor;
 use config::JdVopConfig;
 pub use dto::{JdVopAuthorizationRequest, JdVopAuthorizationStatus, JdVopAuthorizationStatusQuery};
 use engine::AuthorizationEngine;
+use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 pub use tasks::JdVopAuthorizationTasks;
+pub use tokens::JdVopTokenConfiguration;
 
 /// 页面授权固定脱敏错误的结果别名。
 pub type Result<T> = std::result::Result<T, AuthorizationError>;
@@ -28,6 +31,8 @@ pub type Result<T> = std::result::Result<T, AuthorizationError>;
 pub enum AuthorizationError {
     #[error("授权资料格式不正确，请核对账号、密码、回调地址和私钥文件")]
     InvalidInput,
+    #[error("令牌资料格式不正确，请填写同次授权的两项令牌和实际到期时间")]
+    InvalidTokens,
     #[error("当前账号不能授权此供应商连接，请联系管理员核对权限")]
     Forbidden,
     #[error("授权状态已变化，请先查询原结果后再操作")]
@@ -102,7 +107,12 @@ impl JdVopAuthorizationProcess {
             ));
         }
         let mut status = engine.status(operation_id).await;
-        status.can_authorize &= self.access.permission(actor, "authorize").await?;
+        let permitted = self.access.permission(actor, "authorize").await?;
+        status.can_authorize &= permitted;
+        status.can_configure_tokens = permitted
+            && status.state != "unconfigured"
+            && (status.state != "unreadable" || status.version.is_some())
+            && status.recovery_after.is_none_or(|deadline| deadline <= Instant::now().unix_secs());
         Ok(status)
     }
 

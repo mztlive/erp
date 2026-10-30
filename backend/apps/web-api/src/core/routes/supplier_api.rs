@@ -20,19 +20,28 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 }
 
 fn jd_vop_routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new().route(
-        "/supplier-api-connections/{id}/jd-vop-authorization",
-        supplier_api::jd_vop::status_route(with_permission(
-            get(supplier_api::jd_vop::status),
-            rbac,
-            supplier_api::jd_vop::status_permission_key(),
-        ))
-        .merge(supplier_api::jd_vop::authorize_route(with_permission(
-            post(supplier_api::jd_vop::authorize),
-            rbac,
-            supplier_api::jd_vop::authorize_permission_key(),
-        ))),
-    )
+    Router::new()
+        .route(
+            "/supplier-api-connections/{id}/jd-vop-tokens",
+            supplier_api::jd_vop::authorize_route(with_permission(
+                post(supplier_api::jd_vop::tokens::configure),
+                rbac,
+                supplier_api::jd_vop::tokens::configure_permission_key(),
+            )),
+        )
+        .route(
+            "/supplier-api-connections/{id}/jd-vop-authorization",
+            supplier_api::jd_vop::status_route(with_permission(
+                get(supplier_api::jd_vop::status),
+                rbac,
+                supplier_api::jd_vop::status_permission_key(),
+            ))
+            .merge(supplier_api::jd_vop::authorize_route(with_permission(
+                post(supplier_api::jd_vop::authorize),
+                rbac,
+                supplier_api::jd_vop::authorize_permission_key(),
+            ))),
+        )
 }
 
 fn adoption_batch_routes(rbac: &SharedRbacService) -> Router<AppState> {

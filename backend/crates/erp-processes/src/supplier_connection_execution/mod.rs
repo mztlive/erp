@@ -25,6 +25,8 @@ pub(crate) use catalog_supply::apply_source_supply;
 mod execution;
 mod failure;
 mod health;
+mod refresh;
+pub(crate) use refresh::{catalog_refresh_actor, guard_catalog_refresh};
 
 /// 消费组合根已注入的供应商网关，执行已登记的连接任务。
 pub struct SupplierConnectionExecutionProcess {

@@ -9,6 +9,8 @@
 // 首次占位仅AUTHORIZATION_*阶段允许空密文；候选身份只有兑换前明确拒绝才能解除。
 // authorizeForVOP与令牌兑换均须先保存发送边界；任何未知及历史同操作不得自动再发。
 // 产生授权状态或身份历史后，禁止旧binary继续读取和修改凭据；回滚必须保留兼容状态机的binary并停旧worker。
+// manually_configured和configuration_history缺失时使用false/空历史；无需写入回填。
+// 页面令牌配置后，回滚版本必须保留配置标识和历史回执；不得回退到会丢失这些字段的写入版本。
 // 回退必须保留原引用、未知刷新、版本及重新授权历史；不得通过删除记录或更换引用规避未知结果。
 
 const credentialAuditId = process.env.ERP_JD_CREDENTIAL_ID?.trim();
@@ -105,6 +107,34 @@ function credentialAuditAuthorization(row, failures) {
     return {confirmed, candidate, history};
 }
 
+function credentialAuditConfiguration(row, failures) {
+    if (row.manually_configured != null && typeof row.manually_configured !== "boolean") {
+        failures.push("MANUAL_CONFIGURATION_FLAG_INVALID");
+    }
+    const history = row.configuration_history ?? [];
+    if (!Array.isArray(history) || history.length > 256) {
+        failures.push("CONFIGURATION_HISTORY_INVALID");
+        return 0;
+    }
+    const operations = new Set();
+    const version = credentialAuditInteger(row.version);
+    for (const event of history) {
+        const previous = event?.previous_version == null ? null : credentialAuditInteger(event.previous_version);
+        const occurred = credentialAuditInteger(event?.occurred_at);
+        if (!credentialAuditNonempty(event?.operation_id, 128) || operations.has(event.operation_id)
+            || !credentialAuditNonempty(event?.actor_id, 128)
+            || !credentialAuditFingerprint(event?.payload_fingerprint)
+            || occurred === null || occurred < 0n
+            || (event?.previous_version != null && (previous === null || previous < 1n || version === null || previous >= version))
+            || (event?.previous_operation_id != null && !credentialAuditNonempty(event.previous_operation_id, 128))) {
+            failures.push("CONFIGURATION_EVENT_INVALID");
+        }
+        operations.add(event?.operation_id);
+    }
+    if (row.manually_configured === true && history.length === 0) failures.push("CONFIGURATION_RECEIPT_MISSING");
+    return history.length;
+}
+
 function runSupplierCredentialAudit() {
     const collection = db.getCollection("supplier_credentials");
     const indexes = collection.getIndexes();
@@ -121,6 +151,7 @@ function runSupplierCredentialAudit() {
         refresh: 1, reauthorization_history: 1, account_identity_fingerprint: 1,
         authorization_candidate_identity_fingerprint: 1, authorized_uid_fingerprint: 1,
         last_completed_authorization_operation_id: 1, authorization_history: 1,
+        manually_configured: 1, configuration_history: 1,
     }).hint("uk_supplier_credentials_id").limit(2).toArray();
     if (rows.length > 1) {
         throw new Error("稳定凭据引用存在重复记录，禁止导入或刷新");
@@ -147,6 +178,7 @@ function runSupplierCredentialAudit() {
         "AUTHORIZATION_CLAIMED", "AUTHORIZATION_SENT_UNKNOWN", "AUTHORIZATION_REJECTED"];
     if (!knownStates.includes(state)) failures.push("REFRESH_STATE_INVALID");
     const authorization = credentialAuditAuthorization(row, failures);
+    const configurationCount = credentialAuditConfiguration(row, failures);
     const placeholder = row.encrypted_payload === "" && row.payload_fingerprint === ""
         && authorization.confirmed === null && credentialAuditAuthorizationState(state)
         && authorization.history.length > 0;
@@ -177,6 +209,9 @@ function runSupplierCredentialAudit() {
         account_identity_verified: authorization.confirmed !== null,
         authorization_candidate_locked: authorization.candidate !== null,
         authorization_history_count: authorization.history.length,
+        manually_configured: row.manually_configured === true,
+        configuration_history_count: configurationCount,
+        requires_configuration_aware_binary: configurationCount > 0,
         requires_authorization_aware_binary: authorization.history.length > 0 || authorization.confirmed !== null || authorization.candidate !== null,
         authorization_exchange_started: state === "AUTHORIZATION_SENT_UNKNOWN" && row.refresh?.exchange_sent_at != null,
         manual_reauthorization_only: expired || state === "SENT_UNKNOWN" || state === "REAUTHORIZATION_REQUIRED" || credentialAuditAuthorizationState(state),

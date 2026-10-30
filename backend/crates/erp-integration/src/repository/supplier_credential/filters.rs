@@ -21,7 +21,7 @@ pub(super) fn binding(value: &str, binding: &SupplierCredentialBinding) -> Resul
     Ok(filter)
 }
 
-fn version(current: &SupplierCredential, expected: u64) -> Result<Document> {
+pub(super) fn version(current: &SupplierCredential, expected: u64) -> Result<Document> {
     let version = i64::try_from(expected)
         .ok()
         .filter(|value| *value > 0)

@@ -45,6 +45,8 @@ impl SupplierCredential {
             authorized_uid_fingerprint: None,
             last_completed_authorization_operation_id: None,
             authorization_history: vec![SupplierCredentialAuthorizationEvent::new(request, None)],
+            manually_configured: false,
+            configuration_history: vec![],
         })
     }
 
@@ -67,6 +69,9 @@ impl SupplierCredential {
             .expected_version
             .ok_or_else(|| Error::ConflictError("原凭据授权必须指定所见版本".into()))?;
         self.require_version(expected)?;
+        if self.configuration_history.iter().any(|event| event.operation_id == request.claim.operation_id) {
+            return Err(Error::ConflictError("授权操作编号已被令牌配置使用".into()));
+        }
         self.require_authorization_identity(&request.account_identity_fingerprint)?;
         let previous_operation = self.authorization_source(request)?;
         if self.authorization_history.len() >= 256 {
@@ -217,6 +222,7 @@ impl SupplierCredential {
         self.authorization_history[index].payload_fingerprint = Some(payload.payload_fingerprint.clone());
         self.authorization_history[index].authorized_uid_fingerprint = uid.clone();
         self.account_identity_fingerprint = Some(candidate);
+        self.manually_configured = false;
         self.authorization_candidate_identity_fingerprint = None;
         self.authorized_uid_fingerprint = uid.or_else(|| self.authorized_uid_fingerprint.clone());
         self.encrypted_payload = payload.encrypted_payload;

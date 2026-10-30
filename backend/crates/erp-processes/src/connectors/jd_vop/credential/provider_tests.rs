@@ -140,6 +140,7 @@ enum Reply {
 struct FakeOAuth {
     reply: Reply,
     calls: AtomicUsize,
+    refresh_tokens: Mutex<Vec<String>>,
     gated: bool,
     started: Notify,
     release: Notify,
@@ -148,6 +149,11 @@ struct FakeOAuth {
 impl OAuthRefresh for FakeOAuth {
     async fn refresh(&self, request: JdVopRefreshRequest) -> Result<JdVopRefreshResult, RefreshFailure> {
         assert_eq!(request.endpoint(), "https://open-oauth.jd.com/oauth2/refresh_token");
+        self.refresh_tokens.lock().await.extend(
+            url::form_urlencoded::parse(request.parameters().as_bytes())
+                .filter(|(key, _)| key == "refresh_token")
+                .map(|(_, value)| value.into_owned()),
+        );
         self.calls.fetch_add(1, Ordering::SeqCst);
         self.started.notify_one();
         if self.gated {
@@ -208,6 +214,7 @@ fn fixture(
     let oauth = Arc::new(FakeOAuth {
         reply,
         calls: AtomicUsize::new(0),
+        refresh_tokens: Mutex::new(vec![]),
         gated,
         started: Notify::new(),
         release: Notify::new(),
@@ -547,4 +554,57 @@ async fn page_authorization_claim_send_exchange_and_rejection_never_deliver_old_
         assert!(provider.current().await.is_err());
         assert_eq!(oauth.calls.load(Ordering::SeqCst), 0);
     }
+}
+
+#[tokio::test]
+async fn configured_tokens_are_used_and_rotated_in_same_record_without_replay_rollback() {
+    use erp_integration::entity::supplier_credential::SupplierCredentialConfiguration;
+    let (reader, process, store, oauth, clock) = fixture(Reply::Success, false);
+    let crypto = &process.crypto;
+    let command = SupplierCredentialConfiguration {
+        operation_id: "manual-configuration".into(),
+        actor_id: "operator".into(),
+        expected_version: Some(1),
+    };
+    let payload = crypto
+        .replacement(
+            "page-access".into(),
+            "page-refresh".into(),
+            Instant::from_unix_secs(87_400),
+            clock.now(),
+        )
+        .unwrap();
+    store
+        .state
+        .lock()
+        .await
+        .record
+        .as_mut()
+        .unwrap()
+        .configure_tokens(payload.clone(), &command, clock.now())
+        .unwrap();
+    assert_eq!(
+        reader.access_token("credential").await.unwrap().value_for("account", clock.now()).unwrap(),
+        "page-access"
+    );
+    assert_eq!(oauth.calls.load(Ordering::SeqCst), 0);
+    due(&clock);
+    let rotated = reader.access_token("credential").await.unwrap();
+    assert_eq!(*oauth.refresh_tokens.lock().await, vec!["page-refresh".to_string()]);
+    assert_eq!(rotated.value_for("account", clock.now()).unwrap(), "new-access");
+    let mut state = store.state.lock().await;
+    let record = state.record.as_mut().unwrap();
+    let plain = crypto.open(record).unwrap();
+    assert_eq!(plain.refresh_token, "new-refresh");
+    assert_eq!(record.expires_at.unix_secs(), plain.expires_at);
+    assert!(record.manually_configured);
+    assert!(!record.configure_tokens(payload, &command, clock.now()).unwrap());
+    assert_eq!(crypto.open(record).unwrap().access_token, "new-access");
+    drop(state);
+    let restarted = provider(store, oauth.clone(), clock.clone());
+    assert_eq!(
+        restarted.access_token("credential").await.unwrap().value_for("account", clock.now()).unwrap(),
+        "new-access"
+    );
+    assert_eq!(oauth.calls.load(Ordering::SeqCst), 1);
 }

@@ -25,6 +25,42 @@ pub enum CatalogMessageTarget<'a> {
     Brand(&'a str),
 }
 
+/// 按稳定目录主键继续分组回调，不因品牌包含超过五十个规格而截断。
+/// # 参数
+/// `connection` 为绑定连接，`target` 为来源分组，`after` 为已提交主键。
+/// # 返回
+/// 下一个规格；没有剩余时返回 None。
+/// # 错误
+/// 查询失败返回原仓储错误。
+pub async fn next_callback_target(
+    db: &Database,
+    connection: &str,
+    target: CatalogMessageTarget<'_>,
+    after: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<Option<SupplierCatalogItem>> {
+    let mut filter = doc! {"connection_id":connection,"deleted_at":0_i64};
+    match target {
+        CatalogMessageTarget::Product(id) => {
+            filter.insert("product_id", id);
+        },
+        CatalogMessageTarget::Brand(id) => {
+            filter.insert("brand_id", id);
+        },
+    }
+    if let Some(after) = after {
+        filter.insert("id", doc! {"$gt":after});
+    }
+    let mut items = mongo_ops::find_many(
+        &db.collection::<SupplierCatalogItem>(ITEMS),
+        filter,
+        FindOptions::builder().sort(doc! {"id":1}).limit(1).build(),
+        executor,
+    )
+    .await?;
+    Ok(items.pop())
+}
+
 /// 有界读取来源商品或品牌消息涉及的当前目录规格。
 /// # 参数
 /// `connection` 来自服务端绑定；`target` 是适配器解码的来源分组。

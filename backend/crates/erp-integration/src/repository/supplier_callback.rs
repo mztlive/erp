@@ -1,4 +1,5 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_core::common::time::Instant;
 use mongodb::Database;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
@@ -58,7 +59,7 @@ impl SupplierCallbackRepositoryExt for Repository<'_, SupplierCallbackReceipt> {
 /// # 参数
 /// `db` 为当前部署库，执行器由调用方提供。
 /// # 返回
-/// 最早的至多 20 条订单或状态回调接收记录。
+/// 最早的至多 20 条订单回调接收记录；商品状态由独立队列处理。
 /// # 错误
 /// 数据库读取失败时返回原错误。
 pub async fn pending_order_callbacks(
@@ -67,9 +68,32 @@ pub async fn pending_order_callbacks(
 ) -> Result<Vec<SupplierCallbackReceipt>> {
     mongo_ops::find_many(
         &db.supplier_callback_receipts().collection(),
-        doc! {"status":"received","route_kind":{"$in":["order","status"]},"deleted_at":NOT_DELETED_TIMESTAMP_BSON,
-            "$or":[{"next_attempt_at":null},{"next_attempt_at":{"$lte":erp_core::common::time::Instant::now().unix_secs()}}]},
+        doc! {"status":"received","route_kind":"order","deleted_at":NOT_DELETED_TIMESTAMP_BSON,
+        "$or":[{"next_attempt_at":null},{"next_attempt_at":{"$lte":Instant::now().unix_secs()}}]},
         FindOptions::builder().sort(doc! {"next_attempt_at":1,"received_at":1,"id":1}).limit(20).build(),
         executor,
-    ).await
+    )
+    .await
+}
+
+/// 读取到期商品回调；与订单队列共享既有按路由和延期时间的索引。
+/// # 参数
+/// 当前数据库和调用方执行器。
+/// # 返回
+/// 最早的至多五条商品回调；实际领取还须校验记录版本。
+/// # 错误
+/// 数据库查询失败时返回原错误。
+pub async fn pending_catalog_callbacks(
+    db: &Database,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierCallbackReceipt>> {
+    mongo_ops::find_many(
+        &db.supplier_callback_receipts().collection(),
+        doc! {"status":"received","route_kind":{"$in":["status","product","cities","price"]},
+        "deleted_at":NOT_DELETED_TIMESTAMP_BSON,
+        "$or":[{"next_attempt_at":null},{"next_attempt_at":{"$lte":Instant::now().unix_secs()}}]},
+        FindOptions::builder().sort(doc! {"next_attempt_at":1,"received_at":1,"id":1}).limit(5).build(),
+        executor,
+    )
+    .await
 }

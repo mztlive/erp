@@ -1,4 +1,5 @@
 //! 京东页面授权边界；敏感正文使用固定错误，不进入通用字段路径诊断。
+pub mod tokens;
 use std::time::Duration;
 
 use application_core::AuditActor;
@@ -80,6 +81,7 @@ impl IntoResponse for AuthorizationHttpError {
     fn into_response(self) -> Response {
         let (status, code) = match self.0 {
             AuthorizationError::InvalidInput => (StatusCode::BAD_REQUEST, "JD_VOP_AUTH_INPUT_INVALID"),
+            AuthorizationError::InvalidTokens => (StatusCode::BAD_REQUEST, "JD_VOP_TOKEN_INPUT_INVALID"),
             AuthorizationError::Forbidden => (StatusCode::FORBIDDEN, "JD_VOP_AUTH_FORBIDDEN"),
             AuthorizationError::Conflict => (StatusCode::CONFLICT, "JD_VOP_AUTH_CONFLICT"),
             AuthorizationError::Busy => (StatusCode::CONFLICT, "JD_VOP_AUTH_BUSY"),

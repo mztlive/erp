@@ -14,6 +14,7 @@ export const JD_VOP_AUTHORIZATION_LABEL: Record<
     authorizing: "正在授权",
     unknown: "授权结果待核实",
     authorized: "已授权",
+    configured: "令牌已配置",
     refreshing: "正在续期",
     reauthorization_required: "需要重新授权",
     rejected: "授权未通过",

@@ -27,7 +27,7 @@ impl Transport for FakeTransport {
 pub(super) fn settings() -> DangaoshushuConfig {
     from_value(json!({"enabled":true,"channel_no":"test-channel","private_key":"test-key","user_id":"user-1","spec_units":{"spec-1":"个"},"city_regions":{"2":"110100"}})).unwrap()
 }
-pub(super) fn connector(responses: Vec<Value>) -> DangaoshushuConnector {
+pub(crate) fn connector(responses: Vec<Value>) -> DangaoshushuConnector {
     DangaoshushuConnector::with_transport(
         settings(),
         Arc::new(FakeTransport {

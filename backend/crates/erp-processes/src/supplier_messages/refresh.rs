@@ -6,7 +6,6 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::AccessControlExt;
 use erp_integration::entity::supplier_callback::SupplierRefreshHint;
 use erp_integration::entity::supplier_message::SupplierPulledMessage;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt, for_external_order};
@@ -23,15 +22,15 @@ use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::repository::supplier_catalog::{self, CatalogMessageTarget};
 use erp_supply::repository::{SupplierFulfillmentExt, SupplierFulfillmentOrderRepositoryExt};
 use erp_supply::service::supplier_api::SupplierApiService;
-use erp_support::BulkJobExt;
-use erp_support::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::address::refresh_address_notice;
 use super::{SupplierMessageFundsInvestigation, SupplierMessageRefreshApplier};
 use crate::connectors::registry::SupplierConnectorRegistry;
-use crate::supplier_connection_execution::save_catalog_observation;
+use crate::supplier_connection_execution::{
+    catalog_refresh_actor, guard_catalog_refresh, save_catalog_observation,
+};
 use crate::{Error, Result};
 
 pub(super) struct SupplierMessageRefresh {
@@ -64,7 +63,7 @@ impl SupplierMessageRefresh {
             .offers()
             .ok_or_else(|| Error::BusinessLogicError("消息来源不支持定向商品查询".into()))?;
         let skus = self.catalog_targets(hint).await?;
-        let actor = self.catalog_actor().await?;
+        let actor = catalog_refresh_actor(&self.db, &self.connection.base.id).await?;
         for sku in skus {
             let Lookup::Found(snapshot) =
                 offers.offer(&sku).await.map_err(|error| Error::BusinessLogicError(error.summary))?
@@ -126,25 +125,6 @@ impl SupplierMessageRefresh {
             .collect())
     }
 
-    async fn catalog_actor(&self) -> Result<AuditActor> {
-        let history = self
-            .db
-            .background_jobs()
-            .recent_catalog_jobs(&self.connection.base.id, &mut NoTransaction)
-            .await?;
-        let job =
-            history.first().ok_or_else(|| Error::Forbidden("消息商品补查需要先取得目录采集授权".into()))?;
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(&job.requested_by, &mut NoTransaction)
-            .await?
-            .filter(|account| account.is_active_backoffice())
-            .ok_or_else(|| Error::Forbidden("商品采集授权人已失效，请重新授权同步".into()))?;
-        Ok(AuditActor::new(account.base.id.clone(), account.secret.account().into(), account.kind)
-            .with_actor_name_snapshot(Some(account.name))?)
-    }
-
     async fn save_catalog(&self, item: SupplierCatalogItem, actor: &AuditActor) -> Result<()> {
         let (db, connection, actor) = (self.db.clone(), self.connection.clone(), actor.clone());
         self.db
@@ -152,20 +132,7 @@ impl SupplierMessageRefresh {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let service = SupplierApiService::new(db.clone());
-                    let mut current = service.load_connection(&connection.base.id, executor).await?;
-                    if current.technical_config_version != connection.technical_config_version {
-                        return Err(Error::ConflictError("消息补查期间连接配置已变化".into()));
-                    }
-                    service.persist_connection(&mut current, executor).await?;
-                    let active = db
-                        .accounts()
-                        .find_by_id(actor.id(), executor)
-                        .await?
-                        .is_some_and(|account| account.is_active_backoffice());
-                    if !active {
-                        return Err(Error::Forbidden("商品采集授权人已失效".into()));
-                    }
+                    guard_catalog_refresh(&db, &connection, &actor, executor).await?;
                     save_catalog_observation(&db, item, &actor, executor).await
                 })
             })

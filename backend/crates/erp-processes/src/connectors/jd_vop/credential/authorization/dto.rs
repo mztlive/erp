@@ -76,6 +76,7 @@ pub struct JdVopAuthorizationStatus {
     pub operation_id: Option<String>,
     pub operation_state: Option<&'static str>,
     pub can_authorize: bool,
+    pub can_configure_tokens: bool,
     pub recovery_after: Option<i64>,
     pub message: &'static str,
 }
@@ -89,6 +90,7 @@ impl JdVopAuthorizationStatus {
             operation_id: None,
             operation_state: None,
             can_authorize,
+            can_configure_tokens: false,
             recovery_after: None,
             message,
         }

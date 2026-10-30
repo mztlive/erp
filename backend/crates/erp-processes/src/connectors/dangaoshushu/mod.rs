@@ -96,7 +96,7 @@ fn error(class: SupplierFailureClass, code: &str, summary: &str) -> ConnectorErr
 }
 
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 
 #[cfg(test)]
 mod tests {

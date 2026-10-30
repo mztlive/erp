@@ -70,6 +70,7 @@ async fn execution_workers(state: AppState, receiver: watch::Receiver<bool>) {
 }
 
 async fn integration_workers(state: AppState, receiver: watch::Receiver<bool>) {
+    let catalog_callbacks = state.supplier_catalog_callback_process();
     let funds_worker = state.supplier_funds_worker();
     let credentials = state.jd_vop_credential_maintenance();
     let message_worker = state.supplier_message_worker().map(|worker| {
@@ -89,6 +90,13 @@ async fn integration_workers(state: AppState, receiver: watch::Receiver<bool>) {
                 && let Err(error) = worker.run_once().await
             {
                 tracing::warn!(error = %error, "供应商消息补查调度失败");
+            }
+        }),
+        periodic(receiver.clone(), || async {
+            if let Some(process) = &catalog_callbacks
+                && let Err(error) = process.run_once().await
+            {
+                tracing::warn!(error = %error, "供应商商品回调调度失败");
             }
         }),
         credential_worker(receiver, credentials),
