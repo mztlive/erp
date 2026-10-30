@@ -5,11 +5,18 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::{Error, Result};
+use crate::jd_vop_execution::{JdVopExecutionConfig, JdVopMessageConfig};
 
 /// 部署负责账号、Mongo 凭据身份及配额，业务连接不保存京东密钥或令牌。
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JdVopConfig {
+    /// 已核实账号消息范围；缺省不拉取和确认消息。
+    #[serde(default)]
+    pub messages: Option<JdVopMessageConfig>,
+    /// 已核实订单执行资料；缺省保留只读装配。
+    #[serde(default)]
+    pub execution: Option<JdVopExecutionConfig>,
     #[serde(default)]
     pub enabled: bool,
     #[serde(default = "gateway")]
@@ -94,7 +101,8 @@ impl JdVopConfig {
             return Ok(());
         }
         self.validate_credential_settings()?;
-        self.validate_runtime()
+        self.validate_runtime()?;
+        self.validate_execution_binding()
     }
 
     /// 校验 Mongo 凭据配置，允许停用业务连接时受控导入或查询凭据。
@@ -133,6 +141,24 @@ impl JdVopConfig {
             return Err(Error::Invalid(
                 "jd_vop credential_encryption_key must be independent from app.secret".into(),
             ));
+        }
+        Ok(())
+    }
+
+    fn validate_execution_binding(&self) -> Result<()> {
+        let valid = |evidence: &str, account: &str, app: &str| {
+            !evidence.trim().is_empty() && evidence.len() <= 1024
+                && evidence.trim() == evidence && !evidence.chars().any(char::is_control)
+                && account == self.account_scope && app == self.app_key
+        };
+        if self.messages.as_ref().is_some_and(|m| !valid(&m.evidence_reference, &m.account_scope, &m.app_key)
+            || m.types.is_empty() || m.types.len() > 100 || m.types.contains(&0))
+            || self.execution.as_ref().is_some_and(|e| !valid(&e.evidence_reference, &e.account_scope, &e.app_key)
+                || !identifier(&e.external_funds_account_ref) || e.ordinary_skus.is_empty()
+                || e.ordinary_skus.iter().any(|sku| sku.parse::<u64>().is_err() || sku == "0")
+                || !(1..=300).contains(&e.preflight_validity_seconds))
+        {
+            return Err(Error::Invalid("jd_vop execution or messages require verified evidence and matching account/app identity".into()));
         }
         Ok(())
     }

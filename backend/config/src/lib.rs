@@ -66,6 +66,7 @@ mod dangaoshushu;
 pub use dangaoshushu::{DangaoshushuConfig, SupplierTimestampUnit};
 mod xxl_job;
 pub use xxl_job::XxlJobConfig;
+pub mod jd_vop_execution;
 mod jd_vop;
 pub use jd_vop::JdVopConfig;
 mod command;
