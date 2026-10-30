@@ -165,10 +165,14 @@ export function JdVopTokenDialog({
                         </form.AppField>
                         <form.AppField name="expiresAt">
                             {(field) => (
-                                <field.TextField
+                                <field.DateTimeField
                                     id={`${idPrefix}-expires-at`}
                                     label="Access token 到期时间（本地时间）"
-                                    type="datetime-local"
+                                    timeZone={
+                                        Intl.DateTimeFormat().resolvedOptions()
+                                            .timeZone
+                                    }
+                                    showTimeZone={false}
                                     required
                                     disabled={busy}
                                     description="填写京东本次授权返回的实际到期时间；不要填写 refresh token 的有效期，也不要按保存时间推算。"
