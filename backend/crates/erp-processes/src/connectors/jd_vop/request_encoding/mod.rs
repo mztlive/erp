@@ -1,4 +1,4 @@
-//! 首期业务 API 的官方请求封装。字段名依据各方法文档，不从任意 JSON 推导账号身份。
+//! 按各方法的网关协议编码顶层字段或请求对象，不从任意 JSON 推导账号身份。
 use std::collections::BTreeMap;
 
 use erp_supply::ports::connector::common::ConnectorResult;
@@ -48,7 +48,7 @@ impl JdVopRequestContext {
 /// # 参数
 /// `request` 为标准读取意图，`context` 为受信账号上下文。
 /// # 返回
-/// 含官方方法 wrapper 的业务 JSON，不包含访问令牌和签名。
+/// 符合各方法网关参数层级的业务 JSON，不包含访问令牌和签名。
 /// # 错误
 /// 数量、标识、渠道或方法字段不合法时返回脱敏错误。
 pub fn read_payload(
@@ -113,13 +113,26 @@ fn nested(
     fields: Value,
     context: &JdVopRequestContext,
 ) -> ConnectorResult<Box<RawValue>> {
+    envelope(name, &fields_with_source(fields, context)?, None)
+}
+
+/// 编码使用顶层业务参数的网关方法，保留数字精度与稳定字段顺序。
+fn flat(fields: Value, context: &JdVopRequestContext) -> ConnectorResult<Box<RawValue>> {
+    to_raw_value(&fields_with_source(fields, context)?).map_err(|_| mapping("京东业务请求无法编码"))
+}
+
+/// 在唯一的业务参数层加入部署渠道，不添加网关提供的系统字段。
+fn fields_with_source(
+    fields: Value,
+    context: &JdVopRequestContext,
+) -> ConnectorResult<BTreeMap<String, Value>> {
     let Value::Object(fields) = fields else {
         return Err(mapping("京东业务请求结构无效"));
     };
     // 不让依赖是否启用 serde_json/preserve_order 改变业务参数的固定字节顺序。
     let mut object: BTreeMap<String, Value> = fields.into_iter().collect();
     object.insert("sourceType".into(), json!(context.source_type));
-    envelope(name, &object, None)
+    Ok(object)
 }
 
 fn number(value: &str, zero: bool) -> ConnectorResult<u64> {

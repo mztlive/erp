@@ -18,21 +18,35 @@ fn payload(request: JdVopReadRequest) -> Value {
 }
 
 #[test]
-fn catalog_and_address_use_official_wrappers_and_actual_quantity() {
+fn catalog_and_address_match_verified_gateway_parameters() {
     let cases = [
-        (JdVopReadRequest::Pools, "getSkuPoolInfoGoodsReq"),
+        (JdVopReadRequest::Pools, json!({"getSkuPoolInfoGoodsReq":{"sourceType":3}})),
         (
             JdVopReadRequest::PoolPage {
                 pool_id: "pool".into(),
                 offset: "0".into(),
                 page_size: NonZeroU32::new(20).unwrap(),
             },
-            "rpcReq",
+            json!({"bizPoolId":"pool","offset":0,"pageSize":20,"sourceType":3}),
         ),
-        (JdVopReadRequest::Detail { sku_id: "123".into(), query_ext_set: vec![13] }, "getSkuDetailGoodsReq"),
-        (JdVopReadRequest::Images { sku_id: "123".into() }, "getSkuImageGoodsReq"),
-        (JdVopReadRequest::Categories { category_ids: vec!["123".into()] }, "getCategoryInfoGoodsReq"),
-        (JdVopReadRequest::Areas { level: 1, parent_code: None }, "queryJdAreaIdListOpenReq"),
+        (
+            JdVopReadRequest::Detail { sku_id: "123".into(), query_ext_set: vec![1, 13] },
+            json!({"skuId":123,"queryExtSet":[1,13],"sourceType":3}),
+        ),
+        (
+            JdVopReadRequest::Price { sku_id: "123".into(), quantity: "17.0000".into() },
+            json!({"sku":"123","num":"17","sourceType":3}),
+        ),
+        (JdVopReadRequest::Images { sku_id: "123".into() }, json!({"skuId":[123],"sourceType":3})),
+        (
+            JdVopReadRequest::Categories { category_ids: vec!["123".into(), "456".into()] },
+            json!({"categoryId":[123,456],"sourceType":3}),
+        ),
+        (JdVopReadRequest::Areas { level: 1, parent_code: None }, json!({"areaLevel":1,"sourceType":3})),
+        (
+            JdVopReadRequest::Areas { level: 2, parent_code: Some("1".into()) },
+            json!({"areaLevel":2,"jdAreaId":1,"sourceType":3}),
+        ),
         (
             JdVopReadRequest::VerifyAddress {
                 province: "1".into(),
@@ -40,21 +54,12 @@ fn catalog_and_address_use_official_wrappers_and_actual_quantity() {
                 county: "3".into(),
                 town: "0".into(),
             },
-            "verifyAreaFourIdOpenReq",
+            json!({"provinceId":1,"cityId":2,"countyId":3,"townId":0,"sourceType":3}),
         ),
     ];
-    for (request, wrapper) in cases {
-        let value = payload(request);
-        assert_eq!(value[wrapper]["sourceType"], 3);
+    for (request, expected) in cases {
+        assert_eq!(payload(request), expected);
     }
-    let value = payload(JdVopReadRequest::Price { sku_id: "123".into(), quantity: "17".into() });
-    assert_eq!(value["getSellPriceGoodsReq"]["skuInfos"], json!([{"skuId":"123","num":"17"}]));
-    assert!(value["getSellPriceGoodsReq"].get("skuIdList").is_none());
-    assert_eq!(
-        payload(JdVopReadRequest::Price { sku_id: "123".into(), quantity: "17.0000".into() })["getSellPriceGoodsReq"]
-            ["skuInfos"][0]["num"],
-        "17"
-    );
 }
 
 #[test]
@@ -77,31 +82,29 @@ fn order_stock_freight_and_target_queries_preserve_scope() {
         merchant_order_no: Some("original".into()),
         external_order_no: None,
     });
-    assert_eq!(order["queryOrderOpenReq"]["thirdOrderId"], "original");
-    assert!(order["queryOrderOpenReq"].get("jdOrderId").is_none());
-    assert_eq!(order["queryOrderOpenReq"]["queryExt"], "qcjbylx,qyfwsp,kmjhyy,medicine");
-    for (request, wrapper) in [
-        (JdVopReadRequest::Logistics { external_order_no: "123".into() }, "orderLogisticsBillOpenReq"),
-        (
-            JdVopReadRequest::DeliveryInfo { external_order_no: "123".into(), source_type: 3 },
-            "deliveryInfoQueryOpenReq",
-        ),
-        (
-            JdVopReadRequest::CancelProgress { external_order_no: "123".into() },
-            "orderCancelProcessQueryOpenReq",
-        ),
+    assert_eq!(order["thirdOrderId"], "original");
+    assert!(order.get("jdOrderId").is_none());
+    assert_eq!(order["queryExt"], "qcjbylx,qyfwsp,kmjhyy,medicine");
+    assert_eq!(
+        payload(JdVopReadRequest::Logistics { external_order_no: "123".into() }),
+        json!({"orderLogisticsBillOpenReq":{"jdOrderId":123,"sourceType":3}})
+    );
+    for request in [
+        JdVopReadRequest::DeliveryInfo { external_order_no: "123".into(), source_type: 3 },
+        JdVopReadRequest::CancelProgress { external_order_no: "123".into() },
     ] {
-        assert_eq!(payload(request)[wrapper]["jdOrderId"], 123);
+        assert_eq!(payload(request), json!({"jdOrderId":123,"sourceType":3}));
     }
     assert_eq!(
-        payload(JdVopReadRequest::CancellationEligibility { external_order_nos: vec!["123".into()] })["CheckCancelOrderOpenReq"]
-            ["jdOrderIdSet"],
-        json!([123])
+        payload(JdVopReadRequest::CancellationEligibility {
+            external_order_nos: vec!["123".into(), "9007199254740993".into()]
+        }),
+        json!({"jdOrderId":"123,9007199254740993","sourceType":3})
     );
 }
 
 #[test]
-fn funds_and_message_wrappers_keep_window_page_and_original_ids() {
+fn funds_and_messages_keep_top_level_filters_and_original_write_targets() {
     for request in [JdVopReadRequest::Balance, JdVopReadRequest::FundsBalance { source_type: 3 }] {
         assert_eq!(payload(request)["checkAccountBalanceOpenReq"]["sourceType"], 3);
     }
@@ -112,19 +115,20 @@ fn funds_and_message_wrappers_keep_window_page_and_original_ids() {
         page_size: NonZeroU32::new(100).unwrap(),
         page_index: 2,
     });
-    assert_eq!(value["checkBalanceChangeInfoOpenReq"]["pageIndex"], 2);
-    assert_eq!(value["checkBalanceChangeInfoOpenReq"]["startDate"], "start");
+    assert_eq!(
+        value,
+        json!({"startDate":"start","endDate":"end","pageSize":100,"pageIndex":2,"sourceType":3})
+    );
     let value = payload(JdVopReadRequest::Messages { types: vec![1, 5, 12], read_type: 2, source_type: 3 });
-    assert_eq!(value["queryMsgByTenantReq"]["typeSet"], json!([1, 5, 12]));
-    assert_eq!(value["queryMsgByTenantReq"]["readType"], 2);
-    for (request, wrapper) in [
+    assert_eq!(value, json!({"type":"1,5,12","readType":2,"sourceType":3}));
+    for (request, reason) in [
         (
             JdVopWriteRequest::ConfirmReceipt {
                 merchant_order_no: "original".into(),
                 external_order_no: "123".into(),
                 source_type: 3,
             },
-            "confirmReceiveOrderOpenReq",
+            None,
         ),
         (
             JdVopWriteRequest::Confirm {
@@ -132,7 +136,7 @@ fn funds_and_message_wrappers_keep_window_page_and_original_ids() {
                 external_order_no: "123".into(),
                 source_type: 3,
             },
-            "confirmOrderOpenReq",
+            None,
         ),
         (
             JdVopWriteRequest::Cancel {
@@ -141,23 +145,29 @@ fn funds_and_message_wrappers_keep_window_page_and_original_ids() {
                 reason: "reason".into(),
                 source_type: 3,
             },
-            "cancelOrderOpenReq",
+            Some("reason"),
         ),
     ] {
         let value: Value = from_str(write_payload(&request, &context()).unwrap().get()).unwrap();
-        assert_eq!(value[wrapper]["jdOrderId"], 123);
-        assert_eq!(value[wrapper]["thirdOrderId"], "original");
+        let mut expected = json!({"jdOrderId":123,"thirdOrderId":"original","sourceType":3});
+        if let Some(reason) = reason {
+            expected["cancelReason"] = json!(reason);
+        }
+        assert_eq!(value, expected);
     }
     let value: Value = from_str(
         write_payload(
-            &JdVopWriteRequest::DeleteMessages { ids: vec!["123".into()], source_type: 3 },
+            &JdVopWriteRequest::DeleteMessages {
+                ids: vec!["123".into(), "9007199254740993".into()],
+                source_type: 3,
+            },
             &context(),
         )
         .unwrap()
         .get(),
     )
     .unwrap();
-    assert_eq!(value["deleteClientMsgByIdListReq"]["recordIdList"], json!([123]));
+    assert_eq!(value, json!({"id":[123,9007199254740993u64],"sourceType":3}));
 }
 
 fn submit_order() -> SubmitOrder {
@@ -230,6 +240,11 @@ fn invalid_identifiers_quantities_channels_and_batches_stop_encoding() {
     }
     for request in [
         JdVopReadRequest::Messages { types: vec![1], read_type: 0, source_type: 3 },
+        JdVopReadRequest::Messages { types: vec![], read_type: 2, source_type: 3 },
+        JdVopReadRequest::Messages { types: vec![2; 101], read_type: 2, source_type: 3 },
+        JdVopReadRequest::CancellationEligibility { external_order_nos: vec![] },
+        JdVopReadRequest::CancellationEligibility { external_order_nos: vec!["123,456".into()] },
+        JdVopReadRequest::Areas { level: 2, parent_code: None },
         JdVopReadRequest::Price { sku_id: "123".into(), quantity: "2147483648".into() },
         JdVopReadRequest::Detail { sku_id: "123".into(), query_ext_set: vec![u32::MAX] },
         JdVopReadRequest::BalanceChanges {

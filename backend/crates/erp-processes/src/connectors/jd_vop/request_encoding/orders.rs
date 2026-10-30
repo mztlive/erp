@@ -29,23 +29,21 @@ pub(super) fn read(
             if let Some(id) = external_order_no {
                 fields["jdOrderId"] = json!(identifier(id)?);
             }
-            nested("queryOrderOpenReq", fields, context)
+            flat(fields, context)
         },
         R::Logistics { external_order_no } => {
             nested("orderLogisticsBillOpenReq", json!({"jdOrderId":identifier(external_order_no)?}), context)
         },
         R::DeliveryInfo { external_order_no, source_type } => {
             context.source(*source_type)?;
-            nested("deliveryInfoQueryOpenReq", json!({"jdOrderId":identifier(external_order_no)?}), context)
+            flat(json!({"jdOrderId":identifier(external_order_no)?}), context)
         },
         R::CancellationEligibility { external_order_nos } => {
-            nested("CheckCancelOrderOpenReq", json!({"jdOrderIdSet":ids(external_order_nos,20)?}), context)
+            flat(json!({"jdOrderId":csv_ids(external_order_nos,20)?}), context)
         },
-        R::CancelProgress { external_order_no } => nested(
-            "orderCancelProcessQueryOpenReq",
-            json!({"jdOrderId":identifier(external_order_no)?}),
-            context,
-        ),
+        R::CancelProgress { external_order_no } => {
+            flat(json!({"jdOrderId":identifier(external_order_no)?}), context)
+        },
         _ => funds_messages(request, context),
     }
 }
@@ -108,18 +106,20 @@ fn funds_messages(
             {
                 return Err(mapping("京东资金查询分页超出接口范围"));
             }
-            nested(
-                "checkBalanceChangeInfoOpenReq",
+            flat(
                 json!({"startDate":start_date,"endDate":end_date,"pageSize":page_size.get(),"pageIndex":page_index}),
                 context,
             )
         },
         R::Messages { types, read_type, source_type } => {
             context.source(*source_type)?;
-            if types.len() > 100 || *read_type != 2 {
+            if types.is_empty() || types.len() > 100 || *read_type != 2 {
                 return Err(mapping("京东消息类型批次或读取模式超出首期范围"));
             }
-            nested("queryMsgByTenantReq", json!({"typeSet":types,"readType":read_type}), context)
+            flat(
+                json!({"type":types.iter().map(u32::to_string).collect::<Vec<_>>().join(","),"readType":read_type}),
+                context,
+            )
         },
         _ => Err(mapping("京东订单读取方法不匹配")),
     }
@@ -146,8 +146,7 @@ pub(super) fn write(
         W::Confirm { merchant_order_no, external_order_no, source_type } => {
             context.source(*source_type)?;
             merchant(merchant_order_no)?;
-            nested(
-                "confirmOrderOpenReq",
+            flat(
                 json!({"thirdOrderId":merchant_order_no,"jdOrderId":identifier(external_order_no)?}),
                 context,
             )
@@ -155,8 +154,7 @@ pub(super) fn write(
         W::ConfirmReceipt { merchant_order_no, external_order_no, source_type } => {
             context.source(*source_type)?;
             merchant(merchant_order_no)?;
-            nested(
-                "confirmReceiveOrderOpenReq",
+            flat(
                 json!({"thirdOrderId":merchant_order_no,"jdOrderId":identifier(external_order_no)?}),
                 context,
             )
@@ -167,15 +165,19 @@ pub(super) fn write(
             if reason.chars().count() > 200 {
                 return Err(mapping("京东取消原因超过200字"));
             }
-            nested(
-                "cancelOrderOpenReq",
+            flat(
                 json!({"thirdOrderId":merchant_order_no,"jdOrderId":identifier(external_order_no)?,"cancelReason":reason}),
                 context,
             )
         },
         W::DeleteMessages { ids: messages, source_type } => {
             context.source(*source_type)?;
-            nested("deleteClientMsgByIdListReq", json!({"recordIdList":ids(messages,100)?}), context)
+            flat(json!({"id":ids(messages,100)?}), context)
         },
     }
+}
+
+/// 校验订单批次后按网关要求编码为逗号分隔的编号，不经过浮点数。
+fn csv_ids(values: &[String], maximum: usize) -> ConnectorResult<String> {
+    Ok(ids(values, maximum)?.iter().map(u64::to_string).collect::<Vec<_>>().join(","))
 }

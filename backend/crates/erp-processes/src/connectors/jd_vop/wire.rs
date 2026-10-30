@@ -86,13 +86,22 @@ pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) 
     let result = method_result.remove(rpc).ok_or_else(|| mapping("京东方法 RPC 响应键缺失"))?;
     let envelope: RpcResult =
         serde_json::from_str(result.get()).map_err(|_| mapping("京东业务响应格式无效"))?;
+    decode_result(envelope, method)
+}
+
+/// 先验证业务成功；仅消息查询允许已实测的空队列省略结果字段。
+fn decode_result<T: DeserializeOwned>(envelope: RpcResult, method: &str) -> ConnectorResult<T> {
     let success_code = envelope.code.0 == "0000"
         || (method == "jingdong.vop.message.queryTransByVopNormal" && envelope.code.0 == "success");
     if envelope.success.0 != "true" || !success_code {
         return Err(classify_code(&envelope.code.0));
     }
-    let result = envelope.result.ok_or_else(|| mapping("京东成功响应缺少业务结果"))?;
-    serde_json::from_str(result.get()).map_err(|_| mapping("京东业务结果字段无效"))
+    let result = match envelope.result.as_deref() {
+        Some(result) => result.get(),
+        None if method == "jingdong.vop.message.queryTransByVopNormal" => "[]",
+        None => return Err(mapping("京东成功响应缺少业务结果")),
+    };
+    serde_json::from_str(result).map_err(|_| mapping("京东业务结果字段无效"))
 }
 
 fn gateway_error(body: &str) -> ConnectorResult<ConnectorError> {
@@ -271,6 +280,31 @@ pub struct Area {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_successful_message_queries_allow_missing_or_null_results() {
+        let method = "jingdong.vop.message.queryTransByVopNormal";
+        for result in ["", ",\"result\":null", ",\"result\":[]"] {
+            for code in ["0000", "success"] {
+                let body = format!(
+                    r#"{{"jingdong_vop_message_queryTransByVopNormal_responce":{{"openRpcResult":{{"success":true,"resultCode":"{code}"{result}}}}}}}"#
+                );
+                let records: Vec<Box<RawValue>> = decode(body.as_bytes(), method, "openRpcResult").unwrap();
+                assert!(records.is_empty());
+            }
+        }
+        let body = br#"{"jingdong_vop_message_queryTransByVopNormal_responce":{"openRpcResult":{"success":false,"resultCode":"1003"}}}"#;
+        assert_eq!(
+            decode::<Vec<Box<RawValue>>>(body, method, "openRpcResult").unwrap_err().code,
+            "JD_VOP_1003"
+        );
+        let body = br#"{"jingdong_vop_message_queryTransByVopNormal_responce":{"openRpcResult":{"success":true,"resultCode":"0000","result":{}}}}"#;
+        assert!(decode::<Vec<Box<RawValue>>>(body, method, "openRpcResult").is_err());
+        let body = br#"{"jingdong_vop_goods_getSkuPoolInfo_responce":{"openRpcResult":{"success":true,"resultCode":"0000"}}}"#;
+        assert!(
+            decode::<Vec<Box<RawValue>>>(body, "jingdong.vop.goods.getSkuPoolInfo", "openRpcResult").is_err()
+        );
+    }
 
     #[test]
     fn raw_decimal_and_long_identifiers_never_round_through_float() {

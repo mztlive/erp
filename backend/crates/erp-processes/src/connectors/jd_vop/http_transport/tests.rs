@@ -105,6 +105,27 @@ async fn real_dispatch_sends_exact_signed_business_form_once() {
 }
 
 #[tokio::test]
+async fn pool_page_dispatch_signs_and_sends_top_level_pagination_once() {
+    let (transport, sender) = fixture(false, "account", 1_800_000_000, vec![reply(200)]);
+    let request = JdVopReadRequest::PoolPage {
+        pool_id: "pool".into(),
+        offset: "0".into(),
+        page_size: 20.try_into().unwrap(),
+    };
+    transport.read(&request).await.unwrap();
+    let calls = sender.calls.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    let parameters: BTreeMap<_, _> = parse(calls[0].1.as_bytes()).into_owned().collect();
+    assert_eq!(parameters["method"], "jingdong.vop.goods.querySkuByPage");
+    assert_eq!(
+        parameters["360buy_param_json"],
+        r#"{"bizPoolId":"pool","offset":0,"pageSize":20,"sourceType":3}"#
+    );
+    // 独立 Python hashlib 向量，核验签名字节与实际发送的顶层业务 JSON 一致。
+    assert_eq!(parameters["sign"], "98F6AA12E6F3E76D99AD2EF250C41BBD");
+}
+
+#[tokio::test]
 async fn explicit_source_override_is_used_by_real_constructor_and_mismatch_sends_nothing() {
     let (transport, sender) = fixture_source(Some(7), false, "account", 1_800_000_000, vec![reply(200)]);
     assert!(transport.read(&JdVopReadRequest::FundsBalance { source_type: 7 }).await.is_ok());
