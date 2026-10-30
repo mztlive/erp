@@ -89,7 +89,7 @@ pub async fn pending_catalog_callbacks(
 ) -> Result<Vec<SupplierCallbackReceipt>> {
     mongo_ops::find_many(
         &db.supplier_callback_receipts().collection(),
-        doc! {"status":"received","route_kind":{"$in":["status","product","cities","price"]},
+        doc! {"status":"received","route_kind":{"$in":["catalog","status","product","cities","price"]},
         "deleted_at":NOT_DELETED_TIMESTAMP_BSON,
         "$or":[{"next_attempt_at":null},{"next_attempt_at":{"$lte":Instant::now().unix_secs()}}]},
         FindOptions::builder().sort(doc! {"next_attempt_at":1,"received_at":1,"id":1}).limit(5).build(),

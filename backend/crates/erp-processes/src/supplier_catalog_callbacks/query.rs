@@ -117,8 +117,8 @@ async fn query_offer(
         &receipt.base.id,
         snapshot,
     )?;
-    if (receipt.route_kind == "status" && item.availability == CatalogAvailability::Unknown)
-        || (receipt.route_kind == "price" && item.purchase_price.is_none())
+    if (hint.topic == "availability" && item.availability == CatalogAvailability::Unknown)
+        || (hint.topic == "price" && item.purchase_price.is_none())
     {
         return Err(Error::BusinessLogicError("商品补查未取得明确可售状态或采购报价".into()));
     }

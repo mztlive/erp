@@ -29,7 +29,7 @@ pub use transform::DangaoshushuOffer;
 mod wire;
 pub use runtime::{DangaoshushuRuntime, SupplierReferenceTickets};
 mod read;
-pub mod reception;
+
 pub use read::{DangaoshushuReadKind, DangaoshushuReadQuery};
 use transport::Transport;
 

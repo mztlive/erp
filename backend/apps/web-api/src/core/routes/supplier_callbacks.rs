@@ -1,13 +1,13 @@
 use std::time::Duration;
 
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, State};
-use axum::http::{StatusCode, header};
+use axum::extract::{DefaultBodyLimit, OriginalUri, Path, State};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Extension, Router};
 use erp_core::common::time::Instant;
-use erp_processes::connectors::dangaoshushu::reception;
+use erp_supply::entity::supplier_api::SupplierConnectorType;
 use erp_supply::ports::connector::callback::CallbackRequest;
 
 use crate::app_state::AppState;
@@ -18,7 +18,7 @@ const MAX_CALLBACK_BYTES: usize = 256 * 1024;
 
 pub(super) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/callbacks/dangaoshushu/{connection_id}/{kind}", post(receive))
+        .route("/callbacks/{protocol}/{connection_id}/{kind}", post(receive))
         .layer(DefaultBodyLimit::max(MAX_CALLBACK_BYTES))
         .layer(Extension(RateLimiter::new(300, 600, Duration::from_secs(60), 8)))
 }
@@ -26,22 +26,19 @@ pub(super) fn routes() -> Router<AppState> {
 async fn receive(
     State(state): State<AppState>,
     Extension(limiter): Extension<RateLimiter>,
-    Path((connection_id, kind)): Path<(String, String)>,
+    Path((protocol, connection_id, _kind)): Path<(SupplierConnectorType, String, String)>,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, Error> {
-    let runtime =
-        state.dangaoshushu_runtime().ok_or_else(|| Error::NotFound("供应商推送接入未启用".into()))?;
-    let _permit = limiter.admit("dangaoshushu")?;
-    let path = format!("/callbacks/dangaoshushu/{connection_id}/{kind}");
+    let _permit = limiter.admit(protocol.label())?;
+    let path = uri.path_and_query().map_or(uri.path(), |value| value.as_str());
+    let headers = headers.iter().map(|(name, value)| (name.to_string(), value.as_bytes().to_vec())).collect::<Vec<_>>();
     let request = CallbackRequest {
-        method: "POST",
-        path_and_query: &path,
-        headers: &[],
-        body: &body,
+        method: "POST", path_and_query: path, headers: &headers, body: &body,
         received_at: Instant::now(),
     };
-    let reply =
-        reception::receive(&state.db(), &runtime, &state.sensitive_data(), &connection_id, &request).await?;
+    let reply = state.receive_supplier_callback(protocol, &connection_id, &request).await?;
     let status =
         StatusCode::from_u16(reply.status).map_err(|_| Error::Internal("供应商应答状态无效".into()))?;
     Ok((status, [(header::CONTENT_TYPE, reply.content_type)], reply.body).into_response())

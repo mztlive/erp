@@ -20,6 +20,9 @@ impl SupplierCallbackReceipt {
     /// # 错误
     /// 混合、未知或损坏的提示拒绝处理。
     pub fn ensure_catalog(&self) -> Result<()> {
+        if self.route_kind == "catalog" {
+            return self.ensure_generic_catalog();
+        }
         let topic = match self.route_kind.as_str() {
             "status" => "availability",
             "product" => "product",
@@ -39,6 +42,20 @@ impl SupplierCallbackReceipt {
             })
         {
             return Err(Error::ValidationError("商品回调路由、提示或检查点不一致".into()));
+        }
+        Ok(())
+    }
+
+    fn ensure_generic_catalog(&self) -> Result<()> {
+        if self.refresh_hints.is_empty()
+            || self.catalog_progress.hint_index > self.refresh_hints.len()
+            || self.refresh_hints.iter().any(|hint| {
+                !matches!(hint.topic.as_str(), "product" | "availability" | "price" | "region")
+                    || !matches!(hint.target_kind.as_str(), "brand" | "product" | "sku")
+                    || (hint.target_kind == "sku" && hint.product_id.is_none())
+            })
+        {
+            return Err(Error::ValidationError("商品回调提示或检查点不一致".into()));
         }
         Ok(())
     }

@@ -90,6 +90,17 @@ pub struct VerifiedCallback {
 
 /// 纯协议校验接口；密钥由装配注入，不从请求的 channel_no 切换连接。
 pub trait Callbacks: Send + Sync {
+    /// 保留协议已有的字节级接收身份。
+    /// # 参数
+    /// `request` 为已验签的原始请求。
+    /// # 返回
+    /// 旧协议可返回稳定身份；None 使用共用接收身份。
+    /// # 错误
+    /// 不返回错误；不得返回业务事件号冒充本地身份。
+    fn reception_id(&self, _request: &CallbackRequest<'_>) -> Option<String> {
+        None
+    }
+
     /// 验证绑定连接、签名和允许的时间窗口，转换为需要刷新对象的通知。
     ///
     /// # 参数

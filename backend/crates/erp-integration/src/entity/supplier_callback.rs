@@ -33,6 +33,9 @@ pub struct SupplierCallbackReceipt {
     /// 来源未提供事件号时为 None；本地字节级去重号不得填入此字段。
     pub source_event_id: Option<String>,
     pub integrity: String,
+    /// 共用接收器的报文指纹；旧记录缺失时用原始密文核验重复报文。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_fingerprint: Option<String>,
     pub received_at: Instant,
     pub route_kind: String,
     pub body_encrypted: String,
@@ -72,7 +75,7 @@ impl SupplierCallbackReceipt {
         if connection_id.is_empty()
             || refresh_hints.is_empty()
             || refresh_hints.len() > 1000
-            || !matches!(route_kind.as_str(), "order" | "status" | "product" | "cities" | "price")
+            || !matches!(route_kind.as_str(), "order" | "catalog" | "status" | "product" | "cities" | "price")
             || refresh_hints.iter().any(|hint| {
                 hint.object_id.is_empty()
                     || hint.object_id.len() > 128
@@ -97,6 +100,7 @@ impl SupplierCallbackReceipt {
             connection_id,
             source_event_id: None,
             integrity: "envelope_only".into(),
+            content_fingerprint: None,
             received_at,
             route_kind,
             body_encrypted,

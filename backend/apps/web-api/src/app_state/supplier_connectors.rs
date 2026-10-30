@@ -9,6 +9,8 @@ use erp_processes::connectors::jd_vop::credential::MongoJdVopTokenProvider;
 use erp_processes::connectors::jd_vop::http_transport::JdVopHttpTransport;
 use erp_processes::connectors::jd_vop::token::JdVopTokenProvider;
 use erp_processes::connectors::registry::SupplierConnectorRegistry;
+use erp_processes::supplier_callbacks;
+use erp_supply::ports::connector::callback::{CallbackReply, CallbackRequest};
 use erp_processes::supplier_catalog_callbacks::SupplierCatalogCallbackProcess;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::SupplierConnectorType;
@@ -66,6 +68,20 @@ impl JdVopCredentialMaintenance {
 }
 
 impl AppState {
+    /// 按注册表接收供应商回调并可靠保存证据。
+    /// # 参数
+    /// 协议、连接和原始 HTTP 请求。
+    /// # 返回
+    /// 已持久化后的协议应答。
+    /// # 错误
+    /// 未装配、验签、绑定或持久化失败时拒绝。
+    pub async fn receive_supplier_callback(&self, kind: SupplierConnectorType, connection: &str,
+        request: &CallbackRequest<'_>) -> erp_processes::Result<CallbackReply> {
+        let registry = self.external_connectors.order_connectors.as_ref()
+            .ok_or_else(|| erp_processes::Error::NotFound("供应商回调未配置".into()))?;
+        supplier_callbacks::receive(&self.db(), registry, &self.sensitive_data(), kind, connection, request).await
+    }
+
     /// 返回商品回调的补查及来源应用消费者。
     /// # 参数
     /// 无，复用当前部署的协议注册表与权限服务。

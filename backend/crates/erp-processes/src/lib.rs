@@ -49,6 +49,7 @@ pub mod supplier;
 pub mod supplier_api_orders;
 pub mod supplier_catalog_adoption;
 pub mod supplier_catalog_callbacks;
+pub mod supplier_callbacks;
 pub mod supplier_connection_execution;
 pub mod supplier_delivery_template;
 pub mod supplier_deposits;

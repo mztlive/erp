@@ -1,4 +1,4 @@
-//! 蛋糕叔叔商品回调：有界领取、当前事实补查及逐规格原子检查点。
+//! 供应商商品回调：有界领取、当前事实补查及逐规格原子检查点。
 mod query;
 mod store;
 
@@ -9,7 +9,7 @@ use erp_core::common::time::Instant;
 use erp_identity::{Permission, SharedRbacService, subject};
 use erp_integration::entity::supplier_callback::SupplierCallbackReceipt;
 use erp_integration::repository::pending_catalog_callbacks;
-use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
+use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::service::supplier_api::SupplierApiService;
 use mongodb::Database;
@@ -78,14 +78,11 @@ impl SupplierCatalogCallbackProcess {
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(receipt.connection_id.as_ref(), &mut NoTransaction)
             .await?;
-        if connection.connector_type != Some(SupplierConnectorType::Dangaoshushu) {
-            return Err(Error::Forbidden("商品回调连接类型不匹配".into()));
-        }
         let connector = self
             .registry
             .fulfillment_connector(&connection)
             .map_err(|error| Error::BusinessLogicError(error.summary))?;
-        if connector.connection_id().as_ref() != connection.base.id {
+        if connector.callbacks().is_none() || connector.connection_id().as_ref() != connection.base.id {
             return Err(Error::Forbidden("商品回调协议绑定不属于当前连接".into()));
         }
         let actor = catalog_refresh_actor(&self.db, &connection.base.id).await?;

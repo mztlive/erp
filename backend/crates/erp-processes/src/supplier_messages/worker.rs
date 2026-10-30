@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use erp_party::SensitiveDataCodec;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
-use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::repository::supplier_catalog;
 use id_generator::next_id;
 use mongodb::Database;
@@ -57,7 +56,7 @@ impl SupplierMessageWorker {
     /// 连接分页失败时返回错误；单连接错误保留消息且不阻断其余连接。
     pub async fn run_once(&self) -> Result<usize> {
         let mut cursor = self.cursor.lock().await;
-        let kinds = self.registry.catalog_connector_types();
+        let kinds = self.registry.connector_types();
         let connections =
             supplier_catalog::connection_page(&self.db, &cursor, &kinds, &mut NoTransaction).await?;
         if connections.is_empty() {

@@ -60,6 +60,36 @@ pub struct SupplierConnectorRegistry {
 }
 
 impl SupplierConnectorRegistry {
+    /// 返回所有已登记协议，不依赖目录能力筛选通知消费者。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 有序协议清单。
+    /// # 错误
+    /// 不返回错误。
+    pub fn connector_types(&self) -> Vec<SupplierConnectorType> {
+        self.adapters.keys().copied().collect()
+    }
+
+    /// 以服务端连接及路由协议取得回调能力。
+    /// # 参数
+    /// connection 为持久化连接，kind 为路由协议。
+    /// # 返回
+    /// 绑定同一连接且提供回调能力的适配器。
+    /// # 错误
+    /// 协议、连接身份或回调能力不符时拒绝。
+    pub fn callback_connector(&self, connection: &SupplierApiConnection, kind: SupplierConnectorType)
+        -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        let invalid = || ClassifiedError { class: SupplierFailureClass::CapabilityGap,
+            code: "SUPPLIER_CALLBACK_UNAVAILABLE".into(), summary: "供应商回调协议或能力不匹配".into() };
+        if connection.connector_type != Some(kind) { return Err(invalid()); }
+        let connector = self.fulfillment_connector(connection)?;
+        if connector.connection_id().as_ref() != connection.base.id || connector.callbacks().is_none() {
+            return Err(invalid());
+        }
+        Ok(connector)
+    }
+
     /// 将同一协议运行时登记为技术网关及配置目录。
     /// # 参数
     /// `kind` 为协议类型，`runtime` 为当前部署构造的共享运行时。

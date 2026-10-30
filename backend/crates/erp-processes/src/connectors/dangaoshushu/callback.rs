@@ -8,9 +8,14 @@ use erp_supply::ports::connector::order::OrderKey;
 use serde_json::{Value, from_slice};
 
 use super::parsing::{field, id, mapping};
-use super::{DangaoshushuConnector, error, signing};
+use super::{DangaoshushuConnector, error, proof, signing};
 
 impl Callbacks for DangaoshushuConnector {
+    fn reception_id(&self, request: &CallbackRequest<'_>) -> Option<String> {
+        let body = [self.binding.as_bytes(), b"\0", request.path_and_query.as_bytes(), b"\0", request.body].concat();
+        Some(format!("dgss-{}", proof::hash(&self.settings.private_key, &body)))
+    }
+
     fn verify(&self, request: &CallbackRequest<'_>) -> ConnectorResult<VerifiedCallback> {
         if request.method != "POST" || request.body.len() > 256 * 1024 {
             return Err(mapping());
