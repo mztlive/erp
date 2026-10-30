@@ -11,6 +11,8 @@
 /.release-state
 /release-artifacts
 /releases
+/.local/
+/backend/config.worker.local.toml
 .DS_Store
 /node_modules
 /test-results

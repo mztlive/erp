@@ -18,7 +18,13 @@ use crate::core::errors::Error;
 fn state() -> AppState {
     let config = Config::from_toml_str(
         r#"
-        [app]
+        [xxl_job]
+admin_url = "http://admin.invalid/xxl-job-admin"
+executor_url = "http://worker.invalid:10002"
+app_name = "erp-test"
+access_token = "test-token-123456"
+
+[app]
         port = 10001
         secret = "supplier-assets-unit-test-secret-at-least-32-bytes"
         [database]

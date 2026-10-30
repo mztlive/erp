@@ -6,14 +6,13 @@
 
 合同识别和京东授权中由 HTTP 请求启动的异步流程维持原有协议。本阶段不承诺所有异步计算均已离开 API。
 
-XXL-JOB 在第二阶段接管适合定时触发的入口；本阶段不接入调度中心，不改变现有调度频率、业务状态、幂等键、授权重验和结果未知处理规则。
+履约补查与目录周期计划必须由 XXL-JOB 驱动，执行 [XXL-JOB 执行器合同](xxl-job-executor-contract.md)。已有持久任务由 Worker 持续消费，不改变业务状态、幂等键、授权重验和结果未知处理规则。
 
 ## 2. 进程与配置
 
 - 同一后端镜像包含 `web-api` 与 `erp-worker` 两个可执行文件，共用现有应用装配与领域 Process。
-- 集群 API 必须设置 `ERP_BACKGROUND_MODE=external`，不得启动常驻轮询。
-- `web-api` 缺省模式为 `embedded`，仅用于兼容现有本地开发和隔离测试启动命令；不得与同库独立 Worker 同时运行。非法模式值必须拒绝启动。
-- Worker 仅提供 `/health` 和 `/ready` 内部探针，不提供业务路由、Service 或 Ingress；端口复用配置中的 `app.port`，不同 Pod 不冲突。本地分进程时必须使用不同端口配置。
+- `web-api` 固定只处理 HTTP；`erp-worker` 固定处理后台任务。禁止内嵌后台模式和运行时职责切换。
+- Worker 提供 `/health` 和 `/ready` 内部探针，并通过内部 ClusterIP Service 提供必备 XXL 执行器协议；不提供 API 业务路由或 Ingress；端口复用配置中的 `app.port`，不同 Pod 不冲突。本地分进程时必须使用不同端口配置。
 - 两个进程必须连接相同业务数据库与对象存储，使用一致的业务密钥及供应商配置。Worker 不执行管理员引导和内建公司初始化。
 - 数据库与 S3 配置变更必须重启对应进程；沿用既有配置热更新边界。
 
@@ -32,8 +31,8 @@ XXL-JOB 在第二阶段接管适合定时触发的入口；本阶段不接入调
 - 首次迁移必须先完成准备阶段，等待旧 API Pod 全部退出，再以 `worker.enabled=true` 发布 Worker。不得在同一次普通滚动发布中启动新 Worker 并保留旧内嵌执行器。
 - 发布脚本在启用 Worker 前必须核对现存 API Deployment 和全部 API Pod 已标记 external；任一旧 Pod（包括 Terminating）仍存在即拒绝执行。
 - 后续发布必须分别核对 API、Worker 和前端 rollout 及镜像 digest。Worker 与 API 使用相同后端镜像 digest。
-- 回退到拆分后的版本按正常回退流程执行。回退到带内嵌执行器的旧版本前，必须先禁用 Worker 并确认其 Pod 全部退出；发布脚本必须拒绝存在 Worker Pod 时的旧架构回退。
-- 本次开发不执行集群变更、发布、数据库迁移或本地业务进程重启。
+- 正常回退目标必须保持独立 Worker 和必填 XXL-JOB 合同。发布脚本保留历史 Pod 隔离检查，禁止新旧执行器并存。
+- 集群发布、业务数据库迁移与业务进程重启按对应环境执行步骤操作；本地调度中心使用独立容器和专用 MySQL。
 
 ## 5. 验收
 

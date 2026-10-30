@@ -40,15 +40,26 @@ impl SupplierOrderTrackingProcess {
         Self { db, runtime }
     }
 
-    /// 调度至多二十个到期订单，并推进有界回调队列。
+    /// 处理回调意图及完成确认，不执行周期订单查询。
     /// # 参数
-    /// 无；身份与来源仅从已登记订单关联取得。
+    /// 无。
     /// # 返回
-    /// 本轮取得租约并完成查询处理的订单数。
+    /// 当前有界回调批次已处理。
     /// # 错误
-    /// 队列查询失败返回错误；单单故障记录并留待下次处理，不阻断其他订单。
-    pub async fn run_once(&self) -> Result<usize> {
+    /// 回调读取或保存失败时返回错误。
+    pub async fn run_callbacks(&self) -> Result<()> {
         self.refresh_callbacks().await?;
+        self.finish_callbacks().await
+    }
+
+    /// 查询并应用至多二十个到期订单，保留原认领和逐单失败处理。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 本轮完成处理的订单数；逐单业务结果以原记录为准。
+    /// # 错误
+    /// 扫描、认领或结果保存失败时返回错误。
+    pub async fn poll_due(&self) -> Result<usize> {
         let orders = repository::due(&self.db, Instant::now(), &mut NoTransaction).await?;
         let mut processed = 0;
         for candidate in orders {
@@ -61,7 +72,6 @@ impl SupplierOrderTrackingProcess {
             }
             processed += 1;
         }
-        self.finish_callbacks().await?;
         Ok(processed)
     }
 

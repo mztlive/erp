@@ -73,8 +73,6 @@ spec:
             - name: http
               containerPort: 10001
           env:
-            - name: ERP_BACKGROUND_MODE
-              value: external
             - name: NACOS_CLIENT_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -108,7 +106,7 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-          # Worker 只提供进程探针；业务失败与积压必须另外监测。
+          # 探针仅代表进程存活；XXL 注册、业务失败与积压必须另外监测。
           startupProbe:
             httpGet:
               path: /health
@@ -139,4 +137,24 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erp-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: erp-worker
+    app.kubernetes.io/part-of: erp
+    app.kubernetes.io/component: worker
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: erp-worker
+  ports:
+    - name: http
+      port: 10001
+      targetPort: http
 {{- end }}

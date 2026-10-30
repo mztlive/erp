@@ -9,6 +9,7 @@ default-run = "web-api"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+subtle = { workspace = true }
 serde_path_to_error = "0.1"
 erp-sales = { workspace = true }
 erp-procurement = { workspace = true }

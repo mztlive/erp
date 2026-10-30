@@ -106,3 +106,5 @@ println!("listen port: {}", snapshot.app.port);
 完成启停或凭据轮换。配置调试输出整体脱敏；真实密钥只保存在已忽略配置或受控 Nacos。
 
 蛋糕叔叔配置不得包含 `connection_id`、`supplier_id`、`environment`。连接 ID 与供应商由后台“供应商 API”连接记录持有，环境由独立部署隔离；新建连接后在页面选择地址和渠道凭据，无需回填内部 ID。配置 `enabled` 只登记技术参数，业务启停由后台连接控制。
+
+`[xxl_job]` 必填，仅包含 admin_url、executor_url、app_name、access_token。任务按 JobHandler 分发，不绑定控制台任务 ID，不提供 enabled 开关或本地调度模式。执行器只由独立 Worker 启动。所有字段启动期固定，配置变更需重启，禁止因远端故障自动降级。详见 [XXL 接入执行步骤](../../docs/xxl-job-setup.md)。

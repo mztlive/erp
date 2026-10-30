@@ -216,7 +216,7 @@ for DEPLOY_ENV in test production; do
         '.environment == $env and .namespace == $ns and (.api.image | endswith("0001"))' \
         release-artifacts/values-release.json >/dev/null
     grep -q "namespace: $namespace" release-artifacts/manifests.yaml
-    [[ "$(grep -c '^kind:' release-artifacts/manifests.yaml)" == 12 ]]
+    [[ "$(grep -c '^kind:' release-artifacts/manifests.yaml)" == 13 ]]
     if grep -Eq '^kind: (Secret|Namespace)$|defaultServer:' release-artifacts/manifests.yaml; then exit 1; fi
     check_log "any(.[]; index(\"NEXT_PUBLIC_API_BASE_URL=https://erp-api$suffix.fushangyunfu.com\") != null)"
     [[ ! -d "$(cat "$AUTH_PATH")" ]]
@@ -228,8 +228,16 @@ for DEPLOY_ENV in test production; do
     check_log 'all(.[]; index("--take-ownership") == null and (index("apply") == null or index("--dry-run=server") != null))'
     check_log "any(.[]; .[0] == \"curl\" and .[-1] == \"https://erp-api$suffix.fushangyunfu.com/health\")"
 done
-# Worker 为单副本 Recreate，无公网 Service；错误扩容必须在渲染阶段拒绝。
+# Worker 为单副本 Recreate，仅内部 ClusterIP Service；错误扩容必须在渲染阶段拒绝。
 grep -q 'type: Recreate' release-artifacts/manifests.yaml
+"$HELM_REAL" template erp release-artifacts/chart.tgz -n prod -f release-artifacts/values-release.json \
+    --show-only templates/worker.yaml > worker-render.yaml
+awk '/^---$/ { service=0 } /^kind: Service$/ { service=1 } service { print }' worker-render.yaml > worker-service.yaml
+grep -q '^  name: erp-worker$' worker-service.yaml
+grep -q '^  type: ClusterIP$' worker-service.yaml
+grep -q '^      port: 10001$' worker-service.yaml
+grep -q '^      targetPort: http$' worker-service.yaml
+if grep -Eq 'NodePort|LoadBalancer|nodePort:|externalIPs:' worker-service.yaml; then exit 1; fi
 grep -Fq 'command: ["erp-worker"]' release-artifacts/manifests.yaml
 if "$HELM_REAL" template erp release-artifacts/chart.tgz -n prod -f release-artifacts/values-release.json \
     --set worker.replicas=2 > output.log 2>&1; then exit 1; fi

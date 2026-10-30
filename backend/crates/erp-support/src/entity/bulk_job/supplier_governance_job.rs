@@ -80,6 +80,19 @@ pub struct SupplierGovernanceJobSpec {
 }
 
 impl BackgroundJob {
+    /// 判断目录任务是否进入下个同步周期。
+    /// # 参数
+    /// now 为当前 Unix 秒，interval 为同步间隔秒数。
+    /// # 返回
+    /// 已达到同步间隔时为 true。
+    /// # 错误
+    /// 无；非法或早于创建时间的时钟不会启动新周期。
+    pub fn catalog_schedule_due(&self, now: i64, interval: u64) -> bool {
+        u64::try_from(now).is_ok_and(|now| {
+            now >= self.base.created_at && now.saturating_sub(self.base.created_at) >= interval
+        })
+    }
+
     /// 结束失联目录任务，等待中任务取消，执行中任务失败并保留进度。
     /// # 参数
     /// `now` 为服务器判定和结束任务的时间。
@@ -268,5 +281,21 @@ mod tests {
     fn governance_job_kind_exposes_stable_codes() {
         assert_eq!(SupplierGovernanceJobKind::HealthCheck.domain_job_type(), "SUPPLIER_HEALTH_CHECK");
         assert_eq!(SupplierGovernanceJobKind::CatalogSync.job_no_prefix(), "W20-CS");
+    }
+    #[test]
+    fn catalog_schedule_requires_a_valid_due_time() {
+        let mut job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
+            job_id: "schedule-test".to_string().into(),
+            connection_id: "connection".into(),
+            kind: SupplierGovernanceJobKind::CatalogSync,
+            requested_by: "actor".into(),
+            idempotency_hash: "0123456789abcdef".into(),
+        })
+        .unwrap();
+        job.base.created_at = 100;
+        for now in [-1, 99, 109, 110] {
+            assert_eq!(job.catalog_schedule_due(now, 10), now >= 110);
+        }
+        assert!(!job.catalog_schedule_due(99, 0));
     }
 }

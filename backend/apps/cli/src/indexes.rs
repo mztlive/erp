@@ -15,6 +15,7 @@ pub(crate) async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::
     erp_workflow::indexes::ensure_approval_integration(db).await?;
     erp_workflow::indexes::ensure_bpm(db).await?;
     erp_support::indexes::ensure_bulk_job(db).await?;
+    erp_support::indexes::ensure_scheduled_runs(db).await?;
     erp_catalog::indexes::ensure(db).await?;
     erp_contract::indexes::ensure(db).await?;
     erp_finance::indexes::ensure_cost(db).await?;

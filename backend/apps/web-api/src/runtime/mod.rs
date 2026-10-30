@@ -5,6 +5,7 @@
 mod role;
 mod server;
 mod workers;
+mod xxl;
 use config::{Config, S3Config, SafeConfig};
 use erp_identity::service::iam::ensure_identity_foundation;
 use erp_identity::{AdminService, InitializeSuperAdminParams};
@@ -230,6 +231,7 @@ fn spawn_config_watcher(
     initial_storage: S3Config,
 ) {
     let mut receiver = state.subscribe_config();
+    let active_xxl = state.config_snapshot().xxl_job;
 
     tokio::spawn(async move {
         let active_db = initial_db.clone();
@@ -237,10 +239,18 @@ fn spawn_config_watcher(
         let mut current_secret = initial_secret;
         let active_storage = initial_storage.clone();
         let mut observed_storage = initial_storage;
+        let mut observed_xxl = active_xxl.clone();
 
         loop {
             let next_config = receiver.borrow().clone();
             let next_db = DbConfigKey::from_config(&next_config);
+            if next_config.xxl_job != observed_xxl {
+                warn!(
+                    restart_required = next_config.xxl_job != active_xxl,
+                    "XXL 配置变更不热切换；执行器继续使用启动配置"
+                );
+                observed_xxl = next_config.xxl_job.clone();
+            }
 
             if next_db != observed_db {
                 if database_change_requires_restart(&active_db, &next_db) {

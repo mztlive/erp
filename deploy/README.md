@@ -21,7 +21,7 @@ ERP 的生产、测试环境统一使用 `deploy/helm/erp` Chart，由根目录 
 
 环境 JSON 是 Helm 原生支持的 values 输入，发布脚本通过 `jq` 读取其中的域名和配置引用。域名、CLB、配置 Secret 引用只在环境文件维护；副本、资源额度、探针与通用默认值在 Chart 中维护。需要环境专属副本或资源额度时，在对应环境文件覆盖 `api`、`worker`、`client` 或 `pdb` 字段。
 
-同一命名空间仅允许一个 `erp` release。生产资源名称、Service 端口与 Deployment selector 保持现有值：后端 `erp-api`、前端 `erp-client`、Ingress 与 TkeServiceConfig `erp`。Chart 管理 API、前端的 ServiceAccount、Deployment、NodePort Service、PDB，以及 Ingress 和 TkeServiceConfig；启用 Worker 后增加 `erp-worker` ServiceAccount 与 Deployment，共 12 个资源。Worker 不提供 Service 或公网入口。
+同一命名空间仅允许一个 `erp` release。生产资源名称、Service 端口与 Deployment selector 保持现有值：后端 `erp-api`、前端 `erp-client`、Ingress 与 TkeServiceConfig `erp`。Chart 管理 API、前端的 ServiceAccount、Deployment、NodePort Service、PDB，以及 Ingress 和 TkeServiceConfig；启用 Worker 后增加 `erp-worker` ServiceAccount、Deployment 与内部 ClusterIP Service，共 13 个资源。Worker 不提供公网入口。
 
 Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret、镜像拉取 Secret、共享 CLB 本身或集群 CRD。旧 `backend/Jenkinsfile` 与 Compose 链路保持独立，不得与 Helm 同时发布相同的 Kubernetes 工作负载。
 
@@ -59,7 +59,7 @@ API 和前端默认 1 副本，PDB `minAvailable: 0`；滚动更新须预留容�
 
 API 的 `/health` 表示进程已经监听；副本集校验和索引创建发生在监听前，startupProbe 允许约 10 分钟。`/ready` 在外部连接器未配置时可能返回 503，不能替换当前探针。
 
-独立任务切换必须执行 [后台执行器合同](../docs/background-worker-contract.md)：先以 `WORKER_ENABLED=false` 发布支持 external 模式的新 API，等待所有旧 API Pod 退出，再以 `WORKER_ENABLED=true` 发布独立 Worker。两次发布之间后台任务暂时等待。API 与 Worker 使用同一后端镜像 digest 和 Nacos 配置；Worker 仅提供 `/health` 与 `/ready`，不加载 API 业务路由。首次切换不得使用不识别 `ERP_BACKGROUND_MODE` 的历史镜像。
+独立任务切换必须执行 [后台执行器合同](../docs/background-worker-contract.md)：先以 `WORKER_ENABLED=false` 发布固定只处理 HTTP 的新 API，等待所有旧 API Pod 退出，再以 `WORKER_ENABLED=true` 发布独立 Worker。两次发布之间后台任务暂时等待。API 与 Worker 使用同一后端镜像 digest 和 Nacos 配置；Worker 提供 `/health`、`/ready` 和必备的受 token 保护的执行器协议，不加载 API 业务路由。首次切换必须使用已经移除内嵌任务的新镜像。
 
 ## 4. 现有资源首次接管
 
@@ -78,3 +78,5 @@ Helm 就绪、镜像核对及 HTTPS 探测通过后，仍须执行实际登录�
 发布前完成配置解析和应用校验；发布后使用实际应用 Pod、实际 SDK 验证读取。必须分别记录：目标配置读取成功、跨环境读取拒绝、无额外写授权、8848/9848 链路、配置生效及关键业务验收。写入拒绝测试只能使用专用验收条目。记录环境、账号名、Namespace / Group / Data ID、配置版本或摘要、镜像、时间、执行人和结果，不记录密码及配置全文。
 
 本地调试先运行 `kubectl -n infra port-forward --address 127.0.0.1 svc/nacos 8848:8848 9848:9848`，再按 [Config 接入说明](../backend/config/README.md)启动。调试完成停止转发；本机通过不能替代 Pod 验收。仓库离线检查不得连接真实 Nacos、MongoDB 或 S3。
+
+XXL-JOB 配置、任务绑定和切换按 [执行器接入合同](../docs/xxl-job-executor-contract.md) 与 [接入执行步骤](../docs/xxl-job-setup.md) 执行。`WORKER_ENABLED` 只控制 Pod 部署，XXL 驱动由 Nacos 的 `[xxl_job]` 配置决定。

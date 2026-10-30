@@ -96,3 +96,5 @@ mod tests {
         assert!(ensure_paired(false, true, "必须成对").is_err());
     }
 }
+
+pub mod scheduled_run;

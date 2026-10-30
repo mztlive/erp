@@ -5,14 +5,12 @@
 本 crate 提供 `web-api` 与 `erp-worker` 两个二进制，共用 `runtime/` 配置装配和既有 Process。集群必须使用独立执行模式；职责、迁移范围及退出规则见 [后台执行器合同](../../../docs/background-worker-contract.md)。
 
 ```bash
-# 本地兼容模式：一个进程同时提供 API 与常驻任务。
+# 在 backend/ 分别启动 API 与 Worker，端口不同，数据库/存储/密钥保持一致。
 cargo run -p web-api --bin web-api -- --config-path ./config.toml
-# 分进程模式：API 与 Worker 配置的 app.port 必须不同，数据库/存储/密钥保持一致。
-ERP_BACKGROUND_MODE=external cargo run -p web-api --bin web-api -- --config-path ./config-api.toml
-cargo run -p web-api --bin erp-worker -- --config-path ./config-worker.toml
+cargo run -p web-api --bin erp-worker -- --config-path ./config.worker.local.toml
 ```
 
-默认 `web-api` 仍使用 embedded 模式；`ERP_BACKGROUND_MODE` 只接受 embedded/external。禁止对同一数据库同时运行 embedded API 与独立 Worker。Worker 不提供业务路由，只提供内部 `/health` 和 `/ready` 探针。
+`web-api` 固定只提供业务 HTTP；`erp-worker` 固定消费后台任务并提供受 token 保护的 XXL 协议。两个定时任务必须由 XXL-JOB 驱动，不提供 embedded 模式或本地调度开关。两个进程均要求完整 `[xxl_job]` 配置。配置和验收执行 [XXL 接入步骤](../../../docs/xxl-job-setup.md)。
 
 
 `web-api` 是 Axum HTTP 适配层。Handler 只负责提取协议输入、向 Service 传递已认证的

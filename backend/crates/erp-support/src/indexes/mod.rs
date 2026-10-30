@@ -15,13 +15,14 @@ use persistence_core::indexes::{named_index, unique_index};
 /// * `db` - 目标 MongoDB 数据库
 ///
 /// # 返回
-/// 三个子域索引全部创建成功时无返回值。
+/// 全部支撑域索引创建成功时无返回值。
 ///
 /// # 错误
 /// 已有数据违反唯一约束，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     source_registry::ensure(db).await?;
     bulk_job::ensure(db).await?;
+    scheduled_runs::ensure(db).await?;
     file_asset::ensure(db).await?;
     Ok(())
 }
@@ -31,7 +32,7 @@ pub use bulk_job::ensure as ensure_bulk_job;
 pub use file_asset::ensure as ensure_file_asset;
 pub use source_registry::ensure as ensure_source_registry;
 
-/// 为单个集合创建一组幂等命名索引（三集合共用）。
+/// 为单个集合创建一组幂等命名索引。
 ///
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
@@ -44,3 +45,6 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
+
+mod scheduled_runs;
+pub use scheduled_runs::ensure as ensure_scheduled_runs;

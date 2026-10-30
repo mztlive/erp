@@ -82,10 +82,11 @@ async fn execution_workers(state: AppState, receiver: watch::Receiver<bool>) {
             }
         }),
         periodic(receiver, || async {
-            if let Some(process) = &tracking_process
-                && let Err(error) = process.run_once().await
-            {
-                tracing::warn!(error = %error, "供应商履约跟踪调度失败");
+            if let Some(process) = &tracking_process {
+                let result = process.run_callbacks().await;
+                if let Err(error) = result {
+                    tracing::warn!(error = %error, "供应商履约跟踪调度失败");
+                }
             }
         }),
     );

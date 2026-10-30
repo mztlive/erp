@@ -64,6 +64,8 @@ mod contract_ai;
 pub use contract_ai::ContractAiConfig;
 mod dangaoshushu;
 pub use dangaoshushu::{DangaoshushuConfig, SupplierTimestampUnit};
+mod xxl_job;
+pub use xxl_job::XxlJobConfig;
 mod jd_vop;
 pub use jd_vop::JdVopConfig;
 mod command;
@@ -86,6 +88,8 @@ const BOOTSTRAP_PASSWORD_PLACEHOLDER: &str = "replace-with-6-to-32-characters";
 /// 可以从 TOML 格式反序列化。
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
+    /// 必填的启动期调度配置，两个定时入口统一由 XXL-JOB 驱动。
+    pub xxl_job: XxlJobConfig,
     /// 应用程序特定配置
     pub app: AppConfig,
     /// 数据库特定配置
@@ -368,6 +372,7 @@ impl Config {
         if let Some(mail) = &self.purchase_mail {
             mail.validate()?;
         }
+        self.xxl_job.validate()?;
         validate_s3_config(&self.s3)?;
         validate_bootstrap_password(self.bootstrap.initial_admin_password())?;
         Ok(())
@@ -602,6 +607,12 @@ mod tests {
     use super::Config;
 
     const MINIMAL_CONFIG: &str = r#"
+[xxl_job]
+admin_url = "http://admin.invalid/xxl-job-admin"
+executor_url = "http://worker.invalid:10002"
+app_name = "erp-test"
+access_token = "test-token-123456"
+
 [app]
 port = 10001
 secret = "test-secret-that-is-at-least-32-bytes"

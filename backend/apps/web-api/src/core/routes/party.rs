@@ -191,7 +191,13 @@ mod tests {
     fn state() -> AppState {
         let config = Config::from_toml_str(
             r#"
-            [app]
+            [xxl_job]
+admin_url = "http://admin.invalid/xxl-job-admin"
+executor_url = "http://worker.invalid:10002"
+app_name = "erp-test"
+access_token = "test-token-123456"
+
+[app]
             port = 10001
             secret = "unit-test-only-secret-at-least-32-bytes"
             [database]

@@ -1,6 +1,8 @@
 //! 常驻任务装配与监督；所有循环共享进程退出边界。
+use std::sync::Arc;
 use std::time::Duration;
 
+use axum::Router;
 use erp_processes::background::{
     BackgroundRunner, DeliveryCoverageRefreshAdapter, ProductImportTaskAdapter, SalesSelectionTaskAdapter,
     SellableProjectionRefreshAdapter, SupplierCatalogAdoptionTaskAdapter, SupplierCatalogTaskAdapter,
@@ -15,6 +17,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 use super::Result;
+use super::xxl::XxlExecutor;
 use crate::app_state::{AppState, ApprovalOutboxWorker};
 use crate::core::data_transfer;
 use crate::core::supplier_order_worker::{self, SupplierOrderWorker};
@@ -22,6 +25,7 @@ use crate::core::supplier_order_worker::{self, SupplierOrderWorker};
 /// 进程唯一的常驻执行器集合。
 pub(super) struct Workers {
     stop: watch::Sender<bool>,
+    xxl: Arc<XxlExecutor>,
     tasks: Vec<JoinHandle<()>>,
     catalog: CatalogTaskControl,
     orders: SupplierOrderWorker,
@@ -30,19 +34,29 @@ pub(super) struct Workers {
 
 impl Workers {
     /// 先完成所有可失败装配，再启动任何循环。
-    pub(super) fn start(state: AppState) -> Result<Self> {
+    /// # 参数
+    /// state 为已装配的应用组合根。
+    /// # 返回
+    /// 进程唯一的常驻执行器集合。
+    /// # 错误
+    /// 依赖装配或旧调度回执恢复失败时拒绝启动。
+    pub(super) async fn start(state: AppState) -> Result<Self> {
+        let config = state.config_snapshot().xxl_job;
         let catalog = CatalogTaskControl::default();
         let source_media = state.supplier_source_media_preparer()?;
         let runner = build_runner(&state)?;
         let execution = state.supplier_connection_execution_process().with_source_media(source_media.clone());
-        let runner = runner.register(SupplierCatalogTaskAdapter::new(
+        let catalog_adapter = Arc::new(SupplierCatalogTaskAdapter::new(
             state.db(),
             execution,
             state.supplier_api_governance_process(),
             catalog.clone(),
         ));
+        let runner = runner.register_shared(catalog_adapter.clone());
+        let xxl = XxlExecutor::new(&state, config, catalog_adapter).await?;
+        tracing::info!("Worker 定时入口统一由 XXL-JOB 驱动");
         let (stop, receive) = watch::channel(false);
-        let mut tasks = Vec::new();
+        let mut tasks = xxl.spawn(receive.clone());
         if let Some(preparer) = source_media {
             let media = SourceMediaWorker::new(state.db(), preparer);
             let receive = receive.clone();
@@ -57,7 +71,18 @@ impl Workers {
         tasks.push(tokio::spawn(data_transfer::run(state.clone(), receive)));
         let orders = supplier_order_worker::spawn(state.clone());
         let outbox = state.start_approval_outbox_worker();
-        Ok(Self { stop, tasks, catalog, orders, outbox })
+        Ok(Self { stop, tasks, catalog, orders, outbox, xxl })
+    }
+
+    /// 独立 Worker 必备的 XXL 协议路由。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 执行器协议路由。
+    /// # 错误
+    /// 无。
+    pub(super) fn scheduler_routes(&self) -> Router {
+        self.xxl.router()
     }
 
     /// 等待任一常驻循环意外退出；正常业务错误仍由各循环处理。
@@ -67,6 +92,7 @@ impl Workers {
 
     /// 同时停止所有入口，防止串行排空期间其他循环继续领取。
     pub(super) fn request_stop(&self) {
+        self.xxl.request_stop();
         self.stop.send_replace(true);
         self.catalog.request_stop();
         self.orders.request_stop();

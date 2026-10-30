@@ -19,8 +19,8 @@ use crate::core::routes;
 pub(super) async fn serve(state: AppState, role: ProcessRole, port: u16) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
     let readiness = Arc::new(AtomicBool::new(true));
-    let app = if role.serves_api() { routes::create(state.clone()) } else { probes(readiness.clone()) };
-    let workers = if role.runs_workers() { Some(Workers::start(state.clone())?) } else { None };
+    let workers = if role.runs_workers() { Some(Workers::start(state.clone()).await?) } else { None };
+    let app = application(&state, role, workers.as_ref(), readiness.clone());
     let (stop, mut receive) = watch::channel(false);
     let http = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(async move {
@@ -66,6 +66,20 @@ pub(super) async fn serve(state: AppState, role: ProcessRole, port: u16) -> Resu
             warn!("进程排空超过 60 秒，未完成任务保留原状态恢复或核实");
             Err("进程排空超时".into())
         },
+    }
+}
+
+/// API 只提供业务路由，Worker 只提供探针和已启用的执行器协议。
+fn application(
+    state: &AppState,
+    role: ProcessRole,
+    workers: Option<&Workers>,
+    ready: Arc<AtomicBool>,
+) -> Router {
+    if role.serves_api() {
+        routes::create(state.clone())
+    } else {
+        probes(ready).merge(workers.map(Workers::scheduler_routes).unwrap_or_default())
     }
 }
 

@@ -25,6 +25,7 @@ pub struct SupplierCatalogTaskAdapter {
     governance: SupplierApiGovernanceProcess,
     control: CatalogTaskControl,
     cursor: Mutex<String>,
+    schedule_cursor: Mutex<String>,
 }
 
 impl SupplierCatalogTaskAdapter {
@@ -47,14 +48,47 @@ impl SupplierCatalogTaskAdapter {
             governance,
             control,
             cursor: Mutex::new(String::new()),
+            schedule_cursor: Mutex::new(String::new()),
         }
     }
 
-    async fn scheduled_job(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Option<(String, AuditActor)>> {
-        let Some(policy) = self
+    /// 扫描一页连接并持久化到期任务，不启动目录采集。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 本页已生成待执行任务的连接数。
+    /// # 错误
+    /// 任一连接无法确认调度结果时返回错误；已保存任务不回滚或重放。
+    pub async fn schedule_due(&self) -> Result<usize> {
+        let mut cursor = self.schedule_cursor.lock().await;
+        let kinds = self.execution.catalog_connector_types();
+        let connections =
+            supplier_catalog::connection_page(&self.db, &cursor, &kinds, &mut NoTransaction).await?;
+        if connections.is_empty() {
+            cursor.clear();
+            return Ok(0);
+        }
+        let mut scheduled = 0;
+        let mut failed = false;
+        for connection in connections {
+            *cursor = connection.base.id.clone();
+            match self.schedule_connection(&connection).await {
+                Ok(Some(_)) => scheduled += 1,
+                Ok(None) => {},
+                Err(_) => {
+                    failed = true;
+                    tracing::warn!(connection_id=%connection.base.id, "目录计划生成失败，请核对连接原记录");
+                },
+            }
+        }
+        if failed {
+            return Err(Error::BusinessLogicError("本页部分目录计划未确认，请核对原连接任务".into()));
+        }
+        Ok(scheduled)
+    }
+
+    async fn ready_job(&self, connection: &SupplierApiConnection) -> Result<Option<(String, AuditActor)>> {
+        let Some(_) = self
             .execution
             .scheduled_policy(connection)
             .map_err(|error| Error::BusinessLogicError(error.summary))?
@@ -84,12 +118,48 @@ impl SupplierCatalogTaskAdapter {
         } else {
             false
         };
-        if active.is_empty()
-            && !handoff
-            && !is_due(latest.base.created_at, Instant::now().unix_secs(), policy.sync_interval_seconds)
+        if active.is_empty() && !handoff {
+            return Ok(None);
+        }
+        self.create_job(connection, latest).await
+    }
+
+    /// XXL 只生成新的到期任务，旧任务恢复交给持续消费循环。
+    async fn schedule_connection(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<Option<(String, AuditActor)>> {
+        let Some(policy) = self
+            .execution
+            .scheduled_policy(connection)
+            .map_err(|error| Error::BusinessLogicError(error.summary))?
+        else {
+            return Ok(None);
+        };
+        if !self
+            .db
+            .background_jobs()
+            .active_catalog_jobs(&connection.base.id, &mut NoTransaction)
+            .await?
+            .is_empty()
         {
             return Ok(None);
         }
+        let history =
+            self.db.background_jobs().recent_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
+        let Some(latest) = history.first() else { return Ok(None) };
+        if !latest.catalog_schedule_due(Instant::now().unix_secs(), policy.sync_interval_seconds) {
+            return Ok(None);
+        }
+        self.create_job(connection, latest).await
+    }
+
+    /// 周期生成与恢复均沿原任务身份执行治理命令。
+    async fn create_job(
+        &self,
+        connection: &SupplierApiConnection,
+        latest: &BackgroundJob,
+    ) -> Result<Option<(String, AuditActor)>> {
         let actor = self.actor(latest).await?;
         let command = SupplierConnectionCommand {
             action: SupplierConnectionAction::StartCatalogSync,
@@ -144,7 +214,7 @@ impl BackgroundTaskAdapter for SupplierCatalogTaskAdapter {
         for connection in connections {
             let Some(permit) = self.control.claim() else { break };
             *cursor = connection.base.id.clone();
-            match self.scheduled_job(&connection).await {
+            match self.ready_job(&connection).await {
                 Ok(Some((id, actor))) => {
                     let process = Arc::clone(&self.execution);
                     tokio::spawn(async move {
@@ -162,21 +232,5 @@ impl BackgroundTaskAdapter for SupplierCatalogTaskAdapter {
             }
         }
         Ok(claimed)
-    }
-}
-
-fn is_due(created_at: u64, now: i64, interval: u64) -> bool {
-    u64::try_from(now).is_ok_and(|now| now.saturating_sub(created_at) >= interval)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_due;
-    #[test]
-    fn scheduled_reads_respect_interval_without_underflow_or_future_jobs() {
-        assert!(!is_due(100, 109, 10));
-        assert!(is_due(100, 110, 10));
-        assert!(!is_due(100, 99, 10));
-        assert!(!is_due(0, -1, 10));
     }
 }

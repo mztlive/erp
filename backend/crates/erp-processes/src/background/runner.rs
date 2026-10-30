@@ -50,6 +50,18 @@ impl BackgroundRunner {
         self
     }
 
+    /// 注册需要与外部调度共享状态的适配器。
+    /// # 参数
+    /// adapter 为共享适配器。
+    /// # 返回
+    /// 已登记适配器的执行器。
+    /// # 错误
+    /// 无。
+    pub fn register_shared(mut self, adapter: Arc<dyn BackgroundTaskAdapter>) -> Self {
+        self.adapters.push(adapter);
+        self
+    }
+
     /// 执行一轮所有适配器。
     ///
     /// # 参数

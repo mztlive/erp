@@ -730,7 +730,13 @@ mod tests {
     pub(super) fn connector_config(supplier: &str) -> Config {
         Config::from_toml_str(&format!(
             r#"
-            [app]
+            [xxl_job]
+admin_url = "http://admin.invalid/xxl-job-admin"
+executor_url = "http://worker.invalid:10002"
+app_name = "erp-test"
+access_token = "test-token-123456"
+
+[app]
             port=10001
             secret="test-secret-that-is-at-least-32-bytes"
             [database]

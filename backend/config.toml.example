@@ -107,3 +107,10 @@ catalog_full_sync_interval_seconds = 86400
 message_poll_interval_seconds = 60
 
 # source_type = 3 # 可选；默认采用官方接口默认值 3，确有接入差异时覆盖
+
+# 必填：XXL-JOB 连接配置；任务按 JobHandler 分发，无需配置任务 ID。
+[xxl_job]
+admin_url = "http://127.0.0.1:18080/xxl-job-admin"
+executor_url = "http://host.docker.internal:10002"
+app_name = "erp-local"
+access_token = "replace-with-admin-access-token"

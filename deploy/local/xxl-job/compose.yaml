@@ -1,0 +1,55 @@
+name: erp-xxl-local
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mysql:
+    image: mysql:8.4.11@sha256:0744ee5ef89ce6ccfa13de3e579fe6b9e27f93dd70da9c06d2c908b1b193fb8d
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${XXL_MYSQL_ROOT_PASSWORD:?run scripts/start-xxl-job.sh}
+      MYSQL_DATABASE: xxl_job
+      MYSQL_USER: xxl_job
+      MYSQL_PASSWORD: ${XXL_MYSQL_PASSWORD:?run scripts/start-xxl-job.sh}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./00-schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+      - ../../../.local/xxl-job/01-local.sql:/docker-entrypoint-initdb.d/01-local.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql --protocol=TCP -h127.0.0.1 -u$$MYSQL_USER -D xxl_job -e 'SELECT 1 FROM xxl_job_lock LIMIT 1' >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    mem_limit: 768m
+    logging: *logging
+
+  admin:
+    image: xuxueli/xxl-job-admin:2.4.1@sha256:6ef0f2cf57ccd332b045549cf91ac945d4cf0139d7b98b8f126d2effe9364bec
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    entrypoint: ["java", "-Xms128m", "-Xmx384m", "-jar", "/app.jar"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: xxl_job
+      SPRING_DATASOURCE_PASSWORD: ${XXL_MYSQL_PASSWORD:?run scripts/start-xxl-job.sh}
+      XXL_JOB_ACCESSTOKEN: ${XXL_ACCESS_TOKEN:?run scripts/start-xxl-job.sh}
+      XXL_JOB_LOGRETENTIONDAYS: "7"
+      LOGGING_CONFIG: file:/etc/xxl-job/logback.xml
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - ./logback.xml:/etc/xxl-job/logback.xml:ro
+    mem_limit: 768m
+    logging: *logging
+
+volumes:
+  mysql-data:

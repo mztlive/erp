@@ -69,8 +69,6 @@ spec:
             - name: http
               containerPort: 10001
           env:
-            - name: ERP_BACKGROUND_MODE
-              value: external
             - name: NACOS_CLIENT_USERNAME
               valueFrom:
                 secretKeyRef:

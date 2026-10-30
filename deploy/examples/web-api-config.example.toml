@@ -38,3 +38,10 @@ force_path_style = false
 # 可选。生产环境保持关闭。打开后才会允许生成或删除演示主数据。
 # [demo]
 # master_data = false
+
+# 必填：XXL-JOB 连接配置；任务按 JobHandler 分发，无需配置任务 ID。
+[xxl_job]
+admin_url = "http://xxl-job.infra.svc.cluster.local:8080/xxl-job-admin"
+executor_url = "http://erp-worker.test.svc.cluster.local:10001"
+app_name = "erp-test"
+access_token = "replace-with-admin-access-token"
