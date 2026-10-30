@@ -87,6 +87,11 @@
             "group",
             "dataId"
           ]
+        },
+        "backgroundMode": {
+          "enum": [
+            "external"
+          ]
         }
       },
       "required": [
@@ -95,7 +100,8 @@
         "resources",
         "configSecret",
         "configRevision",
-        "nacos"
+        "nacos",
+        "backgroundMode"
       ]
     },
     "client": {
@@ -178,6 +184,44 @@
       "required": [
         "minAvailable"
       ]
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "replicas": {
+          "type": "integer",
+          "enum": [
+            1
+          ]
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requests": {
+              "type": "object",
+              "minProperties": 1
+            },
+            "limits": {
+              "type": "object",
+              "minProperties": 1
+            }
+          },
+          "required": [
+            "requests",
+            "limits"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "replicas",
+        "resources"
+      ]
     }
   },
   "required": [
@@ -188,7 +232,8 @@
     "api",
     "client",
     "ingress",
-    "pdb"
+    "pdb",
+    "worker"
   ],
   "$schema": "http://json-schema.org/draft-07/schema#"
 }

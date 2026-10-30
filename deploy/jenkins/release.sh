@@ -13,6 +13,8 @@ load_environment() {
         production) namespace=prod ;;
         *) echo 'DEPLOY_ENV 必须显式设置为 test 或 production。' >&2; return 1 ;;
     esac
+    worker_enabled="${WORKER_ENABLED:-true}"
+    case "$worker_enabled" in true|false) ;; *) echo 'WORKER_ENABLED 必须为 true 或 false。' >&2; return 1 ;; esac
     environment_values="$chart/environments/$DEPLOY_ENV.json"
     jq -e --arg environment "$DEPLOY_ENV" --arg namespace "$namespace" \
         '.environment == $environment and .namespace == $namespace' "$environment_values" >/dev/null
@@ -78,13 +80,39 @@ preflight() {
         [[ "${ROLLBACK_REVISION:-}" =~ ^[1-9][0-9]*$ ]] || return 1
         target_values="$("${helm_target[@]}" get values erp --revision "$ROLLBACK_REVISION" -o json)"
     else
-        target_values="$(cat "$environment_values")"
+        target_values="$(jq --argjson enabled "$worker_enabled" \
+            '.api.backgroundMode = "external" | .worker.enabled = $enabled' "$environment_values")"
     fi
     check_config_secret "$target_values"
+    check_worker_cutover "$target_values"
     "${kube[@]}" get secret "$tls_secret" -o go-template='{{if index .data "qcloud_cert_id"}}present{{end}}' | grep -qx present
     if [[ -n "${IMAGE_PULL_SECRET:-}" ]]; then
         "${kube[@]}" get secret "$IMAGE_PULL_SECRET" \
             -o go-template='{{if index .data ".dockerconfigjson"}}present{{end}}' | grep -qx present
+    fi
+}
+
+# 单副本只解决新架构内的更新；首次迁移与历史回退必须单独排除旧执行器。
+check_worker_cutover() {
+    local values="$1" api pods
+    if jq -e '.worker.enabled == true' <<< "$values" >/dev/null; then
+        api="$("${kube[@]}" get deployment erp-api --ignore-not-found -o json)"
+        if [[ -n "$api" ]] && ! jq -e \
+            '.spec.template.metadata.annotations["erp/background-mode"] == "external"' <<< "$api" >/dev/null; then
+            echo '首次拆分必须先 WORKER_ENABLED=false 发布 API，等待旧 API Pod 全部退出后再启用 Worker。' >&2
+            return 1
+        fi
+        pods="$("${kube[@]}" get pods -l app.kubernetes.io/name=erp-api -o json)"
+        if ! jq -e 'all(.items[]; .metadata.annotations["erp/background-mode"] == "external")' <<< "$pods" >/dev/null; then
+            echo '仍有旧 API Pod（含 Terminating），禁止同时启动独立 Worker。' >&2
+            return 1
+        fi
+    elif ! jq -e '.api.backgroundMode == "external"' <<< "$values" >/dev/null; then
+        pods="$("${kube[@]}" get pods -l app.kubernetes.io/name=erp-worker -o json)"
+        if ! jq -e '.items | length == 0' <<< "$pods" >/dev/null; then
+            echo '回退旧内嵌架构前，必须先禁用 Worker 并等待其 Pod 全部退出。' >&2
+            return 1
+        fi
     fi
 }
 
@@ -175,7 +203,9 @@ build() (
     web_digest="$(jq -er '."containerimage.digest" | strings | select(test("^sha256:[0-9a-f]{64}$"))' "$artifacts/web-build.json")"
     jq --arg api "$API_REPOSITORY@$api_digest" --arg web "$WEB_REPOSITORY@$web_digest" \
         --arg release "$commit-$DEPLOY_ENV-$BUILD_NUMBER" --arg pull "${IMAGE_PULL_SECRET:-}" \
-        '.api.image = $api | .client.image = $web | .releaseId = $release | .imagePullSecret = $pull' \
+        --argjson enabled "$worker_enabled" \
+        '.api.image = $api | .api.backgroundMode = "external" | .worker.enabled = $enabled |
+         .client.image = $web | .releaseId = $release | .imagePullSecret = $pull' \
         "$environment_values" > "$artifacts/values-release.json"
     helm lint "$chart" --strict --namespace "$namespace" -f "$artifacts/values-release.json"
     helm package "$chart" --destination "$docker_auth_dir"
@@ -188,10 +218,10 @@ deploy() {
     rm -f "$artifacts/deployment-status.txt"
     load_environment
     # 校验目标环境；渲染时由 Chart schema 继续校验镜像 digest 和其余参数。
-    jq -e --slurpfile environment "$environment_values" --arg pull "${IMAGE_PULL_SECRET:-}" '
-        [.environment, .namespace, .ingress, .api.configSecret, .api.nacos, .api.configRevision, .imagePullSecret] ==
+    jq -e --slurpfile environment "$environment_values" --arg pull "${IMAGE_PULL_SECRET:-}" --argjson enabled "$worker_enabled" '
+        [.environment, .namespace, .ingress, .api.configSecret, .api.nacos, .api.configRevision, .imagePullSecret, .api.backgroundMode, .worker.enabled] ==
         [$environment[0].environment, $environment[0].namespace, $environment[0].ingress,
-         $environment[0].api.configSecret, $environment[0].api.nacos, $environment[0].api.configRevision, $pull]' "$artifacts/values-release.json" >/dev/null
+         $environment[0].api.configSecret, $environment[0].api.nacos, $environment[0].api.configRevision, $pull, "external", $enabled]' "$artifacts/values-release.json" >/dev/null
     helm template erp "$artifacts/chart.tgz" --namespace "$namespace" -f "$artifacts/values-release.json" \
         > "$artifacts/manifests.yaml"
     preflight
@@ -244,11 +274,28 @@ rollback() {
 confirm_running() {
     "${kube[@]}" rollout status deployment/erp-api --timeout=900s
     "${kube[@]}" rollout status deployment/erp-client --timeout=900s
-    "${kube[@]}" get deployments erp-api erp-client -o json > "$artifacts/deployments.json"
+    local deployments=(erp-api erp-client)
+    if jq -e '.worker.enabled == true' "$artifacts/values-release.json" >/dev/null; then
+        deployments+=(erp-worker)
+        "${kube[@]}" rollout status deployment/erp-worker --timeout=900s
+    else
+        # 禁用完成必须没有残留 Worker Pod，包含 Terminating，避免旧架构回退重叠。
+        if ! "${kube[@]}" wait --for=delete pod -l app.kubernetes.io/name=erp-worker --timeout=120s; then
+            echo '等待命令未确认 Worker 已删除，将重新读取 Pod 状态。' >&2
+        fi
+        local worker_pods
+        worker_pods="$("${kube[@]}" get pods -l app.kubernetes.io/name=erp-worker -o json)"
+        if ! jq -e '.items | length == 0' <<< "$worker_pods" >/dev/null; then
+            echo '仍存在 Worker Pod，不能确认已停用。' >&2
+            return 1
+        fi
+    fi
+    "${kube[@]}" get deployments "${deployments[@]}" -o json > "$artifacts/deployments.json"
     jq -e --slurpfile values "$artifacts/values-release.json" '
         [.items[] | .metadata.name as $name | .spec.template.spec.containers[] |
          select(.name == $name) | {key: $name, value: .image}] | from_entries ==
-        {"erp-api": $values[0].api.image, "erp-client": $values[0].client.image}' \
+        ({"erp-api": $values[0].api.image, "erp-client": $values[0].client.image} +
+         if $values[0].worker.enabled == true then {"erp-worker": $values[0].api.image} else {} end)' \
         "$artifacts/deployments.json" >/dev/null
     curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 \
         --connect-timeout 10 --max-time 20 --output /dev/null "$api_url/health"

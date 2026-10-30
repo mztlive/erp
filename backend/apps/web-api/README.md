@@ -1,5 +1,20 @@
 # Web API 开发指南
 
+## 进程启动合同
+
+本 crate 提供 `web-api` 与 `erp-worker` 两个二进制，共用 `runtime/` 配置装配和既有 Process。集群必须使用独立执行模式；职责、迁移范围及退出规则见 [后台执行器合同](../../../docs/background-worker-contract.md)。
+
+```bash
+# 本地兼容模式：一个进程同时提供 API 与常驻任务。
+cargo run -p web-api --bin web-api -- --config-path ./config.toml
+# 分进程模式：API 与 Worker 配置的 app.port 必须不同，数据库/存储/密钥保持一致。
+ERP_BACKGROUND_MODE=external cargo run -p web-api --bin web-api -- --config-path ./config-api.toml
+cargo run -p web-api --bin erp-worker -- --config-path ./config-worker.toml
+```
+
+默认 `web-api` 仍使用 embedded 模式；`ERP_BACKGROUND_MODE` 只接受 embedded/external。禁止对同一数据库同时运行 embedded API 与独立 Worker。Worker 不提供业务路由，只提供内部 `/health` 和 `/ready` 探针。
+
+
 `web-api` 是 Axum HTTP 适配层。Handler 只负责提取协议输入、向 Service 传递已认证的
 审计身份、调用用例并包装 `ApiResponse`；管理资源审计语义与事务属于 `services`，
 领域规则和持久化查询分别属于 `entities` 与 `database`。

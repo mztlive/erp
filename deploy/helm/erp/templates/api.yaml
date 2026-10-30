@@ -29,6 +29,7 @@ spec:
   template:
     metadata:
       annotations:
+        erp/background-mode: external
         erp/release: {{ .Values.releaseId | quote }}
         erp/config-revision: {{ .Values.api.configRevision | quote }}
       labels:
@@ -40,6 +41,7 @@ spec:
       imagePullSecrets:
         - name: {{ . | quote }}
 {{- end }}
+      terminationGracePeriodSeconds: 90
       serviceAccountName: erp-api
       automountServiceAccountToken: false
       securityContext:
@@ -67,6 +69,8 @@ spec:
             - name: http
               containerPort: 10001
           env:
+            - name: ERP_BACKGROUND_MODE
+              value: external
             - name: NACOS_CLIENT_USERNAME
               valueFrom:
                 secretKeyRef:

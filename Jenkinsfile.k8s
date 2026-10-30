@@ -26,6 +26,7 @@ pipeline {
         string(name: 'KUBE_CONTEXT', defaultValue: '', description: '可选：留空使用上传 kubeconfig 的 current-context；填写时覆盖默认值')
         string(name: 'IMAGE_PULL_SECRET', defaultValue: '', description: '目标环境命名空间中已有的镜像拉取 Secret；已配置 TKE 免密拉取时可留空')
         choice(name: 'IMAGE_PLATFORM', choices: ['linux/amd64', 'linux/arm64'], description: '必须与 TKE 节点架构一致；Agent 应支持该平台构建')
+        booleanParam(name: 'WORKER_ENABLED', defaultValue: true, description: '独立 Worker；首次迁移先 false 发布 API，确认旧 Pod 全部退出后再 true。回退使用目标 revision 配置')
         booleanParam(name: 'RUN_QUALITY_CHECKS', defaultValue: false, description: 'deploy 时执行前后端质量门禁；发布脚本离线测试始终执行。rollback 不使用')
         booleanParam(name: 'DEPLOY_TO_TKE', defaultValue: true, description: 'deploy 时发布到集群；false 时只构建推送镜像和归档。rollback 必须为 true')
     }

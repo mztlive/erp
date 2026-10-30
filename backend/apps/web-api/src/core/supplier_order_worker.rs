@@ -15,6 +15,28 @@ pub struct SupplierOrderWorker {
 }
 
 impl SupplierOrderWorker {
+    /// 查询常驻循环是否意外结束。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 后台句柄已经完成时为 true。
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn is_finished(&self) -> bool {
+        self.join.is_finished()
+    }
+
+    /// 通知停止领取；已运行轮次由 stop 等待。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已发送停止状态。
+    /// # 错误
+    /// 接收端已退出时无需再次通知。
+    pub(crate) fn request_stop(&self) {
+        let _ = self.stop.send(true);
+    }
+
     /// 停止调度并等待当前有界协议请求结束。
     /// # 参数
     /// 无；消耗本worker句柄。

@@ -19,9 +19,9 @@ ERP 的生产、测试环境统一使用 `deploy/helm/erp` Chart，由根目录 
 | Nacos 凭据 Secret | `prod/erp-api-config` | `test/erp-api-config` |
 | 证书 Secret | `prod/fsytsl-wsk87cm7` | `test/fsytsl-wsk87cm7` |
 
-环境 JSON 是 Helm 原生支持的 values 输入，发布脚本通过 `jq` 读取其中的域名和配置引用。域名、CLB、配置 Secret 引用只在环境文件维护；副本、资源额度、探针与通用默认值在 Chart 中维护。需要环境专属副本或资源额度时，在对应环境文件覆盖 `api`、`client` 或 `pdb` 字段。
+环境 JSON 是 Helm 原生支持的 values 输入，发布脚本通过 `jq` 读取其中的域名和配置引用。域名、CLB、配置 Secret 引用只在环境文件维护；副本、资源额度、探针与通用默认值在 Chart 中维护。需要环境专属副本或资源额度时，在对应环境文件覆盖 `api`、`worker`、`client` 或 `pdb` 字段。
 
-同一命名空间仅允许一个 `erp` release。生产资源名称、Service 端口与 Deployment selector 保持现有值：后端 `erp-api`、前端 `erp-client`、Ingress 与 TkeServiceConfig `erp`。Chart 管理两组 ServiceAccount、Deployment、NodePort Service、PDB，以及 Ingress 和 TkeServiceConfig，共 10 个资源。
+同一命名空间仅允许一个 `erp` release。生产资源名称、Service 端口与 Deployment selector 保持现有值：后端 `erp-api`、前端 `erp-client`、Ingress 与 TkeServiceConfig `erp`。Chart 管理 API、前端的 ServiceAccount、Deployment、NodePort Service、PDB，以及 Ingress 和 TkeServiceConfig；启用 Worker 后增加 `erp-worker` ServiceAccount 与 Deployment，共 12 个资源。Worker 不提供 Service 或公网入口。
 
 Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret、镜像拉取 Secret、共享 CLB 本身或集群 CRD。旧 `backend/Jenkinsfile` 与 Compose 链路保持独立，不得与 Helm 同时发布相同的 Kubernetes 工作负载。
 
@@ -35,7 +35,7 @@ Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret�
 4. MongoDB 必须是副本集，成员地址必须从目标 Pod 可达。流水线不创建数据库、不清库、不执行种子或数据库迁移。
 5. 在各自命名空间准备证书 Secret，包含 `qcloud_cert_id`，并确认覆盖该环境的两个域名。Secret 不跨命名空间引用；相同名称不代表测试环境已经有证书。
 6. 将四个域名解析到共享 CLB，确认域名和路径未被其他应用占用。
-7. 配置 TKE 免密拉取，或在各自命名空间创建镜像拉取 Secret，并通过 Jenkins `IMAGE_PULL_SECRET` 指定名称。免密拉取若限定 ServiceAccount，须覆盖两个命名空间中的 `erp-api` 和 `erp-client`。
+7. 配置 TKE 免密拉取，或在各自命名空间创建镜像拉取 Secret，并通过 Jenkins `IMAGE_PULL_SECRET` 指定名称。免密拉取若限定 ServiceAccount，须覆盖两个命名空间中的 `erp-api`、`erp-worker` 和 `erp-client`。
 
 使用腾讯云 `qcloud` Ingress、NodePort 和现有共享 CLB，不安装 ingress-nginx。共享模式必须在创建 Ingress 时启用；控制器须满足共享 CLB 的版本要求，至少 v2.10.0。已有非共享 Ingress 或绑定其他 CLB 的 Ingress 会阻断发布。不得通过删除线上 Ingress 强行通过检查。
 
@@ -55,9 +55,11 @@ Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret�
 
 从文件模式切换前，必须保留历史 `erp-api-config` Secret 的 `config.toml` 键，并登记保留期限和兼容镜像。回滚 Nacos 版本前，先核对或恢复兼容目标镜像的 Nacos 配置；回滚历史文件版本前，确认旧文件 Secret 仍存在。流水线按目标 revision 的配置来源检查所需键，Helm 回滚不会恢复 Nacos 内容、Secret 或数据库。
 
-默认每个工作负载 1 个副本，PDB `minAvailable: 0`，允许节点维护时驱逐。滚动更新可能临时增加 Pod，须预留容量；单副本维护或故障可能中断服务。修改副本数时必须同时检查 PDB 与应用后台任务并发约束。
+API 和前端默认 1 副本，PDB `minAvailable: 0`；滚动更新须预留容量。Worker 首期固定单副本并使用 Recreate，替换期间任务等待，禁止直接扩容。Worker 的排空预算为 60 秒，API 和 Worker 的 Pod 终止宽限均为 90 秒。
 
 API 的 `/health` 表示进程已经监听；副本集校验和索引创建发生在监听前，startupProbe 允许约 10 分钟。`/ready` 在外部连接器未配置时可能返回 503，不能替换当前探针。
+
+独立任务切换必须执行 [后台执行器合同](../docs/background-worker-contract.md)：先以 `WORKER_ENABLED=false` 发布支持 external 模式的新 API，等待所有旧 API Pod 退出，再以 `WORKER_ENABLED=true` 发布独立 Worker。两次发布之间后台任务暂时等待。API 与 Worker 使用同一后端镜像 digest 和 Nacos 配置；Worker 仅提供 `/health` 与 `/ready`，不加载 API 业务路由。首次切换不得使用不识别 `ERP_BACKGROUND_MODE` 的历史镜像。
 
 ## 4. 现有资源首次接管
 

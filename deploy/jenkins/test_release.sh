@@ -20,7 +20,7 @@ printf '# offline fixture\n' > "$KUBECONFIG"
 export API_REPOSITORY=example.invalid/api WEB_REPOSITORY=example.invalid/web
 export REGISTRY_HOST=example.invalid BUILD_NUMBER=42 IMAGE_PLATFORM=linux/amd64
 export TCR_USERNAME=fixture TCR_PASSWORD=fixture-password IMAGE_PULL_SECRET=tcr-pull
-export DEPLOY_ENV=test CASE=success RUN_QUALITY_CHECKS=false
+export DEPLOY_ENV=test CASE=success RUN_QUALITY_CHECKS=false WORKER_ENABLED=true
 export PATH="$test_root/bin:$PATH"
 export BUILDX_CONFIG="$test_root/buildx-config"
 mkdir -p "$BUILDX_CONFIG/builders"
@@ -113,7 +113,8 @@ case "$tool" in
                 jq --arg api "example.invalid/api@sha256:$(printf 'a%.0s' {1..64})" \
                     --arg web "example.invalid/web@sha256:$(printf 'b%.0s' {1..64})" --arg case "$CASE" \
                     '.api.image = $api | .client.image = $web |
-                     if ($case | startswith("rollback-file")) then del(.api.nacos) | .api.configSecret = "erp-api-config"
+                     if $case == "rollback-worker" then .api.backgroundMode = "external" | .worker.enabled = true
+                     elif ($case | startswith("rollback-file")) then del(.api.nacos) | .api.configSecret = "erp-api-config"
                      elif $case == "rollback-wrong-namespace" then .api.nacos.namespace = "wrong" else . end' \
                     "deploy/helm/erp/environments/$DEPLOY_ENV.json"
             fi
@@ -133,6 +134,21 @@ case "$tool" in
             [[ "$CASE" != wrong-clb ]] || clb=lb-other
             jq -n --arg group "$group" --arg clb "$clb" '{metadata:{annotations:{
                 "ingress.cloud.tencent.com/enable-group":$group,"kubernetes.io/ingress.existLbId":$clb}}}'
+        elif [[ "$args" == *' get deployment erp-api '* ]]; then
+            [[ "$CASE" != new-install ]] || exit 0
+            mode=external
+            [[ "$CASE" != legacy-api ]] || mode=embedded
+            jq -n --arg mode "$mode" '{spec:{template:{metadata:{annotations:{"erp/background-mode":$mode}}}}}'
+        elif [[ "$args" == *' get pods '* ]]; then
+            if [[ "$CASE" == old-api-pod && "$args" == *'name=erp-api'* ]]; then
+                printf '%s\n' '{"items":[{"metadata":{"deletionTimestamp":"2026-10-30T00:00:00Z"}}]}'
+            elif [[ ( "$CASE" == rollback-legacy-worker || "$CASE" == worker-remains ) && "$args" == *'name=erp-worker'* ]]; then
+                printf '%s\n' '{"items":[{"metadata":{"name":"erp-worker-old"}}]}'
+            else
+                printf '%s\n' '{"items":[]}'
+            fi
+        elif [[ "$args" == *' wait '* ]]; then
+            [[ "$CASE" != worker-remains && "$CASE" != worker-already-gone ]]
         elif [[ "$args" == *' get secret '* ]]; then
             [[ "$CASE" != missing-secret ]] || exit 1
             if [[ "$CASE" == missing-nacos-username && "$args" == *NACOS_USERNAME* ]]; then exit 0; fi
@@ -143,12 +159,17 @@ case "$tool" in
         elif [[ "$args" == *' --dry-run=server '* ]]; then
             [[ "$CASE" != dry-run-failure ]]
         elif [[ "$args" == *' rollout '* ]]; then
-            [[ "$CASE" != rollout-failure && "$CASE" != rollback-rollout-failure ]]
+            [[ "$CASE" != rollout-failure && "$CASE" != rollback-rollout-failure ]] || exit 1
+            if [[ "$CASE" == worker-rollout-failure && "$args" == *'deployment/erp-worker'* ]]; then exit 1; fi
         elif [[ "$args" == *' get deployments '* ]]; then
-            jq --arg case "$CASE" '{items:[
+            jq --arg case "$CASE" ' . as $values | {items: ([
                 {metadata:{name:"erp-api"},spec:{template:{spec:{containers:[{name:"erp-api",image:.api.image}]}}}},
                 {metadata:{name:"erp-client"},spec:{template:{spec:{containers:[{name:"erp-client",image:.client.image}]}}}}
-            ]} | if $case == "image-mismatch" or $case == "rollback-image-mismatch" then .items[0].spec.template.spec.containers[0].image = "wrong"
+            ] + (if $values.worker.enabled == true then [
+                {metadata:{name:"erp-worker"},spec:{template:{spec:{containers:[{name:"erp-worker",image:$values.api.image}]}}}}
+            ] else [] end))} | if $case == "worker-image-mismatch" then .items[2].spec.template.spec.containers[0].image = "wrong"
+                elif $case == "worker-missing" then .items = .items[0:2]
+                elif $case == "image-mismatch" or $case == "rollback-image-mismatch" then .items[0].spec.template.spec.containers[0].image = "wrong"
                 elif $case == "missing-deployment" then .items = [.items[0]] else . end' release-artifacts/values-release.json
         fi
         ;;
@@ -195,7 +216,7 @@ for DEPLOY_ENV in test production; do
         '.environment == $env and .namespace == $ns and (.api.image | endswith("0001"))' \
         release-artifacts/values-release.json >/dev/null
     grep -q "namespace: $namespace" release-artifacts/manifests.yaml
-    [[ "$(grep -c '^kind:' release-artifacts/manifests.yaml)" == 10 ]]
+    [[ "$(grep -c '^kind:' release-artifacts/manifests.yaml)" == 12 ]]
     if grep -Eq '^kind: (Secret|Namespace)$|defaultServer:' release-artifacts/manifests.yaml; then exit 1; fi
     check_log "any(.[]; index(\"NEXT_PUBLIC_API_BASE_URL=https://erp-api$suffix.fushangyunfu.com\") != null)"
     [[ ! -d "$(cat "$AUTH_PATH")" ]]
@@ -207,6 +228,29 @@ for DEPLOY_ENV in test production; do
     check_log 'all(.[]; index("--take-ownership") == null and (index("apply") == null or index("--dry-run=server") != null))'
     check_log "any(.[]; .[0] == \"curl\" and .[-1] == \"https://erp-api$suffix.fushangyunfu.com/health\")"
 done
+# Worker 为单副本 Recreate，无公网 Service；错误扩容必须在渲染阶段拒绝。
+grep -q 'type: Recreate' release-artifacts/manifests.yaml
+grep -Fq 'command: ["erp-worker"]' release-artifacts/manifests.yaml
+if "$HELM_REAL" template erp release-artifacts/chart.tgz -n prod -f release-artifacts/values-release.json \
+    --set worker.replicas=2 > output.log 2>&1; then exit 1; fi
+checks=$((checks + 1))
+# 首次迁移准备阶段允许旧 API 存在，禁用 Worker 后等待其 Pod 完全退出。
+export WORKER_ENABLED=false CASE=legacy-api
+run_ok build
+[[ "$(grep -c '^kind:' release-artifacts/manifests.yaml)" == 10 ]]
+run_ok deploy
+check_log 'any(.[]; index("wait") != null and index("app.kubernetes.io/name=erp-worker") != null)'
+export CASE=worker-already-gone
+run_ok deploy
+export CASE=worker-remains
+run_fail deploy
+test ! -e release-artifacts/deployment-status.txt
+export WORKER_ENABLED=true CASE=success
+run_ok build
+# 全新安装无旧 API 时允许启用 Worker。
+export CASE=new-install
+run_ok deploy
+export CASE=success
 # 渲染结果包含 SDK 参数和两个 Secret 引用，不再挂载文件配置。
 grep -q -- '--enable-nacos' release-artifacts/manifests.yaml
 grep -q 'key: NACOS_USERNAME' release-artifacts/manifests.yaml
@@ -241,13 +285,13 @@ run_fail deploy
 check_log 'length == 0'
 export DEPLOY_ENV=production
 for CASE in missing-secret missing-nacos-username missing-nacos-password legacy-ingress wrong-clb ingress-read-failure dry-run-failure ownership-failure \
-    upgrade-failure rollout-failure image-mismatch missing-deployment http-failure; do
+    upgrade-failure rollout-failure image-mismatch missing-deployment http-failure legacy-api old-api-pod worker-rollout-failure worker-image-mismatch worker-missing; do
     export CASE
     printf 'stale success' > release-artifacts/deployment-status.txt
     run_fail deploy
     test ! -e release-artifacts/deployment-status.txt
     case "$CASE" in
-        missing-secret|missing-nacos-username|missing-nacos-password|legacy-ingress|wrong-clb|ingress-read-failure|dry-run-failure) no_upgrade ;;
+        missing-secret|missing-nacos-username|missing-nacos-password|legacy-ingress|wrong-clb|ingress-read-failure|dry-run-failure|legacy-api|old-api-pod) no_upgrade ;;
         ownership-failure) no_live_upgrade ;;
     esac
 done
@@ -303,7 +347,7 @@ for ROLLBACK_REVISION in '' 0 -1 01 abc; do
     no_cluster_change
 done
 export ROLLBACK_REVISION=2
-for CASE in rollback-current rollback-missing rollback-failed-status rollback-bad-image rollback-wrong-namespace rollback-file-missing; do
+for CASE in rollback-current rollback-missing rollback-failed-status rollback-bad-image rollback-wrong-namespace rollback-file-missing rollback-legacy-worker; do
     export CASE
     printf 'stale success' > release-artifacts/deployment-status.txt
     run_fail rollback
@@ -331,6 +375,10 @@ for DEPLOY_ENV in test production; do
     check_log 'all(.[]; index("upgrade") == null and .[0] != "docker")'
     check_log "all(.[]; if .[0] == \"kubectl\" or .[0] == \"helm\" then index(\"--namespace\") != null and .[index(\"--namespace\") + 1] == \"$namespace\" else true end)"
 done
+# 拆分架构回退包含 Worker rollout 和同一后端 digest。
+export CASE=rollback-worker DEPLOY_ENV=test
+run_ok rollback
+check_log 'any(.[]; index("deployment/erp-worker") != null)'
 # 历史文件模式回滚只检查旧 Secret 的 config.toml，不能要求新 Nacos 凭据。
 export CASE=rollback-file DEPLOY_ENV=test
 run_ok rollback

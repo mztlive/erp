@@ -122,6 +122,12 @@ impl BackgroundTaskAdapter for SupplierCatalogTaskAdapter {
         "supplier_catalog_sync"
     }
 
+    async fn drain(&self) {
+        if !self.control.drain(std::time::Duration::from_secs(60)).await {
+            tracing::warn!("目录任务排空超时，保留原检查点恢复");
+        }
+    }
+
     async fn run_due(&self) -> Result<usize> {
         if self.control.stopping() {
             return Ok(0);

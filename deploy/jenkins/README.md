@@ -58,7 +58,7 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 5. 仅 `deploy`：使用隔离的 Docker 登录目录构建推送两个镜像；结束时只清理凭据目录。Buildx builder 按平台保留为 `erp-<平台>`，cargo 缓存留在该 builder 的状态卷中。记录目录默认是 `~/.local/state/erp-buildx`，可用 `BUILDX_CONFIG` 覆盖。固定的 BuildKit 镜像变化时才重建 builder。前端构建地址从所选环境读取。
 6. 构建成功后，在同一 Shell 环境内读取并校验 Buildx digest，将环境 values、两个镜像地址及发布标识合并为 `values-release.json`，直接执行 Helm lint、package、template，归档完整发布包。构建开始时清除旧产物，失败不得继续发布。
 7. 核对归档 values 与当前环境、域名、Secret 引用、Nacos 地址/Namespace/Group/Data ID 和配置 revision 一致，再用归档 Chart 和 values 重新渲染清单；由 Chart schema 校验参数。执行 API Server 清单 dry-run 与 Helm 服务端 dry-run，通过后用同一 Chart 包和 values 升级。
-8. Helm 等待资源就绪，超时为 15 分钟；升级失败请求回退到上一成功 release。随后再次等待两个 Deployment rollout，核对镜像，检查 API `/health` 和管理端 `/` 的公网 HTTPS 响应。
+8. Helm 等待资源就绪，超时为 15 分钟；升级失败请求回退到上一成功 release。随后再次等待 API、前端及已启用 Worker 的 Deployment rollout，核对镜像，检查 API `/health` 和管理端 `/` 的公网 HTTPS 响应。
 
 发布归档保留：
 
@@ -76,13 +76,25 @@ Agent 必须能够访问 Git、依赖源、TCR、目标 TKE API Server 和所选
 
 首次安装不存在上一版本。正常新环境首次安装失败时，Helm 的失败处理可能卸载新安装资源；旧生产资源接管不得使用常规安装流程。任何回退均不恢复 Nacos 内容、外部 Secret 或撤销数据库变化。
 
+### 独立 Worker 首次切换
+
+1. 选择包含 `erp-worker` 且 API 支持 `ERP_BACKGROUND_MODE=external` 的后端版本；禁止搭配历史镜像与新 Chart。
+2. 在 Jenkins 设置 `WORKER_ENABLED=false` 并发布。此阶段关闭 API 内嵌轮询，不创建 Worker；后台任务保留在数据库等待。
+3. 确认 API rollout 成功，所有 API Pod（包括 Terminating）的 `erp/background-mode` 注解均为 `external`；确认新 API 版本支持并实际关闭常驻任务。
+4. 对同一 Git 版本设置 `WORKER_ENABLED=true` 再次发布。发布脚本会检查当前 API Deployment 及全部 API Pod 的模式；旧 Pod 未退出时拒绝启动 Worker。
+5. 核对 Worker 单副本、Recreate、90 秒终止宽限及后端镜像 digest，执行真实任务和重启恢复验收。
+
+`WORKER_ENABLED` 默认 true；归档保存为 `worker.enabled`。禁用 Worker 的发布须等待其 Pod 全部退出才记为成功。Worker 与 API 共用镜像与配置，资源额度单独配置。
+
 ## 5. 查询与回退
 
 操作人必须先从本任务已生成 `deployment-status.txt` 的成功构建中选择目标版本，再用对应构建的 `helm-history.json` 确定 release revision。仅 `helm history` 显示 deployed 不足以证明公网和业务检查通过。
 
-Jenkins 回退：`ACTION=rollback`，`DEPLOY_ENV` 选目标环境，`ROLLBACK_REVISION` 填该 revision。流水线拒绝空值、当前 `deployed`、状态不是 `superseded`、以及镜像 digest 无效的 revision。回退不构建镜像，不恢复 Nacos 内容、配置 Secret 或数据库。回退前必须确认目标镜像兼容的 Nacos 配置已经发布，或历史文件 Secret 仍存在。完成后同样等待 rollout，并按该 revision 保存的 values 核对两个镜像和公网入口。
+Jenkins 回退：`ACTION=rollback`，`DEPLOY_ENV` 选目标环境，`ROLLBACK_REVISION` 填该 revision。流水线拒绝空值、当前 `deployed`、状态不是 `superseded`、以及镜像 digest 无效的 revision。回退不构建镜像，不恢复 Nacos 内容、配置 Secret 或数据库。回退前必须确认目标镜像兼容的 Nacos 配置已经发布，或历史文件 Secret 仍存在。完成后同样等待 rollout，并按该 revision 保存的 values 核对全部 Deployment 镜像和公网入口。
 
-Jenkins 不可用时，在受控终端执行相同回退。替换 kubeconfig 路径和 context；测试用 `test`，生产用 `prod`。不得省略命名空间。
+回退到旧内嵌架构前，必须先以当前拆分版本和 `WORKER_ENABLED=false` 发布，确认 Worker Pod 全部退出。脚本会拒绝 Worker Pod 仍存在时的旧架构回退。回退到拆分版本时按目标 revision 的 `worker.enabled` 决定是否启用 Worker，忽略本次构建的开关。
+
+Jenkins 不可用时，必须先手动完成上述互斥检查，再在受控终端执行相同回退。替换 kubeconfig 路径和 context；测试用 `test`，生产用 `prod`。不得省略命名空间。
 
 ```bash
 helm --kubeconfig /path/to/kubeconfig --kube-context 目标context -n test history erp
@@ -91,6 +103,6 @@ kubectl --kubeconfig /path/to/kubeconfig --context 目标context -n test rollout
 kubectl --kubeconfig /path/to/kubeconfig --context 目标context -n test rollout status deployment/erp-client --timeout=900s
 ```
 
-回退后核对两组镜像与目标成功构建归档一致，检查所选环境两个 HTTPS 入口，再执行业务验收。Helm 历史上限为 20，Jenkins 构建/归档保留最近 20 次；不得承诺超出保留窗口的 revision 可直接回退。需要长期保留的版本必须另行保存归档，并确保 TCR 未清理其 digest。
+回退后核对 API、前端和启用时的 Worker 镜像与目标成功构建归档一致，检查所选环境两个 HTTPS 入口，再执行业务验收。Helm 历史上限为 20，Jenkins 构建/归档保留最近 20 次；不得承诺超出保留窗口的 revision 可直接回退。需要长期保留的版本必须另行保存归档，并确保 TCR 未清理其 digest。
 
 若 revision 已被清理，使用保存的 `chart.tgz` 和 `values-release.json` 执行经过审核的 `helm upgrade --install` 恢复该版本，先完成环境核对、服务端 dry-run、配置与数据兼容性检查。不得从测试归档恢复生产。

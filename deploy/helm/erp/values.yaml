@@ -4,6 +4,7 @@ namespace: ""
 releaseId: ""
 imagePullSecret: ""
 api:
+  backgroundMode: external
   image: ""
   replicas: 1
   configSecret: erp-api-config
@@ -29,3 +30,9 @@ ingress:
   tlsSecret: ""
 pdb:
   minAvailable: 0
+worker:
+  enabled: true
+  replicas: 1
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}

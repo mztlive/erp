@@ -46,6 +46,10 @@ impl BackgroundTaskAdapter for SupplierCatalogAdoptionTaskAdapter {
         "supplier_catalog_adoption"
     }
 
+    async fn drain(&self) {
+        let _permits = self.permits.acquire_many(2).await;
+    }
+
     async fn run_due(&self) -> Result<usize> {
         let mut cursor = self.cursor.lock().await;
         let batches = runnable_batches(&self.db, &cursor, &mut NoTransaction).await?;

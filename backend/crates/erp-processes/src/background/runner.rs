@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::task::JoinHandle;
+use tokio::sync::watch;
 
 use super::adapter::BackgroundTaskAdapter;
 
@@ -61,8 +61,16 @@ impl BackgroundRunner {
     /// # 错误
     /// 无；单个适配器的轮询失败只记日志，不中断其余适配器。
     pub async fn run_once(&self) -> Vec<(&'static str, usize)> {
+        self.run_round(None).await
+    }
+
+    /// 顺序执行适配器，在停止通知后不进入下一个适配器。
+    async fn run_round(&self, stop: Option<&watch::Receiver<bool>>) -> Vec<(&'static str, usize)> {
         let mut counts = Vec::with_capacity(self.adapters.len());
         for adapter in &self.adapters {
+            if stop.is_some_and(|stop| *stop.borrow() || stop.has_changed().is_err()) {
+                break;
+            }
             let started = std::time::Instant::now();
             let name = adapter.name();
             match adapter.run_due().await {
@@ -89,23 +97,21 @@ impl BackgroundRunner {
         counts
     }
 
-    /// 在后台启动轮询循环。
-    ///
+    /// 运行可停止的轮询并排空适配器派生任务。
     /// # 参数
-    /// 无。
-    ///
+    /// `stop` 为进程停止通知。
     /// # 返回
-    /// 返回后台任务句柄；调用方负责在进程退出时等待或终止。
-    ///
+    /// 所有轮次及其派生工作均已结束。
     /// # 错误
-    /// 不返回错误。
-    pub fn spawn(self: Arc<Self>) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(self.interval).await;
-                self.run_once().await;
-            }
+    /// 单轮失败记录日志；总退出预算由进程监督器负责。
+    pub async fn run(&self, stop: watch::Receiver<bool>) {
+        super::periodic(stop.clone(), self.interval, || async {
+            self.run_round(Some(&stop)).await;
         })
+        .await;
+        for adapter in &self.adapters {
+            adapter.drain().await;
+        }
     }
 }
 
@@ -165,5 +171,44 @@ mod tests {
         let counts = runner.run_once().await;
         assert_eq!(counts, vec![("first", 1), ("second", 1)]);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+    struct StoppingAdapter {
+        stop: tokio::sync::watch::Sender<bool>,
+        draining: Arc<tokio::sync::Notify>,
+        finish: Arc<tokio::sync::Notify>,
+    }
+
+    #[async_trait::async_trait]
+    impl BackgroundTaskAdapter for StoppingAdapter {
+        fn name(&self) -> &'static str {
+            "stopping"
+        }
+        async fn run_due(&self) -> crate::Result<usize> {
+            self.stop.send_replace(true);
+            Ok(1)
+        }
+        async fn drain(&self) {
+            self.draining.notify_one();
+            self.finish.notified().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn stop_skips_next_adapter_and_waits_for_spawned_work_to_drain() {
+        let (stop, receive) = tokio::sync::watch::channel(false);
+        let draining = Arc::new(tokio::sync::Notify::new());
+        let finish = Arc::new(tokio::sync::Notify::new());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let runner = BackgroundRunner::new(Duration::ZERO)
+            .register(StoppingAdapter { stop, draining: draining.clone(), finish: finish.clone() })
+            .register(CountingAdapter { name: "must_skip", calls: calls.clone() });
+        let task = tokio::spawn(async move {
+            runner.run(receive).await;
+        });
+        draining.notified().await;
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(!task.is_finished());
+        finish.notify_one();
+        tokio::time::timeout(Duration::from_secs(1), task).await.unwrap().unwrap();
     }
 }

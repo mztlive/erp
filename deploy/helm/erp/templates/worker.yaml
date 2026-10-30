@@ -1,0 +1,142 @@
+{{- if .Values.worker.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: erp-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: erp-worker
+    app.kubernetes.io/part-of: erp
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: erp-worker
+    app.kubernetes.io/part-of: erp
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erp-worker
+  template:
+    metadata:
+      annotations:
+        erp/background-mode: external
+        erp/release: {{ .Values.releaseId | quote }}
+        erp/config-revision: {{ .Values.api.configRevision | quote }}
+      labels:
+        app.kubernetes.io/name: erp-worker
+        app.kubernetes.io/part-of: erp
+        app.kubernetes.io/component: worker
+    spec:
+{{- with .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . | quote }}
+{{- end }}
+      terminationGracePeriodSeconds: 90
+      serviceAccountName: erp-worker
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: erp-worker
+          image: {{ .Values.api.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["erp-worker"]
+          args:
+            - --enable-nacos
+            - --nacos-addr
+            - {{ .Values.api.nacos.serverAddr | quote }}
+            - --nacos-namespace
+            - {{ .Values.api.nacos.namespace | quote }}
+            - --nacos-group
+            - {{ .Values.api.nacos.group | quote }}
+            - --nacos-data-id
+            - {{ .Values.api.nacos.dataId | quote }}
+          ports:
+            - name: http
+              containerPort: 10001
+          env:
+            - name: ERP_BACKGROUND_MODE
+              value: external
+            - name: NACOS_CLIENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.configSecret | quote }}
+                  key: NACOS_USERNAME
+            - name: NACOS_CLIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.configSecret | quote }}
+                  key: NACOS_PASSWORD
+            - name: RUST_LOG
+              value: info
+            - name: LOG_FORMAT
+              value: json
+            - name: LOG_TO_FILE
+              value: "false"
+            - name: OTEL_SDK_DISABLED
+              value: "true"
+            - name: OTEL_SERVICE_NAME
+              value: erp-worker
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: ""
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ printf "deployment.environment.name=%s" .Values.environment | quote }}
+            - name: TZ
+              value: Asia/Shanghai
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          # Worker 只提供进程探针；业务失败与积压必须另外监测。
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+{{ toYaml .Values.worker.resources | indent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

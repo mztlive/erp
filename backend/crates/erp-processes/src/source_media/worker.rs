@@ -10,8 +10,10 @@ use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_support::BulkJobExt;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
+use tokio::sync::watch;
 
 use super::SourceMediaPreparer;
+use crate::background::periodic;
 use crate::{Error, Result};
 
 /// 独立且有界的来源媒体处理循环；数据库版本保护跨进程并发。
@@ -32,28 +34,30 @@ impl SourceMediaWorker {
         Self { db, preparer }
     }
 
-    /// 在独立异步任务中顺序处理图片；进程重启后从数据库恢复。
+    /// 顺序处理媒体，收到停止通知后在条目边界退出。
     /// # 参数
-    /// 无。
+    /// `stop` 为进程停止通知。
     /// # 返回
-    /// 后台任务句柄。
+    /// 当前媒体处理和收尾已结束。
     /// # 错误
     /// 处理失败记录日志并在后续轮次重试。
-    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            loop {
-                if let Err(error) = self.run_due().await {
-                    tracing::warn!(error = %error, "供应商图片后台处理失败");
-                }
-                tokio::time::sleep(Duration::from_secs(5)).await;
+    pub async fn run(&self, stop: watch::Receiver<bool>) {
+        periodic(stop.clone(), Duration::from_secs(5), || async {
+            if let Err(error) = self.run_due(&stop).await {
+                tracing::warn!(error = %error, "供应商图片后台处理失败");
             }
         })
+        .await;
     }
 
-    async fn run_due(&self) -> Result<()> {
+    /// 在持久化条目边界检查停机，不取消媒体写入。
+    async fn run_due(&self, stop: &watch::Receiver<bool>) -> Result<()> {
         let rows =
             supplier_catalog::due_media(&self.db, Instant::now().unix_secs(), &mut NoTransaction).await?;
         for item in rows {
+            if *stop.borrow() || stop.has_changed().is_err() {
+                break;
+            }
             if let Err(error) = self.process(&item).await {
                 tracing::warn!(item_id = %item.base.id, error = %error, "供应商图片处理未完成");
                 self.defer(item).await;

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use config::{Config, SafeConfig};
 use erp_contract::ContractTemplateService;
@@ -39,15 +38,13 @@ use mongodb::Database;
 use serde::Serialize;
 use storage::S3Storage;
 use tokio::sync::{RwLock, watch};
-use tokio::task::JoinHandle;
-use tracing::{error, info, warn};
 
 mod supplier_connectors;
 mod supplier_media;
 pub(crate) use supplier_connectors::JdVopCredentialMaintenance;
 
-/// worker 轮询间隔。
-const OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(1);
+mod approval_worker;
+pub use approval_worker::ApprovalOutboxWorker;
 
 /// 外部连接器装配模式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -124,28 +121,6 @@ impl ExternalConnectorPorts {
             dangaoshushu: None,
             order_connectors: None,
             jd_vop_credentials: None,
-        }
-    }
-}
-
-/// 审批通知 outbox worker 句柄。停止时不再领取新租约。
-pub struct ApprovalOutboxWorker {
-    /// 置位后 worker 停止领取新租约。
-    stop_tx: watch::Sender<bool>,
-    /// 后台轮询任务。
-    join: JoinHandle<()>,
-}
-
-impl ApprovalOutboxWorker {
-    /// 停止领取新租约并等待当前批次结束。
-    ///
-    /// 进程被强制终止时同样不再领取；未完成租约会到期后由其他实例接管。
-    pub async fn stop(self) {
-        if self.stop_tx.send(true).is_err() {
-            info!("审批通知 outbox worker 已退出");
-        }
-        if let Err(error) = self.join.await {
-            error!(error = %error, "等待审批通知 outbox worker 结束失败");
         }
     }
 }
@@ -520,11 +495,7 @@ impl AppState {
     /// # 返回
     /// 返回可用于显式停止的 worker 句柄。
     pub fn start_approval_outbox_worker(&self) -> ApprovalOutboxWorker {
-        let (stop_tx, stop_rx) = watch::channel(false);
-        let port = self.approval_outbox_port();
-        let worker_id = format!("web-api-{}", id_generator::next_id());
-        let join = tokio::spawn(run_approval_outbox_worker(port, worker_id, stop_rx));
-        ApprovalOutboxWorker { stop_tx, join }
+        ApprovalOutboxWorker::start(self.approval_outbox_port())
     }
 
     /// 返回启动时固定的 S3 存储客户端。
@@ -749,42 +720,6 @@ impl AppState {
         let engine = crate::core::auth::JwtEngine::new(config.app.secret)?;
         *engine_guard = Some(engine.clone());
         Ok(engine)
-    }
-}
-
-/// 运行 outbox worker，直到收到停止信号。
-///
-/// # 参数
-/// * `port` - 工作流领域 outbox 端口
-/// * `worker_id` - 本进程租约持有者
-/// * `stop_rx` - 停止信号
-async fn run_approval_outbox_worker(
-    port: Arc<ApprovalNotificationOutboxPort>,
-    worker_id: String,
-    mut stop_rx: watch::Receiver<bool>,
-) {
-    if !port.is_ready() {
-        warn!("审批通知提供方未接入，投递 worker 已暂停；待投递记录保留，不消耗重试次数");
-        return;
-    }
-    info!(worker_id = %worker_id, "审批通知 outbox worker 已启动");
-    loop {
-        if *stop_rx.borrow() {
-            info!(worker_id = %worker_id, "审批通知 outbox worker 停止领取新租约");
-            return;
-        }
-        if let Err(error) = port.process_tick(&worker_id).await {
-            error!(worker_id = %worker_id, error = %error, "审批通知 outbox 批次处理失败");
-        }
-        tokio::select! {
-            changed = stop_rx.changed() => {
-                if changed.is_err() || *stop_rx.borrow() {
-                    info!(worker_id = %worker_id, "审批通知 outbox worker 已停止");
-                    return;
-                }
-            }
-            () = tokio::time::sleep(OUTBOX_POLL_INTERVAL) => {}
-        }
     }
 }
 

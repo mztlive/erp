@@ -1,5 +1,7 @@
 # ERP 现有 Kubernetes 资源 Helm 接管执行规范
 
+本规范仅用于以历史兼容 Chart 建立资源归属基线。接管旧内嵌任务镜像时必须使用 0.2.x Chart；禁止将 0.3.x 的 external 注解与独立 Worker 模板搭配旧镜像。完成接管后，按 [独立执行器合同](../../docs/background-worker-contract.md) 使用新镜像分两次切换。
+
 ## 1. 适用条件
 
 本流程只用于已经通过 Kustomize/kubectl 部署、尚未归属任何 Helm release 的 ERP 资源。空的测试命名空间按正常 Jenkins 发布，不执行本流程。存在其他 Helm release 归属时必须停止，禁止覆盖其归属。
