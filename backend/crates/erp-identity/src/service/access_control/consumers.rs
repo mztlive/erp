@@ -105,6 +105,28 @@ pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
         &[ScopeDimension::InternalOrg],
     ),
     ("supplier_payment", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    (
+        "supplier_deposit",
+        &[
+            "list",
+            "detail",
+            "create",
+            "recharge_request",
+            "approve_recharge",
+            "pay_recharge",
+            "receive_recharge",
+            "authorize",
+            "revoke",
+            "reconcile",
+            "resolve",
+            "release",
+            "reserve",
+            "use",
+            "refund",
+            "bind",
+        ],
+        &[ScopeDimension::InternalOrg, ScopeDimension::SettlementParty],
+    ),
     ("purchase_invoice_allocation", &["list"], &[ScopeDimension::InternalOrg]),
     ("integration_error_task", &["list", "detail", "create"], &[ScopeDimension::InternalOrg]),
     ("reconciliation_difference", &["list", "detail", "create", "decide"], &[ScopeDimension::InternalOrg]),
@@ -252,6 +274,20 @@ pub(super) fn scope_registration(resource: &str, action: &str) -> Result<Consume
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deposit_resolution_and_release_require_the_account_scope() {
+        for action in ["resolve", "release"] {
+            let consumer = registration("supplier_deposit", action).unwrap();
+            assert_eq!(
+                consumer.required_dimensions,
+                &[ScopeDimension::InternalOrg, ScopeDimension::SettlementParty]
+            );
+            assert!(!consumer.default_self);
+            assert!(!consumer.allows_history);
+        }
+        assert!(registration("supplier_deposit", "force_release").is_err());
+    }
 
     #[test]
     fn inquiry_sales_scope_and_procurement_task_grants_remain_separate() {

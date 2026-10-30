@@ -29,6 +29,33 @@ impl SupplierOfferingService {
         if offering.source_type != OfferingSourceType::Api {
             return Ok(());
         }
+        self.api_catalog_item(offering, executor).await?.ensure_supply_prices(revision)
+    }
+
+    /// 将服务器读取的来源采购约束绑定到待创建修订。
+    /// # 参数
+    /// `offering` 为已核验连接的供给，`revision` 为待写修订，执行器沿用创建事务。
+    /// # 返回
+    /// API 供给保存真实来源条件，普通供给保持原语义。
+    /// # 错误
+    /// 来源缺失、采购价或来源税率被改写时拒绝。
+    pub(super) async fn bind_api_purchase_terms(
+        &self,
+        offering: &SupplierOffering,
+        revision: &mut SupplierOfferingRevision,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if offering.source_type == OfferingSourceType::Api {
+            self.api_catalog_item(offering, executor).await?.bind_purchase_terms(revision)?;
+        }
+        Ok(())
+    }
+
+    async fn api_catalog_item(
+        &self,
+        offering: &SupplierOffering,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierCatalogItem> {
         let connection = offering
             .source_connection_id
             .as_ref()
@@ -38,14 +65,12 @@ impl SupplierOfferingService {
             .as_deref()
             .ok_or_else(|| Error::ValidationError("API 供给缺少来源商品编号".into()))?;
         let id = SupplierCatalogItem::source_id(connection.as_ref(), product, &offering.supplier_sku_code);
-        let item = self
-            .db
+        self.db
             .supplier_catalog_items()
             .find_by_id(&id, executor)
             .await?
             .filter(|item| item.supplier_id == offering.supplier_id.as_ref())
-            .ok_or_else(|| Error::ValidationError("API 供给缺少对应的供应商目录，请先同步商品".into()))?;
-        item.ensure_supply_prices(revision)
+            .ok_or_else(|| Error::ValidationError("API 供给缺少对应的供应商目录，请先同步商品".into()))
     }
 
     /// 将已核验的来源报价同步到供给修订，不修改状态、公司销售价或历史修订。
@@ -82,11 +107,8 @@ impl SupplierOfferingService {
             .ok_or_else(|| Error::NotFound("API 供给当前条款不存在".into()))?;
         let current_no = self.current_revision_no(offering, executor).await?;
         let next_no = offering.next_revision_no(current_no, current_no)?;
-        let Some(next) = current.with_source_price(
-            SupplierOfferingRevisionId::new(next_id()),
-            next_no,
-            item.purchase_quote()?,
-        )?
+        let Some(next) =
+            current.with_source_observation(SupplierOfferingRevisionId::new(next_id()), next_no, item)?
         else {
             return Ok(());
         };

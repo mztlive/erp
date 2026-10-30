@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
+import { RequestDepositExecution } from "./request-deposit-execution"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import {
@@ -35,12 +36,12 @@ import type {
 } from "../types"
 
 /** 每笔付款保持独立命令身份；响应未知时重试原金额、回单及分配。 */
-export function RequestPaymentForm({
+function BankRequestPaymentForm({
     request,
     task,
     onTaskCompleted,
 }: {
-    request: PaymentRequest
+    request: PaymentRequest & { payment_recipient: PaymentRecipient }
     task: PaymentTaskContext
     onTaskCompleted?: () => void
 }) {
@@ -373,5 +374,35 @@ export function RequestPaymentForm({
                 onConfirm={confirmPayment}
             />
         </section>
+    )
+}
+
+export function RequestPaymentForm(props: {
+    request: PaymentRequest
+    task: PaymentTaskContext
+    onTaskCompleted?: () => void
+}) {
+    if (props.request.execution_method.type === "supplier_deposit") {
+        return (
+            <RequestDepositExecution
+                request={props.request}
+                task={props.task}
+            />
+        )
+    }
+    if (!props.request.payment_recipient)
+        return (
+            <p role="alert" className="text-sm text-destructive">
+                原银行付款申请缺少冻结的收款资料，请先核对原申请。
+            </p>
+        )
+    return (
+        <BankRequestPaymentForm
+            {...props}
+            request={{
+                ...props.request,
+                payment_recipient: props.request.payment_recipient,
+            }}
+        />
     )
 }

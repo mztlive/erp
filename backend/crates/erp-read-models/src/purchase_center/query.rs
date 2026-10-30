@@ -1,6 +1,8 @@
 //! 采购单查询与对象中心视图编排。
 
+pub(super) mod deposit_funds;
 mod detail;
+mod fulfillment;
 mod source_update;
 
 use std::collections::HashMap;

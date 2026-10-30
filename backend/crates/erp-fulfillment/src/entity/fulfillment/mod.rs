@@ -23,6 +23,7 @@ pub mod customer_acceptance;
 pub mod customer_acceptance_line_batch;
 pub mod delivery;
 pub mod delivery_line_batch;
+mod delivery_partition;
 pub mod delivery_tracking;
 pub mod electronic_delivery;
 pub mod electronic_delivery_draft;

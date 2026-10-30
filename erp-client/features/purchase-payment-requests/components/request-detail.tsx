@@ -100,6 +100,8 @@ export function RequestDetail({
                 showHistory
                 workItemId={scopedWorkItemId}
                 account={
+                    request.execution_method.type === "bank_transfer" &&
+                    request.payment_recipient &&
                     isApprovalTask &&
                     task &&
                     hasPermission(
@@ -110,7 +112,8 @@ export function RequestDetail({
                             id="ppr-review-recipient-account"
                             label="收款账号"
                             maskedValue={
-                                request.payment_recipient.account_number_masked
+                                request.payment_recipient
+                                    ?.account_number_masked ?? "—"
                             }
                             onReveal={() =>
                                 reveal.mutateAsync({ request, task })
@@ -118,7 +121,8 @@ export function RequestDetail({
                         />
                     ) : (
                         <span className="num">
-                            {request.payment_recipient.account_number_masked}
+                            {request.payment_recipient?.account_number_masked ??
+                                "—"}
                         </span>
                     )
                 }

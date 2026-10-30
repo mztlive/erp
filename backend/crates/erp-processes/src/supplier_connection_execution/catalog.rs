@@ -2,6 +2,7 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_supply::catalog_membership::repository as memberships;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
@@ -73,6 +74,7 @@ impl SupplierConnectionExecutionProcess {
                         .await?
                         .ok_or_else(|| Error::NotFound("目录同步任务不存在".to_string()))?;
                     if job.is_terminal() {
+                        memberships::abort_scan(&db, &job.base.id, executor).await?;
                         return Ok(());
                     }
                     let mut run = db
@@ -87,6 +89,7 @@ impl SupplierConnectionExecutionProcess {
                         job.record_progress(0, 0, 1, at)?;
                         job.mark_failed(Some(format!("{}: {}", error.code, error.summary)), at)?;
                         if !run.resume_requested {
+                            memberships::abort_scan(&db, &job.base.id, executor).await?;
                             persist_health_failure_task(&db, &connection, &job, error, &actor, executor)
                                 .await?;
                         }

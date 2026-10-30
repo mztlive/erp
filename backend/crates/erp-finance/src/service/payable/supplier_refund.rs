@@ -96,7 +96,7 @@ async fn persist_refund<P: RefundPostingPort>(
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new(port.next_id()),
             PaymentAllocationData {
-                supplier_payment_id: payment.base.id.clone().into(),
+                source: reverse.source.clone(),
                 payable_entry_id: reverse.entry_id,
                 allocation_seq: seq,
                 allocation_action: PayableAllocationAction::Reverse,
@@ -326,7 +326,7 @@ mod tests {
         PaymentAllocation::new(
             PaymentAllocationId::new(id),
             PaymentAllocationData {
-                supplier_payment_id: SupplierPaymentId::new("pay"),
+                source: SupplierPaymentId::new("pay").into(),
                 payable_entry_id: PayableEntryId::new(entry),
                 allocation_seq: seq,
                 allocation_action: PayableAllocationAction::Apply,

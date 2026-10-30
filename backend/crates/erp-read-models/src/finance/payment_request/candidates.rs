@@ -9,6 +9,7 @@ use erp_core::money::Amount;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
+use erp_finance::repository::supplier_deposit_query::eligible_accounts;
 use erp_party::repository::prelude::*;
 use erp_party::{PartyBankAccountView, PartyExt};
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderRevision, PurchaseOrderStatus};
@@ -19,7 +20,9 @@ use erp_sales::repository::SalesOrderExt;
 use erp_supplier::SupplierExt;
 use persistence_core::{Executor, Transactional};
 
-use super::{PurchasePaymentRequestCandidate, PurchasePaymentRequestReadService};
+use super::{
+    PaymentRequestDepositAccountCandidate, PurchasePaymentRequestCandidate, PurchasePaymentRequestReadService,
+};
 use crate::purchase_center::source_impact::payment_paused_by_source_update;
 use crate::{Error, Result};
 
@@ -149,6 +152,7 @@ impl PurchasePaymentRequestReadService {
         executor: &mut dyn Executor,
     ) -> Result<PurchasePaymentRequestCandidate> {
         let bank_accounts = self.candidate_accounts(order, executor).await?;
+        let deposit_accounts = self.candidate_deposit_accounts(order, revision, executor).await?;
         let lines = self
             .db
             .purchase_order()
@@ -178,7 +182,24 @@ impl PurchasePaymentRequestReadService {
             payment_terms: serde_json::to_value(&revision.payment_term_snapshot)
                 .map_err(|error| Error::Internal(error.to_string()))?,
             bank_accounts,
+            deposit_accounts,
         })
+    }
+
+    async fn candidate_deposit_accounts(
+        &self,
+        order: &PurchaseOrder,
+        revision: &PurchaseOrderRevision,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PaymentRequestDepositAccountCandidate>> {
+        let accounts = eligible_accounts(
+            &self.db,
+            revision.payment_subject.settlement_party_id.as_ref(),
+            order.supplier_id.as_ref(),
+            executor,
+        )
+        .await?;
+        Ok(accounts.iter().map(PaymentRequestDepositAccountCandidate::from).collect())
     }
     async fn candidate_accounts(
         &self,

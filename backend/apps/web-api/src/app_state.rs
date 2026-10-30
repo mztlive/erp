@@ -16,14 +16,17 @@ use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_a
 use erp_processes::adapters::{contract_template_service, supplier_access};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
 use erp_processes::connectors::dangaoshushu::DangaoshushuRuntime;
+use erp_processes::connectors::jd_vop::credential::authorization::{
+    JdVopAuthorizationProcess, JdVopAuthorizationTasks,
+};
 use erp_processes::connectors::registry::SupplierConnectorRegistry;
 use erp_processes::contract_import::{ContractImportProcess, RecognitionProviders};
 use erp_processes::integration_resolution::IntegrationResolutionProcess;
 use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
 use erp_processes::sales_inquiry::SalesInquiryProcess;
+use erp_processes::supplier_deposits::SupplierFundsInvestigationWorker;
+use erp_processes::supplier_messages::SupplierMessageWorker;
 use erp_read_models::integration_center::IntegrationCenterReadService;
-use erp_supply::entity::supplier_api::SupplierConnectorType;
-use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
@@ -39,7 +42,9 @@ use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
+mod supplier_connectors;
 mod supplier_media;
+pub(crate) use supplier_connectors::JdVopCredentialMaintenance;
 
 /// worker 轮询间隔。
 const OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -79,6 +84,8 @@ pub struct ExternalConnectorPorts {
     supplier_fulfillment: Arc<dyn SupplierGateway>,
     readiness: ExternalConnectorReadiness,
     dangaoshushu: Option<Arc<DangaoshushuRuntime>>,
+    order_connectors: Option<Arc<SupplierConnectorRegistry>>,
+    jd_vop_credentials: Option<Arc<JdVopCredentialMaintenance>>,
 }
 
 impl ExternalConnectorPorts {
@@ -98,6 +105,8 @@ impl ExternalConnectorPorts {
                 supplier_fulfillment: ConnectorMode::Configured,
             },
             dangaoshushu: None,
+            order_connectors: None,
+            jd_vop_credentials: None,
         }
     }
 
@@ -113,37 +122,9 @@ impl ExternalConnectorPorts {
                 supplier_fulfillment: ConnectorMode::FailClosed,
             },
             dangaoshushu: None,
+            order_connectors: None,
+            jd_vop_credentials: None,
         }
-    }
-
-    /// 从启动配置装配供应商协议与技术引用；旧履约网关继续失败关闭。
-    /// # 参数
-    /// `config` 是 SafeConfig 的启动快照。
-    /// # 返回
-    /// 缺省关闭集合，或蛋糕叔叔读取与技术引用运行时。
-    /// # 错误
-    /// 启用配置无法构建 HTTP 客户端时返回脱敏分类错误。
-    pub fn from_config(config: &Config) -> ConnectorResult<Self> {
-        let mut ports = Self::fail_closed();
-        let mut registry = SupplierConnectorRegistry::default();
-        if let Some(settings) = config.dangaoshushu.as_ref().filter(|settings| settings.enabled) {
-            let runtime = Arc::new(DangaoshushuRuntime::new(settings.clone())?);
-            registry.register(SupplierConnectorType::Dangaoshushu, runtime.clone()).map_err(|error| {
-                ConnectorError {
-                    class: error.class,
-                    code: error.code,
-                    summary: error.summary,
-                    retry_after: None,
-                }
-            })?;
-            ports.dangaoshushu = Some(runtime);
-            ports.readiness.supplier_api = ConnectorMode::Configured;
-            ports.readiness.supplier_reference_registry = ConnectorMode::Configured;
-        }
-        let registry = Arc::new(registry);
-        ports.supplier_api = registry.clone();
-        ports.supplier_reference_registry = registry;
-        Ok(ports)
     }
 }
 
@@ -182,6 +163,7 @@ pub struct AppState {
     external_connectors: ExternalConnectorPorts,
     integration_evidence: Arc<dyn IntegrationEvidenceAuthority>,
     catalog_supply_query: Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort>,
+    jd_vop_authorization: Arc<JdVopAuthorizationTasks>,
 }
 
 impl AppState {
@@ -245,6 +227,7 @@ impl AppState {
             external_connectors,
             integration_evidence,
             catalog_supply_query,
+            jd_vop_authorization: Arc::new(JdVopAuthorizationTasks::default()),
         }
     }
 
@@ -278,6 +261,34 @@ impl AppState {
     /// 返回共享 RBAC 服务。
     pub fn rbac(&self) -> SharedRbacService {
         Arc::clone(&self.rbac)
+    }
+
+    /// 装配指定京东连接的页面授权入口，复用应用共享任务生命周期。
+    /// # 参数
+    /// 无；账号配置只从SafeConfig当前快照读取。
+    /// # 返回
+    /// 不发送HTTP的授权用例，未配置时状态保持未就绪。
+    /// # 错误
+    /// 不返回错误，敏感配置错误由用例转换为脱敏状态。
+    pub fn jd_vop_authorization_process(&self) -> JdVopAuthorizationProcess {
+        let config = self.config_snapshot();
+        JdVopAuthorizationProcess::new(
+            self.db(),
+            config.jd_vop.as_ref(),
+            self.rbac(),
+            self.jd_vop_authorization.clone(),
+        )
+    }
+
+    /// 返回应用共享授权任务边界，供停止HTTP受理后等待已开始授权保存完成。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 同一任务边界的共享引用。
+    /// # 错误
+    /// 不执行I/O，不返回错误。
+    pub fn jd_vop_authorization_tasks(&self) -> Arc<JdVopAuthorizationTasks> {
+        self.jd_vop_authorization.clone()
     }
 
     /// 装配询价命令及当前授权依赖。
@@ -424,7 +435,7 @@ impl AppState {
     pub fn supplier_api_order_process(
         &self,
     ) -> Option<erp_processes::supplier_api_orders::SupplierApiOrderProcess> {
-        self.external_connectors.dangaoshushu.as_ref().map(|runtime| {
+        self.external_connectors.order_connectors.as_ref().map(|runtime| {
             erp_processes::supplier_api_orders::SupplierApiOrderProcess::new(
                 self.db(),
                 Arc::clone(runtime),
@@ -443,11 +454,38 @@ impl AppState {
     pub fn supplier_order_tracking_process(
         &self,
     ) -> Option<erp_processes::supplier_order_tracking::SupplierOrderTrackingProcess> {
-        self.external_connectors.dangaoshushu.as_ref().map(|runtime| {
+        self.external_connectors.order_connectors.as_ref().map(|runtime| {
             erp_processes::supplier_order_tracking::SupplierOrderTrackingProcess::new(
                 self.db(),
                 Arc::clone(runtime),
             )
+        })
+    }
+
+    /// 返回按账号独立领取的供应商资金调查入口。
+    /// # 参数
+    /// 无；账号、真实资金来源及处理权限来自服务端绑定。
+    /// # 返回
+    /// 已登记协议时返回共享调查器；缺失实际资金能力的连接不会发起请求。
+    /// # 错误
+    /// 不执行 I/O，不返回错误。
+    pub fn supplier_funds_worker(&self) -> Option<Arc<SupplierFundsInvestigationWorker>> {
+        self.external_connectors
+            .order_connectors
+            .as_ref()
+            .map(|registry| Arc::new(SupplierFundsInvestigationWorker::new(self.db(), registry.clone())))
+    }
+
+    /// 返回拉取消息调度入口；只按实际消息能力领取账号，不推导回调身份。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已注册协议返回调度器；未配置时返回 None。
+    /// # 错误
+    /// 不执行 I/O，不返回错误。
+    pub fn supplier_message_worker(&self) -> Option<SupplierMessageWorker> {
+        self.external_connectors.order_connectors.as_ref().map(|registry| {
+            SupplierMessageWorker::new(self.db(), registry.clone(), self.sensitive_data().as_ref().clone())
         })
     }
 
@@ -754,7 +792,7 @@ async fn run_approval_outbox_worker(
 mod tests {
     use super::{Config, ConnectorMode, ExternalConnectorPorts, ExternalConnectorReadiness};
 
-    fn connector_config(supplier: &str) -> Config {
+    pub(super) fn connector_config(supplier: &str) -> Config {
         Config::from_toml_str(&format!(
             r#"
             [app]

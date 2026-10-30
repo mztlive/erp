@@ -95,6 +95,21 @@ pub trait PaymentAllocationRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<PaymentAllocation>>;
 
+    /// 批量读取预存款使用的核销，不混入原充值银行付款。
+    ///
+    /// # 参数
+    /// * `usage_ids` - 已核实使用的稳定身份集合。
+    /// * `executor` - 核销所属事务执行器。
+    /// # 返回
+    /// 返回指定使用形成的正反向分配；空输入不查询。
+    /// # 错误
+    /// 数据库查询或反序列化失败时返回错误。
+    async fn find_allocations_by_deposit_usages(
+        &self,
+        usage_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PaymentAllocation>>;
+
     /// 批量按应付分录集合取回核销分配（`$in`，用于反向核销锁定）。
     ///
     /// # 参数
@@ -114,6 +129,17 @@ pub trait PaymentAllocationRepositoryExt {
 }
 
 impl PaymentAllocationRepositoryExt for persistence_core::Repository<'_, PaymentAllocation> {
+    async fn find_allocations_by_deposit_usages(
+        &self,
+        usage_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PaymentAllocation>> {
+        if usage_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "supplier_deposit_usage_id": { "$in": usage_ids } }, executor).await
+    }
+
     async fn find_allocations_by_payments(
         &self,
         payment_ids: &[erp_core::ids::SupplierPaymentId],

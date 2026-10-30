@@ -1,0 +1,292 @@
+//! 预存款单域查询：所有 Mongo 条件、排序和有界读取仅在拥有仓储定义。
+use erp_core::common::time::Instant;
+use erp_core::money::Amount;
+use futures_util::TryStreamExt;
+use mongodb::Database;
+use mongodb::bson::doc;
+use mongodb::options::FindOptions;
+use persistence_core::{Error as PersistenceError, Executor, Repository, mongo_ops};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
+pub use super::funds_matching::ledger_by_external_transaction;
+use crate::entity::supplier_deposit::{
+    DepositLedgerKind, SupplierDepositAccount, SupplierDepositAuthorization, SupplierDepositBatch,
+    SupplierDepositReservation, SupplierDepositUsage,
+};
+use crate::repository::{PayableExt, SupplierDepositExt};
+use crate::{Error, Result};
+
+/// 在账户范围内取得最近一百项证据；不扫描其他账户。
+/// # 参数
+/// * `repository` - 当前财务记录类型的拥有仓储。
+/// * `account` / `executor` - 已授权账户及原执行器。
+/// # 返回
+/// 返回按创建时间和身份倒序的最近记录。
+/// # 错误
+/// 查询或反序列化失败时拒绝。
+pub async fn latest_account_records<T: Serialize + DeserializeOwned + Send + Sync>(
+    repository: Repository<'_, T>,
+    account: &str,
+    executor: &mut dyn Executor,
+) -> Result<Vec<T>> {
+    Ok(mongo_ops::find_many(
+        &repository.collection(),
+        doc! {"account_id": account, "deleted_at": 0_i64},
+        FindOptions::builder().sort(doc! {"created_at": -1, "id": -1}).limit(100).build(),
+        executor,
+    )
+    .await?)
+}
+
+/// 有界装载资金账户候选，范围许可由调用方逐账户核验。
+/// # 参数
+/// * `db` / `executor` - 财务数据源和执行器。
+/// * `supplier` / `payer` - 仅收窄账户候选的筛选。
+/// * `skip` / `size` - 已规范化分页位置与上限。
+/// # 返回
+/// 最多size加一条账户，额外一条用于继续分页。
+/// # 错误
+/// 分页非法或读取失败时拒绝。
+pub async fn account_page(
+    db: &Database,
+    supplier: Option<&str>,
+    payer: Option<&str>,
+    skip: u64,
+    size: u32,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierDepositAccount>> {
+    if size == 0 || size > 100 {
+        return Err(Error::ValidationError("账户分页上限为一百条".into()));
+    }
+    let mut filter = doc! {"deleted_at": 0_i64};
+    if let Some(supplier) = supplier {
+        filter.insert("identity.supplier_id", supplier);
+    }
+    if let Some(payer) = payer {
+        filter.insert("identity.payer_party_id", payer);
+    }
+    let options = FindOptions::builder()
+        .sort(doc! {"created_at": -1, "id": -1})
+        .skip(skip)
+        .limit(i64::from(size) + 1)
+        .build();
+    Ok(mongo_ops::find_many(&db.supplier_deposit_accounts().collection(), filter, options, executor).await?)
+}
+
+/// 按真实到账时间和稳定身份装载可分配批次。
+/// # 参数
+/// * `db` / `account` / `executor` - 数据源、资金账户和占用事务。
+/// # 返回
+/// 返回有剩余额度的FIFO批次，超过一万候选时明确拒绝。
+/// # 错误
+/// 超限或读取失败时拒绝，不能跳过早期批次。
+pub async fn allocatable_batches(
+    db: &Database,
+    account: &str,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierDepositBatch>> {
+    let filter = doc! {"account_id": account, "deleted_at": 0_i64, "$expr": {"$gt": [{"$subtract": [{"$add": ["$amount", "$returned_amount"]}, {"$add": ["$reserved_amount", "$consumed_amount", "$reversed_amount"]}]}, {"$toDecimal": "0"}]}};
+    let values: Vec<SupplierDepositBatch> = mongo_ops::find_many(
+        &db.supplier_deposit_batches().collection(),
+        filter,
+        FindOptions::builder().sort(doc! {"evidence.received_at": 1, "id": 1}).limit(10001).build(),
+        executor,
+    )
+    .await?;
+    if values.len() > 10000 {
+        return Err(Error::BusinessLogicError("待分配充值批次数量过多，请先整理资金来源".into()));
+    }
+    Ok(values)
+}
+
+/// 读取执行组唯一原占用，不按根单或供应商名称猜测。
+/// # 参数
+/// * `db` / `execution` / `executor` - 数据源、冻结执行组与执行器。
+/// # 返回
+/// 返回原占用或缺失。
+/// # 错误
+/// 查询失败时拒绝。
+pub async fn reservation_for_execution(
+    db: &Database,
+    execution: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<SupplierDepositReservation>> {
+    Ok(db
+        .supplier_deposit_reservations()
+        .find_one_by_field("basis.execution_group_id", execution, executor)
+        .await?)
+}
+
+/// 读取原占用全部资金使用记录，按稳定身份排序。
+/// # 参数
+/// * `db` / `reservation` / `executor` - 数据源、原占用与执行器。
+/// # 返回
+/// 返回相同执行组的使用记录。
+/// # 错误
+/// 读取失败时拒绝。
+pub async fn usages_for_reservation(
+    db: &Database,
+    reservation: &str,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierDepositUsage>> {
+    Ok(db
+        .supplier_deposit_usages()
+        .find_many_sorted(doc! {"reservation_id": reservation}, doc! {"id": 1}, executor)
+        .await?)
+}
+
+/// 返回批准采购同主体、同供应商的可选账户身份，不读取余额作为批准资格。
+/// # 参数
+/// * `db` / `payer` / `supplier` / `executor` - 原采购批准来源及执行器。
+/// # 返回
+/// 返回已启用人民币账户候选。
+/// # 错误
+/// 读取失败时拒绝。
+pub async fn eligible_accounts(
+    db: &Database,
+    payer: &str,
+    supplier: &str,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierDepositAccount>> {
+    let values: Vec<SupplierDepositAccount> = mongo_ops::find_many(&db.supplier_deposit_accounts().collection(), doc! {"identity.payer_party_id": payer, "identity.supplier_id": supplier, "identity.currency": "CNY", "enabled": true, "deleted_at": 0_i64}, FindOptions::builder().sort(doc! {"created_at": 1, "id": 1}).limit(101).build(), executor).await?;
+    if values.len() > 100 {
+        return Err(Error::BusinessLogicError("可选预存款账户超过上限，请先核查账号配置".into()));
+    }
+    Ok(values)
+}
+
+/// 防止历史银行付款的同一流水再次登记为充值现金来源。
+/// # 参数
+/// * `db` / `payer` / `reference` / `executor` - 原主体、银行流水及同一财务事务。
+/// # 返回
+/// 相同主体已存在该银行流水时返回真，包括历史普通采购付款。
+/// # 错误
+/// 查询失败时拒绝，不将未知当作不存在。
+pub async fn bank_source_exists(
+    db: &Database,
+    payer: &str,
+    reference: &str,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    Ok(db
+        .supplier_payments()
+        .exists(doc! {"payer_party_id": payer, "bank_reference": reference}, executor)
+        .await?)
+}
+
+/// 读取原人工命令的永久执行组占用，当前采购退役不影响原结果恢复。
+/// # 参数
+/// * `db` / `account` / `request` - 原财务范围。
+/// * `prefix` - 服务器命令身份形成的完整操作前缀。
+/// * `executor` - 原恢复执行器。
+/// # 返回
+/// 返回最多一千项原命令占用，按稳定身份排序。
+/// # 错误
+/// 前缀无效、超限或读取失败时拒绝。
+pub async fn reservations_for_manual_command(
+    db: &Database,
+    account: &str,
+    request: &str,
+    prefix: &str,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierDepositReservation>> {
+    if prefix.is_empty() || prefix.len() > 256 {
+        return Err(Error::ValidationError("余额执行命令前缀无效".into()));
+    }
+    let mut expression = String::from("^");
+    for character in prefix.chars() {
+        if ".+*?()[]{}|^$\\".contains(character) {
+            expression.push('\\');
+        }
+        expression.push(character);
+    }
+    let values: Vec<SupplierDepositReservation> = mongo_ops::find_many(&db.supplier_deposit_reservations().collection(), doc! {
+        "account_id":account, "basis.payment_request_id":request, "operation_key":{"$regex":expression}, "deleted_at":0_i64,
+    }, FindOptions::builder().sort(doc! {"id":1}).limit(1001).build(), executor).await?;
+    if values.len() > 1000 {
+        return Err(Error::BusinessLogicError("原余额执行组超过上限，请核查原命令".into()));
+    }
+    Ok(values)
+}
+
+/// 读取当前账户有效期限内的自动授权；人工单次授权不进入自动候选。
+/// # 参数
+/// * `db` / `account` / `now` / `executor` - 账户、服务器时间和原执行器。
+/// # 返回
+/// 返回稳定排序的有限自动授权候选，业务限额仍由授权实体校验。
+/// # 错误
+/// 超过一千候选或读取失败时拒绝。
+pub async fn automatic_authorizations(
+    db: &Database,
+    account: &str,
+    now: Instant,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierDepositAuthorization>> {
+    let values: Vec<SupplierDepositAuthorization> = mongo_ops::find_many(&db.supplier_deposit_authorizations().collection(), doc! {
+        "account_id":account,"revoked":false,"valid_from":{"$lte":now.unix_secs()},"valid_until":{"$gt":now.unix_secs()},
+        "$or":[{"mode.type":"automatic"},{"mode":{"$exists":false}}], "deleted_at":0_i64,
+    }, FindOptions::builder().sort(doc! {"valid_until":1,"id":1}).limit(1001).build(), executor).await?;
+    if values.len() > 1000 {
+        return Err(Error::BusinessLogicError("账户自动授权过多，请先核查授权配置".into()));
+    }
+    Ok(values)
+}
+
+#[derive(Deserialize)]
+struct LedgerBalanceRow {
+    #[serde(rename = "_id")]
+    kind: DepositLedgerKind,
+    amount: Amount,
+}
+/// 从真实不可变资金流水重建截止时点余额，拒绝客户端自报本地余额。
+/// # 参数
+/// * `db` / `account` / `cutoff` / `executor` - 原账户、截止时点和对账事务。
+/// # 返回
+/// 返回已保存实际资金来源形成的定点余额。
+/// # 错误
+/// 未知资金方向、金额溢出或聚合失败时拒绝。
+pub async fn ledger_balance_at(
+    db: &Database,
+    account: &str,
+    cutoff: Instant,
+    executor: &mut dyn Executor,
+) -> Result<Amount> {
+    let collection = db.supplier_deposit_ledger().collection();
+    let pipeline = vec![
+        doc! {"$match": {"account_id": account, "evidence.occurred_at": {"$lte": cutoff.unix_secs()}, "deleted_at": 0_i64}},
+        doc! {"$group": {"_id": "$kind", "amount": {"$sum": "$amount"}}},
+    ];
+    let rows: Vec<LedgerBalanceRow> = match executor.session() {
+        Some(session) => collection
+            .aggregate(pipeline)
+            .with_type::<LedgerBalanceRow>()
+            .session(&mut *session)
+            .await
+            .map_err(PersistenceError::from)?
+            .stream(session)
+            .try_collect()
+            .await
+            .map_err(PersistenceError::from)?,
+        None => collection
+            .aggregate(pipeline)
+            .with_type::<LedgerBalanceRow>()
+            .await
+            .map_err(PersistenceError::from)?
+            .try_collect()
+            .await
+            .map_err(PersistenceError::from)?,
+    };
+    rows.into_iter().try_fold(Amount::zero(), |balance, row| {
+        let decimal = match row.kind {
+            DepositLedgerKind::Recharge | DepositLedgerKind::Return => {
+                balance.to_decimal().checked_add(row.amount.to_decimal())
+            },
+            DepositLedgerKind::Debit | DepositLedgerKind::RechargeReversal => {
+                balance.to_decimal().checked_sub(row.amount.to_decimal())
+            },
+        }
+        .ok_or_else(|| Error::BusinessLogicError("资金流水余额重建溢出".into()))?;
+        Amount::try_from(decimal).map_err(Into::into)
+    })
+}

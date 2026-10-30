@@ -7,6 +7,7 @@ pub mod change_draft;
 pub mod change_void;
 pub mod correspondence;
 pub mod delivery_options;
+mod deposit_summary;
 pub mod expense;
 pub mod freight;
 pub mod payment_arrangement;
@@ -36,6 +37,7 @@ use erp_read_models::purchase_center::{PurchaseChangeListView, PurchaseListView,
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
+use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
 
 /// 构造已注入采购范围 Port 的只读服务。
@@ -113,9 +115,11 @@ pub async fn purchase_order_list(
 pub async fn purchase_order_detail(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
+    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
-    let view = purchase_reads(&state).purchase_order_detail(&id, Some(&actor)).await?;
+    let mut view = purchase_reads(&state).purchase_order_detail(&id, Some(&actor)).await?;
+    deposit_summary::attach(&state, &subject, &actor, &mut view).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

@@ -32,7 +32,7 @@ pub(super) trait ObservationApplication: Send + Sync {
     /// 数量、来源或当前执行门槛不满足时拒绝。
     async fn deliveries(
         &self,
-        tracking: &OrderTracking,
+        tracking: &mut OrderTracking,
         observation: &OrderObservation,
         executor: &mut dyn Executor,
     ) -> Result<bool>;

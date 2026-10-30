@@ -51,6 +51,7 @@ mod source_registry;
 mod supplier;
 mod supplier_api;
 mod supplier_callbacks;
+mod supplier_deposit;
 mod supplier_fulfillment;
 mod supplier_offering;
 mod supplier_portal;

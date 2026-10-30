@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum SupplierConnectorType {
     Dangaoshushu,
+    JdVop,
 }
 
 impl SupplierConnectorType {
@@ -16,8 +17,8 @@ impl SupplierConnectorType {
     /// 可用于新建连接的类型清单；不表示部署已配置凭据。
     /// # 错误
     /// 不返回错误。
-    pub const fn all() -> [Self; 1] {
-        [Self::Dangaoshushu]
+    pub const fn all() -> [Self; 2] {
+        [Self::Dangaoshushu, Self::JdVop]
     }
 
     /// 返回接口类型的中文名称。
@@ -30,6 +31,7 @@ impl SupplierConnectorType {
     pub fn label(self) -> &'static str {
         match self {
             Self::Dangaoshushu => "蛋糕叔叔 API",
+            Self::JdVop => "京东 VOP",
         }
     }
 }

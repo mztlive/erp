@@ -1,34 +1,49 @@
+use std::sync::Arc;
+
 use erp_core::common::time::Instant;
+use erp_core::money::Amount;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt, ApiOrderStage};
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_fulfillment::{CancelStatus, FulfillmentStatus};
+use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::ports::connector::common::{ActionKey, ConnectorError, Lookup};
-use erp_supply::ports::connector::offer::{DeliveryQuery, DeliverySource};
+use erp_supply::ports::connector::funds::OrderFundingRequirement;
+use erp_supply::ports::connector::offer::DeliveryQuery;
 use erp_supply::ports::connector::order::{
-    CreateOrder, CreationNext, DeliveryMethod, OrderKey, OrderSnapshot, Orders, PaymentState,
+    CreateOrder, CreationNext, DeliveryMethod, OrderKey, OrderSnapshot,
 };
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use sha2::{Digest, Sha256};
 
-use super::SupplierApiOrderProcess;
 use super::snapshot::ExecutionSnapshot;
-use crate::connectors::dangaoshushu::DangaoshushuConnector;
+use super::{SupplierApiOrderProcess, missing_capability};
+use crate::fulfillment_execution::ensure_po_fulfillable;
+use crate::supplier_deposits::prepare_automatic_execution_funds;
 use crate::{Error, Result};
 
 impl SupplierApiOrderProcess {
-    pub(super) async fn connector(&self, execution: &ApiOrderExecution) -> Result<DangaoshushuConnector> {
+    pub(super) async fn connector(
+        &self,
+        execution: &ApiOrderExecution,
+    ) -> Result<Arc<dyn SupplierConnector>> {
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(&execution.connection_id, &mut NoTransaction)
             .await?;
         let connector = if matches!(
             execution.stage,
-            ApiOrderStage::ConfirmPayment | ApiOrderStage::PaymentUnknown | ApiOrderStage::Observe
+            ApiOrderStage::ConfirmPayment
+                | ApiOrderStage::PaymentUnknown
+                | ApiOrderStage::Observe
+                | ApiOrderStage::DiscoverOrders
+                | ApiOrderStage::ConfirmationUnknown
+                | ApiOrderStage::AddressUnknown
         ) {
-            self.runtime.tracking_connector(&connection)
+            self.runtime.fulfillment_connector(&connection)
         } else {
-            self.runtime.connector(&connection)
+            self.runtime.creation_connector(&connection)
         };
         connector.map_err(|failure| Error::BusinessLogicError(failure.summary))
     }
@@ -43,38 +58,43 @@ impl SupplierApiOrderProcess {
         *execution = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    use erp_procurement::repository::PurchaseOrderExt;
-                    let mut order = db
-                        .purchase_orders()
-                        .find_by_id(&claimed.purchase_order_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("来源采购不存在".into()))?;
-                    crate::fulfillment_execution::ensure_po_fulfillable(&order)?;
-                    if order.stable.current_revision_id.as_deref()
-                        != Some(claimed.purchase_order_revision_id.as_str())
-                    {
-                        return Err(Error::ConflictError("采购版本已变化，接口执行已阻断".into()));
-                    }
-                    crate::fulfillment_execution::ensure_prepay_gate(&process.db, executor, &order).await?;
-                    process.fence_connection(&claimed.connection_id, claimed.stage, executor).await?;
-                    if claimed.stage == ApiOrderStage::PaymentUnknown {
-                        let supplier_order = db
-                            .supplier_fulfillment_orders()
-                            .find_by_id(&claimed.base.id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("供应商订单不存在".into()))?;
-                        if supplier_order.cancel_status == CancelStatus::Canceled {
-                            return Err(Error::BusinessLogicError(
-                                "供应商订单已取消，不再发送履约通知".into(),
-                            ));
-                        }
-                    }
-                    db.purchase_orders().update(&mut order, executor).await?;
+                    process.fence_purchase(&claimed, executor).await?;
                     db.supplier_api_order_executions().update(&mut claimed, executor).await?;
                     Ok::<_, Error>(claimed)
                 })
             })
             .await?;
+        Ok(())
+    }
+
+    async fn fence_purchase(&self, claimed: &ApiOrderExecution, executor: &mut dyn Executor) -> Result<()> {
+        let mut order = self
+            .db
+            .purchase_orders()
+            .find_by_id(&claimed.purchase_order_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("来源采购不存在".into()))?;
+        ensure_po_fulfillable(&order)?;
+        if order.stable.current_revision_id.as_deref() != Some(claimed.purchase_order_revision_id.as_str()) {
+            return Err(Error::ConflictError("采购版本已变化，接口执行已阻断".into()));
+        }
+        self.ensure_execution_funds(claimed, &order, executor).await?;
+        self.fence_connection(&claimed.connection_id, claimed.stage, executor).await?;
+        if matches!(claimed.stage, ApiOrderStage::CreationUnknown | ApiOrderStage::ConfirmationUnknown) {
+            self.mark_funds_sent(claimed, executor).await?;
+        }
+        if claimed.stage == ApiOrderStage::PaymentUnknown {
+            let supplier_order = self
+                .db
+                .supplier_fulfillment_orders()
+                .find_by_id(&claimed.base.id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("供应商订单不存在".into()))?;
+            if supplier_order.cancel_status == CancelStatus::Canceled {
+                return Err(Error::BusinessLogicError("供应商订单已取消，不再发送履约通知".into()));
+            }
+        }
+        self.db.purchase_orders().update(&mut order, executor).await?;
         Ok(())
     }
 
@@ -87,9 +107,9 @@ impl SupplierApiOrderProcess {
         let service = SupplierApiService::new(self.db.clone());
         let mut connection = service.load_connection(id, executor).await?;
         let client = if stage == ApiOrderStage::PaymentUnknown {
-            self.runtime.tracking_connector(&connection)
+            self.runtime.fulfillment_connector(&connection)
         } else {
-            self.runtime.connector(&connection)
+            self.runtime.creation_connector(&connection)
         };
         client.map_err(|failure| Error::BusinessLogicError(failure.summary))?;
         service.persist_connection(&mut connection, executor).await?;
@@ -101,7 +121,12 @@ impl SupplierApiOrderProcess {
         let mut snapshot = self.decode(&execution)?;
         let key = freeze_action(&mut execution, "address", &snapshot.recipient)?;
         self.claim(&mut execution, ApiOrderStage::AddressUnknown).await?;
-        match connector.prepare(&key, &snapshot.recipient).await {
+        match connector
+            .delivery()
+            .ok_or_else(|| missing_capability("地址准备"))?
+            .prepare(&key, &snapshot.recipient)
+            .await
+        {
             Ok(context) => {
                 snapshot.context = Some(context);
                 self.encode(&mut execution, &snapshot)?;
@@ -110,6 +135,33 @@ impl SupplierApiOrderProcess {
                 execution.next_run_at = Instant::now();
             },
             Err(error) => record_failure(&mut execution, error, ApiOrderStage::PrepareAddress),
+        }
+        self.persist(&mut execution).await
+    }
+
+    pub(super) async fn recover_address(&self, mut execution: ApiOrderExecution) -> Result<()> {
+        let connector = self.connector(&execution).await?;
+        let mut snapshot = self.decode(&execution)?;
+        let Some(hash) = execution.action_hashes.get("address") else {
+            execution.defer("原地址准备动作缺少完整记录，请联系管理员核实，系统不会重建地址");
+            return self.persist(&mut execution).await;
+        };
+        let key = ActionKey { id: format!("{}-address", execution.base.id), payload_hash: hash.clone() };
+        match connector
+            .delivery()
+            .ok_or_else(|| missing_capability("原地址结果查询"))?
+            .context_with_recipient(&key, &snapshot.recipient)
+            .await
+        {
+            Ok(Lookup::Found(context)) => {
+                snapshot.context = Some(context);
+                self.encode(&mut execution, &snapshot)?;
+                execution.stage = ApiOrderStage::PlanDelivery;
+                execution.blocker = None;
+                execution.next_run_at = Instant::now();
+            },
+            Ok(Lookup::NotVisible) => execution.defer("原地址结果暂不可见，系统继续查询，不重复创建地址"),
+            Err(error) => execution.defer(error.summary),
         }
         self.persist(&mut execution).await
     }
@@ -125,7 +177,7 @@ impl SupplierApiOrderProcess {
                 .ok_or_else(|| Error::BusinessLogicError("地址准备尚未完成".into()))?,
             lines: snapshot.lines.clone(),
         };
-        match connector.options(&query).await {
+        match connector.delivery().ok_or_else(|| missing_capability("配送核验"))?.options(&query).await {
             Ok(plan) => {
                 if plan.value.groups.len() != 1
                     || plan.value.groups[0].line_ids
@@ -158,15 +210,27 @@ impl SupplierApiOrderProcess {
     pub(super) async fn create(&self, mut execution: ApiOrderExecution) -> Result<()> {
         let connector = self.connector(&execution).await?;
         let snapshot = self.decode(&execution)?;
-        let mut request = create_request(&execution, &snapshot)?;
-        if let Err(error) = self.preflight(&execution, &connector, &request).await {
+        let mut request = match create_request(&execution, &snapshot) {
+            Ok(request) => request,
+            Err(error) => {
+                execution.defer(error.to_string());
+                return self.persist(&mut execution).await;
+            },
+        };
+        if let Err(error) = self.preflight(&execution, connector.as_ref(), &request).await {
             execution.stage = ApiOrderStage::PlanDelivery;
+            execution.defer(error.to_string());
+            return self.persist(&mut execution).await;
+        }
+        if connector.funding_requirement() == OrderFundingRequirement::VerifiedSupplierDeposit
+            && let Err(error) = prepare_automatic_execution_funds(&self.db, &execution, &self.codec).await
+        {
             execution.defer(error.to_string());
             return self.persist(&mut execution).await;
         }
         request.action = freeze_create_action(&mut execution, &request)?;
         self.claim(&mut execution, ApiOrderStage::CreationUnknown).await?;
-        match connector.create(&request).await {
+        match connector.orders().ok_or_else(|| missing_capability("下单"))?.create(&request).await {
             Ok(created) => self.save_created(&mut execution, created.order.value, created.next).await?,
             Err(error) => record_failure(&mut execution, error, ApiOrderStage::PlanDelivery),
         }
@@ -177,12 +241,31 @@ impl SupplierApiOrderProcess {
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(&execution.connection_id, &mut NoTransaction)
             .await?;
-        match self.runtime.observe_order(&connection, &OrderKey::Merchant(execution.base.id.clone())).await {
+        let frozen = self.decode(&execution)?;
+        match self
+            .runtime
+            .observe_order_with_lines(
+                &connection,
+                &OrderKey::Merchant(execution.base.id.clone()),
+                &frozen.lines,
+            )
+            .await
+        {
             Ok(Lookup::Found(snapshot)) => {
-                let next = if snapshot.value.payment == Some(PaymentState::Confirmed) {
-                    CreationNext::ObserveOrder
-                } else {
-                    CreationNext::ConfirmPayment
+                let connector = self
+                    .runtime
+                    .fulfillment_connector(&connection)
+                    .map_err(|error| Error::BusinessLogicError(error.summary))?;
+                let next = match connector
+                    .orders()
+                    .ok_or_else(|| missing_capability("原单恢复"))?
+                    .recovery_next(&snapshot.value)
+                {
+                    Ok(next) => next,
+                    Err(error) => {
+                        execution.defer(error.summary);
+                        return self.persist(&mut execution).await;
+                    },
                 };
                 self.save_created(&mut execution, snapshot.value, next).await?;
             },
@@ -208,18 +291,37 @@ impl SupplierApiOrderProcess {
         request.requires_payment = next == CreationNext::ConfirmPayment;
         let over = request.actual_payable.is_some_and(|amount| amount > request.approved_total);
         let cancelled = snapshot.cancellation == Some(CancelStatus::Canceled);
+        let mut discovery_blocker = None;
+        if let Some(tree) = snapshot.topology {
+            execution.pending_order_tree = Some(tree.clone());
+            if tree.root_order_no != snapshot.reference.external_order_no {
+                discovery_blocker = Some("供应商订单关系与原根单不一致，继续调查原订单".to_owned());
+            } else if let Err(error) = execution.apply_observed_tree(tree, &request.lines) {
+                discovery_blocker = Some(error.to_string());
+            }
+        }
         execution.stage = if over || cancelled {
             ApiOrderStage::Stopped
-        } else if request.requires_payment {
-            ApiOrderStage::ConfirmPayment
         } else {
-            ApiOrderStage::Observe
+            match next {
+                CreationNext::ConfirmPayment => ApiOrderStage::ConfirmPayment,
+                CreationNext::ConfirmOrder
+                    if execution.order_tree.is_none() || discovery_blocker.is_some() =>
+                {
+                    ApiOrderStage::DiscoverOrders
+                },
+                CreationNext::ConfirmOrder => ApiOrderStage::ConfirmOrder,
+                CreationNext::ObserveOrder => ApiOrderStage::Observe,
+            }
         };
         execution.blocker = if cancelled {
             Some("供应商已明确取消原订单，已停止履约通知".into())
         } else {
             over.then(|| "供应商已创建订单但金额超出批准范围，已阻断后续支付确认，请处理原单".into())
         };
+        if discovery_blocker.is_some() && !over && !cancelled {
+            execution.blocker = discovery_blocker;
+        }
         execution.next_run_at = Instant::now();
         self.encode(execution, &request)?;
         self.persist_created_reference(execution, snapshot.reference.external_order_no).await
@@ -257,7 +359,20 @@ impl SupplierApiOrderProcess {
     }
 }
 
-fn create_request(execution: &ApiOrderExecution, snapshot: &ExecutionSnapshot) -> Result<CreateOrder> {
+pub(super) fn create_request(
+    execution: &ApiOrderExecution,
+    snapshot: &ExecutionSnapshot,
+) -> Result<CreateOrder> {
+    let delivery = snapshot
+        .selected_choice
+        .and_then(|index| snapshot.choices.get(index))
+        .cloned()
+        .ok_or_else(|| Error::BusinessLogicError("未选择配送方案".into()))?;
+    let approved_freight =
+        snapshot.approved_budget.as_ref().map(|budget| budget.approved_freight).unwrap_or_else(Amount::zero);
+    if delivery.shipping_fee > approved_freight {
+        return Err(Error::BusinessLogicError("配送运费超出本执行组已批准运费，请先完成采购费用审批".into()));
+    }
     Ok(CreateOrder {
         action: ActionKey { id: format!("{}-create", execution.base.id), payload_hash: String::new() },
         merchant_order_no: execution.base.id.clone(),
@@ -267,11 +382,7 @@ fn create_request(execution: &ApiOrderExecution, snapshot: &ExecutionSnapshot) -
             .context
             .clone()
             .ok_or_else(|| Error::BusinessLogicError("配送地址上下文缺失".into()))?,
-        delivery: snapshot
-            .selected_choice
-            .and_then(|index| snapshot.choices.get(index))
-            .cloned()
-            .ok_or_else(|| Error::BusinessLogicError("未选择配送方案".into()))?,
+        delivery,
         approved_total: snapshot.approved_total,
     })
 }
@@ -335,8 +446,8 @@ pub(super) fn record_failure(
     error: ConnectorError,
     known_stage: ApiOrderStage,
 ) {
-    // 本运行路径限定蛋糕叔叔：写后格式/传输错误均由适配器映射为 ResultUnknown；
-    // 其它类只表示写前失败或供应商明确拒绝，允许解除本步骤的发送占位。
+    // 所有协议都必须将写后传输或解码不确定映射为 ResultUnknown；
+    // 只有写前失败或供应商明确拒绝，才可解除该步骤的发送占位。
     if error.class != SupplierFailureClass::ResultUnknown {
         let action_kind = match execution.stage {
             ApiOrderStage::AddressUnknown => Some("address"),
@@ -365,8 +476,68 @@ pub(super) fn record_failure(
 #[cfg(test)]
 mod tests {
     use erp_supply::api_order::ApiOrderSourceLine;
+    use erp_supply::entity::execution_budget::ApprovedExecutionBudget;
+    use erp_supply::ports::connector::offer::DeliveryContext;
+    use erp_supply::ports::connector::order::{DeliveryChoice, Recipient};
 
     use super::*;
+
+    fn snapshot(freight: &str) -> ExecutionSnapshot {
+        ExecutionSnapshot {
+            recipient: Recipient {
+                name: "收件人".into(),
+                phone: "13800000000".into(),
+                region: "110105".into(),
+                address: "某路".into(),
+                geocoded_address: None,
+                supplier_address: None,
+            },
+            lines: vec![],
+            approved_total: "100".parse().unwrap(),
+            approved_budget: None,
+            source_purchase_terms: vec![],
+            expected_delivery_date: None,
+            context: Some(DeliveryContext { reference: "confirmed-address".into(), supplier_address: None }),
+            choices: vec![DeliveryChoice {
+                method: DeliveryMethod::Courier,
+                shipping_fee: freight.parse().unwrap(),
+                reference: "option".into(),
+            }],
+            selected_choice: Some(0),
+            actual_payable: None,
+            requires_payment: false,
+        }
+    }
+
+    #[test]
+    fn old_snapshot_cannot_borrow_product_budget_for_unapproved_freight() {
+        let execution = ApiOrderExecution::queued(
+            "group".into(),
+            "purchase".into(),
+            "revision".into(),
+            "connection".into(),
+            "supplier".into(),
+            vec![],
+        );
+        assert!(create_request(&execution, &snapshot("0")).is_ok());
+        let error =
+            create_request(&execution, &snapshot("0.01")).err().expect("没有批准运费不能消费商品节余");
+        assert!(error.to_string().contains("批准运费"));
+        let mut current = snapshot("2");
+        current.approved_budget = Some(ApprovedExecutionBudget {
+            purchase_revision_id: "revision".into(),
+            execution_id: "group".into(),
+            approved_goods: "98".parse().unwrap(),
+            approved_freight: "2".parse().unwrap(),
+            approved_other: Amount::zero(),
+            approved_total: "100".parse().unwrap(),
+            freight_allocations: vec![],
+        });
+        let request = create_request(&execution, &current).unwrap();
+        assert_eq!(request.delivery.shipping_fee, "2".parse().unwrap());
+        current.choices[0].shipping_fee = "2.01".parse().unwrap();
+        assert!(create_request(&execution, &current).is_err());
+    }
 
     #[test]
     fn unknown_create_never_reopens_write_step() {
@@ -379,18 +550,27 @@ mod tests {
             Vec::<ApiOrderSourceLine>::new(),
         );
         order.stage = ApiOrderStage::CreationUnknown;
+        order.action_hashes.insert("create".into(), "original-create-hash".into());
+        order.action_hashes.insert("address".into(), "original-address-hash".into());
+        order.request_encrypted = Some("original-encrypted-intent".into());
+        let original_order_no = order.base.id.clone();
         record_failure(
             &mut order,
             ConnectorError {
                 class: SupplierFailureClass::ResultUnknown,
-                code: "TIMEOUT".into(),
-                summary: "原请求结果未知".into(),
+                code: "JD_VOP_1004".into(),
+                summary: "京东原请求结果待核实".into(),
                 retry_after: None,
             },
             ApiOrderStage::Create,
         );
         assert_eq!(order.stage, ApiOrderStage::CreationUnknown);
         assert!(order.blocker.is_some());
+        assert_eq!(order.base.id, original_order_no);
+        assert_eq!(order.action_hashes["create"], "original-create-hash");
+        assert_eq!(order.action_hashes["address"], "original-address-hash");
+        assert_eq!(order.request_encrypted.as_deref(), Some("original-encrypted-intent"));
+        assert_eq!(create_request(&order, &snapshot("0")).unwrap().merchant_order_no, original_order_no);
     }
 
     #[test]
@@ -467,8 +647,9 @@ mod tests {
                 region: "110105".into(),
                 address: "某路".into(),
                 geocoded_address: None,
+                supplier_address: None,
             },
-            delivery_context: DeliveryContext { reference: "context-v1".into() },
+            delivery_context: DeliveryContext { reference: "context-v1".into(), supplier_address: None },
             delivery: DeliveryChoice {
                 method: DeliveryMethod::Courier,
                 shipping_fee: "0".parse().unwrap(),

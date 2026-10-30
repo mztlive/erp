@@ -23,6 +23,7 @@ pub mod adoptions;
 pub mod catalog;
 pub mod connector_types;
 pub mod dangaoshushu;
+pub mod jd_vop;
 pub mod references;
 
 #[permission_macros::permission(

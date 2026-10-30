@@ -11,6 +11,7 @@ use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::PaymentRequestAllocation;
 
@@ -141,6 +142,19 @@ pub struct SupplierPaymentData {
     pub bank_receipt_asset_id: FileAssetId,
 }
 
+/// 银行实际付款用途；充值不冒充逐单采购付款，不提前核销应付。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SupplierPaymentPurpose {
+    #[default]
+    Purchase,
+    SupplierDepositRecharge {
+        recharge_request_id: String,
+        deposit_account_id: String,
+        approval_reference: String,
+    },
+}
+
 /// 供应商付款单实体（正式事实，数据模型 §6.9）。
 ///
 /// `payment_no` 唯一；付款与应付供应商必须相同、净分配不得超过付款金额和应付
@@ -162,6 +176,11 @@ pub struct SupplierPayment {
     pub posted_at: Option<Instant>,
     /// 付款单状态。
     pub status: SupplierPaymentStatus,
+    #[serde(default)]
+    pub purpose: SupplierPaymentPurpose,
+    /// 同一付款主体的真实银行流水只能形成一份现金来源；旧记录保持未取得。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cash_source_fingerprint: Option<String>,
     /// 批准本次付款的采购付款申请；普通采购付款必须绑定。
     #[serde(deserialize_with = "present_identity")]
     pub payment_request_id: Option<String>,
@@ -233,6 +252,8 @@ impl SupplierPayment {
             posted_by: None,
             posted_at: None,
             status: SupplierPaymentStatus::Draft,
+            purpose: SupplierPaymentPurpose::Purchase,
+            cash_source_fingerprint: None,
             payment_request_id: None,
             payer_party_id: None,
             payer_party_name: None,
@@ -309,6 +330,9 @@ impl SupplierPayment {
     /// # 错误
     /// 身份或主体缺失、分配为空、重复、非正、溢出或金额不一致时拒绝。
     pub fn require_payment_request_basis(&self) -> Result<&str> {
+        if self.purpose != SupplierPaymentPurpose::Purchase {
+            return Err(Error::from("预存款充值付款不能作为普通采购付款核销"));
+        }
         let request_id = self
             .payment_request_id
             .as_deref()
@@ -416,6 +440,7 @@ impl SupplierPayment {
             return Err(Error::from("供应商付款已存在过账身份事实，禁止覆盖"));
         }
         ensure_transition(self.status, SupplierPaymentStatus::Posted)?;
+        self.cash_source_fingerprint = self.cash_source_key();
         self.status = SupplierPaymentStatus::Posted;
         self.posted_by = Some(actor_id);
         self.posted_at = Some(posted_at);
@@ -434,6 +459,72 @@ impl SupplierPayment {
     /// 不返回错误。
     pub fn is_posted(&self) -> bool {
         self.status == SupplierPaymentStatus::Posted
+    }
+
+    /// 将草稿按明确的充值用途记录为真实银行付款，不核销采购应付。
+    /// # 参数
+    /// * `purpose` - 经批准的充值申请、目标账户及批准依据。
+    /// * `payer` / `payer_name` - 已核验付款主体。
+    /// * `actor` / `at` - 实际付款执行身份及记录时间。
+    /// # 返回
+    /// 保存真实银行付款一次，采购付款申请身份保持空。
+    /// # 错误
+    /// 非草稿、已有采购分配、缺证据或用途不合法时拒绝。
+    pub fn post_deposit_recharge(
+        &mut self,
+        purpose: SupplierPaymentPurpose,
+        payer: &str,
+        payer_name: &str,
+        actor: &str,
+        at: Instant,
+    ) -> Result<()> {
+        if self.status != SupplierPaymentStatus::Draft
+            || self.payment_request_id.is_some()
+            || !self.request_allocations.is_empty()
+        {
+            return Err(Error::from("已有采购付款依据或已过账付款不得改为充值"));
+        }
+        let SupplierPaymentPurpose::SupplierDepositRecharge {
+            recharge_request_id,
+            deposit_account_id,
+            approval_reference,
+        } = &purpose
+        else {
+            return Err(Error::from("充值必须有独立批准用途"));
+        };
+        for (value, label) in [
+            (recharge_request_id.as_str(), "充值申请"),
+            (deposit_account_id.as_str(), "预存款账户"),
+            (approval_reference.as_str(), "充值批准依据"),
+            (payer, "付款主体"),
+            (payer_name, "付款主体名称"),
+            (actor, "执行人"),
+        ] {
+            normalize_required_text(value.into(), &format!("{label}不能为空"), 256, &format!("{label}过长"))?;
+        }
+        self.require_bank_receipt()?;
+        if self.bank_reference.as_deref().is_none_or(|value| value.trim().is_empty()) {
+            return Err(Error::from("充值必须登记真实银行流水"));
+        }
+        self.purpose = purpose;
+        self.payer_party_id = Some(payer.into());
+        self.payer_party_name = Some(payer_name.into());
+        self.cash_source_fingerprint = self.cash_source_key();
+        self.posted_by = Some(actor.into());
+        self.posted_at = Some(at);
+        self.status = SupplierPaymentStatus::Posted;
+        Ok(())
+    }
+
+    fn cash_source_key(&self) -> Option<String> {
+        let payer = self.payer_party_id.as_deref()?;
+        let reference = self.bank_reference.as_deref()?;
+        let mut digest = Sha256::new();
+        digest.update(payer.len().to_string().as_bytes());
+        digest.update(b":");
+        digest.update(payer.as_bytes());
+        digest.update(reference.as_bytes());
+        Some(hex::encode(digest.finalize()))
     }
 }
 
@@ -799,5 +890,32 @@ mod tests {
         assert_eq!(SupplierPaymentStatus::Posted.label(), "已过账");
         assert_eq!(SupplierPaymentStatus::Reversed.as_str(), "reversed");
         assert_eq!(SupplierPaymentStatus::Draft.as_str(), "draft");
+    }
+
+    #[test]
+    fn bank_source_identity_is_shared_by_purchase_and_recharge_without_double_cash() {
+        let mut purchase = bound_payment();
+        let pending = [PendingPaymentAllocation::new(PayableEntryId::new("entry"), purchase.amount).unwrap()];
+        purchase.post_from_execution(&pending, "cashier", Instant::from_unix_secs(2)).unwrap();
+        let mut recharge =
+            SupplierPayment::new(SupplierPaymentId::new("recharge-payment"), data(), "requester").unwrap();
+        recharge
+            .post_deposit_recharge(
+                SupplierPaymentPurpose::SupplierDepositRecharge {
+                    recharge_request_id: "recharge".into(),
+                    deposit_account_id: "deposit".into(),
+                    approval_reference: "approved".into(),
+                },
+                purchase.payer_party_id.as_deref().unwrap(),
+                "我方主体",
+                "cashier",
+                Instant::from_unix_secs(2),
+            )
+            .unwrap();
+        assert!(purchase.cash_source_fingerprint.is_some());
+        assert_eq!(purchase.cash_source_fingerprint, recharge.cash_source_fingerprint);
+        assert!(recharge.require_payment_request_basis().is_err());
+        assert!(recharge.request_allocations.is_empty());
+        assert!(recharge.payment_request_id.is_none());
     }
 }

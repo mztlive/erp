@@ -277,7 +277,8 @@ fn resource_for_command(action: &str, resource_type: &str, id: String) -> Result
             "purchase_payment_request.create"
             | "purchase_payment_request.submit"
             | "purchase_payment_request.withdraw"
-            | "purchase_payment_request.close",
+            | "purchase_payment_request.close"
+            | "purchase_payment_request.deposit.execute",
             "purchase_payment_request",
         ) => FinanceCommandResource::PurchasePaymentRequest(PurchasePaymentRequestId::new(id)),
         _ => return Err(corrupted_receipt()),
@@ -360,6 +361,7 @@ mod tests {
             ("purchase_payment_request.submit", "purchase_payment_request"),
             ("purchase_payment_request.withdraw", "purchase_payment_request"),
             ("purchase_payment_request.close", "purchase_payment_request"),
+            ("purchase_payment_request.deposit.execute", "purchase_payment_request"),
         ] {
             let command =
                 CommandReceipt::from_payload("finance-", "actor", action, resource_type, "key", &10).unwrap();

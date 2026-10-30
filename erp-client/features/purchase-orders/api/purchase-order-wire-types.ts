@@ -103,6 +103,36 @@ export type BackendCenter = {
     payment_progress: string
     invoice_progress: string
     fulfillment_progress: string
+    api_executions?: Array<{
+        order_id: string
+        order_no: string
+        detail_available?: boolean
+        stage: string
+        blocker: string | null
+        current_order_count: number
+        confirmed_order_count: number
+    }>
+    api_execution_funds?: Array<{
+        execution_group_id: string
+        status: import("../types").PurchaseApiExecutionFunds["status"]
+        reconciliation_required: boolean
+        approved_amount: string
+        reserved_amount: string
+        verified_debit_amount: string
+        settled_amount: string
+        returned_amount: string
+        pending_return_amount: string | null
+    }>
+    fulfillment_quantities?: Array<{
+        line_id: string
+        product_name: string | null
+        unit: string | null
+        ordered_quantity: string | null
+        inbound_quantity: string | null
+        shipped_quantity: string | null
+        remaining_quantity: string | null
+        blocker: string | null
+    }>
     current_submission_id?: string | null
     current_revision_id?: string | null
     revision_no?: number | null

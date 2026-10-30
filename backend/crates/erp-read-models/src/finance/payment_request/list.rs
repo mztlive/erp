@@ -106,6 +106,7 @@ mod tests {
         let mut row = PurchasePaymentRequest::new(
             id.into(),
             PurchasePaymentRequestData {
+                execution_method: Default::default(),
                 supplier_id: "supplier".into(),
                 payee_bank_account_id: "bank".into(),
                 lines: vec![PaymentRequestLineData { payable_account_id: "account".into(), amount }],

@@ -88,7 +88,7 @@ mod tests {
     use entity_core::BaseModel;
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{PaymentAllocationId, SupplierPaymentId};
-    use erp_finance::entity::payable::PayableEntryType;
+    use erp_finance::entity::payable::{PayableEntryType, PaymentAllocationSource};
 
     use super::*;
 
@@ -111,7 +111,7 @@ mod tests {
     fn allocation(action: AllocationAction, amount: &str) -> PaymentAllocation {
         PaymentAllocation {
             base: BaseModel::fake(),
-            supplier_payment_id: SupplierPaymentId::new("payment"),
+            source: SupplierPaymentId::new("payment").into(),
             payable_entry_id: PayableEntryId::new("e-1"),
             allocation_seq: 1,
             allocation_action: action,
@@ -160,5 +160,16 @@ mod tests {
             Err(Error::ConflictError(_))
         ));
         assert!(entry_views(&[], &[], &[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn verified_deposit_usage_counts_once_in_formal_net_settlement() {
+        let mut usage = allocation(AllocationAction::Apply, "60");
+        usage.source = PaymentAllocationSource::deposit_usage("usage").unwrap();
+        let mut returned = allocation(AllocationAction::Reverse, "20");
+        returned.source = usage.source.clone();
+        let views = entry_views(&[entry("e-1", EntryDirection::Increase)], &[usage, returned], &[]).unwrap();
+        assert_eq!(views[0].settled_total, "40".parse().unwrap());
+        assert_eq!(views[0].open_total, "60".parse().unwrap());
     }
 }

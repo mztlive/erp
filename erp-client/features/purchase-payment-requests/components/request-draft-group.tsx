@@ -264,24 +264,98 @@ export function RequestDraftGroup({
                 </div>
                 <div className="space-y-5 border-t pt-5">
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_13rem]">
-                        <form.AppField name={`groups[${index}].account`}>
-                            {(field) => (
-                                <field.SelectField
-                                    onRefresh={onRefreshCandidates}
-                                    id={fieldId("account")}
-                                    label="收款账户"
-                                    className="min-w-0 gap-2"
-                                    required
-                                    options={first.bank_accounts.map(
-                                        (account) => ({
-                                            value: account.bank_account_id,
-                                            label: `${account.account_name === first.supplier_name ? "" : `${account.account_name} · `}${account.bank_name} · ${account.account_number_masked}`,
-                                        }),
-                                    )}
-                                    emptyLabel="供应商暂无有效收款账户"
-                                />
-                            )}
-                        </form.AppField>
+                        <div className="space-y-4">
+                            <form.AppField
+                                name={`groups[${index}].executionMethod`}
+                            >
+                                {(field) => (
+                                    <field.SelectField
+                                        id={fieldId("execution-method")}
+                                        label="付款方式"
+                                        required
+                                        allowClear={false}
+                                        options={[
+                                            {
+                                                value: "bank_transfer",
+                                                label: "银行付款",
+                                            },
+                                            {
+                                                value: "supplier_deposit",
+                                                label: "供应商预存款",
+                                            },
+                                        ]}
+                                        onValueChange={() => {
+                                            form.setFieldValue(
+                                                `groups[${index}].account`,
+                                                "",
+                                            )
+                                            form.setFieldValue(
+                                                `groups[${index}].depositAccount`,
+                                                "",
+                                            )
+                                        }}
+                                    />
+                                )}
+                            </form.AppField>
+                            <form.Subscribe
+                                selector={(state) =>
+                                    state.values.groups[index]?.executionMethod
+                                }
+                            >
+                                {(method) =>
+                                    method === "supplier_deposit" ? (
+                                        <form.AppField
+                                            name={`groups[${index}].depositAccount`}
+                                        >
+                                            {(field) => (
+                                                <field.SelectField
+                                                    id={fieldId(
+                                                        "deposit-account",
+                                                    )}
+                                                    label="预存款账户"
+                                                    required
+                                                    onRefresh={
+                                                        onRefreshCandidates
+                                                    }
+                                                    options={(
+                                                        first.deposit_accounts ??
+                                                        []
+                                                    ).map((account) => ({
+                                                        value: account.id,
+                                                        label: account.label,
+                                                    }))}
+                                                    emptyLabel="同付款主体下暂无有效预存款账户"
+                                                    description="本次批准供应商余额使用，不登记新的银行付款。资金占用与实际扣款核销分别办理。"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    ) : (
+                                        <form.AppField
+                                            name={`groups[${index}].account`}
+                                        >
+                                            {(field) => (
+                                                <field.SelectField
+                                                    onRefresh={
+                                                        onRefreshCandidates
+                                                    }
+                                                    id={fieldId("account")}
+                                                    label="收款账户"
+                                                    className="min-w-0 gap-2"
+                                                    required
+                                                    options={first.bank_accounts.map(
+                                                        (account) => ({
+                                                            value: account.bank_account_id,
+                                                            label: `${account.account_name === first.supplier_name ? "" : `${account.account_name} · `}${account.bank_name} · ${account.account_number_masked}`,
+                                                        }),
+                                                    )}
+                                                    emptyLabel="供应商暂无有效收款账户"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    )
+                                }
+                            </form.Subscribe>
+                        </div>
                         <form.AppField name={`groups[${index}].date`}>
                             {(field) => (
                                 <field.DateField
@@ -293,11 +367,15 @@ export function RequestDraftGroup({
                             )}
                         </form.AppField>
                     </div>
-                    {!first.bank_accounts.length && (
-                        <p role="alert" className="text-xs text-destructive">
-                            请先维护供应商的有效收款账户，再申请付款。
-                        </p>
-                    )}
+                    {group.executionMethod === "bank_transfer" &&
+                        !first.bank_accounts.length && (
+                            <p
+                                role="alert"
+                                className="text-xs text-destructive"
+                            >
+                                请先维护供应商的有效收款账户，再申请付款。
+                            </p>
+                        )}
                     <form.AppField name={`groups[${index}].description`}>
                         {(field) => (
                             <field.TextareaField

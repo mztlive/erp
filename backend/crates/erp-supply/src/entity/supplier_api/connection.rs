@@ -269,6 +269,12 @@ pub struct SupplierApiConnection {
     pub last_health_at: Option<Instant>,
     /// 最近健康检查结果（与 `last_health_at` 成对出现）。
     pub last_health_result: Option<HealthCheckResult>,
+    /// 由财务和部署账号共同核验的预存款账户；缺失时不得余额发单。
+    #[serde(default)]
+    pub supplier_deposit_account_id: Option<String>,
+    /// 已核验外部资金账号身份，不承载令牌或密钥。
+    #[serde(default)]
+    pub supplier_deposit_external_account_ref: Option<String>,
 }
 
 impl PartialEq for SupplierApiConnection {
@@ -294,6 +300,8 @@ impl PartialEq for SupplierApiConnection {
             && self.rate_limit_policy == other.rate_limit_policy
             && self.last_health_at == other.last_health_at
             && self.last_health_result == other.last_health_result
+            && self.supplier_deposit_account_id == other.supplier_deposit_account_id
+            && self.supplier_deposit_external_account_ref == other.supplier_deposit_external_account_ref
     }
 }
 
@@ -349,7 +357,46 @@ impl SupplierApiConnection {
             rate_limit_policy: data.rate_limit_policy,
             last_health_at: None,
             last_health_result: None,
+            supplier_deposit_account_id: None,
+            supplier_deposit_external_account_ref: None,
         })
+    }
+
+    /// 绑定已核验财务账号；更换资金账号须建立新连接保留历史命名空间。
+    /// # 参数
+    /// * `account_id` / `external_account_ref` - 由组合层核验的资金身份。
+    /// * `actor` - 实际绑定人。
+    /// # 返回
+    /// 首次绑定或相同身份重放成功。
+    /// # 错误
+    /// 空身份、已有其他账号或配置版本溢出时拒绝。
+    pub fn bind_supplier_deposit(
+        &mut self,
+        account_id: String,
+        external_account_ref: String,
+        actor: &str,
+    ) -> Result<()> {
+        let account_id = normalize_required_text(account_id, "预存款账户不能为空", 256, "预存款账户过长")?;
+        let external_account_ref =
+            normalize_required_text(external_account_ref, "外部资金账号不能为空", 256, "外部资金账号过长")?;
+        if self.supplier_deposit_account_id.as_ref().is_some_and(|id| id != &account_id)
+            || self
+                .supplier_deposit_external_account_ref
+                .as_ref()
+                .is_some_and(|id| id != &external_account_ref)
+        {
+            return Err(Error::from("更换供应商资金账号须建立新连接"));
+        }
+        if self.supplier_deposit_account_id.as_ref() == Some(&account_id)
+            && self.supplier_deposit_external_account_ref.as_ref() == Some(&external_account_ref)
+        {
+            return Ok(());
+        }
+        self.bump_technical_config_version()?;
+        self.supplier_deposit_account_id = Some(account_id);
+        self.supplier_deposit_external_account_ref = Some(external_account_ref);
+        self.stable.touch(actor);
+        Ok(())
     }
 
     /// 更新供应商 API 连接。
@@ -772,13 +819,12 @@ mod tests {
             data.status = status;
             let connection =
                 SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), data, "admin-1").unwrap();
-            for result in [connection.ensure_active()] {
-                match expected {
-                    None => result.unwrap(),
-                    Some(expected) => {
-                        assert!(matches!(result, Err(Error::LogicError(message)) if message == expected))
-                    },
-                }
+            let result = connection.ensure_active();
+            match expected {
+                None => result.unwrap(),
+                Some(expected) => {
+                    assert!(matches!(result, Err(Error::LogicError(message)) if message == expected))
+                },
             }
             if status == SupplierApiConnectionStatus::Fault {
                 assert!(connection.ensure_offering_source("sup-1").is_err());

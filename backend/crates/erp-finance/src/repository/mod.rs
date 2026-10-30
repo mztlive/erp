@@ -48,6 +48,7 @@ mod test_fixture;
 mod serialization_contract;
 
 pub mod keyword;
+pub mod supplier_deposit_resolution;
 
 /// 构建带 `id` 稳定次序的排序文档：字段名经白名单映射，未命中回退 `created_at`。
 ///
@@ -67,4 +68,13 @@ pub(super) fn sort_doc_with_id(sort_by: Option<&str>, sort_ascending: bool, allo
     doc! { field: direction, "id": direction }
 }
 
+pub mod funds_matching;
 pub mod supplier_credit;
+pub mod supplier_deposit;
+pub mod supplier_deposit_automatic;
+pub mod supplier_deposit_query;
+pub mod supplier_deposit_settlement;
+pub use supplier_deposit::SupplierDepositExt;
+
+pub mod funds_evidence;
+pub use funds_evidence::FundsEvidenceExt;

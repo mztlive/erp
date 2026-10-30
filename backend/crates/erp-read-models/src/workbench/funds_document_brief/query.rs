@@ -593,10 +593,8 @@ fn group_allocations_by_payment(
 ) -> HashMap<String, Vec<PaymentAllocation>> {
     let mut by_payment = HashMap::new();
     for allocation in allocations {
-        by_payment
-            .entry(allocation.supplier_payment_id.to_string())
-            .or_insert_with(Vec::new)
-            .push(allocation);
+        let Some(payment_id) = allocation.source.supplier_payment_id() else { continue };
+        by_payment.entry(payment_id.to_string()).or_insert_with(Vec::new).push(allocation);
     }
     by_payment
 }

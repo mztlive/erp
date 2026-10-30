@@ -26,6 +26,7 @@ use serde_json::Value;
 use super::parsing::mapping;
 use super::transport::{HttpTransport, Transport};
 use super::{DangaoshushuConnector, DangaoshushuReadQuery, error, proof};
+use crate::connectors::registry::SupplierFulfillmentFactory;
 
 /// 技术配置注册表；每次按后台连接绑定客户端，共享 HTTP 连接池与渠道限流。
 pub struct DangaoshushuRuntime {
@@ -405,6 +406,25 @@ impl SupplierReferenceRegistry for DangaoshushuRuntime {
 }
 fn classified(error: ConnectorError) -> ClassifiedError {
     ClassifiedError { class: error.class, code: error.code, summary: error.summary }
+}
+
+impl SupplierFulfillmentFactory for DangaoshushuRuntime {
+    fn creation_connector(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        self.connector(connection)
+            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
+            .map_err(|error| ClassifiedError { class: error.class, code: error.code, summary: error.summary })
+    }
+    fn fulfillment_connector(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        self.tracking_connector(connection)
+            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
+            .map_err(|error| ClassifiedError { class: error.class, code: error.code, summary: error.summary })
+    }
 }
 
 #[cfg(test)]

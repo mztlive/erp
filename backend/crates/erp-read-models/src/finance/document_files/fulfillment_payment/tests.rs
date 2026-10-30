@@ -10,6 +10,7 @@ fn request() -> PurchasePaymentRequest {
     let mut request = PurchasePaymentRequest::new(
         "request".into(),
         PurchasePaymentRequestData {
+            execution_method: Default::default(),
             supplier_id: "supplier".into(),
             payee_bank_account_id: "bank".into(),
             desired_payment_date: BusinessDate::from_ymd(2026, 10, 12).unwrap(),

@@ -5,6 +5,7 @@ use erp_core::money::Amount;
 use serde_json::json;
 
 use super::*;
+use crate::entity::supplier_deposit::{DepositAccountIdentity, DepositCurrency};
 
 fn amount(value: &str) -> Amount {
     Amount::from_str(value).unwrap()
@@ -12,6 +13,7 @@ fn amount(value: &str) -> Amount {
 
 fn data(values: &[(&str, &str)]) -> PurchasePaymentRequestData {
     PurchasePaymentRequestData {
+        execution_method: Default::default(),
         supplier_id: "supplier-1".into(),
         payee_bank_account_id: "bank-1".into(),
         lines: values
@@ -37,14 +39,15 @@ fn submission(request: &PurchasePaymentRequest) -> PaymentRequestSubmission {
         payer_party_id: "company-1".into(),
         payer_party_name: "我方公司".into(),
         org_unit_id: Some("procurement".into()),
-        payee_account: PaymentRequestAccountSnapshot {
+        deposit_account: None,
+        payee_account: Some(PaymentRequestAccountSnapshot {
             account_id: "bank-1".into(),
             version: 1,
             supplier_party_id: "supplier-party".into(),
             account_name: "供应商".into(),
             bank_name: "开户行".into(),
             masked_account_number: "****1234".into(),
-        },
+        }),
         lines: request
             .data
             .lines
@@ -148,15 +151,15 @@ fn submission_checks_source_subject_supplier_account_and_available_before_mutati
         let mut frozen = submission(&candidate);
         match mutation {
             0 => frozen.supplier_id = "other-supplier".into(),
-            1 => frozen.payee_account.account_id = "other-bank".into(),
+            1 => frozen.payee_account.as_mut().unwrap().account_id = "other-bank".into(),
             2 => frozen.payer_party_id.clear(),
             3 => frozen.lines[0].source_snapshot.sales_sources[0].payer_party_id = "other-company".into(),
             4 => frozen.lines[0].other_reserved_total = amount("0.01"),
             5 => frozen.lines[0].purchase_revision_id.clear(),
             6 => frozen.lines[0].source_snapshot.sales_sources.clear(),
             7 => frozen.lines[0].requested_amount = amount("69999"),
-            8 => frozen.payee_account.version = 0,
-            9 => frozen.payee_account.account_name.clear(),
+            8 => frozen.payee_account.as_mut().unwrap().version = 0,
+            9 => frozen.payee_account.as_mut().unwrap().account_name.clear(),
             _ => frozen.lines[0].settled_total = amount("29999"),
         }
         assert!(candidate.submit(frozen).is_err(), "mutation {mutation}");
@@ -363,4 +366,74 @@ fn submitted_materials_remain_exact_after_withdrawal_and_resubmission() {
     let decoded: PurchasePaymentRequestSubmissionSnapshot =
         serde_json::from_value(serde_json::to_value(&original).unwrap()).unwrap();
     assert_eq!(decoded, original);
+}
+
+fn deposit_draft() -> PurchasePaymentRequest {
+    let mut form = data(&[("account-1", "100")]);
+    form.execution_method = PaymentRequestExecutionMethod::SupplierDeposit { account_id: "deposit-1".into() };
+    form.payee_bank_account_id.clear();
+    PurchasePaymentRequest::new("deposit-request".into(), form, "buyer").unwrap()
+}
+
+fn deposit_submission(request: &PurchasePaymentRequest) -> PaymentRequestSubmission {
+    let mut frozen = submission(request);
+    frozen.payee_account = None;
+    frozen.deposit_account = Some(PaymentRequestDepositAccountSnapshot {
+        account_id: "deposit-1".into(),
+        identity: DepositAccountIdentity {
+            payer_party_id: "company-1".into(),
+            supplier_id: "supplier-1".into(),
+            external_account_ref: "server-account-ref".into(),
+            currency: DepositCurrency::CNY,
+        },
+    });
+    frozen
+}
+
+#[test]
+fn deposit_request_preserves_approval_and_never_executes_as_bank_payment() {
+    let mut request = deposit_draft();
+    request.submit(deposit_submission(&request)).unwrap();
+    request.approval_instance_id = Some("approval".into());
+    let material = PurchasePaymentRequestSubmissionSnapshot::freeze(&request).unwrap();
+    assert!(material.request.payee_account.is_none());
+    assert_eq!(material.request.deposit_account.as_ref().unwrap().account_id, "deposit-1");
+    request.approve().unwrap();
+    assert!(request.require_deposit_account("deposit-1").is_ok());
+    assert!(request.require_deposit_account("other").is_err());
+    request.reserve_deposit("reservation", "account-1", 1, amount("100")).unwrap();
+    assert_eq!(request.paid_amount(), Amount::zero());
+    assert_eq!(request.available_to_execute("account-1").unwrap(), Amount::zero());
+    let before = request.clone();
+    assert!(request.record_payment(&allocations(&[("account-1", "1")])).is_err());
+    assert_eq!(request, before);
+    request.settle_deposit("reservation", amount("40")).unwrap();
+    assert_eq!(request.paid_amount(), amount("40"));
+    assert_eq!(request.deposit_reservations["reservation"].amount, amount("60"));
+    assert_eq!(request.available_to_execute("account-1").unwrap(), Amount::zero());
+    let before = request.clone();
+    assert!(request.settle_deposit("reservation", amount("61")).is_err());
+    assert_eq!(request, before);
+    assert!(request.close("原扣款待核实").is_err());
+}
+
+#[test]
+fn deposit_submission_rejects_mixed_bank_and_cross_owner_while_legacy_defaults_to_bank() {
+    let mut value = serde_json::to_value(data(&[("account-1", "100")])).unwrap();
+    value.as_object_mut().unwrap().remove("execution_method");
+    let legacy: PurchasePaymentRequestData = serde_json::from_value(value).unwrap();
+    assert_eq!(legacy.execution_method, PaymentRequestExecutionMethod::BankTransfer);
+    assert!(serde_json::to_value(&legacy).unwrap().get("execution_method").is_none());
+    let mut mixed = deposit_draft().data;
+    mixed.payee_bank_account_id = "bank-1".into();
+    assert!(mixed.normalize().is_err());
+    let mut request = deposit_draft();
+    let mut frozen = deposit_submission(&request);
+    frozen.deposit_account.as_mut().unwrap().identity.payer_party_id = "other-company".into();
+    let original = request.clone();
+    assert!(request.submit(frozen).is_err());
+    assert_eq!(request, original);
+    let mut frozen = deposit_submission(&request);
+    frozen.payee_account = submission(&request).payee_account;
+    assert!(request.submit(frozen).is_err());
 }

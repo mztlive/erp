@@ -28,6 +28,8 @@ pub enum RefreshTarget {
     Brand(String),
     Product(String),
     Sku(SupplierSku),
+    /// 供应商地址字典的来源编码；不推断行政层级，不改写已有订单收货地址。
+    Address(String),
     Order(OrderKey),
     /// 无原动作身份时只能刷新订单并登记待核验线索，不能编造退款编号。
     Refund {
@@ -42,6 +44,7 @@ pub enum ChangeTopic {
     Availability,
     Price,
     Region,
+    Address,
     Order,
     Refund,
 }

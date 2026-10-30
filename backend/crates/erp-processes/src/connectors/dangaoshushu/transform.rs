@@ -35,7 +35,7 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
             Some(SupplyQuote {
                 dropship: Some(PriceTier {
                     unit_price,
-                    minimum_quantity: "1".parse().map_err(|_| mapping())?,
+                    minimum_quantity: Some("1".parse().map_err(|_| mapping())?),
                 }),
                 bulk: None,
                 tax_rate: None,

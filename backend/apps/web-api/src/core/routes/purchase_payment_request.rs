@@ -146,6 +146,7 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
 
 fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(deposit_routes(rbac))
         .route(
             "/purchase-payment-requests/{id}/supplier-credits",
             with_permission(
@@ -181,6 +182,17 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 purchase_payment_request::payments::pay_permission_key(),
             ),
         )
+}
+
+fn deposit_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/purchase-payment-requests/{id}/deposit-executions",
+        with_permission(
+            post(purchase_payment_request::deposit::execute),
+            rbac,
+            purchase_payment_request::deposit::execute_permission_key(),
+        ),
+    )
 }
 
 fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {

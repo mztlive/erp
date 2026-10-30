@@ -7,6 +7,29 @@ use crate::entity::supplier_catalog::SupplierCatalogItem;
 use crate::{Error, Result};
 
 impl SupplierCatalogItem {
+    /// 将当前目录约束绑定到服务端构造的 API 供给首版。
+    /// # 参数
+    /// `revision` 为尚未持久化的首版条款，不接受客户端采购限制。
+    /// # 返回
+    /// 核验来源报价和已报告税率后，冻结真实来源条款。
+    /// # 错误
+    /// 报价、来源约束或已报告税率与待建条款不一致时拒绝。
+    pub fn bind_purchase_terms(&self, revision: &mut SupplierOfferingRevision) -> Result<()> {
+        if let Some(terms) = &self.source_purchase_terms {
+            terms.validate()?;
+            if terms
+                .quote_context
+                .as_ref()
+                .and_then(|context| context.tax_rate)
+                .is_some_and(|rate| rate != revision.input_tax_rate)
+            {
+                return Err(Error::ValidationError("采购税率必须与供应商已核实税率一致".into()));
+            }
+        }
+        revision.source_purchase_terms = self.source_purchase_terms.clone();
+        self.ensure_supply_prices(revision)
+    }
+
     /// 读取供应商明确提供的采购报价，不允许用人工价填补缺失。
     /// # 参数
     /// 无；读取当前目录观察。
@@ -36,6 +59,9 @@ impl SupplierCatalogItem {
     /// 报价缺失、被改写或提交来源不存在的集采条款时拒绝。
     pub fn ensure_supply_prices(&self, revision: &SupplierOfferingRevision) -> Result<()> {
         self.ensure_purchase_price(revision.dropship_supply_price_gross)?;
+        if self.source_purchase_terms != revision.source_purchase_terms {
+            return Err(Error::ValidationError("供应商采购限制或报价上下文已变化，请刷新后再入库".into()));
+        }
         if revision.bulk_supply_price_gross.is_some() || revision.bulk_minimum_order_quantity.is_some() {
             return Err(Error::ValidationError("供应商接口未提供集采报价和起订量，不允许手工补写".into()));
         }
@@ -88,15 +114,103 @@ impl SupplierOfferingRevision {
             valid_to: self.valid_to,
             prefill_source_refs: self.prefill_source_refs.clone(),
         });
-        Ok(Some(Self::new(id, data)?))
+        let mut next = Self::new(id, data)?;
+        next.source_purchase_terms = self.source_purchase_terms.clone();
+        Ok(Some(next))
+    }
+
+    /// 按真实来源价格、税率和采购限制追加不可变修订。
+    /// # 参数
+    /// `id` 与 `revision_no` 为新版本身份，`item` 为已核验同订货身份的目录。
+    /// # 返回
+    /// 实际条件不变时返回空；来源条件变化时保留历史并返回新修订。
+    /// # 错误
+    /// 报价缺失、税率或来源约束无效时拒绝。
+    pub fn with_source_observation(
+        &self,
+        id: SupplierOfferingRevisionId,
+        revision_no: u32,
+        item: &SupplierCatalogItem,
+    ) -> Result<Option<Self>> {
+        let price = item.purchase_quote()?;
+        let tax_rate = item
+            .source_purchase_terms
+            .as_ref()
+            .and_then(|terms| terms.quote_context.as_ref())
+            .and_then(|context| context.tax_rate)
+            .unwrap_or(self.input_tax_rate);
+        let previous = self.source_purchase_terms.as_ref().map(|terms| terms.version_content());
+        let current = item.source_purchase_terms.as_ref().map(|terms| terms.version_content());
+        if price == self.dropship_supply_price_gross && tax_rate == self.input_tax_rate && previous == current
+        {
+            return Ok(None);
+        }
+        let data = SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
+            supplier_offering_id: self.supplier_offering_id.clone(),
+            revision_no,
+            dropship_supply_price_gross: price,
+            bulk_supply_price_gross: self.bulk_supply_price_gross,
+            input_tax_rate: tax_rate,
+            bulk_minimum_order_quantity: self.bulk_minimum_order_quantity,
+            product_capabilities: self.product_capabilities.clone(),
+            valid_from: self.valid_from,
+            valid_to: self.valid_to,
+            prefill_source_refs: self.prefill_source_refs.clone(),
+        });
+        let mut next = Self::new(id, data)?;
+        item.bind_purchase_terms(&mut next)?;
+        Ok(Some(next))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
     use erp_core::ids::SupplierOfferingId;
 
     use super::*;
+    use crate::entity::source_purchase::{SourcePurchaseTerms, SourceQuoteContext};
+    use crate::ports::connector::common::{Snapshot, SourceRevision, SourceStamp, SupplierSku};
+    use crate::ports::connector::offer::{Offer, OfferDetails};
+
+    fn catalog(rate: &str, minimum: &str) -> SupplierCatalogItem {
+        let mut item = SupplierCatalogItem::observed(
+            "c",
+            "s",
+            "job",
+            Snapshot {
+                stamp: SourceStamp {
+                    revision: SourceRevision::Unversioned,
+                    changed_at: None,
+                    observed_at: Instant::from_unix_secs(100),
+                },
+                value: Offer {
+                    sku: SupplierSku { product_id: Some("p".into()), spec_id: "s".into() },
+                    name: "商品".into(),
+                    specification: "规格".into(),
+                    unit: Some("件".into()),
+                    quote: None,
+                    details: OfferDetails {
+                        source_purchase_terms: Some(SourcePurchaseTerms {
+                            minimum_quantity: Some(minimum.parse().unwrap()),
+                            quote_context: Some(SourceQuoteContext {
+                                quantity: "1".parse().unwrap(),
+                                observed_at: Instant::from_unix_secs(100),
+                                tax_rate: Some(rate.parse().unwrap()),
+                                tax_rate_raw: Some(rate.into()),
+                                address_fingerprint: None,
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                },
+            },
+        )
+        .unwrap();
+        item.purchase_price = Some("80".into());
+        item
+    }
 
     fn revision() -> SupplierOfferingRevision {
         SupplierOfferingRevision::new(
@@ -154,5 +268,36 @@ mod tests {
         assert!(
             old.with_source_price(SupplierOfferingRevisionId::new("bad"), 2, "-1".parse().unwrap()).is_err()
         );
+    }
+
+    #[test]
+    fn source_constraints_and_actual_tax_change_revision_even_with_unchanged_unit_price() {
+        let mut old = revision();
+        let mut original = catalog("0.13", "2");
+        original.bind_purchase_terms(&mut old).unwrap();
+        let mut same = original.clone();
+        same.source_purchase_terms.as_mut().unwrap().quote_context.as_mut().unwrap().observed_at =
+            Instant::from_unix_secs(200);
+        assert!(
+            old.with_source_observation(SupplierOfferingRevisionId::new("same"), 2, &same).unwrap().is_none()
+        );
+        let changed = catalog("0.09", "3");
+        let next = old
+            .with_source_observation(SupplierOfferingRevisionId::new("new"), 2, &changed)
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.dropship_supply_price_gross, old.dropship_supply_price_gross);
+        assert_eq!(next.input_tax_rate, "0.09".parse().unwrap());
+        assert_eq!(next.dropship_supply_price_net, "72.8".parse().unwrap());
+        assert_eq!(next.source_purchase_terms, changed.source_purchase_terms);
+        assert_eq!(old.source_purchase_terms, original.source_purchase_terms);
+        assert!(next.source_purchase_terms.as_ref().unwrap().ensure_quantity("2".parse().unwrap()).is_err());
+        let mut encoded = serde_json::to_value(next).unwrap();
+        encoded.as_object_mut().unwrap().remove("source_purchase_terms");
+        let restored: SupplierOfferingRevision = serde_json::from_value(encoded).unwrap();
+        assert!(restored.source_purchase_terms.is_none());
+        original.source_purchase_terms.as_mut().unwrap().quote_context.as_mut().unwrap().tax_rate =
+            Some("0.09".parse().unwrap());
+        assert!(original.bind_purchase_terms(&mut old).is_err());
     }
 }

@@ -333,6 +333,7 @@ mod tests {
             url: "https://images.example/source.png".into(),
             content_fingerprint: Some("a".repeat(64)),
             file_asset_id: Some("asset-one".into()),
+            ..CatalogImage::default()
         }]);
         let request = product_request(&item(), &row(), &media).unwrap();
         assert_eq!(request.carousel_media[0].file_asset_id.as_ref(), "asset-one");

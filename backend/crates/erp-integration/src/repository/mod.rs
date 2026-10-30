@@ -21,3 +21,9 @@ mod command_receipt;
 pub use command_receipt::{IntegrationCommandExt, IntegrationCommandRepositoryExt};
 mod supplier_callback;
 pub use supplier_callback::{SupplierCallbackExt, SupplierCallbackRepositoryExt, pending_order_callbacks};
+mod supplier_credential;
+mod supplier_message;
+pub use supplier_credential::{SupplierCredentialExt, SupplierCredentialRepository};
+pub use supplier_message::{
+    SupplierMessageConsumerRepositoryExt, SupplierMessageExt, SupplierPulledMessageRepositoryExt,
+};

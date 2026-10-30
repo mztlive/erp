@@ -16,6 +16,7 @@ hmac = { workspace = true }
 image = { workspace = true }
 futures-util = { workspace = true }
 regex = { workspace = true }
+rsa = { version = "=0.9.10", features = ["getrandom"] }
 roxmltree = "0.21.1"
 rust_decimal = { workspace = true }
 erp-sales = { workspace = true }
@@ -54,6 +55,9 @@ storage = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
 tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+zeroize = { version = "1.8.2", features = ["serde"] }
 validator = { workspace = true }
 zip = { workspace = true }
 rust_xlsxwriter = { workspace = true }

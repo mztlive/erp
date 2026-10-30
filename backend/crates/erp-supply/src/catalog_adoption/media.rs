@@ -15,7 +15,13 @@ impl CatalogAdoptionPreview {
     pub fn media_blockers(item: &SupplierCatalogItem) -> Vec<String> {
         [(&item.images, "轮播图"), (&item.detail_images, "详情图")]
             .into_iter()
-            .filter(|(group, _)| group.as_deref().unwrap_or_default().iter().any(|image| !verified(image)))
+            .filter(|(group, _)| {
+                group
+                    .as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|image| image.source_valid != Some(false) && !verified(image))
+            })
             .map(|(_, label)| format!("{label}尚未同步完成，请重新同步商品资料后预览"))
             .collect()
     }
@@ -77,8 +83,10 @@ fn verified(image: &CatalogImage) -> bool {
 }
 
 fn same_group(frozen: &Option<Vec<CatalogImage>>, prepared: &Option<Vec<CatalogImage>>) -> bool {
-    let frozen = frozen.as_deref().unwrap_or_default();
-    let prepared = prepared.as_deref().unwrap_or_default();
+    let frozen =
+        frozen.iter().flatten().filter(|image| image.source_valid != Some(false)).collect::<Vec<_>>();
+    let prepared =
+        prepared.iter().flatten().filter(|image| image.source_valid != Some(false)).collect::<Vec<_>>();
     frozen.len() == prepared.len()
         && frozen.iter().zip(prepared).all(|(before, after)| {
             verified(before) && verified(after) && before.content_fingerprint == after.content_fingerprint
@@ -99,6 +107,7 @@ mod tests {
             url: "https://images.example/same.png".into(),
             content_fingerprint: Some(hash.to_string().repeat(64)),
             file_asset_id: Some(asset.into()),
+            ..CatalogImage::default()
         }
     }
 
@@ -186,5 +195,16 @@ mod tests {
             preview.ensure_item_media_verified(&preview.items[0].base.id),
             Err(Error::ConflictError(_))
         ));
+    }
+
+    #[test]
+    fn source_disabled_images_do_not_require_network_proof_or_become_company_media() {
+        let mut disabled = image('a', "asset");
+        disabled.source_valid = Some(false);
+        disabled.content_fingerprint = None;
+        disabled.file_asset_id = None;
+        let preview = preview(Some(vec![disabled.clone()]));
+        assert!(CatalogAdoptionPreview::media_blockers(&preview.items[0]).is_empty());
+        assert!(same_group(&Some(vec![disabled]), &None));
     }
 }

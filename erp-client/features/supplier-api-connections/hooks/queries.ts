@@ -30,7 +30,7 @@ export function useConnectorTypesQuery(enabled: boolean) {
     })
 }
 
-const supplierConnectionKeys = {
+export const supplierConnectionKeys = {
     all: ["supplier-api-connections"] as const,
     list: (input: ListQueryInput) =>
         [...supplierConnectionKeys.all, "list", input] as const,

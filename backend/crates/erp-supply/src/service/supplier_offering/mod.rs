@@ -7,10 +7,7 @@
 //! 供给单域命令：身份、商业修订、实时可供及命令重放。
 mod history;
 use erp_core::common::time::Instant;
-use erp_core::ids::{
-    SupplierDeliveryTemplateId, SupplierOfferingAvailabilityId, SupplierOfferingId,
-    SupplierOfferingRevisionId,
-};
+use erp_core::ids::{SupplierDeliveryTemplateId, SupplierOfferingId, SupplierOfferingRevisionId};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -35,6 +32,7 @@ use crate::repository::{SupplierApiExt, SupplierOfferingExt};
 use crate::{Error, Result};
 mod access;
 mod api_price;
+mod creation;
 mod handover;
 mod recovery;
 mod source_observation;
@@ -157,41 +155,13 @@ impl SupplierOfferingService {
                 .map(CommandPreparation::Replay)
                 .map_err(|e| Error::Internal(e.to_string()).into());
         }
-        let (maintainer, org) = self.access().maintainer_org(None, actor, executor).await?;
-        self.access().ensure_writable(actor, "create", &maintainer, &org, executor).await?;
-        let offering_id = SupplierOfferingId::new(next_id());
-        let mut offering = SupplierOffering::new(
-            offering_id.clone(),
-            req.try_into_offering_data(maintainer, org)?,
-            actor.id(),
-        )?;
-        self.ensure_identity_available(&offering, executor).await?;
-        self.ensure_source_connection(&offering, executor).await?;
-        self.assign_requested_template(
-            &mut offering,
-            req.delivery_template_id.as_deref(),
-            actor.id(),
-            executor,
-        )
-        .await?;
-        let revision_data = req.try_into_initial_revision(offering_id.clone())?;
-        let revision =
-            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
+        let mut offering = self.prepare_initial_offering(req, actor, executor).await?;
+        let offering_id = SupplierOfferingId::new(offering.base.id.clone());
+        let revision = self.prepare_initial_revision(req, &offering, executor).await?;
         qualification
             .ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from, executor)
             .await?;
-        let received_at = Instant::now();
-        let source_updated_at = dto::resolve_source_updated_at(req.source_updated_at, received_at);
-        let availability_data = req.try_into_availability_data(
-            offering_id.clone(),
-            source_updated_at,
-            received_at,
-            actor.id().to_string(),
-        )?;
-        let availability = SupplierOfferingAvailability::new(
-            SupplierOfferingAvailabilityId::new(next_id()),
-            availability_data,
-        )?;
+        let availability = Self::prepare_initial_availability(req, offering_id, actor)?;
         offering.stable.current_revision_id = Some(revision.base.id.clone());
         let result = CreateSupplierOfferingResult {
             offering_id: offering.base.id.clone(),
@@ -287,9 +257,9 @@ impl SupplierOfferingService {
             next_no,
             offering.source_type,
         )?;
-        let revision =
+        let mut revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
-        self.ensure_api_prices(&offering, &revision, executor).await?;
+        self.ensure_api_prices(&offering, &mut revision, executor).await?;
         let next_status = req.status.unwrap_or(offering.stable.status);
         if next_status == OfferingStatus::Active {
             qualification
@@ -482,7 +452,7 @@ impl SupplierOfferingService {
     async fn ensure_api_prices(
         &self,
         offering: &SupplierOffering,
-        revision: &SupplierOfferingRevision,
+        revision: &mut SupplierOfferingRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         if offering.source_type != OfferingSourceType::Api {
@@ -499,6 +469,7 @@ impl SupplierOfferingService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("API 供给当前条款不存在".into()))?;
+        revision.source_purchase_terms = current.source_purchase_terms.clone();
         revision.ensure_api_prices_unchanged(&current)?;
         Ok(())
     }

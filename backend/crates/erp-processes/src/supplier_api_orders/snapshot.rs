@@ -1,8 +1,10 @@
 use erp_core::common::time::BusinessDate;
-use erp_core::money::{Amount, round_to_cent};
+use erp_core::money::Amount;
 use erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderSourceLine};
+use erp_supply::entity::execution_budget::ApprovedExecutionBudget;
+use erp_supply::entity::source_purchase::SourcePurchaseTerms;
 use erp_supply::ports::connector::common::SupplierSku;
 use erp_supply::ports::connector::offer::DeliveryContext;
 use erp_supply::ports::connector::order::{DeliveryChoice, OrderLine, Recipient};
@@ -19,6 +21,11 @@ pub(super) struct ExecutionSnapshot {
     pub recipient: Recipient,
     pub lines: Vec<OrderLine>,
     pub approved_total: Amount,
+    /// 旧快照没有明确分配依据时保持空值，不反推运费已获批准。
+    #[serde(default)]
+    pub approved_budget: Option<ApprovedExecutionBudget>,
+    #[serde(default)]
+    pub source_purchase_terms: Vec<FrozenLinePurchaseTerms>,
     pub expected_delivery_date: Option<BusinessDate>,
     pub context: Option<DeliveryContext>,
     pub choices: Vec<DeliveryChoice>,
@@ -27,44 +34,47 @@ pub(super) struct ExecutionSnapshot {
     pub requires_payment: bool,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub(super) struct FrozenLinePurchaseTerms {
+    pub line_id: String,
+    pub supplier_offering_revision_id: String,
+    pub terms: Option<SourcePurchaseTerms>,
+}
+
 impl SupplierApiOrderProcess {
     pub(super) async fn build_snapshot(&self, execution: &ApiOrderExecution) -> Result<ExecutionSnapshot> {
+        let purchase_lines = self
+            .db
+            .purchase_order()
+            .list_revision_lines(&execution.purchase_order_revision_id.clone().into(), &mut NoTransaction)
+            .await?;
+        let budget = self.approved_budget(execution, &purchase_lines).await?;
         let mut lines = Vec::new();
+        let mut source_purchase_terms = Vec::new();
         let mut recipient = None;
         let mut expected_delivery_date = None;
         for source in &execution.source_lines {
-            let line = self
-                .db
-                .purchase_order_revision_lines()
-                .find_by_id(&source.purchase_order_revision_line_id, &mut NoTransaction)
-                .await?
-                .filter(|line| {
-                    line.purchase_order_revision_id.as_ref() == execution.purchase_order_revision_id
-                })
+            let line = purchase_lines
+                .iter()
+                .find(|line| line.base.id == source.purchase_order_revision_line_id)
                 .ok_or_else(|| Error::NotFound("冻结采购行不存在".into()))?;
             let value = if source.delivery_allocation_index == u32::MAX {
                 self.warehouse_recipient(execution).await?
             } else {
-                recipient_for(&line, source.delivery_allocation_index)?
+                recipient_for(line, source.delivery_allocation_index)?
             };
             recipient.get_or_insert(value);
             expected_delivery_date = line.expected_delivery_date;
-            lines.push(self.order_line(execution, source, &line).await?);
+            let (order_line, source_terms) = self.order_line(execution, source, line).await?;
+            lines.push(order_line);
+            source_purchase_terms.push(source_terms);
         }
-        let total = lines.iter().try_fold(rust_decimal::Decimal::ZERO, |sum, line| {
-            sum.checked_add(
-                line.quantity
-                    .to_decimal()
-                    .checked_mul(line.approved_unit_price.to_decimal())
-                    .ok_or_else(|| Error::ValidationError("采购金额超出范围".into()))?,
-            )
-            .ok_or_else(|| Error::ValidationError("采购金额超出范围".into()))
-        })?;
         Ok(ExecutionSnapshot {
             recipient: recipient.ok_or_else(|| Error::BusinessLogicError("采购执行无明细".into()))?,
             lines,
-            approved_total: Amount::try_from(round_to_cent(total))
-                .map_err(|_| Error::ValidationError("采购金额无效".into()))?,
+            approved_total: budget.approved_total,
+            approved_budget: Some(budget),
+            source_purchase_terms,
             expected_delivery_date,
             context: None,
             choices: Vec::new(),
@@ -79,11 +89,19 @@ impl SupplierApiOrderProcess {
         execution: &ApiOrderExecution,
         source: &ApiOrderSourceLine,
         line: &PurchaseOrderRevisionLine,
-    ) -> Result<OrderLine> {
+    ) -> Result<(OrderLine, FrozenLinePurchaseTerms)> {
         let frozen = line
             .supplier_offering_source
             .as_ref()
             .ok_or_else(|| Error::BusinessLogicError("采购行未冻结供给".into()))?;
+        let terms = self
+            .frozen_purchase_terms(
+                source,
+                frozen.supplier_offering_id.as_ref(),
+                frozen.supplier_offering_revision_id.as_ref(),
+                frozen.revision_version,
+            )
+            .await?;
         let offering = self
             .db
             .supplier_offerings()
@@ -97,17 +115,52 @@ impl SupplierApiOrderProcess {
                         .is_some_and(|id| id.as_ref() == execution.connection_id)
             })
             .ok_or_else(|| Error::BusinessLogicError("采购供给与接口连接不一致".into()))?;
-        Ok(OrderLine {
-            line_id: source.fulfillment_item_id.clone(),
-            sku: SupplierSku {
-                product_id: offering.supplier_product_code,
-                spec_id: offering.supplier_sku_code,
+        Ok((
+            OrderLine {
+                source_purchase_terms: terms.terms.clone(),
+                line_id: source.fulfillment_item_id.clone(),
+                sku: SupplierSku {
+                    product_id: offering.supplier_product_code,
+                    spec_id: offering.supplier_sku_code,
+                },
+                quantity: source.quantity,
+                approved_unit_price: line
+                    .unit_cost_gross
+                    .ok_or_else(|| Error::BusinessLogicError("采购单价缺失".into()))?,
+                attributes: Vec::new(),
             },
-            quantity: source.quantity,
-            approved_unit_price: line
-                .unit_cost_gross
-                .ok_or_else(|| Error::BusinessLogicError("采购单价缺失".into()))?,
-            attributes: Vec::new(),
+            terms,
+        ))
+    }
+
+    async fn frozen_purchase_terms(
+        &self,
+        source: &ApiOrderSourceLine,
+        offering: &str,
+        revision_id: &str,
+        revision_version: u64,
+    ) -> Result<FrozenLinePurchaseTerms> {
+        if source.supplier_offering_revision_id != revision_id {
+            return Err(Error::BusinessLogicError("执行行与已批准供给版本不一致".into()));
+        }
+        let revision = self
+            .db
+            .supplier_offering_revisions()
+            .find_by_id(revision_id, &mut NoTransaction)
+            .await?
+            .filter(|revision| {
+                revision.supplier_offering_id.as_ref() == offering
+                    && revision.base.version == revision_version
+            })
+            .ok_or_else(|| Error::BusinessLogicError("已批准供给修订不存在或版本不一致".into()))?;
+        if let Some(terms) = &revision.source_purchase_terms {
+            terms.ensure_quantity(source.quantity)?;
+            terms.ensure_automatic_order()?;
+        }
+        Ok(FrozenLinePurchaseTerms {
+            line_id: source.fulfillment_item_id.clone(),
+            supplier_offering_revision_id: revision_id.into(),
+            terms: revision.source_purchase_terms,
         })
     }
 
@@ -151,6 +204,7 @@ impl SupplierApiOrderProcess {
             region: region.as_str().into(),
             address: format!("{}{}", region.full_name(), self.codec.decrypt(revision.address.encrypted())?),
             geocoded_address: None,
+            supplier_address: None,
         })
     }
 }
@@ -166,5 +220,6 @@ fn recipient_for(line: &PurchaseOrderRevisionLine, index: u32) -> Result<Recipie
         region: row.region_code.as_str().into(),
         address: row.full_address(),
         geocoded_address: None,
+        supplier_address: None,
     })
 }

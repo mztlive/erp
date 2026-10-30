@@ -88,6 +88,8 @@ pub enum DocumentNumberKind {
 
     /// API 供应商批量入库作业，对应 `supplier_catalog_adoption_batches.batch_no`。
     SupplierCatalogAdoption,
+    /// 供应商预存款充值申请。
+    SupplierDepositRecharge,
 }
 
 impl Display for DocumentNumberKind {
@@ -153,6 +155,7 @@ impl DocumentNumberKind {
             Self::SupplierSettlement => ("SS", "supplier_settlement"),
             Self::Product => ("SPU", "product"),
             Self::SupplierCatalogAdoption => ("SCA", "supplier_catalog_adoption"),
+            Self::SupplierDepositRecharge => ("DR", "supplier_deposit_recharge"),
         }
     }
 }

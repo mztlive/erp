@@ -53,7 +53,12 @@ fn png(value: u8) -> DownloadedSourceImage {
 }
 
 fn source(url: &str) -> CatalogImage {
-    CatalogImage { url: url.into(), content_fingerprint: None, file_asset_id: None }
+    CatalogImage {
+        url: url.into(),
+        content_fingerprint: None,
+        file_asset_id: None,
+        ..CatalogImage::default()
+    }
 }
 
 fn item(images: Option<Vec<CatalogImage>>, details: Option<Vec<CatalogImage>>) -> SupplierCatalogItem {
@@ -128,6 +133,28 @@ async fn prepares_real_pending_assets_and_keeps_order_and_absent_groups() {
     prepared.pending_assets.ensure_all_used(&used).unwrap();
     prepared.apply_to(&mut item).unwrap();
     assert_eq!(item.images.as_ref().unwrap()[0].file_asset_id, sources[0].file_asset_id);
+}
+
+#[tokio::test]
+async fn source_disabled_images_are_retained_without_download_or_adoption() {
+    let (preparer, transport, _) = preparer(vec![png(1)]);
+    let mut disabled = source("https://cdn.example/disabled");
+    disabled.source_valid = Some(false);
+    disabled.source_primary = Some(false);
+    disabled.source_sequence = Some(2);
+    let mut active = source("https://cdn.example/active");
+    active.source_valid = Some(true);
+    active.source_primary = Some(true);
+    active.source_sequence = Some(1);
+    let item = item(Some(vec![disabled.clone(), active]), None);
+    let prepared = preparer.prepare_source_media(&item, &actor()).await.unwrap();
+    assert_eq!(transport.count.load(Ordering::Relaxed), 1);
+    assert_eq!(prepared.images.as_ref().unwrap()[0], disabled);
+    assert_eq!(prepared.images.as_ref().unwrap()[1].source_sequence, Some(1));
+    assert_eq!(prepared.images.as_ref().unwrap()[1].source_primary, Some(true));
+    assert_eq!(prepared.carousel_media.len(), 1);
+    assert_eq!(prepared.carousel_media[0].sort_order, 1);
+    assert!(PreparedSourceMedia::from_archived(&item).carousel_media.is_empty());
 }
 
 #[tokio::test]

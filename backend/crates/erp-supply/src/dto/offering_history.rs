@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use crate::entity::source_purchase::SourcePurchaseTerms;
 use crate::entity::supplier_offering::SupplierOfferingRevision;
 
 /// 条款历史游标；每次固定返回最多 20 个版本。
@@ -25,6 +26,8 @@ pub struct OfferingHistoryPage {
 /// 单个不可变商业条款；无成本权限时金额与税率均为空。
 #[derive(Debug, Serialize)]
 pub struct OfferingRevisionView {
+    /// 来源只读采购条件；税率证据随成本权限脱敏。
+    pub source_purchase_terms: Option<SourcePurchaseTerms>,
     /// 条款版本 ID。
     pub id: String,
     /// 条款版本号。
@@ -66,6 +69,7 @@ impl OfferingRevisionView {
     /// 无。
     pub fn from_revision(revision: SupplierOfferingRevision, current_id: Option<&str>) -> Self {
         Self {
+            source_purchase_terms: revision.source_purchase_terms,
             is_current: current_id == Some(revision.base.id.as_str()),
             id: revision.base.id,
             revision_no: revision.revision.revision_no,
@@ -98,6 +102,9 @@ impl OfferingRevisionView {
         self.bulk_supply_price_gross = None;
         self.bulk_supply_price_net = None;
         self.input_tax_rate = None;
+        if let Some(terms) = &mut self.source_purchase_terms {
+            terms.quote_context = None;
+        }
     }
 }
 

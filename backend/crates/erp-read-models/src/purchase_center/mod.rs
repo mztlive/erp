@@ -15,6 +15,8 @@ pub mod freight_follow_up;
 mod payments;
 pub mod procurement_responsibility;
 mod query;
+pub use query::deposit_funds::PurchaseDepositAccessPort;
+
 pub use crate::finance::purchase_payments::PurchasePaymentView;
 pub mod repository;
 mod scope;

@@ -125,6 +125,7 @@ mod tests {
     use std::sync::Mutex;
 
     use async_trait::async_trait;
+    use erp_core::ids::SupplierOfferingAvailabilityId;
 
     use super::*;
     use crate::dto::supplier_offering::SupplierOfferingTermsWrite;

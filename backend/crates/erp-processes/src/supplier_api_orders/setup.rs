@@ -2,7 +2,11 @@ use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_read_models::supplier_center::execution_progress::{ExecutionOrderTreeView, ExecutionShipmentView};
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt, ApiOrderSetupReceipt, ApiOrderStage};
+use erp_supply::ports::connector::address::{
+    AddressRequirement, ConfirmedSupplierAddress, SupplierAddressLevel,
+};
 use erp_supply::ports::connector::order::{CoordinateSystem, DeliveryMethod, GeocodedAddress, Recipient};
 use erp_supply::service::supplier_fulfillment::FulfillmentOrderAccess;
 use persistence_core::{NoTransaction, Transactional};
@@ -34,6 +38,7 @@ pub struct ExecutionSetupRequest {
     pub geocode: Option<ExecutionGeocode>,
     pub choice_index: Option<usize>,
     pub recipient_phone: Option<String>,
+    pub supplier_address_ticket: Option<String>,
 }
 
 /// 可供采购确认的配送选项；索引只在对应执行版本有效。
@@ -44,7 +49,7 @@ pub struct ExecutionChoiceView {
     pub date: Option<String>,
     pub slot: Option<String>,
     pub store_id: Option<String>,
-    pub shipping_fee: String,
+    pub shipping_fee: Option<String>,
 }
 
 /// API 订单配送资料和真实后台阶段。
@@ -63,6 +68,57 @@ pub struct ExecutionSetupView {
     pub geocode_editable: bool,
     pub choice_editable: bool,
     pub recipient_phone_required: bool,
+    pub address_requirement: &'static str,
+    pub supplier_address: Option<ExecutionSupplierAddressView>,
+    pub supplier_address_editable: bool,
+    pub order_tree: Option<ExecutionOrderTreeView>,
+    pub shipments: Vec<ExecutionShipmentView>,
+    pub result_query_available: bool,
+}
+
+/// 只返回人工已确认的四级名称及编码，不返回账号、地址指纹或原执行身份。
+#[derive(Serialize)]
+pub struct ExecutionSupplierAddressView {
+    pub version: u64,
+    pub province: SupplierAddressLevel,
+    pub city: SupplierAddressLevel,
+    pub county: SupplierAddressLevel,
+    pub town: SupplierAddressLevel,
+}
+
+impl From<&ConfirmedSupplierAddress> for ExecutionSupplierAddressView {
+    fn from(value: &ConfirmedSupplierAddress) -> Self {
+        Self {
+            version: value.version,
+            province: value.province.clone(),
+            city: value.city.clone(),
+            county: value.county.clone(),
+            town: value.town.clone(),
+        }
+    }
+}
+
+impl ExecutionSetupRequest {
+    fn receipt(&self, id: &str) -> Result<(String, ApiOrderSetupReceipt)> {
+        let hash = hex::encode(Sha256::digest(
+            serde_json::to_vec(&(
+                &self.geocode,
+                self.choice_index,
+                &self.recipient_phone,
+                &self.supplier_address_ticket,
+            ))
+            .map_err(|_| Error::ValidationError("配送补充资料无效".into()))?,
+        ));
+        let receipt = ApiOrderSetupReceipt {
+            base: BaseModel::new(format!(
+                "setup-{}",
+                hex::encode(Sha256::digest(format!("{id}\0{}", self.idempotency_key)))
+            )),
+            execution_id: id.into(),
+            payload_hash: hash.clone(),
+        };
+        Ok((hash, receipt))
+    }
 }
 
 /// 授权采购核对坐标所需的最小冻结收件资料。
@@ -72,6 +128,64 @@ pub struct ExecutionRecipientView {
     pub phone: String,
     pub region: String,
     pub address: String,
+}
+
+impl ExecutionSetupView {
+    /// 按既有成本读取资格移除费用及可能含成本的来源错误正文。
+    /// # 参数
+    /// 无；Handler 仅在缺少 supplier_offering_cost:detail 时调用。
+    /// # 返回
+    /// 保留可操作业务原因、阶段、数量和物流，费用保持缺失而非伪造零。
+    /// # 错误
+    /// 不返回错误。
+    pub fn without_costs(&mut self) {
+        for choice in &mut self.choices {
+            choice.shipping_fee = None;
+        }
+        self.blocker =
+            self.blocker.as_deref().map(|reason| public_execution_blocker(reason, self.stage).to_string());
+    }
+
+    fn from_execution(
+        execution: &ApiOrderExecution,
+        snapshot: Option<&ExecutionSnapshot>,
+        requirement: Option<AddressRequirement>,
+        order_tree: Option<ExecutionOrderTreeView>,
+        shipments: Vec<ExecutionShipmentView>,
+    ) -> Self {
+        let waiting = execution.stage == ApiOrderStage::AwaitingSetup;
+        let context_ready = snapshot.is_some_and(|value| value.context.is_some());
+        let address_editable = waiting && !context_ready && snapshot.is_some();
+        Self {
+            purchase_order_id: execution.purchase_order_id.clone(),
+            purchase_order_revision_id: execution.purchase_order_revision_id.clone(),
+            recipient: snapshot.map(|snapshot| masked_recipient(&snapshot.recipient)),
+            recipient_masked: true,
+            execution_version: execution.base.version,
+            stage: execution.stage,
+            blocker: execution.blocker.clone().or_else(|| execution.receipt_blocker.clone()),
+            geocode: None,
+            choices: snapshot.map(choice_views).unwrap_or_default(),
+            selected_choice: snapshot.and_then(|value| value.selected_choice),
+            geocode_editable: address_editable
+                && requirement == Some(AddressRequirement::Geocoded(CoordinateSystem::Bd09)),
+            choice_editable: waiting && context_ready,
+            recipient_phone_required: snapshot.is_some_and(|value| value.recipient.phone.is_empty()),
+            address_requirement: match requirement {
+                Some(AddressRequirement::Text) => "TEXT",
+                Some(AddressRequirement::FourLevel) => "FOUR_LEVEL",
+                Some(AddressRequirement::Geocoded(_)) => "BD09",
+                None => "UNAVAILABLE",
+            },
+            supplier_address: snapshot
+                .and_then(|value| value.recipient.supplier_address.as_ref())
+                .map(ExecutionSupplierAddressView::from),
+            supplier_address_editable: address_editable && requirement == Some(AddressRequirement::FourLevel),
+            order_tree,
+            shipments,
+            result_query_available: execution.original_result_query_allowed(),
+        }
+    }
 }
 
 impl SupplierApiOrderProcess {
@@ -86,29 +200,20 @@ impl SupplierApiOrderProcess {
         let execution = self.load(id).await?;
         let snapshot =
             if execution.request_encrypted.is_some() { Some(self.decode(&execution)?) } else { None };
-        // 普通订单详情权限不授予完整地址或精确坐标揭示资格。
-        let geocode = None;
-        let choices = snapshot.as_ref().map(choice_views).unwrap_or_default();
-        let waiting = execution.stage == ApiOrderStage::AwaitingSetup;
-        let context_ready = snapshot.as_ref().is_some_and(|value| value.context.is_some());
-        let recipient_phone_required =
-            snapshot.as_ref().is_some_and(|value| value.recipient.phone.is_empty());
-        let recipient = snapshot.as_ref().map(|snapshot| masked_recipient(&snapshot.recipient));
-        Ok(ExecutionSetupView {
-            purchase_order_id: execution.purchase_order_id,
-            purchase_order_revision_id: execution.purchase_order_revision_id,
-            recipient,
-            recipient_masked: true,
-            execution_version: execution.base.version,
-            stage: execution.stage,
-            blocker: execution.blocker,
-            geocode,
-            choices,
-            selected_choice: snapshot.as_ref().and_then(|value| value.selected_choice),
-            geocode_editable: waiting && !context_ready && snapshot.is_some(),
-            choice_editable: waiting && context_ready,
-            recipient_phone_required,
-        })
+        let (requirement, unavailable) = match self.setup_connector(&execution).await {
+            Ok(connector) => (Some(connector.address_requirement()), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
+        let (tree, shipments) = self.execution_progress(&execution).await?;
+        let mut view =
+            ExecutionSetupView::from_execution(&execution, snapshot.as_ref(), requirement, tree, shipments);
+        if let Some(reason) = unavailable {
+            view.blocker = Some(match view.blocker {
+                Some(existing) => format!("{existing}；{reason}"),
+                None => reason,
+            });
+        }
+        Ok(view)
     }
 
     /// 保存经采购确认的坐标或配送选择，后台继续执行，保存不代表下单成功。
@@ -126,19 +231,8 @@ impl SupplierApiOrderProcess {
         access: &FulfillmentOrderAccess,
     ) -> Result<ExecutionSetupView> {
         validate_request(&request)?;
-        let hash = hex::encode(Sha256::digest(
-            serde_json::to_vec(&(&request.geocode, request.choice_index, &request.recipient_phone))
-                .map_err(|_| Error::ValidationError("配送补充资料无效".into()))?,
-        ));
+        let (hash, receipt) = request.receipt(id)?;
         let mut execution = self.load(id).await?;
-        let receipt = ApiOrderSetupReceipt {
-            base: BaseModel::new(format!(
-                "setup-{}",
-                hex::encode(Sha256::digest(format!("{id}\0{}", request.idempotency_key)))
-            )),
-            execution_id: id.into(),
-            payload_hash: hash.clone(),
-        };
         if let Some(previous) = self
             .db
             .supplier_api_order_setup_receipts()
@@ -154,7 +248,22 @@ impl SupplierApiOrderProcess {
             return Err(Error::ConflictError("接口执行资料已变化，请刷新后核对".into()));
         }
         let mut snapshot = self.decode(&execution)?;
+        let requirement = self.setup_connector(&execution).await?.address_requirement();
+        if request.geocode.is_some() && requirement != AddressRequirement::Geocoded(CoordinateSystem::Bd09) {
+            return Err(Error::ValidationError("当前供应商不使用百度坐标，请按其收货地址要求补齐".into()));
+        }
         apply_setup(&mut execution, &mut snapshot, &request)?;
+        if let Some(ticket) = &request.supplier_address_ticket {
+            self.apply_supplier_address(&mut execution, &mut snapshot, ticket).await?;
+        }
+        if execution.stage == ApiOrderStage::PrepareAddress {
+            snapshot.recipient.ensure_address_ready(
+                requirement,
+                &execution.connection_id,
+                &execution.base.id,
+                execution.address_fingerprint.as_deref().unwrap_or_default(),
+            )?;
+        }
         self.encode(&mut execution, &snapshot)?;
         execution.setup_idempotency_key = Some(request.idempotency_key);
         execution.setup_payload_hash = Some(hash);
@@ -222,13 +331,17 @@ impl TryFrom<ExecutionGeocode> for GeocodedAddress {
 }
 
 fn validate_request(request: &ExecutionSetupRequest) -> Result<()> {
+    let actions = usize::from(request.geocode.is_some())
+        + usize::from(request.choice_index.is_some())
+        + usize::from(request.supplier_address_ticket.is_some());
     if request.idempotency_key.trim().is_empty()
         || request.idempotency_key.len() > 128
         || request.expected_version == 0
-        || request.geocode.is_none() == request.choice_index.is_none()
+        || actions > 1
+        || (actions == 0 && request.recipient_phone.is_none())
     {
         return Err(Error::ValidationError(
-            "每次请选择补充坐标或确认配送方案，并提供有效版本与操作号".into(),
+            "每次请选择补充收货地址、坐标或确认配送方案，并提供有效版本与操作号".into(),
         ));
     }
     Ok(())
@@ -285,6 +398,12 @@ fn apply_setup(
         snapshot.selected_choice = Some(index);
         execution.stage = ApiOrderStage::PlanDelivery;
     }
+    if request.geocode.is_none()
+        && request.choice_index.is_none()
+        && request.supplier_address_ticket.is_none()
+    {
+        execution.stage = ApiOrderStage::PrepareAddress;
+    }
     Ok(())
 }
 
@@ -309,10 +428,41 @@ fn choice_views(snapshot: &ExecutionSnapshot) -> Vec<ExecutionChoiceView> {
                 date,
                 slot,
                 store_id,
-                shipping_fee: choice.shipping_fee.to_string(),
+                shipping_fee: Some(choice.shipping_fee.to_string()),
             }
         })
         .collect()
+}
+
+fn public_execution_blocker(reason: &str, stage: ApiOrderStage) -> &'static str {
+    if matches!(
+        stage,
+        ApiOrderStage::CreationUnknown
+            | ApiOrderStage::ConfirmationUnknown
+            | ApiOrderStage::PaymentUnknown
+            | ApiOrderStage::CancellationUnknown
+    ) {
+        return "原执行结果待核实，请查询原结果；系统不会重复发送原请求";
+    }
+    if reason.contains("运费") {
+        return "供应商运费需要核对，请由有权限的采购经办人处理";
+    }
+    if reason.contains("余额") {
+        return "供应商账户余额需要核对，请联系财务处理";
+    }
+    if reason.contains("授权") || reason.contains("付款") {
+        return "付款批准或执行授权需要核对，请联系财务处理";
+    }
+    if reason.contains("金额") || reason.contains("价格") || reason.contains("报价") {
+        return "采购金额或报价需要核对，请由有权限的采购经办人处理";
+    }
+    if reason.contains("地址") || reason.contains("坐标") {
+        return "请按供应商要求补齐并核对收货资料";
+    }
+    if reason.contains("配置") || reason.contains("接口类型") {
+        return "供应商接口配置尚未就绪，请联系管理员处理";
+    }
+    "当前执行需要经办人核对，请联系采购负责人处理"
 }
 
 #[cfg(test)]
@@ -337,6 +487,7 @@ mod tests {
     #[test]
     fn setup_default_view_never_reveals_full_recipient() {
         let value = Recipient {
+            supplier_address: None,
             name: "张三".into(),
             phone: "13812345678".into(),
             region: "110105".into(),
@@ -348,5 +499,80 @@ mod tests {
         assert_eq!(masked.phone, "***5678");
         assert!(!masked.address.contains("123号"));
         assert!(!masked.address.contains("某路"));
+    }
+
+    fn address_request() -> ExecutionSetupRequest {
+        ExecutionSetupRequest {
+            expected_version: 1,
+            idempotency_key: "operation".into(),
+            geocode: None,
+            choice_index: None,
+            recipient_phone: None,
+            supplier_address_ticket: Some("issued-town-ticket".into()),
+        }
+    }
+
+    #[test]
+    fn address_setup_accepts_one_action_and_receipt_rejects_changed_payload() {
+        let original = address_request();
+        validate_request(&original).unwrap();
+        let (hash, receipt) = original.receipt("execution").unwrap();
+        receipt.ensure_replay("execution", &hash).unwrap();
+        let mut changed = original.clone();
+        changed.supplier_address_ticket = Some("other-town-ticket".into());
+        let (other_hash, other_receipt) = changed.receipt("execution").unwrap();
+        assert_eq!(receipt.base.id, other_receipt.base.id);
+        assert!(receipt.ensure_replay("execution", &other_hash).is_err());
+        changed.choice_index = Some(0);
+        assert!(validate_request(&changed).is_err());
+        let mut empty = original;
+        empty.supplier_address_ticket = None;
+        assert!(validate_request(&empty).is_err());
+    }
+
+    #[test]
+    fn setup_rejects_client_invented_four_level_codes() {
+        let request = serde_json::from_str::<ExecutionSetupRequest>(
+            r#"{
+            "expected_version":1,"idempotency_key":"operation","supplier_address":{"province":"1"}
+        }"#,
+        );
+        assert!(request.is_err());
+    }
+
+    #[test]
+    fn masked_execution_reason_and_choices_do_not_expose_costs() {
+        let mut execution =
+            ApiOrderExecution::queued("e".into(), "p".into(), "r".into(), "c".into(), "s".into(), vec![]);
+        execution.stage = ApiOrderStage::AwaitingSetup;
+        execution.blocker = Some("运费为19.98，超过批准范围".into());
+        let mut view = ExecutionSetupView::from_execution(
+            &execution,
+            None,
+            Some(AddressRequirement::FourLevel),
+            None,
+            vec![],
+        );
+        view.choices.push(ExecutionChoiceView {
+            index: 0,
+            method: "COURIER",
+            date: None,
+            slot: None,
+            store_id: None,
+            shipping_fee: Some("19.98".into()),
+        });
+        view.without_costs();
+        assert_eq!(view.choices[0].shipping_fee, None);
+        assert_eq!(view.blocker.as_deref(), Some("供应商运费需要核对，请由有权限的采购经办人处理"));
+        execution.stage = ApiOrderStage::ConfirmationUnknown;
+        let mut unknown = ExecutionSetupView::from_execution(&execution, None, None, None, vec![]);
+        unknown.without_costs();
+        assert_eq!(unknown.address_requirement, "UNAVAILABLE");
+        assert!(!unknown.geocode_editable);
+        assert!(!unknown.supplier_address_editable);
+        assert_eq!(
+            unknown.blocker.as_deref(),
+            Some("原执行结果待核实，请查询原结果；系统不会重复发送原请求")
+        );
     }
 }

@@ -1,6 +1,8 @@
 "use client"
 
 import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
+import { PurchaseOrderApiExecutions } from "./purchase-order-api-executions"
+import { PurchaseOrderExecutionFunds } from "./purchase-order-execution-funds"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import {
@@ -49,6 +51,14 @@ export function PurchaseOrderDetailFulfillmentSection({
                 />
             </DetailSummary>
             <div className="space-y-5">
+                <PurchaseOrderApiExecutions
+                    order={order}
+                    costMasked={costMasked}
+                />
+                <PurchaseOrderExecutionFunds
+                    order={order}
+                    costMasked={costMasked}
+                />
                 {quantities.length > 0 ? (
                     <DetailRecordSection title="履约数量">
                         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">

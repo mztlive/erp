@@ -64,6 +64,8 @@ mod contract_ai;
 pub use contract_ai::ContractAiConfig;
 mod dangaoshushu;
 pub use dangaoshushu::{DangaoshushuConfig, SupplierTimestampUnit};
+mod jd_vop;
+pub use jd_vop::JdVopConfig;
 mod command;
 mod errors;
 mod nacos;
@@ -108,6 +110,9 @@ pub struct Config {
     /// 可选蛋糕叔叔连接；凭据由 SafeConfig 提供，不存入业务表。
     #[serde(default)]
     pub dangaoshushu: Option<DangaoshushuConfig>,
+    /// 可选京东 VOP 技术配置；认证与账号授权须独立核验。
+    #[serde(default)]
+    pub jd_vop: Option<JdVopConfig>,
 }
 
 /// 演示主数据开关。
@@ -355,6 +360,10 @@ impl Config {
         }
         if let Some(supplier) = &self.dangaoshushu {
             supplier.validate()?;
+        }
+        if let Some(supplier) = &self.jd_vop {
+            supplier.validate()?;
+            supplier.ensure_independent_key(&self.app.secret)?;
         }
         if let Some(mail) = &self.purchase_mail {
             mail.validate()?;

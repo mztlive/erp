@@ -15,3 +15,4 @@ pub mod actual_profit_loss;
 pub mod cost;
 pub mod extra_cost;
 pub mod funds_scope;
+pub mod supplier_deposits;

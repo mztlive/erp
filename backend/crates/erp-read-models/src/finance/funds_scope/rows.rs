@@ -600,7 +600,8 @@ impl FundsAccess {
                 .and_then(|account| account_order.get(account).cloned())
                 .flatten();
             let view = erp_finance::dto::payable::PaymentAllocationView::from(&item);
-            let payment = item.supplier_payment_id.to_string();
+            let Some(payment_id) = item.source.supplier_payment_id() else { continue };
+            let payment = payment_id.to_string();
             links.entry(payment).or_default().push(PaymentLink { signed, order, view });
         }
         Ok(links)
@@ -823,6 +824,7 @@ mod tests {
                 payment_recipient: None,
                 payment_guidance: None,
                 entries: Vec::new(),
+                payment_allocations: Vec::new(),
                 source_document_no: Some("PO-1".into()),
                 supplier_name: Some("示例供应商".into()),
             }],

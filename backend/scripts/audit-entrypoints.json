@@ -2827,22 +2827,6 @@
       "reason": "用例 update_delivery 在自身事务或已声明 run_audited 边界通过 .resource_log、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
-      "path": "crates/erp-processes/src/fulfillment_execution/delivery_posting.rs",
-      "function": "apply",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        ".resource_log",
-        "persist_log"
-      ],
-      "call_counts": {
-        ".resource_log": 1,
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "用例或步骤 apply 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
-    },
-    {
       "path": "crates/erp-processes/src/fulfillment_execution/electronic_confirm.rs",
       "function": "finish",
       "policy": "Audited",
@@ -5185,22 +5169,6 @@
       "reason": "用例或步骤 decision 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
-      "path": "crates/erp-processes/src/supply_governance/supplier_api/catalog_match.rs",
-      "function": "match_catalog_item",
-      "policy": "Audited",
-      "stage": "Transaction",
-      "boundaries": [
-        ".resource_log",
-        "persist_log"
-      ],
-      "call_counts": {
-        ".resource_log": 1,
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "人工匹配在同一事务重验公司商品范围与目录版本，并保存匹配及审计；相同 SKU 重复确认不重复写入。"
-    },
-    {
       "path": "crates/erp-processes/src/supply_governance/supplier_api/creation.rs",
       "function": "create_connection",
       "policy": "Audited",
@@ -6861,6 +6829,310 @@
       },
       "location_count": 1,
       "reason": "确认选品后以稳定单位身份创建缺少的基础资料，单位和创建审计沿同一事务执行；已有单位不重复写入或记录创建审计，未知提交结果不自动重放。"
+    },
+    {
+      "path": "crates/erp-catalog/src/service/catalog/source_sku.rs",
+      "function": "append_source_sku",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "audit.persist"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "audit.persist": 1
+      },
+      "location_count": 1,
+      "reason": "在选品调用方事务内追加公司规格并保存商品修改审计；不独立提交业务或审计。"
+    },
+    {
+      "path": "crates/erp-catalog/src/service/catalog/source_sync.rs",
+      "function": "save",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "audit.persist"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "audit.persist": 1
+      },
+      "location_count": 1,
+      "reason": "在资料差异确认的同一执行器内保存商品修订、来源、审计与命令回执；重放由原用例处理。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/deposit_execution.rs",
+      "function": "apply",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "原指定出纳余额执行写段由 execute_deposit 的根事务调用；先重验原付款申请、任务版本和逐组资金预算，再保存资金占用、任务活动、审计及命令回执。审计沿同一 Executor 写入；命令回执重放在业务写入和成功事件之前返回。"
+    },
+    {
+      "path": "crates/erp-processes/src/fulfillment_execution/delivery_posting.rs",
+      "function": "persist_posting_audit",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "发货审计写段由 execute_posting 的 Audit 步骤调用，复用人工 post_delivery 根事务或供应商来源观察应用事务的 Executor；原库存或采购门槛、发货状态、履约任务和客户验收待办全部成功后才追加一次审计。人工过账记录 delivery.post，供应商已证实数量过账记录系统来源 supplier_fulfillment.observe_delivery，不生成客户验收事实。"
+    },
+    {
+      "path": "crates/erp-processes/src/product_source_sync.rs",
+      "function": "apply_source_observation",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "来源资料有真实变化时沿目录事务更新公司资料及差异并保存审计；无变化不重复生成事件。"
+    },
+    {
+      "path": "crates/erp-processes/src/product_source_sync.rs",
+      "function": "initialize_source",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "在原选品事务内绑定来源与规格，保存来源初始化审计；跨来源记录保持不变。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_api_orders/cancellation/intent.rs",
+      "function": "persist_cancel_intent",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "取消意图根事务重验原供应商订单 cancel 对象范围及原执行归属；执行意图、逐叶取消动作、动作明细、订单取消轨道和审计沿同一 Executor 保存，外部取消请求在事务提交后由 worker 发送。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_api_orders/change_guard.rs",
+      "function": "supersede_purchase_executions",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "采购变更根事务传入同一 Executor，先处理旧执行的资金占用和未知资金风险，再核验未发送或可信取消资格；安全退役原交付草稿、跟踪及执行替代关系后，仅在存在旧执行时追加 purchase_order.api_execution_supersede 审计。资金释放及其稳定回执由财务领域沿本事务保存，不另开事务或提前释放可能已发送的占用。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_api_orders/setup.rs",
+      "function": "persist_setup",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "配送资料保存根事务重新核验 submit 对象范围；经来源候选及有效性校验的四级地址或既有配送资料以加密快照保存，执行版本更新、稳定设置回执和审计沿同一 Executor 写入。外部地址读取和有效性核验在事务外完成，原命令重放不新增成功事件。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_api_orders/setup_query.rs",
+      "function": "query_execution_result",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "查询原结果根事务重验 submit 对象范围及执行版本，仅唤醒原未知结果调查和原订单跟踪；执行调度、跟踪调度和审计沿同一 Executor 保存，不更换外部身份、不登记新建或确认动作，不在事务内调用供应商。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_catalog_adoption/confirm.rs",
+      "function": "persist_result",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "选品结果、操作回执及商品关联审计使用原选品事务执行器，审计失败不得提交成功回执。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_connection_execution/catalog_supply.rs",
+      "function": "apply_source_supply",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "在原目录事务中核验供给关联，更新来源采购价格与可供事实并保存供给应用审计；公司销售价不由该入口更新。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_deposits/access.rs",
+      "function": "audit",
+      "policy": "Audited",
+      "stage": "PersistenceAdapter",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "预存款管理审计适配器以调用方已授权的 AuditActor、具体资金动作及账户身份构造事件，并通过 persist_log 复用原资金事务的 Executor；不自行开启事务，不根据余额或审计记录推断资金事实。充值、授权、占用、扣款、核销、返款和账号绑定分别由对应管理命令重验范围并调用此适配器。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_deposits/investigation/store.rs",
+      "function": "audit",
+      "policy": "Audited",
+      "stage": "PersistenceAdapter",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "账号级资金调查审计适配器以明确系统身份及当前绑定账户构造事件，接收证据页、保存余额观察、登记待核对原因及应用充值、扣款、返款、核销的各调用段均在其资金根事务内传入同一 Executor；本适配器不自行开启事务，不把余额观察或取消消息解释为资金到账，动态动作仅使用本期目录已登记的有限动作。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_order_tracking/persistence.rs",
+      "function": "apply_supplier_state",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "供应商观察写段由 persist_observation 的根事务调用，在原租约、身份、来源进度及完整订单关系核验后应用独立履约和取消轨道；仅真实状态变化时保存原订单并追加 system:supplier-order-tracking 审计，同一 Executor 保持订单、观察检查点和成功事件的事务边界。"
+    },
+    {
+      "path": "crates/erp-processes/src/supply_governance/supplier_api/catalog_identity_review.rs",
+      "function": "confirm_review",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log_with_message",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log_with_message": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "人工核对在原命令事务重验公司商品及供给权限与版本，保存核对回执和原因审计；同操作重放不重复写入。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_api_orders/receipt/store.rs",
+      "function": "receipt_audit",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "收货通知的原动作登记、查询结果及阻断状态与供应商履约审计在同一事务保存。"
+    },
+    {
+      "path": "crates/erp-processes/src/connectors/jd_vop/credential/store.rs",
+      "function": "mutate",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "供应商技术凭据导入、重新授权和原刷新状态更新与脱敏资源审计在同一事务保存；远端刷新在事务外执行。"
+    },
+    {
+      "path": "crates/erp-processes/src/connectors/jd_vop/credential/authorization/store.rs",
+      "function": "audit",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "页面授权的领取、发送、兑换、拒绝和完成状态与技术凭据审计在同一事务保存；密码、私钥、授权码及令牌不进入审计，京东请求在事务外执行。"
     }
   ]
 }

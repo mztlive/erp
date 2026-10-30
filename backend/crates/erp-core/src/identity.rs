@@ -2,6 +2,8 @@
 //!
 //! 仅包含跨域共用的账号种类；完整 AccountCore 仍留在身份领域。
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 /// 无法从字符串解析账号类型。
@@ -98,5 +100,36 @@ impl TryFrom<&str> for AccountKind {
     /// 未知取值返回 [`InvalidAccountKind`]。
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         Self::parse(value)
+    }
+}
+
+impl FromStr for AccountKind {
+    type Err = InvalidAccountKind;
+
+    /// 按账号稳定代码解析，保持既有转换的大小写及错误语义。
+    ///
+    /// # 参数
+    /// * `value` - 账号类型的稳定代码。
+    /// # 返回
+    /// 返回对应账号类型。
+    /// # 错误
+    /// 未知代码返回 [`InvalidAccountKind`]。
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AccountKind, InvalidAccountKind};
+
+    #[test]
+    fn standard_string_parsing_preserves_exact_account_codes() {
+        assert_eq!("admin".parse::<AccountKind>(), Ok(AccountKind::Admin));
+        assert_eq!("supplier".parse::<AccountKind>(), Ok(AccountKind::Supplier));
+        for invalid in ["", "Admin", " admin", "supplier ", "customer"] {
+            assert_eq!(invalid.parse::<AccountKind>(), Err(InvalidAccountKind));
+        }
+        assert_eq!(AccountKind::try_from("admin"), Ok(AccountKind::Admin));
     }
 }

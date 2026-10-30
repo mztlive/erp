@@ -3,6 +3,7 @@ pub use application_core::PageView;
 pub(crate) use application_core::{SortDir, normalize_sort};
 use erp_core::ids::{SkuId, SupplierAccountId};
 use erp_supply::dto::delivery_template::OfferingDeliveryView;
+use erp_supply::entity::source_purchase::SourcePurchaseTerms;
 use erp_supply::entity::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingRevision,
 };
@@ -52,6 +53,8 @@ pub struct SupplierOfferingListParams {
 /// 供给列表视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SupplierOfferingView {
+    /// 来源只读采购条件；未记录时保持未知。
+    pub source_purchase_terms: Option<SourcePurchaseTerms>,
     /// 供给主键。
     pub id: String,
     /// 公司 SKU。
@@ -178,6 +181,7 @@ impl SupplierOfferingView {
             status: row.status,
             current_revision_id: row.current_revision_id,
             current_revision_no: None,
+            source_purchase_terms: None,
             dropship_supply_price_gross: None,
             dropship_supply_price_net: None,
             bulk_supply_price_gross: None,
@@ -211,6 +215,7 @@ impl SupplierOfferingView {
     /// # 错误
     /// 无。
     pub(super) fn apply_revision(&mut self, revision: SupplierOfferingRevision) {
+        self.source_purchase_terms = revision.source_purchase_terms;
         self.current_revision_no = Some(revision.revision.revision_no);
         self.dropship_supply_price_gross = Some(revision.dropship_supply_price_gross.to_string());
         self.dropship_supply_price_net = Some(revision.dropship_supply_price_net.to_string());
@@ -240,6 +245,9 @@ impl SupplierOfferingView {
         self.bulk_supply_price_gross = None;
         self.bulk_supply_price_net = None;
         self.input_tax_rate = None;
+        if let Some(terms) = &mut self.source_purchase_terms {
+            terms.quote_context = None;
+        }
     }
 }
 
@@ -361,6 +369,7 @@ mod tests {
             status: OfferingStatus::Active,
             current_revision_id: None,
             current_revision_no: None,
+            source_purchase_terms: None,
             dropship_supply_price_gross: Some("10".to_string()),
             dropship_supply_price_net: Some("9".to_string()),
             bulk_supply_price_gross: Some("8".to_string()),

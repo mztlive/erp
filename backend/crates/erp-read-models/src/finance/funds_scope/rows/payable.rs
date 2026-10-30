@@ -1,7 +1,9 @@
 //! 应付范围行的响应合同。
 
 use erp_core::money::Amount;
-use erp_finance::dto::payable::{PayableEntryView, PaymentGuidanceView, PaymentRecipientView};
+use erp_finance::dto::payable::{
+    PayableEntryView, PaymentAllocationView, PaymentGuidanceView, PaymentRecipientView,
+};
 use erp_finance::entity::payable::{PayableAccountStatus, PayableSourceType};
 use serde::Serialize;
 
@@ -46,6 +48,9 @@ pub struct ScopedPayableAccountRow {
     /// 应付分录。列表不填；详情必须带上，否则付款会把子账 id 当成分录 id。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<PayableEntryView>,
+    /// 此子账分录的全部正式核销来源；只在已授权详情中读取，列表为空。
+    #[serde(default)]
+    pub payment_allocations: Vec<PaymentAllocationView>,
     /// 来源业务单号。采购来源为采购单号；空单号不返回，不得回退内部 ID。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_document_no: Option<String>,

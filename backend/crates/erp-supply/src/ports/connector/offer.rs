@@ -7,8 +7,11 @@ use erp_core::common::time::Instant;
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 
+use super::address::ConfirmedSupplierAddress;
 use super::common::{ActionKey, ConnectorResult, Lookup, Page, Scan, Snapshot, SupplierSku};
 use super::order::{DeliveryChoice, OrderLine, Recipient};
+use crate::catalog_membership::{CatalogMembershipPage, CatalogPoolScope};
+use crate::entity::source_purchase::SourcePurchaseTerms;
 
 /// 目录增量能力必须包含明确的变化覆盖范围。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +21,15 @@ pub enum IncrementalSupport {
     Complete,
     /// 未覆盖全部变化，必须独立核验在售供给，禁止据列表缺失推断删除。
     Partial,
+}
+
+/// 来源目录页与可选完整范围证据；缺省 None 不具备按缺项撤回资格。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopedOfferPage {
+    pub page: Page<Snapshot<OfferChange>>,
+    /// 已隔离单项的来源身份和脱敏原因；与有效目录及检查点同事务保存。
+    pub skipped: Vec<String>,
+    pub membership: Option<CatalogMembershipPage>,
 }
 
 /// 供应商原始目录读取能力，不是公司商品主档接口。
@@ -38,10 +50,32 @@ pub trait OfferSource: Send + Sync {
     /// # 参数
     /// `scan` 为固定窗口及游标；适配器将供应商时间精度向外扩展，不得漏掉边界。
     /// # 返回
-    /// 标准目录变化；消费方只为明确绑定的已有公司 SKU 建立供给。
+    /// 标准来源目录变化；公司商品、SKU 与供给由公共选品合同严格匹配或新建。
     /// # 错误
     /// 不支持增量时返回 CapabilityGap，不能静默改为全量；其他失败返回分类错误。
     async fn scan(&self, scan: &Scan) -> ConnectorResult<Page<Snapshot<OfferChange>>>;
+
+    /// 读取带完整账号范围及逐池成员证明的目录页。
+    /// # 参数
+    /// `scan` 为原冻结扫描窗口、页大小与已持久化游标。
+    /// # 返回
+    /// 目录页及来源范围证据；旧协议默认只返回原目录页并保留范围未知。
+    /// # 错误
+    /// 来源读取、范围校验或映射失败时不提供可推进的检查点。
+    async fn scan_scoped(&self, scan: &Scan) -> ConnectorResult<ScopedOfferPage> {
+        Ok(ScopedOfferPage { page: self.scan(scan).await?, skipped: vec![], membership: None })
+    }
+
+    /// 重新核验本连接当前完整的来源账号商品池集合。
+    /// # 参数
+    /// 无；连接及技术账号在适配器实例中绑定。
+    /// # 返回
+    /// 明确的完整范围，旧协议缺少此证明时返回 None。
+    /// # 错误
+    /// 鉴权、授权或读取失败时拒绝，不用缓存代替完成前重验。
+    async fn scope(&self) -> ConnectorResult<Option<CatalogPoolScope>> {
+        Ok(None)
+    }
 
     /// 定向读取一个规格的当前资料。
     ///
@@ -61,7 +95,7 @@ pub enum OfferChange {
     Withdrawn(SupplierSku),
 }
 
-/// 描述仅用于人工绑定核验；不隐式修改公司 SKU 内容。
+/// 来源资料供公共选品与差异核对使用；协议适配器不隐式修改公司 SKU 内容。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
     pub sku: SupplierSku,
@@ -76,12 +110,23 @@ pub struct Offer {
 }
 
 /// 供应商图片；URL 或图片编号本身不构成内容版本证明。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CatalogImage {
     pub url: String,
     pub content_fingerprint: Option<String>,
     #[serde(default)]
     pub file_asset_id: Option<String>,
+    /// 来源主图标记；未取得时保留未知。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_primary: Option<bool>,
+    /// 来源明确禁用的图片保留证据，但不归档或采用为公司商品图。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_valid: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sequence: Option<u64>,
+    /// 来源相对路径；不得直接作为可访问 URL 使用。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
 }
 
 /// 来源商品可供状态，明确撤回与暂不可供分别保存。
@@ -98,6 +143,9 @@ pub enum CatalogAvailability {
 /// 商品来源资料；图片 None 为未提供，Some([]) 才是明确清空。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferDetails {
+    /// 来源购买约束及按真实数量取得的报价范围；缺失保持未知。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_purchase_terms: Option<SourcePurchaseTerms>,
     /// 来源含税市场参考价，与采购报价独立；缺失不推断。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub market_price: Option<Amount>,
@@ -131,7 +179,8 @@ pub struct SupplyQuote {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceTier {
     pub unit_price: UnitPrice,
-    pub minimum_quantity: Quantity,
+    /// 未取得来源起购量时为空，不用默认一件补造条件。
+    pub minimum_quantity: Option<Quantity>,
 }
 
 /// 精确数量、未限制数量、未提供数量分别表达；特殊负数必须按供应商合同解析。
@@ -230,6 +279,9 @@ pub trait AvailabilitySource: Send + Sync {
 pub struct DeliveryContext {
     /// 仅用于绑定连接内恢复地址准备；不得夹带密钥，不能当成通用命令 JSON。
     pub reference: String,
+    /// 绑定原加密执行快照的已确认地址；不能从任意 reference 解析自由编码。
+    #[serde(default)]
+    pub supplier_address: Option<ConfirmedSupplierAddress>,
 }
 
 /// 明细必须非空且数量为正，所有 line_id 在本次请求内唯一。
@@ -275,6 +327,21 @@ pub trait DeliverySource: Send + Sync {
     /// # 错误
     /// 无恢复能力返回 CapabilityGap 并转人工；其他读取失败返回分类错误。
     async fn context(&self, key: &ActionKey) -> ConnectorResult<Lookup<DeliveryContext>>;
+
+    /// 使用原冻结收件资料恢复本地地址上下文，不重新执行地址转换。
+    /// # 参数
+    /// `key` 为原地址动作，`recipient` 为原加密执行快照中的收件资料。
+    /// # 返回
+    /// 原上下文；旧协议默认沿用原动作查询。
+    /// # 错误
+    /// 资料变化、绑定失效或无法证明原结果时拒绝。
+    async fn context_with_recipient(
+        &self,
+        key: &ActionKey,
+        _recipient: &Recipient,
+    ) -> ConnectorResult<Lookup<DeliveryContext>> {
+        self.context(key).await
+    }
 
     /// 查询配送、运费、时段及拆单方案，不创建供应商订单。
     ///

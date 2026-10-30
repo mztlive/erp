@@ -37,6 +37,7 @@ import {
 } from "@/features/supplier-payables/lib/related-documents"
 import {
     SOURCE_TYPE_LABEL,
+    PAYMENT_FUNDING_SOURCE_LABEL,
     type PaymentAllocationLine,
     type PaymentRow,
 } from "@/features/supplier-payables/types"
@@ -593,7 +594,12 @@ function AllocationLineItem({
         <li className="rounded-xl border px-3 py-2 text-sm">
             <div className="flex justify-between gap-2">
                 <span>
-                    {verb} {SOURCE_TYPE_LABEL[allocation.sourceType]}{" "}
+                    {
+                        PAYMENT_FUNDING_SOURCE_LABEL[
+                            allocation.fundingSource ?? "BANK_TRANSFER"
+                        ]
+                    }{" "}
+                    · {verb} {SOURCE_TYPE_LABEL[allocation.sourceType]}{" "}
                     {allocation.sourceDocumentNo}
                 </span>
                 <MoneyValue value={allocation.amount} />

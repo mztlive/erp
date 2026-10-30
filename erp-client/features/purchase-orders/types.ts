@@ -416,6 +416,26 @@ export type PurchaseOrderCenterView = Readonly<{
     delivery?: PurchaseDeliverySummary
     payableSummary?: PayableSummaryView
     fulfillmentSummary: FulfillmentSummaryView
+    apiExecutions?: readonly Readonly<{
+        orderId: string
+        orderNo: string
+        detailAvailable: boolean
+        stage: string
+        blocker: string | null
+        currentOrderCount: number
+        confirmedOrderCount: number
+    }>[]
+    fulfillmentQuantities?: readonly Readonly<{
+        lineId: string
+        productName: string | null
+        unit: string | null
+        orderedQuantity: string | null
+        inboundQuantity: string | null
+        shippedQuantity: string | null
+        remainingQuantity: string | null
+        blocker: string | null
+    }>[]
+    apiExecutionFunds?: readonly PurchaseApiExecutionFunds[]
     changes: readonly RelatedChangeView[]
     workflow: readonly WorkflowActionView[]
     allowedActions: readonly string[]
@@ -429,6 +449,28 @@ export type PurchaseOrderCenterView = Readonly<{
     emptyReason?: string | null
     /** 跨页必须回传的采购变更范围版本。 */
     scopeVersion?: string
+}>
+
+/** 由财务实际占用和资金流水生成；无权限时服务端省略整个区块。 */
+export type PurchaseApiExecutionFunds = Readonly<{
+    executionGroupId: string
+    status:
+        | "not_reserved"
+        | "reserved"
+        | "awaiting_debit_verification"
+        | "debit_pending_settlement"
+        | "partially_settled"
+        | "settled"
+        | "partially_returned"
+        | "returned"
+        | "released"
+    reconciliationRequired: boolean
+    approvedAmount: string
+    reservedAmount: string
+    verifiedDebitAmount: string
+    settledAmount: string
+    returnedAmount: string
+    pendingReturnAmount: string | null
 }>
 
 export type SupplySourceType = "PURCHASE" | "EXISTING_STOCK"

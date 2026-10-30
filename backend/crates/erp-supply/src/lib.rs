@@ -2,6 +2,7 @@
 
 pub mod api_order;
 pub mod catalog_adoption;
+pub mod catalog_membership;
 pub mod command_receipt;
 pub mod dto;
 pub mod entity;

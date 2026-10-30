@@ -12,7 +12,9 @@ use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::super::payable::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
+use super::super::payable::mapping::{
+    payment_allocations_for_entries, payment_recipient_view, resolve_optional_payment_recipient_for_read,
+};
 use super::authorization::*;
 use super::linked::organization_condition;
 use super::payable_source::source_key;
@@ -372,6 +374,7 @@ impl FundsAccess {
             true,
         );
         data.entries = self.payable_detail_entries(account, executor).await?;
+        data.payment_allocations = payment_allocations_for_entries(&self.db, &data.entries, executor).await?;
         self.fill_payment_guidance(std::slice::from_mut(&mut data), executor).await?;
         data.supplier_name = self.supplier_name_of(&account.supplier_id, executor).await?;
         data.payment_recipient =
@@ -460,6 +463,7 @@ pub(super) fn cut_payable_account_row(
         payment_recipient: None,
         payment_guidance: None,
         entries: Vec::new(),
+        payment_allocations: Vec::new(),
         source_document_no: fact.and_then(|order| {
             let number = order.document_no.trim();
             if number.is_empty() { None } else { Some(number.to_string()) }

@@ -1,6 +1,6 @@
 //! 付款申请合同的持久化结构与输入约束。
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use entity_core::BaseModel;
 use entity_macros::{Entity, id_type};
@@ -10,6 +10,8 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use super::{PaymentRequestDepositAccountSnapshot, PaymentRequestExecutionMethod};
 
 id_type!(PurchasePaymentRequestId);
 
@@ -100,7 +102,10 @@ pub struct PaymentRequestLineData {
 #[serde(deny_unknown_fields)]
 pub struct PurchasePaymentRequestData {
     pub supplier_id: String,
+    #[serde(default)]
     pub payee_bank_account_id: String,
+    #[serde(default, skip_serializing_if = "PaymentRequestExecutionMethod::is_bank_transfer")]
+    pub execution_method: PaymentRequestExecutionMethod,
     pub lines: Vec<PaymentRequestLineData>,
     pub desired_payment_date: BusinessDate,
     pub reason: String,
@@ -118,7 +123,7 @@ impl PurchasePaymentRequestData {
     /// 缺少必要身份、说明、金额、重复采购或附件超限时返回错误。
     pub fn normalize(mut self) -> Result<Self> {
         self.supplier_id = required(self.supplier_id, "供应商", 128)?;
-        self.payee_bank_account_id = required(self.payee_bank_account_id, "收款账户", 128)?;
+        self.execution_method.normalize(&mut self.payee_bank_account_id)?;
         self.reason = required(self.reason, "申请说明", 2000)?;
         if self.lines.is_empty() || self.lines.len() > 100 {
             return Err(Error::from("付款申请须包含 1 至 100 张采购单"));
@@ -211,13 +216,22 @@ pub struct PaymentRequestSubmission {
     pub payer_party_id: String,
     pub payer_party_name: String,
     pub org_unit_id: Option<String>,
-    pub payee_account: PaymentRequestAccountSnapshot,
+    pub payee_account: Option<PaymentRequestAccountSnapshot>,
+    #[serde(default)]
+    pub deposit_account: Option<PaymentRequestDepositAccountSnapshot>,
     pub lines: Vec<PurchasePaymentRequestLine>,
 }
 
 /// 实际付款或冲正按申请采购行分配；不得移动逐行批准额度。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PaymentRequestAllocation {
+    pub payable_account_id: String,
+    pub amount: Amount,
+}
+
+/// 已批准申请内锁定给预存款执行组的额度；不属于净已付。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PaymentRequestDepositReservation {
     pub payable_account_id: String,
     pub amount: Amount,
 }
@@ -233,6 +247,8 @@ pub struct PurchasePaymentRequest {
     pub payer_party_id: String,
     pub payer_party_name: String,
     pub payee_account: Option<PaymentRequestAccountSnapshot>,
+    #[serde(default)]
+    pub deposit_account: Option<PaymentRequestDepositAccountSnapshot>,
     pub org_unit_id: Option<String>,
     pub created_by: String,
     pub data: PurchasePaymentRequestData,
@@ -243,6 +259,9 @@ pub struct PurchasePaymentRequest {
     pub approval_instance_id: Option<String>,
     pub work_item_id: Option<String>,
     pub last_reason: Option<String>,
+    /// 同一申请上的银行、留抵和预存款执行共用 CAS，旧记录无占用。
+    #[serde(default)]
+    pub deposit_reservations: BTreeMap<String, PaymentRequestDepositReservation>,
 }
 
 pub(super) fn required(value: String, label: &str, max: usize) -> Result<String> {

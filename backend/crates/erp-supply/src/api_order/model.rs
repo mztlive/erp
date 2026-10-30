@@ -4,6 +4,10 @@ use erp_core::common::time::Instant;
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 
+use super::cancellation::CancellationAction;
+use super::confirmation::ConfirmationAction;
+use super::receipt::ReceiptAction;
+use crate::ports::connector::order_tree::OrderTree;
 use crate::{Error, Result};
 
 /// 每个远端写步骤在发送前持久化进行中状态；重启后只能调查原动作。
@@ -17,6 +21,11 @@ pub enum ApiOrderStage {
     PlanDelivery,
     Create,
     CreationUnknown,
+    DiscoverOrders,
+    ConfirmOrder,
+    ConfirmationUnknown,
+    CancelOrders,
+    CancellationUnknown,
     ConfirmPayment,
     PaymentUnknown,
     Observe,
@@ -53,13 +62,81 @@ pub struct ApiOrderExecution {
     pub setup_payload_hash: Option<String>,
     #[serde(default)]
     pub warehouse_revision_id: Option<String>,
+    /// 旧单据缺省不解释为订单树或待确认订单。
+    #[serde(default)]
+    pub order_tree: Option<OrderTree>,
+    /// 未完整核实的来源关系仅作调查证据，不作为可操作叶子集合。
+    #[serde(default)]
+    pub pending_order_tree: Option<OrderTree>,
+    /// 每个叶子独立保存原目标和未知结果，拆单不能复用旧确认动作。
+    #[serde(default)]
+    pub confirmations: std::collections::BTreeMap<String, ConfirmationAction>,
+    #[serde(default)]
+    pub cancellation_actions: std::collections::BTreeMap<String, CancellationAction>,
+    #[serde(default)]
+    pub cancellation_payload_hash: Option<String>,
+    #[serde(default)]
+    pub cancellation_action_id: Option<String>,
     #[serde(default)]
     pub action_hashes: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub superseded_by_purchase_revision_id: Option<String>,
+    #[serde(default)]
+    pub receipt_actions: std::collections::BTreeMap<String, ReceiptAction>,
+    #[serde(default)]
+    pub receipt_next_run_at: Option<Instant>,
+    #[serde(default)]
+    pub receipt_blocker: Option<String>,
 }
 
 impl ApiOrderExecution {
+    /// 判断是否存在只能调查原结果的外部订单动作。
+    /// # 参数
+    /// 无；仅检查持久化动作和订单证据，不接受人工下单成功声明。
+    /// # 返回
+    /// 已登记创建、确认或有订单关系证据时允许唤醒查询。
+    /// # 错误
+    /// 不返回错误。
+    pub fn original_result_query_allowed(&self) -> bool {
+        self.action_hashes.contains_key("create")
+            || self.order_tree.is_some()
+            || self.pending_order_tree.is_some()
+            || !self.confirmations.is_empty()
+            || !self.cancellation_actions.is_empty()
+            || matches!(
+                self.stage,
+                ApiOrderStage::CreationUnknown
+                    | ApiOrderStage::DiscoverOrders
+                    | ApiOrderStage::ConfirmationUnknown
+                    | ApiOrderStage::PaymentUnknown
+                    | ApiOrderStage::CancellationUnknown
+                    | ApiOrderStage::Observe
+            )
+    }
+
+    /// 唤醒已经持久化的原结果调查，不推进尚未发送的写步骤。
+    /// # 参数
+    /// `now` 为请求时刻。
+    /// # 返回
+    /// 仅未知创建、确认、通知及订单发现步骤提前查询；原动作与阶段保持不变。
+    /// # 错误
+    /// 没有原订单证据时拒绝，不建立新的订单或确认意图。
+    pub fn wake_original_result_query(&mut self, now: Instant) -> Result<()> {
+        if !self.original_result_query_allowed() {
+            return Err(Error::BusinessLogicError("当前没有可查询的原供应商请求".into()));
+        }
+        if matches!(
+            self.stage,
+            ApiOrderStage::CreationUnknown
+                | ApiOrderStage::DiscoverOrders
+                | ApiOrderStage::ConfirmationUnknown
+                | ApiOrderStage::PaymentUnknown
+                | ApiOrderStage::CancellationUnknown
+        ) {
+            self.next_run_at = now;
+        }
+        Ok(())
+    }
     /// 为正式采购建立尚未发送任何外部请求的执行意图。
     /// # 参数
     /// 身份由正式采购版本、连接与地址分组决定；明细来自冻结采购行。
@@ -92,6 +169,15 @@ impl ApiOrderExecution {
             action_hashes: std::collections::BTreeMap::new(),
             superseded_by_purchase_revision_id: None,
             warehouse_revision_id: None,
+            order_tree: None,
+            pending_order_tree: None,
+            confirmations: std::collections::BTreeMap::new(),
+            cancellation_actions: std::collections::BTreeMap::new(),
+            cancellation_payload_hash: None,
+            cancellation_action_id: None,
+            receipt_actions: Default::default(),
+            receipt_next_run_at: None,
+            receipt_blocker: None,
         }
     }
 
@@ -125,7 +211,13 @@ impl ApiOrderExecution {
                 | ApiOrderStage::Create
                 | ApiOrderStage::Stopped
         );
-        if !unsent_stage || self.action_hashes.contains_key("create") {
+        if !unsent_stage
+            || self.action_hashes.contains_key("create")
+            || self.order_tree.is_some()
+            || self.pending_order_tree.is_some()
+            || !self.confirmations.is_empty()
+            || !self.cancellation_actions.is_empty()
+        {
             return Err(Error::BusinessLogicError(
                 "供应商订单已发送或创建结果尚未查明；当前协议不支持自动改单，请先处理原供应商订单".into(),
             ));
@@ -207,6 +299,11 @@ mod purchase_change_tests {
     fn possible_order_creation_and_later_steps_cannot_be_superseded() {
         for stage in [
             ApiOrderStage::CreationUnknown,
+            ApiOrderStage::DiscoverOrders,
+            ApiOrderStage::ConfirmOrder,
+            ApiOrderStage::ConfirmationUnknown,
+            ApiOrderStage::CancelOrders,
+            ApiOrderStage::CancellationUnknown,
             ApiOrderStage::ConfirmPayment,
             ApiOrderStage::PaymentUnknown,
             ApiOrderStage::Observe,
@@ -221,5 +318,25 @@ mod purchase_change_tests {
             assert!(value.stop_for_purchase_change("new-revision").is_err());
             assert_eq!(value.stage, stage);
         }
+    }
+
+    #[test]
+    fn querying_original_result_preserves_action_and_does_not_wake_unsent_confirmation() {
+        let now = Instant::from_unix_secs(100);
+        let later = Instant::from_unix_secs(200);
+        let mut unknown = execution(ApiOrderStage::CreationUnknown);
+        unknown.next_run_at = later;
+        unknown.action_hashes.insert("create".into(), "original-payload".into());
+        unknown.wake_original_result_query(now).unwrap();
+        assert_eq!(unknown.stage, ApiOrderStage::CreationUnknown);
+        assert_eq!(unknown.next_run_at, now);
+        assert_eq!(unknown.action_hashes["create"], "original-payload");
+        let mut pending = execution(ApiOrderStage::ConfirmOrder);
+        pending.next_run_at = later;
+        pending.action_hashes.insert("create".into(), "original-payload".into());
+        pending.wake_original_result_query(now).unwrap();
+        assert_eq!(pending.stage, ApiOrderStage::ConfirmOrder);
+        assert_eq!(pending.next_run_at, later);
+        assert!(execution(ApiOrderStage::Queued).wake_original_result_query(now).is_err());
     }
 }

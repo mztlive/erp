@@ -15,6 +15,7 @@ mod basis;
 mod center;
 mod change;
 mod delivery;
+mod fulfillment;
 mod list;
 
 pub use approval::*;
@@ -22,6 +23,7 @@ pub use basis::*;
 pub use center::*;
 pub use change::*;
 pub use delivery::*;
+pub use fulfillment::*;
 pub use list::*;
 
 #[cfg(test)]

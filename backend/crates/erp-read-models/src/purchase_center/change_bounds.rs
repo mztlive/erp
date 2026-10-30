@@ -132,8 +132,14 @@ pub async fn load_purchase_fulfilled_quantities(
     Ok(totals)
 }
 
-/// 本采购全部版本的版本行。
-async fn all_revision_lines(
+/// 本采购全部版本的版本行，供已授权的改单和详情数量跨版本归集。
+/// # 参数
+/// `db`、`order_id` 为已经核验的采购范围；执行器由调用方提供。
+/// # 返回
+/// 仅属于本采购各版本的有效行。
+/// # 错误
+/// 仓储读取失败返回原错误。
+pub(crate) async fn all_revision_lines(
     db: &Database,
     order_id: &PurchaseOrderId,
     executor: &mut dyn Executor,

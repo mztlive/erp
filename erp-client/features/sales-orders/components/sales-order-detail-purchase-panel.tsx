@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 
 import {
     BusinessFailureState,
@@ -25,6 +26,10 @@ import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/us
 import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasPermission } from "@/lib/permissions"
+import {
+    SalesOrderDeliveryOverview,
+    type DeliveryProgressQuery,
+} from "./sales-order-delivery-overview"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
 
@@ -70,7 +75,15 @@ function PreviewButton({
  * 无列表权限时只展示销售单详情里的采购单笔数，不暴露单号与内容。
  * 列表展示单据生命周期与履约/付款进度，供销售判断采购是否卡住。
  */
-export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
+export function PurchasePanel({
+    order,
+    deliveryQuery,
+    canReadDelivery,
+}: {
+    order: SalesOrderDetailView
+    deliveryQuery: DeliveryProgressQuery
+    canReadDelivery: boolean
+}) {
     const permissions = useSalesOrderDetailPermissions()
     const canList = permissions.openPurchase.enabled
     const canPreview = permissions.previewPurchase.enabled
@@ -108,6 +121,11 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     )
     return (
         <div className="space-y-6">
+            <SalesOrderDeliveryOverview
+                order={order}
+                query={deliveryQuery}
+                canRead={canReadDelivery && order.currentRevisionNo != null}
+            />
             <SalesOrderProcurementProgress
                 order={order}
                 surface="purchase"
@@ -378,12 +396,29 @@ function toRelatedPurchaseDocument(
         },
         owner: row.ownerName,
         openAction: (
-            <PreviewButton
-                id={`sales-orders-detail-purchase-${toAutomationIdSegment(row.purchaseOrderId)}-preview`}
-                disabled={!options.canPreview}
-                disabledReason={options.previewReason}
-                onClick={options.onPreview}
-            />
+            <div className="flex flex-wrap gap-2">
+                <PreviewButton
+                    id={`sales-orders-detail-purchase-${toAutomationIdSegment(row.purchaseOrderId)}-preview`}
+                    disabled={!options.canPreview}
+                    disabledReason={options.previewReason}
+                    onClick={options.onPreview}
+                />
+                {options.canPreview ? (
+                    <Button
+                        id={`sales-orders-detail-purchase-${toAutomationIdSegment(row.purchaseOrderId)}-fulfillment`}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        render={
+                            <Link
+                                href={`/procurement/orders/${encodeURIComponent(row.purchaseOrderId)}?section=fulfillment`}
+                            />
+                        }
+                    >
+                        采购履约
+                    </Button>
+                ) : null}
+            </div>
         ),
     }
 }

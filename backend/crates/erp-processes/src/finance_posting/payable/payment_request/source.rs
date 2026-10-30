@@ -1,4 +1,6 @@
 //! 逐采购证明申请资格，并冻结精确生效版本、销售来源与账户。
+
+mod funding;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::PurchaseOrderRevisionId;
 use erp_finance::entity::payable::{
@@ -59,14 +61,13 @@ pub(super) async fn prepare_submission(
         }
     }
     if reserve {
-        for line in &lines {
-            sync_payment_arrangement(db, &line.purchase_order_id, false, executor).await?;
-        }
+        sync_reserved_arrangements(db, &lines, executor).await?;
     }
     validate_attachments(db, request, actor, executor).await?;
     let (payer_party_id, payer_party_name, org_unit_id) =
         subject.ok_or_else(|| Error::ValidationError("付款申请缺少采购来源".into()))?;
-    let payee_account = selected_account(db, request, reserve, executor).await?;
+    let (payee_account, deposit_account) =
+        funding::selected_accounts(db, request, &payer_party_id, reserve, executor).await?;
     ensure_company(db, &payer_party_id, executor).await?;
     Ok(PaymentRequestSubmission {
         supplier_id: request.data.supplier_id.clone(),
@@ -74,8 +75,20 @@ pub(super) async fn prepare_submission(
         payer_party_name,
         org_unit_id: Some(org_unit_id),
         payee_account,
+        deposit_account,
         lines,
     })
+}
+
+async fn sync_reserved_arrangements(
+    db: &Database,
+    lines: &[PurchasePaymentRequestLine],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    for line in lines {
+        sync_payment_arrangement(db, &line.purchase_order_id, false, executor).await?;
+    }
+    Ok(())
 }
 
 async fn freeze_line(
@@ -213,12 +226,7 @@ pub(super) async fn revalidate(
     request: &PurchasePaymentRequest,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let frozen =
-        request.payee_account.as_ref().ok_or_else(|| Error::ConflictError("申请缺少审核收款账户".into()))?;
-    let current = selected_account(db, request, true, executor).await?;
-    if &current != frozen {
-        return Err(Error::ConflictError("审核收款账户已变化，请关闭未付部分并重新申请".into()));
-    }
+    funding::revalidate(db, request, executor).await?;
     ensure_company(db, &request.payer_party_id, executor).await?;
     for line in &request.lines {
         let order = db

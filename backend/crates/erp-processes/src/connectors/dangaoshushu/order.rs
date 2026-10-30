@@ -144,6 +144,13 @@ fn selected_group(method: &DeliveryMethod, choice: &ChoiceProof) -> ConnectorRes
 
 #[async_trait]
 impl Orders for DangaoshushuConnector {
+    fn recovery_next(&self, snapshot: &OrderSnapshot) -> ConnectorResult<CreationNext> {
+        Ok(if snapshot.payment == Some(PaymentState::Confirmed) {
+            CreationNext::ObserveOrder
+        } else {
+            CreationNext::ConfirmPayment
+        })
+    }
     fn replay_protection(&self) -> ReplayProtection {
         ReplayProtection::Unverified
     }
@@ -215,6 +222,7 @@ fn created_order(value: &Value, merchant_order_no: &str) -> ConnectorResult<Crea
     Ok(CreatedOrder {
         order: snapshot(
             OrderSnapshot {
+                source_evidence: None,
                 reference,
                 amounts: Some(OrderAmounts {
                     payable,
@@ -226,6 +234,9 @@ fn created_order(value: &Value, merchant_order_no: &str) -> ConnectorResult<Crea
                 cancellation: None,
                 refund: None,
                 payment: Some(payment),
+                confirmation: None,
+                topology: None,
+                complete_line_coverage: false,
                 shipments: None,
             },
             None,
@@ -269,12 +280,16 @@ fn order_snapshot(value: &Value, channel: &str) -> ConnectorResult<OrderSnapshot
         Some(OrderAmounts { payable, goods_cost: None, shipping_cost: None, service_cost: None })
     };
     Ok(OrderSnapshot {
+        source_evidence: None,
         reference,
         amounts,
         fulfillment,
         cancellation,
         refund: None,
         payment,
+        confirmation: None,
+        topology: None,
+        complete_line_coverage: fulfillment == Some(FulfillmentStatus::Completed),
         shipments: shipments(value)?,
     })
 }
@@ -288,9 +303,13 @@ fn shipments(value: &Value) -> ConnectorResult<Option<Vec<Shipment>>> {
     Ok(Some(vec![Shipment {
         external_shipment_id: None,
         line_ids: vec![],
+        source_order_no: None,
+        quantity_lines: None,
+        complete_line_coverage: true,
         carrier: Some(field(value, "express_cp")?),
         tracking_no: if courier { None } else { Some(number.clone()) },
         courier_phone: if courier { Some(number) } else { None },
+        events: vec![],
     }]))
 }
 
@@ -334,6 +353,7 @@ mod tests {
 
     fn request() -> CreateOrder {
         let recipient = Recipient {
+            supplier_address: None,
             name: "收件人".into(),
             phone: "13800000000".into(),
             region: "110100".into(),
@@ -347,6 +367,7 @@ mod tests {
             }),
         };
         let lines = vec![OrderLine {
+            source_purchase_terms: None,
             line_id: "line-1".into(),
             sku: SupplierSku { product_id: Some("product-1".into()), spec_id: "spec-1".into() },
             quantity: "2".parse().unwrap(),
@@ -367,7 +388,10 @@ mod tests {
             city_id: "2".into(),
             recipient_hash: proof::recipient_hash("test-key", &recipient).unwrap(),
         };
-        let context = DeliveryContext { reference: proof::encode("test-key", &address).unwrap() };
+        let context = DeliveryContext {
+            reference: proof::encode("test-key", &address).unwrap(),
+            supplier_address: None,
+        };
         let method = DeliveryMethod::Courier;
         let fee = "3.00".parse::<Amount>().unwrap();
         let choice = ChoiceProof {

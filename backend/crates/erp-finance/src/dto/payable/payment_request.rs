@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 
+use erp_core::ids::WorkItemId;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +14,16 @@ use crate::entity::payable::{PurchasePaymentRequestData, PurchasePaymentRequestS
 pub struct SavePurchasePaymentRequest {
     pub expected_version: Option<u64>,
     pub data: PurchasePaymentRequestData,
+}
+
+/// 指定出纳在原任务内明确执行供应商预存款，金额由服务器执行预算确定。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutePurchasePaymentRequestDeposit {
+    pub work_item_id: WorkItemId,
+    pub task_version: String,
+    pub expected_version: u64,
+    pub idempotency_key: String,
 }
 
 /// 原子提交并占用逐采购余额。

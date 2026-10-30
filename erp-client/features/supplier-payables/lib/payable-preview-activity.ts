@@ -2,6 +2,7 @@
 
 import {
     ALLOCATION_ACTION_LABEL,
+    PAYMENT_FUNDING_SOURCE_LABEL,
     type PayableDetailView,
 } from "@/features/supplier-payables/types"
 
@@ -14,6 +15,7 @@ export type PayableActivityItem = Readonly<{
     actionLabel: string
     documentNo: string
     href?: string
+    fundingSourceHref?: string
     amount: string
     occurredAt: string
 }>
@@ -33,7 +35,11 @@ export function buildPayableActivity(
         ...detail.paymentAllocations.map((allocation) => ({
             id: `payment:${allocation.allocationId}`,
             track: "payment" as const,
-            trackLabel: "付款",
+            trackLabel:
+                PAYMENT_FUNDING_SOURCE_LABEL[
+                    allocation.fundingSource ?? "BANK_TRANSFER"
+                ],
+            fundingSourceHref: allocation.fundingSourceHref,
             actionLabel: ALLOCATION_ACTION_LABEL[allocation.action],
             documentNo: allocation.sourceDocumentNo,
             href: allocation.sourceHref,

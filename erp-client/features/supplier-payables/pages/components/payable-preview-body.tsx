@@ -239,9 +239,9 @@ function ActivityRow({ item }: { item: PayableActivityItem }) {
         </>
     )
 
-    if (item.href) {
-        return (
-            <li>
+    return (
+        <li>
+            {item.href ? (
                 <Link
                     id={`supplier-payables-preview-activity-${toAutomationIdSegment(item.id)}-open`}
                     href={item.href}
@@ -249,13 +249,20 @@ function ActivityRow({ item }: { item: PayableActivityItem }) {
                 >
                     {content}
                 </Link>
-            </li>
-        )
-    }
-
-    return (
-        <li className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm">
-            {content}
+            ) : (
+                <div className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm">
+                    {content}
+                </div>
+            )}
+            {item.fundingSourceHref ? (
+                <Link
+                    id={`supplier-payables-preview-activity-${toAutomationIdSegment(item.id)}-funding-source`}
+                    href={item.fundingSourceHref}
+                    className="mx-2 mb-2 inline-flex text-xs text-primary underline-offset-4 hover:underline"
+                >
+                    查看银行付款
+                </Link>
+            ) : null}
         </li>
     )
 }

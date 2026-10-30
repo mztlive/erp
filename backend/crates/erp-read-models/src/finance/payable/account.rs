@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_core::ids::{PayableAccountId, SupplierAccountId};
-use erp_finance::entity::payable::{PayableEntry, PayableSourceType};
+use erp_finance::entity::payable::{PayableAccount, PayableEntry, PayableSourceType};
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
 use erp_party::PartyExt;
@@ -18,9 +18,12 @@ use validator::Validate;
 
 use super::display::{resolve_source_document_no, resolve_supplier_display};
 use super::dto::{
-    PageView, PayableAccountListParams, PayableAccountSummaryView, PayableAccountView, SortDir,
+    PageView, PayableAccountListParams, PayableAccountSummaryView, PayableAccountView, PayableEntryView,
+    PaymentRecipientView, SortDir,
 };
-use super::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
+use super::mapping::{
+    payment_allocations_for_entries, payment_recipient_view, resolve_optional_payment_recipient_for_read,
+};
 use super::{PayableAccountFilter, PayableReadService};
 use crate::{Error, Result};
 
@@ -240,37 +243,12 @@ impl PayableReadService {
             .await?
             .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
         let source_document_no = resolve_source_document_no(&self.db, &account).await?;
-        let account_source_id = account.source_document_id.clone();
-        let entries = self
-            .db
-            .payable_entries()
-            .find_entries_by_account(&account.base.id.clone().into(), &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|entry| erp_finance::dto::payable::PayableEntryView {
-                id: entry.base.id.clone(),
-                entry_type: entry.entry_type,
-                direction: entry.direction,
-                amount: entry.amount,
-                due_date: entry.due_date,
-                source_document_id: entry.source_document_id.clone(),
-                source_document_no: (entry.source_document_id == account_source_id)
-                    .then(|| source_document_no.clone())
-                    .flatten(),
-                source_sequence: entry.source_sequence,
-                posted_at: entry.posted_at,
-            })
-            .collect();
+        let entries = self.detail_entries(&account, source_document_no.as_deref()).await?;
+        let payment_allocations =
+            payment_allocations_for_entries(&self.db, &entries, &mut NoTransaction).await?;
         let (supplier_no, supplier_name) =
             resolve_supplier_display(&self.db, account.supplier_id.as_ref()).await?;
-        let payment_recipient = if include_payment_recipient {
-            resolve_optional_payment_recipient_for_read(&self.db, &account.supplier_id, &mut NoTransaction)
-                .await?
-                .as_ref()
-                .map(payment_recipient_view)
-        } else {
-            None
-        };
+        let payment_recipient = self.detail_recipient(&account, include_payment_recipient).await?;
         Ok(PayableAccountView {
             id: account.base.id.clone(),
             source_document_id: account.source_document_id,
@@ -290,6 +268,50 @@ impl PayableReadService {
             version: account.base.version,
             created_at: account.base.created_at,
             entries,
+            payment_allocations,
         })
+    }
+
+    /// 读取详情分录并补全与子账相同来源的业务单号。
+    async fn detail_entries(
+        &self,
+        account: &PayableAccount,
+        source_document_no: Option<&str>,
+    ) -> Result<Vec<PayableEntryView>> {
+        Ok(self
+            .db
+            .payable_entries()
+            .find_entries_by_account(&account.base.id.clone().into(), &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|entry| PayableEntryView {
+                id: entry.base.id,
+                entry_type: entry.entry_type,
+                direction: entry.direction,
+                amount: entry.amount,
+                due_date: entry.due_date,
+                source_document_no: (entry.source_document_id == account.source_document_id)
+                    .then(|| source_document_no.map(str::to_owned))
+                    .flatten(),
+                source_document_id: entry.source_document_id,
+                source_sequence: entry.source_sequence,
+                posted_at: entry.posted_at,
+            })
+            .collect())
+    }
+
+    /// 为详情按原只读规则解析当前收款账户。
+    async fn detail_recipient(
+        &self,
+        account: &PayableAccount,
+        include: bool,
+    ) -> Result<Option<PaymentRecipientView>> {
+        if !include {
+            return Ok(None);
+        }
+        Ok(resolve_optional_payment_recipient_for_read(&self.db, &account.supplier_id, &mut NoTransaction)
+            .await?
+            .as_ref()
+            .map(payment_recipient_view))
     }
 }

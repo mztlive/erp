@@ -47,6 +47,7 @@ pub(crate) const DOMAIN_MODULES: &[&str] = &[
     "supplier_offering",
     "supplier_portal",
     "supplier_api",
+    "supplier_deposit",
     "supplier_fulfillment",
     "supplier_settlement",
     "integration_ops",

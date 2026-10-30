@@ -370,7 +370,7 @@ impl DeliverySource for DangaoshushuConnector {
                 "供应商可能已创建地址，须调查原地址准备动作",
             )
         })?;
-        Ok(DeliveryContext { reference })
+        Ok(DeliveryContext { reference, supplier_address: None })
     }
 
     async fn context(&self, _key: &ActionKey) -> ConnectorResult<Lookup<DeliveryContext>> {
@@ -409,6 +409,7 @@ mod tests {
 
     fn recipient() -> Recipient {
         Recipient {
+            supplier_address: None,
             name: "张三".into(),
             phone: "13800000000".into(),
             region: "110100".into(),
@@ -425,6 +426,7 @@ mod tests {
 
     fn line(index: u32, quantity: &str) -> OrderLine {
         OrderLine {
+            source_purchase_terms: None,
             line_id: format!("line-{index}"),
             sku: SupplierSku {
                 product_id: Some(format!("product-{index}")),
@@ -462,6 +464,7 @@ mod tests {
                 },
             )
             .unwrap(),
+            supplier_address: None,
         }
     }
 
@@ -474,6 +477,7 @@ mod tests {
         let connector = connector(vec![]);
         let key = ActionKey { id: "address-action".into(), payload_hash: "hash".into() };
         let recipient = Recipient {
+            supplier_address: None,
             name: "张三".into(),
             phone: "13800000000".into(),
             region: "110100".into(),

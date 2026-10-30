@@ -16,6 +16,9 @@ pub struct SupplierRefreshHint {
     pub target_kind: String,
     pub object_id: String,
     pub product_id: Option<String>,
+    /// 仅经协议核实的真实资金交易号；历史消息缺省保持未知。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub funds_transaction_id: Option<String>,
 }
 
 /// 原始证据、验签范围和补查意图单文档原子落库；不直接形成正式订单/供给事实。
@@ -67,6 +70,10 @@ impl SupplierCallbackReceipt {
             || refresh_hints.iter().any(|hint| {
                 hint.object_id.is_empty()
                     || hint.object_id.len() > 128
+                    || hint
+                        .funds_transaction_id
+                        .as_ref()
+                        .is_some_and(|id| id.trim().is_empty() || id.len() > 256)
                     || !matches!(
                         hint.topic.as_str(),
                         "product" | "availability" | "price" | "region" | "order" | "refund"
@@ -154,6 +161,21 @@ impl fmt::Debug for SupplierCallbackReceipt {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn historical_refresh_intent_does_not_gain_a_funds_transaction_identity() {
+        let hint: SupplierRefreshHint = serde_json::from_value(serde_json::json!({
+            "topic":"refund","target_kind":"external_order","object_id":"order","product_id":null,
+        }))
+        .unwrap();
+        assert!(hint.funds_transaction_id.is_none());
+        assert!(serde_json::to_value(&hint).unwrap().get("funds_transaction_id").is_none());
+        let mut verified = hint;
+        verified.funds_transaction_id = Some("real-transaction".into());
+        let restored: SupplierRefreshHint =
+            serde_json::from_value(serde_json::to_value(&verified).unwrap()).unwrap();
+        assert_eq!(restored.funds_transaction_id.as_deref(), Some("real-transaction"));
+    }
     #[test]
     fn local_receive_identity_never_becomes_provider_identity() {
         let hint = SupplierRefreshHint {
@@ -161,6 +183,7 @@ mod tests {
             target_kind: "merchant_order".into(),
             object_id: "order-1".into(),
             product_id: None,
+            funds_transaction_id: None,
         };
         let receipt = SupplierCallbackReceipt::received(
             "local-1".into(),
@@ -194,6 +217,7 @@ mod tests {
             target_kind: "external_order".into(),
             object_id: "external".into(),
             product_id: None,
+            funds_transaction_id: None,
         };
         let mut receipt = SupplierCallbackReceipt::received(
             "local".into(),
@@ -213,6 +237,7 @@ mod tests {
             target_kind: "product".into(),
             object_id: "product".into(),
             product_id: None,
+            funds_transaction_id: None,
         });
         mixed.status = "received".into();
         mixed.processed_at = None;
@@ -227,6 +252,7 @@ mod tests {
             target_kind: "external_order".into(),
             object_id: "old-external".into(),
             product_id: None,
+            funds_transaction_id: None,
         };
         let mut receipt = SupplierCallbackReceipt::received(
             "late".into(),

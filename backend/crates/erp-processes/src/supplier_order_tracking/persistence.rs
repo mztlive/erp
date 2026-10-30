@@ -69,6 +69,7 @@ impl SupplierOrderTrackingProcess {
         claimed: &OrderTracking,
         observation: OrderObservation,
     ) -> Result<String> {
+        self.retain_topology_evidence(claimed, &observation).await?;
         let previous = if let Some(id) = &claimed.latest_observation_id {
             self.db.supplier_order_observations().find_by_id(id, &mut NoTransaction).await?
         } else {
@@ -93,11 +94,40 @@ impl SupplierOrderTrackingProcess {
                         None
                     };
                     ensure_source_progress(previous.as_ref(), &observation)?;
+                    persist_topology(&db, &current, &observation, executor).await?;
                     apply_supplier_state(&db, &current.base.id, &observation, executor).await?;
                     current.latest_observation_id = Some(id.clone());
                     current.last_verified_at = Some(observation.observed_at);
                     db.supplier_order_tracking().update(&mut current, executor).await?;
                     Ok(id)
+                })
+            })
+            .await
+    }
+
+    async fn retain_topology_evidence(
+        &self,
+        claimed: &OrderTracking,
+        observation: &OrderObservation,
+    ) -> Result<()> {
+        let Some(tree) = observation.topology.clone() else {
+            return Ok(());
+        };
+        let (db, claimed) = (self.db.clone(), claimed.clone());
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    load_claimed(&db, &claimed, executor).await?;
+                    let mut execution = db
+                        .supplier_api_order_executions()
+                        .find_by_id(&claimed.base.id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("原 API 执行不存在".into()))?;
+                    execution.pending_order_tree = Some(tree);
+                    db.supplier_api_order_executions().update(&mut execution, executor).await?;
+                    Ok(())
                 })
             })
             .await
@@ -234,6 +264,40 @@ async fn apply_supplier_state(
             order.base.id,
         )?;
         persist_log(db, &audit, executor).await?;
+    }
+    Ok(())
+}
+
+async fn persist_topology(
+    db: &Database,
+    tracking: &OrderTracking,
+    observation: &OrderObservation,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut execution = db
+        .supplier_api_order_executions()
+        .find_by_id(&tracking.base.id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("原 API 执行不存在".into()))?;
+    let Some(next) = &observation.topology else {
+        if execution.order_tree.is_some() {
+            return Err(Error::BusinessLogicError("本次查询缺少完整子单关系，请继续调查原订单".into()));
+        }
+        return Ok(());
+    };
+    let tree = match &execution.order_tree {
+        Some(previous) => previous.merge_tracking(next.clone(), &tracking.source_lines)?,
+        None => {
+            next.validate_tracking(&tracking.source_lines)?;
+            let mut first = next.clone();
+            first.version = 1;
+            first
+        },
+    };
+    if execution.order_tree.as_ref() != Some(&tree) || execution.pending_order_tree.is_some() {
+        execution.order_tree = Some(tree);
+        execution.pending_order_tree = None;
+        db.supplier_api_order_executions().update(&mut execution, executor).await?;
     }
     Ok(())
 }

@@ -168,8 +168,7 @@ impl PaymentReversalWrite {
     fn prepare_posting(self) -> Result<(SupplierPayment, Vec<PaymentAllocation>)> {
         let mut payment = self.payment;
         payment.record_reversal(self.reversal.amount)?;
-        let allocations =
-            build_reverse_allocations(&self.reversal, &payment, &self.reverse_rows, &self.seqs)?;
+        let allocations = build_reverse_allocations(&self.reversal, &self.reverse_rows, &self.seqs)?;
         Ok((payment, allocations))
     }
 }
@@ -214,7 +213,6 @@ async fn revert_payment_settlements(
 /// 仓储失败时返回错误。
 fn build_reverse_allocations(
     reversal: &PaymentReversalFact,
-    payment: &SupplierPayment,
     reverse_rows: &[crate::entity::payable::PaymentReversePlanRow],
     seqs: &[u32],
 ) -> Result<Vec<PaymentAllocation>> {
@@ -226,7 +224,7 @@ fn build_reverse_allocations(
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new(next_id()),
             PaymentAllocationData {
-                supplier_payment_id: payment.base.id.clone().into(),
+                source: reverse.source.clone(),
                 payable_entry_id: reverse.entry_id.clone(),
                 allocation_seq: *seq,
                 allocation_action: PayableAllocationAction::Reverse,
@@ -287,7 +285,7 @@ mod tests {
         PaymentAllocation::new(
             PaymentAllocationId::new("allocation-1"),
             PaymentAllocationData {
-                supplier_payment_id: SupplierPaymentId::new("payment-1"),
+                source: SupplierPaymentId::new("payment-1").into(),
                 payable_entry_id: PayableEntryId::new("entry-1"),
                 allocation_seq: 1,
                 allocation_action: PayableAllocationAction::Apply,

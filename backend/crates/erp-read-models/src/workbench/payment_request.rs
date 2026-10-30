@@ -99,6 +99,7 @@ fn request_brief(request: &PurchasePaymentRequest, submitter_name: Option<String
     let mut sections = Vec::new();
     push_section(&mut sections, "供应商", supplier_name(request).as_deref(), false);
     push_section(&mut sections, "我方付款主体", Some(&request.payer_party_name), false);
+    push_section(&mut sections, "付款方式", Some(request.data.execution_method.label()), false);
     push_section(&mut sections, "申请金额", Some(&format_yuan(&request.total_amount)), true);
     push_section(&mut sections, "希望付款日", Some(&request.data.desired_payment_date.to_string()), false);
     push_section(&mut sections, "申请说明", Some(&request.data.reason), false);

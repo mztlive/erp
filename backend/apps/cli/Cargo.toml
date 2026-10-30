@@ -5,9 +5,12 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+serde = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
 config = { workspace = true }
+application-core = { workspace = true }
+erp-core = { workspace = true }
 erp-identity = { workspace = true }
 erp-audit = { workspace = true }
 persistence-core = { workspace = true }

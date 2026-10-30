@@ -9,7 +9,7 @@
 use mongodb::bson::{Document, doc};
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
-use persistence_core::indexes::{named_index, unique_index};
+use persistence_core::indexes::{named_index, unique_index, unique_partial_index};
 
 use crate::repository::extensions::PayableExt;
 use crate::repository::supplier_credit::{SUPPLIER_CREDIT_USES, SUPPLIER_CREDITS};
@@ -132,6 +132,12 @@ fn supplier_payment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_payments_id", doc! { "id": 1 }),
         unique_index("uk_supplier_payments_no", doc! { "payment_no": 1 }),
+        unique_partial_index(
+            "uk_supplier_payments_cash_source",
+            doc! {"cash_source_fingerprint": 1},
+            doc! {"cash_source_fingerprint": {"$type": "string"}},
+        ),
+        named_index("idx_supplier_payments_bank_source", doc! {"payer_party_id": 1, "bank_reference": 1}),
         named_index("idx_supplier_payments_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
             "idx_supplier_payments_request_page",
@@ -148,9 +154,15 @@ fn supplier_payment_indexes() -> Vec<IndexModel> {
 fn payment_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_payment_allocations_id", doc! { "id": 1 }),
-        unique_index(
-            "uk_payment_allocations_payment_seq",
+        unique_partial_index(
+            "uk_payment_allocations_bank_seq",
             doc! { "supplier_payment_id": 1, "allocation_seq": 1 },
+            doc! { "supplier_payment_id": { "$type": "string" } },
+        ),
+        unique_partial_index(
+            "uk_payment_allocations_deposit_seq",
+            doc! { "supplier_deposit_usage_id": 1, "allocation_seq": 1 },
+            doc! { "supplier_deposit_usage_id": { "$type": "string" } },
         ),
         named_index("idx_payment_allocations_entry_time", doc! { "payable_entry_id": 1, "allocated_at": 1 }),
         named_index("idx_payment_allocations_reverse", doc! { "reverses_allocation_id": 1 }),
@@ -257,11 +269,17 @@ mod tests {
 
     #[test]
     fn payment_allocations_cover_unique_and_bidirectional_lookups() {
-        assert!(
-            payment_allocation_indexes()
-                .iter()
-                .any(|index| name(index) == Some("uk_payment_allocations_payment_seq"))
-        );
+        let indexes = payment_allocation_indexes();
+        for (index_name, source) in [
+            ("uk_payment_allocations_bank_seq", "supplier_payment_id"),
+            ("uk_payment_allocations_deposit_seq", "supplier_deposit_usage_id"),
+        ] {
+            let index = indexes.iter().find(|index| name(index) == Some(index_name)).unwrap();
+            assert_eq!(index.keys, doc! {source: 1, "allocation_seq": 1});
+            let options = index.options.as_ref().unwrap();
+            assert_eq!(options.unique, Some(true));
+            assert_eq!(options.partial_filter_expression, Some(doc! {source: {"$type": "string"}}));
+        }
         assert!(payment_allocation_indexes().iter().any(|index| {
             name(index) == Some("idx_payment_allocations_entry_time")
                 && index.keys == doc! { "payable_entry_id": 1, "allocated_at": 1 }

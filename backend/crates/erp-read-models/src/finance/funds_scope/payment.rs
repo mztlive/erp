@@ -567,6 +567,7 @@ fn payment_page_items(
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::Instant;
+    use erp_core::ids::SupplierPaymentId;
     use erp_finance::dto::payable::PaymentAllocationView;
     use erp_finance::entity::payable::{AllocationAction, SupplierPaymentStatus};
 
@@ -593,6 +594,7 @@ mod tests {
             signed: amount,
             view: PaymentAllocationView {
                 id: id.into(),
+                funding_source: SupplierPaymentId::new("payment").into(),
                 allocation_seq: 1,
                 allocation_action: AllocationAction::Apply,
                 payable_entry_id: id.into(),

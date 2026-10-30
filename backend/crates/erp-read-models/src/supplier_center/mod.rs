@@ -1,6 +1,7 @@
 //! 供应商跨域只读视图。
 
 use erp_supplier::repository::prelude::*;
+pub mod execution_progress;
 pub mod fulfillment_detail;
 mod fulfillment_display;
 

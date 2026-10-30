@@ -1,3 +1,4 @@
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -6,9 +7,85 @@ use persistence_core::indexes::{named_index, unique_index};
 use persistence_core::{Executor, Repository, Result, mongo_ops};
 
 use super::{ApiOrderExecution, ApiOrderSetupReceipt};
+use crate::entity::supplier_api::SupplierApiConnection;
+use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
+use crate::repository::{SupplierApiExt, SupplierFulfillmentExt};
+use crate::{Error, Result as SupplyResult};
 
 const EXECUTIONS: &str = "supplier_api_order_executions";
 const SETUP_RECEIPTS: &str = "supplier_api_order_setup_receipts";
+
+/// 按当前已授权执行集合读取同身份正式供应商订单。
+/// # 参数
+/// `ids` 为读模型从已授权采购派生的执行身份，空集合不查询。
+/// # 返回
+/// 仅指定且未删除的正式订单，不扩大采购范围。
+/// # 错误
+/// 数据库读取失败时返回原仓储错误。
+pub async fn fulfillment_orders_by_execution_ids(
+    db: &Database,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierFulfillmentOrder>> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    db.supplier_fulfillment_orders()
+        .find_many(doc! {"id":{"$in":ids},"deleted_at":NOT_DELETED_TIMESTAMP_BSON}, executor)
+        .await
+}
+
+/// 按执行记录反查其所属连接，禁止从前端指定供应商归属。
+/// # 参数
+/// `ids` 为服务端从已授权执行派生的连接身份，空集合不查询。
+/// # 返回
+/// 指定未删除连接，调用方仍须逐执行核对供应商和连接归属。
+/// # 错误
+/// 数据库读取失败时返回原仓储错误。
+pub async fn connections_by_ids(
+    db: &Database,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierApiConnection>> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    db.supplier_api_connections()
+        .find_many(doc! {"id":{"$in":ids},"deleted_at":NOT_DELETED_TIMESTAMP_BSON}, executor)
+        .await
+}
+
+/// 按已绑定连接和实际外部子单定位原执行，供消息唤醒原根单。
+/// # 参数
+/// `connection` 和 `external` 来自已认证账号消息，不接受跨连接归属。
+/// # 返回
+/// 唯一原执行或 None；未完整关系只能作为唤醒线索。
+/// # 错误
+/// 多个执行争用同一外部身份时拒绝，数据库失败向上传递。
+pub async fn for_external_order(
+    db: &Database,
+    connection: &str,
+    external: &str,
+    executor: &mut dyn Executor,
+) -> SupplyResult<Option<ApiOrderExecution>> {
+    if connection.trim().is_empty() || external.trim().is_empty() {
+        return Err(Error::ValidationError("供应商消息订单身份无效".into()));
+    }
+    let rows = mongo_ops::find_many(
+        &db.collection::<ApiOrderExecution>(EXECUTIONS),
+        doc! {"connection_id":connection,"$or":[
+            {"order_tree.nodes.external_order_no":external},
+            {"pending_order_tree.nodes.external_order_no":external}
+        ]},
+        FindOptions::builder().limit(2).build(),
+        executor,
+    )
+    .await?;
+    if rows.len() > 1 {
+        return Err(Error::ConflictError("供应商子单归属不唯一，请保留消息并核对原单".into()));
+    }
+    Ok(rows.into_iter().next())
+}
 
 /// 接口执行意图的领域仓储访问器。
 pub trait ApiOrderExt {
@@ -70,6 +147,51 @@ pub async fn due(db: &Database, executor: &mut dyn Executor) -> Result<Vec<ApiOr
     ).await
 }
 
+/// 有界读取实际收货通知调度，观察和停止主状态不影响原通知结果调查。
+/// # 参数
+/// 应用数据库及当前只读执行器。
+/// # 返回
+/// 最多二十条按原调度时刻和身份稳定排序的执行。
+/// # 错误
+/// 数据库读取失败时拒绝。
+pub async fn receipts_due(db: &Database, executor: &mut dyn Executor) -> Result<Vec<ApiOrderExecution>> {
+    mongo_ops::find_many(
+        &db.collection::<ApiOrderExecution>(EXECUTIONS),
+        doc! {"receipt_next_run_at":{"$type":"number","$lte":Instant::now().unix_secs()},"deleted_at":0_i64},
+        FindOptions::builder().sort(doc! {"receipt_next_run_at":1,"id":1}).limit(20).build(),
+        executor,
+    )
+    .await
+}
+
+/// 从已正式验收的销售行定位原采购执行，不能按 SKU 扩大通知范围。
+/// # 参数
+/// `lines` 来自实际验收行；空输入不访问数据库。
+/// # 返回
+/// 返回最多一千项原执行，超限时拒绝整次唤醒。
+/// # 错误
+/// 数量超限或数据库失败时拒绝。
+pub async fn for_sales_lines(
+    db: &Database,
+    lines: &[String],
+    executor: &mut dyn Executor,
+) -> SupplyResult<Vec<ApiOrderExecution>> {
+    if lines.is_empty() {
+        return Ok(vec![]);
+    }
+    let rows: Vec<ApiOrderExecution> = mongo_ops::find_many(
+        &db.collection(EXECUTIONS),
+        doc! {"source_lines.sales_order_line_id":{"$in":lines},"deleted_at":0_i64},
+        FindOptions::builder().sort(doc! {"id":1}).limit(1001).build(),
+        executor,
+    )
+    .await?;
+    if rows.len() > 1000 {
+        return Err(Error::BusinessLogicError("验收关联的供应商执行过多，请分批核对原记录".into()));
+    }
+    Ok(rows)
+}
+
 /// 按同连接、同地址指纹复用已明确配置的坐标，不猜测地理位置。
 /// # 参数
 /// `fingerprint` 为应用密钥生成的地址指纹，不包含收件人明文。
@@ -124,6 +246,19 @@ pub async fn ensure_indexes(db: &Database) -> Result<()> {
             unique_index("uk_supplier_api_order_execution_id", doc! {"id":1}),
             named_index("idx_supplier_api_execution_due", doc! {"stage":1,"next_run_at":1,"id":1}),
             named_index("idx_supplier_api_execution_purchase", doc! {"purchase_order_id":1}),
+            named_index("idx_supplier_api_execution_receipt_due", doc! {"receipt_next_run_at":1,"id":1}),
+            named_index(
+                "idx_supplier_api_execution_receipt_sales",
+                doc! {"source_lines.sales_order_line_id":1},
+            ),
+            named_index(
+                "idx_supplier_api_execution_child",
+                doc! {"connection_id":1,"order_tree.nodes.external_order_no":1},
+            ),
+            named_index(
+                "idx_supplier_api_execution_pending_child",
+                doc! {"connection_id":1,"pending_order_tree.nodes.external_order_no":1},
+            ),
             named_index(
                 "idx_supplier_api_execution_address",
                 doc! {"connection_id":1,"address_fingerprint":1,"updated_at":-1},

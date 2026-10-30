@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table"
 import type { SalesOrderDetailView } from "../api/sales-orders"
 import type { useSalesOrderDeliveryProgressQuery } from "../hooks/queries"
+import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
 
 export type DeliveryProgressQuery = ReturnType<
     typeof useSalesOrderDeliveryProgressQuery
@@ -49,6 +50,9 @@ export function SalesOrderDeliveryOverview({
                     共 {order.lineItems.length} 项
                 </span>
             </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+                已交付数量只统计已登记的发货或服务执行。供应商预占、订单确认及父单完成不计入交付，物流妥投后仍按原流程办理客户验收。
+            </p>
             {query.isError ? (
                 <BusinessFailureState
                     id="sales-order-delivery-overview-failure"
@@ -69,102 +73,145 @@ export function SalesOrderDeliveryOverview({
                     正在读取交付进度…
                 </p>
             ) : null}
-            <Table className="min-w-[40rem]">
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>商品</TableHead>
-                        <TableHead data-align="end">销售数量</TableHead>
-                        <TableHead data-align="end">已交付</TableHead>
-                        <TableHead data-align="end">已验收</TableHead>
-                        <TableHead>期望交付日</TableHead>
-                        <TableHead>状态</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {order.lineItems.map((line) => {
-                        const progress = canRead
-                            ? lines.get(line.id)
-                            : undefined
-                        return (
-                            <TableRow key={line.id}>
-                                <TableCell className="min-w-44 whitespace-normal">
-                                    <div className="flex flex-wrap items-center gap-2 font-medium">
-                                        {line.name}
-                                        {line.isGift ? (
-                                            <Badge variant="secondary">
-                                                赠品
-                                            </Badge>
+            <div className="min-w-0 overflow-x-auto">
+                <Table className="min-w-[44rem]">
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>商品</TableHead>
+                            <TableHead data-align="end">销售数量</TableHead>
+                            <TableHead data-align="end">已交付</TableHead>
+                            <TableHead data-align="end">未交付</TableHead>
+                            <TableHead data-align="end">已验收</TableHead>
+                            <TableHead>期望交付日</TableHead>
+                            <TableHead>状态</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {order.lineItems.map((line) => {
+                            const progress = canRead
+                                ? lines.get(line.id)
+                                : undefined
+                            const partiallyDelivered =
+                                progress &&
+                                compareDecimal(
+                                    progress.deliveredQuantity,
+                                    "0",
+                                    6,
+                                ) > 0 &&
+                                compareDecimal(
+                                    progress.deliveredQuantity,
+                                    progress.requiredQuantity,
+                                    6,
+                                ) < 0
+                            return (
+                                <TableRow key={line.id}>
+                                    <TableCell className="min-w-44 whitespace-normal">
+                                        <div className="flex flex-wrap items-center gap-2 font-medium">
+                                            {line.name}
+                                            {line.isGift ? (
+                                                <Badge variant="secondary">
+                                                    赠品
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                        {line.sku && line.sku !== "无规格" ? (
+                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                {line.sku}
+                                            </p>
                                         ) : null}
-                                    </div>
-                                    {line.sku && line.sku !== "无规格" ? (
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            {line.sku}
-                                        </p>
-                                    ) : null}
-                                </TableCell>
-                                <TableCell data-align="end">
-                                    <QuantityValue
-                                        value={line.quantity}
-                                        unit={line.unit}
-                                    />
-                                </TableCell>
-                                <TableCell data-align="end">
-                                    {progress ? (
+                                    </TableCell>
+                                    <TableCell data-align="end">
                                         <QuantityValue
-                                            value={progress.deliveredQuantity}
+                                            value={line.quantity}
                                             unit={line.unit}
                                         />
-                                    ) : (
-                                        "—"
-                                    )}
-                                </TableCell>
-                                <TableCell data-align="end">
-                                    {progress ? (
-                                        <QuantityValue
-                                            value={progress.acceptedQuantity}
-                                            unit={line.unit}
-                                        />
-                                    ) : (
-                                        "—"
-                                    )}
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap text-muted-foreground">
-                                    {line.dueDate || "—"}
-                                </TableCell>
-                                <TableCell>
-                                    {progress ? (
-                                        <StatusBadge
-                                            tone={
-                                                progress.stuckKind === "done"
-                                                    ? "success"
-                                                    : progress.stuckKind ===
-                                                        "exception"
-                                                      ? "warning"
-                                                      : "info"
-                                            }
-                                            label={
-                                                progress.stuckKind === "done"
-                                                    ? "已验收"
-                                                    : progress.stuckKind ===
-                                                        "accept"
-                                                      ? "待验收"
-                                                      : progress.stuckKind ===
-                                                          "exception"
-                                                        ? "待处理"
-                                                        : "待交付"
-                                            }
-                                        />
-                                    ) : (
-                                        <span className="text-xs text-muted-foreground">
-                                            待确认
-                                        </span>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        )
-                    })}
-                </TableBody>
-            </Table>
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        {progress ? (
+                                            <QuantityValue
+                                                value={
+                                                    progress.deliveredQuantity
+                                                }
+                                                unit={line.unit}
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        {progress ? (
+                                            <QuantityValue
+                                                value={subtractFixed(
+                                                    progress.requiredQuantity,
+                                                    progress.deliveredQuantity,
+                                                    {
+                                                        maxScale: 6,
+                                                        outputScale: 6,
+                                                    },
+                                                )}
+                                                unit={line.unit}
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        {progress ? (
+                                            <QuantityValue
+                                                value={
+                                                    progress.acceptedQuantity
+                                                }
+                                                unit={line.unit}
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                                        {line.dueDate || "—"}
+                                    </TableCell>
+                                    <TableCell>
+                                        {progress ? (
+                                            <StatusBadge
+                                                tone={
+                                                    progress.stuckKind ===
+                                                    "done"
+                                                        ? "success"
+                                                        : progress.stuckKind ===
+                                                            "exception"
+                                                          ? "warning"
+                                                          : "info"
+                                                }
+                                                label={
+                                                    partiallyDelivered
+                                                        ? progress.stuckKind ===
+                                                          "accept"
+                                                            ? "部分交付 · 待验收"
+                                                            : "部分交付"
+                                                        : progress.stuckKind ===
+                                                            "done"
+                                                          ? "已验收"
+                                                          : progress.stuckKind ===
+                                                              "accept"
+                                                            ? "待验收"
+                                                            : progress.stuckKind ===
+                                                                "exception"
+                                                              ? "待处理"
+                                                              : "待交付"
+                                                }
+                                            />
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground">
+                                                待确认
+                                            </span>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
+            </div>
         </section>
     )
 }

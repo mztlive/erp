@@ -1,14 +1,16 @@
 //! `payment_allocation` 付款核销分配（数据模型 §6.9，与 `receipt_allocation` 同构）。
 
-use std::str::FromStr;
+use std::collections::HashMap;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
-use erp_core::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
+use erp_core::ids::{PayableEntryId, PaymentAllocationId};
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
+
+use super::PaymentAllocationSource;
 
 /// 分配动作（数据模型 §6.9：`APPLY` 或 `REVERSE`）。
 ///
@@ -96,8 +98,9 @@ impl From<crate::entity::receivable::AllocationAction> for AllocationAction {
 /// 付款核销分配创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PaymentAllocationData {
-    /// 付款单。
-    pub supplier_payment_id: SupplierPaymentId,
+    /// 真实资金来源；历史普通付款保持原字段读取。
+    #[serde(flatten)]
+    pub source: PaymentAllocationSource,
     /// 被核销应付分录。
     pub payable_entry_id: PayableEntryId,
     /// 付款单内追加序号（从 1 开始）。
@@ -121,8 +124,9 @@ pub struct PaymentAllocationData {
 pub struct PaymentAllocation {
     #[serde(flatten)]
     pub base: BaseModel,
-    /// 付款单。
-    pub supplier_payment_id: SupplierPaymentId,
+    /// 真实资金来源；预存款使用不能伪造银行付款身份。
+    #[serde(flatten)]
+    pub source: PaymentAllocationSource,
     /// 被核销应付分录。
     pub payable_entry_id: PayableEntryId,
     /// 付款单内追加序号。
@@ -153,6 +157,7 @@ impl PaymentAllocation {
     /// # 错误
     /// 当金额非正、序号为 0 或动作与引用不一致时返回错误。
     pub fn new(id: PaymentAllocationId, data: PaymentAllocationData) -> Result<Self> {
+        data.source.validate()?;
         if data.allocated_amount.to_decimal().is_sign_negative()
             || data.allocated_amount.to_decimal().is_zero()
         {
@@ -173,7 +178,7 @@ impl PaymentAllocation {
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
-            supplier_payment_id: data.supplier_payment_id,
+            source: data.source,
             payable_entry_id: data.payable_entry_id,
             allocation_seq: data.allocation_seq,
             allocation_action: data.allocation_action,
@@ -207,6 +212,8 @@ impl PaymentAllocation {
 pub struct PaymentReversePlanRow {
     /// 被反向的原 `APPLY` 分配 ID。
     pub original_id: PaymentAllocationId,
+    /// 原核销的真实资金来源，反向核销不得改换来源。
+    pub source: PaymentAllocationSource,
     /// 本次反向金额。
     pub amount: Amount,
     /// 被核销应付分录。
@@ -264,8 +271,9 @@ impl PaymentAllocation {
             return Ok(Vec::new());
         }
         let start = Self::next_allocation_seq(allocations)?;
+        let count = u32::try_from(count).map_err(|_| Error::from("付款核销分配序号区间溢出"))?;
         let end = start
-            .checked_add((count as u32).saturating_sub(1))
+            .checked_add(count.saturating_sub(1))
             .ok_or_else(|| Error::from("付款核销分配序号区间溢出"))?;
         Ok((start..=end).collect())
     }
@@ -290,24 +298,17 @@ impl PaymentAllocation {
         allocations: &[Self],
         amount: Amount,
     ) -> Result<(Vec<PaymentReversePlanRow>, Vec<PaymentReverseChunk>)> {
-        use std::collections::HashMap;
-
+        if allocations.windows(2).any(|pair| pair[0].source != pair[1].source) {
+            return Err(Error::from("反向核销不得混用资金来源"));
+        }
         if amount.to_decimal().is_zero() {
             return Ok((Vec::new(), Vec::new()));
         }
         if amount.to_decimal().is_sign_negative() {
             return Err(Error::from("反向金额必须为正数"));
         }
-        let mut reverse_sums: HashMap<String, Amount> = HashMap::new();
-        let zero = Amount::from_str("0.00").expect("固定零金额必须可解析");
-        for allocation in allocations {
-            if allocation.allocation_action == AllocationAction::Reverse
-                && let Some(original) = &allocation.reverses_allocation_id
-            {
-                let entry = reverse_sums.entry(original.to_string()).or_insert(zero);
-                *entry = entry.checked_add(allocation.allocated_amount);
-            }
-        }
+        let reverse_sums = Self::reversed_amounts(allocations);
+        let zero = Amount::zero();
         let mut applies: Vec<&PaymentAllocation> =
             allocations.iter().filter(|a| a.allocation_action == AllocationAction::Apply).collect();
         applies
@@ -324,6 +325,7 @@ impl PaymentAllocation {
             let chunk = if effective >= remaining { remaining } else { effective };
             rows.push(PaymentReversePlanRow {
                 original_id: allocation.base.id.clone().into(),
+                source: allocation.source.clone(),
                 amount: chunk,
                 entry_id: allocation.payable_entry_id.clone(),
             });
@@ -341,17 +343,88 @@ impl PaymentAllocation {
         }
         Ok((rows, chunks))
     }
+
+    fn reversed_amounts(allocations: &[Self]) -> HashMap<String, Amount> {
+        let mut totals = HashMap::new();
+        for allocation in allocations {
+            if allocation.allocation_action == AllocationAction::Reverse
+                && let Some(original) = &allocation.reverses_allocation_id
+            {
+                let entry = totals.entry(original.to_string()).or_insert_with(Amount::zero);
+                *entry = entry.checked_add(allocation.allocated_amount);
+            }
+        }
+        totals
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::ids::SupplierPaymentId;
+    use serde_json::{from_value, json, to_value};
+
     use super::*;
+
+    #[test]
+    fn full_allocation_reads_legacy_payment_and_roundtrips_deposit_without_cash_identity() {
+        let legacy = PaymentAllocation::new(PaymentAllocationId::new("legacy"), data()).unwrap();
+        let wire = to_value(&legacy).unwrap();
+        assert_eq!(wire["supplier_payment_id"], "sp-1");
+        assert!(wire.get("supplier_deposit_usage_id").is_none());
+        assert_eq!(from_value::<PaymentAllocation>(wire.clone()).unwrap(), legacy);
+        let deposit_data = PaymentAllocationData {
+            source: PaymentAllocationSource::deposit_usage("usage").unwrap(),
+            ..data()
+        };
+        let deposit = PaymentAllocation::new(PaymentAllocationId::new("deposit"), deposit_data).unwrap();
+        let wire = to_value(&deposit).unwrap();
+        assert_eq!(wire["supplier_deposit_usage_id"], "usage");
+        assert!(wire.get("supplier_payment_id").is_none());
+        assert_eq!(from_value::<PaymentAllocation>(wire.clone()).unwrap(), deposit);
+        let mut ambiguous = wire;
+        ambiguous["supplier_payment_id"] = json!("sp-1");
+        assert!(from_value::<PaymentAllocation>(ambiguous).is_err());
+    }
+
+    #[test]
+    fn deposit_reverse_plan_preserves_original_usage_and_partial_limit() {
+        let original = PaymentAllocation::new(
+            PaymentAllocationId::new("apply"),
+            PaymentAllocationData {
+                source: PaymentAllocationSource::deposit_usage("usage").unwrap(),
+                ..data()
+            },
+        )
+        .unwrap();
+        let reverse = PaymentAllocation::new(
+            PaymentAllocationId::new("reverse"),
+            PaymentAllocationData {
+                source: original.source.clone(),
+                allocation_seq: 2,
+                allocation_action: AllocationAction::Reverse,
+                allocated_amount: "250".parse().unwrap(),
+                reverses_allocation_id: Some(PaymentAllocationId::new("apply")),
+                ..data()
+            },
+        )
+        .unwrap();
+        let (rows, _) =
+            PaymentAllocation::plan_reverse(&[original.clone(), reverse.clone()], "750".parse().unwrap())
+                .unwrap();
+        assert_eq!(rows[0].source, original.source);
+        assert_eq!(rows[0].original_id.as_ref(), "apply");
+        assert!(
+            PaymentAllocation::plan_reverse(&[original.clone(), reverse], "751".parse().unwrap()).is_err()
+        );
+        let unrelated = PaymentAllocation::new(PaymentAllocationId::new("bank"), data()).unwrap();
+        assert!(PaymentAllocation::plan_reverse(&[original, unrelated], "10".parse().unwrap()).is_err());
+    }
 
     fn data() -> PaymentAllocationData {
         PaymentAllocationData {
-            supplier_payment_id: SupplierPaymentId::new("sp-1"),
+            source: SupplierPaymentId::new("sp-1").into(),
             payable_entry_id: PayableEntryId::new("pe-1"),
             allocation_seq: 1,
             allocation_action: AllocationAction::Apply,
@@ -441,7 +514,7 @@ mod tests {
         PaymentAllocation::new(
             PaymentAllocationId::new(id),
             PaymentAllocationData {
-                supplier_payment_id: SupplierPaymentId::new("sp-1"),
+                source: SupplierPaymentId::new("sp-1").into(),
                 payable_entry_id: PayableEntryId::new(entry),
                 allocation_seq: seq,
                 allocation_action: action,

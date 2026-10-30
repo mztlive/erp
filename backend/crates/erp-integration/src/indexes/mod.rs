@@ -1,6 +1,8 @@
-//! 四个集成事实集合的冻结索引；顺序保持入站、错误任务、差异、决定。
+//! 集成事实、供应商消息及技术凭据的索引入口；既有集合创建顺序保持不变。
 
 mod integration_ops;
 mod supplier_callback;
+pub mod supplier_credential;
+mod supplier_message;
 
 pub use integration_ops::ensure;

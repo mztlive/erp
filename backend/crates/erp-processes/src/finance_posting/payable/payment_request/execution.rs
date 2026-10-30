@@ -136,12 +136,12 @@ pub(crate) async fn authorize_payment_result(
     basis::validate_snapshot(payment, &snapshot)
 }
 
-fn can_read_payment_result_task(task: &WorkItem, request_id: &str, actor_id: &str) -> bool {
+pub(super) fn can_read_payment_result_task(task: &WorkItem, request_id: &str, actor_id: &str) -> bool {
     matches_purchase_payment_request_identity(task, request_id)
         && task.owner_user_id.as_deref() == Some(actor_id)
 }
 
-async fn require_result_permissions(
+pub(super) async fn require_result_permissions(
     db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,

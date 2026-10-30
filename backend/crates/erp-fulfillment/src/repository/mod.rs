@@ -5,6 +5,7 @@ pub mod extensions;
 pub mod fulfillment;
 pub mod owned;
 pub mod prelude;
+pub mod receipt_confirmation;
 
 pub use command_receipt::{FulfillmentCommandExt, FulfillmentCommandReceiptRepository};
 pub use extensions::FulfillmentExt;

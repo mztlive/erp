@@ -158,9 +158,9 @@ export function SupplierExecutionSetupForm({
         >
             <Alert variant="info">
                 <AlertDescription>
-                    收件人和详细地址使用已批准采购资料。仅补充该地址对应的城市、区县及真实百度
-                    BD-09
-                    坐标，不接受其他坐标直接替用。保存后由后台继续核验并取得可选配送方案。
+                    {setup.address_requirement === "FOUR_LEVEL"
+                        ? "收件人、详细地址和已确认的四级区域使用已批准采购资料。请选择供应商返回的配送方案，保存后继续按本次数量核验。"
+                        : "收件人和详细地址使用已批准采购资料。仅补充该地址对应的城市、区县及真实百度 BD-09 坐标，不接受其他坐标直接替用。保存后由后台继续核验并取得可选配送方案。"}
                 </AlertDescription>
             </Alert>
             <div className="rounded-md border p-3 text-sm">
@@ -335,6 +335,12 @@ export function SupplierExecutionSetupForm({
                                                 <MoneyValue
                                                     value={choice.shipping_fee}
                                                     display="exact"
+                                                    unavailableReason={
+                                                        choice.shipping_fee ==
+                                                        null
+                                                            ? "费用需授权查看"
+                                                            : undefined
+                                                    }
                                                 />
                                                 {choice.store_id
                                                     ? " · 指定门店方案"

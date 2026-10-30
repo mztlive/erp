@@ -82,7 +82,7 @@ impl ObservationApplication for MongoObservationApplication<'_> {
     }
     async fn deliveries(
         &self,
-        tracking: &OrderTracking,
+        tracking: &mut OrderTracking,
         observation: &OrderObservation,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
@@ -96,7 +96,7 @@ impl ObservationApplication for MongoObservationApplication<'_> {
 
 async fn apply_erp_deliveries(
     db: &Database,
-    tracking: &OrderTracking,
+    tracking: &mut OrderTracking,
     observation: &OrderObservation,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
@@ -111,9 +111,25 @@ async fn apply_erp_deliveries(
         // 入仓只记录供应商运输结果，实际收货和自有库存继续由仓库确认。
         return Ok(complete);
     }
+    if observation.topology.is_some()
+        || !tracking.applied_shipments.is_empty()
+        || observation.shipments.iter().flatten().any(|shipment| shipment.quantity_lines.is_some())
+        || (observation.proves_dispatch() && !observation.proves_complete_coverage())
+    {
+        return super::partial_delivery::apply_quantity_deliveries(db, tracking, observation, executor).await;
+    }
     if !observation.proves_dispatch() && observation.shipments.as_ref().is_none_or(Vec::is_empty) {
         return Ok(false);
     }
+    apply_complete_deliveries(db, tracking, observation, executor).await
+}
+
+async fn apply_complete_deliveries(
+    db: &Database,
+    tracking: &OrderTracking,
+    observation: &OrderObservation,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
     let ids = tracking.direct_delivery_ids()?.into_iter().map(DeliveryId::new).collect::<Vec<_>>();
     let deliveries = db
         .deliveries()
@@ -143,7 +159,8 @@ async fn apply_erp_deliveries(
     if observation.proves_dispatch() && covered.len() != tracking.source_lines.len() {
         return Err(Error::BusinessLogicError("来源发货结果尚未匹配全部 ERP 发货行，请核对采购分配".into()));
     }
-    Ok(complete)
+    Ok(observation.fulfillment == Some(FulfillmentStatus::Completed)
+        && observation.proves_complete_coverage())
 }
 
 async fn ensure_purchase_revision(
@@ -208,7 +225,8 @@ async fn apply_one_delivery(
         .collect();
     delivery.merge_observed_tracking(entries)?;
     delivery.ensure_tracking_lines(&lines)?;
-    if delivery.status == DeliveryState::Draft && observation.proves_dispatch() {
+    let complete_coverage = observation.proves_complete_coverage();
+    if delivery.status == DeliveryState::Draft && observation.proves_dispatch() && complete_coverage {
         let actor = delegated_actor(db, &tracking.purchase_order_id, executor).await?;
         let source_time = if observation.fulfillment == Some(FulfillmentStatus::Shipped) {
             observation.source_updated_at
@@ -222,7 +240,14 @@ async fn apply_one_delivery(
     Ok(())
 }
 
-async fn delegated_actor(
+/// 读取自动直发任务的有效采购责任人，沿用原履约权限和审计归属。
+/// # 参数
+/// 业务库、原采购单身份及同一事务执行器。
+/// # 返回
+/// 当前仍然有效的采购责任人审计身份。
+/// # 错误
+/// 采购、责任人缺失或账号失效时拒绝自动发货。
+pub(super) async fn delegated_actor(
     db: &Database,
     purchase_id: &str,
     executor: &mut dyn Executor,
@@ -322,6 +347,7 @@ mod tests {
                     observed_at: Instant::from_unix_secs(20),
                 },
                 value: OrderSnapshot {
+                    source_evidence: None,
                     reference: OrderReference {
                         merchant_order_no: "merchant".into(),
                         external_order_no: "external".into(),
@@ -332,6 +358,9 @@ mod tests {
                     refund: None,
                     payment: None,
                     shipments: None,
+                    topology: None,
+                    confirmation: None,
+                    complete_line_coverage: false,
                 },
             },
         )
@@ -340,10 +369,14 @@ mod tests {
     fn shipment(ids: &[&str], number: &str) -> OrderShipment {
         OrderShipment {
             external_shipment_id: None,
+            source_order_no: None,
+            quantity_lines: None,
+            complete_line_coverage: true,
             line_ids: ids.iter().map(|id| (*id).into()).collect(),
             carrier: Some("顺丰".into()),
             tracking_no: Some(number.into()),
             has_courier_contact: false,
+            events: Vec::new(),
         }
     }
     #[test]

@@ -18,6 +18,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::source_purchase::SourcePurchaseTerms;
 use crate::entity::supplier_offering::{OfferingRevisionImpact, OfferingSourceType, OfferingStatus};
 
 const SUPPLIER_CODE_MAX_LEN: usize = 128;
@@ -435,6 +436,9 @@ pub struct SupplierOfferingRevision {
     pub revision: RevisionBase,
     /// 所属供给。
     pub supplier_offering_id: SupplierOfferingId,
+    /// 由服务器从来源目录冻结的采购约束，不接受人工条款写入。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_purchase_terms: Option<SourcePurchaseTerms>,
     /// 一件代发含税价。
     pub dropship_supply_price_gross: UnitPrice,
     /// 一件代发不含税价。
@@ -481,6 +485,7 @@ impl SupplierOfferingRevision {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
             supplier_offering_id: data.supplier_offering_id,
+            source_purchase_terms: None,
             dropship_supply_price_gross: data.dropship_supply_price_gross,
             dropship_supply_price_net: data.dropship_supply_price_net,
             bulk_supply_price_gross: data.bulk_supply_price_gross,
@@ -502,9 +507,19 @@ impl SupplierOfferingRevision {
     /// # 错误
     /// 代发价、集采价或起订量变化时拒绝。
     pub fn ensure_api_prices_unchanged(&self, prior: &Self) -> Result<()> {
+        if self
+            .source_purchase_terms
+            .as_ref()
+            .and_then(|terms| terms.quote_context.as_ref())
+            .and_then(|context| context.tax_rate)
+            .is_some_and(|rate| rate != self.input_tax_rate)
+        {
+            return Err(Error::from("供应商已核实采购税率不允许手工修改"));
+        }
         if self.dropship_supply_price_gross != prior.dropship_supply_price_gross
             || self.bulk_supply_price_gross != prior.bulk_supply_price_gross
             || self.bulk_minimum_order_quantity != prior.bulk_minimum_order_quantity
+            || self.source_purchase_terms != prior.source_purchase_terms
         {
             return Err(Error::from("API 来源采购价格和集采条件由供应商提供，不允许手工修改"));
         }
@@ -526,6 +541,8 @@ impl SupplierOfferingRevision {
     /// 不返回错误。
     pub fn impact_from(&self, prior: &Self) -> OfferingRevisionImpact {
         let critical_changed = prior.bulk_minimum_order_quantity != self.bulk_minimum_order_quantity
+            || prior.source_purchase_terms.as_ref().map(SourcePurchaseTerms::version_content)
+                != self.source_purchase_terms.as_ref().map(SourcePurchaseTerms::version_content)
             || prior.product_capabilities != self.product_capabilities
             || prior.valid_from != self.valid_from
             || prior.valid_to != self.valid_to;

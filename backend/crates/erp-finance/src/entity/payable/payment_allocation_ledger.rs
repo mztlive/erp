@@ -16,7 +16,8 @@ use erp_core::money::Amount;
 use erp_core::{Error, Result};
 
 use crate::entity::payable::{
-    AllocationAction, PayableEntry, PaymentAllocation, PaymentAllocationData, PendingPaymentAllocation,
+    AllocationAction, PayableEntry, PaymentAllocation, PaymentAllocationData, PaymentAllocationSource,
+    PendingPaymentAllocation,
 };
 use crate::entity::receivable::{checked_add_amount, zero_amount};
 
@@ -32,8 +33,8 @@ use crate::entity::receivable::{checked_add_amount, zero_amount};
 /// - 全部金额运算为精确定点运算，任一步溢出即失败，失败行不写入账本。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaymentAllocationLedger {
-    /// 付款单。
-    payment_id: SupplierPaymentId,
+    /// 核销资金来源。
+    source: PaymentAllocationSource,
     /// 净已核销合计（既有净额 + 本次待过账合计）。
     net_allocated_total: Amount,
     /// 构造时冻结的待过账行（顺序即 `apply` 顺序）。
@@ -81,6 +82,30 @@ impl PaymentAllocationLedger {
         existing: &[PaymentAllocation],
         pending: &[PendingPaymentAllocation],
     ) -> Result<Self> {
+        Self::for_source(payment_id.into(), payment_amount, existing, pending)
+    }
+
+    /// 依据真实资金来源构建统一核销账本。
+    ///
+    /// # 参数
+    /// * `source` - 普通付款或已核实的预存款使用。
+    /// * `payment_amount` - 该来源实际可核销金额上限。
+    /// * `existing` - 同一来源的既有分配。
+    /// * `pending` - 本次待核销分配。
+    /// # 返回
+    /// 返回保持金额、顺序及来源约束的账本。
+    /// # 错误
+    /// 来源混用、身份非法、超额或溢出时拒绝。
+    pub fn for_source(
+        source: PaymentAllocationSource,
+        payment_amount: Amount,
+        existing: &[PaymentAllocation],
+        pending: &[PendingPaymentAllocation],
+    ) -> Result<Self> {
+        source.validate()?;
+        if existing.iter().any(|line| line.source != source) {
+            return Err(Error::from("核销账本不得混用资金来源"));
+        }
         let existing_net = existing
             .iter()
             .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, signed_existing_delta(line)?))?;
@@ -99,7 +124,7 @@ impl PaymentAllocationLedger {
         }
         let seqs = PaymentAllocation::next_allocation_seq_range(existing, pending.len())?;
         Ok(Self {
-            payment_id,
+            source,
             net_allocated_total,
             pending: pending.to_vec(),
             allocations: Vec::with_capacity(pending.len()),
@@ -154,7 +179,7 @@ impl PaymentAllocationLedger {
         let allocation = PaymentAllocation::new(
             allocation_id,
             PaymentAllocationData {
-                supplier_payment_id: self.payment_id.clone(),
+                source: self.source.clone(),
                 payable_entry_id: line.payable_entry_id.clone(),
                 allocation_seq: seq,
                 allocation_action: AllocationAction::Apply,
@@ -334,7 +359,7 @@ mod tests {
         PaymentAllocation::new(
             PaymentAllocationId::new(id),
             PaymentAllocationData {
-                supplier_payment_id: SupplierPaymentId::new("sp-1"),
+                source: SupplierPaymentId::new("sp-1").into(),
                 payable_entry_id: PayableEntryId::new(entry_id),
                 allocation_seq: seq,
                 allocation_action: action,
@@ -665,5 +690,48 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("序号"), "序号整数溢出必须失败，实际错误：{}", err);
+    }
+
+    #[test]
+    fn deposit_ledger_applies_real_usage_and_rejects_mixed_funding_sources() {
+        let source = PaymentAllocationSource::deposit_usage("usage-1").unwrap();
+        let pending = [pending_line("pe-1", "25.00")];
+        let mut ledger =
+            PaymentAllocationLedger::for_source(source.clone(), "25".parse().unwrap(), &[], &pending)
+                .unwrap();
+        ledger
+            .apply(
+                &pending[0],
+                &entry("pe-1", "acct-1", "100"),
+                PaymentAllocationId::new("allocation"),
+                Instant::from_unix_secs(1),
+            )
+            .unwrap();
+        assert_eq!(ledger.new_allocations()[0].source, source);
+        assert_eq!(
+            ledger.account_settlement_deltas(),
+            &[(PayableAccountId::new("acct-1"), "25".parse().unwrap())]
+        );
+        assert!(
+            PaymentAllocationLedger::new(
+                SupplierPaymentId::new("bank-payment"),
+                "100".parse().unwrap(),
+                ledger.new_allocations(),
+                &[]
+            )
+            .is_err()
+        );
+        assert!(
+            PaymentAllocationLedger::for_source(
+                PaymentAllocationSource::deposit_usage("usage-2").unwrap(),
+                "100".parse().unwrap(),
+                ledger.new_allocations(),
+                &[],
+            )
+            .is_err()
+        );
+        assert!(
+            PaymentAllocationLedger::for_source(source, "24.99".parse().unwrap(), &[], &pending).is_err()
+        );
     }
 }

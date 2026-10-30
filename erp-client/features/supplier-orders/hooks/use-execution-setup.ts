@@ -3,8 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     fetchSupplierExecutionSetup,
+    fetchSupplierAddressCandidates,
+    querySupplierExecutionResult,
     saveSupplierExecutionSetup,
     type SaveSupplierExecutionSetup,
+    type SupplierAddressLevel,
 } from "../api/execution-setup"
 
 const executionSetupKey = (orderId: string) =>
@@ -23,9 +26,50 @@ export function useSupplierExecutionSetupQuery(orderId: string) {
                 "PLAN_DELIVERY",
                 "CREATE",
                 "CONFIRM_PAYMENT",
+                "DISCOVER_ORDERS",
+                "CONFIRM_ORDER",
             ].includes(query.state.data.stage)
                 ? 5000
                 : false,
+    })
+}
+
+export function useSupplierAddressCandidatesQuery(
+    orderId: string,
+    executionVersion: number,
+    level: SupplierAddressLevel,
+    parentTicket: string | undefined,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: [
+            ...executionSetupKey(orderId),
+            "address-candidates",
+            executionVersion,
+            level,
+            parentTicket ?? null,
+        ],
+        queryFn: ({ signal }) =>
+            fetchSupplierAddressCandidates(
+                orderId,
+                level,
+                parentTicket,
+                signal,
+            ),
+        enabled: enabled && Boolean(orderId),
+        retry: false,
+        refetchOnMount: "always",
+    })
+}
+
+export function useQuerySupplierExecutionResultMutation(orderId: string) {
+    const client = useQueryClient()
+    return useMutation({
+        mutationFn: (expectedVersion: number) =>
+            querySupplierExecutionResult(orderId, expectedVersion),
+        onSuccess: async () => {
+            await client.invalidateQueries({ queryKey: ["supplier-orders"] })
+        },
     })
 }
 

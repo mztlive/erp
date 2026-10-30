@@ -116,15 +116,16 @@ export function RequestSubmissionHistory({
                                             收款户名 / 开户行
                                         </dt>
                                         <dd className="mt-1">
-                                            {
-                                                query.data.payment_recipient
-                                                    .account_name
-                                            }{" "}
+                                            {query.data.payment_recipient
+                                                ?.account_name ??
+                                                (query.data.execution_method
+                                                    .type === "supplier_deposit"
+                                                    ? "供应商预存款"
+                                                    : "未记录")}{" "}
                                             ·{" "}
-                                            {
-                                                query.data.payment_recipient
-                                                    .bank_name
-                                            }
+                                            {query.data.payment_recipient
+                                                ?.bank_name ??
+                                                "本次不办理银行付款"}
                                         </dd>
                                     </div>
                                     <div>
@@ -132,10 +133,9 @@ export function RequestSubmissionHistory({
                                             收款账号
                                         </dt>
                                         <dd className="num mt-1">
-                                            {
-                                                query.data.payment_recipient
-                                                    .account_number_masked
-                                            }
+                                            {query.data.payment_recipient
+                                                ?.account_number_masked ??
+                                                "预存款账户已随申请冻结"}
                                         </dd>
                                     </div>
                                     <div>

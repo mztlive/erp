@@ -7,6 +7,7 @@ pub mod owned;
 pub mod prelude;
 pub mod returns;
 mod returns_posted_totals;
+pub mod supplier_receipt;
 
 pub use command_receipt::{ReturnsCommandExt, ReturnsCommandReceiptRepository};
 pub use extensions::ReturnsExt;

@@ -16,7 +16,7 @@ use persistence_core::{NoTransaction, Transactional};
 
 use super::SupplierApiOrderProcess;
 use super::snapshot::ExecutionSnapshot;
-use crate::fulfillment_execution::{ensure_po_fulfillable, ensure_prepay_gate};
+use crate::fulfillment_execution::ensure_po_fulfillable;
 use crate::{Error, Result};
 
 impl SupplierApiOrderProcess {
@@ -26,8 +26,14 @@ impl SupplierApiOrderProcess {
         }
         // 调查可能已送达的写请求不受新业务启停、采购修订或预付款变化阻断。
         match execution.stage {
+            ApiOrderStage::CancelOrders | ApiOrderStage::CancellationUnknown => {
+                return self.process_cancellations(execution).await;
+            },
+            ApiOrderStage::AddressUnknown => return self.recover_address(execution).await,
             ApiOrderStage::CreationUnknown => return self.recover_creation(execution).await,
             ApiOrderStage::PaymentUnknown => return self.recover_payment(execution).await,
+            ApiOrderStage::ConfirmationUnknown => return self.recover_confirmation(execution).await,
+            ApiOrderStage::DiscoverOrders => return self.discover_orders(execution).await,
             _ => {},
         }
         if let Err(error) = self.ensure_eligible(&execution).await {
@@ -40,11 +46,8 @@ impl SupplierApiOrderProcess {
             ApiOrderStage::Create => self.create(execution).await,
             ApiOrderStage::CreationUnknown => self.recover_creation(execution).await,
             ApiOrderStage::ConfirmPayment => self.confirm_payment(execution).await,
+            ApiOrderStage::ConfirmOrder => self.confirm_order(execution).await,
             ApiOrderStage::PaymentUnknown => self.recover_payment(execution).await,
-            ApiOrderStage::AddressUnknown => {
-                execution.defer("供应商地址准备结果未知，请联系管理员核查原请求；系统不会重复创建地址");
-                self.persist(&mut execution).await
-            },
             _ => {
                 execution.next_run_at =
                     Instant::from_unix_secs(Instant::now().unix_secs().saturating_add(60));
@@ -67,7 +70,7 @@ impl SupplierApiOrderProcess {
                 "采购生效版本已变化，请先核对已有供应商订单；系统不会按新版本重复下单".into(),
             ));
         }
-        ensure_prepay_gate(&self.db, &mut NoTransaction, &order).await?;
+        self.ensure_preflight_funds(execution, &order, &mut NoTransaction).await?;
         Ok(order)
     }
 
@@ -91,17 +94,10 @@ impl SupplierApiOrderProcess {
                     .to_owned();
                 self.reuse_geocode(execution, &mut snapshot, &fingerprint).await?;
                 execution.address_fingerprint = Some(fingerprint);
-                execution.stage = if snapshot.recipient.geocoded_address.is_some()
-                    && !snapshot.recipient.phone.is_empty()
-                {
-                    ApiOrderStage::PrepareAddress
-                } else {
-                    ApiOrderStage::AwaitingSetup
-                };
-                if execution.stage == ApiOrderStage::AwaitingSetup {
-                    execution.blocker =
-                        Some("请完善已核验的 BD-09 收件坐标及缺失的收件电话；相同地址下次自动复用".into());
-                }
+                let ready = self.address_ready(execution, &snapshot).await;
+                execution.stage =
+                    if ready.is_ok() { ApiOrderStage::PrepareAddress } else { ApiOrderStage::AwaitingSetup };
+                execution.blocker = ready.err().map(|error| error.to_string());
                 self.encode(execution, &snapshot)?;
             },
             Err(error) => {
@@ -110,6 +106,24 @@ impl SupplierApiOrderProcess {
             },
         }
         self.persist_initial_order(execution, &order).await
+    }
+
+    async fn address_ready(&self, execution: &ApiOrderExecution, snapshot: &ExecutionSnapshot) -> Result<()> {
+        use erp_supply::service::supplier_api::SupplierApiService;
+        let connection = SupplierApiService::new(self.db.clone())
+            .load_connection(&execution.connection_id, &mut NoTransaction)
+            .await?;
+        let connector = self
+            .runtime
+            .fulfillment_connector(&connection)
+            .map_err(|error| Error::BusinessLogicError(error.summary))?;
+        snapshot.recipient.ensure_address_ready(
+            connector.address_requirement(),
+            &execution.connection_id,
+            &execution.base.id,
+            execution.address_fingerprint.as_deref().unwrap_or_default(),
+        )?;
+        Ok(())
     }
 
     async fn reuse_geocode(

@@ -130,7 +130,23 @@ export type PayableRow = Readonly<{
     actionBlockers: readonly ActionBlocker[]
 }>
 
+export type PaymentFundingSource =
+    | "BANK_TRANSFER"
+    | "SUPPLIER_DEPOSIT_USAGE"
+    | "UNKNOWN"
+export const PAYMENT_FUNDING_SOURCE_LABEL: Record<
+    PaymentFundingSource,
+    string
+> = {
+    BANK_TRANSFER: "银行付款",
+    SUPPLIER_DEPOSIT_USAGE: "预存款使用",
+    UNKNOWN: "资金来源待核对",
+}
+
 export type PaymentAllocationLine = Readonly<{
+    fundingSource: PaymentFundingSource
+    fundingSourceHref?: string
+
     allocationId: string
     action: "APPLY" | "REVERSE"
     payableAccountId: string

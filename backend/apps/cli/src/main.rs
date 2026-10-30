@@ -6,15 +6,14 @@ mod indexes;
 mod migrate_contract_templates;
 mod migrate_scopes;
 
-mod args;
 mod error;
 mod init_admin;
+mod jd_vop;
 mod password;
 mod reset_password;
 mod runtime;
 
-use args::{Cli, Command};
-use clap::Parser;
+use cli::args::{self, Cli, Command};
 use error::Result;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::filter_fn;
@@ -44,8 +43,10 @@ async fn main() {
 /// 配置、数据库、密码输入或服务编排失败时返回错误。
 async fn run() -> Result<()> {
     init_tracing();
-    let cli = Cli::parse();
+    let cli = Cli::try_parse_safe_from(std::env::args_os()).unwrap_or_else(|error| error.exit());
     match cli.command {
+        Command::JdVopCredentialImport(args) => jd_vop::import(&cli.config, args).await,
+        Command::JdVopCredentialStatus => jd_vop::status(&cli.config).await,
         Command::MigrateContractTemplates => migrate_contract_templates::run(&cli.config).await,
         Command::MigratePersonScopes(args) => migrate_scopes::run(&cli.config, args).await,
         Command::InitAdmin(args) => init_admin::run(&cli.config, args).await,

@@ -243,7 +243,8 @@ pub(super) fn readable_file(file: &FileAsset) -> bool {
 pub(super) fn effective_payment_totals(allocations: &[PaymentAllocation]) -> BTreeMap<String, Amount> {
     let mut totals = BTreeMap::new();
     for row in allocations {
-        let total = totals.entry(row.supplier_payment_id.to_string()).or_insert_with(Amount::zero);
+        let Some(payment_id) = row.source.supplier_payment_id() else { continue };
+        let total = totals.entry(payment_id.to_string()).or_insert_with(Amount::zero);
         *total = row.allocation_action.apply_to_net(*total, row.allocated_amount);
     }
     totals.into_iter().filter(|(_, amount)| *amount > Amount::zero()).collect()
@@ -295,12 +296,14 @@ mod tests {
     fn only_positive_net_payment_allocations_keep_the_source_relation() {
         use erp_core::common::time::Instant;
         use erp_core::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
-        use erp_finance::entity::payable::{AllocationAction, PaymentAllocationData};
+        use erp_finance::entity::payable::{
+            AllocationAction, PaymentAllocationData, PaymentAllocationSource,
+        };
         let allocation = |payment: &str, action, amount: &str| {
             PaymentAllocation::new(
                 PaymentAllocationId::new("a"),
                 PaymentAllocationData {
-                    supplier_payment_id: SupplierPaymentId::new(payment),
+                    source: SupplierPaymentId::new(payment).into(),
                     payable_entry_id: PayableEntryId::new("entry"),
                     allocation_seq: 1,
                     allocation_action: action,
@@ -312,6 +315,8 @@ mod tests {
             )
             .unwrap()
         };
+        let mut deposit_usage = allocation("deposit", AllocationAction::Apply, "500");
+        deposit_usage.source = PaymentAllocationSource::deposit_usage("usage").unwrap();
         let rows = [
             allocation("positive", AllocationAction::Apply, "10"),
             allocation("positive", AllocationAction::Reverse, "3"),
@@ -319,6 +324,7 @@ mod tests {
             allocation("another", AllocationAction::Apply, "0.65"),
             allocation("reversed", AllocationAction::Apply, "5"),
             allocation("reversed", AllocationAction::Reverse, "5"),
+            deposit_usage,
         ];
         assert_eq!(
             effective_payment_totals(&rows),

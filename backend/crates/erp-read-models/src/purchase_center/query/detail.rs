@@ -91,6 +91,10 @@ impl PurchaseOrderReadService {
         view.target_warehouse_name = target_warehouse_name(&self.db, &order).await?;
         view.source_update = purchase_source_update_view(&self.db, &order, &mut NoTransaction).await?;
         view.delivery = delivery_summary(&self.db, &order).await?;
+        let (api_executions, fulfillment_quantities) =
+            super::fulfillment::fulfillment_views(&self.db, &order).await?;
+        view.api_executions = api_executions;
+        view.fulfillment_quantities = fulfillment_quantities;
         Ok(view)
     }
 }
@@ -293,6 +297,9 @@ fn center_view(
         delivery: None,
         totals: content.totals,
         allocations: relations.allocations,
+        api_executions: Vec::new(),
+        fulfillment_quantities: Vec::new(),
+        api_execution_funds: None,
         changes: relations.changes,
         payable_summary: relations.payable_summary,
         approval,

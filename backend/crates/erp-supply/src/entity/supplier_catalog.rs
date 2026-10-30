@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::dto::supplier_catalog::{
     CatalogIdentityReviewView, CatalogSyncMode, ReviewCatalogIdentityRequest,
 };
+use crate::entity::source_purchase::SourcePurchaseTerms;
 use crate::ports::connector::common::{Snapshot, SourceRevision};
 pub use crate::ports::connector::offer::{CatalogAvailability, CatalogImage};
 use crate::ports::connector::offer::{Offer, OfferDetails};
@@ -35,6 +36,9 @@ pub struct SupplierCatalogItem {
     #[serde(default)]
     pub barcode: Option<String>,
     pub purchase_price: Option<String>,
+    /// 来源购买约束与按量报价上下文；旧目录未记录时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_purchase_terms: Option<SourcePurchaseTerms>,
     /// 来源市场参考价，仅供新建公司 SKU 时预填。
     #[serde(default)]
     pub market_price: Option<Amount>,
@@ -114,6 +118,7 @@ impl SupplierCatalogItem {
             self.media_errors = previous.media_errors;
         }
         self.barcode = self.barcode.take().or(previous.barcode);
+        self.source_purchase_terms = self.source_purchase_terms.take().or(previous.source_purchase_terms);
         self.description = self.description.take().or(previous.description);
         self.images = self.images.take().or(previous.images);
         self.detail_images = self.detail_images.take().or(previous.detail_images);
@@ -181,6 +186,7 @@ impl SupplierCatalogItem {
             unit,
             barcode: normalize_optional_text(details.barcode, "供应商条码", 128)?,
             purchase_price: quote.and_then(|quote| quote.dropship).map(|price| price.unit_price.to_string()),
+            source_purchase_terms: details.source_purchase_terms,
             market_price: details.market_price,
             category_id: details.category_id,
             category_name: details.category_name,
@@ -370,7 +376,14 @@ impl SupplierCatalogItem {
     /// # 错误
     /// 内容无法序列化时返回错误。
     pub fn refresh_fingerprint(&mut self) -> Result<()> {
+        if let Some(terms) = &self.source_purchase_terms {
+            terms.validate()?;
+        }
         let details = OfferDetails {
+            source_purchase_terms: self
+                .source_purchase_terms
+                .as_ref()
+                .map(SourcePurchaseTerms::version_content),
             market_price: self.market_price,
             barcode: self.barcode.clone(),
             category_id: self.category_id.clone(),
@@ -573,6 +586,39 @@ mod tests {
         }
     }
     #[test]
+    fn purchase_terms_survive_storage_and_change_source_version_without_sampling_time_noise() {
+        use crate::entity::source_purchase::{SourcePurchaseTerms, SourceQuoteContext};
+        let mut source = observation();
+        source.value.details.source_purchase_terms = Some(SourcePurchaseTerms {
+            minimum_quantity: Some("2".parse().unwrap()),
+            quantity_multiple: Some("2".parse().unwrap()),
+            quote_context: Some(SourceQuoteContext {
+                quantity: "2".parse().unwrap(),
+                observed_at: Instant::from_unix_secs(100),
+                tax_rate: Some("0.09".parse().unwrap()),
+                tax_rate_raw: Some("9".into()),
+                address_fingerprint: None,
+            }),
+            ..Default::default()
+        });
+        let item = SupplierCatalogItem::observed("c", "s", "job", source).unwrap();
+        let restored: SupplierCatalogItem =
+            serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
+        assert_eq!(restored.source_purchase_terms, item.source_purchase_terms);
+        let mut same = restored.clone();
+        same.source_purchase_terms.as_mut().unwrap().quote_context.as_mut().unwrap().observed_at =
+            Instant::from_unix_secs(200);
+        same.refresh_fingerprint().unwrap();
+        assert_eq!(same.source_fingerprint, item.source_fingerprint);
+        same.source_purchase_terms.as_mut().unwrap().quantity_multiple = Some("3".parse().unwrap());
+        same.refresh_fingerprint().unwrap();
+        assert_ne!(same.source_fingerprint, item.source_fingerprint);
+        let mut legacy = serde_json::to_value(item).unwrap();
+        legacy.as_object_mut().unwrap().remove("source_purchase_terms");
+        let legacy: SupplierCatalogItem = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.source_purchase_terms.is_none());
+    }
+    #[test]
     fn barcode_is_literal_optional_and_identity_changes_require_review() {
         let mut snapshot = observation();
         snapshot.value.details.barcode = Some(" 0012345678905 ".into());
@@ -758,6 +804,7 @@ mod tests {
             url: "https://example.com/a.jpg".into(),
             content_fingerprint: Some("sha".into()),
             file_asset_id: Some("asset".into()),
+            ..CatalogImage::default()
         }]);
         let mut prior = SupplierCatalogItem::observed("c", "s", "j1", source).unwrap();
         prior

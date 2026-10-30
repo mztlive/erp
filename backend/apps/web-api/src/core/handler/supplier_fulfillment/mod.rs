@@ -195,6 +195,17 @@ pub async fn supplier_fulfillment_order_cancel(
     Path(id): Path<String>,
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
+    state
+        .supplier_fulfillment_process()
+        .require_scoped_order(&id, &actor, "cancel", &mut NoTransaction)
+        .await?;
+    if let Some(process) = state.supplier_api_order_process()
+        && let Some(view) = process
+            .submit_cancel_if_api(&id, req.clone(), &actor, &state.supplier_fulfillment_service().access())
+            .await?
+    {
+        return Ok(ApiResponse::ok_with_data(view));
+    }
     let view = state.supplier_fulfillment_process().submit_cancel(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))

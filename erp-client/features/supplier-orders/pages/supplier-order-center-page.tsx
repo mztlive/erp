@@ -30,6 +30,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { hasPermission } from "@/lib/permissions"
 import { SupplierOrderExecutionSetup } from "../components/supplier-order-execution-setup"
+import { SupplierOrderExecutionProgress } from "../components/supplier-order-execution-progress"
 import { SupplierOrderCenterDialogs } from "@/features/supplier-orders/components/supplier-order-preview-center-dialogs"
 import {
     AftersalesSection,
@@ -315,19 +316,26 @@ export function SupplierOrderCenterPage({
                     ) : null}
 
                     {activeSection === "fulfillment" ? (
-                        <FulfillmentSection
-                            logistics={detail.logistics}
-                            address={detail.address}
-                            statusHistory={detail.statusHistory}
-                            canReveal={derivation.canReveal}
-                            revealPending={revealMutation.isPending}
-                            onReveal={() => void orderActions.handleReveal()}
-                            onHide={() => {
-                                void clearAddressReveal(supplierOrderId).then(
-                                    () => void query.refetch(),
-                                )
-                            }}
-                        />
+                        <div className="space-y-6">
+                            <SupplierOrderExecutionProgress
+                                orderId={supplierOrderId}
+                            />
+                            <FulfillmentSection
+                                logistics={detail.logistics}
+                                address={detail.address}
+                                statusHistory={detail.statusHistory}
+                                canReveal={derivation.canReveal}
+                                revealPending={revealMutation.isPending}
+                                onReveal={() =>
+                                    void orderActions.handleReveal()
+                                }
+                                onHide={() => {
+                                    void clearAddressReveal(
+                                        supplierOrderId,
+                                    ).then(() => void query.refetch())
+                                }}
+                            />
+                        </div>
                     ) : null}
 
                     {activeSection === "aftersales" ? (

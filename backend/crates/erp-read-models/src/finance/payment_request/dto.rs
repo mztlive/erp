@@ -4,6 +4,7 @@ use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_finance::entity::payable::supplier_credit::SupplierCreditUse;
 use erp_finance::entity::payable::{PaymentRequestAllocation, PurchasePaymentRequest};
+use erp_finance::entity::supplier_deposit::SupplierDepositAccount;
 use erp_party::PartyBankAccountView;
 use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrderRevisionLine};
 use serde::Serialize;
@@ -107,6 +108,31 @@ pub struct PurchasePaymentRequestCandidate {
     pub available_total: Amount,
     pub payment_terms: Value,
     pub bank_accounts: Vec<PartyBankAccountView>,
+    /// 仅提供可选账户身份及脱敏标签，不授权读取财务余额。
+    pub deposit_accounts: Vec<PaymentRequestDepositAccountCandidate>,
+}
+
+/// 采购申请资格内的账户选择；不包含余额、流水或完整技术账号。
+#[derive(Debug, Clone, Serialize)]
+pub struct PaymentRequestDepositAccountCandidate {
+    pub id: String,
+    pub label: String,
+}
+
+impl From<&SupplierDepositAccount> for PaymentRequestDepositAccountCandidate {
+    fn from(account: &SupplierDepositAccount) -> Self {
+        let suffix = account
+            .identity
+            .external_account_ref
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<String>();
+        Self { id: account.base.id.clone(), label: format!("人民币预存款 · ****{suffix}") }
+    }
 }
 
 impl PurchasePaymentRequestCandidate {

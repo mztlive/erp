@@ -17,6 +17,9 @@ import { subtractFixed, sumFixed } from "@/lib/fixed-decimal"
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     PaymentCandidate,
+    PaymentExecutionMethod,
+    PaymentDepositAccount,
+    DepositAccountOption,
     PaymentInput,
     PaymentRecipient,
     PaymentRequest,
@@ -74,6 +77,7 @@ type CandidateDto = {
     available_total: string
     payment_terms: PaymentTerms
     bank_accounts: BankAccount[]
+    deposit_accounts?: DepositAccountOption[]
 }
 type PurchasePreviewDto = {
     purchase_order_id: string
@@ -128,9 +132,11 @@ type RequestDto = {
         bank_name: string
         masked_account_number: string
     } | null
+    deposit_account?: PaymentDepositAccount | null
     data: {
         supplier_id: string
-        payee_bank_account_id: string
+        execution_method?: PaymentExecutionMethod
+        payee_bank_account_id?: string
         desired_payment_date: string
         reason: string
         attachment_ids: string[]
@@ -184,6 +190,7 @@ function mapCandidate(item: CandidateDto): PaymentCandidate {
                 (_, index) => item.bank_accounts[index]?.is_default,
             ) ?? accounts[0],
         bank_accounts: accounts,
+        deposit_accounts: item.deposit_accounts ?? [],
     }
 }
 function mapRequest(dto: RequestDto): PaymentRequest {
@@ -217,15 +224,24 @@ function mapRequest(dto: RequestDto): PaymentRequest {
         applicant_name: dto.created_by_name || "未记录姓名",
         desired_payment_date: dto.data.desired_payment_date,
         description: dto.data.reason,
-        payment_recipient: {
-            bank_account_id:
-                dto.payee_account?.account_id ?? dto.data.payee_bank_account_id,
-            version: dto.payee_account?.version ?? 0,
-            account_name: dto.payee_account?.account_name ?? "未记录",
-            bank_name: dto.payee_account?.bank_name ?? "未记录",
-            account_number_masked:
-                dto.payee_account?.masked_account_number ?? "未记录",
+        execution_method: dto.data.execution_method ?? {
+            type: "bank_transfer",
         },
+        deposit_account: dto.deposit_account,
+        payment_recipient:
+            dto.data.execution_method?.type === "supplier_deposit"
+                ? null
+                : {
+                      bank_account_id:
+                          dto.payee_account?.account_id ??
+                          dto.data.payee_bank_account_id ??
+                          "",
+                      version: dto.payee_account?.version ?? 0,
+                      account_name: dto.payee_account?.account_name ?? "未记录",
+                      bank_name: dto.payee_account?.bank_name ?? "未记录",
+                      account_number_masked:
+                          dto.payee_account?.masked_account_number ?? "未记录",
+                  },
         total_amount: dto.total_amount,
         paid_amount: paid,
         closed_amount: closed,
@@ -330,6 +346,9 @@ export async function saveRequest(
         data: {
             supplier_id: input.supplier_id,
             payee_bank_account_id: input.bank_account_id,
+            execution_method: input.execution_method ?? {
+                type: "bank_transfer",
+            },
             lines: input.lines,
             desired_payment_date: input.desired_payment_date,
             reason: input.description,
@@ -351,6 +370,9 @@ export async function submitRequestBatch(command: BatchSubmitCommand) {
         requests: command.requests.map((input) => ({
             supplier_id: input.supplier_id,
             payee_bank_account_id: input.bank_account_id,
+            execution_method: input.execution_method ?? {
+                type: "bank_transfer",
+            },
             lines: input.lines,
             desired_payment_date: input.desired_payment_date,
             reason: input.description,
@@ -462,14 +484,36 @@ export async function revealAccount(
     request: PaymentRequest,
     task: { workItemId: string; taskVersion: string },
 ) {
+    if (
+        request.execution_method.type !== "bank_transfer" ||
+        !request.payment_recipient
+    )
+        throw new Error("该申请使用供应商预存款，没有本次银行收款账号")
     const result = await apiPost<{ account_number: string }>(
         `${ROOT}/${encodeURIComponent(request.id)}/reveal-account`,
         {
             work_item_id: task.workItemId,
             expected_task_version: task.taskVersion,
-            expected_bank_account_id: request.payment_recipient.bank_account_id,
-            expected_bank_account_version: request.payment_recipient.version,
+            expected_bank_account_id:
+                request.payment_recipient?.bank_account_id,
+            expected_bank_account_version: request.payment_recipient?.version,
         },
     )
     return result.account_number
+}
+
+export type ExecuteRequestDepositCommand = {
+    work_item_id: string
+    task_version: string
+    expected_version: number
+    idempotency_key: string
+}
+export function executeRequestDeposit(
+    id: string,
+    command: ExecuteRequestDepositCommand,
+) {
+    return apiPost<unknown[]>(
+        `${ROOT}/${encodeURIComponent(id)}/deposit-executions`,
+        command,
+    )
 }

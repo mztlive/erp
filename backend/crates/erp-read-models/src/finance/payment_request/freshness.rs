@@ -3,8 +3,10 @@
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use erp_finance::entity::payable::{
-    PayableAccount, PaymentRequestSourceSnapshot, PurchasePaymentRequest, PurchasePaymentRequestLine,
+    PayableAccount, PaymentRequestExecutionMethod, PaymentRequestSourceSnapshot, PurchasePaymentRequest,
+    PurchasePaymentRequestLine,
 };
+use erp_finance::repository::SupplierDepositExt;
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderStatus};
@@ -21,7 +23,18 @@ impl PurchasePaymentRequestReadService {
         request: &PurchasePaymentRequest,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let Some(snapshot) = &request.payee_account else { return Ok(false) };
+        if let PaymentRequestExecutionMethod::SupplierDeposit { account_id } = &request.data.execution_method
+        {
+            let Some(snapshot) = &request.deposit_account else { return Ok(true) };
+            let Some(account) = self.db.supplier_deposit_accounts().find_by_id(account_id, executor).await?
+            else {
+                return Ok(true);
+            };
+            return Ok(!account.enabled
+                || account.base.id != snapshot.account_id
+                || account.identity != snapshot.identity);
+        }
+        let Some(snapshot) = &request.payee_account else { return Ok(true) };
         let Some(account) = self.db.party_bank_accounts().find_by_id(&snapshot.account_id, executor).await?
         else {
             return Ok(true);

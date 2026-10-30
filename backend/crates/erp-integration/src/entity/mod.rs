@@ -2,3 +2,6 @@
 
 pub mod integration_ops;
 pub mod supplier_callback;
+pub mod supplier_credential;
+pub mod supplier_message;
+pub mod supplier_message_consumer;

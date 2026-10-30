@@ -580,6 +580,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W12",
+                    href: "/finance/supplier-deposits",
+                    label: "供应商预存款",
+                    icon: WalletCardsIcon,
+                    requiredPermissions: ["supplier_deposit:list"],
+                },
+                {
+                    routeId: "W12",
                     href: "/finance/responsibilities",
                     label: "财务责任配置",
                     icon: UsersIcon,

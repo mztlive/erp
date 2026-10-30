@@ -1,4 +1,5 @@
 use std::fmt;
+use std::str::FromStr;
 
 use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
@@ -128,6 +129,24 @@ impl TryFrom<&str> for LoginAccount {
     /// # 错误
     /// 账号为空或字符数不在允许区间时返回 `Error::LogicError`。
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl FromStr for LoginAccount {
+    type Err = Error;
+
+    /// 按 [`LoginAccount::new`] 解析并规范化登录账号。
+    ///
+    /// # 参数
+    /// * `value` - 原始登录账号。
+    ///
+    /// # 返回
+    /// 返回去除首尾空白且保持大小写的登录账号。
+    ///
+    /// # 错误
+    /// 规范化后账号字符数不在允许区间时返回 `Error::LogicError`。
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
         Self::new(value)
     }
 }
@@ -362,6 +381,17 @@ mod tests {
     fn login_account_should_reject_out_of_range_values() {
         assert!(LoginAccount::new("  ").is_err());
         assert!(LoginAccount::new("a".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn standard_account_parsing_keeps_normalization_and_length_boundaries() {
+        assert_eq!("  Admin01  ".parse::<LoginAccount>().unwrap().as_str(), "Admin01");
+        for value in ["abc".to_string(), "a".repeat(64)] {
+            assert_eq!(value.parse::<LoginAccount>().unwrap(), LoginAccount::try_from(value).unwrap());
+        }
+        for value in [String::new(), "  ab  ".to_string(), "a".repeat(65)] {
+            assert!(value.parse::<LoginAccount>().is_err());
+        }
     }
 
     #[test]

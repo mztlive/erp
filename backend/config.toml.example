@@ -87,3 +87,23 @@ availability_validity_seconds = 7200 # ERP成功读取后可供缓存期限，�
 # api_key = "REPLACE_WITH_SECRET"
 # from = "采购部 <orders@example.com>"
 # timeout_seconds = 20
+
+# 京东 VOP：默认关闭；凭据保存在当前应用 MongoDB 的集成域专用集合。
+# 首次导入与续期使用 credential_id 定位，配置和业务响应不保存令牌正文。
+[jd_vop]
+enabled = false
+gateway_url = "https://api.jd.com/routerjson"
+app_key = "replace-with-jd-app-key"
+app_secret = "replace-with-jd-app-secret"
+credential_id = "replace-with-jd-credential-id" # 仅字母、数字、下划线及短横线，不是 URI 或 Redis key
+credential_encryption_key = "replace-with-independent-credential-key" # 独立部署密钥，至少 32 字节；不得复用 app.secret 或 app_secret
+account_scope = "replace-with-jd-account-scope" # 稳定采购账号命名空间，更换账号不得复用
+# image_base_url = "https://verified-image-origin.example/path/" # 仅在核实图片路径规则后填写
+timeout_seconds = 15
+max_concurrent_reads = 2
+requests_per_second = 5
+catalog_sync_interval_seconds = 3600
+catalog_full_sync_interval_seconds = 86400
+message_poll_interval_seconds = 60
+
+# source_type = 3 # 可选；默认采用官方接口默认值 3，确有接入差异时覆盖

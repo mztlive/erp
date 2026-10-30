@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use chrono::{Duration, Utc};
 use erp_core::AccountKind;
@@ -64,7 +65,28 @@ impl TryFrom<&str> for SubjectKind {
     ///
     /// # 返回值
     /// 成功返回主体类型，失败返回空错误。
+    ///
+    /// # 错误
+    /// 字符串不是精确的已知主体类型时返回空错误。
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
+        Self::from_str(value)
+    }
+}
+
+impl FromStr for SubjectKind {
+    type Err = ();
+
+    /// 按精确字符串解析 JWT 主体类型。
+    ///
+    /// # 参数
+    /// * `value` - 主体类型字符串。
+    ///
+    /// # 返回
+    /// 返回已知的后台或供应商门户主体类型。
+    ///
+    /// # 错误
+    /// 未知值、大小写变化或首尾空白均返回空错误。
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
         match value {
             "backoffice" => Ok(Self::Backoffice),
             "supplier_portal" => Ok(Self::SupplierPortal),
@@ -278,6 +300,21 @@ mod tests {
     use super::*;
 
     const TEST_SECRET: &str = "test-secret-that-is-at-least-32-bytes";
+
+    #[test]
+    fn standard_subject_parsing_matches_try_from_and_keeps_exact_values() {
+        for (raw, expected) in [
+            ("backoffice", Ok(SubjectKind::Backoffice)),
+            ("supplier_portal", Ok(SubjectKind::SupplierPortal)),
+            ("", Err(())),
+            ("Backoffice", Err(())),
+            (" backoffice ", Err(())),
+            ("supplier", Err(())),
+        ] {
+            assert_eq!(raw.parse::<SubjectKind>(), expected);
+            assert_eq!(SubjectKind::try_from(raw), expected);
+        }
+    }
 
     #[test]
     fn supplier_token_round_trip_requires_external_kind_and_binding_version() {

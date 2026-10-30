@@ -113,6 +113,7 @@ mod tests {
         let mut request = PurchasePaymentRequest::new(
             "request-1".into(),
             PurchasePaymentRequestData {
+                execution_method: Default::default(),
                 supplier_id: "supplier-1".into(),
                 payee_bank_account_id: "bank-1".into(),
                 lines: vec![PaymentRequestLineData {
@@ -132,14 +133,15 @@ mod tests {
                 payer_party_id: "company-1".into(),
                 payer_party_name: "我方公司".into(),
                 org_unit_id: Some("procurement".into()),
-                payee_account: PaymentRequestAccountSnapshot {
+                deposit_account: None,
+                payee_account: Some(PaymentRequestAccountSnapshot {
                     account_id: "bank-1".into(),
                     version: 1,
                     supplier_party_id: "supplier-party".into(),
                     account_name: "供应商".into(),
                     bank_name: "开户行".into(),
                     masked_account_number: "****1234".into(),
-                },
+                }),
                 lines: vec![PurchasePaymentRequestLine {
                     payable_account_id: "account-1".into(),
                     purchase_order_id: "purchase-1".into(),

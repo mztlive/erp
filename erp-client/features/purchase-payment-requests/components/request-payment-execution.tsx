@@ -94,11 +94,13 @@ export function RequestPaymentExecution({
                     </dl>
                 </section>
             </WorkspaceTaskPageSlot>
-            <SupplierCreditUsePanel
-                request={request}
-                task={task}
-                onTaskCompleted={onTaskCompleted}
-            />
+            {request.execution_method.type === "bank_transfer" && (
+                <SupplierCreditUsePanel
+                    request={request}
+                    task={task}
+                    onTaskCompleted={onTaskCompleted}
+                />
+            )}
             <RequestPaymentForm
                 request={request}
                 task={task}

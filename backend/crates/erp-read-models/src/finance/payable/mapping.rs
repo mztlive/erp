@@ -3,16 +3,44 @@
 use std::str::FromStr;
 
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{PartyId, SupplierAccountId};
+use erp_core::ids::{PartyId, PayableEntryId, SupplierAccountId};
 use erp_core::money::Amount;
+use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
 use erp_party::repository::prelude::*;
 use erp_party::{PartyBankAccount, PartyExt};
 use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::dto::PaymentRecipientView;
+use super::display::enrich_payment_allocation_views_batched_with_executor;
+use super::dto::{PayableEntryView, PaymentAllocationView, PaymentRecipientView};
 use crate::{Error, Result};
+
+/// 读取已授权应付分录的全部来源核销，保留原始来源并补全业务展示字段。
+///
+/// # 参数
+/// * `db` - 数据库实例。
+/// * `entries` - 已通过原应付详情范围授权的真实分录。
+/// * `executor` - 读取授权与分录时使用的同一执行器。
+/// # 返回
+/// 返回按核销时间、身份稳定升序排列的正反向流水；空分录返回空集合。
+/// # 错误
+/// 分配或来源读取失败时返回错误。
+pub(crate) async fn payment_allocations_for_entries(
+    db: &Database,
+    entries: &[PayableEntryView],
+    executor: &mut dyn Executor,
+) -> Result<Vec<PaymentAllocationView>> {
+    let ids = entries.iter().map(|entry| PayableEntryId::new(entry.id.clone())).collect::<Vec<_>>();
+    let mut allocations = db.payment_allocations().find_allocations_by_entries(&ids, executor).await?;
+    allocations.sort_unstable_by(|left, right| {
+        (left.allocated_at, &left.base.id).cmp(&(right.allocated_at, &right.base.id))
+    });
+    let views = allocations.iter().map(PaymentAllocationView::from).collect();
+    let enriched = enrich_payment_allocation_views_batched_with_executor(db, vec![views], executor).await?;
+    Ok(enriched.into_iter().flatten().collect())
+}
 
 /// 解析供应商在当前业务日唯一生效的默认收款账户。
 ///

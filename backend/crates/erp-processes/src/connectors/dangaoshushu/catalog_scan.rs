@@ -33,7 +33,7 @@ impl DangaoshushuConnector {
         } else {
             None
         };
-        let mut page = CatalogPage { items: vec![], skipped: vec![], next };
+        let mut page = CatalogPage { items: vec![], skipped: vec![], next, membership: None };
         let mut details = BTreeMap::new();
         for (index, product) in products.iter().enumerate() {
             let position = format!("第 {number} 页第 {} 个商品", index + 1);

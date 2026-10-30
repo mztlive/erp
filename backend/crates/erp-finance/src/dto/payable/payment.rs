@@ -17,7 +17,8 @@ use super::account::{
 };
 use crate::Result;
 use crate::entity::payable::{
-    AllocationAction, PayableSourceType, PaymentAllocation, PendingPaymentAllocation, SupplierPaymentStatus,
+    AllocationAction, PayableSourceType, PaymentAllocation, PaymentAllocationSource,
+    PendingPaymentAllocation, SupplierPaymentStatus,
 };
 
 // ---------------------------------------------------------------------------
@@ -151,6 +152,9 @@ impl CommitSupplierPaymentRequest {
 pub struct PaymentAllocationView {
     /// 实体主键。
     pub id: String,
+    /// 核销的真实资金来源；供历史追溯，不作为新增现金支出。
+    #[serde(flatten)]
+    pub funding_source: PaymentAllocationSource,
     /// 付款单内追加序号。
     pub allocation_seq: u32,
     /// 分配动作。
@@ -185,6 +189,7 @@ impl From<&PaymentAllocation> for PaymentAllocationView {
     fn from(allocation: &PaymentAllocation) -> Self {
         Self {
             id: allocation.base.id.clone(),
+            funding_source: allocation.source.clone(),
             allocation_seq: allocation.allocation_seq,
             allocation_action: allocation.allocation_action,
             payable_entry_id: allocation.payable_entry_id.to_string(),

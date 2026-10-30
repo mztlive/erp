@@ -1,5 +1,6 @@
 //! 采购单对象中心与应付汇总视图。
 
+use erp_finance::entity::supplier_deposit::DepositExecutionFundsSummary;
 use erp_procurement::entity::purchase_order::{
     PurchaseFreightWaiver, PurchaseSourceResolution, SourceImpactReason, SupplyPriceBasis,
 };
@@ -69,6 +70,13 @@ pub struct PurchaseOrderCenterView {
     pub totals: TotalsView,
     /// 生效版本的销售分配。
     pub allocations: Vec<PurchaseSalesAllocationView>,
+    /// 当前采购版本的接口执行摘要，沿本采购权限读取。
+    pub api_executions: Vec<PurchaseApiExecutionView>,
+    /// 实物采购逐行已应用的ERP收货或发货数量。
+    pub fulfillment_quantities: Vec<PurchaseFulfillmentQuantityView>,
+    /// 仅通过财务账号与主体供应商范围资格后附加；无权时不返回此区块。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_execution_funds: Option<Vec<DepositExecutionFundsSummary>>,
     /// 本采购单的变更单列表。
     pub changes: Vec<PurchaseChangeSummaryView>,
     /// 应付往来子账汇总（采购单生效形成应付后存在，否则为空）。

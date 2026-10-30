@@ -33,6 +33,7 @@ pub mod sales_selection;
 pub mod source_registry;
 pub mod supplier;
 pub mod supplier_api;
+pub mod supplier_deposit;
 pub mod supplier_fulfillment;
 pub mod supplier_offering;
 pub mod supplier_portal;

@@ -61,18 +61,44 @@ function PaymentInformation({
                     </dl>
                 </div>
             )}
-            <div className={fullPage ? "space-y-3" : "space-y-3 border-t pt-5"}>
-                <h3 className="text-sm font-semibold">收款信息</h3>
-                <dl className="grid gap-x-8 gap-y-3 text-sm @min-[640px]/payment-detail:grid-cols-2">
-                    <Field label="收款户名">
-                        {request.payment_recipient.account_name}
-                    </Field>
-                    <Field label="开户行">
-                        {request.payment_recipient.bank_name}
-                    </Field>
-                    <Field label="收款账号">{account}</Field>
-                </dl>
-            </div>
+            {request.execution_method.type === "supplier_deposit" ? (
+                <div
+                    className={
+                        fullPage ? "space-y-3" : "space-y-3 border-t pt-5"
+                    }
+                >
+                    <h3 className="text-sm font-semibold">
+                        付款方式：供应商预存款
+                    </h3>
+                    <p className="text-sm">
+                        人民币预存款
+                        {request.deposit_account?.identity.external_account_ref
+                            ? ` · 账户标识 ****${request.deposit_account.identity.external_account_ref.slice(-4)}`
+                            : "账户已冻结"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                        使用提交时已冻结的同主体、同供应商预存款账户。批准后按采购执行组占用，实际扣款核实后才核销，不登记本次银行付款。
+                    </p>
+                </div>
+            ) : (
+                <div
+                    className={
+                        fullPage ? "space-y-3" : "space-y-3 border-t pt-5"
+                    }
+                >
+                    <h3 className="text-sm font-semibold">收款信息</h3>
+                    <dl className="grid gap-x-8 gap-y-3 text-sm @min-[640px]/payment-detail:grid-cols-2">
+                        <Field label="收款户名">
+                            {request.payment_recipient?.account_name ??
+                                "未记录"}
+                        </Field>
+                        <Field label="开户行">
+                            {request.payment_recipient?.bank_name ?? "未记录"}
+                        </Field>
+                        <Field label="收款账号">{account}</Field>
+                    </dl>
+                </div>
+            )}
         </section>
     )
 }

@@ -21,6 +21,13 @@ use crate::core::middleware::with_permission;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     execution_routes(rbac)
+        .merge(order_routes(rbac))
+        .merge(order_action_routes(rbac))
+        .merge(order_handover_routes(rbac))
+}
+
+fn order_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/supplier-fulfillment-orders",
             with_permission(
@@ -61,6 +68,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 supplier_fulfillment::supplier_fulfillment_order_task_completion_permission_key(),
             ),
         )
+}
+
+fn order_action_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/supplier-fulfillment-orders/{id}",
             with_permission(
@@ -93,6 +104,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 supplier_fulfillment::supplier_fulfillment_order_reject_permission_key(),
             ),
         )
+}
+
+fn order_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/supplier-fulfillment-orders/{id}/handover",
             with_permission(
@@ -121,7 +136,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 
 /// 将配送补充路由单独组装，保持读写各自既有动作授权。
 fn execution_routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new().route(
+    execution_query_routes(rbac).route(
         "/supplier-fulfillment-orders/{id}/execution-setup",
         with_permission(
             get(supplier_fulfillment::execution_setup::supplier_order_execution_setup),
@@ -134,4 +149,16 @@ fn execution_routes(rbac: &SharedRbacService) -> Router<AppState> {
             supplier_fulfillment::execution_setup::save_supplier_order_execution_setup_permission_key(),
         )),
     )
+}
+
+fn execution_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route("/supplier-fulfillment-orders/{id}/execution-address-candidates", with_permission(
+            get(supplier_fulfillment::execution_setup::supplier_order_execution_address_candidates), rbac,
+            supplier_fulfillment::execution_setup::supplier_order_execution_address_candidates_permission_key(),
+        ))
+        .route("/supplier-fulfillment-orders/{id}/execution-query", with_permission(
+            post(supplier_fulfillment::execution_setup::query_supplier_order_execution_result), rbac,
+            supplier_fulfillment::execution_setup::query_supplier_order_execution_result_permission_key(),
+        ))
 }

@@ -387,10 +387,8 @@ fn payment_allocation_groups(
 ) -> (Vec<Amount>, Vec<Vec<PaymentAllocationView>>) {
     let mut allocations_by_payment: HashMap<String, Vec<&PaymentAllocation>> = HashMap::new();
     for allocation in allocations {
-        allocations_by_payment
-            .entry(allocation.supplier_payment_id.to_string())
-            .or_default()
-            .push(allocation);
+        let Some(payment_id) = allocation.source.supplier_payment_id() else { continue };
+        allocations_by_payment.entry(payment_id.to_string()).or_default().push(allocation);
     }
     for group in allocations_by_payment.values_mut() {
         group.sort_by(|left, right| {

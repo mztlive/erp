@@ -87,6 +87,21 @@ impl<'de> Deserialize<'de> for QueryIds {
     }
 }
 
+/// 由资源查询生成的候选项；值是稳定身份，标签用于区分同名候选。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FilterOption {
+    pub value: String,
+    pub label: String,
+}
+/// 分页结果的归属口径；候选由独立目录查询。
+#[derive(Debug, Clone, Serialize)]
+pub struct OwnershipPage<T> {
+    #[serde(flatten)]
+    pub page: crate::PageView<T>,
+    /// 当前负责人权威来源，不代表组织隔离已生效。
+    pub ownership_basis: &'static str,
+}
+
 #[cfg(test)]
 mod tests {
     use serde::de::value::{Error, StrDeserializer};
@@ -121,19 +136,4 @@ mod tests {
         parts.push("u");
         assert_eq!(parse_query_ids(&parts.join(",")), Err("单次人员条件最多 100 个 ID"));
     }
-}
-
-/// 由资源查询生成的候选项；值是稳定身份，标签用于区分同名候选。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FilterOption {
-    pub value: String,
-    pub label: String,
-}
-/// 分页结果的归属口径；候选由独立目录查询。
-#[derive(Debug, Clone, Serialize)]
-pub struct OwnershipPage<T> {
-    #[serde(flatten)]
-    pub page: crate::PageView<T>,
-    /// 当前负责人权威来源，不代表组织隔离已生效。
-    pub ownership_basis: &'static str,
 }

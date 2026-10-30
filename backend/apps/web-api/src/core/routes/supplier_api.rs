@@ -13,9 +13,26 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     connection_routes(rbac)
         .merge(governance_routes(rbac))
         .merge(dangaoshushu_routes(rbac))
+        .merge(jd_vop_routes(rbac))
         .merge(catalog_routes(rbac))
         .merge(adoption_routes(rbac))
         .merge(adoption_batch_routes(rbac))
+}
+
+fn jd_vop_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/supplier-api-connections/{id}/jd-vop-authorization",
+        supplier_api::jd_vop::status_route(with_permission(
+            get(supplier_api::jd_vop::status),
+            rbac,
+            supplier_api::jd_vop::status_permission_key(),
+        ))
+        .merge(supplier_api::jd_vop::authorize_route(with_permission(
+            post(supplier_api::jd_vop::authorize),
+            rbac,
+            supplier_api::jd_vop::authorize_permission_key(),
+        ))),
+    )
 }
 
 fn adoption_batch_routes(rbac: &SharedRbacService) -> Router<AppState> {

@@ -51,7 +51,7 @@ export function useDraftForm(
                     )!
                     const account = candidate.bank_accounts.find(
                         (item) => item.bank_account_id === group.account,
-                    )!
+                    )
                     const missing = group.files.filter(
                         (file) => !uploaded.current.has(file),
                     )
@@ -61,8 +61,21 @@ export function useDraftForm(
                     )
                     requests.push({
                         supplier_id: candidate.supplier_id,
-                        bank_account_id: account.bank_account_id,
-                        bank_account_version: account.version,
+                        bank_account_id:
+                            group.executionMethod === "bank_transfer"
+                                ? account?.bank_account_id
+                                : undefined,
+                        bank_account_version:
+                            group.executionMethod === "bank_transfer"
+                                ? account?.version
+                                : undefined,
+                        execution_method:
+                            group.executionMethod === "supplier_deposit"
+                                ? {
+                                      type: "supplier_deposit",
+                                      account_id: group.depositAccount,
+                                  }
+                                : { type: "bank_transfer" },
                         desired_payment_date: group.date,
                         description: group.description.trim(),
                         attachment_ids: [

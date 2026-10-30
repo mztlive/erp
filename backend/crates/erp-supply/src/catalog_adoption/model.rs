@@ -493,6 +493,7 @@ mod tests {
             url: "https://example.com/a".into(),
             content_fingerprint: None,
             file_asset_id: None,
+            ..CatalogImage::default()
         }]);
         item.refresh_fingerprint().unwrap();
         let preview = CatalogAdoptionPreview {

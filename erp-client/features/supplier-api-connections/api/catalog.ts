@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api"
+import type { SourcePurchaseTerms } from "@/lib/api/source-purchase-terms"
 
 export type CatalogImage = {
     url: string
@@ -42,6 +43,7 @@ export type CatalogItem = {
     suggested_unit?: string | null
     unit_inferred?: boolean
     purchase_price: string | null
+    source_purchase_terms?: SourcePurchaseTerms | null
     market_price?: string | null
     observed_at: number
     sku_id: string | null

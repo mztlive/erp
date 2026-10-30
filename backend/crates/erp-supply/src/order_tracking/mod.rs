@@ -6,11 +6,15 @@ use persistence_core::Result as PersistenceResult;
 use persistence_core::indexes::{named_index, unique_index};
 use repository::OrderTrackingExt;
 
+mod cancellation;
 mod coverage;
+mod messages;
 mod model;
+mod quantities;
 pub mod repository;
 pub use coverage::{DeliveryCoverageLine, complete_delivery_coverage};
 pub use model::{OrderObservation, OrderShipment, OrderTracking, TrackingSourceLine, TrackingState};
+pub use quantities::{AppliedShipment, PendingShipment};
 
 /// 创建订单跟踪集合的唯一身份与有界调度索引。
 /// # 参数

@@ -9,26 +9,26 @@ index = "https://rsproxy.cn/crates.io-index"
 [net]
 git-fetch-with-cli = true
 
-# Cranelift 仅用于本地 nightly dev（见仓库根目录与 backend/ 的 rust-toolchain.toml）。
-# Cargo 1.97 stable 无法解析 profile.dev.codegen-backend，IDE rust-analyzer 必须走 nightly。
-# release / Docker（rust:1.97）不复制本文件，仍走 LLVM。
-[unstable]
-codegen-backend = true
-feature-unification = true
+# # Cranelift 仅用于本地 nightly dev（见仓库根目录与 backend/ 的 rust-toolchain.toml）。
+# # Cargo 1.97 stable 无法解析 profile.dev.codegen-backend，IDE rust-analyzer 必须走 nightly。
+# # release / Docker（rust:1.97）不复制本文件，仍走 LLVM。
+# [unstable]
+# codegen-backend = true
+# feature-unification = true
 
-# 按 workspace 统一依赖特性：`-p <crate>` 与 `-p web-api` 共用同一份依赖产物，
-# 同一改动只编译一次。dev-dependency 特性不在统一范围内，`cargo test` 仍是独立产物。
-[resolver]
-feature-unification = "workspace"
+# # 按 workspace 统一依赖特性：`-p <crate>` 与 `-p web-api` 共用同一份依赖产物，
+# # 同一改动只编译一次。dev-dependency 特性不在统一范围内，`cargo test` 仍是独立产物。
+# [resolver]
+# feature-unification = "workspace"
 
-# 并行编译前端：erp-processes 全量编译实测 89s → 39s，单个 rustc 峰值内存约 3GB。
-[build]
-rustflags = ["-Zthreads=8"]
+# # 并行编译前端：erp-processes 全量编译实测 89s → 39s，单个 rustc 峰值内存约 3GB。
+# [build]
+# rustflags = ["-Zthreads=8"]
 
-[profile.dev]
-codegen-backend = "cranelift"
+# [profile.dev]
+# codegen-backend = "cranelift"
 
-# 依赖（尤其 rustls / aws-lc-rs）走 LLVM：Cranelift 不支持 #[link_name] 的 \u{1} 前缀，
-# 会把 native 符号编错。工作区 crate 仍用上面的 Cranelift。
-[profile.dev.package."*"]
-codegen-backend = "llvm"
+# # 依赖（尤其 rustls / aws-lc-rs）走 LLVM：Cranelift 不支持 #[link_name] 的 \u{1} 前缀，
+# # 会把 native 符号编错。工作区 crate 仍用上面的 Cranelift。
+# [profile.dev.package."*"]
+# codegen-backend = "llvm"

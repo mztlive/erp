@@ -61,6 +61,7 @@ impl AuthorizationPolicy {
                 | "stock_balance"
                 | "stock_movement"
                 | "stock_reservation"
+                | "supplier_deposit"
                 | "integration_error_task"
                 | "reconciliation_difference",
                 _,

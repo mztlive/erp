@@ -20,6 +20,7 @@ import {
     projectInvoice,
     projectPayable,
     projectPayment,
+    projectPaymentAllocation,
 } from "@/features/supplier-payables/api/mappers"
 import type {
     BackendInvoice,
@@ -297,7 +298,9 @@ export async function fetchPayableDetail(
             dueDate: e.due_date,
             occurredAt: instantToIso(e.posted_at),
         })),
-        paymentAllocations: [],
+        paymentAllocations: (a.payment_allocations ?? []).map(
+            projectPaymentAllocation,
+        ),
         invoiceAllocations: invoiceAllocs,
         dataWatermark: `wm-pa-${a.version}`,
         queriedAt: new Date().toISOString(),

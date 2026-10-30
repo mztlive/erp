@@ -39,6 +39,10 @@ members = [
 ]
 resolver = "2"
 
+[workspace.metadata.blaze]
+# Blaze 0.20261027 无法将此宏依赖的 getrandom 编译为 WebAssembly；仅此宏使用原生展开。
+native-proc-macros = ["const-random-macro"]
+
 
 [workspace.dependencies]
 image = { version = "=0.25.10", default-features = false, features = ["png", "webp"] }

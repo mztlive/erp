@@ -34,6 +34,7 @@ use validator::Validate;
 use super::FulfillmentProcess;
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
 use crate::audit::persist_log;
+use crate::supplier_api_orders::wake_purchase_receipts;
 use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
@@ -113,6 +114,7 @@ async fn post_receipt(
         executor,
     )
     .await?;
+    wake_purchase_receipts(db, receipt.purchase_order_id.as_ref(), executor).await?;
     Ok(receipt)
 }
 

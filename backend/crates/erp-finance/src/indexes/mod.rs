@@ -2,8 +2,10 @@
 
 mod command_receipt;
 mod cost;
+mod funds_evidence;
 mod payable;
 mod receivable;
+mod supplier_deposit;
 
 /// 按原相对注册顺序创建成本、应付、应收与财务回执集合索引。
 ///
@@ -20,6 +22,7 @@ pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     payable::ensure(db).await?;
     receivable::ensure(db).await?;
     command_receipt::ensure(db).await?;
+    supplier_deposit::ensure(db).await?;
     payment_request::ensure(db).await
 }
 
@@ -28,5 +31,6 @@ pub use command_receipt::{FINANCE_COMMAND_ID_INDEX, ensure as ensure_command_rec
 pub use cost::ensure as ensure_cost;
 pub use payable::ensure as ensure_payable;
 pub use receivable::ensure as ensure_receivable;
+pub use supplier_deposit::ensure as ensure_supplier_deposits;
 mod payment_request;
 pub use payment_request::ensure as ensure_purchase_payment_requests;

@@ -2,6 +2,7 @@
 
 pub mod candidate_list;
 pub mod credit;
+pub mod deposit;
 pub mod materials;
 pub mod payments;
 

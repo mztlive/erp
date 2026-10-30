@@ -37,7 +37,7 @@ impl PurchasePaymentRequestSubmissionSnapshot {
             || request.submission_version == 0
             || request.submission_version != request.approval_subject_version
             || request.lines.is_empty()
-            || request.payee_account.is_none()
+            || !request.has_funding_snapshot()
         {
             return Err(Error::from("只有来源和审批完整的付款申请提交可以冻结材料"));
         }

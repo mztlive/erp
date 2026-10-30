@@ -3,15 +3,13 @@ use erp_core::common::time::Instant;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderStage};
 use erp_supply::entity::supplier_fulfillment::CancelStatus;
 use erp_supply::ports::connector::common::Lookup;
-use erp_supply::ports::connector::order::{
-    ConfirmPayment, OrderKey, OrderReference, PaymentConfirmation, PaymentState,
-};
+use erp_supply::ports::connector::order::{ConfirmPayment, OrderKey, OrderReference, PaymentState};
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use persistence_core::NoTransaction;
 
-use super::SupplierApiOrderProcess;
 use super::steps::{freeze_action, record_failure};
+use super::{SupplierApiOrderProcess, missing_capability};
 use crate::{Error, Result};
 
 impl SupplierApiOrderProcess {
@@ -45,7 +43,12 @@ impl SupplierApiOrderProcess {
         let action = freeze_action(&mut execution, "payment", &(&reference, &transaction_no, amount))?;
         let request = ConfirmPayment { action, order: reference, transaction_no, amount };
         self.claim(&mut execution, ApiOrderStage::PaymentUnknown).await?;
-        match connector.confirm(&request).await {
+        match connector
+            .payment_confirmation()
+            .ok_or_else(|| missing_capability("履约通知"))?
+            .confirm(&request)
+            .await
+        {
             Ok(state) if state.value == PaymentState::Confirmed => {
                 execution.stage = ApiOrderStage::Observe;
                 execution.blocker = None;
@@ -61,7 +64,16 @@ impl SupplierApiOrderProcess {
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(&execution.connection_id, &mut NoTransaction)
             .await?;
-        match self.runtime.observe_order(&connection, &OrderKey::Merchant(execution.base.id.clone())).await {
+        let frozen = self.decode(&execution)?;
+        match self
+            .runtime
+            .observe_order_with_lines(
+                &connection,
+                &OrderKey::Merchant(execution.base.id.clone()),
+                &frozen.lines,
+            )
+            .await
+        {
             Ok(Lookup::Found(snapshot)) if snapshot.value.payment == Some(PaymentState::Confirmed) => {
                 execution.stage = ApiOrderStage::Observe;
                 execution.blocker = None;

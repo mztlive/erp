@@ -19,6 +19,7 @@ use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::payment::PaymentAllocationView;
 use crate::Result;
 use crate::entity::payable::{EntryDirection, PayableAccountStatus, PayableEntryType, PayableSourceType};
 /// 财务付款详情消费的冲正状态；由组合读模型映射退货事实，保持原 HTTP 编码。
@@ -189,6 +190,8 @@ pub struct PayableAccountView {
     pub created_at: u64,
     /// 应付分录。
     pub entries: Vec<PayableEntryView>,
+    /// 此子账分录的全部正式核销流水，保留银行付款与预存款使用的真实来源。
+    pub payment_allocations: Vec<PaymentAllocationView>,
 }
 
 /// 付款工作台使用的收款账户安全摘要。

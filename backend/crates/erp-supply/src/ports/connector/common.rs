@@ -24,7 +24,7 @@ pub struct ConnectorError {
     pub retry_after: Option<Duration>,
 }
 
-/// 外部商品身份。订货规格号必须非空；禁止按名称或条码自动绑定公司 SKU。
+/// 外部订货身份；规格号不作为实际条码，选品仅按公共严格匹配合同关联或新建公司 SKU。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SupplierSku {
     pub product_id: Option<String>,

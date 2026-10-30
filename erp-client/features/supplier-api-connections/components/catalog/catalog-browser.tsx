@@ -15,6 +15,7 @@ import {
     BusinessTableFrame,
     DataTable,
     MoneyValue,
+    QuantityValue,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -150,6 +151,9 @@ export function CatalogBrowser({
                             <p className="text-xs text-muted-foreground">
                                 {row.original.specification || "未标注规格"}
                             </p>
+                            <p className="num mt-1 text-xs text-muted-foreground">
+                                供应商订货编码：{row.original.spec_id}
+                            </p>
                         </div>
                     </div>
                 ),
@@ -190,6 +194,44 @@ export function CatalogBrowser({
                             display="exact"
                         />
                     ),
+            },
+            {
+                id: "purchase-terms",
+                header: "采购要求",
+                meta: { label: "采购要求" },
+                cell: ({ row }) => {
+                    const terms = row.original.source_purchase_terms
+                    if (!terms) return "未取得"
+                    return (
+                        <div className="space-y-1 text-xs">
+                            <p>
+                                起购：
+                                {terms.minimum_quantity ? (
+                                    <QuantityValue
+                                        value={terms.minimum_quantity}
+                                        unit={row.original.unit ?? ""}
+                                    />
+                                ) : (
+                                    "未取得"
+                                )}
+                            </p>
+                            <p>
+                                倍数：
+                                {terms.quantity_multiple ? (
+                                    <QuantityValue
+                                        value={terms.quantity_multiple}
+                                        unit={row.original.unit ?? ""}
+                                    />
+                                ) : (
+                                    "未取得"
+                                )}
+                            </p>
+                            {terms.restrictions.length > 0 ? (
+                                <Badge variant="warning">含附加采购条件</Badge>
+                            ) : null}
+                        </div>
+                    )
+                },
             },
             {
                 accessorKey: "availability",

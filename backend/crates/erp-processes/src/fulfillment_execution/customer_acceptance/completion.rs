@@ -15,6 +15,7 @@ use super::task::{
     persist_customer_acceptance_task_after_posting,
 };
 use crate::audit::persist_log;
+use crate::supplier_api_orders::wake_customer_receipts;
 use crate::{Error, Result};
 
 /// 用例确定任务来源和审计种类，避免给普通 post 新增幂等回放。
@@ -62,7 +63,8 @@ pub(super) async fn complete_acceptance(
 ) -> Result<()> {
     let mode = kind.mode();
     let mut port = DatabaseCompletion { db, acceptance, actor, kind, audit_event_id: None };
-    finish(&mut port, mode, executor).await
+    finish(&mut port, mode, executor).await?;
+    wake_customer_receipts(db, acceptance, executor).await
 }
 
 #[async_trait]

@@ -35,6 +35,9 @@ export type CapabilityCode =
     | "SERVICE_AREAS"
     | "DELIVERY"
     | "PAYMENT_CONFIRMATION"
+    | "ORDER_CONFIRMATION"
+    | "RECEIPT_CONFIRMATION"
+    | "ORDER_PREFLIGHT"
     | "ORDER"
     | "QUERY"
     | "CANCEL"
@@ -283,6 +286,9 @@ export const CAPABILITY_LABEL: Record<CapabilityCode, string> = {
     SERVICE_AREAS: "可售地区",
     DELIVERY: "配送校验",
     PAYMENT_CONFIRMATION: "履约支付通知",
+    ORDER_CONFIRMATION: "订单确认",
+    RECEIPT_CONFIRMATION: "收货通知",
+    ORDER_PREFLIGHT: "下单预检",
     ORDER: "下单",
     QUERY: "查询",
     CANCEL: "取消",

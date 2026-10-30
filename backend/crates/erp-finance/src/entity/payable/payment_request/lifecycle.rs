@@ -34,6 +34,7 @@ impl PurchasePaymentRequest {
             payer_party_id: String::new(),
             payer_party_name: String::new(),
             payee_account: None,
+            deposit_account: None,
             org_unit_id: None,
             created_by: required(actor.to_owned(), "申请人", 128)?,
             data,
@@ -44,6 +45,7 @@ impl PurchasePaymentRequest {
             approval_instance_id: None,
             work_item_id: None,
             last_reason: None,
+            deposit_reservations: Default::default(),
         })
     }
 
@@ -152,6 +154,9 @@ impl PurchasePaymentRequest {
     /// # 错误
     /// 非待付款、部分付款或已付清，或理由无效时返回错误。
     pub fn close(&mut self, reason: &str) -> Result<Vec<PaymentRequestAllocation>> {
+        if !self.deposit_reservations.is_empty() {
+            return Err(Error::from("预存款仍有占用或扣款待核销，请先核实原执行结果"));
+        }
         if !self.status.can_close() {
             return Err(Error::from("只有已批准、部分付款或已付清申请可以关闭原付款授权"));
         }
@@ -174,6 +179,14 @@ impl PurchasePaymentRequest {
     /// # 错误
     /// 未批准、重复应付、非正金额或超过逐行未付额度时返回错误。
     pub fn record_payment(&mut self, allocations: &[PaymentRequestAllocation]) -> Result<()> {
+        self.require_bank_execution()?;
+        self.record_authorized_payment(allocations)
+    }
+
+    pub(super) fn record_authorized_payment(
+        &mut self,
+        allocations: &[PaymentRequestAllocation],
+    ) -> Result<()> {
         self.ensure_payable()?;
         self.validate_allocations(allocations, false)?;
         for allocation in allocations {
@@ -322,7 +335,8 @@ impl PurchasePaymentRequest {
         self.payer_party_id = submission.payer_party_id;
         self.payer_party_name = submission.payer_party_name;
         self.org_unit_id = submission.org_unit_id;
-        self.payee_account = Some(submission.payee_account);
+        self.payee_account = submission.payee_account;
+        self.deposit_account = submission.deposit_account;
         self.lines = submission.lines;
     }
 
@@ -367,7 +381,11 @@ impl PurchasePaymentRequest {
                 .iter()
                 .find(|line| line.payable_account_id == allocation.payable_account_id)
                 .ok_or_else(|| Error::from("采购应付不在付款申请范围内"))?;
-            let limit = if reversing { line.paid_amount } else { line.remaining() };
+            let limit = if reversing {
+                line.paid_amount
+            } else {
+                self.available_to_execute(&line.payable_account_id)?
+            };
             if allocation.amount > limit {
                 return Err(Error::from("金额超过该采购申请行的可执行额度"));
             }
@@ -380,20 +398,12 @@ fn validate_submission(
     request: &PurchasePaymentRequest,
     submission: &PaymentRequestSubmission,
 ) -> Result<()> {
-    if submission.supplier_id != request.data.supplier_id
-        || submission.payee_account.account_id != request.data.payee_bank_account_id
-    {
+    if submission.supplier_id != request.data.supplier_id {
         return Err(Error::from("付款申请供应商或收款账户与表单不一致"));
     }
     required(submission.payer_party_id.clone(), "我方付款主体", 128)?;
     required(submission.payer_party_name.clone(), "我方付款主体名称", 256)?;
-    required(submission.payee_account.supplier_party_id.clone(), "供应商主体", 128)?;
-    required(submission.payee_account.account_name.clone(), "收款账户户名", 256)?;
-    required(submission.payee_account.bank_name.clone(), "开户行", 256)?;
-    required(submission.payee_account.masked_account_number.clone(), "脱敏收款账号", 128)?;
-    if submission.payee_account.version == 0 {
-        return Err(Error::from("收款账户审核版本无效"));
-    }
+    request.validate_funding_submission(submission)?;
     if submission.lines.len() != request.data.lines.len() {
         return Err(Error::from("冻结采购范围与表单不一致"));
     }

@@ -11,7 +11,10 @@ use crate::entity::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentOrder,
 };
 use crate::ports::connector::common::{Snapshot, SourceRevision};
-use crate::ports::connector::order::{OrderSnapshot, PaymentState};
+use crate::ports::connector::order::{
+    EncryptedOrderEvidence, OrderSnapshot, PaymentState, Shipment, ShipmentEvent, ShipmentLine,
+};
+use crate::ports::connector::order_tree::OrderTree;
 use crate::{Error, Result};
 
 /// 外部订货行与已批准采购、销售行的冻结关联。
@@ -39,10 +42,18 @@ pub enum TrackingState {
 pub struct OrderShipment {
     pub external_shipment_id: Option<String>,
     pub line_ids: Vec<String>,
+    #[serde(default)]
+    pub source_order_no: Option<String>,
+    #[serde(default)]
+    pub quantity_lines: Option<Vec<ShipmentLine>>,
+    #[serde(default)]
+    pub complete_line_coverage: bool,
     pub carrier: Option<String>,
     pub tracking_no: Option<String>,
     /// 来源提供了配送员联系方式；本投影不保存号码，不能作为物流单号展示。
     pub has_courier_contact: bool,
+    #[serde(default)]
+    pub events: Vec<ShipmentEvent>,
 }
 
 /// 调度和应用检查点；与正式供应商订单使用相同 id。
@@ -62,6 +73,8 @@ pub struct OrderTracking {
     pub last_error: Option<String>,
     #[serde(default)]
     pub last_verified_at: Option<Instant>,
+    #[serde(default)]
+    pub applied_shipments: Vec<super::AppliedShipment>,
 }
 
 impl OrderTracking {
@@ -78,6 +91,9 @@ impl OrderTracking {
             || self.latest_observation_id.as_deref() != Some(observation.base.id.as_str())
         {
             return Err(Error::ConflictError("订单跟踪观察已变化，请重新查询".into()));
+        }
+        if observation.cancellation == Some(CancelStatus::Canceled) && !self.applied_shipments.is_empty() {
+            return Err(Error::BusinessLogicError("订单已经存在真实分批发货，请沿原履约流程处理取消".into()));
         }
         if observation.cancellation != Some(CancelStatus::Canceled)
             && observation.refund.is_some_and(|status| status != RefundStatus::None)
@@ -197,6 +213,7 @@ impl OrderTracking {
             applied_observation_id: None,
             last_error: None,
             last_verified_at: None,
+            applied_shipments: Vec::new(),
         })
     }
 }
@@ -218,6 +235,12 @@ pub struct OrderObservation {
     pub refund: Option<RefundStatus>,
     pub payment_confirmed: Option<bool>,
     pub shipments: Option<Vec<OrderShipment>>,
+    #[serde(default)]
+    pub topology: Option<OrderTree>,
+    #[serde(default)]
+    pub complete_line_coverage: bool,
+    #[serde(default)]
+    pub source_evidence: Option<EncryptedOrderEvidence>,
 }
 
 impl OrderObservation {
@@ -229,6 +252,7 @@ impl OrderObservation {
     /// # 错误
     /// 身份、取消、发货或退款证据不一致时拒绝，不生成取消或资金事实。
     pub fn ensure_safe_cancellation(&self, order: &SupplierFulfillmentOrder) -> Result<()> {
+        self.ensure_leaf_cancellations()?;
         let before_dispatch = |status| {
             matches!(
                 status,
@@ -277,18 +301,14 @@ impl OrderObservation {
         if value.reference.merchant_order_no.is_empty() || value.reference.external_order_no.is_empty() {
             return Err(Error::ValidationError("供应商查询缺少订单身份".into()));
         }
-        let shipments = value.shipments.map(|shipments| {
-            shipments
-                .into_iter()
-                .map(|shipment| OrderShipment {
-                    external_shipment_id: shipment.external_shipment_id,
-                    line_ids: shipment.line_ids,
-                    carrier: shipment.carrier,
-                    tracking_no: shipment.tracking_no,
-                    has_courier_contact: shipment.courier_phone.is_some(),
-                })
-                .collect::<Vec<_>>()
-        });
+        if let Some(topology) = &value.topology
+            && topology.root_order_no != value.reference.external_order_no
+        {
+            return Err(Error::ConflictError("来源订单树不属于原始根单".into()));
+        }
+        let shipments = value
+            .shipments
+            .map(|shipments| shipments.into_iter().map(OrderShipment::from_connector).collect::<Vec<_>>());
         validate_shipments(shipments.as_deref(), &tracking.source_lines)?;
         Ok(Self {
             base: BaseModel::new(id),
@@ -304,6 +324,9 @@ impl OrderObservation {
             refund: value.refund,
             payment_confirmed: value.payment.map(|state| state == PaymentState::Confirmed),
             shipments,
+            topology: value.topology,
+            complete_line_coverage: value.complete_line_coverage,
+            source_evidence: value.source_evidence,
         })
     }
 
@@ -316,6 +339,20 @@ impl OrderObservation {
     /// 无。
     pub fn proves_dispatch(&self) -> bool {
         matches!(self.fulfillment, Some(FulfillmentStatus::Shipped | FulfillmentStatus::Completed))
+    }
+
+    /// 判断适配器是否明确证明整个冻结明细已覆盖。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 整单证明或全部包裹的显式证明成立时返回 true；默认缺失不推断。
+    /// # 错误
+    /// 无。
+    pub fn proves_complete_coverage(&self) -> bool {
+        self.complete_line_coverage
+            || self.shipments.as_ref().is_some_and(|shipments| {
+                !shipments.is_empty() && shipments.iter().all(|shipment| shipment.complete_line_coverage)
+            })
     }
 
     /// 比较业务内容，重复查询不追加相同证据。
@@ -336,7 +373,11 @@ impl OrderObservation {
             && self.cancellation == previous.cancellation
             && self.refund == previous.refund
             && self.payment_confirmed == previous.payment_confirmed
-            && self.shipments == previous.shipments
+            && same_shipments(self.shipments.as_deref(), previous.shipments.as_deref())
+            && self.topology == previous.topology
+            && self.complete_line_coverage == previous.complete_line_coverage
+            && self.source_evidence.as_ref().map(|value| &value.content_fingerprint)
+                == previous.source_evidence.as_ref().map(|value| &value.content_fingerprint)
     }
 }
 
@@ -363,4 +404,54 @@ fn validate_shipments(shipments: Option<&[OrderShipment]>, lines: &[TrackingSour
         return Err(Error::ValidationError("供应商包裹明细不属于原订单或超出限制".into()));
     }
     Ok(())
+}
+
+impl OrderShipment {
+    fn from_connector(shipment: Shipment) -> Self {
+        Self {
+            external_shipment_id: shipment.external_shipment_id,
+            line_ids: shipment.line_ids,
+            source_order_no: shipment.source_order_no,
+            quantity_lines: shipment.quantity_lines,
+            complete_line_coverage: shipment.complete_line_coverage,
+            carrier: shipment.carrier,
+            tracking_no: shipment.tracking_no,
+            has_courier_contact: shipment.courier_phone.is_some(),
+            events: shipment.events,
+        }
+    }
+}
+
+fn same_shipments(current: Option<&[OrderShipment]>, previous: Option<&[OrderShipment]>) -> bool {
+    match (current, previous) {
+        (None, None) => true,
+        (Some(current), Some(previous)) => {
+            current.len() == previous.len()
+                && current.iter().zip(previous).all(|(current, previous)| current.same_content(previous))
+        },
+        _ => false,
+    }
+}
+
+impl OrderShipment {
+    fn same_content(&self, previous: &Self) -> bool {
+        self.external_shipment_id == previous.external_shipment_id
+            && self.line_ids == previous.line_ids
+            && self.source_order_no == previous.source_order_no
+            && self.quantity_lines == previous.quantity_lines
+            && self.complete_line_coverage == previous.complete_line_coverage
+            && self.carrier == previous.carrier
+            && self.tracking_no == previous.tracking_no
+            && self.has_courier_contact == previous.has_courier_contact
+            && self.events.len() == previous.events.len()
+            && self.events.iter().zip(&previous.events).all(|(current, previous)| {
+                current.source_time_text == previous.source_time_text
+                    && current.description == previous.description
+                    && match (&current.content_fingerprint, &previous.content_fingerprint) {
+                        (Some(current), Some(previous)) => current == previous,
+                        (None, None) => current.encrypted_description == previous.encrypted_description,
+                        _ => false,
+                    }
+            })
+    }
 }

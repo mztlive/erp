@@ -5,10 +5,11 @@ use config::DangaoshushuConfig;
 use erp_core::ids::SupplierApiConnectionId;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::SupplierConnector;
+use erp_supply::ports::connector::address::AddressRequirement;
 use erp_supply::ports::connector::callback::Callbacks;
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use erp_supply::ports::connector::offer::{AvailabilitySource, DeliverySource, OfferSource, ServiceAreas};
-use erp_supply::ports::connector::order::{Orders, PaymentConfirmation};
+use erp_supply::ports::connector::order::{CoordinateSystem, Orders, PaymentConfirmation};
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 
 mod callback;
@@ -61,6 +62,9 @@ impl DangaoshushuConnector {
 }
 
 impl SupplierConnector for DangaoshushuConnector {
+    fn address_requirement(&self) -> AddressRequirement {
+        AddressRequirement::Geocoded(CoordinateSystem::Bd09)
+    }
     fn connection_id(&self) -> &SupplierApiConnectionId {
         &self.connection_id
     }

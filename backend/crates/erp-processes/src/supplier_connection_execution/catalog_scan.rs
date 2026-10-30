@@ -3,6 +3,9 @@ use std::cmp::Ordering;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_supply::catalog_membership::{
+    CatalogMembershipPage, CatalogMembershipState, repository as memberships,
+};
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_catalog::{SupplierCatalogItem, SupplierCatalogRun};
@@ -29,6 +32,7 @@ struct Withdrawal {
     stamp: SourceStamp,
 }
 struct PreparedPage {
+    membership: Option<CatalogMembershipPage>,
     items: Vec<PreparedObservation>,
     withdrawn: Vec<Withdrawal>,
     next: Option<String>,
@@ -61,6 +65,7 @@ impl SupplierConnectionExecutionProcess {
                 .map_err(|_| storage_error())?
                 .ok_or_else(storage_error)?;
             if run.finished {
+                self.reconcile_catalog_memberships(&run, actor).await?;
                 return Ok(());
             }
             if self.control.stopping() {
@@ -139,8 +144,14 @@ impl SupplierConnectionExecutionProcess {
     ) -> Result<PreparedPage> {
         let count =
             u64::try_from(page.items.len()).map_err(|_| Error::ValidationError("来源商品数量超限".into()))?;
-        let mut prepared =
-            PreparedPage { items: vec![], withdrawn: vec![], next: page.next, count, skipped: page.skipped };
+        let mut prepared = PreparedPage {
+            membership: page.membership,
+            items: vec![],
+            withdrawn: vec![],
+            next: page.next,
+            count,
+            skipped: page.skipped,
+        };
         if let Err(error) = self.prepare_page_items(connection, job, page.items, actor, &mut prepared).await {
             for observation in &prepared.items {
                 observation.media.cleanup_handle().discard_uncommitted().await;
@@ -273,7 +284,7 @@ impl SupplierConnectionExecutionProcess {
                     if job.status != JobStatus::Running {
                         return Err(Error::ConflictError("同步任务已停止".into()));
                     }
-                    save_page_items(&db, &mut checkpoint, page, &actor, executor).await?;
+                    save_page_items(&db, &current, &mut checkpoint, page, &actor, executor).await?;
                     job.record_progress(0, 0, 0, Instant::now())?;
                     db.background_jobs().update(&mut job, executor).await?;
                     Ok(())
@@ -286,11 +297,13 @@ impl SupplierConnectionExecutionProcess {
 /// 在当前页面事务中保存有效来源、异常和检查点。
 async fn save_page_items(
     db: &Database,
+    connection: &SupplierApiConnection,
     checkpoint: &mut SupplierCatalogRun,
     page: PreparedPage,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    save_membership_page(db, connection, checkpoint, &page, executor).await?;
     checkpoint.advance(page.next, page.count)?;
     checkpoint.record_skipped(page.skipped)?;
     for observation in page.items {
@@ -305,7 +318,7 @@ async fn save_page_items(
     Ok(())
 }
 
-fn verify_connection(connection: &SupplierApiConnection, run: &SupplierCatalogRun) -> Result<()> {
+pub(super) fn verify_connection(connection: &SupplierApiConnection, run: &SupplierCatalogRun) -> Result<()> {
     if connection.base.id != run.connection_id
         || connection.technical_config_version != run.technical_config_version
     {
@@ -314,7 +327,44 @@ fn verify_connection(connection: &SupplierApiConnection, run: &SupplierCatalogRu
     Ok(())
 }
 
-async fn save_observation(
+async fn save_membership_page(
+    db: &Database,
+    connection: &SupplierApiConnection,
+    checkpoint: &mut SupplierCatalogRun,
+    page: &PreparedPage,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let Some(proof) = &page.membership else { return Ok(()) };
+    if proof.scan_finished != page.next.is_none() {
+        return Err(Error::ConflictError("目录池完成证据与本页检查点不一致".into()));
+    }
+    let scan = memberships::record_page(
+        db,
+        &connection.base.id,
+        connection.supplier_id.as_ref(),
+        &checkpoint.base.id,
+        proof,
+        Instant::now(),
+        executor,
+    )
+    .await?;
+    if scan.pages != u64::from(checkpoint.pages) + 1 {
+        return Err(Error::ConflictError("目录池成员与目录页面进度不一致".into()));
+    }
+    if scan.state == CatalogMembershipState::Uncertain {
+        checkpoint.record_skipped(vec!["商品池授权范围需要核实；已保留本次观察，未按缺项撤回商品".into()])?;
+    }
+    Ok(())
+}
+
+/// 复用同一目录规则保存完整查询观察并同步既有供给及公司资料。
+/// # 参数
+/// `db`、`item`、`actor` 为已核验来源与采集授权，`executor` 属于调用方结果事务。
+/// # 返回
+/// 来源观察、供给及已选品资料按原规则原子应用。
+/// # 错误
+/// 来源身份、版本、供给关联或仓储失败时拒绝。
+pub(crate) async fn save_observation(
     db: &Database,
     mut item: SupplierCatalogItem,
     actor: &AuditActor,
@@ -356,7 +406,7 @@ async fn apply_withdrawal(
     Ok(())
 }
 
-fn classify(error: Error) -> ClassifiedError {
+pub(super) fn classify(error: Error) -> ClassifiedError {
     match error {
         Error::ConflictError(_) => ClassifiedError {
             class: SupplierFailureClass::BusinessRejected,

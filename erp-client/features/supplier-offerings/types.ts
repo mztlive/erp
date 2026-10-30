@@ -1,6 +1,7 @@
 /** 公司 SKU 的供应商供给合同。 */
 
 import type { WorkItemProjection } from "@/features/work-items/types"
+import type { SourcePurchaseTerms } from "@/lib/api/source-purchase-terms"
 
 export type OfferingSourceType = "MANUAL" | "EXCEL" | "API"
 export type OfferingStatus = "ACTIVE" | "PAUSED" | "STOPPED"
@@ -11,6 +12,7 @@ export type AvailabilityStatus =
     | "STALE"
 
 export type SupplierOfferingView = Readonly<{
+    source_purchase_terms?: SourcePurchaseTerms | null
     id: string
     sku_id: string
     sku_no?: string | null
@@ -211,6 +213,7 @@ export type OfferingRevisionView = Pick<
     | "input_tax_rate"
     | "bulk_minimum_order_quantity"
     | "product_capabilities"
+    | "source_purchase_terms"
     | "valid_from"
     | "valid_to"
 > &

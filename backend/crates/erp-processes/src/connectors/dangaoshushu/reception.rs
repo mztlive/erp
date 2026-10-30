@@ -99,6 +99,9 @@ fn hint(notice: &ChangeNotice) -> Result<SupplierRefreshHint> {
         ChangeTopic::Availability => "availability",
         ChangeTopic::Price => "price",
         ChangeTopic::Region => "region",
+        ChangeTopic::Address => {
+            return Err(Error::ValidationError("当前推送协议不接收地址字典变更".into()));
+        },
         ChangeTopic::Order => "order",
         ChangeTopic::Refund => "refund",
     };
@@ -106,13 +109,22 @@ fn hint(notice: &ChangeNotice) -> Result<SupplierRefreshHint> {
         RefreshTarget::Brand(id) => ("brand", id.clone(), None),
         RefreshTarget::Product(id) => ("product", id.clone(), None),
         RefreshTarget::Sku(sku) => ("sku", sku.spec_id.clone(), sku.product_id.clone()),
+        RefreshTarget::Address(_) => {
+            return Err(Error::ValidationError("当前推送协议不接收地址字典变更".into()));
+        },
         RefreshTarget::Order(OrderKey::Merchant(id)) => ("merchant_order", id.clone(), None),
         RefreshTarget::Order(OrderKey::External(id)) => ("external_order", id.clone(), None),
         RefreshTarget::Refund { .. } => {
             return Err(Error::ValidationError("不接受缺少单笔身份的退款事实".into()));
         },
     };
-    Ok(SupplierRefreshHint { topic: topic.into(), target_kind: target_kind.into(), object_id, product_id })
+    Ok(SupplierRefreshHint {
+        topic: topic.into(),
+        target_kind: target_kind.into(),
+        object_id,
+        product_id,
+        funds_transaction_id: None,
+    })
 }
 
 #[cfg(test)]

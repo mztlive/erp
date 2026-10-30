@@ -358,6 +358,39 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             shippedQty: "—",
             remainingQty: "—",
         },
+        apiExecutions: center.api_executions?.map((execution) => ({
+            orderId: execution.order_id,
+            orderNo: execution.order_no,
+            // 旧响应只在履约单存在时返回业务单号，兼容先升级客户端的部署顺序。
+            detailAvailable:
+                execution.detail_available ??
+                execution.order_no.trim().length > 0,
+            stage: execution.stage,
+            blocker: execution.blocker,
+            currentOrderCount: execution.current_order_count,
+            confirmedOrderCount: execution.confirmed_order_count,
+        })),
+        apiExecutionFunds: center.api_execution_funds?.map((funds) => ({
+            executionGroupId: funds.execution_group_id,
+            status: funds.status,
+            reconciliationRequired: funds.reconciliation_required,
+            approvedAmount: funds.approved_amount,
+            reservedAmount: funds.reserved_amount,
+            verifiedDebitAmount: funds.verified_debit_amount,
+            settledAmount: funds.settled_amount,
+            returnedAmount: funds.returned_amount,
+            pendingReturnAmount: funds.pending_return_amount,
+        })),
+        fulfillmentQuantities: center.fulfillment_quantities?.map((line) => ({
+            lineId: line.line_id,
+            productName: line.product_name,
+            unit: line.unit,
+            orderedQuantity: line.ordered_quantity,
+            inboundQuantity: line.inbound_quantity,
+            shippedQuantity: line.shipped_quantity,
+            remainingQuantity: line.remaining_quantity,
+            blocker: line.blocker,
+        })),
         changes: (center.changes ?? []).map((c) => ({
             changeId: c.change_id,
             label: c.reason || "采购变更",

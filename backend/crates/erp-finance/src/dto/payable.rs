@@ -106,7 +106,7 @@ mod tests {
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new("alloc-1"),
             PaymentAllocationData {
-                supplier_payment_id: SupplierPaymentId::new("pay-1"),
+                source: SupplierPaymentId::new("pay-1").into(),
                 payable_entry_id: PayableEntryId::new("pe-1"),
                 allocation_seq: 1,
                 allocation_action: AllocationAction::Apply,

@@ -18,6 +18,7 @@ import {
     catalogMediaBlocker,
 } from "../../lib/catalog-media"
 import { CatalogSourceImage } from "./catalog-source-image"
+import { SourcePurchaseTerms } from "./source-purchase-terms"
 import {
     CatalogPreviewGallery,
     CatalogPreviewThumbnails,
@@ -221,6 +222,11 @@ export function CatalogPreviewSheet({
                         <dd className="num break-all">{item.spec_id}</dd>
                     </div>
                 </dl>
+                <SourcePurchaseTerms
+                    terms={item.source_purchase_terms}
+                    unit={item.unit}
+                    canReadCost={canReadCost}
+                />
                 {choice.error ? (
                     <div role="alert" className="space-y-2 text-sm">
                         <p className="text-destructive">

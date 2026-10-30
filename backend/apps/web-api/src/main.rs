@@ -121,7 +121,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 
     let app_port = config.app.port;
 
-    let connectors = ExternalConnectorPorts::from_config(&config)?;
+    let connectors = ExternalConnectorPorts::from_database(&config, db.clone())?;
     let state = AppState::new_with_connectors(db, cfg.clone(), storage, connectors);
     persistence_core::ensure_transaction_support(&state.db()).await?;
     crate::indexes::ensure_indexes(&state.db()).await?;
@@ -144,12 +144,16 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     let supplier_order_worker = web_api::core::supplier_order_worker::spawn(state.clone());
     let catalog_control = spawn_background_runner(state.clone())?;
     web_api::core::data_transfer::spawn(state.clone());
+    let authorization_tasks = state.jd_vop_authorization_tasks();
     let result = run_app(app_port, state, catalog_control.clone()).await;
     if !catalog_control.drain(std::time::Duration::from_secs(20)).await {
         warn!("目录任务未在发布等待期内退出，将由心跳超时恢复");
     }
     supplier_order_worker.stop().await;
     outbox_worker.stop().await;
+    if authorization_tasks.shutdown().await.is_err() {
+        warn!("京东授权任务退出状态待核实，请查询原授权记录");
+    }
     result
 }
 

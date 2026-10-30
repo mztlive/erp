@@ -107,7 +107,8 @@ async fn payable(
     for row in
         db.payment_allocations().find_many(doc! { "payable_entry_id": { "$in": &entries } }, executor).await?
     {
-        let id = row.supplier_payment_id.to_string();
+        let Some(payment_id) = row.source.supplier_payment_id() else { continue };
+        let id = payment_id.to_string();
         sources.add(DocumentType::SupplierPayment, id.clone(), Some(sale), None);
         allocation(
             sources,

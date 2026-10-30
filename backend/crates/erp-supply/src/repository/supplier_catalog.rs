@@ -19,6 +19,43 @@ pub const ITEMS: &str = "supplier_catalog_items";
 pub const RUNS: &str = "supplier_catalog_runs";
 pub const IDENTITY_REVIEWS: &str = "supplier_catalog_identity_reviews";
 
+/// 来源分组消息只能补查本连接已有目录，不推导或合并公司商品身份。
+pub enum CatalogMessageTarget<'a> {
+    Product(&'a str),
+    Brand(&'a str),
+}
+
+/// 有界读取来源商品或品牌消息涉及的当前目录规格。
+/// # 参数
+/// `connection` 来自服务端绑定；`target` 是适配器解码的来源分组。
+/// # 返回
+/// 最多51条记录；调用方只允许一次处理50条，超限须保留消息并完整重建基线。
+/// # 错误
+/// 仓储查询失败返回原错误。
+pub async fn message_targets(
+    db: &Database,
+    connection: &str,
+    target: CatalogMessageTarget<'_>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierCatalogItem>> {
+    let mut filter = doc! {"connection_id":connection,"deleted_at":0_i64};
+    match target {
+        CatalogMessageTarget::Product(id) => {
+            filter.insert("product_id", id);
+        },
+        CatalogMessageTarget::Brand(id) => {
+            filter.insert("brand_id", id);
+        },
+    }
+    mongo_ops::find_many(
+        &db.collection::<SupplierCatalogItem>(ITEMS),
+        filter,
+        FindOptions::builder().limit(51).build(),
+        executor,
+    )
+    .await
+}
+
 /// 直接读取当前配置与映射版本的成功检查点，不受任务展示条数限制。
 /// # 参数
 /// `full_only` 只读取无跳过项的成功全量；普通查询保留跳过项以阻止错误增量。

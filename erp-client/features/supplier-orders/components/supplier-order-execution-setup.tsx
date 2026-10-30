@@ -10,27 +10,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isApiError } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     useSaveSupplierExecutionSetupMutation,
     useSupplierExecutionSetupQuery,
+    useQuerySupplierExecutionResultMutation,
 } from "../hooks/use-execution-setup"
 import { SupplierExecutionSetupForm } from "./supplier-order-execution-setup-form"
-
-const STAGE_LABEL: Record<string, string> = {
-    QUEUED: "等待接口处理",
-    AWAITING_SETUP: "等待补充配送资料",
-    PREPARE_ADDRESS: "正在核验配送地址",
-    ADDRESS_UNKNOWN: "地址提交结果待查询",
-    PLAN_DELIVERY: "正在查询配送方案",
-    CREATE: "正在向供应商下单",
-    CREATION_UNKNOWN: "下单结果待查询",
-    CONFIRM_PAYMENT: "正在确认供应商履约接口",
-    PAYMENT_UNKNOWN: "供应商履约确认结果待查询",
-    OBSERVE: "订单已提交，持续跟踪中",
-    STOPPED: "接口执行已暂停",
-}
+import { SupplierOrderFourLevelAddressForm } from "./supplier-order-four-level-address-form"
+import { SUPPLIER_EXECUTION_STAGE_LABEL } from "../lib/execution-stage"
 
 export function SupplierOrderExecutionSetup({
     orderId,
@@ -43,17 +32,42 @@ export function SupplierOrderExecutionSetup({
 }) {
     const query = useSupplierExecutionSetupQuery(orderId)
     const mutation = useSaveSupplierExecutionSetupMutation(orderId)
+    const resultQuery = useQuerySupplierExecutionResultMutation(orderId)
     const [open, setOpen] = React.useState(false)
     const [saved, setSaved] = React.useState(false)
     const setup = query.data
+    const saveOutcomeUnknown =
+        Boolean(mutation.error) &&
+        (!isApiError(mutation.error) ||
+            ["Network", "Parse", "Unknown"].includes(mutation.error.kind) ||
+            (mutation.error.status != null && mutation.error.status >= 500) ||
+            Boolean(mutation.error.code?.includes("UNKNOWN")))
     const prefix = `supplier-order-execution-${toAutomationIdSegment(orderId)}`
     const editable =
         setup?.stage === "AWAITING_SETUP" &&
-        (setup.geocode_editable || setup.choice_editable)
+        (setup.geocode_editable ||
+            setup.choice_editable ||
+            setup.supplier_address_editable)
+    const fourLevelAddress = setup?.address_requirement === "FOUR_LEVEL"
+    const unknown =
+        setup &&
+        [
+            "CREATION_UNKNOWN",
+            "PAYMENT_UNKNOWN",
+            "CONFIRMATION_UNKNOWN",
+        ].includes(setup.stage)
     if (query.isPending || (!query.isError && !setup)) return null
     const refresh = async () => {
         const result = await query.refetch()
-        if (result.isSuccess) mutation.reset()
+        if (
+            result.isSuccess &&
+            (!saveOutcomeUnknown ||
+                !mutation.variables ||
+                result.data?.execution_version !==
+                    mutation.variables.expected_version ||
+                result.data?.stage !== "AWAITING_SETUP")
+        )
+            mutation.reset()
     }
     return (
         <>
@@ -63,7 +77,8 @@ export function SupplierOrderExecutionSetup({
                 <AlertTitle>
                     {query.isError
                         ? "接口配送资料暂不可查"
-                        : (STAGE_LABEL[setup!.stage] ?? "接口执行处理中")}
+                        : (SUPPLIER_EXECUTION_STAGE_LABEL[setup!.stage] ??
+                          "接口执行处理中")}
                 </AlertTitle>
                 <AlertDescription>
                     {query.isError ? (
@@ -88,7 +103,7 @@ export function SupplierOrderExecutionSetup({
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                    mutation.reset()
+                                    if (!saveOutcomeUnknown) mutation.reset()
                                     setOpen(true)
                                 }}
                             >
@@ -110,7 +125,52 @@ export function SupplierOrderExecutionSetup({
                         >
                             刷新执行状态
                         </Button>
+                        {setup?.result_query_available ? (
+                            <Button
+                                id={`${prefix}-query-original`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    !canEdit ||
+                                    resultQuery.isPending ||
+                                    query.isFetching
+                                }
+                                onClick={() =>
+                                    void resultQuery
+                                        .mutateAsync(setup.execution_version)
+                                        .catch(() => undefined)
+                                }
+                            >
+                                {resultQuery.isPending
+                                    ? "正在提交查询…"
+                                    : "查询原结果"}
+                            </Button>
+                        ) : null}
                     </div>
+                    {setup?.result_query_available && !canEdit ? (
+                        <p className="mt-2 text-xs">
+                            请求查询原执行结果需要供应商订单提交权限。
+                        </p>
+                    ) : null}
+                    {unknown ? (
+                        <p className="mt-2 text-xs">
+                            原请求可能已送达，暂未查到或尚未确认不代表可以重新发送。
+                        </p>
+                    ) : null}
+                    {resultQuery.error ? (
+                        <p
+                            role="alert"
+                            className="mt-2 text-sm text-destructive"
+                        >
+                            {getErrorMessage(resultQuery.error)}
+                        </p>
+                    ) : null}
+                    {resultQuery.isSuccess ? (
+                        <p className="mt-2 text-xs">
+                            已安排查询原请求，实际结果以随后核实的订单进度为准。
+                        </p>
+                    ) : null}
                 </AlertDescription>
             </Alert>
             <Dialog
@@ -126,10 +186,38 @@ export function SupplierOrderExecutionSetup({
                     <DialogHeader>
                         <DialogTitle>完善接口配送资料</DialogTitle>
                         <DialogDescription>
-                            核对当前采购的收件地址，再补充真实地区坐标或选择供应商配送方案。
+                            {fourLevelAddress
+                                ? "核对当前采购的完整收货地址，从供应商候选中确认四级区域或配送方案。"
+                                : "核对当前采购的收件地址，再补充真实地区坐标或选择供应商配送方案。"}
                         </DialogDescription>
                     </DialogHeader>
-                    {setup && editable ? (
+                    {setup &&
+                    editable &&
+                    setup.supplier_address_editable &&
+                    fourLevelAddress ? (
+                        <SupplierOrderFourLevelAddressForm
+                            key={setup.execution_version}
+                            orderId={orderId}
+                            setup={setup}
+                            addressSummary={addressSummary}
+                            pending={
+                                mutation.isPending ||
+                                query.isFetching ||
+                                Boolean(mutation.error)
+                            }
+                            error={mutation.error}
+                            onCancel={() => setOpen(false)}
+                            onSubmit={async (request) => {
+                                try {
+                                    await mutation.mutateAsync(request)
+                                    setSaved(true)
+                                    setOpen(false)
+                                } catch {
+                                    /* 原保存结果先查证 */
+                                }
+                            }}
+                        />
+                    ) : setup && editable ? (
                         <SupplierExecutionSetupForm
                             key={setup.execution_version}
                             orderId={orderId}
@@ -158,15 +246,45 @@ export function SupplierOrderExecutionSetup({
                         </p>
                     )}
                     {mutation.error ? (
-                        <Button
-                            id={`${prefix}-retry-read`}
-                            type="button"
-                            variant="outline"
-                            disabled={query.isFetching}
-                            onClick={() => void refresh()}
-                        >
-                            重新读取配送资料
-                        </Button>
+                        <div className="space-y-3">
+                            {saveOutcomeUnknown && mutation.variables ? (
+                                <>
+                                    <p className="text-sm text-warning-soft-foreground">
+                                        原保存结果尚未查明，已保留本次地址选择和原操作。重试只提交原资料，不更换地址票据。
+                                    </p>
+                                    <Button
+                                        id={`${prefix}-retry-original-save`}
+                                        type="button"
+                                        variant="outline"
+                                        disabled={
+                                            mutation.isPending ||
+                                            query.isFetching
+                                        }
+                                        onClick={() => {
+                                            if (!mutation.variables) return
+                                            void mutation
+                                                .mutateAsync(mutation.variables)
+                                                .then(() => {
+                                                    setSaved(true)
+                                                    setOpen(false)
+                                                })
+                                                .catch(() => undefined)
+                                        }}
+                                    >
+                                        重试原保存
+                                    </Button>
+                                </>
+                            ) : null}
+                            <Button
+                                id={`${prefix}-retry-read`}
+                                type="button"
+                                variant="outline"
+                                disabled={query.isFetching}
+                                onClick={() => void refresh()}
+                            >
+                                重新读取配送资料
+                            </Button>
+                        </div>
                     ) : null}
                 </DialogContent>
             </Dialog>

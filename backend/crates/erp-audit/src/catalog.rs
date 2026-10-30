@@ -235,6 +235,11 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("purchase_payment_request.withdraw", "purchase_payment_request", "撤回采购付款申请"),
     action("purchase_payment_request.close", "purchase_payment_request", "关闭采购付款申请未付部分"),
     action("purchase_payment_request.pay", "purchase_payment_request", "登记采购付款申请实际付款"),
+    action(
+        "purchase_payment_request.deposit.execute",
+        "purchase_payment_request",
+        "执行采购付款申请预存款占用",
+    ),
     action("purchase_payment_request.account.reveal", "purchase_payment_request", "查看采购付款申请收款账号"),
     action("purchase_payment_request.material.read", "purchase_payment_request", "读取采购付款申请材料"),
     action("purchase_receipt.create", "purchase_receipt", "创建采购收货单"),
@@ -338,17 +343,49 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("supplier_api_connection.health_check.settle", "supplier_api_connection", "登记接口健康检查结果"),
     action("supplier_api_connection.run_health_check", "supplier_api_connection", "发起供应商接口健康检查"),
     action("supplier_api_connection.start_catalog_sync", "supplier_api_connection", "发起供应商目录同步"),
+    action("supplier_credential.authorize", "supplier_credential", "办理京东账号授权"),
+    action("supplier_credential.import", "supplier_credential", "导入或重新授权供应商技术凭据"),
+    action("supplier_credential.refresh", "supplier_credential", "登记供应商技术凭据续期"),
     action(
         "supplier_api_connection.update_business_profile",
         "supplier_api_connection",
         "修改供应商接口业务资料",
     ),
     action("supplier_capability.handover", "supplier_capability", "能力负责人交接"),
+    action("supplier_deposit.create", "supplier_deposit", "创建供应商预存款账户"),
+    action("supplier_deposit.recharge_request", "supplier_deposit", "申请供应商预存款充值"),
+    action("supplier_deposit.approve_recharge", "supplier_deposit", "批准供应商预存款充值"),
+    action("supplier_deposit.pay_recharge", "supplier_deposit", "登记供应商预存款充值付款"),
+    action("supplier_deposit.receive_recharge", "supplier_deposit", "核实供应商预存款充值到账"),
+    action("supplier_deposit.authorize", "supplier_deposit", "授予供应商预存款执行授权"),
+    action("supplier_deposit.revoke", "supplier_deposit", "撤销供应商预存款执行授权"),
+    action("supplier_deposit.reconcile", "supplier_deposit", "核对供应商预存款账户"),
+    action("supplier_deposit.resolve", "supplier_deposit", "核实并结清供应商预存款对账差异"),
+    action("supplier_deposit.reserve", "supplier_deposit", "占用供应商订单预存款"),
+    action("supplier_deposit.release", "supplier_deposit", "释放已核实无风险的供应商预存款占用"),
+    action("supplier_deposit.use", "supplier_deposit", "核实供应商预存款订单扣款"),
+    action("supplier_deposit.settle", "supplier_deposit", "核销供应商预存款使用"),
+    action("supplier_deposit.refund", "supplier_deposit", "核实供应商预存款返款"),
+    action("supplier_deposit.bind", "supplier_deposit", "绑定供应商接口资金账户"),
+    action("supplier_deposit.funds.receive", "supplier_deposit", "接收供应商资金交易证据"),
+    action("supplier_deposit.funds.review", "supplier_deposit", "登记供应商资金待核对证据"),
+    action("supplier_deposit.funds.balance", "supplier_deposit", "保存供应商账户余额观察"),
     action("supplier_fulfillment.after_sales_action", "supplier_order_action", "登记供应商售后操作"),
+    action("supplier_fulfillment.api_cancel", "supplier_order_action", "登记供应商接口订单取消申请"),
     action("supplier_fulfillment.execution_setup", "supplier_fulfillment_order", "补充供应商订单配送资料"),
     action("supplier_fulfillment.handover", "supplier_fulfillment_order", "交接供应商履约跟进责任"),
     action("supplier_fulfillment.observe", "supplier_fulfillment_order", "自动同步供应商订单"),
     action("supplier_fulfillment.observe_delivery", "delivery", "自动同步供应商发货"),
+    action(
+        "supplier_fulfillment.receipt_confirmation",
+        "supplier_fulfillment_order",
+        "核实并通知供应商实际收货",
+    ),
+    action(
+        "supplier_fulfillment.query_original_result",
+        "supplier_fulfillment_order",
+        "查询供应商原执行结果",
+    ),
     action("supplier_fulfillment.investigate", "SUPPLIER_FULFILLMENT_ORDER", "登记供应商履约调查"),
     action("supplier_fulfillment.refund_result", "supplier_refund_fact", "登记供应商退款结果"),
     action("supplier_fulfillment.reject", "supplier_fulfillment_order", "驳回供应商履约订单"),
@@ -458,7 +495,107 @@ pub fn registered_actions() -> &'static [AuditAction] {
 mod tests {
     use std::collections::HashSet;
 
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+
     use super::{registered_action, registered_actions};
+    use crate::AuditActorLogs;
+
+    fn finance_actor() -> AuditActor {
+        AuditActor::new("finance".into(), "finance-account".into(), AccountKind::Admin)
+    }
+
+    #[test]
+    fn supplier_deposit_actions_create_runtime_logs_with_exact_account_resources() {
+        for code in [
+            "supplier_deposit.create",
+            "supplier_deposit.recharge_request",
+            "supplier_deposit.approve_recharge",
+            "supplier_deposit.pay_recharge",
+            "supplier_deposit.receive_recharge",
+            "supplier_deposit.authorize",
+            "supplier_deposit.revoke",
+            "supplier_deposit.reconcile",
+            "supplier_deposit.resolve",
+            "supplier_deposit.reserve",
+            "supplier_deposit.release",
+            "supplier_deposit.use",
+            "supplier_deposit.settle",
+            "supplier_deposit.refund",
+            "supplier_deposit.bind",
+            "supplier_deposit.funds.receive",
+            "supplier_deposit.funds.review",
+            "supplier_deposit.funds.balance",
+        ] {
+            let log = finance_actor().resource_log(code, "supplier_deposit", "account".into()).unwrap();
+            assert!(log.success);
+            assert_eq!(log.action, code);
+            assert_eq!(log.resource_type, "supplier_deposit");
+            assert_eq!(log.resource_id.as_deref(), Some("account"));
+            assert_eq!(log.structured_event.as_ref().unwrap().action_code, code);
+            assert!(registered_action(code, "supplier_deposit").unwrap().allowed_fields.is_empty());
+            assert!(finance_actor().resource_log(code, "supplier_payment", "payment".into()).is_err());
+        }
+    }
+
+    #[test]
+    fn deposit_execution_and_original_order_controls_create_runtime_logs_with_exact_targets() {
+        for (code, resource) in [
+            ("purchase_payment_request.deposit.execute", "purchase_payment_request"),
+            ("supplier_fulfillment.api_cancel", "supplier_order_action"),
+            ("supplier_fulfillment.query_original_result", "supplier_fulfillment_order"),
+        ] {
+            let log = finance_actor().resource_log(code, resource, "original-object".into()).unwrap();
+            assert_eq!(log.action, code);
+            assert_eq!(log.resource_type, resource);
+            assert_eq!(log.resource_id.as_deref(), Some("original-object"));
+            assert_eq!(log.structured_event.as_ref().unwrap().action_code, code);
+            assert!(finance_actor().resource_log(code, "supplier_deposit", "account".into()).is_err());
+        }
+    }
+
+    #[test]
+    fn deposit_actions_follow_existing_action_whitespace_normalization() {
+        let log = finance_actor()
+            .resource_log(" supplier_deposit.use ", "supplier_deposit", "account".into())
+            .unwrap();
+        assert_eq!(log.action, "supplier_deposit.use");
+    }
+
+    #[test]
+    fn unknown_deposit_or_embedded_resource_actions_remain_rejected_at_runtime() {
+        for code in [
+            "supplier_deposit.unknown",
+            "supplier_deposit.funds.unknown",
+            "supplier_deposit.funds.*",
+            "supplier_deposit.use:account",
+        ] {
+            assert!(finance_actor().resource_log(code, "supplier_deposit", "account".into()).is_err());
+        }
+        assert!(
+            finance_actor()
+                .resource_log(
+                    "purchase_payment_request.deposit.unknown",
+                    "purchase_payment_request",
+                    "request".into()
+                )
+                .is_err()
+        );
+        assert!(
+            finance_actor()
+                .resource_log(
+                    "supplier_fulfillment.query_original_result",
+                    "supplier_order_action",
+                    "action".into()
+                )
+                .is_err()
+        );
+        assert!(
+            finance_actor()
+                .resource_log("supplier_fulfillment.api_cancel", "supplier_fulfillment_order", "order".into())
+                .is_err()
+        );
+    }
 
     #[test]
     fn api_product_and_fulfillment_actions_create_real_audits_with_exact_resource_pairs() {
@@ -478,6 +615,10 @@ mod tests {
             ("supplier_fulfillment.execution_setup", "supplier_fulfillment_order"),
             ("supplier_fulfillment.observe", "supplier_fulfillment_order"),
             ("supplier_fulfillment.observe_delivery", "delivery"),
+            ("supplier_fulfillment.receipt_confirmation", "supplier_fulfillment_order"),
+            ("supplier_credential.authorize", "supplier_credential"),
+            ("supplier_credential.import", "supplier_credential"),
+            ("supplier_credential.refresh", "supplier_credential"),
         ] {
             let actor = AuditActor::new("buyer".into(), "buyer-account".into(), AccountKind::Admin);
             let log = actor.resource_log(code, resource, "business-object".into()).unwrap();

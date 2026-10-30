@@ -6,6 +6,7 @@ import type { RequestListQuery } from "../lib/list-query"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     commandRequest,
+    executeRequestDeposit,
     commitPayment,
     downloadAttachment,
     fetchCandidates,
@@ -188,5 +189,27 @@ export function useSubmitRequestBatchMutation() {
     return useMutation({
         mutationFn: submitRequestBatch,
         onSuccess: invalidate,
+    })
+}
+
+export function useRequestDepositExecutionMutation() {
+    const invalidate = useInvalidate()
+    const client = useQueryClient()
+    return useMutation({
+        mutationFn: (input: {
+            id: string
+            command: Parameters<typeof executeRequestDeposit>[1]
+        }) => executeRequestDeposit(input.id, input.command),
+        retry: false,
+        onSuccess: async () => {
+            await Promise.all([
+                invalidate(),
+                client.invalidateQueries({ queryKey: ["supplier-deposits"] }),
+                client.invalidateQueries({ queryKey: ["supplier-orders"] }),
+                client.invalidateQueries({
+                    queryKey: ["fulfillment-operations"],
+                }),
+            ])
+        },
     })
 }

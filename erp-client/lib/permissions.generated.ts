@@ -4633,6 +4633,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests/{id}/deposit-executions",
+                description: "在批准采购付款申请内执行预存款",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "pay",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/purchase-payment-requests/{id}/materials/{file_asset_id}/download",
                 description: "下载本付款申请冻结材料",
@@ -6094,6 +6104,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/supplier-api-connections/{id}/jd-vop-authorization",
+                description: "查询京东账号授权状态",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/jd-vop-authorization",
+                description: "授权京东企业采购账号",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "authorize",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/supplier-api-connections/{id}/adoption-batches/{batch}/selection",
                 description: "读取供应商批次选择集合",
                 permission: {
@@ -6364,6 +6394,182 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "供应商预存款",
+        description: "真实充值、逐单占用与资金核实",
+        permissions: [
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/reconciliations/{reconciliation}/resolve",
+                description: "结案预存款资金差异",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "resolve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/reservations/{reservation}/release",
+                description: "核实并释放预存款剩余占用",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "release",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-deposits/accounts",
+                description: "查询预存款账户",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts",
+                description: "开立供应商预存款账户",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-deposits/accounts/{id}",
+                description: "读取预存款账户明细",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/recharge-requests",
+                description: "申请供应商预存款充值",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "recharge_request",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/recharge-requests/{request}/approve",
+                description: "批准供应商预存款充值",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "approve_recharge",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/recharge-requests/{request}/pay",
+                description: "登记充值银行付款",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "pay_recharge",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/recharges",
+                description: "核对供应商充值到账",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "receive_recharge",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/authorizations",
+                description: "授权有限额自动余额执行",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "authorize",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/authorizations/{authorization}/revoke",
+                description: "撤销自动余额执行授权",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "revoke",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/reconciliations",
+                description: "登记预存款资金对账",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "reconcile",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/reservations",
+                description: "占用执行组预存款",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "reserve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/debits",
+                description: "核实预存款实际扣款",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "use",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/usages/{usage}/settlements",
+                description: "核销已核实预存款使用",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "use",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/returns",
+                description: "核实供应商预存款返款",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "refund",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-deposits/accounts/{id}/connections",
+                description: "绑定连接资金账号",
+                permission: {
+                    resource: "supplier_deposit",
+                    action: "bind",
+                },
+            },
+        ],
+    },
+    {
         name: "供应商订单",
         description: "供应商履约订单、动作与退款事实管理",
         permissions: [
@@ -6502,6 +6708,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 method: "POST",
                 path: "/admin/supplier-fulfillment-orders/{id}/execution-setup",
                 description: "补充自动执行配送资料",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-fulfillment-orders/{id}/execution-address-candidates",
+                description: "查询供应商收货地址候选",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/execution-query",
+                description: "查询原供应商执行结果",
                 permission: {
                     resource: "supplier_fulfillment_order",
                     action: "submit",

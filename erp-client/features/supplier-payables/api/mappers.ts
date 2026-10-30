@@ -27,6 +27,7 @@ import {
 import {
     missingSourceDocumentNo,
     payablePreviewHref,
+    paymentPreviewHref,
     sourceDocumentHref,
 } from "@/features/supplier-payables/lib/related-documents"
 import {
@@ -111,11 +112,15 @@ export type BackendPayableAccount = {
     version: number
     created_at: number
     entries: BackendPayableEntry[]
+    payment_allocations?: BackendPaymentAllocation[]
     payment_guidance?: BackendPaymentGuidance | null
     payment_recipient?: BackendPaymentRecipient | null
 }
 
-type BackendPaymentAllocation = {
+export type BackendPaymentAllocation = {
+    supplier_payment_id?: string | null
+    supplier_deposit_usage_id?: string | null
+
     id: string
     allocation_seq: number
     allocation_action: "apply" | "reverse"
@@ -369,13 +374,25 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
  *
  * @param a 付款核销分配 HTTP 载荷。
  */
-function projectPaymentAllocation(
+export function projectPaymentAllocation(
     a: BackendPaymentAllocation,
 ): PaymentAllocationLine {
+    const paymentId = a.supplier_payment_id?.trim()
+    const depositUsageId = a.supplier_deposit_usage_id?.trim()
+    const fundingSource = depositUsageId
+        ? paymentId
+            ? "UNKNOWN"
+            : "SUPPLIER_DEPOSIT_USAGE"
+        : "BANK_TRANSFER"
     const sourceType = mapSourceType(a.source_type ?? "purchase_order")
     const payableAccountId = a.payable_account_id?.trim() ?? ""
     return {
         allocationId: a.id,
+        fundingSource,
+        fundingSourceHref:
+            fundingSource === "BANK_TRANSFER" && paymentId
+                ? paymentPreviewHref(paymentId)
+                : undefined,
         action: a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
         payableAccountId,
         payableEntryId: a.payable_entry_id,

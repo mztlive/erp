@@ -1,6 +1,6 @@
 //! 采购变更只采用已正式应用的供应商取消证据，不接受人工取消声明。
 
-use super::{ApiOrderExecution, ApiOrderStage};
+use super::{ApiOrderExecution, ApiOrderStage, CancellationActionState, ConfirmationActionState};
 use crate::entity::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentOrder,
 };
@@ -22,9 +22,26 @@ impl ApiOrderExecution {
         tracking: &OrderTracking,
         observation: &OrderObservation,
     ) -> Result<()> {
+        observation.ensure_leaf_cancellations()?;
+        if self.order_tree.as_ref().is_some_and(|current| {
+            observation.topology.as_ref().is_none_or(|observed| !current.same_topology(observed))
+        }) {
+            return Err(Error::ConflictError("当前子单关系与已应用取消证据不一致，请重新查询".into()));
+        }
+        if !tracking.applied_shipments.is_empty()
+            || self.confirmations.values().any(|action| action.state == ConfirmationActionState::SentUnknown)
+            || self.cancellation_actions.values().any(|action| {
+                !matches!(action.state, CancellationActionState::Canceled | CancellationActionState::Failed)
+            })
+        {
+            return Err(Error::BusinessLogicError("原子单已有发货或确认结果待核实，请先处理原单".into()));
+        }
         let known = matches!(
             self.stage,
-            ApiOrderStage::Observe | ApiOrderStage::ConfirmPayment | ApiOrderStage::Stopped
+            ApiOrderStage::Observe
+                | ApiOrderStage::ConfirmPayment
+                | ApiOrderStage::ConfirmOrder
+                | ApiOrderStage::Stopped
         );
         if !known
             || !cancellation_identity_matches(self, order, tracking, observation)
@@ -133,6 +150,7 @@ mod tests {
             applied_observation_id: Some("obs".into()),
             last_error: None,
             last_verified_at: Some(Instant::now()),
+            applied_shipments: Vec::new(),
         };
         let observation = OrderObservation {
             base: BaseModel::new("obs".into()),
@@ -148,6 +166,9 @@ mod tests {
             refund: None,
             payment_confirmed: Some(true),
             shipments: None,
+            topology: None,
+            complete_line_coverage: false,
+            source_evidence: None,
         };
         (execution, order, tracking, observation)
     }

@@ -83,6 +83,7 @@ fn image_list(value: &Value, key: &str) -> ConnectorResult<Option<Vec<CatalogIma
             url: String::new(),
             content_fingerprint: None,
             file_asset_id: None,
+            ..CatalogImage::default()
         }]));
     };
     Ok(Some(
@@ -102,6 +103,7 @@ fn image_list(value: &Value, key: &str) -> ConnectorResult<Option<Vec<CatalogIma
                     url: if valid { url } else { String::new() },
                     content_fingerprint: None,
                     file_asset_id: None,
+                    ..CatalogImage::default()
                 }
             })
             .collect(),

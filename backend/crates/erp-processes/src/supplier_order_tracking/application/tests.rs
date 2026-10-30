@@ -30,7 +30,7 @@ impl ObservationApplication for Application {
     }
     async fn deliveries(
         &self,
-        _tracking: &OrderTracking,
+        _tracking: &mut OrderTracking,
         _observation: &OrderObservation,
         _executor: &mut dyn Executor,
     ) -> Result<bool> {
@@ -68,6 +68,7 @@ fn cancellation() -> (Application, OrderTracking, OrderObservation, ApiOrderExec
                 observed_at: Instant::from_unix_secs(20),
             },
             value: OrderSnapshot {
+                source_evidence: None,
                 reference: OrderReference {
                     merchant_order_no: "order".into(),
                     external_order_no: "external".into(),
@@ -78,6 +79,9 @@ fn cancellation() -> (Application, OrderTracking, OrderObservation, ApiOrderExec
                 refund: None,
                 payment: None,
                 shipments: None,
+                topology: None,
+                confirmation: None,
+                complete_line_coverage: false,
             },
         },
     )

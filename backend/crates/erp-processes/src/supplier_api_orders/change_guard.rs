@@ -13,6 +13,7 @@ use persistence_core::Executor;
 
 use crate::audit::persist_log;
 use crate::fulfillment_execution::task::supersede::close_api_delivery_task;
+use crate::supplier_deposits::prepare_execution_funds_replacement;
 use crate::{Error, Result};
 
 /// 在采购变更根事务内替代未发单或已经可信取消的旧 API 执行。
@@ -31,6 +32,7 @@ pub async fn supersede_purchase_executions(
 ) -> Result<bool> {
     let mut existing = active_for_purchase(db, &purchase.base.id, executor).await?;
     for execution in &mut existing {
+        prepare_execution_funds_replacement(db, execution, actor, executor).await?;
         prepare_replacement(db, execution, replacement_revision, executor).await?;
     }
     for execution in &mut existing {

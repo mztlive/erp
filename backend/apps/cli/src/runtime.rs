@@ -1,8 +1,32 @@
 use config::ConfigArgs;
 use erp_identity::AdminService;
 use erp_processes::adapters::identity::shared_rbac_service;
+use erp_processes::connectors::jd_vop::credential::JdVopCredentialProcess;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
+
+/// 只装配配置绑定凭据用例；不启动供应商调用、刷新或业务 worker。
+pub struct JdVopCredentialRuntime {
+    pub process: JdVopCredentialProcess,
+}
+
+impl JdVopCredentialRuntime {
+    /// 校验停用模式下也必需的凭据配置，并连接目标数据库。
+    /// # 参数
+    /// `source` 为本地或 Nacos 的统一配置来源。
+    /// # 返回
+    /// 精确绑定凭据 ID、账号范围及 app key 的用例。
+    /// # 错误
+    /// 配置缺失、绑定设置无效、数据库连接或用例装配失败时返回错误。
+    pub async fn connect(source: &ConfigArgs) -> Result<Self> {
+        let config = source.load().await?;
+        let settings =
+            config.jd_vop.as_ref().ok_or_else(|| Error::Usage("配置缺少 jd_vop 凭据设置".into()))?;
+        settings.validate_credential_settings()?;
+        let (_, db) = persistence_core::connect(&config.database.uri, &config.database.db_name).await?;
+        Ok(Self { process: JdVopCredentialProcess::new(db, settings)? })
+    }
+}
 
 /// 已连接到目标库的管理员服务运行时。
 pub struct AdminRuntime {

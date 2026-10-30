@@ -3,27 +3,29 @@
 mod application;
 mod callbacks;
 mod delivery;
+mod partial_delivery;
 mod persistence;
+mod shipment_tracking;
 
 use std::sync::Arc;
 
 use erp_core::common::time::Instant;
 use erp_supply::order_tracking::{OrderObservation, OrderTracking, repository};
-use erp_supply::ports::connector::common::Lookup;
-use erp_supply::ports::connector::order::OrderKey;
+use erp_supply::ports::connector::common::{Lookup, SupplierSku};
+use erp_supply::ports::connector::order::{OrderKey, OrderLine};
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
-use crate::connectors::dangaoshushu::DangaoshushuRuntime;
+use crate::connectors::registry::SupplierConnectorRegistry;
 use crate::{Error, Result};
 
 /// 后台只读补查入口；供应商写操作由独立发单 Process 负责。
 pub struct SupplierOrderTrackingProcess {
     db: Database,
-    runtime: Arc<DangaoshushuRuntime>,
+    runtime: Arc<SupplierConnectorRegistry>,
 }
 
 impl SupplierOrderTrackingProcess {
@@ -34,7 +36,7 @@ impl SupplierOrderTrackingProcess {
     /// 订单跟踪 Process。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, runtime: Arc<DangaoshushuRuntime>) -> Self {
+    pub fn new(db: Database, runtime: Arc<SupplierConnectorRegistry>) -> Self {
         Self { db, runtime }
     }
 
@@ -79,9 +81,10 @@ impl SupplierOrderTrackingProcess {
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(&tracking.connection_id, &mut NoTransaction)
             .await?;
+        let frozen = self.frozen_order_lines(tracking).await?;
         let result = self
             .runtime
-            .observe_order(&connection, &OrderKey::External(external.clone()))
+            .observe_order_with_lines(&connection, &OrderKey::External(external.clone()), &frozen)
             .await
             .map_err(|error| Error::BusinessLogicError(error.summary))?;
         let Lookup::Found(snapshot) = result else {
@@ -95,6 +98,33 @@ impl SupplierOrderTrackingProcess {
         let observation = OrderObservation::from_snapshot(next_id(), tracking, snapshot)?;
         let observation_id = self.persist_observation(tracking, observation).await?;
         self.apply_delivery(tracking, &observation_id).await
+    }
+    async fn frozen_order_lines(&self, tracking: &OrderTracking) -> Result<Vec<OrderLine>> {
+        let mut lines = Vec::with_capacity(tracking.source_lines.len());
+        for source in &tracking.source_lines {
+            let item = self
+                .db
+                .supplier_fulfillment_items()
+                .find_by_id(&source.fulfillment_item_id, &mut NoTransaction)
+                .await?
+                .filter(|item| {
+                    item.supplier_fulfillment_order_id.as_ref() == tracking.base.id
+                        && item.quantity == source.quantity
+                })
+                .ok_or_else(|| Error::ConflictError("原供应商订货明细缺失或与冻结数量不一致".into()))?;
+            lines.push(OrderLine {
+                source_purchase_terms: None,
+                line_id: item.base.id,
+                sku: SupplierSku {
+                    product_id: item.supplier_product_code_snapshot,
+                    spec_id: item.supplier_sku_code_snapshot,
+                },
+                quantity: item.quantity,
+                approved_unit_price: item.unit_cost_snapshot_gross,
+                attributes: Vec::new(),
+            });
+        }
+        Ok(lines)
     }
 }
 

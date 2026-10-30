@@ -29,6 +29,7 @@ fn snapshot() -> Snapshot<OrderSnapshot> {
             observed_at: Instant::from_unix_secs(30),
         },
         value: OrderSnapshot {
+            source_evidence: None,
             reference: OrderReference {
                 merchant_order_no: "merchant".into(),
                 external_order_no: "external".into(),
@@ -39,6 +40,9 @@ fn snapshot() -> Snapshot<OrderSnapshot> {
             refund: None,
             payment: None,
             shipments: None,
+            topology: None,
+            confirmation: None,
+            complete_line_coverage: false,
         },
     }
 }
@@ -77,10 +81,14 @@ fn courier_contact_is_not_serialized_and_cross_order_packages_are_rejected() {
     let mut source = snapshot();
     source.value.shipments = Some(vec![Shipment {
         external_shipment_id: None,
+        source_order_no: None,
+        quantity_lines: None,
+        complete_line_coverage: true,
         line_ids: vec!["item".into()],
         carrier: Some("同城配送".into()),
         tracking_no: None,
         courier_phone: Some("13800009999".into()),
+        events: vec![],
     }]);
     let observation = OrderObservation::from_snapshot("obs".into(), &tracking(), source.clone()).unwrap();
     assert!(observation.shipments.as_ref().unwrap()[0].has_courier_contact);
@@ -107,4 +115,46 @@ fn purchase_change_retirement_prevents_callback_reactivation_and_preserves_evide
     assert_eq!(tracking.applied_observation_id.as_deref(), Some("old-applied"));
     // 正常完成且未被采购变更替代的订单仍须允许后续退款/取消刷新。
     assert!(tracking.can_refresh(false, now));
+}
+
+#[test]
+fn protected_trajectory_requery_uses_content_identity_instead_of_random_ciphertext() {
+    use crate::ports::connector::order::ShipmentEvent;
+    let mut value = snapshot();
+    value.value.shipments = Some(vec![Shipment {
+        external_shipment_id: Some("parcel".into()),
+        source_order_no: None,
+        line_ids: vec!["item".into()],
+        quantity_lines: None,
+        complete_line_coverage: false,
+        carrier: None,
+        tracking_no: Some("SF1".into()),
+        courier_phone: None,
+        events: vec![ShipmentEvent {
+            source_time_text: "2026-10-29 11:00".into(),
+            description: "物流信息已更新".into(),
+            encrypted_description: Some("cipher-one".into()),
+            content_fingerprint: Some("content-one".into()),
+        }],
+    }]);
+    let first = OrderObservation::from_snapshot("first".into(), &tracking(), value.clone()).unwrap();
+    value.value.shipments.as_mut().unwrap()[0].events[0].encrypted_description = Some("cipher-two".into());
+    let repeated = OrderObservation::from_snapshot("second".into(), &tracking(), value.clone()).unwrap();
+    assert!(first.same_content(&repeated));
+    value.value.shipments.as_mut().unwrap()[0].events[0].content_fingerprint = Some("changed-content".into());
+    let changed = OrderObservation::from_snapshot("third".into(), &tracking(), value).unwrap();
+    assert!(!first.same_content(&changed));
+}
+
+#[test]
+fn completed_order_without_explicit_quantity_coverage_does_not_prove_whole_dispatch() {
+    let mut value = snapshot();
+    value.value.fulfillment = Some(FulfillmentStatus::Completed);
+    let unknown = OrderObservation::from_snapshot("unknown".into(), &tracking(), value.clone()).unwrap();
+    assert!(unknown.proves_dispatch());
+    assert!(!unknown.proves_complete_coverage());
+    value.value.complete_line_coverage = true;
+    let proven = OrderObservation::from_snapshot("proven".into(), &tracking(), value).unwrap();
+    assert!(proven.proves_complete_coverage());
+    assert!(proven.shipments.is_none());
 }

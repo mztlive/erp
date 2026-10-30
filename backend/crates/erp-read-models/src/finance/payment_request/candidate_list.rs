@@ -203,6 +203,7 @@ mod tests {
             available_total: amount,
             payment_terms: json!({"payment_term_name":"月结"}),
             bank_accounts: vec![],
+            deposit_accounts: vec![],
         }
     }
 

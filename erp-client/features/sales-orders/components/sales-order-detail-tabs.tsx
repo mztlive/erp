@@ -223,7 +223,11 @@ export function SalesOrderDetailTabs({
                     isCard ? (
                         <CollaborationPanel order={order} />
                     ) : (
-                        <PurchasePanel order={order} />
+                        <PurchasePanel
+                            order={order}
+                            deliveryQuery={deliveryQuery}
+                            canReadDelivery={canReadDelivery}
+                        />
                     )
                 ) : null}
                 {navSection === "collaboration" ? (

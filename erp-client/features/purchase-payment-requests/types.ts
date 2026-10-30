@@ -19,6 +19,20 @@ export type PaymentRecipient = {
     account_number_masked: string
 }
 
+export type PaymentExecutionMethod =
+    | { type: "bank_transfer" }
+    | { type: "supplier_deposit"; account_id: string }
+export type PaymentDepositAccount = {
+    account_id: string
+    identity: {
+        payer_party_id: string
+        supplier_id: string
+        external_account_ref: string
+        currency: "CNY"
+    }
+}
+export type DepositAccountOption = { id: string; label: string }
+
 export type PaymentCandidate = {
     payable_account_id: string
     purchase_order_id: string
@@ -40,6 +54,7 @@ export type PaymentCandidate = {
     available_amount: string
     payment_recipient?: PaymentRecipient | null
     bank_accounts: PaymentRecipient[]
+    deposit_accounts?: DepositAccountOption[]
 }
 
 export type RequestLine = PaymentCandidate & {
@@ -70,7 +85,9 @@ export type PaymentRequest = {
     supplier_name: string
     our_company_id: string
     our_company_name: string
-    payment_recipient: PaymentRecipient
+    payment_recipient: PaymentRecipient | null
+    execution_method: PaymentExecutionMethod
+    deposit_account?: PaymentDepositAccount | null
     applicant_name: string
     desired_payment_date: string
     description: string
@@ -110,8 +127,9 @@ export type RequestDraftInput = {
     supplier_id: string
     desired_payment_date: string
     description: string
-    bank_account_id: string
-    bank_account_version: number
+    bank_account_id?: string
+    bank_account_version?: number
+    execution_method?: PaymentExecutionMethod
     lines: { payable_account_id: string; amount: string }[]
     attachment_ids: string[]
 }

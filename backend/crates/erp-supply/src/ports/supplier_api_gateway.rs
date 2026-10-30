@@ -5,6 +5,7 @@ use std::pin::Pin;
 use super::catalog_sync::CatalogSyncPolicy;
 use super::connector::common::{Scan, Snapshot};
 use super::connector::offer::OfferChange;
+use crate::catalog_membership::{CatalogMembershipPage, CatalogPoolScope};
 use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType, SupplierHealthCheckType};
 /// 一页标准商品来源记录。
@@ -14,9 +15,15 @@ pub struct CatalogPage {
     pub next: Option<String>,
     /// 本页跳过的商品或规格及脱敏原因；与有效来源及游标同事务保存。
     pub skipped: Vec<String>,
+    /// 显式完整范围证据才允许成员缺项核对；普通目录页保持 None。
+    pub membership: Option<CatalogMembershipPage>,
 }
 /// 事务外目录读取 Future。
 pub type CatalogRead<'a> = Pin<Box<dyn Future<Output = Result<CatalogPage, ClassifiedError>> + Send + 'a>>;
+
+/// 目录完整范围的独立只读复核，事务外执行。
+pub type CatalogScopeRead<'a> =
+    Pin<Box<dyn Future<Output = Result<Option<CatalogPoolScope>, ClassifiedError>> + Send + 'a>>;
 
 /// 既有网关失败分类；是否可重试由编排层依据副作用及恢复证据判断。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +43,17 @@ pub struct ClassifiedError {
 /// 未注册的供应商以明确能力缺口失败；已注册协议使用当前服务端配置，
 /// 由 Process 保存分页目录，不允许协议客户端直接修改 ERP 数据。
 pub trait SupplierApiGateway: Send + Sync {
+    /// 读取本连接当前完整授权商品池，供分批缺项核对前再次检查。
+    /// # 参数
+    /// `connection` 为服务端加载的当前连接。
+    /// # 返回
+    /// 完整账号范围或 None；None 禁止按目录缺项作撤回。
+    /// # 错误
+    /// 授权、范围或读取失败时返回分类错误。
+    fn catalog_scope<'a>(&'a self, _connection: &'a SupplierApiConnection) -> CatalogScopeRead<'a> {
+        Box::pin(async { Ok(None) })
+    }
+
     /// 返回已登记、可供调度器检查的协议类型。
     /// # 参数
     /// 无。

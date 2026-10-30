@@ -30,6 +30,12 @@ pub enum SupplierApiCapabilityCode {
     Delivery,
     /// 供应商履约支付结果通知。
     PaymentConfirmation,
+    /// 预占订单独立确认。
+    OrderConfirmation,
+    /// 实际收到商品之后的供应商通知。
+    ReceiptConfirmation,
+    /// 使用实际采购数量和地址的下单预检。
+    OrderPreflight,
     /// 下单。
     Order,
     /// 查询。
@@ -65,6 +71,9 @@ impl SupplierApiCapabilityCode {
             Self::ServiceAreas => "可售地区",
             Self::Delivery => "配送校验",
             Self::PaymentConfirmation => "履约支付通知",
+            Self::OrderConfirmation => "订单确认",
+            Self::ReceiptConfirmation => "收货通知",
+            Self::OrderPreflight => "下单预检",
             Self::Order => "下单",
             Self::Query => "查询",
             Self::Cancel => "取消",
@@ -93,6 +102,9 @@ impl SupplierApiCapabilityCode {
             Self::ServiceAreas => "service_areas",
             Self::Delivery => "delivery",
             Self::PaymentConfirmation => "payment_confirmation",
+            Self::OrderConfirmation => "order_confirmation",
+            Self::ReceiptConfirmation => "receipt_confirmation",
+            Self::OrderPreflight => "order_preflight",
             Self::Order => "order",
             Self::Query => "query",
             Self::Cancel => "cancel",

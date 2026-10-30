@@ -78,6 +78,8 @@ export type DraftGroup = {
     key: string
     ids: string[]
     account: string
+    executionMethod: "bank_transfer" | "supplier_deposit"
+    depositAccount: string
     date: string
     description: string
     files: File[]
@@ -122,6 +124,8 @@ export function regroup(
                 key,
                 ids: [id],
                 account: candidate.payment_recipient?.bank_account_id ?? "",
+                executionMethod: "bank_transfer",
+                depositAccount: "",
                 date: defaultRequestDate(),
                 description: "申请支付采购款",
                 files: [],
@@ -149,7 +153,12 @@ export function draftDefaults(
     const groups = regroup(ids, candidates, [])
     if (request && groups[0])
         Object.assign(groups[0], {
-            account: request.payment_recipient.bank_account_id,
+            account: request.payment_recipient?.bank_account_id ?? "",
+            executionMethod: request.execution_method.type,
+            depositAccount:
+                request.execution_method.type === "supplier_deposit"
+                    ? request.execution_method.account_id
+                    : "",
             date: request.desired_payment_date,
             description: request.description,
         })
@@ -182,7 +191,12 @@ export function draftSchema(candidates: PaymentCandidate[]) {
                     z.object({
                         key: z.string(),
                         ids: z.array(z.string()).min(1),
-                        account: z.string().min(1, "请选择有效收款账户"),
+                        account: z.string(),
+                        executionMethod: z.enum([
+                            "bank_transfer",
+                            "supplier_deposit",
+                        ]),
+                        depositAccount: z.string(),
                         date: z.string().min(1, "请填写希望付款日"),
                         description: z
                             .string()
@@ -211,6 +225,7 @@ export function draftSchema(candidates: PaymentCandidate[]) {
             for (const [index, group] of values.groups.entries()) {
                 const first = lookup.get(group.ids[0])
                 if (
+                    group.executionMethod === "bank_transfer" &&
                     !first?.bank_accounts.some(
                         (account) => account.bank_account_id === group.account,
                     )
@@ -219,6 +234,17 @@ export function draftSchema(candidates: PaymentCandidate[]) {
                         code: "custom",
                         path: ["groups", index, "account"],
                         message: "请选择当前供应商的有效账户",
+                    })
+                if (
+                    group.executionMethod === "supplier_deposit" &&
+                    !first?.deposit_accounts?.some(
+                        (account) => account.id === group.depositAccount,
+                    )
+                )
+                    context.addIssue({
+                        code: "custom",
+                        path: ["groups", index, "depositAccount"],
+                        message: "请选择同付款主体、同供应商的有效预存款账户",
                     })
                 for (const id of group.ids) {
                     const candidate = lookup.get(id)

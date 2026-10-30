@@ -32,6 +32,7 @@ import type { BatchFieldEdit } from "../../api/batch"
 import type { CatalogItem } from "../../api/catalog"
 import { catalogUnitLabel } from "../../api/catalog"
 import { CatalogSourceImage } from "../catalog/catalog-source-image"
+import { SourcePurchaseTerms } from "../catalog/source-purchase-terms"
 
 export type BatchItemDraft = {
     dropship: string
@@ -405,6 +406,10 @@ function BatchItemEditor({
                                 </dd>
                             </div>
                         </dl>
+                        <SourcePurchaseTerms
+                            terms={item.source_purchase_terms}
+                            unit={item.unit}
+                        />
                         <section
                             className="space-y-3"
                             aria-labelledby={`${prefix}-prices-title`}

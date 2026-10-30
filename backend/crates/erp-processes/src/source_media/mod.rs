@@ -169,6 +169,9 @@ fn archived_group(group: &Option<Vec<CatalogImage>>) -> Vec<ProductMediaInput> {
         .flatten()
         .enumerate()
         .filter_map(|(index, image)| {
+            if image.source_valid == Some(false) {
+                return None;
+            }
             let hash = image.content_fingerprint.as_deref()?;
             let id = image.file_asset_id.as_deref()?;
             if hash.len() != 64
@@ -185,6 +188,29 @@ fn archived_group(group: &Option<Vec<CatalogImage>>) -> Vec<ProductMediaInput> {
             })
         })
         .collect()
+}
+
+fn retain_without_download(
+    source: &CatalogImage,
+    position: usize,
+    only_missing: bool,
+    sources: &mut Vec<CatalogImage>,
+    media: &mut Vec<ProductMediaInput>,
+) -> bool {
+    if source.source_valid == Some(false) {
+        sources.push(source.clone());
+        return true;
+    }
+    if !only_missing {
+        return false;
+    }
+    let Some(mut reference) = archived_group(&Some(vec![source.clone()])).into_iter().next() else {
+        return false;
+    };
+    reference.sort_order = i32::try_from(position).expect("来源图片最多一百张");
+    sources.push(source.clone());
+    media.push(reference);
+    true
 }
 
 /// 可复用的媒体准备器；不在数据库事务内调用。
@@ -350,13 +376,7 @@ impl SourceMediaPreparer {
         let mut sources = Vec::with_capacity(images.len());
         let mut media = Vec::with_capacity(images.len());
         for (position, source) in images.iter().enumerate() {
-            if preparation.only_missing
-                && let Some(reference) = archived_group(&Some(vec![source.clone()])).first()
-            {
-                sources.push(source.clone());
-                let mut reference = reference.clone();
-                reference.sort_order = i32::try_from(position).expect("来源图片最多一百张");
-                media.push(reference);
+            if retain_without_download(source, position, preparation.only_missing, &mut sources, &mut media) {
                 continue;
             }
             let checkpoint = preparation.cleanup.checkpoint();
@@ -381,6 +401,7 @@ impl SourceMediaPreparer {
                         url: source.url.clone(),
                         content_fingerprint: None,
                         file_asset_id: None,
+                        ..source.clone()
                     });
                     continue;
                 },
@@ -412,6 +433,7 @@ impl SourceMediaPreparer {
                 url: source.url.clone(),
                 content_fingerprint: Some(image.digest),
                 file_asset_id: Some(id.into()),
+                ..source.clone()
             };
             return Ok((source, FileAssetId::new(id)));
         }
@@ -437,6 +459,7 @@ impl SourceMediaPreparer {
             url: source.url.clone(),
             content_fingerprint: Some(image.digest),
             file_asset_id: Some(reference.clone()),
+            ..source.clone()
         };
         Ok((source, FileAssetId::new(reference)))
     }
