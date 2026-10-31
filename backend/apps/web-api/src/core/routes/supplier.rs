@@ -12,6 +12,7 @@ use crate::app_state::AppState;
 use crate::core::handler::supplier;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -28,7 +29,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(supplier::import::supplier_import_submit)
                     .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
                 rbac,
-                supplier::import::supplier_import_submit_permission_key(),
+                permissions::supplier::IMPORT_SUPPLIER_IMPORT_SUBMIT,
             ),
         )
         .route(
@@ -36,7 +37,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier::import::supplier_import_failures),
                 rbac,
-                supplier::import::supplier_import_failures_permission_key(),
+                permissions::supplier::IMPORT_SUPPLIER_IMPORT_FAILURES,
             ),
         )
         .route(
@@ -44,7 +45,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier::import::supplier_import),
                 rbac,
-                supplier::import::supplier_import_permission_key(),
+                permissions::supplier::IMPORT_SUPPLIER_IMPORT,
             ),
         )
         .route(
@@ -52,7 +53,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier::supplier_profile_create),
                 rbac,
-                supplier::supplier_profile_create_permission_key(),
+                permissions::supplier::PROFILE_CREATE,
             ),
         )
         .route(
@@ -63,7 +64,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                supplier::supplier_profile_create_with_assets_permission_key(),
+                permissions::supplier::PROFILE_CREATE_WITH_ASSETS,
             ),
         )
         .route(
@@ -71,7 +72,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(supplier::supplier_profile_update),
                 rbac,
-                supplier::supplier_profile_update_permission_key(),
+                permissions::supplier::PROFILE_UPDATE,
             ),
         )
         .route(
@@ -82,7 +83,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                supplier::supplier_profile_update_with_assets_permission_key(),
+                permissions::supplier::PROFILE_UPDATE_WITH_ASSETS,
             ),
         )
         .route(
@@ -90,7 +91,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier::supplier_profile_command_detail),
                 rbac,
-                supplier::supplier_profile_command_detail_permission_key(),
+                permissions::supplier::PROFILE_COMMAND_DETAIL,
             ),
         )
         .route(
@@ -98,39 +99,28 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier::supplier_sensitive_reveal),
                 rbac,
-                supplier::supplier_sensitive_reveal_permission_key(),
+                permissions::supplier::SENSITIVE_REVEAL,
             ),
         )
+        .route("/suppliers", with_permission(get(supplier::supplier_list), rbac, permissions::supplier::LIST))
         .route(
-            "/suppliers",
-            with_permission(get(supplier::supplier_list), rbac, supplier::supplier_list_permission_key()),
+            "/suppliers/{id}",
+            with_permission(get(supplier::supplier_detail), rbac, permissions::supplier::DETAIL),
         )
         .route(
             "/suppliers/{id}",
-            with_permission(get(supplier::supplier_detail), rbac, supplier::supplier_detail_permission_key()),
-        )
-        .route(
-            "/suppliers/{id}",
-            with_permission(
-                delete(supplier::supplier_delete),
-                rbac,
-                supplier::supplier_delete_permission_key(),
-            ),
+            with_permission(delete(supplier::supplier_delete), rbac, permissions::supplier::DELETE),
         )
         .route(
             "/suppliers/{id}/handover",
-            with_permission(
-                post(supplier::supplier_handover),
-                rbac,
-                supplier::supplier_handover_permission_key(),
-            ),
+            with_permission(post(supplier::supplier_handover), rbac, permissions::supplier::HANDOVER),
         )
         .route(
             "/suppliers/{id}/handover-candidates",
             with_permission(
                 get(supplier::supplier_handover_candidates),
                 rbac,
-                supplier::supplier_handover_candidates_permission_key(),
+                permissions::supplier::HANDOVER_CANDIDATES,
             ),
         )
         .route(
@@ -138,7 +128,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier::supplier_capability_handover),
                 rbac,
-                supplier::supplier_capability_handover_permission_key(),
+                permissions::supplier::CAPABILITY_HANDOVER,
             ),
         )
 }

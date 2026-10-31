@@ -24,13 +24,6 @@ pub struct MaterialQuery {
     source_revision_id: Option<String>,
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "读取开票审批当前核对依据",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 返回实例授权内唯一应收的当前票款核对依据。
 /// # 参数
 /// 应用状态、认证账号和开票审批实例 ID。
@@ -50,13 +43,6 @@ pub async fn invoice_review(
     Ok(response)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "读取本次提交的审批资料",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 返回授权实例的冻结资料；开票审批另列当前销售来源资料。
 /// # 参数
 /// 应用状态、认证账号和审批实例 ID。
@@ -76,13 +62,6 @@ pub async fn list(
     Ok(response)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "预览本次提交的审批附件",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 预览实例允许清单中的同一版本图片或 PDF。
 /// # 参数
 /// 应用状态、认证账号、实例和附件 ID。
@@ -110,13 +89,6 @@ pub async fn preview(
     .await
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "下载本次提交的审批附件",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 下载允许清单中的同一版本文件，强制以附件响应避免执行活动内容。
 /// # 参数
 /// 应用状态、认证账号、实例和附件 ID。

@@ -20,13 +20,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询仓库列表",
-    resource = "warehouse",
-    action = "list"
-)]
 /// 查询仓库列表。
 ///
 /// # 参数
@@ -45,13 +38,6 @@ pub async fn warehouse_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建仓库",
-    resource = "warehouse",
-    action = "create"
-)]
 /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
 ///
 /// # 参数
@@ -71,13 +57,6 @@ pub async fn warehouse_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新仓库",
-    resource = "warehouse",
-    action = "update"
-)]
 /// 更新仓库（追加新修订并更新稳定身份，跨集合事务；乐观锁）。
 ///
 /// # 参数
@@ -99,13 +78,6 @@ pub async fn warehouse_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "配置仓库收发经办人",
-    resource = "warehouse",
-    action = "update"
-)]
 /// 更新仓库入库与仓发经办人。
 ///
 /// # 参数
@@ -126,13 +98,6 @@ pub async fn warehouse_fulfillment_handlers_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询仓库收发经办人选项",
-    resource = "warehouse",
-    action = "update"
-)]
 /// 查询可用的仓库收发经办人选项。
 ///
 /// # 参数
@@ -147,13 +112,6 @@ pub async fn warehouse_fulfillment_handler_options(
     Ok(ApiResponse::ok_with_data(options))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询仓库修订列表",
-    resource = "warehouse_revision",
-    action = "list"
-)]
 /// 查询仓库修订列表（不含加密地址/联系人等敏感字段）。
 ///
 /// # 参数
@@ -171,13 +129,6 @@ pub async fn warehouse_revision_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询仓库SKU预警策略列表",
-    resource = "warehouse_sku_policy",
-    action = "list"
-)]
 /// 查询仓库-SKU 预警策略列表。
 ///
 /// # 参数
@@ -195,13 +146,6 @@ pub async fn warehouse_sku_policy_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建仓库SKU预警策略",
-    resource = "warehouse_sku_policy",
-    action = "create"
-)]
 /// 创建仓库-SKU 预警策略（启用区间不得与既有策略重叠）。
 ///
 /// # 参数
@@ -221,13 +165,6 @@ pub async fn warehouse_sku_policy_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新仓库SKU预警策略",
-    resource = "warehouse_sku_policy",
-    action = "update"
-)]
 /// 更新仓库-SKU 预警策略（乐观锁）。
 ///
 /// # 参数
@@ -249,13 +186,6 @@ pub async fn warehouse_sku_policy_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "删除仓库SKU预警策略",
-    resource = "warehouse_sku_policy",
-    action = "delete"
-)]
 /// 删除仓库-SKU 预警策略（软删除）。
 ///
 /// # 参数

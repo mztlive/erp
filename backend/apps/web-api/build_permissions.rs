@@ -3,15 +3,6 @@ use std::collections::HashMap;
 #[path = "../../crates/erp-identity/src/entity/policy_permission.rs"]
 mod policy_permission;
 
-#[derive(Debug, Clone)]
-pub(crate) struct PermissionMeta {
-    pub(crate) group: String,
-    pub(crate) group_desc: String,
-    pub(crate) desc: String,
-    pub(crate) resource: Option<String>,
-    pub(crate) action: Option<String>,
-}
-
 /// 权限扫描覆盖的业务域模块：既有业务域、审批定义管理，以及演示主数据。
 pub(crate) const DOMAIN_MODULES: &[&str] = &[
     "organization",
@@ -51,7 +42,7 @@ pub(crate) const DOMAIN_MODULES: &[&str] = &[
     "supplier_fulfillment",
     "supplier_settlement",
     "integration_ops",
-    // 单文件不够，扫描 `handler/demo_master_data/mod.rs`。
+    // 演示主数据与其他管理端路由采用相同的显式目录约束。
     "demo_master_data",
 ];
 
@@ -60,6 +51,8 @@ pub(crate) struct RouteHandler {
     pub(crate) method: String,
     pub(crate) path: String,
     pub(crate) handler: String,
+    pub(crate) permission: Option<String>,
+    pub(crate) guards: Vec<String>,
 }
 
 /// 只登记管理端路由，补全门户专项路由的嵌套前缀。

@@ -10,13 +10,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "保存采购草稿",
-    resource = "purchase_order",
-    action = "update"
-)]
 /// 按销售当前版本读取采购各行的预计交付日上限与收件地址剩余量。
 ///
 /// # 参数

@@ -7,13 +7,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "系统审计",
-    group_desc = "系统操作日志",
-    desc = "查询审计日志",
-    resource = "audit_log",
-    action = "list"
-)]
 /// 查询审计日志列表。
 ///
 /// # 参数

@@ -7,6 +7,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::supplier_api;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
@@ -26,7 +27,7 @@ fn jd_vop_routes(rbac: &SharedRbacService) -> Router<AppState> {
             supplier_api::jd_vop::authorize_route(with_permission(
                 post(supplier_api::jd_vop::tokens::configure),
                 rbac,
-                supplier_api::jd_vop::tokens::configure_permission_key(),
+                permissions::supplier_api::JD_VOP_TOKENS_CONFIGURE,
             )),
         )
         .route(
@@ -34,12 +35,12 @@ fn jd_vop_routes(rbac: &SharedRbacService) -> Router<AppState> {
             supplier_api::jd_vop::status_route(with_permission(
                 get(supplier_api::jd_vop::status),
                 rbac,
-                supplier_api::jd_vop::status_permission_key(),
+                permissions::supplier_api::JD_VOP_STATUS,
             ))
             .merge(supplier_api::jd_vop::authorize_route(with_permission(
                 post(supplier_api::jd_vop::authorize),
                 rbac,
-                supplier_api::jd_vop::authorize_permission_key(),
+                permissions::supplier_api::JD_VOP_AUTHORIZE,
             ))),
         )
 }
@@ -58,7 +59,7 @@ fn adoption_preparation_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::adoption_batches::selection),
                 rbac,
-                supplier_api::adoption_batches::selection_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_SELECTION,
             ),
         )
         .route(
@@ -66,12 +67,12 @@ fn adoption_preparation_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::adoption_batches::preparation),
                 rbac,
-                supplier_api::adoption_batches::preparation_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_PREPARATION,
             )
             .merge(with_permission(
                 post(supplier_api::adoption_batches::control_preparation),
                 rbac,
-                supplier_api::adoption_batches::control_preparation_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_CONTROL_PREPARATION,
             )),
         )
 }
@@ -83,7 +84,7 @@ fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoption_batches::submission_result),
                 rbac,
-                supplier_api::adoption_batches::submission_result_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_SUBMISSION_RESULT,
             ),
         )
         .route(
@@ -91,7 +92,7 @@ fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoption_batches::create),
                 rbac,
-                supplier_api::adoption_batches::create_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_CREATE,
             ),
         )
         .route(
@@ -99,7 +100,7 @@ fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::adoption_batches::list),
                 rbac,
-                supplier_api::adoption_batches::list_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_LIST,
             ),
         )
         .route(
@@ -107,7 +108,7 @@ fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::adoption_batches::detail),
                 rbac,
-                supplier_api::adoption_batches::detail_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_DETAIL,
             ),
         )
 }
@@ -119,7 +120,7 @@ fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoption_batches::control_work),
                 rbac,
-                supplier_api::adoption_batches::control_work_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_CONTROL_WORK,
             ),
         )
         .route(
@@ -127,7 +128,7 @@ fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(supplier_api::adoption_batches::save),
                 rbac,
-                supplier_api::adoption_batches::save_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_SAVE,
             ),
         )
         .route(
@@ -135,7 +136,7 @@ fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoption_batches::preview),
                 rbac,
-                supplier_api::adoption_batches::preview_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_PREVIEW,
             ),
         )
         .route(
@@ -143,7 +144,7 @@ fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoption_batches::submit),
                 rbac,
-                supplier_api::adoption_batches::submit_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_SUBMIT,
             ),
         )
         .route(
@@ -151,7 +152,7 @@ fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoption_batches::reconcile),
                 rbac,
-                supplier_api::adoption_batches::reconcile_permission_key(),
+                permissions::supplier_api::ADOPTION_BATCHES_RECONCILE,
             ),
         )
 }
@@ -163,7 +164,7 @@ fn adoption_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoptions::preview),
                 rbac,
-                supplier_api::adoptions::preview_permission_key(),
+                permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -171,7 +172,7 @@ fn adoption_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoptions::confirm),
                 rbac,
-                supplier_api::adoptions::confirm_permission_key(),
+                permissions::supplier_api::ADOPTIONS_CONFIRM,
             ),
         )
         .route(
@@ -179,7 +180,7 @@ fn adoption_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::adoptions::resolve),
                 rbac,
-                supplier_api::adoptions::resolve_permission_key(),
+                permissions::supplier_api::ADOPTIONS_RESOLVE,
             ),
         )
 }
@@ -191,7 +192,7 @@ fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::references::options),
                 rbac,
-                supplier_api::references::options_permission_key(),
+                permissions::supplier_api::REFERENCES_OPTIONS,
             ),
         )
         .route(
@@ -199,7 +200,7 @@ fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::dangaoshushu::read),
                 rbac,
-                supplier_api::dangaoshushu::read_permission_key(),
+                permissions::supplier_api::DANGAOSHUSHU_READ,
             ),
         )
         .route(
@@ -207,7 +208,7 @@ fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::dangaoshushu::reference_tickets),
                 rbac,
-                supplier_api::dangaoshushu::reference_tickets_permission_key(),
+                permissions::supplier_api::DANGAOSHUSHU_REFERENCE_TICKETS,
             ),
         )
 }
@@ -219,7 +220,7 @@ fn connection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::connector_types::options),
                 rbac,
-                supplier_api::connector_types::options_permission_key(),
+                permissions::supplier_api::CONNECTOR_TYPES_OPTIONS,
             ),
         )
         .route(
@@ -227,7 +228,7 @@ fn connection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::supplier_api_connection_list),
                 rbac,
-                supplier_api::supplier_api_connection_list_permission_key(),
+                permissions::supplier_api::CONNECTION_LIST,
             ),
         )
         .route(
@@ -235,7 +236,7 @@ fn connection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::supplier_api_connection_create),
                 rbac,
-                supplier_api::supplier_api_connection_create_permission_key(),
+                permissions::supplier_api::CONNECTION_CREATE,
             ),
         )
         .route(
@@ -243,7 +244,7 @@ fn connection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::supplier_api_connection_detail),
                 rbac,
-                supplier_api::supplier_api_connection_detail_permission_key(),
+                permissions::supplier_api::CONNECTION_DETAIL,
             ),
         )
         .route(
@@ -251,7 +252,8 @@ fn connection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_api::supplier_api_connection_command),
                 rbac,
-                supplier_api::supplier_api_connection_detail_permission_key(),
+                permissions::supplier_api::CONNECTION_DETAIL
+                    .documented_as(permissions::supplier_api::CONNECTION_COMMAND),
             ),
         )
 }
@@ -262,7 +264,7 @@ fn governance_routes(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(supplier_api::supplier_api_connection_job_detail),
             rbac,
-            supplier_api::supplier_api_connection_detail_permission_key(),
+            permissions::supplier_api::CONNECTION_JOB_DETAIL,
         ),
     )
 }
@@ -274,20 +276,16 @@ fn catalog_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_api::catalog::identity_review),
                 rbac,
-                supplier_api::catalog::identity_review_permission_key(),
+                permissions::supplier_api::CATALOG_IDENTITY_REVIEW,
             )
             .merge(with_permission(
                 post(supplier_api::catalog::confirm_identity_review),
                 rbac,
-                supplier_api::catalog::confirm_identity_review_permission_key(),
+                permissions::supplier_api::CATALOG_CONFIRM_IDENTITY_REVIEW,
             )),
         )
         .route(
             "/supplier-api-connections/{id}/catalog",
-            with_permission(
-                get(supplier_api::catalog::list),
-                rbac,
-                supplier_api::catalog::list_permission_key(),
-            ),
+            with_permission(get(supplier_api::catalog::list), rbac, permissions::supplier_api::CATALOG_LIST),
         )
 }

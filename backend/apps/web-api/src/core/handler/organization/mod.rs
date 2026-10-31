@@ -26,13 +26,6 @@ use crate::core::response::ApiResponse;
 ///
 /// # 关键业务约束
 /// 缺范围返回空集并标记 `no_scope`；组织配置权不授予业务执行权。
-#[permission_macros::permission(
-    group = "组织管理",
-    group_desc = "内部组织与成员",
-    desc = "查询组织",
-    resource = "org_unit",
-    action = "list"
-)]
 pub async fn list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -55,13 +48,6 @@ pub async fn list(
 ///
 /// # 关键业务约束
 /// 组织配置权不授予业务执行权；所属部门不代替 `org_unit:manage`。
-#[permission_macros::permission(
-    group = "组织管理",
-    group_desc = "内部组织与成员",
-    desc = "管理组织",
-    resource = "org_unit",
-    action = "manage"
-)]
 pub async fn preview(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -87,13 +73,6 @@ pub async fn preview(
 ///
 /// # 关键业务约束
 /// 事务内重验授权、版本和成员资格；不自动改派任务。
-#[permission_macros::permission(
-    group = "组织管理",
-    group_desc = "内部组织与成员",
-    desc = "管理组织",
-    resource = "org_unit",
-    action = "manage"
-)]
 pub async fn change(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

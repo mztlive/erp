@@ -18,13 +18,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "查询销售单附加费用",
-    resource = "cost_entry",
-    action = "list"
-)]
 /// 查询销售单上的附加费用。
 ///
 /// # 参数
@@ -46,13 +39,6 @@ pub async fn sales_extra_cost_list(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "登记销售单附加费用",
-    resource = "cost_entry",
-    action = "create"
-)]
 /// 按凭证登记销售单附加费用。
 ///
 /// 命令与凭证一次 multipart 提交：`command` 为 JSON，凭证字段名须与
@@ -83,13 +69,6 @@ pub async fn sales_extra_cost_register(
     finish(&state, &pending, result).await
 }
 
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "冲减销售单附加费用",
-    resource = "cost_entry",
-    action = "create"
-)]
 /// 冲减一笔财务登记的附加费用。
 ///
 /// # 参数

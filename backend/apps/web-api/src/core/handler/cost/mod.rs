@@ -19,13 +19,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "查询成本事实列表",
-    resource = "cost_entry",
-    action = "list"
-)]
 /// 查询成本事实列表。
 ///
 /// # 参数
@@ -44,13 +37,6 @@ pub async fn cost_entry_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "查询成本事实详情",
-    resource = "cost_entry",
-    action = "detail"
-)]
 /// 查询成本事实详情（事实 + 分配行）。
 ///
 /// # 参数
@@ -69,13 +55,6 @@ pub async fn cost_entry_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "手工登记成本事实",
-    resource = "cost_entry",
-    action = "create"
-)]
 /// 手工登记成本事实与分配行（跨集合事务：事实 + 分配行原子可见）。
 ///
 /// # 参数
@@ -97,13 +76,6 @@ pub async fn cost_entry_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "查询成本分配列表",
-    resource = "cost_allocation",
-    action = "list"
-)]
 /// 查询成本分配列表。
 ///
 /// # 参数

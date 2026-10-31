@@ -36,13 +36,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品分类列表",
-    resource = "product_category",
-    action = "list"
-)]
 /// 查询商品分类列表。
 ///
 /// # 参数
@@ -60,13 +53,6 @@ pub async fn product_category_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建商品分类",
-    resource = "product_category",
-    action = "create"
-)]
 /// 创建商品分类。
 ///
 /// # 参数
@@ -86,13 +72,6 @@ pub async fn product_category_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新商品分类",
-    resource = "product_category",
-    action = "update"
-)]
 /// 更新商品分类（乐观锁：请求携带期望版本，冲突返回 409）。
 ///
 /// # 参数
@@ -114,13 +93,6 @@ pub async fn product_category_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "移动商品分类",
-    resource = "product_category",
-    action = "update"
-)]
 /// 移动商品分类到新父分类（树形维护，成环检测在服务层完成）。
 ///
 /// # 参数
@@ -142,13 +114,6 @@ pub async fn product_category_move(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "删除商品分类",
-    resource = "product_category",
-    action = "delete"
-)]
 /// 删除商品分类（软删除；存在子分类时拒绝）。
 ///
 /// # 参数
@@ -168,13 +133,6 @@ pub async fn product_category_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品品牌列表",
-    resource = "product_brand",
-    action = "list"
-)]
 /// 查询商品品牌列表。
 ///
 /// # 参数
@@ -192,13 +150,6 @@ pub async fn product_brand_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建商品品牌",
-    resource = "product_brand",
-    action = "create"
-)]
 /// 创建商品品牌。
 ///
 /// # 参数
@@ -218,13 +169,6 @@ pub async fn product_brand_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "一次创建商品品牌及Logo",
-    resource = "product_brand",
-    action = "create"
-)]
 /// 一次接收品牌创建命令与 Logo，并原子登记文件元数据和品牌。
 ///
 /// # 参数
@@ -249,13 +193,6 @@ pub async fn product_brand_create_with_assets(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新商品品牌",
-    resource = "product_brand",
-    action = "update"
-)]
 /// 更新商品品牌（乐观锁）。
 ///
 /// # 参数
@@ -277,13 +214,6 @@ pub async fn product_brand_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "一次更新商品品牌及Logo",
-    resource = "product_brand",
-    action = "update"
-)]
 /// 一次接收品牌更新命令与 Logo，并原子登记文件元数据和品牌变更。
 ///
 /// # 参数
@@ -310,13 +240,6 @@ pub async fn product_brand_update_with_assets(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "删除商品品牌",
-    resource = "product_brand",
-    action = "delete"
-)]
 /// 删除商品品牌（软删除）。
 ///
 /// # 参数
@@ -336,13 +259,6 @@ pub async fn product_brand_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询计量单位列表",
-    resource = "unit_of_measure",
-    action = "list"
-)]
 /// 查询计量单位列表。
 ///
 /// # 参数
@@ -360,13 +276,6 @@ pub async fn unit_of_measure_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建计量单位",
-    resource = "unit_of_measure",
-    action = "create"
-)]
 /// 创建计量单位。
 ///
 /// # 参数
@@ -386,13 +295,6 @@ pub async fn unit_of_measure_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新计量单位",
-    resource = "unit_of_measure",
-    action = "update"
-)]
 /// 更新计量单位（乐观锁）。
 ///
 /// # 参数
@@ -414,13 +316,6 @@ pub async fn unit_of_measure_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "删除计量单位",
-    resource = "unit_of_measure",
-    action = "delete"
-)]
 /// 删除计量单位（软删除）。
 ///
 /// # 参数
@@ -440,13 +335,6 @@ pub async fn unit_of_measure_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询规格属性列表",
-    resource = "sku_attribute",
-    action = "list"
-)]
 /// 查询规格属性列表。
 ///
 /// # 参数
@@ -464,13 +352,6 @@ pub async fn sku_attribute_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建规格属性",
-    resource = "sku_attribute",
-    action = "create"
-)]
 /// 创建规格属性。
 ///
 /// # 参数
@@ -490,13 +371,6 @@ pub async fn sku_attribute_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新规格属性",
-    resource = "sku_attribute",
-    action = "update"
-)]
 /// 更新规格属性（乐观锁）。
 ///
 /// # 参数
@@ -518,13 +392,6 @@ pub async fn sku_attribute_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "删除规格属性",
-    resource = "sku_attribute",
-    action = "delete"
-)]
 /// 删除规格属性（软删除）。
 ///
 /// # 参数
@@ -544,13 +411,6 @@ pub async fn sku_attribute_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询规格属性值列表",
-    resource = "sku_attribute_value",
-    action = "list"
-)]
 /// 查询规格属性值列表。
 ///
 /// # 参数
@@ -568,13 +428,6 @@ pub async fn sku_attribute_value_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建规格属性值",
-    resource = "sku_attribute_value",
-    action = "create"
-)]
 /// 创建规格属性值。
 ///
 /// # 参数
@@ -594,13 +447,6 @@ pub async fn sku_attribute_value_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新规格属性值",
-    resource = "sku_attribute_value",
-    action = "update"
-)]
 /// 更新规格属性值（乐观锁）。
 ///
 /// # 参数
@@ -622,13 +468,6 @@ pub async fn sku_attribute_value_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "删除规格属性值",
-    resource = "sku_attribute_value",
-    action = "delete"
-)]
 /// 删除规格属性值（软删除）。
 ///
 /// # 参数

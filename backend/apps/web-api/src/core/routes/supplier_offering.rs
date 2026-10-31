@@ -7,6 +7,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::supplier_offering;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 构建供应商供给管理路由。
 ///
@@ -34,7 +35,7 @@ fn delivery_template_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_offering::delivery_template::list),
                 rbac,
-                supplier_offering::delivery_template::list_permission_key(),
+                permissions::supplier_offering::DELIVERY_TEMPLATE_LIST,
             ),
         )
         .route(
@@ -42,7 +43,7 @@ fn delivery_template_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_offering::delivery_template::create),
                 rbac,
-                supplier_offering::delivery_template::create_permission_key(),
+                permissions::supplier_offering::DELIVERY_TEMPLATE_CREATE,
             ),
         )
         .route(
@@ -50,7 +51,7 @@ fn delivery_template_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(supplier_offering::delivery_template::update),
                 rbac,
-                supplier_offering::delivery_template::update_permission_key(),
+                permissions::supplier_offering::DELIVERY_TEMPLATE_UPDATE,
             ),
         )
         .route(
@@ -58,7 +59,7 @@ fn delivery_template_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(supplier_offering::delivery_template::delete),
                 rbac,
-                supplier_offering::delivery_template::delete_permission_key(),
+                permissions::supplier_offering::DELIVERY_TEMPLATE_DELETE,
             ),
         )
         .route(
@@ -66,7 +67,7 @@ fn delivery_template_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_offering::delivery_template::assign),
                 rbac,
-                supplier_offering::delivery_template::assign_permission_key(),
+                permissions::supplier_offering::DELIVERY_TEMPLATE_ASSIGN,
             ),
         )
 }
@@ -79,7 +80,7 @@ fn read_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_offering::read::detail),
                 rbac,
-                supplier_offering::read::detail_permission_key(),
+                permissions::supplier_offering::READ_DETAIL,
             ),
         )
         .route(
@@ -87,19 +88,19 @@ fn read_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_offering::read::history),
                 rbac,
-                supplier_offering::read::history_permission_key(),
+                permissions::supplier_offering::READ_HISTORY,
             ),
         )
         .route(
             "/supplier-offerings",
-            with_permission(get(supplier_offering::list), rbac, supplier_offering::list_permission_key()),
+            with_permission(get(supplier_offering::list), rbac, permissions::supplier_offering::LIST),
         )
         .route(
             "/supplier-offerings/{id}/handover-candidates",
             with_permission(
                 get(supplier_offering::offering_handover_candidates),
                 rbac,
-                supplier_offering::offering_handover_candidates_permission_key(),
+                permissions::supplier_offering::OFFERING_HANDOVER_CANDIDATES,
             ),
         )
 }
@@ -112,7 +113,7 @@ fn batch_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_offering::batch::revise),
                 rbac,
-                supplier_offering::batch::revise_permission_key(),
+                permissions::supplier_offering::BATCH_REVISE,
             ),
         )
         .route(
@@ -120,7 +121,7 @@ fn batch_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_offering::batch::availability),
                 rbac,
-                supplier_offering::batch::availability_permission_key(),
+                permissions::supplier_offering::BATCH_AVAILABILITY,
             ),
         )
 }
@@ -130,26 +131,18 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/supplier-offerings",
-            with_permission(
-                post(supplier_offering::create),
-                rbac,
-                supplier_offering::create_permission_key(),
-            ),
+            with_permission(post(supplier_offering::create), rbac, permissions::supplier_offering::CREATE),
         )
         .route(
             "/supplier-offerings/{id}/revisions",
-            with_permission(
-                post(supplier_offering::revise),
-                rbac,
-                supplier_offering::revise_permission_key(),
-            ),
+            with_permission(post(supplier_offering::revise), rbac, permissions::supplier_offering::REVISE),
         )
         .route(
             "/supplier-offerings/{id}/availability",
             with_permission(
                 post(supplier_offering::update_availability),
                 rbac,
-                supplier_offering::update_availability_permission_key(),
+                permissions::supplier_offering::UPDATE_AVAILABILITY,
             ),
         )
         .route(
@@ -157,7 +150,7 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_offering::complete_supply_exception_task),
                 rbac,
-                supplier_offering::complete_supply_exception_task_permission_key(),
+                permissions::supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK,
             ),
         )
         .route(
@@ -165,7 +158,7 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_offering::offering_handover),
                 rbac,
-                supplier_offering::offering_handover_permission_key(),
+                permissions::supplier_offering::OFFERING_HANDOVER,
             ),
         )
 }

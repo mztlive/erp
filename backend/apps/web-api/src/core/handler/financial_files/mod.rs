@@ -15,13 +15,6 @@ use crate::core::errors::{Error, Result};
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "下载本单发票文件",
-    resource = "sales_order",
-    action = "detail"
-)]
 /// 按本单详情资格读取发票文件，不要求完整财务详情权限。
 /// # 参数
 /// 来源销售单及当前认证账号。
@@ -39,13 +32,6 @@ pub async fn sales_invoice_files(
     ))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "下载本单发票文件",
-    resource = "sales_order",
-    action = "detail"
-)]
 /// 下载前后沿销售来源与发票附件双键重验。
 /// # 参数
 /// 来源销售单、所属发票和文件身份。
@@ -67,13 +53,6 @@ pub async fn sales_invoice_download(
     asset_download_response(&view, content)
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "下载采购履约付款回单",
-    resource = "work_item",
-    action = "detail"
-)]
 /// 正式履约任务读取资格覆盖其采购来源付款回单。
 /// # 参数
 /// 正式任务及当前账号。
@@ -89,13 +68,6 @@ pub async fn purchase_payment_receipts(
     Ok(ApiResponse::ok_with_data(task_files(&state, &actor, &id).await?))
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "下载采购履约付款回单",
-    resource = "work_item",
-    action = "detail"
-)]
 /// 下载回单前后重验正式任务及精确付款关系。
 /// # 参数
 /// 工作台任务及来源已付款单。

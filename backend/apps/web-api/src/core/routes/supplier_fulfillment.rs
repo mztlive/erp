@@ -2,7 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/supplier-fulfillment-orders`、
 //! `/admin/supplier-fulfillment-orders/{id}/refund-facts`；每条路由统一走 JWT + RBAC（`with_permission`），
-//! handler 标注 `#[permission_macros::permission]`。
+//! 权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -11,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::supplier_fulfillment;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -33,7 +34,7 @@ fn order_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_fulfillment::supplier_fulfillment_order_list),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_list_permission_key(),
+                permissions::supplier_fulfillment::ORDER_LIST,
             ),
         )
         .route(
@@ -41,7 +42,7 @@ fn order_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_submit),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_submit_permission_key(),
+                permissions::supplier_fulfillment::ORDER_SUBMIT,
             ),
         )
         .route(
@@ -49,7 +50,7 @@ fn order_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_investigation),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_investigation_permission_key(),
+                permissions::supplier_fulfillment::ORDER_INVESTIGATION,
             ),
         )
         .route(
@@ -57,7 +58,7 @@ fn order_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_task_investigation),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_task_investigation_permission_key(),
+                permissions::supplier_fulfillment::ORDER_TASK_INVESTIGATION,
             ),
         )
         .route(
@@ -65,7 +66,7 @@ fn order_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_task_completion),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_task_completion_permission_key(),
+                permissions::supplier_fulfillment::ORDER_TASK_COMPLETION,
             ),
         )
 }
@@ -77,7 +78,7 @@ fn order_action_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_fulfillment::supplier_fulfillment_order_detail),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_detail_permission_key(),
+                permissions::supplier_fulfillment::ORDER_DETAIL,
             ),
         )
         .route(
@@ -85,7 +86,7 @@ fn order_action_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_cancel),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_cancel_permission_key(),
+                permissions::supplier_fulfillment::ORDER_CANCEL,
             ),
         )
         .route(
@@ -93,7 +94,7 @@ fn order_action_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_refund),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_refund_permission_key(),
+                permissions::supplier_fulfillment::ORDER_REFUND,
             ),
         )
         .route(
@@ -101,7 +102,7 @@ fn order_action_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_reject),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_reject_permission_key(),
+                permissions::supplier_fulfillment::ORDER_REJECT,
             ),
         )
 }
@@ -113,7 +114,7 @@ fn order_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_fulfillment_order_handover),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_handover_permission_key(),
+                permissions::supplier_fulfillment::ORDER_HANDOVER,
             ),
         )
         .route(
@@ -121,7 +122,7 @@ fn order_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_fulfillment::supplier_fulfillment_order_handover_candidates),
                 rbac,
-                supplier_fulfillment::supplier_fulfillment_order_handover_candidates_permission_key(),
+                permissions::supplier_fulfillment::ORDER_HANDOVER_CANDIDATES,
             ),
         )
         .route(
@@ -129,7 +130,7 @@ fn order_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_fulfillment::supplier_refund_fact_post),
                 rbac,
-                supplier_fulfillment::supplier_refund_fact_post_permission_key(),
+                permissions::supplier_fulfillment::SUPPLIER_REFUND_FACT_POST,
             ),
         )
 }
@@ -141,12 +142,12 @@ fn execution_routes(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(supplier_fulfillment::execution_setup::supplier_order_execution_setup),
             rbac,
-            supplier_fulfillment::execution_setup::supplier_order_execution_setup_permission_key(),
+            permissions::supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
         )
         .merge(with_permission(
             post(supplier_fulfillment::execution_setup::save_supplier_order_execution_setup),
             rbac,
-            supplier_fulfillment::execution_setup::save_supplier_order_execution_setup_permission_key(),
+            permissions::supplier_fulfillment::EXECUTION_SETUP_SAVE_SUPPLIER_ORDER_EXECUTION_SETUP,
         )),
     )
 }
@@ -155,10 +156,10 @@ fn execution_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route("/supplier-fulfillment-orders/{id}/execution-address-candidates", with_permission(
             get(supplier_fulfillment::execution_setup::supplier_order_execution_address_candidates), rbac,
-            supplier_fulfillment::execution_setup::supplier_order_execution_address_candidates_permission_key(),
+            permissions::supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_ADDRESS_CANDIDATES,
         ))
         .route("/supplier-fulfillment-orders/{id}/execution-query", with_permission(
             post(supplier_fulfillment::execution_setup::query_supplier_order_execution_result), rbac,
-            supplier_fulfillment::execution_setup::query_supplier_order_execution_result_permission_key(),
+            permissions::supplier_fulfillment::EXECUTION_SETUP_QUERY_SUPPLIER_ORDER_EXECUTION_RESULT,
         ))
 }

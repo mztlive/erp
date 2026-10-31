@@ -18,13 +18,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "创建供应商批量入库作业",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 冻结明确勾选或全部筛选结果，并创建可恢复作业。
 /// # 参数
 /// 路径指定连接，载荷指定选择范围，操作人来自认证上下文。
@@ -42,13 +35,6 @@ pub async fn create(
     Ok(ApiResponse::ok_with_data(batch))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询可恢复的供应商批量入库作业",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 读取当前操作人最近保存的批次，重新校验连接所属供应商范围。
 /// # 参数
 /// 路径指定连接，操作人来自认证上下文。
@@ -65,13 +51,6 @@ pub async fn list(
     Ok(ApiResponse::ok_with_data(batches))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询供应商批量入库作业",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 根据当前权限和数据范围读取草稿或执行结果。
 /// # 参数
 /// 路径指定连接与批次，操作人来自认证上下文。
@@ -88,13 +67,6 @@ pub async fn detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "保存供应商批量入库草稿",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 保存规则、补值、单项例外和排除项，使受影响预览失效。
 /// # 参数
 /// 路径指定连接与批次，载荷包含保存版本及修改项。
@@ -113,13 +85,6 @@ pub async fn save(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "核对供应商批量入库结果",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 由服务器重新匹配、计算并保存确认预览。
 /// # 参数
 /// 路径指定连接与批次，载荷指定当前草稿版本。
@@ -140,13 +105,6 @@ pub async fn preview(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "确认供应商批量入库作业",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 冻结明确确认的就绪行，交由统一后台执行器持续处理。
 /// # 参数
 /// 路径指定连接与批次，载荷指定预览版本及本次确认范围。
@@ -165,13 +123,6 @@ pub async fn submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "核实供应商批量入库原操作结果",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 查询原操作回执，未知结果不得作为明确失败直接重放。
 /// # 参数
 /// 路径指定连接与批次，操作人来自认证上下文。
@@ -189,13 +140,6 @@ pub async fn reconcile(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查证供应商批量入库原确认",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 查证原确认；未受理时封存原操作，防止迟到请求执行。
 /// # 参数
 /// 路径指定连接与批次，载荷为浏览器保存的原确认。
@@ -216,13 +160,6 @@ pub async fn submission_result(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "读取供应商批次选择集合",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 读取商品库选择所需身份与展示字段。
 /// # 参数
 /// 已认证用户及连接、批次路径。
@@ -247,13 +184,6 @@ pub struct PreparationRequest {
     pub action: PreparationAction,
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询供应商选品准备进度",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 只返回准备摘要，不加载全批成员。
 /// # 参数
 /// 路径指定连接与批次，用户来自认证上下文。
@@ -273,13 +203,6 @@ pub async fn preparation(
     Ok(ApiResponse::ok_with_data(batch))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "重试或取消供应商选品准备",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 重试保留原范围，取消停止后续准备。
 /// # 参数
 /// 路径指定连接与批次，载荷仅含动作。
@@ -308,13 +231,6 @@ pub struct WorkControlRequest {
     pub retry: bool,
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "恢复供应商批次保存与核对",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 恢复原保存/核对任务，或结束尚未产生部分保存的失败任务。
 /// # 参数
 /// 路径、原任务身份及认证用户。

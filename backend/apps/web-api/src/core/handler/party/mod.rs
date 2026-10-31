@@ -22,13 +22,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "查询主体列表",
-    resource = "party",
-    action = "list"
-)]
 /// 查询主体列表。
 ///
 /// # 参数
@@ -45,13 +38,6 @@ pub async fn party_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "创建主体",
-    resource = "party",
-    action = "create"
-)]
 /// 创建主体（同事务建立主体 + 首版修订）。
 ///
 /// # 参数
@@ -70,13 +56,6 @@ pub async fn party_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "查询主体详情",
-    resource = "party",
-    action = "detail"
-)]
 /// 查询主体详情（主体 + 当前生效修订快照）。
 ///
 /// # 参数
@@ -90,13 +69,6 @@ pub async fn party_detail(State(state): State<AppState>, Path(id): Path<String>)
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "更新主体并形成新修订",
-    resource = "party",
-    action = "update"
-)]
 /// 更新主体（乐观锁 + 追加修订）。
 ///
 /// # 参数
@@ -117,13 +89,6 @@ pub async fn party_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "删除主体",
-    resource = "party",
-    action = "delete"
-)]
 /// 软删除主体。
 ///
 /// # 参数
@@ -142,13 +107,6 @@ pub async fn party_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "查询主体修订列表",
-    resource = "party_revision",
-    action = "list"
-)]
 /// 查询主体修订列表（版本链历史）。
 ///
 /// # 参数
@@ -167,13 +125,6 @@ pub async fn party_revision_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "查询联系人列表",
-    resource = "party_contact",
-    action = "list"
-)]
 /// 查询联系人列表（敏感字段不进投影）。
 ///
 /// # 参数
@@ -192,13 +143,6 @@ pub async fn party_contact_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "创建联系人",
-    resource = "party_contact",
-    action = "create"
-)]
 /// 创建联系人（手机号为明文入参，实体只保留指纹与密文）。
 ///
 /// # 参数
@@ -219,13 +163,6 @@ pub async fn party_contact_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "更新联系人",
-    resource = "party_contact",
-    action = "update"
-)]
 /// 更新联系人（仅生命周期字段）。
 ///
 /// # 参数
@@ -246,13 +183,6 @@ pub async fn party_contact_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "查询地址列表",
-    resource = "party_address",
-    action = "list"
-)]
 /// 查询地址列表（敏感字段不进投影）。
 ///
 /// # 参数
@@ -271,13 +201,6 @@ pub async fn party_address_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "创建地址",
-    resource = "party_address",
-    action = "create"
-)]
 /// 创建地址（地址内容为明文入参，实体只保留指纹与密文）。
 ///
 /// # 参数
@@ -298,13 +221,6 @@ pub async fn party_address_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "更新地址",
-    resource = "party_address",
-    action = "update"
-)]
 /// 更新地址（仅生命周期字段）。
 ///
 /// # 参数
@@ -325,13 +241,6 @@ pub async fn party_address_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "查询税务资料列表",
-    resource = "party_tax_profile",
-    action = "list"
-)]
 /// 查询税务资料列表。
 ///
 /// # 参数
@@ -350,13 +259,6 @@ pub async fn party_tax_profile_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "创建税务资料",
-    resource = "party_tax_profile",
-    action = "create"
-)]
 /// 创建税务资料。
 ///
 /// # 参数
@@ -377,13 +279,6 @@ pub async fn party_tax_profile_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "更新税务资料",
-    resource = "party_tax_profile",
-    action = "update"
-)]
 /// 更新税务资料（仅生命周期字段）。
 ///
 /// # 参数
@@ -404,13 +299,6 @@ pub async fn party_tax_profile_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "查询银行账户列表",
-    resource = "party_bank_account",
-    action = "list"
-)]
 /// 查询银行账户列表（敏感字段不进投影）。
 ///
 /// # 参数
@@ -429,13 +317,6 @@ pub async fn party_bank_account_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "创建银行账户",
-    resource = "party_bank_account",
-    action = "create"
-)]
 /// 创建银行账户（账号为明文入参，实体只保留指纹与密文）。
 ///
 /// # 参数
@@ -456,13 +337,6 @@ pub async fn party_bank_account_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "主体",
-    group_desc = "企业主体稳定身份与历史名称资料管理",
-    desc = "更新银行账户",
-    resource = "party_bank_account",
-    action = "update"
-)]
 /// 更新银行账户（仅生命周期字段）。
 ///
 /// # 参数

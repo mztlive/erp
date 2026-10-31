@@ -22,13 +22,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "查询权限定义列表",
-    resource = "permission",
-    action = "list"
-)]
 /// 查询权限定义列表（权限目录）。
 ///
 /// # 参数
@@ -46,13 +39,6 @@ pub async fn permission_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "创建权限定义",
-    resource = "permission",
-    action = "create"
-)]
 /// 创建权限定义（`resource:action` 唯一）。
 ///
 /// # 参数
@@ -72,13 +58,6 @@ pub async fn permission_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "更新权限定义",
-    resource = "permission",
-    action = "update"
-)]
 /// 更新权限定义（乐观锁：请求携带期望版本，冲突返回 409）。
 ///
 /// # 参数
@@ -100,13 +79,6 @@ pub async fn permission_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "删除权限定义",
-    resource = "permission",
-    action = "delete"
-)]
 /// 删除权限定义（软删除；系统内建权限禁止删除）。
 ///
 /// # 参数
@@ -126,13 +98,6 @@ pub async fn permission_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "查询用户角色绑定",
-    resource = "user_role",
-    action = "list"
-)]
 /// 按用户查询角色绑定（含撤权历史，只读展示）。
 ///
 /// # 参数
@@ -150,13 +115,6 @@ pub async fn user_role_list(
     Ok(ApiResponse::ok_with_data(items))
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "分配用户角色",
-    resource = "user_role",
-    action = "create"
-)]
 /// 分配用户角色（绑定记录 + 审计事件原子写入）。
 ///
 /// # 参数
@@ -176,13 +134,6 @@ pub async fn user_role_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "撤权用户角色",
-    resource = "user_role",
-    action = "revoke"
-)]
 /// 撤权用户角色（立即紧急撤权，必须记录结构化原因）。
 ///
 /// # 参数
@@ -204,13 +155,6 @@ pub async fn user_role_revoke(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "查询审计事件列表",
-    resource = "audit_event",
-    action = "list"
-)]
 /// 查询审计事件列表（事实型留痕，不可编辑不可删除）。
 ///
 /// # 参数

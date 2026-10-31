@@ -2,7 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/bulk-selection-snapshots`、
 //! `/admin/background-jobs`；每条路由统一走 JWT + RBAC（`with_permission`），
-//! handler 标注 `#[permission_macros::permission]`。
+//! 权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -11,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::bulk_job;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -26,7 +27,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(bulk_job::bulk_selection_snapshot_list),
                 rbac,
-                bulk_job::bulk_selection_snapshot_list_permission_key(),
+                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_LIST,
             ),
         )
         .route(
@@ -34,7 +35,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(bulk_job::bulk_selection_snapshot_create),
                 rbac,
-                bulk_job::bulk_selection_snapshot_create_permission_key(),
+                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_CREATE,
             ),
         )
         .route(
@@ -42,7 +43,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(bulk_job::bulk_selection_snapshot_confirm),
                 rbac,
-                bulk_job::bulk_selection_snapshot_confirm_permission_key(),
+                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_CONFIRM,
             ),
         )
         .route(
@@ -50,7 +51,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(bulk_job::bulk_selection_snapshot_expire),
                 rbac,
-                bulk_job::bulk_selection_snapshot_expire_permission_key(),
+                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_EXPIRE,
             ),
         )
         .route(
@@ -58,7 +59,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(bulk_job::bulk_selection_item_list),
                 rbac,
-                bulk_job::bulk_selection_item_list_permission_key(),
+                permissions::bulk_job::BULK_SELECTION_ITEM_LIST,
             ),
         )
         .route(
@@ -66,7 +67,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(bulk_job::background_job_list),
                 rbac,
-                bulk_job::background_job_list_permission_key(),
+                permissions::bulk_job::BACKGROUND_JOB_LIST,
             ),
         )
         .route(
@@ -74,7 +75,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(bulk_job::background_job_create),
                 rbac,
-                bulk_job::background_job_create_permission_key(),
+                permissions::bulk_job::BACKGROUND_JOB_CREATE,
             ),
         )
         .route(
@@ -82,7 +83,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(bulk_job::background_job_cancel_all),
                 rbac,
-                bulk_job::background_job_cancel_all_permission_key(),
+                permissions::bulk_job::BACKGROUND_JOB_CANCEL_ALL,
             ),
         )
         .route(
@@ -90,7 +91,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(bulk_job::background_job_detail),
                 rbac,
-                bulk_job::background_job_detail_permission_key(),
+                permissions::bulk_job::BACKGROUND_JOB_DETAIL,
             ),
         )
         .route(
@@ -98,7 +99,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(bulk_job::background_job_cancel),
                 rbac,
-                bulk_job::background_job_cancel_permission_key(),
+                permissions::bulk_job::BACKGROUND_JOB_CANCEL,
             ),
         )
         .route(
@@ -106,7 +107,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(bulk_job::background_job_item_list),
                 rbac,
-                bulk_job::background_job_item_list_permission_key(),
+                permissions::bulk_job::BACKGROUND_JOB_ITEM_LIST,
             ),
         )
 }

@@ -11,13 +11,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Error;
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "下载销售单建单凭证",
-    resource = "sales_order",
-    action = "detail"
-)]
 /// 下载来源销售单自身的建单凭证。
 ///
 /// # 参数

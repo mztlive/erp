@@ -9,13 +9,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "读取销售方案开单内容",
-    resource = "sales_order",
-    action = "create"
-)]
 /// 读取按份采购方案开单内容，不执行写入。
 /// # 参数
 /// `state` 为应用依赖；`actor` 为认证操作人；`id` 为方案身份。
@@ -36,10 +29,13 @@ pub async fn selection_basis(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::permissions;
 
     #[test]
     fn basis_requires_sales_creation_permission() {
-        assert_eq!(selection_basis_permission_key().to_string(), "sales_order:create");
+        assert_eq!(
+            permissions::sales_order::SELECTION_SELECTION_BASIS.permission().to_string(),
+            "sales_order:create"
+        );
     }
 }

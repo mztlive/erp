@@ -1,7 +1,7 @@
 //! 域 D13 `sales_order` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/sales-orders`；每条路由
-//! 统一走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! 统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -10,6 +10,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::sales_order;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -33,7 +34,7 @@ fn read_create_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_order::timeline::sales_timeline),
                 rbac,
-                sales_order::timeline::sales_timeline_permission_key(),
+                permissions::sales_order::TIMELINE_SALES_TIMELINE,
             ),
         )
         .route(
@@ -41,32 +42,20 @@ fn read_create_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_order::selection::selection_basis),
                 rbac,
-                sales_order::selection::selection_basis_permission_key(),
+                permissions::sales_order::SELECTION_SELECTION_BASIS,
             ),
         )
         .route(
             "/sales-orders",
-            with_permission(
-                get(sales_order::sales_order_list),
-                rbac,
-                sales_order::sales_order_list_permission_key(),
-            ),
+            with_permission(get(sales_order::sales_order_list), rbac, permissions::sales_order::LIST),
         )
         .route(
             "/sales-orders",
-            with_permission(
-                post(sales_order::sales_order_create),
-                rbac,
-                sales_order::sales_order_create_permission_key(),
-            ),
+            with_permission(post(sales_order::sales_order_create), rbac, permissions::sales_order::CREATE),
         )
         .route(
             "/sales-orders/{id}",
-            with_permission(
-                get(sales_order::sales_order_detail),
-                rbac,
-                sales_order::sales_order_detail_permission_key(),
-            ),
+            with_permission(get(sales_order::sales_order_detail), rbac, permissions::sales_order::DETAIL),
         )
 }
 
@@ -78,39 +67,31 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(sales_order::sales_order_save_working_copy),
                 rbac,
-                sales_order::sales_order_save_working_copy_permission_key(),
+                permissions::sales_order::SAVE_WORKING_COPY,
             ),
         )
         .route(
             "/sales-orders/{id}/submit",
-            with_permission(
-                post(sales_order::sales_order_submit),
-                rbac,
-                sales_order::sales_order_submit_permission_key(),
-            ),
+            with_permission(post(sales_order::sales_order_submit), rbac, permissions::sales_order::SUBMIT),
         )
         .route(
             "/sales-orders/{id}/cancel-approval",
             with_permission(
                 post(sales_order::sales_order_cancel_approval),
                 rbac,
-                sales_order::sales_order_cancel_approval_permission_key(),
+                permissions::sales_order::CANCEL_APPROVAL,
             ),
         )
         .route(
             "/sales-orders/{id}/void",
-            with_permission(
-                post(sales_order::sales_order_void),
-                rbac,
-                sales_order::sales_order_void_permission_key(),
-            ),
+            with_permission(post(sales_order::sales_order_void), rbac, permissions::sales_order::VOID),
         )
         .route(
             "/sales-orders/{id}/handover",
             with_permission(
                 post(sales_order::sales_order_handover),
                 rbac,
-                sales_order::sales_order_handover_permission_key(),
+                permissions::sales_order::HANDOVER,
             ),
         )
         .route(
@@ -118,7 +99,7 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_order::sales_order_handover_candidates),
                 rbac,
-                sales_order::sales_order_handover_candidates_permission_key(),
+                permissions::sales_order::HANDOVER_CANDIDATES,
             ),
         )
 }
@@ -138,7 +119,7 @@ fn evidence_contract_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_order::contract_check::sales_order_contract_check),
                 rbac,
-                sales_order::contract_check::sales_order_contract_check_permission_key(),
+                permissions::sales_order::CONTRACT_CHECK_SALES_ORDER_CONTRACT_CHECK,
             ),
         )
         .route(
@@ -146,7 +127,7 @@ fn evidence_contract_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_order::evidence::sales_order_evidence_download),
                 rbac,
-                sales_order::evidence::sales_order_evidence_download_permission_key(),
+                permissions::sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
             ),
         )
         .route(
@@ -154,7 +135,7 @@ fn evidence_contract_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_order::sales_order_bind_contract),
                 rbac,
-                sales_order::sales_order_bind_contract_permission_key(),
+                permissions::sales_order::BIND_CONTRACT,
             ),
         )
 }

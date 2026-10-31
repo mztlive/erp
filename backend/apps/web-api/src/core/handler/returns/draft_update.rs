@@ -14,13 +14,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "修改原财务单据草稿",
-    resource = "customer_refund",
-    action = "submit"
-)]
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
 ///
 /// # 参数
@@ -47,13 +40,6 @@ pub async fn customer_refund_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "修改原财务单据草稿",
-    resource = "supplier_refund",
-    action = "submit"
-)]
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
 ///
 /// # 参数
@@ -80,13 +66,6 @@ pub async fn supplier_refund_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "修改原财务单据草稿",
-    resource = "receipt_reversal",
-    action = "submit"
-)]
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
 ///
 /// # 参数
@@ -113,13 +92,6 @@ pub async fn receipt_reversal_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "修改原财务单据草稿",
-    resource = "payment_reversal",
-    action = "submit"
-)]
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
 ///
 /// # 参数

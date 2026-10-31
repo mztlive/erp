@@ -12,13 +12,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "查询本人有权查看的待办详情",
-    resource = "work_item",
-    action = "detail"
-)]
 /// 读取当前任务的办理动态及可查看的销售单入口。
 /// # 参数
 /// `state`、`actor` 为应用与身份；`id`、`query` 为任务及分页。

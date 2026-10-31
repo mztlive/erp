@@ -34,13 +34,6 @@ use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 use crate::core::upload;
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "查询文件资产列表",
-    resource = "file_asset",
-    action = "list"
-)]
 /// 查询文件资产列表（列表不暴露敏感对象存储键）。
 ///
 /// # 参数
@@ -58,13 +51,6 @@ pub async fn file_asset_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "查询文件资产详情",
-    resource = "file_asset",
-    action = "detail"
-)]
 /// 查询文件资产详情；敏感资产不返回对象存储键或公开 URL。
 ///
 /// # 参数
@@ -82,13 +68,6 @@ pub async fn file_asset_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "预览文件资产内容",
-    resource = "file_asset",
-    action = "preview"
-)]
 /// 在鉴权与审计后以内联内容响应返回文件资产；对象存储键不进入响应。
 ///
 /// # Errors
@@ -122,13 +101,6 @@ pub async fn file_asset_preview(
     Ok(response)
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "上传并登记文件资产",
-    resource = "file_asset",
-    action = "create"
-)]
 /// 上传文件并登记文件资产。
 ///
 /// Multipart 表单：`file` 文件字段 + `sensitivity_class`/`retention_class`/
@@ -220,13 +192,6 @@ pub(crate) fn prepare_asset_response(state: &AppState, view: &mut FileAssetView)
     view.public_url = None;
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "登记文件资产",
-    resource = "file_asset",
-    action = "create"
-)]
 /// 登记文件资产（元数据登记；文件已由调用方落盘到受控对象存储）。
 ///
 /// # 参数
@@ -248,13 +213,6 @@ pub async fn file_asset_register(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "建立单据附件关联",
-    resource = "document_attachment",
-    action = "create"
-)]
 /// 建立单据附件关联（安全检查、保留期与销毁状态不阻断关联）。
 ///
 /// # 参数
@@ -290,13 +248,6 @@ pub async fn document_attachment_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "查询单据附件列表",
-    resource = "document_attachment",
-    action = "list"
-)]
 /// 按业务单据查询附件关联。
 ///
 /// # 参数
@@ -328,13 +279,6 @@ pub async fn document_attachment_list(
     Ok(ApiResponse::ok_with_data(items))
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "记录安全检查结果",
-    resource = "file_asset",
-    action = "update"
-)]
 /// 记录安全检查结果（通过/拒绝/隔离；隔离后经人工复核可放行或拒绝）。
 ///
 /// # 参数
@@ -357,13 +301,6 @@ pub async fn file_asset_scan_result(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "文件资产",
-    group_desc = "文件元数据、单据附件与安全检查",
-    desc = "销毁文件资产",
-    resource = "file_asset",
-    action = "delete"
-)]
 /// 销毁文件资产（销毁审计只记录一次；已销毁资产不得再用于业务关联）。
 ///
 /// # 参数

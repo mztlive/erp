@@ -28,13 +28,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "查询供应商履约订单列表",
-    resource = "supplier_fulfillment_order",
-    action = "list"
-)]
 /// 查询供应商履约订单列表。
 ///
 /// # 参数
@@ -53,13 +46,6 @@ pub async fn supplier_fulfillment_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "查询供应商履约订单详情",
-    resource = "supplier_fulfillment_order",
-    action = "detail"
-)]
 /// 查询供应商履约订单详情。
 ///
 /// # 参数
@@ -92,13 +78,6 @@ pub async fn supplier_fulfillment_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "从订单入口调查供应商原动作结果",
-    resource = "supplier_fulfillment_order",
-    action = "investigate"
-)]
 /// 从普通订单入口查询原结果或执行已证明安全的重放。
 pub async fn supplier_fulfillment_order_investigation(
     State(state): State<AppState>,
@@ -110,13 +89,6 @@ pub async fn supplier_fulfillment_order_investigation(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "从正式任务调查供应商原动作结果",
-    resource = "supplier_fulfillment_order",
-    action = "investigate"
-)]
 /// 从 W26 正式任务入口查询原结果或执行已证明安全的重放。
 pub async fn supplier_fulfillment_order_task_investigation(
     State(state): State<AppState>,
@@ -128,13 +100,6 @@ pub async fn supplier_fulfillment_order_task_investigation(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "根据已验证结果完成供应商履约任务",
-    resource = "supplier_fulfillment_order",
-    action = "complete"
-)]
 /// 以服务端可验证终态证据完成 W26 正式任务。
 pub async fn supplier_fulfillment_order_task_completion(
     State(state): State<AppState>,
@@ -146,13 +111,6 @@ pub async fn supplier_fulfillment_order_task_completion(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "向供应商提交下单",
-    resource = "supplier_fulfillment_order",
-    action = "submit"
-)]
 /// 向供应商提交下单（幂等键：`fulfillment_order_no`）。
 ///
 /// # 参数
@@ -172,13 +130,6 @@ pub async fn supplier_fulfillment_order_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "向供应商提交取消",
-    resource = "supplier_fulfillment_order",
-    action = "cancel"
-)]
 /// 向供应商提交取消（幂等键：「订单号 + CANCEL + 售后申请 ID」）。
 ///
 /// # 参数
@@ -211,13 +162,6 @@ pub async fn supplier_fulfillment_order_cancel(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "向供应商提交退款",
-    resource = "supplier_fulfillment_order",
-    action = "refund"
-)]
 /// 向供应商提交退款（幂等键：「订单号 + REFUND + 售后申请 ID」）。
 ///
 /// # 参数
@@ -246,13 +190,6 @@ pub async fn supplier_fulfillment_order_refund(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "登记供应商拒单结果",
-    resource = "supplier_fulfillment_order",
-    action = "reject"
-)]
 /// 登记供应商拒单结果（回调幂等键 `(connection_id, external_event_id)`）。
 ///
 /// # 参数
@@ -274,13 +211,6 @@ pub async fn supplier_fulfillment_order_reject(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "登记供应商退款成功结果",
-    resource = "supplier_refund_fact",
-    action = "post"
-)]
 /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no,
 /// external_refund_version)`）。
 ///
@@ -310,13 +240,6 @@ pub async fn supplier_refund_fact_post(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "交接供应商履约订单跟进人",
-    resource = "supplier_fulfillment_order",
-    action = "handover"
-)]
 /// 显式交接内部跟进人；是否转交开放 W26 任务由命令声明。
 pub async fn supplier_fulfillment_order_handover(
     State(state): State<AppState>,
@@ -328,13 +251,6 @@ pub async fn supplier_fulfillment_order_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "查询供应商履约订单交接待选目标",
-    resource = "supplier_fulfillment_order",
-    action = "handover"
-)]
 /// 查询当前订单可交接的合格内部人员。
 pub async fn supplier_fulfillment_order_handover_candidates(
     State(state): State<AppState>,

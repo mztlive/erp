@@ -14,13 +14,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "创建销售询价",
-    resource = "sales_inquiry",
-    action = "create"
-)]
 /// 创建销售询价。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -37,13 +30,6 @@ pub async fn sales_create(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "保存询价需求",
-    resource = "sales_inquiry",
-    action = "update"
-)]
 /// 保存询价需求。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -61,13 +47,6 @@ pub async fn sales_save(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "提交询价需求",
-    resource = "sales_inquiry",
-    action = "submit"
-)]
 /// 提交询价需求。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -85,13 +64,6 @@ pub async fn sales_submit(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "接受询价反馈",
-    resource = "sales_inquiry",
-    action = "accept"
-)]
 /// 接受询价反馈。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -109,13 +81,6 @@ pub async fn sales_accept(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "要求重新询价",
-    resource = "sales_inquiry",
-    action = "reinquire"
-)]
 /// 要求重新询价。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -133,13 +98,6 @@ pub async fn sales_reinquire(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "关闭销售询价",
-    resource = "sales_inquiry",
-    action = "close"
-)]
 /// 关闭销售询价。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -157,13 +115,6 @@ pub async fn sales_close(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "要求补充询价需求",
-    resource = "procurement_inquiry",
-    action = "supplement"
-)]
 /// 要求补充询价需求。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -181,13 +132,6 @@ pub async fn procurement_supplement(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "改派询价责任",
-    resource = "procurement_inquiry",
-    action = "reassign"
-)]
 /// 改派询价责任。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -205,13 +149,6 @@ pub async fn procurement_reassign(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "保存询价反馈草稿",
-    resource = "procurement_inquiry",
-    action = "save_feedback"
-)]
 /// 保存询价反馈草稿。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -229,13 +166,6 @@ pub async fn procurement_save_feedback(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "发布询价完整反馈",
-    resource = "procurement_inquiry",
-    action = "publish"
-)]
 /// 发布询价完整反馈。
 /// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
@@ -253,13 +183,6 @@ pub async fn procurement_publish(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "发起新一轮询价报价",
-    resource = "procurement_inquiry",
-    action = "publish"
-)]
 /// 采购主动发起新一轮整体报价。
 /// # 参数
 /// `state`、`actor` 为应用及认证身份，`id`、`request` 为询价和任务版本。

@@ -37,13 +37,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "查询应付往来子账列表",
-    resource = "payable_account",
-    action = "list"
-)]
 /// 查询应付往来子账列表。
 ///
 /// DataScope v2：按来源采购单当前采购负责人查询，同一事务快照；
@@ -69,13 +62,6 @@ pub async fn payable_account_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "查询应付往来子账详情",
-    resource = "payable_account",
-    action = "detail"
-)]
 /// 查询应付往来子账详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
@@ -98,13 +84,6 @@ pub async fn payable_account_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "揭示付款任务收款账号",
-    resource = "party_bank_account",
-    action = "reveal"
-)]
 /// 在付款任务责任、版本和收款账户身份校验后揭示完整收款账号。
 ///
 /// # 参数
@@ -131,13 +110,6 @@ pub async fn payment_recipient_reveal(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "建立应付往来子账",
-    resource = "payable_account",
-    action = "create"
-)]
 /// 建立应付往来子账与原始应付分录（跨集合事务）。
 ///
 /// # 参数
@@ -161,13 +133,6 @@ pub async fn payable_account_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "查询供应商付款单列表",
-    resource = "supplier_payment",
-    action = "list"
-)]
 /// 查询供应商付款单列表。
 ///
 /// DataScope v2：按核销关联采购当前负责人与付款经办人分别查询；
@@ -193,13 +158,6 @@ pub async fn supplier_payment_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "查询供应商付款单详情",
-    resource = "supplier_payment",
-    action = "detail"
-)]
 /// 查询供应商付款单详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
@@ -222,13 +180,6 @@ pub async fn supplier_payment_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "查询可合并的同供应商付款任务",
-    resource = "payable_account",
-    action = "detail"
-)]
 /// 查询当前付款任务可合并的同供应商开放任务。
 ///
 /// # 参数
@@ -251,13 +202,6 @@ pub async fn supplier_payment_merge_candidates(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "登记供应商付款并过账核销",
-    resource = "supplier_payment",
-    action = "commit"
-)]
 /// 在付款执行任务内原子登记付款、过账并核销。
 ///
 /// # 参数
@@ -294,13 +238,6 @@ pub async fn supplier_payment_commit(
     Ok(ApiResponse::ok_with_data(result.view?))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "预览供应商付款银行回单",
-    resource = "supplier_payment",
-    action = "detail"
-)]
 /// 在校验付款归属并记录审计后，返回银行回单图片内容。
 ///
 /// # 错误
@@ -365,13 +302,6 @@ pub(crate) fn validate_bank_receipt_upload(
     Ok(())
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "进项发票登记过账并分配",
-    resource = "purchase_invoice_allocation",
-    action = "post"
-)]
 /// 进项发票登记过账并分配（§8.3-2 事务不变量，资金入口幂等去重）。
 ///
 /// 发票实体经 D18 `invoices()` 仓储写入，D19 只写进项发票分配。
@@ -397,13 +327,6 @@ pub async fn purchase_invoice_allocation_post(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "查询进项发票分配列表",
-    resource = "purchase_invoice_allocation",
-    action = "list"
-)]
 /// 查询进项发票分配列表（按应付子账筛选）。
 ///
 /// DataScope v2：按应付子账来源采购当前负责人与收票经办人分别查询；

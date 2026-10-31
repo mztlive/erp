@@ -6,6 +6,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::supplier_deposit;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 /// 装配已明确授权的财务账户与资金命令。
 /// # 参数
 /// * `rbac` - 当前应用共享权限服务。
@@ -28,7 +29,7 @@ fn resolution(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_deposit::resolution::resolve),
                 rbac,
-                supplier_deposit::resolution::resolve_permission_key(),
+                permissions::supplier_deposit::RESOLUTION_RESOLVE,
             ),
         )
         .route(
@@ -36,7 +37,7 @@ fn resolution(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_deposit::resolution::release),
                 rbac,
-                supplier_deposit::resolution::release_permission_key(),
+                permissions::supplier_deposit::RESOLUTION_RELEASE,
             ),
         )
 }
@@ -45,15 +46,15 @@ fn reads(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts",
-            with_permission(get(supplier_deposit::list), rbac, supplier_deposit::list_permission_key()),
+            with_permission(get(supplier_deposit::list), rbac, permissions::supplier_deposit::LIST),
         )
         .route(
             "/supplier-deposits/accounts",
-            with_permission(post(supplier_deposit::open), rbac, supplier_deposit::open_permission_key()),
+            with_permission(post(supplier_deposit::open), rbac, permissions::supplier_deposit::OPEN),
         )
         .route(
             "/supplier-deposits/accounts/{id}",
-            with_permission(get(supplier_deposit::detail), rbac, supplier_deposit::detail_permission_key()),
+            with_permission(get(supplier_deposit::detail), rbac, permissions::supplier_deposit::DETAIL),
         )
 }
 
@@ -64,7 +65,7 @@ fn recharge(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_deposit::request_recharge),
                 rbac,
-                supplier_deposit::request_recharge_permission_key(),
+                permissions::supplier_deposit::REQUEST_RECHARGE,
             ),
         )
         .route(
@@ -72,7 +73,7 @@ fn recharge(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_deposit::approve_recharge),
                 rbac,
-                supplier_deposit::approve_recharge_permission_key(),
+                permissions::supplier_deposit::APPROVE_RECHARGE,
             ),
         )
         .route(
@@ -80,7 +81,7 @@ fn recharge(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_deposit::pay_recharge),
                 rbac,
-                supplier_deposit::pay_recharge_permission_key(),
+                permissions::supplier_deposit::PAY_RECHARGE,
             ),
         )
         .route(
@@ -88,7 +89,7 @@ fn recharge(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_deposit::receive_recharge),
                 rbac,
-                supplier_deposit::receive_recharge_permission_key(),
+                permissions::supplier_deposit::RECEIVE_RECHARGE,
             ),
         )
 }
@@ -100,19 +101,19 @@ fn authorizations(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_deposit::authorize),
                 rbac,
-                supplier_deposit::authorize_permission_key(),
+                permissions::supplier_deposit::AUTHORIZE,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/authorizations/{authorization}/revoke",
-            with_permission(post(supplier_deposit::revoke), rbac, supplier_deposit::revoke_permission_key()),
+            with_permission(post(supplier_deposit::revoke), rbac, permissions::supplier_deposit::REVOKE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/reconciliations",
             with_permission(
                 post(supplier_deposit::reconcile),
                 rbac,
-                supplier_deposit::reconcile_permission_key(),
+                permissions::supplier_deposit::RECONCILE,
             ),
         )
 }
@@ -121,34 +122,30 @@ fn execution(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/reservations",
-            with_permission(
-                post(supplier_deposit::reserve),
-                rbac,
-                supplier_deposit::reserve_permission_key(),
-            ),
+            with_permission(post(supplier_deposit::reserve), rbac, permissions::supplier_deposit::RESERVE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/debits",
             with_permission(
                 post(supplier_deposit::record_debit),
                 rbac,
-                supplier_deposit::record_debit_permission_key(),
+                permissions::supplier_deposit::RECORD_DEBIT,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/usages/{usage}/settlements",
-            with_permission(post(supplier_deposit::settle), rbac, supplier_deposit::settle_permission_key()),
+            with_permission(post(supplier_deposit::settle), rbac, permissions::supplier_deposit::SETTLE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/returns",
             with_permission(
                 post(supplier_deposit::return_usage),
                 rbac,
-                supplier_deposit::return_usage_permission_key(),
+                permissions::supplier_deposit::RETURN_USAGE,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/connections",
-            with_permission(post(supplier_deposit::bind), rbac, supplier_deposit::bind_permission_key()),
+            with_permission(post(supplier_deposit::bind), rbac, permissions::supplier_deposit::BIND),
         )
 }

@@ -15,13 +15,6 @@ use crate::core::response::ApiResponse;
 /// 模板权限、配置要求及当前角色状态。
 /// # 错误
 /// 无查看资格或模板加载失败时拒绝。
-#[permission_macros::permission(
-    group = "角色管理",
-    group_desc = "系统角色和权限配置",
-    desc = "查询角色列表",
-    resource = "role",
-    action = "list"
-)]
 pub async fn list_role_templates(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -36,13 +29,6 @@ pub async fn list_role_templates(
 /// 各岗位的新建或保留结果。
 /// # 错误
 /// 越权、参数无效、预览过期或写入失败时整批拒绝。
-#[permission_macros::permission(
-    group = "角色管理",
-    group_desc = "系统角色和权限配置",
-    desc = "创建角色",
-    resource = "role",
-    action = "create"
-)]
 pub async fn generate_builtin_roles(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -53,12 +39,18 @@ pub async fn generate_builtin_roles(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::permissions;
 
     /// HTTP 两个入口沿用正式角色查看和创建资格，模板不能另开弱权限入口。
     #[test]
     fn templates_use_existing_role_permissions() {
-        assert_eq!(list_role_templates_permission_key().to_string(), "role:list");
-        assert_eq!(generate_builtin_roles_permission_key().to_string(), "role:create");
+        assert_eq!(
+            permissions::admin::ROLE_TEMPLATE_LIST_ROLE_TEMPLATES.permission().to_string(),
+            "role:list"
+        );
+        assert_eq!(
+            permissions::admin::ROLE_TEMPLATE_GENERATE_BUILTIN_ROLES.permission().to_string(),
+            "role:create"
+        );
     }
 }

@@ -39,13 +39,6 @@ fn settlement_process(state: &AppState) -> SupplierSettlementProcess {
     erp_processes::adapters::scoped_settlement_process(state.db(), state.rbac())
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "查询供应商结算单列表",
-    resource = "supplier_settlement_statement",
-    action = "list"
-)]
 /// 查询供应商结算单列表。
 ///
 /// # 参数
@@ -64,13 +57,6 @@ pub async fn supplier_settlement_statement_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "查询供应商结算单详情",
-    resource = "supplier_settlement_statement",
-    action = "detail"
-)]
 /// 查询供应商结算单详情。
 ///
 /// # 参数
@@ -92,13 +78,6 @@ pub async fn supplier_settlement_statement_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "创建供应商结算草稿",
-    resource = "supplier_settlement_statement",
-    action = "create"
-)]
 /// 创建供应商结算草稿（幂等键：`statement_no`）。
 ///
 /// # 参数
@@ -119,13 +98,6 @@ pub async fn supplier_settlement_statement_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "刷新供应商结算权威来源试算",
-    resource = "supplier_settlement_statement",
-    action = "update"
-)]
 /// 从冻结策略下最新来源证据刷新尚未提交复核的结算试算。
 pub async fn supplier_settlement_statement_refresh(
     State(state): State<AppState>,
@@ -138,13 +110,6 @@ pub async fn supplier_settlement_statement_refresh(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "查询最新供应商结算来源证据",
-    resource = "supplier_settlement_source_evidence",
-    action = "list"
-)]
 /// 查询创建草稿所需的最新完整来源证据批次，不返回金额明细。
 pub async fn supplier_settlement_source_evidence_latest(
     State(state): State<AppState>,
@@ -154,13 +119,6 @@ pub async fn supplier_settlement_source_evidence_latest(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "录入供应商结算不可变来源证据",
-    resource = "supplier_settlement_source_evidence",
-    action = "create"
-)]
 /// 逐行核验 D32 正式事实并冻结供应商结算来源证据批次。
 pub async fn supplier_settlement_source_evidence_record(
     State(state): State<AppState>,
@@ -171,13 +129,6 @@ pub async fn supplier_settlement_source_evidence_record(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "提交结算复核",
-    resource = "supplier_settlement_statement",
-    action = "submit"
-)]
 /// 提交结算复核（乐观锁；存在未解决差异时拒绝）。
 ///
 /// # 参数
@@ -200,13 +151,6 @@ pub async fn supplier_settlement_statement_submit_review(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "执行供应商结算正式复核决定",
-    resource = "supplier_settlement_statement",
-    action = "confirm"
-)]
 /// 执行 `REJECT` 或 `CONFIRM` 正式复核决定。
 ///
 /// # 参数
@@ -229,13 +173,6 @@ pub async fn supplier_settlement_statement_review_decide(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "作废结算单",
-    resource = "supplier_settlement_statement",
-    action = "void"
-)]
 /// 作废结算单（乐观锁；已作废为终态）。
 ///
 /// # 参数
@@ -258,13 +195,6 @@ pub async fn supplier_settlement_statement_void(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "查询供应商结算明细列表",
-    resource = "supplier_settlement_item",
-    action = "list"
-)]
 /// 查询供应商结算明细列表。
 ///
 /// # 参数
@@ -283,13 +213,6 @@ pub async fn supplier_settlement_item_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "查询供应商结算差异列表",
-    resource = "supplier_settlement_difference",
-    action = "list"
-)]
 /// 查询供应商结算差异列表。
 ///
 /// # 参数
@@ -309,13 +232,6 @@ pub async fn supplier_settlement_difference_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "登记结算差异处理结论",
-    resource = "supplier_settlement_difference",
-    action = "update"
-)]
 /// 登记结算差异处理结论（乐观锁；处理结果三元组成组校验）。
 ///
 /// # 参数
@@ -339,13 +255,6 @@ pub async fn supplier_settlement_difference_decide(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "追加结算差异正式补证",
-    resource = "supplier_settlement_difference",
-    action = "update"
-)]
 /// 追加不可变差异补证；不直接改变差异结论。
 pub async fn supplier_settlement_difference_evidence_append(
     State(state): State<AppState>,
@@ -358,13 +267,6 @@ pub async fn supplier_settlement_difference_evidence_append(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "交接供应商结算对账负责人",
-    resource = "supplier_settlement_statement",
-    action = "update"
-)]
 /// 显式交接对账负责人；开放复核任务不改派。
 pub async fn supplier_settlement_statement_handover(
     State(state): State<AppState>,
@@ -376,13 +278,6 @@ pub async fn supplier_settlement_statement_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "查询供应商结算交接待选",
-    resource = "supplier_settlement_statement",
-    action = "update"
-)]
 /// 返回可交接的合格有效人员。
 pub async fn supplier_settlement_statement_handover_candidates(
     State(state): State<AppState>,
@@ -393,13 +288,6 @@ pub async fn supplier_settlement_statement_handover_candidates(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商结算",
-    group_desc = "供应商周期结算单、明细与差异管理",
-    desc = "改派供应商结算差异处理人",
-    resource = "supplier_settlement_statement",
-    action = "update"
-)]
 /// 独立改派差异处理人，不得强制等于对账负责人。
 pub async fn supplier_settlement_statement_reassign_difference_handler(
     State(state): State<AppState>,

@@ -27,13 +27,6 @@ fn document_registry_service(state: &AppState) -> DocumentRegistryService {
     )
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "查询单据注册列表",
-    resource = "business_document",
-    action = "list"
-)]
 /// 查询单据注册列表。
 ///
 /// # 参数
@@ -51,13 +44,6 @@ pub async fn business_document_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "注册业务单据（幂等）",
-    resource = "business_document",
-    action = "create"
-)]
 /// 注册业务单据（幂等：同身份同 ID 返回已存在行）。
 ///
 /// # 参数
@@ -77,13 +63,6 @@ pub async fn business_document_register(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "查询单据注册详情",
-    resource = "business_document",
-    action = "detail"
-)]
 /// 查询单据注册详情。
 ///
 /// # 参数
@@ -101,13 +80,6 @@ pub async fn business_document_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "查询工作流动作列表",
-    resource = "workflow_action",
-    action = "list"
-)]
 /// 查询工作流动作列表。
 ///
 /// # 参数
@@ -125,13 +97,6 @@ pub async fn workflow_action_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "追加工作流动作",
-    resource = "workflow_action",
-    action = "create"
-)]
 /// 追加工作流动作（提交/通过/驳回/确认/作废/完成）。
 ///
 /// # 参数
@@ -152,13 +117,6 @@ pub async fn workflow_action_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "查询单据关系列表",
-    resource = "document_relation",
-    action = "list"
-)]
 /// 查询单据的全部关系（出向 + 入向）。
 ///
 /// # 参数
@@ -178,13 +136,6 @@ pub async fn document_relation_list(
     Ok(ApiResponse::ok_with_data(relations))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "建立单据关系",
-    resource = "document_relation",
-    action = "create"
-)]
 /// 建立单据关系（变更/退货/退款/冲正/红票/派生）。
 ///
 /// # 参数
@@ -204,13 +155,6 @@ pub async fn document_relation_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "查询单据参与人列表",
-    resource = "document_participant",
-    action = "list"
-)]
 /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
 ///
 /// # 参数
@@ -228,13 +172,6 @@ pub async fn document_participant_list(
     Ok(ApiResponse::ok_with_data(items))
 }
 
-#[permission_macros::permission(
-    group = "单据注册",
-    group_desc = "跨域单据稳定注册表与工作流动作",
-    desc = "登记单据参与人",
-    resource = "document_participant",
-    action = "create"
-)]
 /// 登记单据参与人（只追加不删除，客户历史查看权依据）。
 ///
 /// # 参数

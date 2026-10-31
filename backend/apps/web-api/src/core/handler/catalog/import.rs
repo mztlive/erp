@@ -18,13 +18,6 @@ use crate::core::handler::file_asset::{AssetFile, delete_pending_asset_objects, 
 use crate::core::response::ApiResponse;
 use crate::core::upload;
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "导入商品报价表",
-    resource = "product",
-    action = "create"
-)]
 /// 上传产品报价表并登记异步导入任务。
 ///
 /// 前台只做任务投递，不直接执行；执行统一由后台任务执行器认领，避免与轮询器并发写入同一任务。
@@ -68,13 +61,6 @@ pub async fn product_import_submit(
     }
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品导入任务",
-    resource = "product",
-    action = "list"
-)]
 /// 查询当前操作人的商品导入任务。
 ///
 /// # 参数
@@ -93,13 +79,6 @@ pub async fn product_import_job_list(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品导入任务详情",
-    resource = "product",
-    action = "list"
-)]
 /// 查询单个商品导入任务。
 ///
 /// # 参数
@@ -118,13 +97,6 @@ pub async fn product_import_job_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品导入逐项结果",
-    resource = "product",
-    action = "list"
-)]
 /// 查询导入任务逐项结果。
 ///
 /// # 参数
@@ -159,13 +131,6 @@ pub struct DirectUploadAbortQuery {
     request_id: String,
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "初始化商品直传",
-    resource = "product",
-    action = "create"
-)]
 /// 初始化浏览器直传：在对象存储创建分片上传。
 ///
 /// 大文件不再经网关上传：本接口只返回分片上传标识、对象键与分片口径，
@@ -188,13 +153,6 @@ pub async fn product_import_direct_upload_init(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "签发商品直传分片地址",
-    resource = "product",
-    action = "create"
-)]
 /// 为单个分片签发浏览器可直接 PUT 的预签名地址。
 ///
 /// 地址按需获取：有效期约 2 小时，慢速网络可在上传该片前重新获取，
@@ -223,13 +181,6 @@ pub async fn product_import_direct_upload_part_url(
     }))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "合并商品直传并登记导入任务",
-    resource = "product",
-    action = "create"
-)]
 /// 合并浏览器已直传的分片并登记异步导入任务。
 ///
 /// 请求体为小 JSON（对象键、文件名、大小、请求身份与分片 ETag），
@@ -257,13 +208,6 @@ pub async fn product_import_direct_upload_complete(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "取消商品直传",
-    resource = "product",
-    action = "create"
-)]
 /// 取消分片上传并清理对象存储侧已上传的分片。
 ///
 /// # 参数

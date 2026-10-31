@@ -448,65 +448,6 @@ pub struct QualityRows<T> {
     pub total: usize,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{CurrentQualityRow, HistoryQualityRow, QualityScope};
-
-    #[test]
-    fn current_row_builder_preserves_mandatory_fields() {
-        let row =
-            CurrentQualityRow::new("customer:c-1".to_string(), "customer".to_string(), "100.00".to_string())
-                .with_counts(2, 1);
-        assert_eq!(row.row_id, "customer:c-1");
-        assert_eq!(row.kind, "customer");
-        assert_eq!(row.gross_total, "100.00");
-        assert_eq!(row.order_count, 2);
-        assert_eq!(row.unpriced_count, 1);
-    }
-
-    #[test]
-    fn current_row_optional_builders_do_not_touch_mandatory_fields() {
-        let row = CurrentQualityRow::new(
-            "owner_user:u-1".to_string(),
-            "owner_user".to_string(),
-            "0.00".to_string(),
-        )
-        .with_group(Some("u-1".to_string()), Some("销售 · u-1".to_string()), Some(3))
-        .with_ownership(Some("u-1".to_string()), Some("销售".to_string()), None, None)
-        .with_effective_range(Some("2026-09-01".to_string()), None);
-        assert_eq!(row.group_id.as_deref(), Some("u-1"));
-        assert_eq!(row.owner_user_id.as_deref(), Some("u-1"));
-        assert_eq!(row.first_effective_at.as_deref(), Some("2026-09-01"));
-        assert!(row.customer_id.is_none());
-    }
-
-    #[test]
-    fn history_row_builder_preserves_mandatory_fields() {
-        let row =
-            HistoryQualityRow::new("order:o-1".to_string(), "sales_order".to_string(), "50.00".to_string())
-                .with_order(
-                    Some("o-1".to_string()),
-                    Some("SO-1".to_string()),
-                    Some("c-1".to_string()),
-                    Some("测试客户".to_string()),
-                    Some("2026-09-01".to_string()),
-                )
-                .with_counts(Some(1), 0);
-        assert_eq!(row.row_id, "order:o-1");
-        assert_eq!(row.order_no.as_deref(), Some("SO-1"));
-        assert_eq!(row.order_count, Some(1));
-    }
-
-    #[test]
-    fn scope_builder_preserves_mandatory_fields() {
-        let scope = QualityScope::new("authorized".to_string(), "当前负责客户".to_string(), "v3".to_string())
-            .with_label("历史负责订单".to_string());
-        assert_eq!(scope.id, "authorized");
-        assert_eq!(scope.label, "历史负责订单");
-        assert_eq!(scope.permission_version, "v3");
-    }
-}
-
 /// 响应范围摘要；不暴露完整角色证明或人员集合。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -606,4 +547,63 @@ pub struct QualityExport {
     pub file_name: String,
     pub row_count: usize,
     pub generated_at: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CurrentQualityRow, HistoryQualityRow, QualityScope};
+
+    #[test]
+    fn current_row_builder_preserves_mandatory_fields() {
+        let row =
+            CurrentQualityRow::new("customer:c-1".to_string(), "customer".to_string(), "100.00".to_string())
+                .with_counts(2, 1);
+        assert_eq!(row.row_id, "customer:c-1");
+        assert_eq!(row.kind, "customer");
+        assert_eq!(row.gross_total, "100.00");
+        assert_eq!(row.order_count, 2);
+        assert_eq!(row.unpriced_count, 1);
+    }
+
+    #[test]
+    fn current_row_optional_builders_do_not_touch_mandatory_fields() {
+        let row = CurrentQualityRow::new(
+            "owner_user:u-1".to_string(),
+            "owner_user".to_string(),
+            "0.00".to_string(),
+        )
+        .with_group(Some("u-1".to_string()), Some("销售 · u-1".to_string()), Some(3))
+        .with_ownership(Some("u-1".to_string()), Some("销售".to_string()), None, None)
+        .with_effective_range(Some("2026-09-01".to_string()), None);
+        assert_eq!(row.group_id.as_deref(), Some("u-1"));
+        assert_eq!(row.owner_user_id.as_deref(), Some("u-1"));
+        assert_eq!(row.first_effective_at.as_deref(), Some("2026-09-01"));
+        assert!(row.customer_id.is_none());
+    }
+
+    #[test]
+    fn history_row_builder_preserves_mandatory_fields() {
+        let row =
+            HistoryQualityRow::new("order:o-1".to_string(), "sales_order".to_string(), "50.00".to_string())
+                .with_order(
+                    Some("o-1".to_string()),
+                    Some("SO-1".to_string()),
+                    Some("c-1".to_string()),
+                    Some("测试客户".to_string()),
+                    Some("2026-09-01".to_string()),
+                )
+                .with_counts(Some(1), 0);
+        assert_eq!(row.row_id, "order:o-1");
+        assert_eq!(row.order_no.as_deref(), Some("SO-1"));
+        assert_eq!(row.order_count, Some(1));
+    }
+
+    #[test]
+    fn scope_builder_preserves_mandatory_fields() {
+        let scope = QualityScope::new("authorized".to_string(), "当前负责客户".to_string(), "v3".to_string())
+            .with_label("历史负责订单".to_string());
+        assert_eq!(scope.id, "authorized");
+        assert_eq!(scope.label, "历史负责订单");
+        assert_eq!(scope.permission_version, "v3");
+    }
 }

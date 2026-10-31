@@ -15,13 +15,6 @@ use crate::core::extractor::{Json, Query};
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "导入供应商回填报价",
-    resource = "procurement_inquiry",
-    action = "internal_quote"
-)]
 /// 原子导入核对后的供应商回填报价。
 /// # 参数
 /// 当前应用、采购身份、询价与包含任务版本的批量报价。
@@ -40,13 +33,6 @@ pub async fn import_quotes(
     ))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "保存询价内部报价",
-    resource = "procurement_inquiry",
-    action = "internal_quote"
-)]
 /// 追加当前责任商品的内部报价版本，不隐式修改通用供给。
 /// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为询价，`request` 为带版本及任务的报价。
@@ -65,13 +51,6 @@ pub async fn save_quote(
     ))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "保存询价费用内部依据",
-    resource = "procurement_inquiry",
-    action = "internal_quote"
-)]
 /// 保存明确费用的内部收款依据，公开反馈只保留对销售金额及说明。
 /// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为询价，`request` 为责任任务和费用内部依据。
@@ -88,13 +67,6 @@ pub async fn save_fee_basis(
     Ok(ApiResponse::ok_with_data(state.sales_inquiry_process().save_fee_basis(&actor, &id, request).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "读取询价费用内部依据",
-    resource = "procurement_inquiry",
-    action = "internal_quote"
-)]
 /// 读取当前责任范围内明确轮次的内部费用依据。
 /// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为询价，`params` 为当前任务及反馈轮次。
@@ -113,13 +85,6 @@ pub async fn fee_bases(
     ))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "下载当前责任费用依据附件",
-    resource = "procurement_inquiry",
-    action = "internal_quote"
-)]
 /// 在存储读取前后复核当前费用责任、反馈轮次及精确依据附件关系。
 /// # 参数
 /// `state`、`actor` 为当前应用及采购，路径含询价、依据及文件；查询含任务和反馈轮次。

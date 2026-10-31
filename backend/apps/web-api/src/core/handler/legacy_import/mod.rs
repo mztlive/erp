@@ -22,13 +22,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "查询导入批次列表",
-    resource = "legacy_import_batch",
-    action = "list"
-)]
 /// 查询导入批次列表。
 ///
 /// # 参数
@@ -47,13 +40,6 @@ pub async fn legacy_import_batch_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "创建导入批次",
-    resource = "legacy_import_batch",
-    action = "create"
-)]
 /// 创建导入批次（批次 + 来源行 + 后台任务原子写入，批次号重复按幂等返回）。
 ///
 /// # 参数
@@ -73,13 +59,6 @@ pub async fn legacy_import_batch_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "查询导入批次详情",
-    resource = "legacy_import_batch",
-    action = "detail"
-)]
 /// 查询导入批次详情（含后台任务关联）。
 ///
 /// # 参数
@@ -98,13 +77,6 @@ pub async fn legacy_import_batch_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "应用导入批次",
-    resource = "legacy_import_batch",
-    action = "apply"
-)]
 /// 应用导入批次（后台应用阶段逐行结果，批次/行终态后重复提交按幂等返回）。
 ///
 /// # 参数
@@ -126,13 +98,6 @@ pub async fn legacy_import_batch_apply(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "执行导入应用命令",
-    resource = "legacy_import_batch",
-    action = "execute"
-)]
 /// 执行 W18 导入应用阶段强命令。
 ///
 /// # 参数
@@ -154,13 +119,6 @@ pub async fn legacy_import_execution_command(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "查询导入行列表",
-    resource = "legacy_import_row",
-    action = "list"
-)]
 /// 查询导入行列表（按批次）。
 ///
 /// # 参数
@@ -180,13 +138,6 @@ pub async fn legacy_import_row_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "查询导入确认事实列表",
-    resource = "legacy_import_confirmation",
-    action = "list"
-)]
 /// 查询导入确认事实列表。
 ///
 /// # 参数
@@ -206,13 +157,6 @@ pub async fn legacy_import_confirmation_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "创建导入确认事实",
-    resource = "legacy_import_confirmation",
-    action = "create"
-)]
 /// 创建待确认确认事实（批次推进到待确认阶段，重复提交按幂等返回）。
 ///
 /// # 参数
@@ -232,13 +176,6 @@ pub async fn legacy_import_confirmation_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "导入与期初",
-    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "完成导入业务确认任务",
-    resource = "legacy_import_confirmation",
-    action = "complete"
-)]
 /// 执行 W18 唯一 `CompleteImportBusinessConfirmation` 强类型命令。
 ///
 /// # 参数

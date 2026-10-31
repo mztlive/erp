@@ -9,6 +9,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::sales_review;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -25,7 +26,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_review::sales_change_order_list),
                 rbac,
-                sales_review::sales_change_order_list_permission_key(),
+                permissions::sales_review::SALES_CHANGE_ORDER_LIST,
             ),
         )
         .route(
@@ -33,7 +34,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_review::sales_change_order_create),
                 rbac,
-                sales_review::sales_change_order_create_permission_key(),
+                permissions::sales_review::SALES_CHANGE_ORDER_CREATE,
             ),
         )
         .route(
@@ -41,7 +42,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_review::sales_change_order_detail),
                 rbac,
-                sales_review::sales_change_order_detail_permission_key(),
+                permissions::sales_review::SALES_CHANGE_ORDER_DETAIL,
             ),
         )
         .route(
@@ -49,7 +50,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_review::sales_change_order_submit_impact),
                 rbac,
-                sales_review::sales_change_order_submit_impact_permission_key(),
+                permissions::sales_review::SALES_CHANGE_ORDER_SUBMIT_IMPACT,
             ),
         )
         .route(
@@ -57,7 +58,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_review::sales_change_order_void),
                 rbac,
-                sales_review::sales_change_order_void_permission_key(),
+                permissions::sales_review::SALES_CHANGE_ORDER_VOID,
             ),
         )
         .route(
@@ -65,7 +66,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_review::sales_change_order_cancel_approval),
                 rbac,
-                sales_review::sales_change_order_cancel_approval_permission_key(),
+                permissions::sales_review::SALES_CHANGE_ORDER_CANCEL_APPROVAL,
             ),
         )
 }
@@ -85,7 +86,7 @@ fn draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_review::sales_change_draft),
                 rbac,
-                sales_review::sales_change_draft_permission_key(),
+                permissions::sales_review::SALES_CHANGE_DRAFT,
             ),
         )
         .route(
@@ -93,7 +94,7 @@ fn draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_review::sales_change_save_draft),
                 rbac,
-                sales_review::sales_change_save_draft_permission_key(),
+                permissions::sales_review::SALES_CHANGE_SAVE_DRAFT,
             ),
         )
 }

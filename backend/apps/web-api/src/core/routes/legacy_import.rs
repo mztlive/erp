@@ -5,7 +5,7 @@
 //! `/admin/legacy-import-batches/{id}/apply`、`/admin/legacy-import-confirmations`、
 //! `/admin/legacy-import-batches/{id}/commands`、`/admin/legacy-import-confirmations/complete`；
 //! 每条路由统一走
-//! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -14,6 +14,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::legacy_import;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -29,7 +30,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(legacy_import::legacy_import_batch_list),
                 rbac,
-                legacy_import::legacy_import_batch_list_permission_key(),
+                permissions::legacy_import::BATCH_LIST,
             ),
         )
         .route(
@@ -37,7 +38,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(legacy_import::legacy_import_batch_create),
                 rbac,
-                legacy_import::legacy_import_batch_create_permission_key(),
+                permissions::legacy_import::BATCH_CREATE,
             ),
         )
         .route(
@@ -45,7 +46,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(legacy_import::legacy_import_batch_detail),
                 rbac,
-                legacy_import::legacy_import_batch_detail_permission_key(),
+                permissions::legacy_import::BATCH_DETAIL,
             ),
         )
         .route(
@@ -53,7 +54,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(legacy_import::legacy_import_row_list),
                 rbac,
-                legacy_import::legacy_import_row_list_permission_key(),
+                permissions::legacy_import::ROW_LIST,
             ),
         )
         .route(
@@ -61,7 +62,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(legacy_import::legacy_import_batch_apply),
                 rbac,
-                legacy_import::legacy_import_batch_apply_permission_key(),
+                permissions::legacy_import::BATCH_APPLY,
             ),
         )
         .route(
@@ -69,7 +70,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(legacy_import::legacy_import_execution_command),
                 rbac,
-                legacy_import::legacy_import_execution_command_permission_key(),
+                permissions::legacy_import::EXECUTION_COMMAND,
             ),
         )
         .route(
@@ -77,7 +78,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(legacy_import::legacy_import_confirmation_list),
                 rbac,
-                legacy_import::legacy_import_confirmation_list_permission_key(),
+                permissions::legacy_import::CONFIRMATION_LIST,
             ),
         )
         .route(
@@ -85,7 +86,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(legacy_import::legacy_import_confirmation_create),
                 rbac,
-                legacy_import::legacy_import_confirmation_create_permission_key(),
+                permissions::legacy_import::CONFIRMATION_CREATE,
             ),
         )
         .route(
@@ -93,7 +94,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(legacy_import::legacy_import_confirmation_complete),
                 rbac,
-                legacy_import::legacy_import_confirmation_complete_permission_key(),
+                permissions::legacy_import::CONFIRMATION_COMPLETE,
             ),
         )
 }

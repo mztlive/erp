@@ -13,13 +13,6 @@ use crate::core::errors::Error;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查看供应商接口配置选项",
-    resource = "supplier_api_connection",
-    action = "view_reference_metadata"
-)]
 /// 列出当前后台连接可绑定的地址或密钥配置。
 /// # 参数
 /// 应用状态、操作人、连接 ID 和配置种类。

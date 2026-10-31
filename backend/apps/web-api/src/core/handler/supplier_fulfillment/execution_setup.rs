@@ -14,13 +14,6 @@ use crate::core::extractor::{Json, Query};
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "读取自动执行配送资料",
-    resource = "supplier_fulfillment_order",
-    action = "detail"
-)]
 /// 读取真实接口执行阶段和可补充资料。
 /// # 参数
 /// 当前账号和路径订单通过同一订单数据范围核验。
@@ -45,13 +38,6 @@ pub async fn supplier_order_execution_setup(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "补充自动执行配送资料",
-    resource = "supplier_fulfillment_order",
-    action = "submit"
-)]
 /// 保存经核验的配送补充资料，后台负责后续执行。
 /// # 参数
 /// 当前账号须具备订单 submit 权限与对象写范围。
@@ -79,13 +65,6 @@ pub async fn save_supplier_order_execution_setup(
     Ok(ApiResponse::ok_with_data(mask_execution_costs(&state, &subject, view).await?))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "查询供应商收货地址候选",
-    resource = "supplier_fulfillment_order",
-    action = "submit"
-)]
 /// 按原执行地址返回下一层供应商候选，前端不能指定外部编码。
 /// # 参数
 /// 订单路径与当前账号执行 submit 数据范围核验。
@@ -109,13 +88,6 @@ pub async fn supplier_order_execution_address_candidates(
     Ok(ApiResponse::ok_with_data(process.execution_address_candidates(&id, query).await?))
 }
 
-#[permission_macros::permission(
-    group = "供应商订单",
-    group_desc = "供应商履约订单、动作与退款事实管理",
-    desc = "查询原供应商执行结果",
-    resource = "supplier_fulfillment_order",
-    action = "submit"
-)]
 /// 请求查询原订单及确认结果，不重新发送下单或确认。
 /// # 参数
 /// 原订单及预期执行版本，权限在服务端事务内重新校验。

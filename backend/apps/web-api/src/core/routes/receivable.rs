@@ -2,8 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/receivable-accounts`、
 //! `/admin/customer-receipts`、`/admin/invoices`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -13,6 +12,7 @@ use crate::app_state::AppState;
 use crate::core::handler::receivable;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -29,7 +29,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(receivable::receivable_account_list),
                 rbac,
-                receivable::receivable_account_list_permission_key(),
+                permissions::receivable::ACCOUNT_LIST,
             ),
         )
         .route(
@@ -37,7 +37,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::receivable_account_create),
                 rbac,
-                receivable::receivable_account_create_permission_key(),
+                permissions::receivable::ACCOUNT_CREATE,
             ),
         )
         .route(
@@ -45,7 +45,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(receivable::receivable_account_detail),
                 rbac,
-                receivable::receivable_account_detail_permission_key(),
+                permissions::receivable::ACCOUNT_DETAIL,
             ),
         )
         .route(
@@ -53,7 +53,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(receivable::customer_receipt_list),
                 rbac,
-                receivable::customer_receipt_list_permission_key(),
+                permissions::receivable::CUSTOMER_RECEIPT_LIST,
             ),
         )
         .route(
@@ -61,7 +61,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::customer_receipt_create),
                 rbac,
-                receivable::customer_receipt_create_permission_key(),
+                permissions::receivable::CUSTOMER_RECEIPT_CREATE,
             ),
         )
         .route(
@@ -69,7 +69,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(receivable::customer_receipt_detail),
                 rbac,
-                receivable::customer_receipt_detail_permission_key(),
+                permissions::receivable::CUSTOMER_RECEIPT_DETAIL,
             ),
         )
         .route(
@@ -77,7 +77,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::draft_update::customer_receipt_save_draft),
                 rbac,
-                receivable::draft_update::customer_receipt_save_draft_permission_key(),
+                permissions::receivable::DRAFT_UPDATE_CUSTOMER_RECEIPT_SAVE_DRAFT,
             ),
         )
         .route(
@@ -85,7 +85,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::customer_receipt_commit),
                 rbac,
-                receivable::customer_receipt_commit_permission_key(),
+                permissions::receivable::CUSTOMER_RECEIPT_COMMIT,
             ),
         )
         .route(
@@ -93,7 +93,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::customer_receipt_submit),
                 rbac,
-                receivable::customer_receipt_submit_permission_key(),
+                permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
         .route(
@@ -101,7 +101,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::customer_receipt_cancel_approval),
                 rbac,
-                receivable::customer_receipt_cancel_approval_permission_key(),
+                permissions::receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -109,35 +109,27 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::customer_receipt_post),
                 rbac,
-                receivable::customer_receipt_post_permission_key(),
+                permissions::receivable::CUSTOMER_RECEIPT_POST,
             ),
         )
         .route(
             "/invoices",
-            with_permission(get(receivable::invoice_list), rbac, receivable::invoice_list_permission_key()),
+            with_permission(get(receivable::invoice_list), rbac, permissions::receivable::INVOICE_LIST),
         )
         .route(
             "/invoices",
-            with_permission(
-                post(receivable::invoice_create),
-                rbac,
-                receivable::invoice_create_permission_key(),
-            ),
+            with_permission(post(receivable::invoice_create), rbac, permissions::receivable::INVOICE_CREATE),
         )
         .route(
             "/invoices/{id}",
-            with_permission(
-                get(receivable::invoice_detail),
-                rbac,
-                receivable::invoice_detail_permission_key(),
-            ),
+            with_permission(get(receivable::invoice_detail), rbac, permissions::receivable::INVOICE_DETAIL),
         )
         .route(
             "/sales-invoice-requests",
             with_permission(
                 get(receivable::invoice_request::invoice_request_list),
                 rbac,
-                receivable::invoice_request::invoice_request_list_permission_key(),
+                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_LIST,
             ),
         )
         .route(
@@ -145,7 +137,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::invoice_request::invoice_request_submit),
                 rbac,
-                receivable::invoice_request::invoice_request_submit_permission_key(),
+                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT,
             ),
         )
         .route(
@@ -153,7 +145,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(receivable::invoice_request::invoice_request_detail),
                 rbac,
-                receivable::invoice_request::invoice_request_detail_permission_key(),
+                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
             ),
         )
         .route(
@@ -161,7 +153,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(receivable::invoice_request::invoice_request_cancel),
                 rbac,
-                receivable::invoice_request::invoice_request_cancel_permission_key(),
+                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_CANCEL,
             ),
         )
         .route(
@@ -169,27 +161,23 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(receivable::invoice_request::invoice_request_amounts),
                 rbac,
-                receivable::invoice_request::invoice_request_amounts_permission_key(),
+                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_AMOUNTS,
             ),
         )
         .route(
             "/invoices/commit",
-            with_permission(
-                post(receivable::invoice_commit),
-                rbac,
-                receivable::invoice_commit_permission_key(),
-            ),
+            with_permission(post(receivable::invoice_commit), rbac, permissions::receivable::INVOICE_COMMIT),
         )
         .route(
             "/invoices/{id}/post",
-            with_permission(post(receivable::invoice_post), rbac, receivable::invoice_post_permission_key()),
+            with_permission(post(receivable::invoice_post), rbac, permissions::receivable::INVOICE_POST),
         )
         .route(
             "/invoices/{id}/red-issue",
             with_permission(
                 post(receivable::invoice_red_issue),
                 rbac,
-                receivable::invoice_red_issue_permission_key(),
+                permissions::receivable::INVOICE_RED_ISSUE,
             ),
         )
 }
@@ -212,7 +200,7 @@ fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
                 ),
                 rbac,
-                receivable::invoice_files::invoice_create_with_files_permission_key(),
+                permissions::receivable::INVOICE_FILES_INVOICE_CREATE_WITH_FILES,
             ),
         )
         .route(
@@ -223,7 +211,7 @@ fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
                 ),
                 rbac,
-                receivable::invoice_files::invoice_commit_with_files_permission_key(),
+                permissions::receivable::INVOICE_FILES_INVOICE_COMMIT_WITH_FILES,
             ),
         )
         .route(
@@ -234,7 +222,7 @@ fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
                 ),
                 rbac,
-                receivable::invoice_files::invoice_complete_with_files_permission_key(),
+                permissions::receivable::INVOICE_FILES_INVOICE_COMPLETE_WITH_FILES,
             ),
         )
         .route(
@@ -242,7 +230,7 @@ fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(receivable::draft_update::customer_receipt_update),
                 rbac,
-                receivable::draft_update::customer_receipt_update_permission_key(),
+                permissions::receivable::DRAFT_UPDATE_CUSTOMER_RECEIPT_UPDATE,
             ),
         )
         .route(
@@ -250,7 +238,7 @@ fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(receivable::draft_read::customer_receipt_draft),
                 rbac,
-                receivable::draft_read::customer_receipt_draft_permission_key(),
+                permissions::receivable::DRAFT_READ_CUSTOMER_RECEIPT_DRAFT,
             ),
         )
 }
@@ -265,7 +253,7 @@ fn receipt_file_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 upload::MAX_MULTIPART_REQUEST_BYTES,
             ),
             rbac,
-            receivable::receipt_files::customer_receipt_save_with_files_permission_key(),
+            permissions::receivable::RECEIPT_FILES_CUSTOMER_RECEIPT_SAVE_WITH_FILES,
         ),
     )
 }

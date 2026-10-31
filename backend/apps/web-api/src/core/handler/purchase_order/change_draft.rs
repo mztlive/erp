@@ -10,13 +10,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "读取原采购变更草稿",
-    resource = "purchase_change_order",
-    action = "submit"
-)]
 /// 读取可原单修改重提的采购变更完整目标。
 ///
 /// # 参数

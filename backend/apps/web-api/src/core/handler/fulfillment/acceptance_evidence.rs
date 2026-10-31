@@ -9,13 +9,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Error;
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询客户验收单详情",
-    resource = "customer_acceptance",
-    action = "detail"
-)]
 /// 下载销售范围内的签收单凭证。
 ///
 /// # 参数

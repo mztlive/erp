@@ -80,7 +80,6 @@
 | [entity-core](entity-core/README.md) | 提供持久化实体共用的基础字段：ID、版本号、创建时间、更新时间和软删除时间。 |
 | [entity-macros](entity-macros/README.md) | 在编译时生成重复的实体基础字段访问代码，以及具有独立 Rust 类型的字符串 ID。 |
 | [id-generator](id-generator/README.md) | 为业务对象生成内部主键，并为正式单据分配可展示的业务编号。 |
-| [permission-macros](permission-macros/README.md) | 为 HTTP Handler 声明权限标识，并在编译时生成取得该权限键的函数。 |
 | [storage](storage/README.md) | 将文件字节保存到 S3 或兼容服务，提供读取、删除、公开 URL 和大文件分片上传能力。 |
 | [test-support](test-support/README.md) | 提供后端测试共用的请求调用、测试 JWT、账号种子和索引断言辅助，并保留历史数据库测试夹具。 |
 

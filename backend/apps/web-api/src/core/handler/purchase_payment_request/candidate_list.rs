@@ -11,13 +11,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "查询可申请采购来源",
-    resource = "purchase_payment_request",
-    action = "create"
-)]
 /// 查询通过当前来源资格与独立条件的候选页。
 /// # 参数
 /// 当前账号、应用状态及分页查询条件。
@@ -33,13 +26,6 @@ pub async fn page(
     Ok(ApiResponse::ok_with_data(reads(&state).candidate_page(&actor, query).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "查询可申请采购来源",
-    resource = "purchase_payment_request",
-    action = "create"
-)]
 /// 查询跨页全选与发起前复验所需的当前候选身份。
 /// # 参数
 /// 当前账号、应用状态及独立筛选条件。
@@ -58,11 +44,18 @@ pub async fn ids(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::permissions;
 
     #[test]
     fn candidate_reads_require_create_permission() {
-        assert_eq!(page_permission_key().to_string(), "purchase_payment_request:create");
-        assert_eq!(ids_permission_key().to_string(), "purchase_payment_request:create");
+        assert_eq!(
+            permissions::purchase_payment_request::CANDIDATE_LIST_PAGE.permission().to_string(),
+            "purchase_payment_request:create"
+        );
+        assert_eq!(
+            permissions::purchase_payment_request::CANDIDATE_LIST_IDS.permission().to_string(),
+            "purchase_payment_request:create"
+        );
     }
 
     #[test]

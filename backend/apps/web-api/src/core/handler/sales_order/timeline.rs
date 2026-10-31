@@ -10,13 +10,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "查询销售单详情",
-    resource = "sales_order",
-    action = "detail"
-)]
 /// 读取销售单及关联单据的已授权时间线。
 /// # 参数
 /// `state`、`actor` 为应用与身份；`id`、`query` 为销售单及分页。

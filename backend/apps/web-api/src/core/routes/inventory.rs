@@ -2,8 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/stock-balances`、
 //! `/admin/stock-movements`、`/admin/stock-reservations`、`/admin/stock-adjustments`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -12,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::inventory;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -27,7 +27,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(inventory::stock_balance_list),
                 rbac,
-                inventory::stock_balance_list_permission_key(),
+                permissions::inventory::STOCK_BALANCE_LIST,
             ),
         )
         .route(
@@ -35,7 +35,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(inventory::stock_balance_detail),
                 rbac,
-                inventory::stock_balance_detail_permission_key(),
+                permissions::inventory::STOCK_BALANCE_DETAIL,
             ),
         )
         .route(
@@ -43,7 +43,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(inventory::stock_movement_list),
                 rbac,
-                inventory::stock_movement_list_permission_key(),
+                permissions::inventory::STOCK_MOVEMENT_LIST,
             ),
         )
         .route(
@@ -51,7 +51,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(inventory::stock_reservation_list),
                 rbac,
-                inventory::stock_reservation_list_permission_key(),
+                permissions::inventory::STOCK_RESERVATION_LIST,
             ),
         )
         .route(
@@ -59,7 +59,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(inventory::stock_adjustment_list),
                 rbac,
-                inventory::stock_adjustment_list_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_LIST,
             ),
         )
         .route(
@@ -67,7 +67,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(inventory::stock_adjustment_create),
                 rbac,
-                inventory::stock_adjustment_create_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_CREATE,
             ),
         )
         .route(
@@ -75,7 +75,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(inventory::stock_adjustment_detail),
                 rbac,
-                inventory::stock_adjustment_detail_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_DETAIL,
             ),
         )
         .route(
@@ -83,7 +83,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(inventory::stock_adjustment_update),
                 rbac,
-                inventory::stock_adjustment_update_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_UPDATE,
             ),
         )
         .route(
@@ -91,7 +91,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(inventory::stock_adjustment_submit),
                 rbac,
-                inventory::stock_adjustment_submit_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_SUBMIT,
             ),
         )
         .route(
@@ -99,7 +99,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(inventory::stock_adjustment_submit_result),
                 rbac,
-                inventory::stock_adjustment_submit_result_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_SUBMIT_RESULT,
             ),
         )
         .route(
@@ -107,7 +107,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(inventory::stock_adjustment_cancel_approval),
                 rbac,
-                inventory::stock_adjustment_cancel_approval_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -115,7 +115,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(inventory::stock_adjustment_post),
                 rbac,
-                inventory::stock_adjustment_post_permission_key(),
+                permissions::inventory::STOCK_ADJUSTMENT_POST,
             ),
         )
 }

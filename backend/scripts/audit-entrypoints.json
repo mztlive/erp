@@ -4785,6 +4785,70 @@
       "reason": "用例 delete_supplier 在自身事务或已声明 run_audited 边界通过 .resource_log、run_audited 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
+      "path": "crates/erp-processes/src/supplier_after_sales/refund.rs",
+      "function": "persist_refund_intent",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "退款意图保存步骤沿用上层 Executor，保存退款动作、执行记录与履约订单，并通过 persist_log 在同一事务中记录 supplier_fulfillment.api_refund。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_after_sales/refund_result.rs",
+      "function": "complete_refund",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "退款事实完成步骤沿用上层 Executor，更新执行记录与动作投影，并通过 persist_log 在同一事务中记录 supplier_fulfillment.api_refund_apply。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_after_sales/refund_store.rs",
+      "function": "save",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "退款观察结果适配器开启事务，在同一 Executor 中更新执行记录与动作投影，并记录 supplier_fulfillment.refund_observe；外部供应商调用不在该事务内。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_after_sales/settlement.rs",
+      "function": "save_page",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "结算分页保存适配器在同一事务中更新扫描进度、幂等保存结算证据并记录 supplier_settlement.receive；本登记不声明真实数据库回滚验收。"
+    },
+    {
       "path": "crates/erp-processes/src/supplier_connection_execution/catalog.rs",
       "function": "finish_catalog_job",
       "policy": "Audited",

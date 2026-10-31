@@ -13,13 +13,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "查询销售退货处理单列表",
-    resource = "sales_return_case",
-    action = "list"
-)]
 /// 查询销售退货/拒收处理单列表。
 ///
 /// # 参数
@@ -40,13 +33,6 @@ pub async fn sales_return_case_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "查询销售退货处理单详情",
-    resource = "sales_return_case",
-    action = "detail"
-)]
 /// 查询销售退货/拒收处理单详情（处理单 + 明细行）。
 ///
 /// # 参数
@@ -67,13 +53,6 @@ pub async fn sales_return_case_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "建立销售退货处理单",
-    resource = "sales_return_case",
-    action = "create"
-)]
 /// 建立销售退货/拒收处理单与明细行（跨集合事务）。
 ///
 /// # 参数

@@ -5,8 +5,7 @@
 //! `/admin/sku-attribute-values`、`/admin/products`、`/admin/product-revisions`、
 //! `/admin/skus`、`/admin/sku-revisions`、`/admin/voucher-category-profiles`（只读列表）、
 //! `/admin/voucher-categories`（原子创建）、`/admin/voucher-categories/{sku_id}`（更新）；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
@@ -16,6 +15,7 @@ use crate::app_state::AppState;
 use crate::core::handler::catalog;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 返回商品目录管理路由，按资源合并各操作入口。
 ///
@@ -64,7 +64,7 @@ fn product_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product_category_list),
                 rbac,
-                catalog::product_category_list_permission_key(),
+                permissions::catalog::PRODUCT_CATEGORY_LIST,
             ),
         )
         .route(
@@ -72,7 +72,7 @@ fn product_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::product_category_create),
                 rbac,
-                catalog::product_category_create_permission_key(),
+                permissions::catalog::PRODUCT_CATEGORY_CREATE,
             ),
         )
         .route(
@@ -80,7 +80,7 @@ fn product_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::product_category_update),
                 rbac,
-                catalog::product_category_update_permission_key(),
+                permissions::catalog::PRODUCT_CATEGORY_UPDATE,
             ),
         )
         .route(
@@ -88,7 +88,7 @@ fn product_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::product_category_move),
                 rbac,
-                catalog::product_category_move_permission_key(),
+                permissions::catalog::PRODUCT_CATEGORY_MOVE,
             ),
         )
         .route(
@@ -96,7 +96,7 @@ fn product_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(catalog::product_category_delete),
                 rbac,
-                catalog::product_category_delete_permission_key(),
+                permissions::catalog::PRODUCT_CATEGORY_DELETE,
             ),
         )
 }
@@ -113,18 +113,14 @@ fn product_brand_collection_routes(rbac: &SharedRbacService) -> Router<AppState>
     Router::new()
         .route(
             "/product-brands",
-            with_permission(
-                get(catalog::product_brand_list),
-                rbac,
-                catalog::product_brand_list_permission_key(),
-            ),
+            with_permission(get(catalog::product_brand_list), rbac, permissions::catalog::PRODUCT_BRAND_LIST),
         )
         .route(
             "/product-brands",
             with_permission(
                 post(catalog::product_brand_create),
                 rbac,
-                catalog::product_brand_create_permission_key(),
+                permissions::catalog::PRODUCT_BRAND_CREATE,
             ),
         )
         .route(
@@ -135,7 +131,7 @@ fn product_brand_collection_routes(rbac: &SharedRbacService) -> Router<AppState>
                     upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                catalog::product_brand_create_with_assets_permission_key(),
+                permissions::catalog::PRODUCT_BRAND_CREATE_WITH_ASSETS,
             ),
         )
 }
@@ -155,7 +151,7 @@ fn product_brand_item_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::product_brand_update),
                 rbac,
-                catalog::product_brand_update_permission_key(),
+                permissions::catalog::PRODUCT_BRAND_UPDATE,
             ),
         )
         .route(
@@ -166,7 +162,7 @@ fn product_brand_item_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                catalog::product_brand_update_with_assets_permission_key(),
+                permissions::catalog::PRODUCT_BRAND_UPDATE_WITH_ASSETS,
             ),
         )
         .route(
@@ -174,7 +170,7 @@ fn product_brand_item_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(catalog::product_brand_delete),
                 rbac,
-                catalog::product_brand_delete_permission_key(),
+                permissions::catalog::PRODUCT_BRAND_DELETE,
             ),
         )
 }
@@ -194,7 +190,7 @@ fn unit_of_measure_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::unit_of_measure_list),
                 rbac,
-                catalog::unit_of_measure_list_permission_key(),
+                permissions::catalog::UNIT_OF_MEASURE_LIST,
             ),
         )
         .route(
@@ -202,7 +198,7 @@ fn unit_of_measure_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::unit_of_measure_create),
                 rbac,
-                catalog::unit_of_measure_create_permission_key(),
+                permissions::catalog::UNIT_OF_MEASURE_CREATE,
             ),
         )
         .route(
@@ -210,7 +206,7 @@ fn unit_of_measure_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::unit_of_measure_update),
                 rbac,
-                catalog::unit_of_measure_update_permission_key(),
+                permissions::catalog::UNIT_OF_MEASURE_UPDATE,
             ),
         )
         .route(
@@ -218,7 +214,7 @@ fn unit_of_measure_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(catalog::unit_of_measure_delete),
                 rbac,
-                catalog::unit_of_measure_delete_permission_key(),
+                permissions::catalog::UNIT_OF_MEASURE_DELETE,
             ),
         )
 }
@@ -235,18 +231,14 @@ fn sku_attribute_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/sku-attributes",
-            with_permission(
-                get(catalog::sku_attribute_list),
-                rbac,
-                catalog::sku_attribute_list_permission_key(),
-            ),
+            with_permission(get(catalog::sku_attribute_list), rbac, permissions::catalog::SKU_ATTRIBUTE_LIST),
         )
         .route(
             "/sku-attributes",
             with_permission(
                 post(catalog::sku_attribute_create),
                 rbac,
-                catalog::sku_attribute_create_permission_key(),
+                permissions::catalog::SKU_ATTRIBUTE_CREATE,
             ),
         )
         .route(
@@ -254,7 +246,7 @@ fn sku_attribute_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::sku_attribute_update),
                 rbac,
-                catalog::sku_attribute_update_permission_key(),
+                permissions::catalog::SKU_ATTRIBUTE_UPDATE,
             ),
         )
         .route(
@@ -262,7 +254,7 @@ fn sku_attribute_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(catalog::sku_attribute_delete),
                 rbac,
-                catalog::sku_attribute_delete_permission_key(),
+                permissions::catalog::SKU_ATTRIBUTE_DELETE,
             ),
         )
 }
@@ -282,7 +274,7 @@ fn sku_attribute_value_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::sku_attribute_value_list),
                 rbac,
-                catalog::sku_attribute_value_list_permission_key(),
+                permissions::catalog::SKU_ATTRIBUTE_VALUE_LIST,
             ),
         )
         .route(
@@ -290,7 +282,7 @@ fn sku_attribute_value_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::sku_attribute_value_create),
                 rbac,
-                catalog::sku_attribute_value_create_permission_key(),
+                permissions::catalog::SKU_ATTRIBUTE_VALUE_CREATE,
             ),
         )
         .route(
@@ -298,7 +290,7 @@ fn sku_attribute_value_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::sku_attribute_value_update),
                 rbac,
-                catalog::sku_attribute_value_update_permission_key(),
+                permissions::catalog::SKU_ATTRIBUTE_VALUE_UPDATE,
             ),
         )
         .route(
@@ -306,7 +298,7 @@ fn sku_attribute_value_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(catalog::sku_attribute_value_delete),
                 rbac,
-                catalog::sku_attribute_value_delete_permission_key(),
+                permissions::catalog::SKU_ATTRIBUTE_VALUE_DELETE,
             ),
         )
 }
@@ -326,7 +318,7 @@ fn product_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::product_list),
                 rbac,
-                catalog::product::product_list_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_LIST,
             ),
         )
         .route(
@@ -334,7 +326,7 @@ fn product_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::product::product_create),
                 rbac,
-                catalog::product::product_create_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_CREATE,
             ),
         )
         .route(
@@ -345,7 +337,7 @@ fn product_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                catalog::product::product_create_with_assets_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_CREATE_WITH_ASSETS,
             ),
         )
 }
@@ -368,7 +360,7 @@ fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_PRODUCT_IMPORT_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                catalog::import::product_import_submit_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_SUBMIT,
             ),
         )
         .route(
@@ -376,7 +368,7 @@ fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::import::product_import_direct_upload_init),
                 rbac,
-                catalog::import::product_import_direct_upload_init_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_DIRECT_UPLOAD_INIT,
             ),
         )
         .route(
@@ -384,7 +376,7 @@ fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::import::product_import_direct_upload_part_url),
                 rbac,
-                catalog::import::product_import_direct_upload_part_url_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_DIRECT_UPLOAD_PART_URL,
             ),
         )
         .route(
@@ -392,7 +384,7 @@ fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::import::product_import_direct_upload_complete),
                 rbac,
-                catalog::import::product_import_direct_upload_complete_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_DIRECT_UPLOAD_COMPLETE,
             ),
         )
         .route(
@@ -400,7 +392,7 @@ fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(catalog::import::product_import_direct_upload_abort),
                 rbac,
-                catalog::import::product_import_direct_upload_abort_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_DIRECT_UPLOAD_ABORT,
             ),
         )
 }
@@ -420,7 +412,7 @@ fn product_import_job_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::import::product_import_job_list),
                 rbac,
-                catalog::import::product_import_job_list_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_JOB_LIST,
             ),
         )
         .route(
@@ -428,7 +420,7 @@ fn product_import_job_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::import::product_import_job_detail),
                 rbac,
-                catalog::import::product_import_job_detail_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_JOB_DETAIL,
             ),
         )
         .route(
@@ -436,7 +428,7 @@ fn product_import_job_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::import::product_import_job_items),
                 rbac,
-                catalog::import::product_import_job_items_permission_key(),
+                permissions::catalog::IMPORT_PRODUCT_IMPORT_JOB_ITEMS,
             ),
         )
 }
@@ -456,7 +448,7 @@ fn product_item_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::product::product_update),
                 rbac,
-                catalog::product::product_update_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_UPDATE,
             ),
         )
         .route(
@@ -464,7 +456,7 @@ fn product_item_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::product_detail),
                 rbac,
-                catalog::product::product_detail_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_DETAIL,
             ),
         )
 }
@@ -484,7 +476,7 @@ fn product_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::product::product_handover),
                 rbac,
-                catalog::product::product_handover_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_HANDOVER,
             ),
         )
         .route(
@@ -492,7 +484,7 @@ fn product_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::product_handover_candidates),
                 rbac,
-                catalog::product::product_handover_candidates_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_HANDOVER_CANDIDATES,
             ),
         )
 }
@@ -512,7 +504,7 @@ fn product_revision_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::product_detail_revisions),
                 rbac,
-                catalog::product::product_detail_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_DETAIL_REVISIONS,
             ),
         )
         .route(
@@ -520,7 +512,7 @@ fn product_revision_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::product_detail_skus),
                 rbac,
-                catalog::product::product_detail_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_DETAIL_SKUS,
             ),
         )
         .route(
@@ -528,7 +520,7 @@ fn product_revision_query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::product_detail_sku_revisions),
                 rbac,
-                catalog::product::product_detail_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_DETAIL_SKU_REVISIONS,
             ),
         )
 }
@@ -550,7 +542,7 @@ fn product_asset_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
             ),
             rbac,
-            catalog::product::product_update_with_assets_permission_key(),
+            permissions::catalog::PRODUCT_PRODUCT_UPDATE_WITH_ASSETS,
         ),
     )
 }
@@ -570,7 +562,7 @@ fn product_status_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::product::product_disable),
                 rbac,
-                catalog::product::product_disable_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_DISABLE,
             ),
         )
         .route(
@@ -578,7 +570,7 @@ fn product_status_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::product::product_listing_update),
                 rbac,
-                catalog::product::product_listing_update_permission_key(),
+                permissions::catalog::PRODUCT_PRODUCT_LISTING_UPDATE,
             ),
         )
 }
@@ -597,7 +589,7 @@ fn product_revision_routes(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(catalog::product::product_revision_list),
             rbac,
-            catalog::product::product_revision_list_permission_key(),
+            permissions::catalog::PRODUCT_PRODUCT_REVISION_LIST,
         ),
     )
 }
@@ -614,18 +606,14 @@ fn sku_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/skus",
-            with_permission(
-                get(catalog::product::sku_list),
-                rbac,
-                catalog::product::sku_list_permission_key(),
-            ),
+            with_permission(get(catalog::product::sku_list), rbac, permissions::catalog::PRODUCT_SKU_LIST),
         )
         .route(
             "/skus/{id}/listing-status",
             with_permission(
                 put(catalog::product::sku_listing_update),
                 rbac,
-                catalog::product::sku_listing_update_permission_key(),
+                permissions::catalog::PRODUCT_SKU_LISTING_UPDATE,
             ),
         )
 }
@@ -645,7 +633,7 @@ fn sellable_sku_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::sellable_sku_list),
                 rbac,
-                catalog::product::sellable_sku_list_permission_key(),
+                permissions::catalog::PRODUCT_SELLABLE_SKU_LIST,
             ),
         )
         .route(
@@ -653,7 +641,7 @@ fn sellable_sku_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::delivery_coverage::delivery_coverage),
                 rbac,
-                catalog::delivery_coverage::delivery_coverage_permission_key(),
+                permissions::catalog::DELIVERY_COVERAGE_DELIVERY_COVERAGE,
             ),
         )
 }
@@ -672,7 +660,7 @@ fn sku_revision_routes(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(catalog::product::sku_revision_list),
             rbac,
-            catalog::product::sku_revision_list_permission_key(),
+            permissions::catalog::PRODUCT_SKU_REVISION_LIST,
         ),
     )
 }
@@ -692,7 +680,7 @@ fn voucher_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::product::voucher_category_profile_list),
                 rbac,
-                catalog::product::voucher_category_profile_list_permission_key(),
+                permissions::catalog::PRODUCT_VOUCHER_CATEGORY_PROFILE_LIST,
             ),
         )
         .route(
@@ -700,7 +688,7 @@ fn voucher_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::product::voucher_category_create),
                 rbac,
-                catalog::product::voucher_category_create_permission_key(),
+                permissions::catalog::PRODUCT_VOUCHER_CATEGORY_CREATE,
             ),
         )
         .route(
@@ -708,7 +696,7 @@ fn voucher_category_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(catalog::product::voucher_category_update),
                 rbac,
-                catalog::product::voucher_category_update_permission_key(),
+                permissions::catalog::PRODUCT_VOUCHER_CATEGORY_UPDATE,
             ),
         )
 }
@@ -727,7 +715,7 @@ fn product_source_diff_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(catalog::source_diff::product_source_diff),
                 rbac,
-                catalog::source_diff::product_source_diff_permission_key(),
+                permissions::catalog::SOURCE_DIFF_PRODUCT_SOURCE_DIFF,
             ),
         )
         .route(
@@ -735,7 +723,7 @@ fn product_source_diff_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(catalog::source_diff::resolve_product_source_diff),
                 rbac,
-                catalog::source_diff::resolve_product_source_diff_permission_key(),
+                permissions::catalog::SOURCE_DIFF_RESOLVE_PRODUCT_SOURCE_DIFF,
             ),
         )
 }

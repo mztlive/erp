@@ -22,13 +22,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询费用采购来源销售单",
-    resource = "purchase_order",
-    action = "create"
-)]
 /// 查询费用采购可选的来源销售单。
 /// # 参数
 /// `state` 为应用，`actor` 为当前账号，`params` 为搜索与分页。
@@ -45,13 +38,6 @@ pub async fn expense_sources(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "读取费用采购来源明细",
-    resource = "purchase_order",
-    action = "create"
-)]
 /// 读取可归属费用的销售明细。
 /// # 参数
 /// `state` 为应用，`actor` 为当前账号，`id` 为来源销售单。
@@ -68,13 +54,6 @@ pub async fn expense_source_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "从销售单追加费用采购单",
-    resource = "purchase_order",
-    action = "create"
-)]
 /// 从已生效销售单追加费用采购单并提交审批。
 ///
 /// # 参数
@@ -101,13 +80,6 @@ pub async fn expense_purchase_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "确认采购费用行已发生",
-    resource = "purchase_order",
-    action = "confirm_expense"
-)]
 /// 确认采购单上的一条费用行已发生，形成实际发生成本。
 ///
 /// 命令与凭证一次 multipart 提交：`command` 为 JSON，凭证字段名须与

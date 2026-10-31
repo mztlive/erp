@@ -57,13 +57,6 @@ fn purchase_reads(state: &AppState) -> PurchaseOrderReadService {
     PurchaseOrderReadService::with_scope(state.db(), MongoPurchaseDataScope::shared(state.db(), state.rbac()))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购单列表",
-    resource = "purchase_order",
-    action = "list"
-)]
 /// 查询采购单列表。
 ///
 /// # 参数
@@ -90,13 +83,6 @@ pub async fn purchase_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购单对象中心",
-    resource = "purchase_order",
-    action = "detail"
-)]
 /// 查询采购单对象中心。
 ///
 /// # 参数
@@ -124,13 +110,6 @@ pub async fn purchase_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "依据采购确认创建采购单",
-    resource = "purchase_order",
-    action = "create"
-)]
 /// 依据采购确认创建采购单并提交审批（幂等：同拆单维度结果复用）。
 ///
 /// # 参数
@@ -153,13 +132,6 @@ pub async fn purchase_order_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "确认供给分配",
-    resource = "purchase_order",
-    action = "create"
-)]
 /// 一次确认库存与采购供给分配（幂等：同键同载荷回放原结果）。
 ///
 /// # 参数
@@ -182,13 +154,6 @@ pub async fn purchase_order_create_from_sourcing(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "保存采购草稿",
-    resource = "purchase_order",
-    action = "update"
-)]
 /// 保存采购草稿（乐观锁：请求携带期望版本，冲突返回 409）。
 ///
 /// # 参数
@@ -213,13 +178,6 @@ pub async fn purchase_order_save_draft(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "作废采购单草稿",
-    resource = "purchase_order",
-    action = "delete"
-)]
 /// 作废采购草稿并释放对应销售采购覆盖。
 ///
 /// # 参数
@@ -244,13 +202,6 @@ pub async fn purchase_order_void(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "提交采购单审批",
-    resource = "purchase_order",
-    action = "submit"
-)]
 /// 提交采购单并启动统一审批。
 ///
 /// # 参数
@@ -275,13 +226,6 @@ pub async fn purchase_order_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "登记维持原采购依据",
-    resource = "purchase_order",
-    action = "maintain_source"
-)]
 /// 销售变更影响采购但无法调整时，登记维持原采购。
 ///
 /// # 参数
@@ -302,13 +246,6 @@ pub async fn purchase_order_maintain_source(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "撤回采购单审批",
-    resource = "purchase_order",
-    action = "cancel_approval"
-)]
 /// 撤回尚未最终通过的采购单审批。
 ///
 /// # 参数
@@ -333,13 +270,6 @@ pub async fn purchase_order_cancel_approval(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询供给分配依据",
-    resource = "purchase_order",
-    action = "create"
-)]
 /// 查询当前账号开放任务范围内的库存与采购供给依据。
 ///
 /// # 参数
@@ -359,13 +289,6 @@ pub async fn purchase_creation_basis_list(
     Ok(ApiResponse::ok_with_data(views))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "发起采购变更",
-    resource = "purchase_change_order",
-    action = "create"
-)]
 /// 发起采购变更（基于当前生效版本创建变更单）。
 ///
 /// # 参数
@@ -390,13 +313,6 @@ pub async fn purchase_change_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "提交采购变更审批",
-    resource = "purchase_change_order",
-    action = "submit"
-)]
 /// 提交采购变更并启动统一审批。
 ///
 /// # 参数
@@ -421,13 +337,6 @@ pub async fn purchase_change_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "采购变更生效",
-    resource = "purchase_change_order",
-    action = "post"
-)]
 /// 客户端直接生效失败关闭。最终动作仅由审批运行时 `on_final_approve` 调用。
 ///
 /// # 参数
@@ -450,13 +359,6 @@ pub async fn purchase_change_effect(
     }
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "撤回采购变更审批",
-    resource = "purchase_change_order",
-    action = "cancel_approval"
-)]
 /// 撤回尚未最终通过的采购变更审批。
 ///
 /// # 参数
@@ -481,13 +383,6 @@ pub async fn purchase_change_cancel_approval(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购变更单列表",
-    resource = "purchase_change_order",
-    action = "list"
-)]
 /// 查询采购变更单列表。
 ///
 /// # 参数
@@ -513,13 +408,6 @@ pub async fn purchase_change_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购变更单详情",
-    resource = "purchase_change_order",
-    action = "detail"
-)]
 /// 查询采购变更单详情。
 ///
 /// # 参数

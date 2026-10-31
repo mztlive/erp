@@ -199,13 +199,6 @@ pub async fn download(
 /// 完整受控文件字节及禁止缓存、嗅探的响应头。
 /// # 错误
 /// 专项任务资格失效、来源不符、版本变化或文件治理禁止时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "下载供应商专项审核素材",
-    resource = "supplier_portal_request",
-    action = "detail"
-)]
 pub async fn review_download(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

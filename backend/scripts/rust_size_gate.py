@@ -29,7 +29,7 @@ MAX_FILE_LINES = 800
 MAX_FN_LINES = 50
 FN_NAME = re.compile(r"\bfn\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*)")
 MOD_NAME = re.compile(r"mod\s+([A-Za-z_][A-Za-z0-9_]*)")
-MACRO_IMPL_PREFIXES = ("crates/entity-macros/", "crates/permission-macros/")
+MACRO_IMPL_PREFIXES = ("crates/entity-macros/",)
 CFG_TEST = re.compile(
     r"#\s*!?\s*\[\s*cfg\s*\(\s*(?:test\s*\)|all\s*\((?:[^()]|\([^()]*\))*\btest\b)",
     re.S,

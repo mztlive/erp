@@ -28,13 +28,6 @@ pub struct PaymentRequestMaterialQuery {
     submission_version: Option<u32>,
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "读取采购付款申请历史提交",
-    resource = "purchase_payment_request",
-    action = "detail"
-)]
 /// 按完整历史来源资格读取该轮不可变提交依据。
 /// # 参数
 /// 当前账号、申请身份与提交版本。
@@ -50,13 +43,6 @@ pub async fn submission(
     Ok(ApiResponse::ok_with_data(reads(&state).submission(&actor, &id, version).await?))
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "读取付款申请任务上下文",
-    resource = "work_item",
-    action = "detail"
-)]
 /// 当前审批人或出纳凭本任务读取全部冻结采购和销售资料。
 /// # 参数
 /// 当前账号与正式任务身份。
@@ -74,13 +60,6 @@ pub async fn task_context(
     ))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "下载本付款申请冻结材料",
-    resource = "purchase_payment_request",
-    action = "detail"
-)]
 /// 下载本申请允许材料，在存储读取前后复验完整来源及治理状态。
 /// # 参数
 /// 当前账号、申请和文件身份；可附当前正式任务身份。
@@ -97,13 +76,6 @@ pub async fn material_download(
     content(&state, &actor, &id, &asset_id, &query, true).await
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "预览本付款申请冻结材料",
-    resource = "purchase_payment_request",
-    action = "detail"
-)]
 /// 预览允许清单中的同版本图片或 PDF。
 /// # 参数
 /// 当前账号、申请和文件身份；可附当前正式任务身份。

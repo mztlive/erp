@@ -11,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::party;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -29,7 +30,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(party::company::company_list),
                 rbac,
-                party::company::company_list_permission_key(),
+                permissions::party::COMPANY_COMPANY_LIST,
             ),
         )
         .route(
@@ -37,7 +38,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(party::company::company_create),
                 rbac,
-                party::company::company_create_permission_key(),
+                permissions::party::COMPANY_COMPANY_CREATE,
             ),
         )
         .route(
@@ -45,7 +46,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(party::company::company_detail),
                 rbac,
-                party::company::company_detail_permission_key(),
+                permissions::party::COMPANY_COMPANY_DETAIL,
             ),
         )
         .route(
@@ -53,88 +54,55 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(party::company::company_update),
                 rbac,
-                party::company::company_update_permission_key(),
+                permissions::party::COMPANY_COMPANY_UPDATE,
             ),
         )
-        .route("/parties", with_permission(get(party::party_list), rbac, party::party_list_permission_key()))
-        .route(
-            "/parties",
-            with_permission(post(party::party_create), rbac, party::party_create_permission_key()),
-        )
-        .route(
-            "/parties/{id}",
-            with_permission(get(party::party_detail), rbac, party::party_detail_permission_key()),
-        )
+        .route("/parties", with_permission(get(party::party_list), rbac, permissions::party::LIST))
+        .route("/parties", with_permission(post(party::party_create), rbac, permissions::party::CREATE))
+        .route("/parties/{id}", with_permission(get(party::party_detail), rbac, permissions::party::DETAIL))
+        .route("/parties/{id}", with_permission(put(party::party_update), rbac, permissions::party::UPDATE))
         .route(
             "/parties/{id}",
-            with_permission(put(party::party_update), rbac, party::party_update_permission_key()),
-        )
-        .route(
-            "/parties/{id}",
-            with_permission(delete(party::party_delete), rbac, party::party_delete_permission_key()),
+            with_permission(delete(party::party_delete), rbac, permissions::party::DELETE),
         )
         .route(
             "/parties/{id}/revisions",
-            with_permission(
-                get(party::party_revision_list),
-                rbac,
-                party::party_revision_list_permission_key(),
-            ),
+            with_permission(get(party::party_revision_list), rbac, permissions::party::REVISION_LIST),
         )
         .route(
             "/parties/{id}/contacts",
-            with_permission(get(party::party_contact_list), rbac, party::party_contact_list_permission_key()),
+            with_permission(get(party::party_contact_list), rbac, permissions::party::CONTACT_LIST),
         )
         .route(
             "/parties/{id}/contacts",
-            with_permission(
-                post(party::party_contact_create),
-                rbac,
-                party::party_contact_create_permission_key(),
-            ),
+            with_permission(post(party::party_contact_create), rbac, permissions::party::CONTACT_CREATE),
         )
         .route(
             "/party-contacts/{id}",
-            with_permission(
-                put(party::party_contact_update),
-                rbac,
-                party::party_contact_update_permission_key(),
-            ),
+            with_permission(put(party::party_contact_update), rbac, permissions::party::CONTACT_UPDATE),
         )
         .route(
             "/parties/{id}/addresses",
-            with_permission(get(party::party_address_list), rbac, party::party_address_list_permission_key()),
+            with_permission(get(party::party_address_list), rbac, permissions::party::ADDRESS_LIST),
         )
         .route(
             "/parties/{id}/addresses",
-            with_permission(
-                post(party::party_address_create),
-                rbac,
-                party::party_address_create_permission_key(),
-            ),
+            with_permission(post(party::party_address_create), rbac, permissions::party::ADDRESS_CREATE),
         )
         .route(
             "/party-addresses/{id}",
-            with_permission(
-                put(party::party_address_update),
-                rbac,
-                party::party_address_update_permission_key(),
-            ),
+            with_permission(put(party::party_address_update), rbac, permissions::party::ADDRESS_UPDATE),
         )
         .route(
             "/parties/{id}/tax-profiles",
-            with_permission(
-                get(party::party_tax_profile_list),
-                rbac,
-                party::party_tax_profile_list_permission_key(),
-            ),
+            with_permission(get(party::party_tax_profile_list), rbac, permissions::party::TAX_PROFILE_LIST),
         )
         .route(
             "/parties/{id}/tax-profiles",
             with_permission(
                 post(party::party_tax_profile_create),
                 rbac,
-                party::party_tax_profile_create_permission_key(),
+                permissions::party::TAX_PROFILE_CREATE,
             ),
         )
         .route(
@@ -142,23 +110,19 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(party::party_tax_profile_update),
                 rbac,
-                party::party_tax_profile_update_permission_key(),
+                permissions::party::TAX_PROFILE_UPDATE,
             ),
         )
         .route(
             "/parties/{id}/bank-accounts",
-            with_permission(
-                get(party::party_bank_account_list),
-                rbac,
-                party::party_bank_account_list_permission_key(),
-            ),
+            with_permission(get(party::party_bank_account_list), rbac, permissions::party::BANK_ACCOUNT_LIST),
         )
         .route(
             "/parties/{id}/bank-accounts",
             with_permission(
                 post(party::party_bank_account_create),
                 rbac,
-                party::party_bank_account_create_permission_key(),
+                permissions::party::BANK_ACCOUNT_CREATE,
             ),
         )
         .route(
@@ -166,7 +130,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(party::party_bank_account_update),
                 rbac,
-                party::party_bank_account_update_permission_key(),
+                permissions::party::BANK_ACCOUNT_UPDATE,
             ),
         )
 }

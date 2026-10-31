@@ -27,13 +27,6 @@ pub struct ImportListQuery {
     pub revision_contract_id: Option<String>,
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "上传识别合同",
-    resource = "contract",
-    action = "create"
-)]
 /// 上传只登记导入任务，后续识别预填并由用户确认业务字段。
 /// # 参数
 /// * `state` / `actor` / `multipart` - 应用、认证人及文件与控制命令。
@@ -95,13 +88,6 @@ fn decode_command(bytes: &[u8]) -> std::result::Result<ImportCommand, Error> {
         .map_err(|_| Error::BadRequest("导入命令无效，不允许手填合同业务字段".into()))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "查询本人合同导入",
-    resource = "contract",
-    action = "create"
-)]
 /// 分页查看本人的导入任务。
 /// # 参数
 /// * `state` / `actor` / `query` - 应用、认证人与页码。
@@ -122,13 +108,6 @@ pub async fn list(
     ))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "查询本人合同导入结果",
-    resource = "contract",
-    action = "create"
-)]
 /// 读取本人导入结果。
 /// # 参数
 /// * `state` / `actor` / `id` - 应用、认证人与任务。
@@ -144,13 +123,6 @@ pub async fn detail(
     Ok(ApiResponse::ok_with_data(state.contract_import_process().detail(&id, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "执行或重试合同识别",
-    resource = "contract",
-    action = "create"
-)]
 /// 执行或重试；请求不接受业务字段。
 /// # 参数
 /// * `state` / `actor` / `id` / `body` - 应用、认证人、任务与必须为空的正文。
@@ -170,13 +142,6 @@ pub async fn run(
     Ok(ApiResponse::ok_with_data(contract_import_worker::start(state, actor, id).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "确认合同识别信息并归档",
-    resource = "contract",
-    action = "create"
-)]
 /// 接收用户补充或修改的字段并归档。
 /// # 参数
 /// * `state` / `actor` / `id` / `command` - 应用、认证人、任务及确认命令。
@@ -193,13 +158,6 @@ pub async fn confirm(
     Ok(ApiResponse::ok_with_data(state.contract_import_process().confirm(&id, command, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "预览本人导入原文",
-    resource = "contract",
-    action = "create"
-)]
 /// 只通过本人任务提供原文件，禁止仅凭附件 ID 下载。
 /// # 参数
 /// * `state` / `actor` / `id` - 应用、认证人与任务。

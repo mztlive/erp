@@ -65,14 +65,13 @@ BPM_FORBIDDEN_PACKAGES = {
     "mongodb",
     "axum",
     "id-generator",
-    "permission-macros",
 }
 PLANNED_DOMAIN_PACKAGES = FOUNDATION | COMPOSITION | BUSINESS_DOMAINS
 KINDS = ("normal", "build", "dev")
 CUTOVER_REQUIRED_PACKAGES = (
     FOUNDATION | COMPOSITION | (BUSINESS_DOMAINS - {"erp-commerce"})
     | {"bpm", "cli", "web-api", "config", "entity-core", "entity-macros",
-       "permission-macros", "storage", "aliyun-ocr", CONTRACT_RECOGNITION, "id-generator", "test-support"}
+       "storage", "aliyun-ocr", CONTRACT_RECOGNITION, "id-generator", "test-support"}
 )
 
 
@@ -806,6 +805,12 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
             result.errors.extend(
                 scan_foreign_collections(rel, path.read_text(encoding="utf-8"), own, foreign)
             )
+
+    if cutover:
+        # Final mode already checks every active source and legacy source tree.
+        # Phase-specific clearance belongs only to the transitional workspace.
+        result.notes.append("最终切换以全量旧源清零为准，不依赖已归档的阶段迁移计划")
+        return result
 
     manifest = load_plan_manifest(backend)
     accepted = {phase["id"] for phase in manifest.get("phases") or [] if phase.get("status") == "已验收"}

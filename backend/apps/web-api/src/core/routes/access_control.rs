@@ -2,8 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/permissions`、
 //! `/admin/data-scopes`、`/admin/user-roles`、`/admin/audit-events`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -13,6 +12,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::{access_control, organization};
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -40,7 +40,7 @@ fn policy_bundle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::policy_bundle::validate),
                 rbac,
-                access_control::policy_bundle::validate_permission_key(),
+                permissions::access_control::POLICY_BUNDLE_VALIDATE,
             ),
         )
         .route(
@@ -48,7 +48,7 @@ fn policy_bundle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::policy_bundle::preview),
                 rbac,
-                access_control::policy_bundle::preview_permission_key(),
+                permissions::access_control::POLICY_BUNDLE_PREVIEW,
             ),
         )
         .route(
@@ -56,7 +56,7 @@ fn policy_bundle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::policy_bundle::apply),
                 rbac,
-                access_control::policy_bundle::apply_permission_key(),
+                permissions::access_control::POLICY_BUNDLE_APPLY,
             ),
         )
         .route(
@@ -64,7 +64,7 @@ fn policy_bundle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::policy_bundle::export),
                 rbac,
-                access_control::policy_bundle::export_permission_key(),
+                permissions::access_control::POLICY_BUNDLE_EXPORT,
             ),
         )
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
@@ -78,7 +78,7 @@ fn organization_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_directory::get_qualification),
                 rbac,
-                access_control::person_directory::get_qualification_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_GET_QUALIFICATION,
             ),
         )
         .route(
@@ -86,20 +86,17 @@ fn organization_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(access_control::person_directory::change_qualification),
                 rbac,
-                access_control::person_directory::change_qualification_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_CHANGE_QUALIFICATION,
             ),
         )
-        .route(
-            "/org-units",
-            with_permission(get(organization::list), rbac, organization::list_permission_key()),
-        )
+        .route("/org-units", with_permission(get(organization::list), rbac, permissions::organization::LIST))
         .route(
             "/org-units/preview",
-            with_permission(post(organization::preview), rbac, organization::preview_permission_key()),
+            with_permission(post(organization::preview), rbac, permissions::organization::PREVIEW),
         )
         .route(
             "/org-units/change",
-            with_permission(post(organization::change), rbac, organization::change_permission_key()),
+            with_permission(post(organization::change), rbac, permissions::organization::CHANGE),
         )
 }
 
@@ -111,7 +108,7 @@ fn permission_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::permission_list),
                 rbac,
-                access_control::permission_list_permission_key(),
+                permissions::access_control::PERMISSION_LIST,
             ),
         )
         .route(
@@ -119,7 +116,7 @@ fn permission_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::permission_create),
                 rbac,
-                access_control::permission_create_permission_key(),
+                permissions::access_control::PERMISSION_CREATE,
             ),
         )
         .route(
@@ -127,7 +124,7 @@ fn permission_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(access_control::permission_update),
                 rbac,
-                access_control::permission_update_permission_key(),
+                permissions::access_control::PERMISSION_UPDATE,
             ),
         )
         .route(
@@ -135,7 +132,7 @@ fn permission_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(access_control::permission_delete),
                 rbac,
-                access_control::permission_delete_permission_key(),
+                permissions::access_control::PERMISSION_DELETE,
             ),
         )
 }
@@ -148,7 +145,7 @@ fn binding_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::user_role_list),
                 rbac,
-                access_control::user_role_list_permission_key(),
+                permissions::access_control::USER_ROLE_LIST,
             ),
         )
         .route(
@@ -156,7 +153,7 @@ fn binding_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::user_role_create),
                 rbac,
-                access_control::user_role_create_permission_key(),
+                permissions::access_control::USER_ROLE_CREATE,
             ),
         )
         .route(
@@ -164,7 +161,7 @@ fn binding_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::user_role_revoke),
                 rbac,
-                access_control::user_role_revoke_permission_key(),
+                permissions::access_control::USER_ROLE_REVOKE,
             ),
         )
 }
@@ -177,7 +174,7 @@ fn inspection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(access_control::inspection::inspect),
                 rbac,
-                access_control::inspection::inspect_permission_key(),
+                permissions::access_control::INSPECTION_INSPECT,
             ),
         )
         .route(
@@ -185,7 +182,7 @@ fn inspection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::audit_event_list),
                 rbac,
-                access_control::audit_event_list_permission_key(),
+                permissions::access_control::AUDIT_EVENT_LIST,
             ),
         )
 }
@@ -198,7 +195,7 @@ fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_directory::list_salespeople),
                 rbac,
-                access_control::person_directory::list_salespeople_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_LIST_SALESPEOPLE,
             ),
         )
         .route(
@@ -206,7 +203,7 @@ fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_directory::list_selected_salespeople),
                 rbac,
-                access_control::person_directory::list_selected_salespeople_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_LIST_SELECTED_SALESPEOPLE,
             ),
         )
         .route(
@@ -214,7 +211,7 @@ fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_directory::list_procurement_people),
                 rbac,
-                access_control::person_directory::list_procurement_people_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_LIST_PROCUREMENT_PEOPLE,
             ),
         )
         .route(
@@ -222,7 +219,7 @@ fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_directory::list_selected_procurement_people),
                 rbac,
-                access_control::person_directory::list_selected_procurement_people_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_LIST_SELECTED_PROCUREMENT_PEOPLE,
             ),
         )
         .route(
@@ -230,7 +227,7 @@ fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_directory::list_business_people),
                 rbac,
-                access_control::person_directory::list_business_people_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_LIST_BUSINESS_PEOPLE,
             ),
         )
         .route(
@@ -238,7 +235,7 @@ fn people_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_directory::list_selected_business_people),
                 rbac,
-                access_control::person_directory::list_selected_business_people_permission_key(),
+                permissions::access_control::PERSON_DIRECTORY_LIST_SELECTED_BUSINESS_PEOPLE,
             ),
         )
 }
@@ -251,7 +248,7 @@ fn person_scope_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(access_control::person_scope::list),
                 rbac,
-                access_control::person_scope::list_permission_key(),
+                permissions::access_control::PERSON_SCOPE_LIST,
             ),
         )
         .route(
@@ -259,7 +256,7 @@ fn person_scope_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(access_control::person_scope::save),
                 rbac,
-                access_control::person_scope::save_permission_key(),
+                permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
 }

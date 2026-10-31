@@ -59,9 +59,10 @@ src/
 反向代理部署必须通过可信网络拓扑保留真实来源地址，或在可信代理边界显式完成来源地址
 传递。
 
-管理端 Handler 使用 `#[permission_macros::permission(...)]` 声明
-`resource:action`；`build.rs` 解析这些声明生成前端权限定义。新增管理端接口时必须同时
-挂到 `routes/admin.rs` 的认证与 RBAC 链路。
+管理端路由通过 `with_permission` 引用 `permission_catalog/` 中的普通 Rust 权限常量。
+`build.rs` 编译同一目录并解析路由绑定，生成前端权限目录及后端授权文件校验白名单。
+新增管理端接口必须挂到 `routes/admin.rs` 的认证与 RBAC 链路，并遵循
+[权限目录维护合同](../../docs/permissions-gen.md)。
 
 ## DTO 与 Handler 边界
 
@@ -136,7 +137,7 @@ S3 客户端在启动时固定。Nacos 修改数据库或任一 S3 字段后，�
 1. 先在 `entities` 定义或复用不变式，在 `services` 增加 DTO 与编排。
 2. 在对应 `handler/{admin,auth}` 模块或明确的共享 Handler 文件中添加薄 Handler。
 3. 在 `routes/{admin,account,public}.rs` 注册路由。
-4. 管理端接口添加 permission 宏并使用 `with_permission`。
+4. 管理端接口登记显式权限常量并通过 `with_permission` 引用。
 5. 覆盖正常、校验失败、权限/冲突等关键路径。
 6. 运行：
 

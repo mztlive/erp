@@ -16,13 +16,6 @@ pub struct InquiryRecoveryParams {
     pub action: String,
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "核对销售询价命令结果",
-    resource = "sales_inquiry",
-    action = "recover"
-)]
 /// 使用原命令键查询已提交结果，当前销售范围仍须有效。
 /// # 参数
 /// `state` 为应用，`actor` 为当前账号，路径为询价及原命令键，查询含原动作。
@@ -41,13 +34,6 @@ pub async fn sales_recover(
     ))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "核对新建询价命令结果",
-    resource = "sales_inquiry",
-    action = "recover"
-)]
 /// 新建响应丢失后按原命令键取得由服务端登记的询价身份。
 /// # 参数
 /// `state`、`actor` 为当前应用及账号，`key` 为原创建命令键。
@@ -63,13 +49,6 @@ pub async fn sales_create_recover(
     Ok(ApiResponse::ok_with_data(state.sales_inquiry_process().recover(&actor, "", "create", &key).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "核对采购询价命令结果",
-    resource = "procurement_inquiry",
-    action = "recover"
-)]
 /// 查询本人采购询价命令的安全结果，不恢复历史任务操作权。
 /// # 参数
 /// `state`、`actor` 为当前应用及账号，路径限定询价和原命令，查询含动作。

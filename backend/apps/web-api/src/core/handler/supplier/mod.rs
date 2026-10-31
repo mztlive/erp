@@ -30,13 +30,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "创建完整供应商资料",
-    resource = "supplier",
-    action = "create"
-)]
 /// 原子创建完整供应商资料。
 pub async fn supplier_profile_create(
     State(state): State<AppState>,
@@ -47,13 +40,6 @@ pub async fn supplier_profile_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "一次创建供应商资料及资质文件",
-    resource = "supplier",
-    action = "create"
-)]
 /// 一次接收供应商根命令与资质文件，并原子登记文件元数据和完整供应商资料。
 ///
 /// # 参数
@@ -80,13 +66,6 @@ pub async fn supplier_profile_create_with_assets(
     Ok(ApiResponse::ok_with_data(result.view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "修订完整供应商资料",
-    resource = "supplier",
-    action = "update"
-)]
 /// 原子修订完整供应商资料。
 pub async fn supplier_profile_update(
     State(state): State<AppState>,
@@ -98,13 +77,6 @@ pub async fn supplier_profile_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "一次修订供应商资料及资质文件",
-    resource = "supplier",
-    action = "update"
-)]
 /// 一次接收供应商修订根命令与资质文件，并原子登记文件元数据和全部资料变化。
 ///
 /// # 参数
@@ -147,13 +119,6 @@ fn supplier_asset_sensitivity(reference: &str) -> SensitivityClass {
     }
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询供应商资料保存结果",
-    resource = "supplier",
-    action = "detail"
-)]
 /// 按幂等键查询已成功的供应商资料命令结果。
 pub async fn supplier_profile_command_detail(
     State(state): State<AppState>,
@@ -163,13 +128,6 @@ pub async fn supplier_profile_command_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "短时查看供应商敏感字段",
-    resource = "supplier_sensitive",
-    action = "reveal"
-)]
 /// 按详情接口签发的短时令牌揭示单个敏感字段。
 pub async fn supplier_sensitive_reveal(
     State(state): State<AppState>,
@@ -180,13 +138,6 @@ pub async fn supplier_sensitive_reveal(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询供应商列表",
-    resource = "supplier",
-    action = "list"
-)]
 /// 查询供应商列表。
 ///
 /// # 参数
@@ -205,13 +156,6 @@ pub async fn supplier_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询供应商详情",
-    resource = "supplier",
-    action = "detail"
-)]
 /// 查询供应商详情（供应商 + 当前商务结算版本 + 主体编号）。
 ///
 /// # 参数
@@ -229,13 +173,6 @@ pub async fn supplier_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "删除供应商",
-    resource = "supplier",
-    action = "delete"
-)]
 /// 软删除供应商角色。
 ///
 /// # 参数
@@ -254,13 +191,6 @@ pub async fn supplier_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "交接供应商整体维护人",
-    resource = "supplier",
-    action = "update"
-)]
 /// 显式交接供应商整体维护人。
 ///
 /// # 参数
@@ -284,13 +214,6 @@ pub async fn supplier_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询供应商交接待选人",
-    resource = "supplier",
-    action = "update"
-)]
 /// 查询合格有效的维护人交接待选。
 ///
 /// # 参数
@@ -312,13 +235,6 @@ pub async fn supplier_handover_candidates(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "交接供给能力负责人",
-    resource = "supplier",
-    action = "update"
-)]
 /// 显式交接供给能力负责人。
 ///
 /// # 参数

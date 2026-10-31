@@ -40,13 +40,6 @@ fn process(state: &AppState) -> SalesSelectionProcess {
     .with_rbac(state.rbac())
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "查询选品册列表",
-    resource = "sales_selection_booklet",
-    action = "list"
-)]
 /// 查询选品册列表。
 ///
 /// # 参数
@@ -66,13 +59,6 @@ pub async fn booklet_list(
     Ok(ApiResponse::ok_with_data(process(&state).booklet_list(params, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "查询选品册详情",
-    resource = "sales_selection_booklet",
-    action = "get"
-)]
 /// 查询选品册详情。
 ///
 /// # 参数
@@ -91,13 +77,6 @@ pub async fn booklet_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "创建选品册",
-    resource = "sales_selection_booklet",
-    action = "create"
-)]
 /// 创建选品册并排队首次准备。
 ///
 /// # 参数
@@ -116,13 +95,6 @@ pub async fn booklet_create(
     Ok(ApiResponse::ok_with_data(process(&state).create(req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "准备及重生成选品册",
-    resource = "sales_selection_booklet",
-    action = "prepare"
-)]
 /// 启动准备。
 ///
 /// # 参数
@@ -143,13 +115,6 @@ pub async fn booklet_prepare(
     Ok(ApiResponse::ok_with_data(process(&state).start_prepare(id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "维护选品册陈列",
-    resource = "sales_selection_booklet",
-    action = "maintain"
-)]
 /// 删除陈列项。
 ///
 /// # 参数
@@ -170,13 +135,6 @@ pub async fn booklet_delete_item(
     Ok(ApiResponse::ok_with_data(process(&state).delete_display_item(id, item_id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "维护选品册陈列",
-    resource = "sales_selection_booklet",
-    action = "maintain"
-)]
 /// 删除陈列项（POST 兼容路径）。
 ///
 /// # 参数
@@ -197,13 +155,6 @@ pub async fn booklet_delete_item_post(
     Ok(ApiResponse::ok_with_data(process(&state).delete_display_item(id, item_id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "发布选品册",
-    resource = "sales_selection_booklet",
-    action = "publish"
-)]
 /// 发布选品册。
 ///
 /// # 参数
@@ -224,13 +175,6 @@ pub async fn booklet_publish(
     Ok(ApiResponse::ok_with_data(process(&state).publish(id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "复制选品链接",
-    resource = "sales_selection_booklet",
-    action = "copy_link"
-)]
 /// 复制当前链接。
 ///
 /// # 参数
@@ -248,13 +192,6 @@ pub async fn booklet_copy_link(
     Ok(ApiResponse::ok_with_data(process(&state).copy_link(&id, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "复制选品链接",
-    resource = "sales_selection_booklet",
-    action = "copy_link"
-)]
 /// 复制当前链接相对地址。
 ///
 /// # 参数
@@ -272,13 +209,6 @@ pub async fn booklet_copy_link_url(
     Ok(ApiResponse::ok_with_data(process(&state).copy_link_url(&id, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "查询选品册详情",
-    resource = "sales_selection_booklet",
-    action = "get"
-)]
 /// 内部会话快照。
 ///
 /// # 参数
@@ -296,13 +226,6 @@ pub async fn booklet_session(
     Ok(ApiResponse::ok_with_data(process(&state).admin_session(&id, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "更换选品链接",
-    resource = "sales_selection_booklet",
-    action = "rotate_link"
-)]
 /// 更换链接。
 ///
 /// # 参数
@@ -323,13 +246,6 @@ pub async fn booklet_rotate_link(
     Ok(ApiResponse::ok_with_data(process(&state).rotate_link(id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "关闭或撤销选品链接",
-    resource = "sales_selection_booklet",
-    action = "close"
-)]
 /// 关闭未提交选品册。
 ///
 /// # 参数
@@ -350,13 +266,6 @@ pub async fn booklet_close(
     Ok(ApiResponse::ok_with_data(process(&state).close(id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "关闭或撤销选品链接",
-    resource = "sales_selection_booklet",
-    action = "revoke"
-)]
 /// 撤销已提交链接访问。
 ///
 /// # 参数
@@ -377,13 +286,6 @@ pub async fn booklet_revoke(
     Ok(ApiResponse::ok_with_data(process(&state).revoke(id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "发布前作废选品册",
-    resource = "sales_selection_booklet",
-    action = "void"
-)]
 /// 作废选品册。
 ///
 /// # 参数
@@ -404,13 +306,6 @@ pub async fn booklet_void(
     Ok(ApiResponse::ok_with_data(process(&state).void(id, req, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "查询销售方案列表",
-    resource = "sales_selection_proposal",
-    action = "list"
-)]
 /// 查询销售方案列表。
 ///
 /// # 参数
@@ -430,13 +325,6 @@ pub async fn proposal_list(
     Ok(ApiResponse::ok_with_data(process(&state).proposal_list(params, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "查询销售方案详情",
-    resource = "sales_selection_proposal",
-    action = "get"
-)]
 /// 查询销售方案详情。
 ///
 /// # 参数
@@ -455,13 +343,6 @@ pub async fn proposal_detail(
     Ok(ApiResponse::ok_with_data(proposal))
 }
 
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "查询选品册详情",
-    resource = "sales_selection_booklet",
-    action = "get"
-)]
 /// 读取管理端受权限保护的快照图片。
 /// # 错误
 /// 客户越权、跨册资产和存储读取失败时拒绝。

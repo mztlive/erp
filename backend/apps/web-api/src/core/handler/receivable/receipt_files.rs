@@ -16,13 +16,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "保存回款草稿及凭证附件",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 在登记回款草稿时上传文件，复用原登记权限与事务。
 /// # 参数
 /// `state` 为应用状态，`actor` 为认证账号，`multipart` 为命令及其引用文件。

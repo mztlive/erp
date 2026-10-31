@@ -7,6 +7,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::sales_inquiry;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 装配询价路由。
 /// # 参数
@@ -37,7 +38,7 @@ fn procurement_fee_attachments(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(sales_inquiry::internal::fee_basis_attachment),
             rbac,
-            sales_inquiry::internal::fee_basis_attachment_permission_key(),
+            permissions::sales_inquiry::INTERNAL_FEE_BASIS_ATTACHMENT,
         ),
     )
 }
@@ -49,7 +50,7 @@ fn sales_reads(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::query::sales_list),
                 rbac,
-                sales_inquiry::query::sales_list_permission_key(),
+                permissions::sales_inquiry::QUERY_SALES_LIST,
             ),
         )
         .route(
@@ -57,7 +58,7 @@ fn sales_reads(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::query::sales_detail),
                 rbac,
-                sales_inquiry::query::sales_detail_permission_key(),
+                permissions::sales_inquiry::QUERY_SALES_DETAIL,
             ),
         )
         .route(
@@ -65,7 +66,7 @@ fn sales_reads(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::query::sales_template_products),
                 rbac,
-                sales_inquiry::query::sales_template_products_permission_key(),
+                permissions::sales_inquiry::QUERY_SALES_TEMPLATE_PRODUCTS,
             ),
         )
 }
@@ -77,7 +78,7 @@ fn sales_drafts(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::sales_create),
                 rbac,
-                sales_inquiry::commands::sales_create_permission_key(),
+                permissions::sales_inquiry::COMMANDS_SALES_CREATE,
             ),
         )
         .route(
@@ -85,7 +86,7 @@ fn sales_drafts(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(sales_inquiry::commands::sales_save),
                 rbac,
-                sales_inquiry::commands::sales_save_permission_key(),
+                permissions::sales_inquiry::COMMANDS_SALES_SAVE,
             ),
         )
         .route(
@@ -93,7 +94,7 @@ fn sales_drafts(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::sales_submit),
                 rbac,
-                sales_inquiry::commands::sales_submit_permission_key(),
+                permissions::sales_inquiry::COMMANDS_SALES_SUBMIT,
             ),
         )
 }
@@ -105,7 +106,7 @@ fn sales_feedback(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::sales_accept),
                 rbac,
-                sales_inquiry::commands::sales_accept_permission_key(),
+                permissions::sales_inquiry::COMMANDS_SALES_ACCEPT,
             ),
         )
         .route(
@@ -113,7 +114,7 @@ fn sales_feedback(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::sales_reinquire),
                 rbac,
-                sales_inquiry::commands::sales_reinquire_permission_key(),
+                permissions::sales_inquiry::COMMANDS_SALES_REINQUIRE,
             ),
         )
         .route(
@@ -121,7 +122,7 @@ fn sales_feedback(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::sales_close),
                 rbac,
-                sales_inquiry::commands::sales_close_permission_key(),
+                permissions::sales_inquiry::COMMANDS_SALES_CLOSE,
             ),
         )
 }
@@ -133,7 +134,7 @@ fn sales_imports(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::import_creation::creation_preview),
                 rbac,
-                sales_inquiry::import_creation::creation_preview_permission_key(),
+                permissions::sales_inquiry::IMPORT_CREATION_CREATION_PREVIEW,
             )
             .layer(DefaultBodyLimit::max(5 * 1024 * 1024 + 64 * 1024)),
         )
@@ -142,7 +143,7 @@ fn sales_imports(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::import_creation::creation_confirm),
                 rbac,
-                sales_inquiry::import_creation::creation_confirm_permission_key(),
+                permissions::sales_inquiry::IMPORT_CREATION_CREATION_CONFIRM,
             ),
         )
         .route(
@@ -150,7 +151,7 @@ fn sales_imports(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::import::sales_import_preview),
                 rbac,
-                sales_inquiry::import::sales_import_preview_permission_key(),
+                permissions::sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
             )
             .layer(DefaultBodyLimit::max(5 * 1024 * 1024 + 64 * 1024)),
         )
@@ -159,7 +160,7 @@ fn sales_imports(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::import::sales_import_confirm),
                 rbac,
-                sales_inquiry::import::sales_import_confirm_permission_key(),
+                permissions::sales_inquiry::IMPORT_SALES_IMPORT_CONFIRM,
             ),
         )
 }
@@ -171,7 +172,7 @@ fn sales_conversion(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::conversion::financial_inquiry_candidates),
                 rbac,
-                sales_inquiry::conversion::financial_inquiry_candidates_permission_key(),
+                permissions::sales_inquiry::CONVERSION_FINANCIAL_INQUIRY_CANDIDATES,
             ),
         )
         .route(
@@ -179,7 +180,7 @@ fn sales_conversion(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::conversion::sales_basis),
                 rbac,
-                sales_inquiry::conversion::sales_basis_permission_key(),
+                permissions::sales_inquiry::CONVERSION_SALES_BASIS,
             ),
         )
         .route(
@@ -187,7 +188,7 @@ fn sales_conversion(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::conversion::fee_sales),
                 rbac,
-                sales_inquiry::conversion::fee_sales_permission_key(),
+                permissions::sales_inquiry::CONVERSION_FEE_SALES,
             ),
         )
         .route(
@@ -195,7 +196,7 @@ fn sales_conversion(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::conversion::allocate_fees),
                 rbac,
-                sales_inquiry::conversion::allocate_fees_permission_key(),
+                permissions::sales_inquiry::CONVERSION_ALLOCATE_FEES,
             ),
         )
 }
@@ -207,7 +208,7 @@ fn sales_recovery(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::recovery::sales_create_recover),
                 rbac,
-                sales_inquiry::recovery::sales_create_recover_permission_key(),
+                permissions::sales_inquiry::RECOVERY_SALES_CREATE_RECOVER,
             ),
         )
         .route(
@@ -215,7 +216,7 @@ fn sales_recovery(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::recovery::sales_recover),
                 rbac,
-                sales_inquiry::recovery::sales_recover_permission_key(),
+                permissions::sales_inquiry::RECOVERY_SALES_RECOVER,
             ),
         )
 }
@@ -227,7 +228,7 @@ fn procurement_reads(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::query::procurement_list),
                 rbac,
-                sales_inquiry::query::procurement_list_permission_key(),
+                permissions::sales_inquiry::QUERY_PROCUREMENT_LIST,
             ),
         )
         .route(
@@ -235,7 +236,7 @@ fn procurement_reads(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::query::procurement_detail),
                 rbac,
-                sales_inquiry::query::procurement_detail_permission_key(),
+                permissions::sales_inquiry::QUERY_PROCUREMENT_DETAIL,
             ),
         )
         .route(
@@ -243,7 +244,7 @@ fn procurement_reads(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::recovery::procurement_recover),
                 rbac,
-                sales_inquiry::recovery::procurement_recover_permission_key(),
+                permissions::sales_inquiry::RECOVERY_PROCUREMENT_RECOVER,
             ),
         )
 }
@@ -255,7 +256,7 @@ fn procurement_work(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_supplement),
                 rbac,
-                sales_inquiry::commands::procurement_supplement_permission_key(),
+                permissions::sales_inquiry::COMMANDS_PROCUREMENT_SUPPLEMENT,
             ),
         )
         .route(
@@ -263,7 +264,7 @@ fn procurement_work(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_reassign),
                 rbac,
-                sales_inquiry::commands::procurement_reassign_permission_key(),
+                permissions::sales_inquiry::COMMANDS_PROCUREMENT_REASSIGN,
             ),
         )
 }
@@ -275,7 +276,7 @@ fn procurement_feedback(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_renew),
                 rbac,
-                sales_inquiry::commands::procurement_renew_permission_key(),
+                permissions::sales_inquiry::COMMANDS_PROCUREMENT_RENEW,
             ),
         )
         .route(
@@ -283,7 +284,7 @@ fn procurement_feedback(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(sales_inquiry::commands::procurement_save_feedback),
                 rbac,
-                sales_inquiry::commands::procurement_save_feedback_permission_key(),
+                permissions::sales_inquiry::COMMANDS_PROCUREMENT_SAVE_FEEDBACK,
             ),
         )
         .route(
@@ -291,7 +292,7 @@ fn procurement_feedback(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_publish),
                 rbac,
-                sales_inquiry::commands::procurement_publish_permission_key(),
+                permissions::sales_inquiry::COMMANDS_PROCUREMENT_PUBLISH,
             ),
         )
 }
@@ -303,7 +304,7 @@ fn procurement_quotes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::internal::import_quotes),
                 rbac,
-                sales_inquiry::internal::import_quotes_permission_key(),
+                permissions::sales_inquiry::INTERNAL_IMPORT_QUOTES,
             )
             .layer(DefaultBodyLimit::max(20 * 1024 * 1024)),
         )
@@ -312,7 +313,7 @@ fn procurement_quotes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::query::procurement_internal_quotes),
                 rbac,
-                sales_inquiry::query::procurement_internal_quotes_permission_key(),
+                permissions::sales_inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES,
             ),
         )
         .route(
@@ -320,7 +321,7 @@ fn procurement_quotes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::internal::save_quote),
                 rbac,
-                sales_inquiry::internal::save_quote_permission_key(),
+                permissions::sales_inquiry::INTERNAL_SAVE_QUOTE,
             ),
         )
 }
@@ -332,7 +333,7 @@ fn procurement_fees(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::internal::fee_bases),
                 rbac,
-                sales_inquiry::internal::fee_bases_permission_key(),
+                permissions::sales_inquiry::INTERNAL_FEE_BASES,
             ),
         )
         .route(
@@ -340,7 +341,7 @@ fn procurement_fees(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_inquiry::internal::save_fee_basis),
                 rbac,
-                sales_inquiry::internal::save_fee_basis_permission_key(),
+                permissions::sales_inquiry::INTERNAL_SAVE_FEE_BASIS,
             ),
         )
         .route(
@@ -348,7 +349,7 @@ fn procurement_fees(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_inquiry::conversion::expense_inquiry_candidates),
                 rbac,
-                sales_inquiry::conversion::expense_inquiry_candidates_permission_key(),
+                permissions::sales_inquiry::CONVERSION_EXPENSE_INQUIRY_CANDIDATES,
             ),
         )
 }

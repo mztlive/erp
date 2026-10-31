@@ -19,13 +19,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "查询选择快照列表",
-    resource = "bulk_selection_snapshot",
-    action = "list"
-)]
 /// 查询选择快照列表。
 ///
 /// # 参数
@@ -43,13 +36,6 @@ pub async fn bulk_selection_snapshot_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "创建选择快照",
-    resource = "bulk_selection_snapshot",
-    action = "create"
-)]
 /// 创建选择快照并冻结逐项目标（跨集合事务写入）。
 ///
 /// # 参数
@@ -69,13 +55,6 @@ pub async fn bulk_selection_snapshot_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "确认选择快照",
-    resource = "bulk_selection_snapshot",
-    action = "confirm"
-)]
 /// 确认选择快照（确认后目标集合与预期版本不可修改）。
 ///
 /// # 参数
@@ -97,13 +76,6 @@ pub async fn bulk_selection_snapshot_confirm(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "失效选择快照",
-    resource = "bulk_selection_snapshot",
-    action = "expire"
-)]
 /// 标记选择快照失效（仅待确认/已确认可失效）。
 ///
 /// # 参数
@@ -125,13 +97,6 @@ pub async fn bulk_selection_snapshot_expire(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "查询选择快照逐项结果",
-    resource = "bulk_selection_item",
-    action = "list"
-)]
 /// 分页查询选择快照逐项结果。
 ///
 /// # 参数
@@ -154,13 +119,6 @@ pub async fn bulk_selection_item_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "查询后台任务列表",
-    resource = "background_job",
-    action = "list"
-)]
 /// 查询后台任务列表（任务中心）。
 ///
 /// 数据隔离：普通用户只能看到自己创建的任务；管理员可查看全部。
@@ -183,13 +141,6 @@ pub async fn background_job_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "查询后台任务详情",
-    resource = "background_job",
-    action = "detail"
-)]
 /// 查询后台任务详情。
 ///
 /// 数据隔离：普通用户只能查看自己创建的任务。
@@ -212,13 +163,6 @@ pub async fn background_job_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "创建后台任务",
-    resource = "background_job",
-    action = "create"
-)]
 /// 创建后台任务并登记逐项结果表（按 `request_id` 幂等）。
 ///
 /// # 参数
@@ -238,13 +182,6 @@ pub async fn background_job_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "取消后台任务",
-    resource = "background_job",
-    action = "cancel"
-)]
 /// 取消后台任务（只停止尚未开始的项目）。
 ///
 /// 数据隔离：普通用户只能取消自己创建的任务。
@@ -269,13 +206,6 @@ pub async fn background_job_cancel(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "停止并取消全部后台任务",
-    resource = "background_job",
-    action = "cancel_all"
-)]
 /// 停止并取消全部未完成后台任务（仅管理员）。
 ///
 /// 单个任务失败不阻塞其余任务，调用方按返回计数决定是否重试。
@@ -298,13 +228,6 @@ pub async fn background_job_cancel_all(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "批量任务",
-    group_desc = "批量选择快照与后台任务中心",
-    desc = "查询后台任务逐项结果",
-    resource = "background_job_item",
-    action = "list"
-)]
 /// 分页查询后台任务逐项结果。
 ///
 /// 数据隔离：普通用户只能查看自己创建任务的逐项结果。

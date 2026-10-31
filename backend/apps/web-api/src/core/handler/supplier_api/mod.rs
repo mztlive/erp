@@ -26,13 +26,6 @@ pub mod dangaoshushu;
 pub mod jd_vop;
 pub mod references;
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询供应商 API 连接列表",
-    resource = "supplier_api_connection",
-    action = "list"
-)]
 /// 查询供应商 API 连接列表。
 pub async fn supplier_api_connection_list(
     State(state): State<AppState>,
@@ -43,13 +36,6 @@ pub async fn supplier_api_connection_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询供应商 API 连接详情",
-    resource = "supplier_api_connection",
-    action = "detail"
-)]
 /// 查询供应商 API 连接详情。
 pub async fn supplier_api_connection_detail(
     State(state): State<AppState>,
@@ -60,13 +46,6 @@ pub async fn supplier_api_connection_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "创建供应商 API 连接",
-    resource = "supplier_api_connection",
-    action = "create"
-)]
 /// 创建停用状态的供应商 API 连接身份。
 pub async fn supplier_api_connection_create(
     State(state): State<AppState>,
@@ -77,13 +56,6 @@ pub async fn supplier_api_connection_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "执行供应商 API 连接治理强命令",
-    resource = "supplier_api_connection",
-    action = "command"
-)]
 /// 执行固定动作注册表中的连接治理命令。
 pub async fn supplier_api_connection_command(
     State(state): State<AppState>,
@@ -121,13 +93,6 @@ pub async fn supplier_api_connection_command(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询供应商 API 连接后台任务",
-    resource = "supplier_api_connection",
-    action = "detail"
-)]
 /// 查询健康检查或目录同步任务进度与终态。
 pub async fn supplier_api_connection_job_detail(
     State(state): State<AppState>,

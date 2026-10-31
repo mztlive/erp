@@ -2,7 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/customers`、
 //! `/admin/customers/{id}/assignments` 等；每条路由统一走
-//! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
@@ -11,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::customer;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -26,7 +27,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(customer::customer_profile_create),
                 rbac,
-                customer::customer_profile_create_permission_key(),
+                permissions::customer::PROFILE_CREATE,
             ),
         )
         .route(
@@ -34,7 +35,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(customer::customer_profile_detail),
                 rbac,
-                customer::customer_profile_detail_permission_key(),
+                permissions::customer::PROFILE_DETAIL,
             ),
         )
         .route(
@@ -42,7 +43,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(customer::customer_center_related),
                 rbac,
-                customer::customer_center_related_permission_key(),
+                permissions::customer::CENTER_RELATED,
             ),
         )
         .route(
@@ -50,7 +51,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(customer::customer_center_receivable),
                 rbac,
-                customer::customer_center_receivable_permission_key(),
+                permissions::customer::CENTER_RECEIVABLE,
             ),
         )
         .route(
@@ -58,7 +59,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(customer::customer_profile_update),
                 rbac,
-                customer::customer_profile_update_permission_key(),
+                permissions::customer::PROFILE_UPDATE,
             ),
         )
         .route(
@@ -66,7 +67,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(customer::customer_profile_command_detail),
                 rbac,
-                customer::customer_profile_command_detail_permission_key(),
+                permissions::customer::PROFILE_COMMAND_DETAIL,
             ),
         )
         .route(
@@ -74,51 +75,40 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(customer::customer_sensitive_reveal),
                 rbac,
-                customer::customer_sensitive_reveal_permission_key(),
+                permissions::customer::SENSITIVE_REVEAL,
             ),
         )
-        .route(
-            "/customers",
-            with_permission(get(customer::customer_list), rbac, customer::customer_list_permission_key()),
-        )
+        .route("/customers", with_permission(get(customer::customer_list), rbac, permissions::customer::LIST))
         .route(
             "/customers/all-authorized",
             with_permission(
                 get(customer::customer_all_authorized_list),
                 rbac,
-                customer::customer_all_authorized_list_permission_key(),
+                permissions::customer::ALL_AUTHORIZED_LIST,
             ),
         )
         .route(
             "/customers",
-            with_permission(
-                post(customer::customer_create),
-                rbac,
-                customer::customer_create_permission_key(),
-            ),
+            with_permission(post(customer::customer_create), rbac, permissions::customer::CREATE),
         )
         .route(
             "/customers/{id}",
-            with_permission(get(customer::customer_detail), rbac, customer::customer_detail_permission_key()),
+            with_permission(get(customer::customer_detail), rbac, permissions::customer::DETAIL),
         )
         .route(
             "/customers/{id}",
-            with_permission(put(customer::customer_update), rbac, customer::customer_update_permission_key()),
+            with_permission(put(customer::customer_update), rbac, permissions::customer::UPDATE),
         )
         .route(
             "/customers/{id}",
-            with_permission(
-                delete(customer::customer_delete),
-                rbac,
-                customer::customer_delete_permission_key(),
-            ),
+            with_permission(delete(customer::customer_delete), rbac, permissions::customer::DELETE),
         )
         .route(
             "/customers/{id}/assignments",
             with_permission(
                 get(customer::customer_assignment_list),
                 rbac,
-                customer::customer_assignment_list_permission_key(),
+                permissions::customer::ASSIGNMENT_LIST,
             ),
         )
         .route(
@@ -126,7 +116,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(customer::customer_assignment_apply),
                 rbac,
-                customer::customer_assignment_apply_permission_key(),
+                permissions::customer::ASSIGNMENT_APPLY,
             ),
         )
 }

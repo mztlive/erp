@@ -31,13 +31,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询应收往来子账列表",
-    resource = "receivable_account",
-    action = "list"
-)]
 /// 查询应收往来子账列表。
 ///
 /// DataScope v2：按关联销售单当前负责人与登记经办人分别查询，同一事务快照；
@@ -62,13 +55,6 @@ pub async fn receivable_account_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询应收往来子账详情",
-    resource = "receivable_account",
-    action = "detail"
-)]
 /// 查询应收往来子账详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
@@ -90,13 +76,6 @@ pub async fn receivable_account_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "建立应收往来子账",
-    resource = "receivable_account",
-    action = "create"
-)]
 /// 建立应收往来子账与原始应收分录（跨集合事务）。
 ///
 /// # 参数
@@ -119,13 +98,6 @@ pub async fn receivable_account_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询客户回款单列表",
-    resource = "customer_receipt",
-    action = "list"
-)]
 /// 查询客户回款单列表。
 ///
 /// DataScope v2：按核销关联销售当前负责人与登记/核销经办人分别查询；
@@ -150,13 +122,6 @@ pub async fn customer_receipt_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询客户回款单详情",
-    resource = "customer_receipt",
-    action = "detail"
-)]
 /// 查询客户回款单详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
@@ -178,13 +143,6 @@ pub async fn customer_receipt_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "登记客户回款草稿",
-    resource = "customer_receipt",
-    action = "create"
-)]
 /// 登记客户回款草稿（回款单号唯一构成幂等去重）。
 ///
 /// # 参数
@@ -207,13 +165,6 @@ pub async fn customer_receipt_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "原子创建或提交客户回款审批",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 原子创建或提交客户回款并启动统一审批。
 ///
 /// # 参数
@@ -236,13 +187,6 @@ pub async fn customer_receipt_commit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "提交客户回款审批",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 提交客户回款并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
@@ -267,13 +211,6 @@ pub async fn customer_receipt_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "撤回客户回款审批",
-    resource = "customer_receipt",
-    action = "cancel_approval"
-)]
 /// 撤回尚未最终通过的客户回款审批。
 ///
 /// # 参数
@@ -298,13 +235,6 @@ pub async fn customer_receipt_cancel_approval(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "客户回款过账并核销",
-    resource = "customer_receipt",
-    action = "post"
-)]
 /// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
 ///
 /// # 参数
@@ -327,13 +257,6 @@ pub async fn customer_receipt_post(
     }
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询发票列表",
-    resource = "invoice",
-    action = "list"
-)]
 /// 查询发票列表（销项/进项共用，`invoice_direction` 筛选）。
 ///
 /// DataScope v2：销项按负责销售与登记经办，进项按采购负责人与登记经办；
@@ -359,13 +282,6 @@ pub async fn invoice_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询发票详情",
-    resource = "invoice",
-    action = "detail"
-)]
 /// 查询发票详情（DataScope v2 范围裁剪行）。
 ///
 /// # 参数
@@ -388,13 +304,6 @@ pub async fn invoice_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "登记发票草稿",
-    resource = "invoice",
-    action = "create"
-)]
 /// 登记发票草稿。不绑定审批定义，不启动审批实例，不创建审批任务。
 ///
 /// # 参数
@@ -417,13 +326,6 @@ pub async fn invoice_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "原子登记销项发票并分配",
-    resource = "invoice",
-    action = "post"
-)]
 /// 原子创建或提交销项发票并完成正式分配。
 ///
 /// # 参数
@@ -446,13 +348,6 @@ pub async fn invoice_commit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "发票登记过账并分配",
-    resource = "invoice",
-    action = "post"
-)]
 /// 发票登记过账并分配（§8.3-2 事务不变量，资金入口幂等去重）。
 ///
 /// # 参数
@@ -477,13 +372,6 @@ pub async fn invoice_post(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "开具红票并红冲",
-    resource = "invoice",
-    action = "reverse"
-)]
 /// 开具红票并红冲（§8.3-3 事务不变量：保留原事实，累计红冲不超原分配）。
 ///
 /// # 参数

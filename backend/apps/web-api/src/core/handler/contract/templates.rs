@@ -22,13 +22,6 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "合同模板",
-    group_desc = "Word 模板与合同领号",
-    desc = "查询合同模板",
-    resource = "contract_template",
-    action = "list"
-)]
 /// 查询模板目录。
 /// # 参数
 /// * `state` - 应用状态。
@@ -44,13 +37,6 @@ pub async fn list(
     Ok(ApiResponse::ok_with_data(state.contract_template_service().templates(&params).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同模板",
-    group_desc = "Word 模板与合同领号",
-    desc = "维护合同模板与编号规则",
-    resource = "contract_template",
-    action = "manage"
-)]
 /// 上传不可变 Word 模板，处理及对象写入位于数据库事务外。
 /// # 参数
 /// * `state` - 应用状态。
@@ -88,13 +74,6 @@ pub async fn create(
     }
 }
 
-#[permission_macros::permission(
-    group = "合同模板",
-    group_desc = "Word 模板与合同领号",
-    desc = "启停合同模板",
-    resource = "contract_template",
-    action = "manage"
-)]
 /// 更改模板启停状态。
 /// # 参数
 /// * `state` - 应用状态。
@@ -114,13 +93,6 @@ pub async fn status(
     Ok(ApiResponse::ok_with_data(state.contract_template_service().set_status(&id, request, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同模板",
-    group_desc = "Word 模板与合同领号",
-    desc = "读取年度合同流水",
-    resource = "contract_template",
-    action = "manage"
-)]
 /// 读取本年度流水。
 /// # 参数
 /// * `state` - 应用状态。
@@ -132,13 +104,6 @@ pub async fn counters(State(state): State<AppState>) -> Result<Vec<CounterView>>
     Ok(ApiResponse::ok_with_data(state.contract_template_service().counters().await?))
 }
 
-#[permission_macros::permission(
-    group = "合同模板",
-    group_desc = "Word 模板与合同领号",
-    desc = "校准年度合同流水",
-    resource = "contract_template",
-    action = "manage"
-)]
 /// 只向前校准流水。
 /// # 参数
 /// * `state` - 应用状态。
@@ -156,13 +121,6 @@ pub async fn configure(
     Ok(ApiResponse::ok_with_data(state.contract_template_service().configure_counter(request, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同申请",
-    group_desc = "本人合同领号及下载",
-    desc = "查询本人合同申请",
-    resource = "contract_application",
-    action = "list"
-)]
 /// 查询本人记录。
 /// # 参数
 /// * `state` - 应用状态。
@@ -180,13 +138,6 @@ pub async fn applications(
     Ok(ApiResponse::ok_with_data(state.contract_template_service().applications(&params, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同申请",
-    group_desc = "本人合同领号及下载",
-    desc = "申请销售合同编号",
-    resource = "contract_application",
-    action = "create"
-)]
 /// 从启用模板领号。
 /// # 参数
 /// * `state` - 应用状态。
@@ -204,13 +155,6 @@ pub async fn apply(
     Ok(ApiResponse::ok_with_data(state.contract_template_service().apply(request, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "合同申请",
-    group_desc = "本人合同领号及下载",
-    desc = "下载本人带编号 Word 合同",
-    resource = "contract_application",
-    action = "download"
-)]
 /// 独立授权后返回带原编号的 DOCX。
 /// # 参数
 /// * `state` - 应用状态。
@@ -229,13 +173,6 @@ pub async fn download(
     word_response(&state, source).await
 }
 
-#[permission_macros::permission(
-    group = "合同模板",
-    group_desc = "Word 模板与合同领号",
-    desc = "下载编号样张",
-    resource = "contract_template",
-    action = "manage"
-)]
 /// 下载不占流水的样张，用于管理员在 Word 中核对首页排版。
 /// # 参数
 /// * `state` - 应用状态。

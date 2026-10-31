@@ -10,6 +10,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::customer_quality;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -25,7 +26,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(customer_quality::quality_history_directory),
                 rbac,
-                customer_quality::quality_history_directory_permission_key(),
+                permissions::customer_quality::QUALITY_HISTORY_DIRECTORY,
             ),
         )
         .route(
@@ -33,7 +34,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(customer_quality::quality_current),
                 rbac,
-                customer_quality::quality_current_permission_key(),
+                permissions::customer_quality::QUALITY_CURRENT,
             ),
         )
         .route(
@@ -41,7 +42,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(customer_quality::quality_history),
                 rbac,
-                customer_quality::quality_history_permission_key(),
+                permissions::customer_quality::QUALITY_HISTORY,
             ),
         )
         .route(
@@ -49,7 +50,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(customer_quality::quality_current_export),
                 rbac,
-                customer_quality::quality_current_export_permission_key(),
+                permissions::customer_quality::QUALITY_CURRENT_EXPORT,
             ),
         )
         .route(
@@ -57,7 +58,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(customer_quality::quality_history_export),
                 rbac,
-                customer_quality::quality_history_export_permission_key(),
+                permissions::customer_quality::QUALITY_HISTORY_EXPORT,
             ),
         )
 }

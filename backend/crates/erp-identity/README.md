@@ -12,7 +12,7 @@
 
 ## 协作示例
 
-给账号配置角色和组织关系时使用本 crate；客户归谁负责由 [erp-customer](../erp-customer/README.md) 维护。HTTP 请求中的 JWT 校验和路由装配由 [web-api](../../apps/web-api/README.md) 接入，权限标注宏见 [permission-macros](../permission-macros/README.md)。
+给账号配置角色和组织关系时使用本 crate；客户归谁负责由 [erp-customer](../erp-customer/README.md) 维护。HTTP 请求中的 JWT 校验和路由装配由 [web-api](../../apps/web-api/README.md) 接入，显式权限目录维护规则见 [权限目录合同](../../docs/permissions-gen.md)。
 
 ## 负责的数据与能力
 

@@ -1,23 +1,18 @@
 #[path = "../../crates/erp-identity/src/entity/access_control/audit_actions.rs"]
 mod audit_actions;
 
+mod build_catalog;
 mod build_format;
 mod build_permissions;
 mod build_policy_catalog;
-use std::collections::{HashMap, HashSet};
+#[path = "permission_catalog/mod.rs"]
+mod permissions;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
 use build_format::push_description;
-use build_permissions::{
-    DOMAIN_MODULES, PermissionGroup, PermissionItem, PermissionMeta, RouteHandler, append_policy_permissions,
-    management_routes,
-};
+use build_permissions::PermissionGroup;
 use build_policy_catalog::write_policy_catalog;
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
-use syn::{Attribute, Expr, File, Item, ItemFn, Lit, MetaNameValue, Token};
-
 /// 构建脚本入口。
 ///
 /// # 返回
@@ -51,67 +46,39 @@ fn main() {
 
     let routes_mod_path = manifest_dir.join("src/core/routes/mod.rs");
     let routes_admin_path = manifest_dir.join("src/core/routes/admin.rs");
-    let handlers_root = manifest_dir.join("src/core/handler");
-
+    rerun_if_changed(&manifest_dir.join("permission_catalog"));
+    rerun_if_changed(&manifest_dir.join("build_catalog.rs"));
+    rerun_if_changed(&manifest_dir.join("build_routes.rs"));
     rerun_if_changed(&manifest_dir.join("build_permissions.rs"));
     rerun_if_changed(&manifest_dir.join("build_format.rs"));
     rerun_if_changed(&manifest_dir.join("build_policy_catalog.rs"));
+    rerun_if_changed(&manifest_dir.join("src/core/routes"));
     rerun_if_changed(&routes_mod_path);
     rerun_if_changed(&routes_admin_path);
-
-    let handler_files = match collect_handler_files(&handlers_root) {
-        Ok(files) => files,
-        Err(err) => {
-            println!("cargo:warning=failed to collect handler files: {}", err);
-            return;
-        },
-    };
-
-    for file in &handler_files {
-        rerun_if_changed(file);
-    }
-    for module in DOMAIN_MODULES {
-        rerun_if_changed(&manifest_dir.join(format!("src/core/routes/{module}.rs")));
-    }
-
-    let prefix = match fs::read_to_string(&routes_mod_path) {
-        Ok(content) => parse_admin_prefix(&content).unwrap_or_else(|| "/admin".to_string()),
-        Err(err) => {
-            println!("cargo:warning=failed to read routes mod file {}: {}", routes_mod_path.display(), err);
-            return;
-        },
-    };
-
-    let handler_meta = match parse_handler_permissions(&handlers_root, &handler_files) {
-        Ok(meta) => meta,
-        Err(err) => {
-            println!("cargo:warning=failed to parse handler permissions: {}", err);
-            return;
-        },
-    };
-
-    let route_handlers = match collect_route_handlers(&manifest_dir) {
-        Ok(handlers) => handlers,
-        Err(err) => {
-            println!("cargo:warning=failed to read route files: {}", err);
-            return;
-        },
-    };
-
-    let (groups, used_handlers) = build_permission_groups(&prefix, &handler_meta, &route_handlers);
+    let source = fs::read_to_string(&routes_mod_path).expect("必须读取路由前缀");
+    let prefix = parse_admin_prefix(&source).expect("必须声明管理端路由前缀");
+    let route_handlers = build_catalog::collect_routes(&manifest_dir).expect("权限路由必须完整可解析");
+    let groups = build_catalog::groups(&prefix, &route_handlers).expect("路由必须引用有效的显式权限定义");
     write_policy_catalog(&groups).expect("权限目录必须随运行版本生成");
-    for handler in handler_meta.keys() {
-        if !used_handlers.contains(handler) {
-            println!("cargo:warning=handler '{}' not found in routes", handler);
-        }
-    }
+    let contract = build_catalog::route_contract(&route_handlers).expect("路由权限合同必须可生成");
+    fs::write(
+        PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("permission_routes.json"),
+        contract,
+    )
+    .expect("必须写入路由权限合同");
+
+    fs::write(
+        PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR"))
+            .join("permission_references.rs"),
+        build_catalog::compiled_references().expect("权限引用必须可枚举"),
+    )
+    .expect("必须写入权限常量引用");
 
     // P0-4.1：权限生成物落点修正，输出到 erp-client（实际前端）。
     // erp-client 侧自包含 PermissionItem 类型（其 tsconfig 无 @/types/admin 映射）。
     let client_output_path = repo_root.join("erp-client/lib/permissions.generated.ts");
-    if let Err(err) = write_generated_file(&client_output_path, &groups, client_permission_item_source()) {
-        println!("cargo:warning=failed to write generated permissions: {}", err);
-    }
+    write_generated_file(&client_output_path, &groups, client_permission_item_source())
+        .expect("必须生成前端权限目录");
 }
 
 /// 记录 build.rs 的文件依赖，路径不存在时跳过。
@@ -204,490 +171,6 @@ fn parse_admin_prefix(content: &str) -> Option<String> {
         index = end + 1;
     }
     None
-}
-
-/// 读取 handler 目录并解析权限注解。
-///
-/// # 参数
-/// * `handler_root` - 处理器根目录
-/// * `handler_files` - 处理器文件集合
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
-fn parse_handler_permissions(
-    handler_root: &Path,
-    handler_files: &[PathBuf],
-) -> io::Result<HashMap<String, PermissionMeta>> {
-    let mut out = HashMap::new();
-
-    for file_path in handler_files {
-        let module_path = match module_path_for_file(handler_root, file_path) {
-            Some(path) => path,
-            None => continue,
-        };
-
-        let content = fs::read_to_string(file_path)?;
-        let file = match syn::parse_file(&content) {
-            Ok(file) => file,
-            Err(err) => {
-                println!("cargo:warning=failed to parse handler file {}: {}", file_path.display(), err);
-                continue;
-            },
-        };
-
-        collect_permission_meta(&file, &module_path, &mut out);
-    }
-
-    Ok(out)
-}
-
-/// 收集文件中的权限注解信息。
-///
-/// # 参数
-/// * `file` - 文件
-/// * `module_path` - 模块路径
-/// * `out` - 输出收集器
-///
-/// # 返回
-/// 不返回数据，仅表示执行结果。
-fn collect_permission_meta(file: &File, module_path: &str, out: &mut HashMap<String, PermissionMeta>) {
-    for item in &file.items {
-        let Item::Fn(item_fn) = item else {
-            continue;
-        };
-        if let Some(meta) = extract_permission_meta(item_fn) {
-            let handler_name = format!("{}::{}", module_path, item_fn.sig.ident);
-            if out.insert(handler_name.clone(), meta).is_some() {
-                println!("cargo:warning=duplicate permission metadata for handler '{}'", handler_name);
-            }
-        }
-    }
-}
-
-/// 从函数属性中提取权限注解。
-///
-/// # 参数
-/// * `item_fn` - 函数节点
-///
-/// # 返回
-/// 返回可选结果，`Some` 表示存在，`None` 表示不存在。
-fn extract_permission_meta(item_fn: &ItemFn) -> Option<PermissionMeta> {
-    let attrs = &item_fn.attrs;
-    for attr in attrs {
-        if !is_permission_attr(attr) {
-            continue;
-        }
-
-        match parse_permission_args(attr) {
-            Ok(meta) => return Some(meta),
-            Err(err) => {
-                println!(
-                    "cargo:warning=failed to parse permission attribute for {}: {}",
-                    item_fn.sig.ident, err
-                );
-                return None;
-            },
-        }
-    }
-
-    None
-}
-
-/// 判断属性是否为 permission 标注。
-///
-/// # 参数
-/// * `attr` - 属性节点
-///
-/// # 返回
-/// 返回布尔值表示条件是否满足或操作是否成功。
-fn is_permission_attr(attr: &Attribute) -> bool {
-    attr.path().segments.last().map(|seg| seg.ident == "permission").unwrap_or(false)
-}
-
-/// 解析 permission 宏参数。
-///
-/// # 参数
-/// * `attr` - 属性节点
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
-fn parse_permission_args(attr: &Attribute) -> syn::Result<PermissionMeta> {
-    let parser = Punctuated::<MetaNameValue, Token![,]>::parse_terminated;
-    let args = attr.parse_args_with(parser)?;
-
-    let mut group = None;
-    let mut group_desc = None;
-    let mut desc = None;
-    let mut resource = None;
-    let mut action = None;
-
-    for arg in args {
-        let name = arg.path.get_ident().map(|ident| ident.to_string());
-        let value = match arg.value {
-            Expr::Lit(expr) => match expr.lit {
-                Lit::Str(lit) => lit.value(),
-                _ => continue,
-            },
-            _ => continue,
-        };
-
-        match name.as_deref() {
-            Some("group") => group = Some(value),
-            Some("group_desc") => group_desc = Some(value),
-            Some("desc") => desc = Some(value),
-            Some("resource") => resource = Some(value),
-            Some("action") => action = Some(value),
-            _ => {},
-        }
-    }
-
-    let group = group.ok_or_else(|| syn::Error::new(attr.span(), "missing group"))?;
-    let group_desc = group_desc.ok_or_else(|| syn::Error::new(attr.span(), "missing group_desc"))?;
-    let desc = desc.ok_or_else(|| syn::Error::new(attr.span(), "missing desc"))?;
-
-    Ok(PermissionMeta { group, group_desc, desc, resource, action })
-}
-
-/// 获取 handler 文件对应的模块路径。
-///
-/// 以 `handler/` 为根：`handler/admin/account.rs` → `admin::account`，
-/// `handler/source_registry/foo.rs` → `source_registry::foo`，
-/// 与 routes 文件中 `get(...)` 内的引用写法保持一致。
-///
-/// # 参数
-/// * `handler_root` - 处理器根目录（`src/core/handler`）
-/// * `file_path` - 文件路径
-///
-/// # 返回
-/// 返回可选结果，`Some` 表示存在，`None` 表示不存在。
-fn module_path_for_file(handler_root: &Path, file_path: &Path) -> Option<String> {
-    let relative = file_path.strip_prefix(handler_root).ok()?;
-    let mut segments = Vec::new();
-
-    for component in relative.components() {
-        let name = component.as_os_str().to_string_lossy();
-        if name.ends_with(".rs") {
-            let stem = name.trim_end_matches(".rs");
-            if stem == "mod" {
-                continue;
-            }
-            segments.push(stem.to_string());
-        } else {
-            segments.push(name.to_string());
-        }
-    }
-
-    Some(segments.join("::"))
-}
-
-/// 递归收集 `handler/admin` 与全部域 handler 目录下的 Rust 文件。
-///
-/// `auth`、`upload` 等非域 handler 不在扫描范围（权限产物只覆盖管理端路由）。
-///
-/// # 参数
-/// * `root` - 处理器根目录（`src/core/handler`）
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-fn collect_handler_files(root: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    collect_rs_files_inner(&root.join("admin"), &mut files)?;
-    for module in DOMAIN_MODULES {
-        collect_rs_files_inner(&root.join(module), &mut files)?;
-    }
-    Ok(files)
-}
-
-/// 收集管理端路由文件中的全部 `.route()` 处理器引用。
-///
-/// 覆盖 `admin.rs`（既有聚合路由）与全部域路由文件
-/// （`routes/<domain>.rs`，含独立的审批定义管理路由）。
-///
-/// # 参数
-/// * `manifest_dir` - web-api crate 目录
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-fn collect_route_handlers(manifest_dir: &Path) -> io::Result<Vec<RouteHandler>> {
-    let mut handlers = Vec::new();
-    let admin_path = manifest_dir.join("src/core/routes/admin.rs");
-    if let Ok(content) = fs::read_to_string(&admin_path) {
-        handlers.extend(parse_routes(&content));
-    }
-    for module in DOMAIN_MODULES {
-        let path = manifest_dir.join(format!("src/core/routes/{module}.rs"));
-        let Ok(content) = fs::read_to_string(&path) else {
-            continue;
-        };
-        handlers.extend(management_routes(module, parse_routes(&content)));
-    }
-    Ok(handlers)
-}
-
-/// 递归收集 Rust 文件，目录不存在时视为空目录。
-///
-/// # 参数
-/// * `root` - 根目录
-/// * `files` - 文件集合
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-fn collect_rs_files_inner(root: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
-    if !root.is_dir() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_rs_files_inner(&path, files)?;
-            continue;
-        }
-        if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
-            files.push(path);
-        }
-    }
-    Ok(())
-}
-
-/// 解析 admin routes 文件中的路由信息。
-///
-/// # 参数
-/// * `content` - 文件内容
-///
-/// # 返回
-/// 返回结果集合。
-fn parse_routes(content: &str) -> Vec<RouteHandler> {
-    let mut result = Vec::new();
-    let mut index = 0;
-    let marker = ".route(";
-
-    while let Some(pos) = content[index..].find(marker) {
-        let start = index + pos + marker.len();
-        let bytes = content.as_bytes();
-        let mut cursor = start;
-
-        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-            cursor += 1;
-        }
-
-        if cursor >= bytes.len() || bytes[cursor] != b'"' {
-            index = start;
-            continue;
-        }
-        cursor += 1;
-        let path_start = cursor;
-        while cursor < bytes.len() && bytes[cursor] != b'"' {
-            cursor += 1;
-        }
-        if cursor >= bytes.len() {
-            break;
-        }
-        let path = content[path_start..cursor].to_string();
-        cursor += 1;
-
-        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-            cursor += 1;
-        }
-        if cursor >= bytes.len() || bytes[cursor] != b',' {
-            index = cursor;
-            continue;
-        }
-        cursor += 1;
-        let expr_start = cursor;
-        let mut depth = 1;
-        let mut end = cursor;
-        while end < bytes.len() {
-            match bytes[end] {
-                b'(' => depth += 1,
-                b')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        break;
-                    }
-                },
-                _ => {},
-            }
-            end += 1;
-        }
-        if end >= bytes.len() {
-            break;
-        }
-
-        let expr = content[expr_start..end].trim();
-        for handler in parse_handler_chain(expr) {
-            result.push(RouteHandler {
-                method: handler.method,
-                path: path.clone(),
-                handler: handler.handler,
-            });
-        }
-
-        index = end + 1;
-    }
-
-    result
-}
-
-/// 解析 `.route()` 中的方法链。
-///
-/// # 参数
-/// * `expr` - 表达式节点
-///
-/// # 返回
-/// 返回结果集合。
-fn parse_handler_chain(expr: &str) -> Vec<RouteHandler> {
-    let methods = ["get", "post", "put", "delete", "patch", "head"];
-    let bytes = expr.as_bytes();
-    let mut index = 0;
-    let mut out = Vec::new();
-
-    while index < bytes.len() {
-        if !bytes[index].is_ascii_alphabetic() {
-            index += 1;
-            continue;
-        }
-
-        let mut matched = None;
-        for method in methods {
-            if expr[index..].starts_with(method) {
-                matched = Some(method);
-                break;
-            }
-        }
-
-        let Some(method) = matched else {
-            index += 1;
-            continue;
-        };
-
-        let mut cursor = index + method.len();
-        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-            cursor += 1;
-        }
-
-        if cursor >= bytes.len() || bytes[cursor] != b'(' {
-            index += method.len();
-            continue;
-        }
-
-        cursor += 1;
-        let handler_start = cursor;
-        let mut depth = 1;
-        while cursor < bytes.len() {
-            match bytes[cursor] {
-                b'(' => depth += 1,
-                b')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        break;
-                    }
-                },
-                _ => {},
-            }
-            cursor += 1;
-        }
-        if cursor >= bytes.len() {
-            break;
-        }
-
-        let handler = expr[handler_start..cursor].trim().to_string();
-        out.push(RouteHandler { method: method.to_uppercase(), path: String::new(), handler });
-
-        index = cursor + 1;
-    }
-
-    out
-}
-
-/// 构建权限分组并返回已使用的 handler 集合。
-///
-/// # 参数
-/// * `prefix` - 前缀
-/// * `handler_meta` - 处理器元数据
-/// * `route_handlers` - 路由处理器映射
-///
-/// # 返回
-/// 返回 `(Vec<(String, PermissionGroup)>, HashSet<String>)` 结果。
-fn build_permission_groups(
-    prefix: &str,
-    handler_meta: &HashMap<String, PermissionMeta>,
-    route_handlers: &[RouteHandler],
-) -> (Vec<(String, PermissionGroup)>, HashSet<String>) {
-    let mut groups: HashMap<String, PermissionGroup> = HashMap::new();
-    let mut order: Vec<String> = Vec::new();
-    let mut used_handlers = HashSet::new();
-
-    for route in route_handlers {
-        // 公开选品使用令牌授权；结算主体目录仅需后台登录，均不生成 RBAC 权限。
-        if route.path.starts_with("/public/selection/")
-            || route.path.starts_with("/public/sales-selections/")
-            || matches!(route.path.as_str(), "/settlement-parties" | "/settlement-parties/selected")
-        {
-            continue;
-        }
-        let Some(meta) = handler_meta.get(&route.handler) else {
-            println!("cargo:warning=missing #[permission] for handler '{}'", route.handler);
-            continue;
-        };
-
-        used_handlers.insert(route.handler.clone());
-
-        let entry = groups.entry(meta.group.clone()).or_insert_with(|| {
-            order.push(meta.group.clone());
-            PermissionGroup { desc: meta.group_desc.clone(), permissions: Vec::new() }
-        });
-
-        if entry.desc != meta.group_desc {
-            println!(
-                "cargo:warning=group_desc mismatch for group '{}': '{}' vs '{}'",
-                meta.group, entry.desc, meta.group_desc
-            );
-        }
-
-        let Some(resource) = meta.resource.clone() else {
-            println!("cargo:warning=missing resource for permission mapping '{}'", route.handler);
-            continue;
-        };
-        let Some(action) = meta.action.clone() else {
-            println!("cargo:warning=missing action for permission mapping '{}'", route.handler);
-            continue;
-        };
-        entry.permissions.push(PermissionItem {
-            module: "admin".to_string(),
-            method: route.method.clone(),
-            path: join_paths(prefix, &route.path),
-            description: meta.desc.clone(),
-            resource,
-            action,
-        });
-    }
-
-    append_policy_permissions(&mut groups, &mut order);
-    let ordered =
-        order.into_iter().filter_map(|name| groups.remove(&name).map(|group| (name, group))).collect();
-
-    (ordered, used_handlers)
-}
-
-/// 拼接路由前缀与路径。
-///
-/// # 参数
-/// * `prefix` - 前缀
-/// * `path` - 路径
-///
-/// # 返回
-/// 返回字符串结果。
-fn join_paths(prefix: &str, path: &str) -> String {
-    let left = prefix.trim_end_matches('/');
-    let right = path.trim_start_matches('/');
-    format!("{}/{}", left, right)
 }
 
 /// 生成并写入权限配置文件。

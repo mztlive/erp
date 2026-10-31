@@ -9,13 +9,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查看商品来源资料差异",
-    resource = "product",
-    action = "detail"
-)]
 /// 读取当前可见商品的供应商资料差异。
 /// # 参数
 /// 应用、已认证操作人和路径商品。
@@ -31,13 +24,6 @@ pub async fn product_source_diff(
     Ok(ApiResponse::ok_with_data(state.catalog_service().product_source_diff(&id, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "确认商品来源资料差异",
-    resource = "product",
-    action = "update"
-)]
 /// 按用户看到的版本确认指定展示字段。
 /// # 参数
 /// 应用、操作人、路径商品及带幂等号的决策。

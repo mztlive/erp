@@ -24,13 +24,6 @@ fn service(state: &AppState) -> IdentityResult<PolicyBundleService> {
     Ok(PolicyBundleService::new(scope_configuration(state.db(), state.rbac()), catalog))
 }
 
-#[permission_macros::permission(
-    group = "授权文件",
-    group_desc = "声明式授权配置",
-    desc = "校验授权文件",
-    resource = "authorization_policy",
-    action = "preview"
-)]
 /// 只读校验结构、当前目标和授权能力。
 /// # 参数
 /// state 为依赖，actor 为认证身份，document 为授权文件。
@@ -46,13 +39,6 @@ pub async fn validate(
     Ok(ApiResponse::ok_with_data(service(&state)?.preview(document, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "授权文件",
-    group_desc = "声明式授权配置",
-    desc = "预览授权文件",
-    resource = "authorization_policy",
-    action = "preview"
-)]
 /// 只读生成绑定当前事实和操作人的审核计划。
 /// # 参数
 /// state 为依赖，actor 为认证身份，document 为授权文件。
@@ -68,13 +54,6 @@ pub async fn preview(
     Ok(ApiResponse::ok_with_data(service(&state)?.preview(document, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "授权文件",
-    group_desc = "声明式授权配置",
-    desc = "应用授权文件",
-    resource = "authorization_policy",
-    action = "apply"
-)]
 /// 应用已审核文件，重验事实后在同一授权事务提交。
 /// # 参数
 /// state 为依赖，actor 为认证身份，request 为原文件及预览和命令身份。
@@ -90,13 +69,6 @@ pub async fn apply(
     Ok(ApiResponse::ok_with_data(service(&state)?.apply(request, actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "授权文件",
-    group_desc = "声明式授权配置",
-    desc = "导出授权文件",
-    resource = "authorization_policy",
-    action = "export"
-)]
 /// 导出明确选择的人员及角色。
 /// # 参数
 /// state 为依赖，actor 为认证身份，request 为有界选择。
@@ -138,5 +110,17 @@ mod tests {
             .body(Body::from(r#"{"version":"1.0","roles":[],"bindings":[],"data_scopes":[]}"#))
             .unwrap();
         assert!(Json::<PolicyDocument>::from_request(request, &()).await.is_ok());
+    }
+}
+
+#[cfg(test)]
+mod catalog_tests {
+    use super::POLICY_PERMISSION_CODES;
+
+    #[test]
+    fn generated_policy_whitelist_matches_the_frozen_baseline() {
+        let expected: Vec<String> =
+            serde_json::from_str(include_str!("../../../../testdata/policy-permissions.json")).unwrap();
+        assert_eq!(POLICY_PERMISSION_CODES, expected);
     }
 }

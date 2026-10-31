@@ -26,13 +26,6 @@ use crate::core::handler::contract::ensure_contract_access;
 use crate::core::handler::customer::ensure_customer_access;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "查询销售单列表",
-    resource = "sales_order",
-    action = "list"
-)]
 /// 查询销售单列表。
 ///
 /// # 参数
@@ -56,13 +49,6 @@ pub async fn sales_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "创建销售单",
-    resource = "sales_order",
-    action = "create"
-)]
 /// 创建销售单（订单 + 稳定明细 + 工作副本原子形成；`intent=SUBMIT` 时立即提交）。
 ///
 /// # 参数
@@ -95,13 +81,6 @@ pub async fn sales_order_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "查询销售单详情",
-    resource = "sales_order",
-    action = "detail"
-)]
 /// 查询销售单详情（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
 ///
 /// # 参数
@@ -122,13 +101,6 @@ pub async fn sales_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "保存销售单草稿",
-    resource = "sales_order",
-    action = "update"
-)]
 /// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁）。
 ///
 /// # 参数
@@ -163,13 +135,6 @@ pub async fn sales_order_save_working_copy(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "提交销售单",
-    resource = "sales_order",
-    action = "submit"
-)]
 /// 提交销售单（冻结提交快照并推进审核轨；重复提交幂等返回既有提交）。
 ///
 /// # 参数
@@ -204,13 +169,6 @@ pub async fn sales_order_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "撤回销售单审批",
-    resource = "sales_order",
-    action = "cancel_approval"
-)]
 /// 撤回尚未最终通过的销售单审批（含 `VoucherSalesOrder`）。
 ///
 /// # 参数
@@ -235,13 +193,6 @@ pub async fn sales_order_cancel_approval(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "作废销售单草稿",
-    resource = "sales_order",
-    action = "delete"
-)]
 /// 作废销售单草稿（主状态 `DRAFT → VOIDED`，乐观锁）。
 ///
 /// # 参数
@@ -266,13 +217,6 @@ pub async fn sales_order_void(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "交接销售单责任",
-    resource = "sales_order",
-    action = "update"
-)]
 /// 显式交接销售单负责销售与业务组织，并原子转交开放验收任务。
 ///
 /// # 参数
@@ -300,13 +244,6 @@ pub async fn sales_order_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "查询销售交接待选目标",
-    resource = "sales_order",
-    action = "list"
-)]
 /// 查询当前销售单可交接的合格目标候选。
 ///
 /// # 参数
@@ -387,13 +324,6 @@ mod scope_query_tests {
     }
 }
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "补录销售单合同",
-    resource = "sales_order",
-    action = "update"
-)]
 /// 为原销售单首次补录合同，保留既有客户、结算主体与全部历史商业快照。
 ///
 /// # 参数

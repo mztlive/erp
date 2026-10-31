@@ -1,16 +1,17 @@
 //! 域 D12 `contract` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/contracts`；每条路由统一
-//! 走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! 走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
-use crate::core::handler::{contract, customer};
+use crate::core::handler::contract;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -31,13 +32,9 @@ fn sales_access_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new().route(
         "/contracts/{id}/sales-access",
         with_permission(
-            with_permission(
-                put(contract::contract_sales_access),
-                rbac,
-                contract::contract_sales_access_permission_key(),
-            ),
+            with_permission(put(contract::contract_sales_access), rbac, permissions::contract::SALES_ACCESS),
             rbac,
-            customer::customer_assignment_apply_permission_key(),
+            permissions::customer::ASSIGNMENT_APPLY,
         ),
     )
 }
@@ -45,10 +42,7 @@ fn sales_access_routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn archived_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .merge(file_routes(rbac))
-        .route(
-            "/contracts",
-            with_permission(get(contract::contract_list), rbac, contract::contract_list_permission_key()),
-        )
+        .route("/contracts", with_permission(get(contract::contract_list), rbac, permissions::contract::LIST))
         .route(
             "/contracts/upload",
             with_permission(
@@ -57,36 +51,28 @@ fn archived_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_CONTRACT_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                contract::imports::upload_permission_key(),
+                permissions::contract::IMPORTS_UPLOAD,
             ),
         )
         .route(
             "/contracts",
-            with_permission(
-                post(contract::contract_create),
-                rbac,
-                contract::contract_create_permission_key(),
-            ),
+            with_permission(post(contract::contract_create), rbac, permissions::contract::CREATE),
         )
         .route(
             "/contracts/{id}",
-            with_permission(get(contract::contract_detail), rbac, contract::contract_detail_permission_key()),
+            with_permission(get(contract::contract_detail), rbac, permissions::contract::DETAIL),
         )
         .route(
             "/contracts/{id}/revisions",
             with_permission(
                 post(contract::contract_archive_revision),
                 rbac,
-                contract::contract_archive_revision_permission_key(),
+                permissions::contract::ARCHIVE_REVISION,
             ),
         )
         .route(
             "/contracts/{id}/terminate",
-            with_permission(
-                post(contract::contract_terminate),
-                rbac,
-                contract::contract_terminate_permission_key(),
-            ),
+            with_permission(post(contract::contract_terminate), rbac, permissions::contract::TERMINATE),
         )
 }
 
@@ -95,7 +81,7 @@ fn template_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/contract-templates",
-            with_permission(get(contract::templates::list), rbac, contract::templates::list_permission_key()),
+            with_permission(get(contract::templates::list), rbac, permissions::contract::TEMPLATES_LIST),
         )
         .route(
             "/contract-templates",
@@ -105,31 +91,23 @@ fn template_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_CONTRACT_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                contract::templates::create_permission_key(),
+                permissions::contract::TEMPLATES_CREATE,
             ),
         )
         .route(
             "/contract-templates/{id}/status",
-            with_permission(
-                post(contract::templates::status),
-                rbac,
-                contract::templates::status_permission_key(),
-            ),
+            with_permission(post(contract::templates::status), rbac, permissions::contract::TEMPLATES_STATUS),
         )
         .route(
             "/contract-templates/{id}/sample",
-            with_permission(
-                get(contract::templates::sample),
-                rbac,
-                contract::templates::sample_permission_key(),
-            ),
+            with_permission(get(contract::templates::sample), rbac, permissions::contract::TEMPLATES_SAMPLE),
         )
         .route(
             "/contract-number-counters",
             with_permission(
                 get(contract::templates::counters),
                 rbac,
-                contract::templates::counters_permission_key(),
+                permissions::contract::TEMPLATES_COUNTERS,
             ),
         )
         .route(
@@ -137,7 +115,7 @@ fn template_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(contract::templates::configure),
                 rbac,
-                contract::templates::configure_permission_key(),
+                permissions::contract::TEMPLATES_CONFIGURE,
             ),
         )
 }
@@ -149,23 +127,19 @@ fn application_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(contract::templates::applications),
                 rbac,
-                contract::templates::applications_permission_key(),
+                permissions::contract::TEMPLATES_APPLICATIONS,
             ),
         )
         .route(
             "/contract-applications",
-            with_permission(
-                post(contract::templates::apply),
-                rbac,
-                contract::templates::apply_permission_key(),
-            ),
+            with_permission(post(contract::templates::apply), rbac, permissions::contract::TEMPLATES_APPLY),
         )
         .route(
             "/contract-applications/{id}/download",
             with_permission(
                 get(contract::templates::download),
                 rbac,
-                contract::templates::download_permission_key(),
+                permissions::contract::TEMPLATES_DOWNLOAD,
             ),
         )
 }
@@ -174,15 +148,11 @@ fn file_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/contracts/{id}/files/{file_id}",
-            with_permission(get(contract::contract_file), rbac, contract::contract_file_permission_key()),
+            with_permission(get(contract::contract_file), rbac, permissions::contract::FILE),
         )
         .route(
             "/contracts/{id}/files/{file_id}/preview",
-            with_permission(
-                get(contract::contract_file_preview),
-                rbac,
-                contract::contract_file_preview_permission_key(),
-            ),
+            with_permission(get(contract::contract_file_preview), rbac, permissions::contract::FILE_PREVIEW),
         )
 }
 
@@ -190,30 +160,22 @@ fn import_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/contract-imports",
-            with_permission(get(contract::imports::list), rbac, contract::imports::list_permission_key()),
+            with_permission(get(contract::imports::list), rbac, permissions::contract::IMPORTS_LIST),
         )
         .route(
             "/contract-imports/{id}",
-            with_permission(get(contract::imports::detail), rbac, contract::imports::detail_permission_key()),
+            with_permission(get(contract::imports::detail), rbac, permissions::contract::IMPORTS_DETAIL),
         )
         .route(
             "/contract-imports/{id}/run",
-            with_permission(post(contract::imports::run), rbac, contract::imports::run_permission_key()),
+            with_permission(post(contract::imports::run), rbac, permissions::contract::IMPORTS_RUN),
         )
         .route(
             "/contract-imports/{id}/confirm",
-            with_permission(
-                post(contract::imports::confirm),
-                rbac,
-                contract::imports::confirm_permission_key(),
-            ),
+            with_permission(post(contract::imports::confirm), rbac, permissions::contract::IMPORTS_CONFIRM),
         )
         .route(
             "/contract-imports/{id}/preview",
-            with_permission(
-                get(contract::imports::preview),
-                rbac,
-                contract::imports::preview_permission_key(),
-            ),
+            with_permission(get(contract::imports::preview), rbac, permissions::contract::IMPORTS_PREVIEW),
         )
 }

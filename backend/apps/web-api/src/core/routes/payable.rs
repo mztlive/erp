@@ -12,6 +12,7 @@ use crate::app_state::AppState;
 use crate::core::handler::payable;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -29,34 +30,26 @@ fn account_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/payable-accounts",
-            with_permission(
-                get(payable::payable_account_list),
-                rbac,
-                payable::payable_account_list_permission_key(),
-            ),
+            with_permission(get(payable::payable_account_list), rbac, permissions::payable::ACCOUNT_LIST),
         )
         .route(
             "/payable-accounts",
             with_permission(
                 post(payable::payable_account_create),
                 rbac,
-                payable::payable_account_create_permission_key(),
+                permissions::payable::ACCOUNT_CREATE,
             ),
         )
         .route(
             "/payable-accounts/{id}",
-            with_permission(
-                get(payable::payable_account_detail),
-                rbac,
-                payable::payable_account_detail_permission_key(),
-            ),
+            with_permission(get(payable::payable_account_detail), rbac, permissions::payable::ACCOUNT_DETAIL),
         )
         .route(
             "/payable-accounts/{id}/payment-recipient/reveal",
             with_permission(
                 post(payable::payment_recipient_reveal),
                 rbac,
-                payable::payment_recipient_reveal_permission_key(),
+                permissions::payable::PAYMENT_RECIPIENT_REVEAL,
             ),
         )
 }
@@ -69,7 +62,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(payable::supplier_payment_list),
                 rbac,
-                payable::supplier_payment_list_permission_key(),
+                permissions::payable::SUPPLIER_PAYMENT_LIST,
             ),
         )
         .route(
@@ -77,7 +70,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(payable::supplier_payment_merge_candidates),
                 rbac,
-                payable::supplier_payment_merge_candidates_permission_key(),
+                permissions::payable::SUPPLIER_PAYMENT_MERGE_CANDIDATES,
             ),
         )
         .route(
@@ -85,7 +78,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(payable::supplier_payment_detail),
                 rbac,
-                payable::supplier_payment_detail_permission_key(),
+                permissions::payable::SUPPLIER_PAYMENT_DETAIL,
             ),
         )
         .route(
@@ -93,7 +86,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(payable::supplier_payment_bank_receipt),
                 rbac,
-                payable::supplier_payment_bank_receipt_permission_key(),
+                permissions::payable::SUPPLIER_PAYMENT_BANK_RECEIPT,
             ),
         )
         .route(
@@ -104,7 +97,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                payable::supplier_payment_commit_permission_key(),
+                permissions::payable::SUPPLIER_PAYMENT_COMMIT,
             ),
         )
 }
@@ -117,7 +110,7 @@ fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(payable::purchase_invoice_allocation_list),
                 rbac,
-                payable::purchase_invoice_allocation_list_permission_key(),
+                permissions::payable::PURCHASE_INVOICE_ALLOCATION_LIST,
             ),
         )
         .route(
@@ -125,7 +118,7 @@ fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(payable::purchase_invoice_allocation_post),
                 rbac,
-                payable::purchase_invoice_allocation_post_permission_key(),
+                permissions::payable::PURCHASE_INVOICE_ALLOCATION_POST,
             ),
         )
         .route(
@@ -136,7 +129,7 @@ fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                payable::invoice_files::purchase_invoice_allocation_post_with_files_permission_key(),
+                permissions::payable::INVOICE_FILES_PURCHASE_INVOICE_ALLOCATION_POST_WITH_FILES,
             ),
         )
 }

@@ -18,13 +18,6 @@ use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 /// 分页查询采购责任规则。
-#[permission_macros::permission(
-    group = "采购责任管理",
-    group_desc = "维护采购责任规则并预览逐行负责人",
-    desc = "查询采购责任规则",
-    resource = "procurement_responsibility",
-    action = "list"
-)]
 pub async fn list_rules(
     State(state): State<AppState>,
     Query(params): Query<ProcurementResponsibilityRuleListParams>,
@@ -35,13 +28,6 @@ pub async fn list_rules(
 }
 
 /// 创建采购责任规则。
-#[permission_macros::permission(
-    group = "采购责任管理",
-    group_desc = "维护采购责任规则并预览逐行负责人",
-    desc = "创建采购责任规则",
-    resource = "procurement_responsibility",
-    action = "manage"
-)]
 pub async fn create_rule(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -54,13 +40,6 @@ pub async fn create_rule(
 }
 
 /// 整项更新采购责任规则。
-#[permission_macros::permission(
-    group = "采购责任管理",
-    group_desc = "维护采购责任规则并预览逐行负责人",
-    desc = "更新采购责任规则",
-    resource = "procurement_responsibility",
-    action = "manage"
-)]
 pub async fn update_rule(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -75,13 +54,6 @@ pub async fn update_rule(
 }
 
 /// 逐行预览采购责任解析结果。
-#[permission_macros::permission(
-    group = "采购责任管理",
-    group_desc = "维护采购责任规则并预览逐行负责人",
-    desc = "预览采购责任解析",
-    resource = "procurement_responsibility",
-    action = "list"
-)]
 pub async fn resolve(
     State(state): State<AppState>,
     Json(request): Json<ProcurementResponsibilityResolveRequest>,

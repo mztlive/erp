@@ -7,6 +7,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::demo_master_data;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 演示主数据路由。
 ///
@@ -22,7 +23,7 @@ pub(super) fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(demo_master_data::demo_master_data_status),
                 rbac,
-                demo_master_data::demo_master_data_status_permission_key(),
+                permissions::demo_master_data::STATUS,
             ),
         )
         .route(
@@ -30,7 +31,7 @@ pub(super) fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(demo_master_data::demo_master_data_apply),
                 rbac,
-                demo_master_data::demo_master_data_apply_permission_key(),
+                permissions::demo_master_data::APPLY,
             ),
         )
         .route(
@@ -38,7 +39,7 @@ pub(super) fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(demo_master_data::demo_master_data_foundation),
                 rbac,
-                demo_master_data::demo_master_data_foundation_permission_key(),
+                permissions::demo_master_data::FOUNDATION,
             ),
         )
         .route(
@@ -46,7 +47,7 @@ pub(super) fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(demo_master_data::demo_master_data_remove),
                 rbac,
-                demo_master_data::demo_master_data_remove_permission_key(),
+                permissions::demo_master_data::REMOVE,
             ),
         )
 }

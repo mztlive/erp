@@ -8,13 +8,6 @@ use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
 
 use super::*;
 
-#[permission_macros::permission(
-    group = "开票申请",
-    group_desc = "开票申请与授权管理",
-    desc = "查询开票申请列表",
-    resource = "sales_invoice_request",
-    action = "list"
-)]
 /// 查询开票申请列表。
 ///
 /// DataScope v2：按关联销售当前负责人、申请人与当前开票处理人分别查询；
@@ -33,13 +26,6 @@ pub async fn invoice_request_list(
     ))
 }
 
-#[permission_macros::permission(
-    group = "开票申请",
-    group_desc = "开票申请与授权管理",
-    desc = "查询开票申请详情",
-    resource = "sales_invoice_request",
-    action = "detail"
-)]
 /// 查询开票申请详情（DataScope v2 范围裁剪行）。
 /// # 返回
 /// 返回范围裁剪后的申请行；不可见与不存在统一为 NotFound。
@@ -55,13 +41,6 @@ pub async fn invoice_request_detail(
     ))
 }
 
-#[permission_macros::permission(
-    group = "开票申请",
-    group_desc = "开票申请与授权管理",
-    desc = "查询可申请开票额度",
-    resource = "sales_invoice_request",
-    action = "list"
-)]
 /// 查询可申请开票额度。
 /// # 返回
 /// 返回已授权业务用例的结果；失败保留既有错误类型。
@@ -72,13 +51,6 @@ pub async fn invoice_request_amounts(
     Ok(ApiResponse::ok_with_data(ReceivableReadService::new(state.db()).invoice_request_amounts(&id).await?))
 }
 
-#[permission_macros::permission(
-    group = "开票申请",
-    group_desc = "开票申请与授权管理",
-    desc = "提交开票申请",
-    resource = "sales_invoice_request",
-    action = "submit"
-)]
 /// 提交开票申请。
 /// # 返回
 /// 返回已授权业务用例的结果；失败保留既有错误类型。
@@ -95,13 +67,6 @@ pub async fn invoice_request_submit(
     ))
 }
 
-#[permission_macros::permission(
-    group = "开票申请",
-    group_desc = "开票申请与授权管理",
-    desc = "撤回开票申请",
-    resource = "sales_invoice_request",
-    action = "cancel"
-)]
 /// 撤回开票申请。
 /// # 返回
 /// 返回已授权业务用例的结果；失败保留既有错误类型。

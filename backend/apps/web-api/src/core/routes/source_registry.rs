@@ -2,7 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/source-systems`、
 //! `/admin/external-identity-maps`；每条路由统一走
-//! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -11,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::source_registry;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -26,7 +27,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(source_registry::source_system_list),
                 rbac,
-                source_registry::source_system_list_permission_key(),
+                permissions::source_registry::SOURCE_SYSTEM_LIST,
             ),
         )
         .route(
@@ -34,7 +35,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(source_registry::source_system_create),
                 rbac,
-                source_registry::source_system_create_permission_key(),
+                permissions::source_registry::SOURCE_SYSTEM_CREATE,
             ),
         )
         .route(
@@ -42,7 +43,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(source_registry::source_system_update),
                 rbac,
-                source_registry::source_system_update_permission_key(),
+                permissions::source_registry::SOURCE_SYSTEM_UPDATE,
             ),
         )
         .route(
@@ -50,7 +51,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(source_registry::external_identity_map_list),
                 rbac,
-                source_registry::external_identity_map_list_permission_key(),
+                permissions::source_registry::EXTERNAL_IDENTITY_MAP_LIST,
             ),
         )
         .route(
@@ -58,7 +59,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(source_registry::external_identity_map_create),
                 rbac,
-                source_registry::external_identity_map_create_permission_key(),
+                permissions::source_registry::EXTERNAL_IDENTITY_MAP_CREATE,
             ),
         )
 }

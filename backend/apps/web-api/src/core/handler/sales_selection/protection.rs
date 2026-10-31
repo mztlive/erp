@@ -31,13 +31,6 @@ use crate::core::response::ApiResponse;
 ///
 /// # 错误
 /// 无维护权限、版本冲突或密码格式不合法时拒绝。
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "维护选品册访问密码",
-    resource = "sales_selection_booklet",
-    action = "maintain"
-)]
 pub async fn booklet_password(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -60,13 +53,6 @@ pub async fn booklet_password(
 ///
 /// # 错误
 /// 无复制链接权限或无客户访问资格时拒绝。
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "读取选品册个人提货码",
-    resource = "sales_selection_booklet",
-    action = "copy_link"
-)]
 pub async fn booklet_vouchers(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -88,13 +74,6 @@ pub async fn booklet_vouchers(
 ///
 /// # 错误
 /// 无册读取权限或无客户访问资格时拒绝。
-#[permission_macros::permission(
-    group = "销售选品",
-    group_desc = "选品册与销售方案",
-    desc = "查询选品册个人选品明细",
-    resource = "sales_selection_booklet",
-    action = "get"
-)]
 pub async fn booklet_selection_details(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

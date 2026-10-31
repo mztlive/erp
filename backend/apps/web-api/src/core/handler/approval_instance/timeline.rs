@@ -10,13 +10,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "查询审批实例详情",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 沿实例阅读授权返回相关业务动态。
 /// # 参数
 /// `state`、`actor` 为应用与身份；`id`、`query` 为实例及分页。

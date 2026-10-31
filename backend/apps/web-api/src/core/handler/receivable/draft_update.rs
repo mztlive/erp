@@ -12,13 +12,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "修改原财务单据草稿",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
 ///
 /// # 参数
@@ -45,13 +38,6 @@ pub async fn customer_receipt_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "保存回款登记草稿",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 保存到账字段与拟核销分配，不启动审批。
 /// # 参数
 /// * `state` - 应用状态。

@@ -296,13 +296,6 @@ impl HttpWorkItemConflict {
     }
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "查询本人授权范围内的待办",
-    resource = "work_item",
-    action = "list"
-)]
 /// 查询服务端责任过滤后的待办队列。
 ///
 /// # 参数
@@ -327,13 +320,6 @@ pub async fn work_item_list(
     Ok(ApiResponse::ok_with_data(wrap_page(page)))
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "查询本人授权范围内的履约责任队列",
-    resource = "work_item",
-    action = "list"
-)]
 /// 查询 W09 服务端分页履约责任读模型。
 ///
 /// # 参数
@@ -357,13 +343,6 @@ pub async fn fulfillment_queue_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "查询本人授权范围内的待办统计",
-    resource = "work_item",
-    action = "list"
-)]
 /// 查询与正式待办列表复用授权快照的统计。
 ///
 /// # 参数
@@ -387,13 +366,6 @@ pub async fn work_item_stats(
     Ok(ApiResponse::ok_with_data(stats))
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "查询本人有权查看的待办详情",
-    resource = "work_item",
-    action = "detail"
-)]
 /// 查询单条任务的安全详情。
 ///
 /// # 参数
@@ -417,13 +389,6 @@ pub async fn work_item_detail(
     Ok(ApiResponse::ok_with_data(view.into()))
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "查询非审批任务可转交人员",
-    resource = "work_item",
-    action = "reassign"
-)]
 /// 查询开放非审批任务当前合格的转交候选人。
 ///
 /// # 参数
@@ -445,13 +410,6 @@ pub async fn work_item_reassign_candidates(
     Ok(ApiResponse::ok_with_data(candidates))
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "在授权范围内受控转交非审批任务",
-    resource = "work_item",
-    action = "reassign"
-)]
 /// 转交开放非审批任务给重新校验合格的用户。
 ///
 /// 审批任务必须失败关闭。
@@ -479,13 +437,6 @@ pub async fn work_item_reassign(
     work_item_action_response(state, actor, outcome, headers).await
 }
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "关闭重复、误派或已有替代的非审批任务",
-    resource = "work_item",
-    action = "close"
-)]
 /// 受控关闭允许人工关闭的无效非审批任务。
 ///
 /// 审批任务必须失败关闭。

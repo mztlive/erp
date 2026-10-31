@@ -10,13 +10,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "读取原回款编辑字段",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 读取原登记人的完整回款，保留真实状态供未知提交确认。
 ///
 /// # 参数

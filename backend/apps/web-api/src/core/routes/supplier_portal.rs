@@ -11,6 +11,7 @@ use crate::core::handler::supplier_portal::{self, assets, auth, read, write};
 use crate::core::middleware::supplier_portal::authenticate_portal;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 装配公开登录及逐请求重验身份的门户业务接口。
 ///
@@ -105,7 +106,7 @@ fn account_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::admin::accounts),
                 rbac,
-                supplier_portal::admin::accounts_permission_key(),
+                permissions::supplier_portal::ADMIN_ACCOUNTS,
             ),
         )
         .route(
@@ -113,7 +114,7 @@ fn account_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_portal::admin::create_account),
                 rbac,
-                supplier_portal::admin::create_account_permission_key(),
+                permissions::supplier_portal::ADMIN_CREATE_ACCOUNT,
             ),
         )
         .route(
@@ -121,7 +122,7 @@ fn account_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(supplier_portal::admin::update_account),
                 rbac,
-                supplier_portal::admin::update_account_permission_key(),
+                permissions::supplier_portal::ADMIN_UPDATE_ACCOUNT,
             ),
         )
 }
@@ -134,7 +135,7 @@ fn catalog_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::admin::grants),
                 rbac,
-                supplier_portal::admin::grants_permission_key(),
+                permissions::supplier_portal::ADMIN_GRANTS,
             ),
         )
         .route(
@@ -142,7 +143,7 @@ fn catalog_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_portal::admin::update_grant),
                 rbac,
-                supplier_portal::admin::update_grant_permission_key(),
+                permissions::supplier_portal::ADMIN_UPDATE_GRANT,
             ),
         )
 }
@@ -155,7 +156,7 @@ fn application_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::admin::applications),
                 rbac,
-                supplier_portal::admin::applications_permission_key(),
+                permissions::supplier_portal::ADMIN_APPLICATIONS,
             ),
         )
         .route(
@@ -163,7 +164,7 @@ fn application_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::admin::application),
                 rbac,
-                supplier_portal::admin::application_permission_key(),
+                permissions::supplier_portal::ADMIN_APPLICATION,
             ),
         )
         .route(
@@ -171,7 +172,7 @@ fn application_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_portal::admin::review),
                 rbac,
-                supplier_portal::admin::review_permission_key(),
+                permissions::supplier_portal::ADMIN_REVIEW,
             ),
         )
 }
@@ -184,7 +185,7 @@ fn review_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::admin::impacts),
                 rbac,
-                supplier_portal::admin::impacts_permission_key(),
+                permissions::supplier_portal::ADMIN_IMPACTS,
             ),
         )
         .route(
@@ -192,7 +193,7 @@ fn review_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::assets::review_download),
                 rbac,
-                supplier_portal::assets::review_download_permission_key(),
+                permissions::supplier_portal::ASSETS_REVIEW_DOWNLOAD,
             ),
         )
         .route(
@@ -200,7 +201,7 @@ fn review_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::admin::dictionaries),
                 rbac,
-                supplier_portal::admin::dictionaries_permission_key(),
+                permissions::supplier_portal::ADMIN_DICTIONARIES,
             ),
         )
         .route(
@@ -208,7 +209,7 @@ fn review_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_portal::admin::duplicates),
                 rbac,
-                supplier_portal::admin::duplicates_permission_key(),
+                permissions::supplier_portal::ADMIN_DUPLICATES,
             ),
         )
 }

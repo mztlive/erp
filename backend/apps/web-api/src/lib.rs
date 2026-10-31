@@ -8,3 +8,12 @@ pub mod core;
 
 mod indexes;
 pub mod runtime;
+
+pub mod permissions;
+
+#[cfg(test)]
+#[path = "../build_catalog.rs"]
+mod build_catalog;
+#[cfg(test)]
+#[path = "../build_permissions.rs"]
+mod build_permissions;

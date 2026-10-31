@@ -15,13 +15,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "上传发票文件并登记过账分配",
-    resource = "purchase_invoice_allocation",
-    action = "post"
-)]
 /// 在登记进项发票时上传文件，复用原登记权限与事务。
 /// # 参数
 /// `state` 为应用状态，`actor` 为认证账号，`multipart` 为命令及其引用文件。

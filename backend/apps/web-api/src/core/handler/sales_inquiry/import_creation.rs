@@ -14,13 +14,6 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "预览导入新建询价",
-    resource = "sales_inquiry",
-    action = "import"
-)]
 /// 校验客户绑定的新建文件，不创建空草稿。
 /// # 参数
 /// multipart 必须包含一个 customer_id 和一个 file，身份取当前账号。
@@ -41,13 +34,6 @@ pub async fn creation_preview(
     ))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "导入新建询价",
-    resource = "sales_inquiry",
-    action = "import"
-)]
 /// 从原预览一次性创建询价和配送需求。
 /// # 参数
 /// `request` 仅包含客户、预览、指纹、合并确认及稳定命令号。

@@ -15,13 +15,6 @@ use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 /// 查询财务责任规则。
-#[permission_macros::permission(
-    group = "财务责任管理",
-    group_desc = "维护付款与销项开票的具体负责人规则",
-    desc = "查询财务责任规则",
-    resource = "finance_responsibility",
-    action = "list"
-)]
 pub async fn finance_responsibility_rule_list(
     State(state): State<AppState>,
 ) -> Result<Vec<FinanceResponsibilityRuleView>> {
@@ -41,13 +34,6 @@ pub async fn finance_responsibility_rule_list(
 ///
 /// # 错误
 /// 请求非法、资格校验或规则创建失败时返回错误。
-#[permission_macros::permission(
-    group = "财务责任管理",
-    group_desc = "维护付款与销项开票的具体负责人规则",
-    desc = "创建财务责任规则",
-    resource = "finance_responsibility",
-    action = "manage"
-)]
 pub async fn finance_responsibility_rule_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -73,13 +59,6 @@ pub async fn finance_responsibility_rule_create(
 ///
 /// # 错误
 /// 请求非法、版本冲突、资格校验或规则更新失败时返回错误。
-#[permission_macros::permission(
-    group = "财务责任管理",
-    group_desc = "维护付款与销项开票的具体负责人规则",
-    desc = "更新财务责任规则",
-    resource = "finance_responsibility",
-    action = "manage"
-)]
 pub async fn finance_responsibility_rule_update(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -94,13 +73,6 @@ pub async fn finance_responsibility_rule_update(
 }
 
 /// 查询付款与销项开票的负责人候选。
-#[permission_macros::permission(
-    group = "财务责任管理",
-    group_desc = "维护付款与销项开票的具体负责人规则",
-    desc = "查询财务负责人候选",
-    resource = "finance_responsibility",
-    action = "list"
-)]
 pub async fn finance_responsibility_owner_options(
     State(state): State<AppState>,
 ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {

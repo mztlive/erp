@@ -21,13 +21,6 @@ use crate::core::handler::file_asset::{
 use crate::core::handler::payable::validate_bank_receipt_upload;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "在批准采购付款申请内登记付款",
-    resource = "purchase_payment_request",
-    action = "pay"
-)]
 /// 原子登记付款、回单、逐行核销、占用扣减、任务进度及命令结果。
 /// # 参数
 /// 当前出纳、批准申请身份及带银行回单的付款命令。
@@ -65,13 +58,6 @@ pub async fn pay(
     Ok(ApiResponse::ok_with_data(result.view?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "主动查看当前付款申请完整收款账号",
-    resource = "party_bank_account",
-    action = "reveal"
-)]
 /// 仅在敏感揭示权限、当前任务和冻结账户版本全部有效时交付完整账号。
 /// # 参数
 /// 当前账号、申请身份、任务及账户所见版本。

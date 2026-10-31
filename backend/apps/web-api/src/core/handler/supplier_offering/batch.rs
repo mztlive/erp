@@ -13,13 +13,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "保存供应商供给条款",
-    resource = "supplier_offering",
-    action = "update"
-)]
 /// 批量校验或追加商业条款修订。
 ///
 /// # 参数
@@ -42,13 +35,6 @@ pub async fn revise(
     ))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "更新供应商可供状态",
-    resource = "supplier_offering_availability",
-    action = "update"
-)]
 /// 批量校验或更新可供状态与数量。
 ///
 /// # 参数

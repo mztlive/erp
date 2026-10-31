@@ -12,13 +12,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "下载供应商采购单",
-    resource = "purchase_order",
-    action = "detail"
-)]
 /// 下载当前保存内容的独立采购单文件。
 /// # 参数
 /// `state` 为应用状态，`actor` 为认证人，`id` 为采购单。
@@ -35,13 +28,6 @@ pub async fn purchase_paper(
         purchase_correspondence::download(state.db(), state.rbac(), &id, &actor).await?,
     ))
 }
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "发送采购单邮件给供应商",
-    resource = "purchase_order",
-    action = "send_email"
-)]
 /// 发送已生效采购单，所有正文由服务端生成。
 /// # 参数
 /// `state`、`actor`、`id` 为应用身份上下文，`req` 为发件确认。
@@ -69,13 +55,6 @@ pub async fn send_purchase_email(
     ))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查看采购邮件发送记录",
-    resource = "purchase_order",
-    action = "detail"
-)]
 /// 读取本采购单的发送记录。
 /// # 参数
 /// `state`、`actor` 和 `id` 为应用身份及采购单上下文。

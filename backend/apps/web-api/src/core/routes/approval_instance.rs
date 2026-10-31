@@ -10,6 +10,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::approval_instance;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// P0-B 声明 `mod approval_process` 后应删除此 `#[path]`。
 #[path = "approval_process.rs"]
@@ -39,7 +40,7 @@ fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::materials::invoice_review),
                 rbac,
-                approval_instance::materials::invoice_review_permission_key(),
+                permissions::approval_instance::MATERIALS_INVOICE_REVIEW,
             ),
         )
         .route(
@@ -47,7 +48,7 @@ fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::materials::list),
                 rbac,
-                approval_instance::materials::list_permission_key(),
+                permissions::approval_instance::MATERIALS_LIST,
             ),
         )
         .route(
@@ -55,7 +56,7 @@ fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::materials::preview),
                 rbac,
-                approval_instance::materials::preview_permission_key(),
+                permissions::approval_instance::MATERIALS_PREVIEW,
             ),
         )
         .route(
@@ -63,7 +64,7 @@ fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::materials::download),
                 rbac,
-                approval_instance::materials::download_permission_key(),
+                permissions::approval_instance::MATERIALS_DOWNLOAD,
             ),
         )
 }
@@ -76,7 +77,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::timeline::approval_timeline),
                 rbac,
-                approval_instance::timeline::approval_timeline_permission_key(),
+                permissions::approval_instance::TIMELINE_APPROVAL_TIMELINE,
             ),
         )
         .route(
@@ -84,7 +85,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::instance_list),
                 rbac,
-                approval_instance::instance_list_permission_key(),
+                permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -92,7 +93,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::instance_detail),
                 rbac,
-                approval_instance::instance_detail_permission_key(),
+                permissions::approval_instance::INSTANCE_DETAIL,
             ),
         )
         .route(
@@ -100,7 +101,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::instance_history),
                 rbac,
-                approval_instance::instance_history_permission_key(),
+                permissions::approval_instance::INSTANCE_HISTORY,
             ),
         )
         .route(
@@ -108,7 +109,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_instance::recovery_options),
                 rbac,
-                approval_instance::recovery_options_permission_key(),
+                permissions::approval_instance::RECOVERY_OPTIONS,
             ),
         )
 }
@@ -121,7 +122,7 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(approval_instance::submit_decision),
                 rbac,
-                approval_instance::submit_decision_permission_key(),
+                permissions::approval_instance::SUBMIT_DECISION,
             ),
         )
         .route(
@@ -129,7 +130,7 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(approval_instance::resume_current_approver),
                 rbac,
-                approval_instance::resume_current_approver_permission_key(),
+                permissions::approval_instance::RESUME_CURRENT_APPROVER,
             ),
         )
         .route(
@@ -137,7 +138,7 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(approval_instance::cancel_blocked),
                 rbac,
-                approval_instance::cancel_blocked_permission_key(),
+                permissions::approval_instance::CANCEL_BLOCKED,
             ),
         )
         .route(
@@ -145,7 +146,7 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(approval_instance::upgrade_binding),
                 rbac,
-                approval_instance::upgrade_binding_permission_key(),
+                permissions::approval_instance::UPGRADE_BINDING,
             ),
         )
 }
@@ -156,7 +157,7 @@ fn copy_routes(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(approval_instance::copies::history),
             rbac,
-            approval_instance::copies::history_permission_key(),
+            permissions::approval_instance::COPIES_HISTORY,
         ),
     )
 }

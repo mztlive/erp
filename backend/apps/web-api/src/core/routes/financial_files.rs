@@ -6,6 +6,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::financial_files;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 构建财务文件业务访问路由。
 /// # 参数
@@ -22,7 +23,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::fulfillment_payment::purchase_payment_summary),
                 rbac,
-                financial_files::fulfillment_payment::purchase_payment_summary_permission_key(),
+                permissions::financial_files::FULFILLMENT_PAYMENT_PURCHASE_PAYMENT_SUMMARY,
             ),
         )
         .route(
@@ -30,7 +31,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::sales_invoice_files),
                 rbac,
-                financial_files::sales_invoice_files_permission_key(),
+                permissions::financial_files::SALES_INVOICE_FILES,
             ),
         )
         .route(
@@ -38,7 +39,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::sales_invoice_download),
                 rbac,
-                financial_files::sales_invoice_download_permission_key(),
+                permissions::financial_files::SALES_INVOICE_DOWNLOAD,
             ),
         )
         .route(
@@ -46,7 +47,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::purchase_payment_receipts),
                 rbac,
-                financial_files::purchase_payment_receipts_permission_key(),
+                permissions::financial_files::PURCHASE_PAYMENT_RECEIPTS,
             ),
         )
         .route(
@@ -54,7 +55,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::purchase_payment_receipt_download),
                 rbac,
-                financial_files::purchase_payment_receipt_download_permission_key(),
+                permissions::financial_files::PURCHASE_PAYMENT_RECEIPT_DOWNLOAD,
             ),
         )
 }
@@ -67,7 +68,7 @@ fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::invoice::invoice_files),
                 rbac,
-                financial_files::invoice::invoice_files_permission_key(),
+                permissions::financial_files::INVOICE_INVOICE_FILES,
             ),
         )
         .route(
@@ -75,7 +76,7 @@ fn invoice_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::invoice::invoice_download),
                 rbac,
-                financial_files::invoice::invoice_download_permission_key(),
+                permissions::financial_files::INVOICE_INVOICE_DOWNLOAD,
             ),
         )
 }
@@ -88,7 +89,7 @@ fn receipt_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::receipt::receipt_files),
                 rbac,
-                financial_files::receipt::receipt_files_permission_key(),
+                permissions::financial_files::RECEIPT_RECEIPT_FILES,
             ),
         )
         .route(
@@ -96,7 +97,7 @@ fn receipt_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::receipt::receipt_file_download),
                 rbac,
-                financial_files::receipt::receipt_file_download_permission_key(),
+                permissions::financial_files::RECEIPT_RECEIPT_FILE_DOWNLOAD,
             ),
         )
         .route(
@@ -104,7 +105,7 @@ fn receipt_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::receipt::receipt_draft_files),
                 rbac,
-                financial_files::receipt::receipt_draft_files_permission_key(),
+                permissions::financial_files::RECEIPT_RECEIPT_DRAFT_FILES,
             ),
         )
         .route(
@@ -112,7 +113,7 @@ fn receipt_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(financial_files::receipt::receipt_draft_file_download),
                 rbac,
-                financial_files::receipt::receipt_draft_file_download_permission_key(),
+                permissions::financial_files::RECEIPT_RECEIPT_DRAFT_FILE_DOWNLOAD,
             ),
         )
 }

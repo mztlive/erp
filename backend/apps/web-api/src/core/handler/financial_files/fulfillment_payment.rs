@@ -9,13 +9,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "统一待办",
-    group_desc = "待办队列与责任处理",
-    desc = "查看采购履约付款进度",
-    resource = "work_item",
-    action = "detail"
-)]
 /// 读取当前履约来源的采购付款和申请进度。
 /// # 参数
 /// 当前账号及履约任务身份。

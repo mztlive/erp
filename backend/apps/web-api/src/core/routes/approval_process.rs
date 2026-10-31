@@ -10,6 +10,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::approval_instance::approval_process;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回定义管理路由。
 ///
@@ -25,7 +26,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_process::definition_catalog),
                 rbac,
-                approval_process::definition_catalog_permission_key(),
+                permissions::approval_process::DEFINITION_CATALOG,
             ),
         )
         .route(
@@ -33,7 +34,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_process::definition_versions),
                 rbac,
-                approval_process::definition_versions_permission_key(),
+                permissions::approval_process::DEFINITION_VERSIONS,
             ),
         )
         .route(
@@ -41,7 +42,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_process::eligible_assignees),
                 rbac,
-                approval_process::eligible_assignees_permission_key(),
+                permissions::approval_process::ELIGIBLE_ASSIGNEES,
             ),
         )
         .route(
@@ -49,7 +50,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(approval_process::create_definition_draft),
                 rbac,
-                approval_process::create_definition_draft_permission_key(),
+                permissions::approval_process::CREATE_DEFINITION_DRAFT,
             ),
         )
         .route(
@@ -57,7 +58,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(approval_process::definition_detail),
                 rbac,
-                approval_process::definition_detail_permission_key(),
+                permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
@@ -65,7 +66,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(approval_process::replace_definition_nodes),
                 rbac,
-                approval_process::replace_definition_nodes_permission_key(),
+                permissions::approval_process::REPLACE_DEFINITION_NODES,
             ),
         )
         .route(
@@ -73,7 +74,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(approval_process::publish_definition),
                 rbac,
-                approval_process::publish_definition_permission_key(),
+                permissions::approval_process::PUBLISH_DEFINITION,
             ),
         )
         .route(
@@ -81,7 +82,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(approval_process::retire_definition),
                 rbac,
-                approval_process::retire_definition_permission_key(),
+                permissions::approval_process::RETIRE_DEFINITION,
             ),
         )
 }

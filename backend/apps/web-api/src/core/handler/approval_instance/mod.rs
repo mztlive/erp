@@ -33,13 +33,6 @@ use crate::core::response::ApiResponse;
 /// 审批实例 Handler 结果。
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "提交当前开放审批任务的通过或驳回",
-    resource = "approval_instance",
-    action = "decide"
-)]
 /// 对当前开放审批任务通过或驳回。
 ///
 /// actor 只从认证上下文注入。`DecisionOutcome::Blocked` 必须映射为 409。
@@ -67,13 +60,6 @@ pub async fn submit_decision(
     ok_json(view)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "按固定 view 查询审批实例",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 按 `mine|started|managed|blocked` 查询实例摘要。
 ///
 /// # 错误
@@ -114,13 +100,6 @@ pub async fn instance_list(
     }))
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "查询审批实例详情",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 返回实例、当前责任和最近受控条数历史。
 ///
 /// 详情最多 20 条执行摘要并携带 `history_next_cursor`。
@@ -141,13 +120,6 @@ pub async fn instance_detail(
     ok_json(view)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "按轮次读取审批历史",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 按 `round_no asc, execution_no asc, id asc` 读取完整历史。
 ///
 /// # 错误
@@ -170,13 +142,6 @@ pub async fn instance_history(
     ok_json(page)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "查询当前 blocker 的唯一合法恢复方式",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 返回当前 blocker 的唯一合法恢复方式。
 ///
 /// 只对通过运行管理权与 DataScope 的 actor 返回结果。
@@ -196,13 +161,6 @@ pub async fn recovery_options(
     ok_json(view)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "原审批人重新合格后恢复当前节点",
-    resource = "approval_instance",
-    action = "resume"
-)]
 /// 恢复当前审批人并创建新执行和新任务。
 ///
 /// 不接受目标用户、决定、节点或恢复动作枚举。
@@ -224,13 +182,6 @@ pub async fn resume_current_approver(
     ok_json(view)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "取消非人员一致性 blocker",
-    resource = "approval_instance",
-    action = "cancel_blocked"
-)]
 /// 取消非人员一致性 blocker。
 ///
 /// 不得接受新定义、修复值、下一节点或目标用户。
@@ -252,13 +203,6 @@ pub async fn cancel_blocked(
     ok_json(view)
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "升级未提交单据的审批定义绑定",
-    resource = "approval_instance",
-    action = "upgrade_binding"
-)]
 /// 升级未提交单据绑定到当前发布版本。
 ///
 /// 目标定义不得由客户端提交。

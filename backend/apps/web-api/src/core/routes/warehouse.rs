@@ -2,8 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/warehouses`、
 //! `/admin/warehouse-revisions`、`/admin/warehouse-sku-policies`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
@@ -12,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::warehouse;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -24,46 +24,34 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/warehouse-directory",
-            with_permission(
-                get(warehouse::directory::list),
-                rbac,
-                warehouse::directory::list_permission_key(),
-            ),
+            with_permission(get(warehouse::directory::list), rbac, permissions::warehouse::DIRECTORY_LIST),
         )
         .route(
             "/warehouse-directory/selected",
             with_permission(
                 get(warehouse::directory::selected),
                 rbac,
-                warehouse::directory::selected_permission_key(),
+                permissions::warehouse::DIRECTORY_SELECTED,
             ),
         )
         .route(
             "/warehouses",
-            with_permission(get(warehouse::warehouse_list), rbac, warehouse::warehouse_list_permission_key()),
+            with_permission(get(warehouse::warehouse_list), rbac, permissions::warehouse::LIST),
         )
         .route(
             "/warehouses",
-            with_permission(
-                post(warehouse::warehouse_create),
-                rbac,
-                warehouse::warehouse_create_permission_key(),
-            ),
+            with_permission(post(warehouse::warehouse_create), rbac, permissions::warehouse::CREATE),
         )
         .route(
             "/warehouses/{id}",
-            with_permission(
-                put(warehouse::warehouse_update),
-                rbac,
-                warehouse::warehouse_update_permission_key(),
-            ),
+            with_permission(put(warehouse::warehouse_update), rbac, permissions::warehouse::UPDATE),
         )
         .route(
             "/warehouses/{id}/fulfillment-handlers",
             with_permission(
                 put(warehouse::warehouse_fulfillment_handlers_update),
                 rbac,
-                warehouse::warehouse_fulfillment_handlers_update_permission_key(),
+                permissions::warehouse::FULFILLMENT_HANDLERS_UPDATE,
             ),
         )
         .route(
@@ -71,7 +59,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(warehouse::warehouse_fulfillment_handler_options),
                 rbac,
-                warehouse::warehouse_fulfillment_handler_options_permission_key(),
+                permissions::warehouse::FULFILLMENT_HANDLER_OPTIONS,
             ),
         )
         .route(
@@ -79,7 +67,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(warehouse::warehouse_revision_list),
                 rbac,
-                warehouse::warehouse_revision_list_permission_key(),
+                permissions::warehouse::REVISION_LIST,
             ),
         )
         .route(
@@ -87,7 +75,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(warehouse::warehouse_sku_policy_list),
                 rbac,
-                warehouse::warehouse_sku_policy_list_permission_key(),
+                permissions::warehouse::SKU_POLICY_LIST,
             ),
         )
         .route(
@@ -95,7 +83,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(warehouse::warehouse_sku_policy_create),
                 rbac,
-                warehouse::warehouse_sku_policy_create_permission_key(),
+                permissions::warehouse::SKU_POLICY_CREATE,
             ),
         )
         .route(
@@ -103,7 +91,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(warehouse::warehouse_sku_policy_update),
                 rbac,
-                warehouse::warehouse_sku_policy_update_permission_key(),
+                permissions::warehouse::SKU_POLICY_UPDATE,
             ),
         )
         .route(
@@ -111,7 +99,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(warehouse::warehouse_sku_policy_delete),
                 rbac,
-                warehouse::warehouse_sku_policy_delete_permission_key(),
+                permissions::warehouse::SKU_POLICY_DELETE,
             ),
         )
 }

@@ -26,13 +26,6 @@ impl<S: Send + Sync> FromRequest<S> for TokenJson {
     }
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "配置京东访问及刷新令牌",
-    resource = "supplier_api_connection",
-    action = "authorize"
-)]
 /// 保存同账号同应用的外部授权令牌，复用京东授权权限及供应商数据范围。
 /// # 参数
 /// 当前应用、操作人、连接及短生命周期令牌输入。

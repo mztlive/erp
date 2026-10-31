@@ -172,6 +172,13 @@ fn date_seconds(value: &str) -> Result<i64> {
     date.map(|d| d.timestamp()).ok_or_else(|| Error::ValidationError("日期须为有效的 YYYY-MM-DD".into()))
 }
 
+/// 工作台 HTTP 查询扩展；保留既有领域调用入参。
+#[derive(Debug, Clone)]
+pub struct WorkItemSearchParams {
+    pub base: WorkItemListParams,
+    pub filters: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,11 +215,4 @@ mod tests {
         doc.facet("counterparties", "客户", "客户");
         assert!(filter.matches(&doc));
     }
-}
-
-/// 工作台 HTTP 查询扩展；保留既有领域调用入参。
-#[derive(Debug, Clone)]
-pub struct WorkItemSearchParams {
-    pub base: WorkItemListParams,
-    pub filters: Option<String>,
 }

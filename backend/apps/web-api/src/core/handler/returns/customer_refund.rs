@@ -17,13 +17,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "查询客户退款列表",
-    resource = "customer_refund",
-    action = "list"
-)]
 /// 查询客户退款列表。
 ///
 /// # 参数
@@ -44,13 +37,6 @@ pub async fn customer_refund_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "查询客户退款详情",
-    resource = "customer_refund",
-    action = "detail"
-)]
 /// 查询客户退款详情。
 ///
 /// # 参数
@@ -71,13 +57,6 @@ pub async fn customer_refund_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "登记客户退款草稿",
-    resource = "customer_refund",
-    action = "create"
-)]
 /// 登记客户退款草稿（退款单号唯一构成幂等去重；经办/复核分离）。
 ///
 /// # 参数
@@ -103,13 +82,6 @@ pub async fn customer_refund_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "一次创建并提交客户退款审批",
-    resource = "customer_refund",
-    action = "submit"
-)]
 /// 按原回款一次创建客户退款并启动审批。
 ///
 /// # 参数
@@ -134,13 +106,6 @@ pub async fn customer_refund_commit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "提交客户退款审批",
-    resource = "customer_refund",
-    action = "submit"
-)]
 /// 提交客户退款并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
@@ -168,13 +133,6 @@ pub async fn customer_refund_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "撤回客户退款审批",
-    resource = "customer_refund",
-    action = "cancel_approval"
-)]
 /// 撤回尚未最终通过的客户退款审批。
 ///
 /// # 参数
@@ -202,13 +160,6 @@ pub async fn customer_refund_cancel_approval(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "客户退款过账",
-    resource = "customer_refund",
-    action = "post"
-)]
 /// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
 ///
 /// # 参数

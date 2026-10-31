@@ -12,13 +12,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商预存款",
-    group_desc = "真实充值、逐单占用与资金核实",
-    desc = "结案预存款资金差异",
-    resource = "supplier_deposit",
-    action = "resolve"
-)]
 /// 核实并结案原账户差异。
 /// # 参数
 /// 当前认证人员、原账户与对账路径以及完整核验命令。
@@ -37,13 +30,6 @@ pub async fn resolve(
     ))
 }
 
-#[permission_macros::permission(
-    group = "供应商预存款",
-    group_desc = "真实充值、逐单占用与资金核实",
-    desc = "核实并释放预存款剩余占用",
-    resource = "supplier_deposit",
-    action = "release"
-)]
 /// 核实原执行风险后释放未使用尾款。
 /// # 参数
 /// 当前认证人员、原账户与占用路径及完整核验命令。

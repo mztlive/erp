@@ -10,13 +10,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品收货地区配送提示",
-    resource = "sellable_sku",
-    action = "list"
-)]
 /// 按商品全部有效供给的配送模板，提示收货地区是否无可配送供给或需另付运费。
 ///
 /// # 参数

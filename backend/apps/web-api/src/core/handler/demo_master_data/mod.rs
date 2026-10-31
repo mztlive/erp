@@ -11,13 +11,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "演示主数据",
-    group_desc = "生成演示资料；清空数据库时仅保留 admin",
-    desc = "查看演示主数据",
-    resource = "demo_master_data",
-    action = "read"
-)]
 /// 查看演示主数据是否开放，以及各类还剩多少。
 ///
 /// # 参数
@@ -30,13 +23,6 @@ pub async fn demo_master_data_status(State(state): State<AppState>) -> Result<De
     Ok(ApiResponse::ok_with_data(status))
 }
 
-#[permission_macros::permission(
-    group = "演示主数据",
-    group_desc = "生成演示资料；清空数据库时仅保留 admin",
-    desc = "准备岗位账号、审批流程和默认责任规则",
-    resource = "demo_master_data",
-    action = "apply"
-)]
 /// 补齐演示用的岗位账号、尚未发布的审批流程，以及缺失的默认责任规则。
 ///
 /// # 参数
@@ -56,13 +42,6 @@ pub async fn demo_master_data_foundation(
     Ok(ApiResponse::ok_with_data(report))
 }
 
-#[permission_macros::permission(
-    group = "演示主数据",
-    group_desc = "生成演示资料；清空数据库时仅保留 admin",
-    desc = "生成演示主数据",
-    resource = "demo_master_data",
-    action = "apply"
-)]
 /// 生成或恢复下一批演示主数据。
 ///
 /// # 参数
@@ -81,13 +60,6 @@ pub async fn demo_master_data_apply(
     Ok(ApiResponse::ok_with_data(report))
 }
 
-#[permission_macros::permission(
-    group = "演示主数据",
-    group_desc = "生成演示资料；清空数据库时仅保留 admin",
-    desc = "清空演示数据库（仅保留 admin）",
-    resource = "demo_master_data",
-    action = "remove"
-)]
 /// 一次清空数据库，只保留 admin 账号和必要超管授权。
 ///
 /// # 参数

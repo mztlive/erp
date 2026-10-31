@@ -39,13 +39,6 @@ fn process(state: &AppState) -> PurchasePaymentRequestProcess {
         .with_object_read(state.approval_object_read())
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "查询采购付款申请",
-    resource = "purchase_payment_request",
-    action = "list"
-)]
 /// 仅交付全部来源获准的整单申请列表。
 /// # 参数
 /// 当前账号与有界筛选条件。
@@ -61,13 +54,6 @@ pub async fn list(
     Ok(ApiResponse::ok_with_data(reads(&state).list(&actor, &query).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "查询可申请采购来源",
-    resource = "purchase_payment_request",
-    action = "create"
-)]
 /// 查询具备申请资格、已生效且有可用余额的采购来源。
 /// # 参数
 /// 当前账号与可选供应商筛选。
@@ -83,13 +69,6 @@ pub async fn candidates(
     Ok(ApiResponse::ok_with_data(reads(&state).candidates(&actor, query.supplier_id.as_deref()).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "读取采购付款申请",
-    resource = "purchase_payment_request",
-    action = "detail"
-)]
 /// 按全部采购来源或当前申请任务资格读取完整申请。
 /// # 参数
 /// 当前账号与申请身份。
@@ -105,13 +84,6 @@ pub async fn detail(
     Ok(ApiResponse::ok_with_data(reads(&state).detail(&actor, &id).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "创建采购付款申请",
-    resource = "purchase_payment_request",
-    action = "create"
-)]
 /// 创建不占用额度的采购付款申请草稿。
 /// # 参数
 /// 当前账号与逐采购金额表单。
@@ -127,13 +99,6 @@ pub async fn create(
     Ok(ApiResponse::ok_with_data(process(&state).create(req, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "修改采购付款申请草稿",
-    resource = "purchase_payment_request",
-    action = "update"
-)]
 /// 修改本人尚未批准的申请草稿。
 /// # 参数
 /// 当前账号、申请身份与所见版本。
@@ -150,13 +115,6 @@ pub async fn update(
     Ok(ApiResponse::ok_with_data(process(&state).update(&id, req, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "提交采购付款申请审核",
-    resource = "purchase_payment_request",
-    action = "submit"
-)]
 /// 原子冻结本次来源、账户并占用逐采购额度。
 /// # 参数
 /// 当前账号、申请身份、版本及稳定命令身份。
@@ -173,13 +131,6 @@ pub async fn submit(
     Ok(ApiResponse::ok_with_data(process(&state).submit(&id, req, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "撤回采购付款申请",
-    resource = "purchase_payment_request",
-    action = "withdraw"
-)]
 /// 撤回本人审批中申请，释放占用并终止开放审批任务。
 /// # 参数
 /// 当前账号、申请、版本、原因及稳定命令身份。
@@ -196,13 +147,6 @@ pub async fn withdraw(
     Ok(ApiResponse::ok_with_data(process(&state).withdraw(&id, req, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "关闭采购付款申请未付部分",
-    resource = "purchase_payment_request",
-    action = "close"
-)]
 /// 关闭批准未付金额，保留原批准及实际付款历史。
 /// # 参数
 /// 当前账号、申请、版本、原因及稳定命令身份。
@@ -219,13 +163,6 @@ pub async fn close(
     Ok(ApiResponse::ok_with_data(process(&state).close(&id, req, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "批量创建采购付款申请",
-    resource = "purchase_payment_request",
-    action = "create"
-)]
 /// 原子创建并提交跨供应商的多份独立申请，同时复验逐来源提交权限。
 /// # 参数
 /// 当前账号、完整批次及稳定操作号。

@@ -44,13 +44,6 @@ async fn download(
     asset_download_response(&view, content)
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询回款凭证",
-    resource = "customer_receipt",
-    action = "detail"
-)]
 /// 查询回款凭证，保持原单与当前操作人授权。
 /// # 参数
 /// 应用状态、认证账号和路径中的单据及文件身份。
@@ -66,13 +59,6 @@ pub async fn receipt_files(
     Ok(ApiResponse::ok_with_data(files(&state, &actor, &id, false).await?))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "下载回款凭证",
-    resource = "customer_receipt",
-    action = "detail"
-)]
 /// 下载回款凭证，保持原单与当前操作人授权。
 /// # 参数
 /// 应用状态、认证账号和路径中的单据及文件身份。
@@ -88,13 +74,6 @@ pub async fn receipt_file_download(
     download(&state, &actor, &id, &asset_id, false).await
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询回款凭证",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 查询回款凭证，保持原单与当前操作人授权。
 /// # 参数
 /// 应用状态、认证账号和路径中的单据及文件身份。
@@ -110,13 +89,6 @@ pub async fn receipt_draft_files(
     Ok(ApiResponse::ok_with_data(files(&state, &actor, &id, true).await?))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "下载回款凭证",
-    resource = "customer_receipt",
-    action = "submit"
-)]
 /// 下载回款凭证，保持原单与当前操作人授权。
 /// # 参数
 /// 应用状态、认证账号和路径中的单据及文件身份。

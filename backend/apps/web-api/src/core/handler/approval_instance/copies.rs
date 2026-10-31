@@ -129,13 +129,6 @@ fn no_store(mut response: Response) -> Response {
 pub struct CopyCursorQuery {
     after: Option<String>,
 }
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "查看实例抄送记录",
-    resource = "approval_instance",
-    action = "read"
-)]
 /// 返回已授权实例的抄送历史。
 /// # 参数
 /// 当前身份、实例 ID 和游标。

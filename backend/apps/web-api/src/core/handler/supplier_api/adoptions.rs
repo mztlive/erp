@@ -13,13 +13,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "同步供应商商品目录",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 冻结本次采购明确勾选或完整筛选的来源规格。
 /// # 参数
 /// 路径为连接，载荷为选择模式，actor 为认证采购人员。
@@ -38,13 +31,6 @@ pub async fn preview(
     ))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "同步供应商商品目录",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 按明确映射及条款逐项建立正式公司商品、供给和来源关系。
 /// # 参数
 /// 路径为连接及预览；载荷为预览版本、原始操作号和确认行。
@@ -63,13 +49,6 @@ pub async fn confirm(
     ))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "同步供应商商品目录",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 解析冻结来源商品的自动匹配结果。
 /// # 参数
 /// 路径为连接与预览；请求只包含建档字典和展示内容。

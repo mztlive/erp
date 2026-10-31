@@ -16,13 +16,6 @@ use crate::core::extractor::Query;
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "查询供应商供给列表",
-    resource = "supplier_offering",
-    action = "list"
-)]
 /// 查询供给资料，复用列表动作和供给自身的数据范围。
 ///
 /// # 参数
@@ -55,13 +48,6 @@ pub async fn detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "查询供应商供给列表",
-    resource = "supplier_offering",
-    action = "list"
-)]
 /// 查询供给历史条款，每次重新校验对象范围与成本权限。
 ///
 /// # 参数

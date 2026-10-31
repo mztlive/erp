@@ -175,13 +175,6 @@ impl StockAdjustmentSubmitResultHttpQuery {
     }
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "查询库存余额列表",
-    resource = "stock_balance",
-    action = "list"
-)]
 /// 查询库存余额列表（W10 台账）。
 ///
 /// # 参数
@@ -201,13 +194,6 @@ pub async fn stock_balance_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "查询库存余额详情",
-    resource = "stock_balance",
-    action = "detail"
-)]
 /// 查询库存余额详情（余额 + 最近流水 + 有效预占 + 未过账调整）。
 ///
 /// # 参数
@@ -227,13 +213,6 @@ pub async fn stock_balance_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "查询库存流水台账",
-    resource = "stock_movement",
-    action = "list"
-)]
 /// 查询库存流水台账（W10 流水视图）。
 ///
 /// # 参数
@@ -253,13 +232,6 @@ pub async fn stock_movement_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "查询库存预占列表",
-    resource = "stock_reservation",
-    action = "list"
-)]
 /// 查询库存预占列表（W10 销售预占视图）。
 ///
 /// # 参数
@@ -279,13 +251,6 @@ pub async fn stock_reservation_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "查询库存调整单列表",
-    resource = "stock_adjustment",
-    action = "list"
-)]
 /// 查询库存调整单列表（W10 调整记录视图）。
 ///
 /// # 参数
@@ -305,13 +270,6 @@ pub async fn stock_adjustment_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "查询库存调整单详情",
-    resource = "stock_adjustment",
-    action = "detail"
-)]
 /// 查询库存调整单详情（表头 + 明细 + 过账流水）。
 ///
 /// # 参数
@@ -331,13 +289,6 @@ pub async fn stock_adjustment_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "创建库存调整单",
-    resource = "stock_adjustment",
-    action = "create"
-)]
 /// 创建库存调整单（草稿）。
 ///
 /// # 参数
@@ -363,13 +314,6 @@ pub async fn stock_adjustment_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "更新库存调整单",
-    resource = "stock_adjustment",
-    action = "update"
-)]
 /// 更新库存调整单（仅草稿/驳回；乐观锁冲突返回 409）。
 ///
 /// # 参数
@@ -397,13 +341,6 @@ pub async fn stock_adjustment_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "提交库存调整审批",
-    resource = "stock_adjustment",
-    action = "submit"
-)]
 /// 提交库存调整并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
@@ -431,13 +368,6 @@ pub async fn stock_adjustment_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "查询库存调整提交结果",
-    resource = "stock_adjustment",
-    action = "detail"
-)]
 /// 按原冻结主题版本与幂等键查询提交审批的精确收据结果。
 ///
 /// 缺失或错误幂等键返回 404；不得根据库存调整单当前状态推断成功。
@@ -457,13 +387,6 @@ pub async fn stock_adjustment_submit_result(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与取消",
-    desc = "撤回库存调整审批",
-    resource = "approval_instance",
-    action = "cancel"
-)]
 /// 撤回尚未最终通过的库存调整审批。
 ///
 /// Handler 只适配合同请求；Service 负责校验原提交人/运行管理员、调用统一
@@ -579,13 +502,6 @@ impl CancelStockAdjustmentApprovalHttpRequest {
     }
 }
 
-#[permission_macros::permission(
-    group = "库存",
-    group_desc = "库存台账与库存调整管理",
-    desc = "过账库存调整",
-    resource = "stock_adjustment",
-    action = "post"
-)]
 /// 人工过账旁路已关闭。过账只允许作为审批最终通过动作。
 ///
 /// # 参数

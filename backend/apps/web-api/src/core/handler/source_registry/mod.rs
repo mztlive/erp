@@ -16,13 +16,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "来源注册",
-    group_desc = "来源系统与外部身份映射管理",
-    desc = "查询来源系统列表",
-    resource = "source_system",
-    action = "list"
-)]
 /// 查询来源系统列表。
 ///
 /// # 参数
@@ -40,13 +33,6 @@ pub async fn source_system_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "来源注册",
-    group_desc = "来源系统与外部身份映射管理",
-    desc = "创建来源系统",
-    resource = "source_system",
-    action = "create"
-)]
 /// 创建来源系统。
 ///
 /// # 参数
@@ -66,13 +52,6 @@ pub async fn source_system_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "来源注册",
-    group_desc = "来源系统与外部身份映射管理",
-    desc = "更新来源系统",
-    resource = "source_system",
-    action = "update"
-)]
 /// 更新来源系统（乐观锁：请求携带期望版本，冲突返回 409）。
 ///
 /// # 参数
@@ -94,13 +73,6 @@ pub async fn source_system_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "来源注册",
-    group_desc = "来源系统与外部身份映射管理",
-    desc = "查询外部身份映射列表",
-    resource = "external_identity_map",
-    action = "list"
-)]
 /// 查询外部身份映射列表。
 ///
 /// # 参数
@@ -118,13 +90,6 @@ pub async fn external_identity_map_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "来源注册",
-    group_desc = "来源系统与外部身份映射管理",
-    desc = "建立外部身份映射",
-    resource = "external_identity_map",
-    action = "create"
-)]
 /// 建立外部身份映射（跨集合事务：映射身份 + 目标谱系原子写入）。
 ///
 /// # 参数

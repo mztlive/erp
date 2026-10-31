@@ -12,13 +12,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "作废采购变更单",
-    resource = "purchase_change_order",
-    action = "delete"
-)]
 /// 作废采购改单草稿（仅草稿态，乐观锁）。
 ///
 /// # 参数

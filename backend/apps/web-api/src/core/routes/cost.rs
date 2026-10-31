@@ -11,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::cost;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -26,48 +27,40 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(cost::profit_loss::history_directory),
                 rbac,
-                cost::profit_loss::history_directory_permission_key(),
+                permissions::cost::PROFIT_LOSS_HISTORY_DIRECTORY,
             ),
         )
         .route(
             "/actual-profit-loss",
-            with_permission(get(cost::profit_loss::view), rbac, cost::profit_loss::view_permission_key()),
+            with_permission(get(cost::profit_loss::view), rbac, permissions::cost::PROFIT_LOSS_VIEW),
         )
         .route(
             "/actual-profit-loss/period-basis",
             with_permission(
                 get(cost::profit_loss::period_basis),
                 rbac,
-                cost::profit_loss::period_basis_permission_key(),
+                permissions::cost::PROFIT_LOSS_PERIOD_BASIS,
             ),
         )
         .route(
             "/actual-profit-loss/exports",
-            with_permission(
-                post(cost::profit_loss::export),
-                rbac,
-                cost::profit_loss::export_permission_key(),
-            ),
+            with_permission(post(cost::profit_loss::export), rbac, permissions::cost::PROFIT_LOSS_EXPORT),
         )
         .route(
             "/cost-entries",
-            with_permission(get(cost::cost_entry_list), rbac, cost::cost_entry_list_permission_key()),
+            with_permission(get(cost::cost_entry_list), rbac, permissions::cost::ENTRY_LIST),
         )
         .route(
             "/cost-entries",
-            with_permission(post(cost::cost_entry_create), rbac, cost::cost_entry_create_permission_key()),
+            with_permission(post(cost::cost_entry_create), rbac, permissions::cost::ENTRY_CREATE),
         )
         .route(
             "/cost-entries/{id}",
-            with_permission(get(cost::cost_entry_detail), rbac, cost::cost_entry_detail_permission_key()),
+            with_permission(get(cost::cost_entry_detail), rbac, permissions::cost::ENTRY_DETAIL),
         )
         .route(
             "/cost-allocations",
-            with_permission(
-                get(cost::cost_allocation_list),
-                rbac,
-                cost::cost_allocation_list_permission_key(),
-            ),
+            with_permission(get(cost::cost_allocation_list), rbac, permissions::cost::ALLOCATION_LIST),
         )
         .merge(extra_cost_routes(rbac))
 }
@@ -86,7 +79,7 @@ fn extra_cost_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(cost::extra_cost::sales_extra_cost_list),
                 rbac,
-                cost::extra_cost::sales_extra_cost_list_permission_key(),
+                permissions::cost::EXTRA_COST_SALES_EXTRA_COST_LIST,
             ),
         )
         .route(
@@ -94,7 +87,7 @@ fn extra_cost_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(cost::extra_cost::sales_extra_cost_register),
                 rbac,
-                cost::extra_cost::sales_extra_cost_register_permission_key(),
+                permissions::cost::EXTRA_COST_SALES_EXTRA_COST_REGISTER,
             ),
         )
         .route(
@@ -102,7 +95,7 @@ fn extra_cost_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(cost::extra_cost::sales_extra_cost_reduce),
                 rbac,
-                cost::extra_cost::sales_extra_cost_reduce_permission_key(),
+                permissions::cost::EXTRA_COST_SALES_EXTRA_COST_REDUCE,
             ),
         )
 }

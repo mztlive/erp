@@ -11,13 +11,6 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "读取供应商协议目录资料",
-    resource = "supplier_api_connection",
-    action = "protocol_read"
-)]
 /// 读取蛋糕叔叔原始目录；先执行连接数据范围与固定供应商绑定校验。
 /// # 参数
 /// HTTP 状态、当前操作人、连接 ID 和固定只读查询。
@@ -40,13 +33,6 @@ pub async fn read(
     Ok(ApiResponse::ok_with_data(value))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "签发供应商技术绑定票据",
-    resource = "supplier_api_connection",
-    action = "manage_credential_reference"
-)]
 /// 签发端点和凭证绑定票据；复用连接范围并要求凭证管理权限。
 /// # 参数
 /// HTTP 状态、当前操作人和连接 ID。

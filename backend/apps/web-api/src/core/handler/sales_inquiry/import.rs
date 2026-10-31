@@ -12,13 +12,6 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "预览客户选品导入",
-    resource = "sales_inquiry",
-    action = "import"
-)]
 /// 解析客户选品工作簿并保存当前询价权限绑定的预览。
 /// # 参数
 /// `state` 为应用，`actor` 为当前销售，`id` 为询价；multipart 包含 file 和 expected_version。
@@ -39,13 +32,6 @@ pub async fn sales_import_preview(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "确认客户选品导入",
-    resource = "sales_inquiry",
-    action = "import"
-)]
 /// 重验商品资格、输入指纹和当前版本后确认导入。
 /// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价，`request` 为原预览与稳定命令。

@@ -3,8 +3,7 @@
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/business-documents`、
 //! `/admin/workflow-actions`、`/admin/documents/{id}/relations`、
 //! `/admin/document-relations`、`/admin/document-participants`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -13,6 +12,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::document_registry;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -28,7 +28,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(document_registry::business_document_list),
                 rbac,
-                document_registry::business_document_list_permission_key(),
+                permissions::document_registry::BUSINESS_DOCUMENT_LIST,
             ),
         )
         .route(
@@ -36,7 +36,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(document_registry::business_document_register),
                 rbac,
-                document_registry::business_document_register_permission_key(),
+                permissions::document_registry::BUSINESS_DOCUMENT_REGISTER,
             ),
         )
         .route(
@@ -44,7 +44,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(document_registry::business_document_detail),
                 rbac,
-                document_registry::business_document_detail_permission_key(),
+                permissions::document_registry::BUSINESS_DOCUMENT_DETAIL,
             ),
         )
         .route(
@@ -52,7 +52,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(document_registry::workflow_action_list),
                 rbac,
-                document_registry::workflow_action_list_permission_key(),
+                permissions::document_registry::WORKFLOW_ACTION_LIST,
             ),
         )
         .route(
@@ -60,7 +60,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(document_registry::workflow_action_create),
                 rbac,
-                document_registry::workflow_action_create_permission_key(),
+                permissions::document_registry::WORKFLOW_ACTION_CREATE,
             ),
         )
         .route(
@@ -68,7 +68,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(document_registry::document_relation_list),
                 rbac,
-                document_registry::document_relation_list_permission_key(),
+                permissions::document_registry::DOCUMENT_RELATION_LIST,
             ),
         )
         .route(
@@ -76,7 +76,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(document_registry::document_relation_create),
                 rbac,
-                document_registry::document_relation_create_permission_key(),
+                permissions::document_registry::DOCUMENT_RELATION_CREATE,
             ),
         )
         .route(
@@ -84,7 +84,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(document_registry::document_participant_list),
                 rbac,
-                document_registry::document_participant_list_permission_key(),
+                permissions::document_registry::DOCUMENT_PARTICIPANT_LIST,
             ),
         )
         .route(
@@ -92,7 +92,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(document_registry::document_participant_create),
                 rbac,
-                document_registry::document_participant_create_permission_key(),
+                permissions::document_registry::DOCUMENT_PARTICIPANT_CREATE,
             ),
         )
 }

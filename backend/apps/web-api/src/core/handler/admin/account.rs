@@ -7,13 +7,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "账号管理",
-    group_desc = "管理员账号的增删改查",
-    desc = "创建管理员",
-    resource = "admin",
-    action = "create"
-)]
 pub async fn create_admin(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -24,25 +17,11 @@ pub async fn create_admin(
     Ok(ApiResponse::<()>::ok())
 }
 
-#[permission_macros::permission(
-    group = "账号管理",
-    group_desc = "管理员账号的增删改查",
-    desc = "查询管理员列表",
-    resource = "admin",
-    action = "list"
-)]
 pub async fn list_admins(State(state): State<AppState>) -> Result<Vec<AdminItem>> {
     let items = AdminService::new(state.db(), state.rbac()).admin_list().await?;
     Ok(ApiResponse::ok_with_data(items))
 }
 
-#[permission_macros::permission(
-    group = "账号管理",
-    group_desc = "管理员账号的增删改查",
-    desc = "更新管理员信息",
-    resource = "admin",
-    action = "update"
-)]
 pub async fn update_admin(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -55,13 +34,6 @@ pub async fn update_admin(
     Ok(ApiResponse::<()>::ok())
 }
 
-#[permission_macros::permission(
-    group = "账号管理",
-    group_desc = "管理员账号的增删改查",
-    desc = "删除管理员",
-    resource = "admin",
-    action = "delete"
-)]
 pub async fn delete_admin(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -72,13 +44,6 @@ pub async fn delete_admin(
     Ok(ApiResponse::<()>::ok())
 }
 
-#[permission_macros::permission(
-    group = "账号管理",
-    group_desc = "管理员账号的增删改查",
-    desc = "更新管理员角色",
-    resource = "admin",
-    action = "update_role"
-)]
 pub async fn update_admin_role(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

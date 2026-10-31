@@ -10,13 +10,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查看供应商 API 连接详情",
-    resource = "supplier_api_connection",
-    action = "detail"
-)]
 /// 分页查看连接已同步的供应商商品。
 /// # 参数
 /// 状态为组合根，路径为连接身份，查询为分页。
@@ -33,13 +26,6 @@ pub async fn list(
     Ok(ApiResponse::ok_with_data(state.supplier_api_read_service().catalog(&id, query, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查看供应商 API 连接详情",
-    resource = "supplier_api_connection",
-    action = "detail"
-)]
 /// 读取来源关键规格的人工核对资料。
 /// # 参数
 /// 已认证操作人及连接、目录身份。
@@ -57,13 +43,6 @@ pub async fn identity_review(
     ))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "同步供应商商品目录",
-    resource = "supplier_api_connection",
-    action = "catalog_sync"
-)]
 /// 提交同一销售项及单位的人工作业确认。
 /// # 参数
 /// 当前认证账号、来源路径和明确核对请求。

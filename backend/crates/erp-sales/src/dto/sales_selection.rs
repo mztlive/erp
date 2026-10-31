@@ -692,32 +692,6 @@ pub struct PublicReceiptView {
     pub total_amount: Option<Amount>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn public_choice_view_new_defaults_options_to_none() {
-        let view = PublicChoiceView::new("item-1".into());
-        assert_eq!(view.item_id, "item-1");
-        assert!(view.quantity.is_none());
-    }
-
-    #[test]
-    fn first_prepare_reuses_book_rules_and_create_key() {
-        let req = PrepareSalesSelectionRequest::first_prepare("book-1", 1, "idem-1");
-        assert_eq!(req.booklet_id, "book-1");
-        assert_eq!(req.expected_version, 1);
-        assert_eq!(req.idempotency_key, "idem-1");
-        assert_eq!(req.kind, PrepareKind::FirstPrepare);
-        assert!(req.tier_ids.is_empty());
-        assert_eq!(req.seed, 0);
-        assert!(req.pool_filter.is_none());
-        assert!(req.sku_ids.is_none());
-        assert!(req.tiers.is_empty());
-    }
-}
-
 /// 分页别名。
 pub type SalesSelectionBookletPage = PageView<SalesSelectionBookletListItemView>;
 /// 方案分页。
@@ -817,4 +791,30 @@ pub struct SalesSelectionSessionView {
     pub total_amount: Option<Amount>,
     /// 更新时间。
     pub updated_at: Instant,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_choice_view_new_defaults_options_to_none() {
+        let view = PublicChoiceView::new("item-1".into());
+        assert_eq!(view.item_id, "item-1");
+        assert!(view.quantity.is_none());
+    }
+
+    #[test]
+    fn first_prepare_reuses_book_rules_and_create_key() {
+        let req = PrepareSalesSelectionRequest::first_prepare("book-1", 1, "idem-1");
+        assert_eq!(req.booklet_id, "book-1");
+        assert_eq!(req.expected_version, 1);
+        assert_eq!(req.idempotency_key, "idem-1");
+        assert_eq!(req.kind, PrepareKind::FirstPrepare);
+        assert!(req.tier_ids.is_empty());
+        assert_eq!(req.seed, 0);
+        assert!(req.pool_filter.is_none());
+        assert!(req.sku_ids.is_none());
+        assert!(req.tiers.is_empty());
+    }
 }

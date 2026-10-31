@@ -8,6 +8,7 @@ use crate::app_state::AppState;
 use crate::core::handler::purchase_payment_request;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 装配申请、材料及付款路由。
 /// # 参数
@@ -27,7 +28,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::list),
                 rbac,
-                purchase_payment_request::list_permission_key(),
+                permissions::purchase_payment_request::LIST,
             ),
         )
         .route(
@@ -35,7 +36,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::candidates),
                 rbac,
-                purchase_payment_request::candidates_permission_key(),
+                permissions::purchase_payment_request::CANDIDATES,
             ),
         )
         .route(
@@ -43,7 +44,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::detail),
                 rbac,
-                purchase_payment_request::detail_permission_key(),
+                permissions::purchase_payment_request::DETAIL,
             ),
         )
         .route(
@@ -51,7 +52,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::materials::submission),
                 rbac,
-                purchase_payment_request::materials::submission_permission_key(),
+                permissions::purchase_payment_request::MATERIALS_SUBMISSION,
             ),
         )
         .route(
@@ -59,7 +60,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::materials::task_context),
                 rbac,
-                purchase_payment_request::materials::task_context_permission_key(),
+                permissions::purchase_payment_request::MATERIALS_TASK_CONTEXT,
             ),
         )
 }
@@ -71,7 +72,7 @@ fn candidate_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::candidate_list::page),
                 rbac,
-                purchase_payment_request::candidate_list::page_permission_key(),
+                permissions::purchase_payment_request::CANDIDATE_LIST_PAGE,
             ),
         )
         .route(
@@ -79,7 +80,7 @@ fn candidate_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::candidate_list::ids),
                 rbac,
-                purchase_payment_request::candidate_list::ids_permission_key(),
+                permissions::purchase_payment_request::CANDIDATE_LIST_IDS,
             ),
         )
 }
@@ -95,7 +96,7 @@ fn draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(purchase_payment_request::create_batch),
                 rbac,
-                purchase_payment_request::create_batch_permission_key(),
+                permissions::purchase_payment_request::CREATE_BATCH,
             ),
         )
         .route(
@@ -103,7 +104,7 @@ fn draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(purchase_payment_request::create),
                 rbac,
-                purchase_payment_request::create_permission_key(),
+                permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
@@ -111,7 +112,7 @@ fn draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(purchase_payment_request::update),
                 rbac,
-                purchase_payment_request::update_permission_key(),
+                permissions::purchase_payment_request::UPDATE,
             ),
         )
 }
@@ -123,7 +124,7 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(purchase_payment_request::submit),
                 rbac,
-                purchase_payment_request::submit_permission_key(),
+                permissions::purchase_payment_request::SUBMIT,
             ),
         )
         .route(
@@ -131,7 +132,7 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(purchase_payment_request::withdraw),
                 rbac,
-                purchase_payment_request::withdraw_permission_key(),
+                permissions::purchase_payment_request::WITHDRAW,
             ),
         )
         .route(
@@ -139,7 +140,7 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(purchase_payment_request::close),
                 rbac,
-                purchase_payment_request::close_permission_key(),
+                permissions::purchase_payment_request::CLOSE,
             ),
         )
 }
@@ -152,7 +153,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::credit::list),
                 rbac,
-                purchase_payment_request::credit::list_permission_key(),
+                permissions::purchase_payment_request::CREDIT_LIST,
             ),
         )
         .route(
@@ -160,7 +161,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(purchase_payment_request::credit::apply),
                 rbac,
-                purchase_payment_request::credit::apply_permission_key(),
+                permissions::purchase_payment_request::CREDIT_APPLY,
             ),
         )
         .route(
@@ -168,7 +169,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(purchase_payment_request::payments::reveal_account),
                 rbac,
-                purchase_payment_request::payments::reveal_account_permission_key(),
+                permissions::purchase_payment_request::PAYMENTS_REVEAL_ACCOUNT,
             ),
         )
         .route(
@@ -179,7 +180,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                purchase_payment_request::payments::pay_permission_key(),
+                permissions::purchase_payment_request::PAYMENTS_PAY,
             ),
         )
 }
@@ -190,7 +191,7 @@ fn deposit_routes(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             post(purchase_payment_request::deposit::execute),
             rbac,
-            purchase_payment_request::deposit::execute_permission_key(),
+            permissions::purchase_payment_request::DEPOSIT_EXECUTE,
         ),
     )
 }
@@ -202,7 +203,7 @@ fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::materials::material_download),
                 rbac,
-                purchase_payment_request::materials::material_download_permission_key(),
+                permissions::purchase_payment_request::MATERIALS_MATERIAL_DOWNLOAD,
             ),
         )
         .route(
@@ -210,7 +211,7 @@ fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(purchase_payment_request::materials::material_preview),
                 rbac,
-                purchase_payment_request::materials::material_preview_permission_key(),
+                permissions::purchase_payment_request::MATERIALS_MATERIAL_PREVIEW,
             ),
         )
 }

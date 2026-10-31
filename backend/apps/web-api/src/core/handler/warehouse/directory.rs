@@ -17,13 +17,6 @@ use crate::core::response::ApiResponse;
 /// 目录页。
 /// # 错误
 /// 权限、范围、参数或读取失败时传播。
-#[permission_macros::permission(
-    group = "对象目录",
-    group_desc = "按独立范围查询业务对象",
-    desc = "查询仓库目录",
-    resource = "warehouse",
-    action = "list"
-)]
 pub async fn list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -40,13 +33,6 @@ pub async fn list(
 /// 当前可读对象页。
 /// # 错误
 /// 权限、范围、参数或读取失败时传播。
-#[permission_macros::permission(
-    group = "对象目录",
-    group_desc = "按独立范围查询业务对象",
-    desc = "回显warehouse目录",
-    resource = "warehouse",
-    action = "list"
-)]
 pub async fn selected(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

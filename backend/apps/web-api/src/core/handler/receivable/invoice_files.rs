@@ -17,13 +17,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "登记发票草稿",
-    resource = "invoice",
-    action = "create"
-)]
 /// 登记发票草稿同时上传图片或 PDF。
 ///
 /// # 参数
@@ -58,13 +51,6 @@ pub async fn invoice_create_with_files(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "原子登记销项发票并分配",
-    resource = "invoice",
-    action = "post"
-)]
 /// 原子开票时在同一事务登记文件和关联；重放删除本次未消费上传。
 ///
 /// # 参数
@@ -99,13 +85,6 @@ pub async fn invoice_commit_with_files(
     Ok(ApiResponse::ok_with_data(result.view))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "上传附件并完成开票",
-    resource = "invoice",
-    action = "post"
-)]
 /// 按剩余批准金额完成开票并关联附件；重放删除未消费上传。
 ///
 /// # 参数

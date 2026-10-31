@@ -20,13 +20,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "读取销售变更原单草稿",
-    resource = "sales_change_order",
-    action = "submit"
-)]
 /// 读取原变更可修改内容。
 ///
 /// # 参数
@@ -47,13 +40,6 @@ pub async fn sales_change_draft(
     Ok(ApiResponse::ok_with_data(SalesChangeProcess::new(state.db(), state.rbac()).draft(&id, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "修改销售变更原单草稿",
-    resource = "sales_change_order",
-    action = "submit"
-)]
 /// 保存原变更可修改内容。
 ///
 /// # 参数
@@ -78,13 +64,6 @@ pub async fn sales_change_save_draft(
     ))
 }
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "查询销售变更单列表",
-    resource = "sales_change_order",
-    action = "list"
-)]
 /// 查询销售变更单列表（W05 变更轨）。
 ///
 /// # 参数
@@ -112,13 +91,6 @@ pub async fn sales_change_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "查询销售变更单详情",
-    resource = "sales_change_order",
-    action = "detail"
-)]
 /// 查询销售变更单详情。
 ///
 /// # 参数
@@ -146,13 +118,6 @@ pub async fn sales_change_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "创建销售变更单",
-    resource = "sales_change_order",
-    action = "create"
-)]
 /// 创建销售变更单（草稿 + 变更工作副本原子形成）。
 ///
 /// # 参数
@@ -176,13 +141,6 @@ pub async fn sales_change_order_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "发起销售变更影响确认",
-    resource = "sales_change_order",
-    action = "submit"
-)]
 /// 提交销售变更并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
@@ -207,13 +165,6 @@ pub async fn sales_change_order_submit_impact(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "作废销售变更单",
-    resource = "sales_change_order",
-    action = "delete"
-)]
 /// 作废销售变更单（仅草稿态，乐观锁）。
 ///
 /// # 参数
@@ -238,13 +189,6 @@ pub async fn sales_change_order_void(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "撤回销售变更审批",
-    resource = "sales_change_order",
-    action = "submit"
-)]
 /// 撤回尚未最终通过的销售变更审批，回到可修正草稿。
 ///
 /// # 参数

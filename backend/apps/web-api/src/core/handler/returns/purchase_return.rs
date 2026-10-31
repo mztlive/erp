@@ -16,13 +16,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "查询采购退货单列表",
-    resource = "purchase_return_order",
-    action = "list"
-)]
 /// 查询采购退货单列表。
 ///
 /// # 参数
@@ -51,13 +44,6 @@ pub async fn purchase_return_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "查询采购退货单详情",
-    resource = "purchase_return_order",
-    action = "detail"
-)]
 /// 查询采购退货单详情（退货单 + 明细行）。
 ///
 /// # 参数
@@ -86,13 +72,6 @@ pub async fn purchase_return_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "建立采购退货单",
-    resource = "purchase_return_order",
-    action = "create"
-)]
 /// 建立采购退货单与明细行（跨集合事务）。
 ///
 /// # 参数
@@ -118,13 +97,6 @@ pub async fn purchase_return_order_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "建立采购退货单",
-    resource = "purchase_return_order",
-    action = "create"
-)]
 /// 登记已核实的客户直退，保留原采购和发货记录。
 /// # 参数
 /// * `state` - 应用状态。
@@ -149,13 +121,6 @@ pub async fn purchase_direct_return_confirm(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "建立采购退货单",
-    resource = "purchase_return_order",
-    action = "create"
-)]
 /// 同步已有直退的财务责任交接。
 /// # 参数
 /// * `state` - 应用状态。

@@ -11,13 +11,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "销售单",
-    group_desc = "销售单（W05）管理",
-    desc = "核对后补销售合同",
-    resource = "sales_order",
-    action = "update"
-)]
 /// 返回原单与所选合同的商业条款差异。
 ///
 /// # 参数
@@ -45,6 +38,7 @@ mod tests {
     use axum::http::Uri;
 
     use super::*;
+    use crate::permissions;
 
     #[test]
     fn preflight_requires_order_and_contract_versions() {
@@ -61,6 +55,9 @@ mod tests {
 
     #[test]
     fn preflight_uses_sales_update_permission() {
-        assert_eq!(sales_order_contract_check_permission_key().to_string(), "sales_order:update");
+        assert_eq!(
+            permissions::sales_order::CONTRACT_CHECK_SALES_ORDER_CONTRACT_CHECK.permission().to_string(),
+            "sales_order:update"
+        );
     }
 }

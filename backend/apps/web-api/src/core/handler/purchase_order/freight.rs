@@ -11,13 +11,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "标记供应商不收运费",
-    resource = "purchase_order",
-    action = "update"
-)]
 /// 标记采购单某商品的运费另计由供应商免收。
 ///
 /// # 参数

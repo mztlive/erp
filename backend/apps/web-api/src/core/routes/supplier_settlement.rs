@@ -2,8 +2,7 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/supplier-settlement-statements`、
 //! `/admin/supplier-settlement-items`、`/admin/supplier-settlement-differences`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -12,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::supplier_settlement;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -27,7 +27,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_settlement::reviewer_options::supplier_settlement_reviewer_options),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_submit_review_permission_key(),
+                permissions::supplier_settlement::REVIEWER_OPTIONS_SUPPLIER_SETTLEMENT_REVIEWER_OPTIONS,
             ),
         )
         .route(
@@ -35,7 +35,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_statement_list),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_list_permission_key(),
+                permissions::supplier_settlement::STATEMENT_LIST,
             ),
         )
         .route(
@@ -43,7 +43,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_create),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_create_permission_key(),
+                permissions::supplier_settlement::STATEMENT_CREATE,
             ),
         )
         .route(
@@ -51,7 +51,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_statement_detail),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_detail_permission_key(),
+                permissions::supplier_settlement::STATEMENT_DETAIL,
             ),
         )
         .route(
@@ -59,7 +59,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_submit_review),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_submit_review_permission_key(),
+                permissions::supplier_settlement::STATEMENT_SUBMIT_REVIEW,
             ),
         )
         .route(
@@ -67,7 +67,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_refresh),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_refresh_permission_key(),
+                permissions::supplier_settlement::STATEMENT_REFRESH,
             ),
         )
         .route(
@@ -75,7 +75,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_source_evidence_latest),
                 rbac,
-                supplier_settlement::supplier_settlement_source_evidence_latest_permission_key(),
+                permissions::supplier_settlement::SOURCE_EVIDENCE_LATEST,
             ),
         )
         .route(
@@ -83,7 +83,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_source_evidence_record),
                 rbac,
-                supplier_settlement::supplier_settlement_source_evidence_record_permission_key(),
+                permissions::supplier_settlement::SOURCE_EVIDENCE_RECORD,
             ),
         )
         .route(
@@ -91,7 +91,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_review_decide),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_review_decide_permission_key(),
+                permissions::supplier_settlement::STATEMENT_REVIEW_DECIDE,
             ),
         )
         .route(
@@ -99,7 +99,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_void),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_void_permission_key(),
+                permissions::supplier_settlement::STATEMENT_VOID,
             ),
         )
         .route(
@@ -107,7 +107,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_handover),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_handover_permission_key(),
+                permissions::supplier_settlement::STATEMENT_HANDOVER,
             ),
         )
         .route(
@@ -115,7 +115,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_statement_handover_candidates),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_handover_candidates_permission_key(),
+                permissions::supplier_settlement::STATEMENT_HANDOVER_CANDIDATES,
             ),
         )
         .route(
@@ -123,8 +123,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_reassign_difference_handler),
                 rbac,
-                supplier_settlement::supplier_settlement_statement_reassign_difference_handler_permission_key(
-                ),
+                permissions::supplier_settlement::STATEMENT_REASSIGN_DIFFERENCE_HANDLER,
             ),
         )
         .route(
@@ -132,7 +131,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_item_list),
                 rbac,
-                supplier_settlement::supplier_settlement_item_list_permission_key(),
+                permissions::supplier_settlement::ITEM_LIST,
             ),
         )
         .route(
@@ -140,7 +139,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_difference_list),
                 rbac,
-                supplier_settlement::supplier_settlement_difference_list_permission_key(),
+                permissions::supplier_settlement::DIFFERENCE_LIST,
             ),
         )
         .route(
@@ -148,7 +147,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_difference_decide),
                 rbac,
-                supplier_settlement::supplier_settlement_difference_decide_permission_key(),
+                permissions::supplier_settlement::DIFFERENCE_DECIDE,
             ),
         )
         .route(
@@ -156,7 +155,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_difference_evidence_append),
                 rbac,
-                supplier_settlement::supplier_settlement_difference_evidence_append_permission_key(),
+                permissions::supplier_settlement::DIFFERENCE_EVIDENCE_APPEND,
             ),
         )
 }

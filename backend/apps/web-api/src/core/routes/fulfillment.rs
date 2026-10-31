@@ -3,7 +3,7 @@
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/purchase-receipts`、
 //! `/admin/deliveries`、`/admin/electronic-deliveries`、`/admin/service-fulfillments`、
 //! `/admin/customer-acceptances`；每条路由统一走 JWT + RBAC（`with_permission`），
-//! handler 标注 `#[permission_macros::permission]`。
+//! 权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -13,6 +13,7 @@ use crate::app_state::AppState;
 use crate::core::handler::fulfillment;
 use crate::core::middleware::with_permission;
 use crate::core::upload;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -29,7 +30,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::purchase_receipt::purchase_receipt_list),
                 rbac,
-                fulfillment::purchase_receipt::purchase_receipt_list_permission_key(),
+                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
             ),
         )
         .route(
@@ -37,7 +38,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::purchase_receipt::purchase_receipt_create),
                 rbac,
-                fulfillment::purchase_receipt::purchase_receipt_create_permission_key(),
+                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_CREATE,
             ),
         )
         .route(
@@ -45,7 +46,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::purchase_receipt::purchase_receipt_detail),
                 rbac,
-                fulfillment::purchase_receipt::purchase_receipt_detail_permission_key(),
+                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
             ),
         )
         .route(
@@ -53,7 +54,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(fulfillment::purchase_receipt::purchase_receipt_update),
                 rbac,
-                fulfillment::purchase_receipt::purchase_receipt_update_permission_key(),
+                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
             ),
         )
         .route(
@@ -61,7 +62,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::purchase_receipt::purchase_receipt_post),
                 rbac,
-                fulfillment::purchase_receipt::purchase_receipt_post_permission_key(),
+                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
             ),
         )
         .route(
@@ -69,7 +70,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::delivery::delivery_list),
                 rbac,
-                fulfillment::delivery::delivery_list_permission_key(),
+                permissions::fulfillment::DELIVERY_DELIVERY_LIST,
             ),
         )
         .route(
@@ -77,7 +78,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::delivery::delivery_create),
                 rbac,
-                fulfillment::delivery::delivery_create_permission_key(),
+                permissions::fulfillment::DELIVERY_DELIVERY_CREATE,
             ),
         )
         .route(
@@ -85,7 +86,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::delivery::delivery_detail),
                 rbac,
-                fulfillment::delivery::delivery_detail_permission_key(),
+                permissions::fulfillment::DELIVERY_DELIVERY_DETAIL,
             ),
         )
         .route(
@@ -93,7 +94,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(fulfillment::delivery::delivery_update),
                 rbac,
-                fulfillment::delivery::delivery_update_permission_key(),
+                permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
             ),
         )
         .route(
@@ -101,7 +102,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::delivery::delivery_post),
                 rbac,
-                fulfillment::delivery::delivery_post_permission_key(),
+                permissions::fulfillment::DELIVERY_DELIVERY_POST,
             ),
         )
         .route(
@@ -109,7 +110,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::electronic_delivery::electronic_delivery_list),
                 rbac,
-                fulfillment::electronic_delivery::electronic_delivery_list_permission_key(),
+                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
             ),
         )
         .route(
@@ -117,7 +118,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::electronic_delivery::electronic_delivery_create),
                 rbac,
-                fulfillment::electronic_delivery::electronic_delivery_create_permission_key(),
+                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CREATE,
             ),
         )
         .route(
@@ -125,7 +126,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::electronic_delivery::electronic_delivery_detail),
                 rbac,
-                fulfillment::electronic_delivery::electronic_delivery_detail_permission_key(),
+                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_DETAIL,
             ),
         )
         .route(
@@ -133,7 +134,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::electronic_delivery::electronic_delivery_confirm),
                 rbac,
-                fulfillment::electronic_delivery::electronic_delivery_confirm_permission_key(),
+                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
             ),
         )
         .route(
@@ -141,7 +142,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::service_fulfillment::service_fulfillment_list),
                 rbac,
-                fulfillment::service_fulfillment::service_fulfillment_list_permission_key(),
+                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
             ),
         )
         .route(
@@ -149,7 +150,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::service_fulfillment::service_fulfillment_create),
                 rbac,
-                fulfillment::service_fulfillment::service_fulfillment_create_permission_key(),
+                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CREATE,
             ),
         )
         .route(
@@ -157,7 +158,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::service_fulfillment::service_fulfillment_detail),
                 rbac,
-                fulfillment::service_fulfillment::service_fulfillment_detail_permission_key(),
+                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_DETAIL,
             ),
         )
         .route(
@@ -168,7 +169,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                fulfillment::service_fulfillment::service_fulfillment_confirm_permission_key(),
+                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
             ),
         )
         .route(
@@ -176,7 +177,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::customer_acceptance::customer_acceptance_list),
                 rbac,
-                fulfillment::customer_acceptance::customer_acceptance_list_permission_key(),
+                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
             ),
         )
         .route(
@@ -184,7 +185,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_create),
                 rbac,
-                fulfillment::customer_acceptance::customer_acceptance_create_permission_key(),
+                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
             ),
         )
         .route(
@@ -192,7 +193,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::customer_acceptance::customer_acceptance_eligible),
                 rbac,
-                fulfillment::customer_acceptance::customer_acceptance_eligible_permission_key(),
+                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_ELIGIBLE,
             ),
         )
         .route(
@@ -200,7 +201,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_commit),
                 rbac,
-                fulfillment::customer_acceptance::customer_acceptance_commit_permission_key(),
+                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
             ),
         )
         .route(
@@ -208,7 +209,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(fulfillment::customer_acceptance::customer_acceptance_detail),
                 rbac,
-                fulfillment::customer_acceptance::customer_acceptance_detail_permission_key(),
+                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_DETAIL,
             ),
         )
         .route(
@@ -216,7 +217,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_post),
                 rbac,
-                fulfillment::customer_acceptance::customer_acceptance_post_permission_key(),
+                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_POST,
             ),
         )
         .route(
@@ -224,7 +225,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_reverse),
                 rbac,
-                fulfillment::customer_acceptance::customer_acceptance_reverse_permission_key(),
+                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_REVERSE,
             ),
         )
 }
@@ -243,7 +244,7 @@ fn acceptance_evidence_routes(rbac: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(fulfillment::acceptance_evidence::customer_acceptance_evidence),
             rbac,
-            fulfillment::acceptance_evidence::customer_acceptance_evidence_permission_key(),
+            permissions::fulfillment::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
         ),
     )
 }

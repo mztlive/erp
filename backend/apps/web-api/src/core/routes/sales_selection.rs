@@ -14,6 +14,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::sales_selection;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回选品管理端路由。
 ///
@@ -30,7 +31,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::admin_image),
                 rbac,
-                sales_selection::admin_image_permission_key(),
+                permissions::sales_selection::ADMIN_IMAGE,
             ),
         )
         .merge(book_item_routes(rbac, true))
@@ -42,7 +43,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::proposal_list),
                 rbac,
-                sales_selection::proposal_list_permission_key(),
+                permissions::sales_selection::PROPOSAL_LIST,
             ),
         )
         .route(
@@ -50,7 +51,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::proposal_detail),
                 rbac,
-                sales_selection::proposal_detail_permission_key(),
+                permissions::sales_selection::PROPOSAL_DETAIL,
             ),
         )
 }
@@ -69,7 +70,7 @@ fn book_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_list),
                 rbac,
-                sales_selection::booklet_list_permission_key(),
+                permissions::sales_selection::BOOKLET_LIST,
             ),
         )
         .route(
@@ -77,7 +78,7 @@ fn book_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_create),
                 rbac,
-                sales_selection::booklet_create_permission_key(),
+                permissions::sales_selection::BOOKLET_CREATE,
             ),
         )
         .route(
@@ -85,7 +86,7 @@ fn book_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_list),
                 rbac,
-                sales_selection::booklet_list_permission_key(),
+                permissions::sales_selection::BOOKLET_LIST,
             ),
         )
         .route(
@@ -93,7 +94,7 @@ fn book_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_create),
                 rbac,
-                sales_selection::booklet_create_permission_key(),
+                permissions::sales_selection::BOOKLET_CREATE,
             ),
         )
 }
@@ -124,7 +125,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_detail),
                 rbac,
-                sales_selection::booklet_detail_permission_key(),
+                permissions::sales_selection::BOOKLET_DETAIL,
             ),
         )
         .route(
@@ -132,7 +133,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_prepare),
                 rbac,
-                sales_selection::booklet_prepare_permission_key(),
+                permissions::sales_selection::BOOKLET_PREPARE,
             ),
         )
         .route(
@@ -140,7 +141,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(sales_selection::booklet_delete_item),
                 rbac,
-                sales_selection::booklet_delete_item_permission_key(),
+                permissions::sales_selection::BOOKLET_DELETE_ITEM,
             ),
         )
         .route(
@@ -148,7 +149,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_delete_item_post),
                 rbac,
-                sales_selection::booklet_delete_item_permission_key(),
+                permissions::sales_selection::BOOKLET_DELETE_ITEM_POST,
             ),
         )
         .route(
@@ -156,7 +157,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_publish),
                 rbac,
-                sales_selection::booklet_publish_permission_key(),
+                permissions::sales_selection::BOOKLET_PUBLISH,
             ),
         )
         .route(
@@ -164,7 +165,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_copy_link_url),
                 rbac,
-                sales_selection::booklet_copy_link_permission_key(),
+                permissions::sales_selection::BOOKLET_COPY_LINK_URL,
             ),
         )
         .route(
@@ -172,7 +173,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_copy_link),
                 rbac,
-                sales_selection::booklet_copy_link_permission_key(),
+                permissions::sales_selection::BOOKLET_COPY_LINK,
             ),
         )
         .route(
@@ -180,7 +181,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_rotate_link),
                 rbac,
-                sales_selection::booklet_rotate_link_permission_key(),
+                permissions::sales_selection::BOOKLET_ROTATE_LINK,
             ),
         )
         .route(
@@ -188,7 +189,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_rotate_link),
                 rbac,
-                sales_selection::booklet_rotate_link_permission_key(),
+                permissions::sales_selection::BOOKLET_ROTATE_LINK,
             ),
         )
         .route(
@@ -196,7 +197,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_close),
                 rbac,
-                sales_selection::booklet_close_permission_key(),
+                permissions::sales_selection::BOOKLET_CLOSE,
             ),
         )
         .route(
@@ -204,7 +205,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_revoke),
                 rbac,
-                sales_selection::booklet_revoke_permission_key(),
+                permissions::sales_selection::BOOKLET_REVOKE,
             ),
         )
         .route(
@@ -212,7 +213,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_revoke),
                 rbac,
-                sales_selection::booklet_revoke_permission_key(),
+                permissions::sales_selection::BOOKLET_REVOKE,
             ),
         )
         .route(
@@ -220,7 +221,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_void),
                 rbac,
-                sales_selection::booklet_void_permission_key(),
+                permissions::sales_selection::BOOKLET_VOID,
             ),
         )
         .route(
@@ -228,7 +229,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_session),
                 rbac,
-                sales_selection::booklet_detail_permission_key(),
+                permissions::sales_selection::BOOKLET_SESSION,
             ),
         )
 }
@@ -247,7 +248,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_detail),
                 rbac,
-                sales_selection::booklet_detail_permission_key(),
+                permissions::sales_selection::BOOKLET_DETAIL,
             ),
         )
         .route(
@@ -255,7 +256,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_prepare),
                 rbac,
-                sales_selection::booklet_prepare_permission_key(),
+                permissions::sales_selection::BOOKLET_PREPARE,
             ),
         )
         .route(
@@ -263,7 +264,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(sales_selection::booklet_delete_item),
                 rbac,
-                sales_selection::booklet_delete_item_permission_key(),
+                permissions::sales_selection::BOOKLET_DELETE_ITEM,
             ),
         )
         .route(
@@ -271,7 +272,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_delete_item_post),
                 rbac,
-                sales_selection::booklet_delete_item_permission_key(),
+                permissions::sales_selection::BOOKLET_DELETE_ITEM_POST,
             ),
         )
         .route(
@@ -279,7 +280,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_publish),
                 rbac,
-                sales_selection::booklet_publish_permission_key(),
+                permissions::sales_selection::BOOKLET_PUBLISH,
             ),
         )
         .route(
@@ -287,7 +288,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_copy_link_url),
                 rbac,
-                sales_selection::booklet_copy_link_permission_key(),
+                permissions::sales_selection::BOOKLET_COPY_LINK_URL,
             ),
         )
         .route(
@@ -295,7 +296,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_copy_link),
                 rbac,
-                sales_selection::booklet_copy_link_permission_key(),
+                permissions::sales_selection::BOOKLET_COPY_LINK,
             ),
         )
         .route(
@@ -303,7 +304,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_rotate_link),
                 rbac,
-                sales_selection::booklet_rotate_link_permission_key(),
+                permissions::sales_selection::BOOKLET_ROTATE_LINK,
             ),
         )
         .route(
@@ -311,7 +312,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_rotate_link),
                 rbac,
-                sales_selection::booklet_rotate_link_permission_key(),
+                permissions::sales_selection::BOOKLET_ROTATE_LINK,
             ),
         )
         .route(
@@ -319,7 +320,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_close),
                 rbac,
-                sales_selection::booklet_close_permission_key(),
+                permissions::sales_selection::BOOKLET_CLOSE,
             ),
         )
         .route(
@@ -327,7 +328,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_revoke),
                 rbac,
-                sales_selection::booklet_revoke_permission_key(),
+                permissions::sales_selection::BOOKLET_REVOKE,
             ),
         )
         .route(
@@ -335,7 +336,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_revoke),
                 rbac,
-                sales_selection::booklet_revoke_permission_key(),
+                permissions::sales_selection::BOOKLET_REVOKE,
             ),
         )
         .route(
@@ -343,7 +344,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::booklet_void),
                 rbac,
-                sales_selection::booklet_void_permission_key(),
+                permissions::sales_selection::BOOKLET_VOID,
             ),
         )
         .route(
@@ -351,7 +352,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::booklet_session),
                 rbac,
-                sales_selection::booklet_detail_permission_key(),
+                permissions::sales_selection::BOOKLET_SESSION,
             ),
         )
 }
@@ -400,7 +401,7 @@ fn book_protection_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(sales_selection::protection::booklet_password),
                 rbac,
-                sales_selection::protection::booklet_password_permission_key(),
+                permissions::sales_selection::PROTECTION_BOOKLET_PASSWORD,
             ),
         )
         .route(
@@ -408,7 +409,7 @@ fn book_protection_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::protection::booklet_vouchers),
                 rbac,
-                sales_selection::protection::booklet_vouchers_permission_key(),
+                permissions::sales_selection::PROTECTION_BOOKLET_VOUCHERS,
             ),
         )
         .route(
@@ -416,7 +417,7 @@ fn book_protection_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(sales_selection::protection::booklet_selection_details),
                 rbac,
-                sales_selection::protection::booklet_selection_details_permission_key(),
+                permissions::sales_selection::PROTECTION_BOOKLET_SELECTION_DETAILS,
             ),
         )
 }
@@ -428,7 +429,7 @@ fn book_protection_routes_booklets(rbac: &SharedRbacService) -> Router<AppState>
             with_permission(
                 post(sales_selection::protection::booklet_password),
                 rbac,
-                sales_selection::protection::booklet_password_permission_key(),
+                permissions::sales_selection::PROTECTION_BOOKLET_PASSWORD,
             ),
         )
         .route(
@@ -436,7 +437,7 @@ fn book_protection_routes_booklets(rbac: &SharedRbacService) -> Router<AppState>
             with_permission(
                 get(sales_selection::protection::booklet_vouchers),
                 rbac,
-                sales_selection::protection::booklet_vouchers_permission_key(),
+                permissions::sales_selection::PROTECTION_BOOKLET_VOUCHERS,
             ),
         )
         .route(
@@ -444,7 +445,7 @@ fn book_protection_routes_booklets(rbac: &SharedRbacService) -> Router<AppState>
             with_permission(
                 get(sales_selection::protection::booklet_selection_details),
                 rbac,
-                sales_selection::protection::booklet_selection_details_permission_key(),
+                permissions::sales_selection::PROTECTION_BOOKLET_SELECTION_DETAILS,
             ),
         )
 }

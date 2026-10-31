@@ -18,13 +18,6 @@ use crate::core::response::ApiResponse;
 /// 新角色 ID；客户端继续打开该角色编辑页。
 /// # 错误
 /// 参数、授权或持久化校验失败时返回统一错误。
-#[permission_macros::permission(
-    group = "角色管理",
-    group_desc = "系统角色和权限配置",
-    desc = "创建角色",
-    resource = "role",
-    action = "create"
-)]
 pub async fn create_role(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -37,26 +30,12 @@ pub async fn create_role(
 }
 
 /// 查询全部角色及其 Casbin 权限策略。
-#[permission_macros::permission(
-    group = "角色管理",
-    group_desc = "系统角色和权限配置",
-    desc = "查询角色列表",
-    resource = "role",
-    action = "list"
-)]
 pub async fn list_roles(State(state): State<AppState>) -> Result<Vec<RoleItem>> {
     let items = state.rbac().role_list().await?;
     Ok(ApiResponse::ok_with_data(items))
 }
 
 /// 查询当前可分配的启用角色。
-#[permission_macros::permission(
-    group = "角色管理",
-    group_desc = "系统角色和权限配置",
-    desc = "查询可分配角色",
-    resource = "role",
-    action = "assignable_list"
-)]
 pub async fn list_assignable_roles(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -66,13 +45,6 @@ pub async fn list_assignable_roles(
 }
 
 /// 更新角色与 Casbin 权限策略。
-#[permission_macros::permission(
-    group = "角色管理",
-    group_desc = "系统角色和权限配置",
-    desc = "更新角色信息",
-    resource = "role",
-    action = "update"
-)]
 pub async fn update_role(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -86,13 +58,6 @@ pub async fn update_role(
 }
 
 /// 删除非系统角色及其 Casbin policy/绑定。
-#[permission_macros::permission(
-    group = "角色管理",
-    group_desc = "系统角色和权限配置",
-    desc = "删除角色",
-    resource = "role",
-    action = "delete"
-)]
 pub async fn delete_role(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

@@ -12,13 +12,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "在批准采购付款申请内执行预存款",
-    resource = "purchase_payment_request",
-    action = "pay"
-)]
 /// 由当前付款任务出纳明确占用本次全部执行组资金。
 /// # 参数
 /// 原付款申请、当前指定任务及稳定原命令身份。

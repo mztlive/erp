@@ -22,13 +22,6 @@ async fn files(
         .await?)
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "查询发票文件",
-    resource = "invoice",
-    action = "detail"
-)]
 /// 按整票详情资格列出文件。
 /// # 参数
 /// 应用状态、当前账号及发票身份。
@@ -44,13 +37,6 @@ pub async fn invoice_files(
     Ok(ApiResponse::ok_with_data(files(&state, &actor, &id).await?))
 }
 
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款与销项发票管理",
-    desc = "下载发票文件",
-    resource = "invoice",
-    action = "detail"
-)]
 /// 下载前后重验发票资格、文件关联及文件状态。
 /// # 参数
 /// 应用状态、当前账号、发票及文件身份。

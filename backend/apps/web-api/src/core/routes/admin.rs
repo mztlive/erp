@@ -13,6 +13,7 @@ use crate::core::routes::{
     supplier_deposit, supplier_fulfillment, supplier_offering, supplier_portal, supplier_settlement,
     warehouse, work_item,
 };
+use crate::permissions;
 
 /// 管理后台路由入口。
 ///
@@ -80,7 +81,7 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(admin::account::list_admins),
                 rbac_service,
-                admin::account::list_admins_permission_key(),
+                permissions::admin::ACCOUNT_LIST_ADMINS,
             ),
         )
         .route(
@@ -88,7 +89,7 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(admin::account::create_admin),
                 rbac_service,
-                admin::account::create_admin_permission_key(),
+                permissions::admin::ACCOUNT_CREATE_ADMIN,
             ),
         )
         .route(
@@ -96,7 +97,7 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(admin::account::update_admin),
                 rbac_service,
-                admin::account::update_admin_permission_key(),
+                permissions::admin::ACCOUNT_UPDATE_ADMIN,
             ),
         )
         .route(
@@ -104,7 +105,7 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(admin::account::delete_admin),
                 rbac_service,
-                admin::account::delete_admin_permission_key(),
+                permissions::admin::ACCOUNT_DELETE_ADMIN,
             ),
         )
         .route(
@@ -112,7 +113,7 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(admin::account::update_admin_role),
                 rbac_service,
-                admin::account::update_admin_role_permission_key(),
+                permissions::admin::ACCOUNT_UPDATE_ADMIN_ROLE,
             ),
         )
 }
@@ -136,7 +137,7 @@ fn role_template_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(admin::role_template::list_role_templates),
                 rbac_service,
-                admin::role_template::list_role_templates_permission_key(),
+                permissions::admin::ROLE_TEMPLATE_LIST_ROLE_TEMPLATES,
             ),
         )
         .route(
@@ -144,7 +145,7 @@ fn role_template_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(admin::role_template::generate_builtin_roles),
                 rbac_service,
-                admin::role_template::generate_builtin_roles_permission_key(),
+                permissions::admin::ROLE_TEMPLATE_GENERATE_BUILTIN_ROLES,
             ),
         )
 }
@@ -154,18 +155,14 @@ fn role_crud_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
             "/roles",
-            with_permission(
-                get(admin::role::list_roles),
-                rbac_service,
-                admin::role::list_roles_permission_key(),
-            ),
+            with_permission(get(admin::role::list_roles), rbac_service, permissions::admin::ROLE_LIST_ROLES),
         )
         .route(
             "/roles/assignable",
             with_permission(
                 get(admin::role::list_assignable_roles),
                 rbac_service,
-                admin::role::list_assignable_roles_permission_key(),
+                permissions::admin::ROLE_LIST_ASSIGNABLE_ROLES,
             ),
         )
         .route(
@@ -173,7 +170,7 @@ fn role_crud_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(admin::role::create_role),
                 rbac_service,
-                admin::role::create_role_permission_key(),
+                permissions::admin::ROLE_CREATE_ROLE,
             ),
         )
         .route(
@@ -181,7 +178,7 @@ fn role_crud_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 put(admin::role::update_role),
                 rbac_service,
-                admin::role::update_role_permission_key(),
+                permissions::admin::ROLE_UPDATE_ROLE,
             ),
         )
         .route(
@@ -189,7 +186,7 @@ fn role_crud_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 delete(admin::role::delete_role),
                 rbac_service,
-                admin::role::delete_role_permission_key(),
+                permissions::admin::ROLE_DELETE_ROLE,
             ),
         )
 }
@@ -207,7 +204,7 @@ fn audit_log_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
         with_permission(
             get(admin::audit_log::list_audit_logs),
             rbac_service,
-            admin::audit_log::list_audit_logs_permission_key(),
+            permissions::admin::AUDIT_LOG_LIST_AUDIT_LOGS,
         ),
     )
 }
@@ -226,7 +223,7 @@ fn procurement_responsibility_routes(rbac_service: &SharedRbacService) -> Router
             with_permission(
                 get(admin::procurement_responsibility::list_rules),
                 rbac_service,
-                admin::procurement_responsibility::list_rules_permission_key(),
+                permissions::admin::PROCUREMENT_RESPONSIBILITY_LIST_RULES,
             ),
         )
         .route(
@@ -234,7 +231,7 @@ fn procurement_responsibility_routes(rbac_service: &SharedRbacService) -> Router
             with_permission(
                 post(admin::procurement_responsibility::create_rule),
                 rbac_service,
-                admin::procurement_responsibility::create_rule_permission_key(),
+                permissions::admin::PROCUREMENT_RESPONSIBILITY_CREATE_RULE,
             ),
         )
         .route(
@@ -242,7 +239,7 @@ fn procurement_responsibility_routes(rbac_service: &SharedRbacService) -> Router
             with_permission(
                 put(admin::procurement_responsibility::update_rule),
                 rbac_service,
-                admin::procurement_responsibility::update_rule_permission_key(),
+                permissions::admin::PROCUREMENT_RESPONSIBILITY_UPDATE_RULE,
             ),
         )
         .route(
@@ -250,7 +247,7 @@ fn procurement_responsibility_routes(rbac_service: &SharedRbacService) -> Router
             with_permission(
                 post(admin::procurement_responsibility::resolve),
                 rbac_service,
-                admin::procurement_responsibility::resolve_permission_key(),
+                permissions::admin::PROCUREMENT_RESPONSIBILITY_RESOLVE,
             ),
         )
 }

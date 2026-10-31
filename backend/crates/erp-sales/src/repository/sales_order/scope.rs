@@ -296,6 +296,13 @@ fn union(conditions: Vec<Document>) -> Document {
     doc! { "$or": conditions }
 }
 
+/// 跨页校验使用的业务身份和版本，不包含金额及其他展示字段。
+#[derive(Debug, serde::Deserialize, Hash)]
+pub struct SalesVersion {
+    pub id: String,
+    pub version: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,11 +397,4 @@ mod tests {
             ] }] }
         );
     }
-}
-
-/// 跨页校验使用的业务身份和版本，不包含金额及其他展示字段。
-#[derive(Debug, serde::Deserialize, Hash)]
-pub struct SalesVersion {
-    pub id: String,
-    pub version: u64,
 }

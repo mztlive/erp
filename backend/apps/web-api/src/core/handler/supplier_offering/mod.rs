@@ -28,13 +28,6 @@ use crate::core::extractor::{Json, Query};
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "查询供应商供给列表",
-    resource = "supplier_offering",
-    action = "list"
-)]
 /// 查询供应商供给列表。
 ///
 /// # 参数
@@ -65,13 +58,6 @@ pub async fn list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "新增供应商供给",
-    resource = "supplier_offering",
-    action = "create"
-)]
 /// 为公司 SKU 新增供应商供给。
 ///
 /// # 参数
@@ -92,13 +78,6 @@ pub async fn create(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "保存供应商供给条款",
-    resource = "supplier_offering",
-    action = "update"
-)]
 /// 追加供给商业条款修订。
 ///
 /// # 参数
@@ -121,13 +100,6 @@ pub async fn revise(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "更新供应商可供状态",
-    resource = "supplier_offering_availability",
-    action = "update"
-)]
 /// 更新供给的实时可供状态与数量。
 ///
 /// # 参数
@@ -150,13 +122,6 @@ pub async fn update_availability(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "完成供应停止影响核对任务",
-    resource = "supplier_offering",
-    action = "resolve_supply_exception"
-)]
 /// 核对供应停止来源与安全暂停影响并完成正式任务。
 ///
 /// 本命令不恢复供给、不恢复商品发布；安全暂停事实继续生效。
@@ -172,13 +137,6 @@ pub async fn complete_supply_exception_task(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "交接供给维护人",
-    resource = "supplier_offering",
-    action = "update"
-)]
 /// 显式交接供给维护人与可选业务组织。
 ///
 /// # 参数
@@ -199,13 +157,6 @@ pub async fn offering_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "供应商供给",
-    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
-    desc = "查询供给交接候选",
-    resource = "supplier_offering",
-    action = "update"
-)]
 /// 查询合格有效的供给维护人交接候选。
 ///
 /// # 参数

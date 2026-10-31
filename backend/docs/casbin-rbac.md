@@ -17,7 +17,7 @@ Adapter，也提供事务内替换角色绑定、替换角色权限、删除角�
 ## 请求授权链路
 
 1. `authenticate` 中间件验证 JWT，并为后台账号注入稳定的 RBAC 主体。
-2. admin 路由通过 `with_permission` 绑定 handler 宏生成的 `Permission`。
+2. admin 路由通过 `with_permission` 绑定显式目录中的权限常量，转换为领域 `Permission` 后执行鉴权。
 3. `services::iam::RbacService` 使用 Casbin Enforcer 按主体、资源和动作判定。
 4. 未认证返回 `401`，无权限返回 `403`，授权引擎或存储异常返回不泄露内部细节的 `500`。
 

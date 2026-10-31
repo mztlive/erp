@@ -27,13 +27,6 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "管理合同共享销售",
-    resource = "contract",
-    action = "update"
-)]
 /// 维护本合同的明确共享名单，路由同时要求客户人员分配权限。
 pub async fn contract_sales_access(
     State(state): State<AppState>,
@@ -45,13 +38,6 @@ pub async fn contract_sales_access(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "查询合同列表",
-    resource = "contract",
-    action = "list"
-)]
 /// 查询合同列表。
 ///
 /// # 参数
@@ -71,13 +57,6 @@ pub async fn contract_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "首次归档合同 PDF",
-    resource = "contract",
-    action = "create"
-)]
 /// 首次归档合同（合同身份 + 首个不可变版本 + PDF 关联原子形成）。
 ///
 /// # 参数
@@ -96,13 +75,6 @@ pub async fn contract_create(
     Err(Error::BadRequest("合同必须通过 PDF 自动识别导入，不接受手填归档".into()))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "查询合同详情",
-    resource = "contract",
-    action = "detail"
-)]
 /// 查询合同详情（合同 + 全部不可变版本时间线）。
 ///
 /// # 参数
@@ -122,13 +94,6 @@ pub async fn contract_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "查询合同附件",
-    resource = "contract",
-    action = "detail"
-)]
 /// 独立重验合同读取资格后返回合同 PDF 元数据。
 ///
 /// # 参数
@@ -150,13 +115,6 @@ pub async fn contract_file(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "预览合同附件",
-    resource = "contract",
-    action = "detail"
-)]
 /// 独立重验合同读取资格后以内联内容返回合同 PDF。
 ///
 /// # 参数
@@ -191,13 +149,6 @@ pub async fn contract_file_preview(
     Ok(response)
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "归档合同新版本",
-    resource = "contract",
-    action = "update"
-)]
 /// 归档合同新版本（追加不可变版本并切换当前版本指针，乐观锁）。
 ///
 /// # 参数
@@ -218,13 +169,6 @@ pub async fn contract_archive_revision(
     Err(Error::BadRequest("合同新版本必须通过 PDF 自动识别导入".into()))
 }
 
-#[permission_macros::permission(
-    group = "合同",
-    group_desc = "合同 PDF 档案管理",
-    desc = "终止合同",
-    resource = "contract",
-    action = "update"
-)]
 /// 终止合同（乐观锁；历史销售引用保持不变）。
 ///
 /// # 参数

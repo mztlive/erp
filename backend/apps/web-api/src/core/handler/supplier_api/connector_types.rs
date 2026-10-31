@@ -4,13 +4,6 @@ use erp_supply::entity::supplier_api::SupplierConnectorType;
 
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "创建供应商 API 连接",
-    resource = "supplier_api_connection",
-    action = "create"
-)]
 /// 列出新建连接可选择的已实现接口类型。
 /// # 参数
 /// 无；路由使用创建连接权限。

@@ -19,13 +19,6 @@ use crate::core::response::ApiResponse;
 /// 分层检查报告。
 /// # 错误
 /// 越权、参数错误或存储故障返回统一错误信封。
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "检查人员访问权限",
-    resource = "data_scope",
-    action = "list"
-)]
 pub async fn inspect(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

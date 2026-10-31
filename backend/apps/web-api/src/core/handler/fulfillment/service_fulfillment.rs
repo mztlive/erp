@@ -21,13 +21,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询服务履约记录列表",
-    resource = "service_fulfillment",
-    action = "list"
-)]
 /// 查询线下服务履约记录列表（W01 履约任务聚合视图）。
 ///
 /// # 参数
@@ -48,13 +41,6 @@ pub async fn service_fulfillment_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询服务履约记录详情",
-    resource = "service_fulfillment",
-    action = "list"
-)]
 /// 按主键查询线下服务履约记录。
 ///
 /// # 参数
@@ -75,13 +61,6 @@ pub async fn service_fulfillment_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "创建服务履约记录",
-    resource = "service_fulfillment",
-    action = "create"
-)]
 /// 创建线下服务履约记录（草稿；服务地点与交付对象快照由边界传入）。
 ///
 /// # 参数
@@ -104,13 +83,6 @@ pub async fn service_fulfillment_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "确认服务履约",
-    resource = "service_fulfillment",
-    action = "confirm"
-)]
 /// 确认服务履约（草稿 → 已确认；门槛、现场事实与图片凭证同事务）。
 ///
 /// 命令与现场图片一次 multipart 提交：`command` 为 JSON，图片字段名必须与

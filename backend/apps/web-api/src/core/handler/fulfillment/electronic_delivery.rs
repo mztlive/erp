@@ -21,13 +21,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询电子交付记录列表",
-    resource = "electronic_delivery",
-    action = "list"
-)]
 /// 查询电子交付记录列表（W01 履约任务聚合视图）。
 ///
 /// # 参数
@@ -48,13 +41,6 @@ pub async fn electronic_delivery_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询电子交付记录详情",
-    resource = "electronic_delivery",
-    action = "list"
-)]
 /// 按主键查询电子交付记录。
 ///
 /// # 参数
@@ -75,13 +61,6 @@ pub async fn electronic_delivery_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "创建电子交付记录",
-    resource = "electronic_delivery",
-    action = "create"
-)]
 /// 创建电子交付记录（草稿；交付对象快照由边界传入，服务端计算查询指纹）。
 ///
 /// # 参数
@@ -104,13 +83,6 @@ pub async fn electronic_delivery_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "确认电子交付",
-    resource = "electronic_delivery",
-    action = "confirm"
-)]
 /// 确认电子交付（草稿 → 已确认；门槛与分配有效性校验同事务）。
 ///
 /// # 参数

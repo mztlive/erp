@@ -23,13 +23,6 @@ use crate::core::extractor::{Json, Query};
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "创建完整客户资料",
-    resource = "customer",
-    action = "create"
-)]
 /// 原子创建完整客户资料。
 pub async fn customer_profile_create(
     State(state): State<AppState>,
@@ -51,13 +44,6 @@ pub async fn customer_profile_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "修订完整客户资料",
-    resource = "customer",
-    action = "update"
-)]
 /// 原子修订完整客户资料。
 pub async fn customer_profile_update(
     State(state): State<AppState>,
@@ -83,13 +69,6 @@ pub async fn customer_profile_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询完整客户资料",
-    resource = "customer",
-    action = "detail"
-)]
 /// 查询完整客户资料，并按当前字段权限裁剪从属事实与允许动作。
 pub async fn customer_profile_detail(
     State(state): State<AppState>,
@@ -130,13 +109,6 @@ pub async fn customer_profile_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询客户中心合同与销售摘要",
-    resource = "customer",
-    action = "detail"
-)]
 /// 查询客户中心合同/销售最近摘要与跨页指标。
 pub async fn customer_center_related(
     State(state): State<AppState>,
@@ -159,13 +131,6 @@ pub async fn customer_center_related(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询客户中心应收汇总",
-    resource = "customer",
-    action = "detail"
-)]
 /// 查询客户中心跨应收账户的定点金额汇总。
 pub async fn customer_center_receivable(
     State(state): State<AppState>,
@@ -187,13 +152,6 @@ pub async fn customer_center_receivable(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询客户资料保存结果",
-    resource = "customer",
-    action = "detail"
-)]
 /// 按幂等键查询已成功客户资料命令结果。
 pub async fn customer_profile_command_detail(
     State(state): State<AppState>,
@@ -209,13 +167,6 @@ pub async fn customer_profile_command_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查看客户敏感字段",
-    resource = "customer_sensitive",
-    action = "reveal"
-)]
 /// 按短时令牌揭示单个敏感字段，并同时校验客户范围、字段详情与揭示权限。
 pub async fn customer_sensitive_reveal(
     State(state): State<AppState>,
@@ -240,13 +191,6 @@ pub async fn customer_sensitive_reveal(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询客户列表",
-    resource = "customer",
-    action = "list"
-)]
 /// 查询客户列表。
 ///
 /// # 参数
@@ -268,13 +212,6 @@ pub async fn customer_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询全部有权客户",
-    resource = "customer_scope",
-    action = "detail"
-)]
 /// 查询不受个人归属限制的全部有权客户。
 ///
 /// 与常规列表共用同一响应，不附带负责销售候选。
@@ -291,13 +228,6 @@ pub async fn customer_all_authorized_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "创建客户",
-    resource = "customer",
-    action = "create"
-)]
 /// 创建客户（同事务建立客户角色 + 首条 OWNER 归属）。
 ///
 /// # 参数
@@ -316,13 +246,6 @@ pub async fn customer_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询客户详情",
-    resource = "customer",
-    action = "detail"
-)]
 /// 查询客户详情（客户 + 主体身份 + 当前生效 OWNER）。
 ///
 /// # 参数
@@ -340,13 +263,6 @@ pub async fn customer_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "更新客户",
-    resource = "customer",
-    action = "update"
-)]
 /// 更新客户角色（乐观锁）。
 ///
 /// # 参数
@@ -367,13 +283,6 @@ pub async fn customer_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "删除客户",
-    resource = "customer",
-    action = "delete"
-)]
 /// 软删除客户角色。
 ///
 /// # 参数
@@ -393,13 +302,6 @@ pub async fn customer_delete(
     Ok(ApiResponse::ok())
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "查询客户归属列表",
-    resource = "customer_assignment",
-    action = "list"
-)]
 /// 查询客户归属列表。
 ///
 /// # 参数
@@ -420,13 +322,6 @@ pub async fn customer_assignment_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "客户",
-    group_desc = "客户角色与归属管理",
-    desc = "调整客户归属",
-    resource = "customer_assignment",
-    action = "create"
-)]
 /// 调整客户归属（Assign 建立新归属并结束重叠旧归属；End 提前结束有效期）。
 ///
 /// # 参数

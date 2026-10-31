@@ -13,13 +13,6 @@ use crate::core::errors::{Error, Result};
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购单对象中心",
-    resource = "purchase_order",
-    action = "detail"
-)]
 /// 按采购详情资格读取本单付款记录。
 /// # 参数
 /// 当前账号与采购单身份。
@@ -35,13 +28,6 @@ pub async fn purchase_payments(
     Ok(ApiResponse::ok_with_data(purchase_reads(&state).payment_records(&actor, &id).await?))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购单对象中心",
-    resource = "purchase_order",
-    action = "detail"
-)]
 /// 读取回单前后重验采购资格、有效付款分配及精确文件身份。
 /// # 参数
 /// 当前账号、采购单与付款单身份。

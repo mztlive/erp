@@ -12,7 +12,7 @@
 backend/
 ├── apps/
 │   ├── web-api/                      # Axum 协议层、AppState 装配、后台 worker 生命周期
-│   │   ├── build.rs                  # 由 permission 标注生成前端权限
+│   │   ├── build.rs                  # 由显式权限目录和路由生成前后端权限
 │   │   ├── examples/                 # 真实 Mongo 验收例程（禁新增/修改/执行）
 │   │   └── src/
 │   │       ├── app_state.rs
@@ -48,7 +48,6 @@ backend/
 │   ├── bpm/                          # 流程定义、运行状态、引擎规则
 │   ├── entity-core/                  # BaseModel
 │   ├── entity-macros/                # Entity 派生、id_type
-│   ├── permission-macros/
 │   ├── id-generator/
 │   ├── storage/                      # S3Storage
 │   └── test-support/                 # 仅 dev-dependency
@@ -81,7 +80,8 @@ backend/
 
 ## HTTP 与权限
 
-- `/admin` 下 Handler 必须加 `#[permission_macros::permission(...)]`；仅 `/login`、`/upload`、`/public/selection/*`、`/account/*` 等非管理端入口除外。
+- 管理端接口必须通过 `with_permission` 引用 `apps/web-api/permission_catalog/` 中的显式权限常量；处理函数不声明权限属性。公开选品、结算主体登录目录等既有例外保持原认证链路。
+- 新权限在所属目录模块定义并加入 `ENTRIES`；新模块登记 `MODULES`。新增受保护路由模块同步登记 `build_permissions.rs` 的扫描清单。权限代码只定义一次，复用时保留接口各自的展示说明。
 - 前端权限由 `apps/web-api/build.rs` 生成，禁手改生成物；改动后跑 `./scripts/check-permissions-drift.sh`。
 - 配置只经 `config::SafeConfig` 读取；上传只经 `AppState` 的 `storage::S3Storage` 写入。
 
@@ -171,7 +171,7 @@ env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 - 一项功能完成时：`cargo clippy -p <crate> --all-targets`。
 - 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。
 - 改 `bpm` 或 `erp-workflow`：`./scripts/check-bpm-boundaries.sh`。
-- 改 `permission` 标注：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
+- 改显式权限目录或路由绑定：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
 - 仅改文档：不编译、不测试，只跑 `git diff --check`。
 
 ### 提交阶段

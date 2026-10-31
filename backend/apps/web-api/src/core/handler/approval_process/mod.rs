@@ -27,13 +27,6 @@ use crate::core::response::ApiResponse;
 /// 定义 Handler 结果。
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "读取固定单据类型审批目录",
-    resource = "approval_process",
-    action = "read"
-)]
 /// 返回固定 20 行非敏感目录。
 ///
 /// # 参数
@@ -61,13 +54,6 @@ pub async fn definition_catalog(
     Ok(ApiResponse::ok_with_data(items))
 }
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "读取某单据类型的定义版本",
-    resource = "approval_process",
-    action = "read"
-)]
 /// 列出某单据类型的定义版本。
 ///
 /// # 错误
@@ -88,13 +74,6 @@ pub async fn definition_versions(
     Ok(ApiResponse::ok_with_data(versions))
 }
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "读取审批流程定义详情",
-    resource = "approval_process",
-    action = "read"
-)]
 /// 返回定义图详情。
 ///
 /// # 错误
@@ -115,13 +94,6 @@ pub async fn definition_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "创建更高版本审批流程草稿",
-    resource = "approval_process",
-    action = "create"
-)]
 /// 创建定义草稿。
 ///
 /// actor 只从认证上下文注入，请求体不得携带源定义 ID。
@@ -141,13 +113,6 @@ pub async fn create_definition_draft(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "整组替换草稿节点",
-    resource = "approval_process",
-    action = "edit"
-)]
 /// 整组替换草稿节点。
 ///
 /// 新增节点不接受 `node_key`；已有节点只接受本定义内 `node_id`。
@@ -169,13 +134,6 @@ pub async fn replace_definition_nodes(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "发布审批流程草稿",
-    resource = "approval_process",
-    action = "publish"
-)]
 /// 发布草稿并退役旧版本。
 ///
 /// # 错误
@@ -195,13 +153,6 @@ pub async fn publish_definition(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "退役当前已发布审批流程",
-    resource = "approval_process",
-    action = "retire"
-)]
 /// 退役当前已发布定义。
 ///
 /// # 错误
@@ -221,13 +172,6 @@ pub async fn retire_definition(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "审批流程",
-    group_desc = "固定单据类型审批流程定义管理",
-    desc = "按定义期规则搜索可选审批人",
-    resource = "approval_process",
-    action = "read"
-)]
 /// 服务端过滤定义期可选审批人。
 ///
 /// 只执行定义期静态过滤，不得复用运行期改派候选。

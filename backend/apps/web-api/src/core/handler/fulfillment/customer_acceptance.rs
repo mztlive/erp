@@ -24,13 +24,6 @@ fn acceptance_process(state: &AppState) -> CustomerAcceptanceProcess {
     CustomerAcceptanceProcess::new(state.db(), service(state), state.rbac(), state.approval_object_read())
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询客户验收单列表",
-    resource = "customer_acceptance",
-    action = "list"
-)]
 /// 查询客户验收单列表（W06 验收历史视图）。
 ///
 /// # 参数
@@ -52,13 +45,6 @@ pub async fn customer_acceptance_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询客户验收单详情",
-    resource = "customer_acceptance",
-    action = "detail"
-)]
 /// 查询客户验收单详情（表头 + 行 + 分配）。
 ///
 /// # 参数
@@ -80,13 +66,6 @@ pub async fn customer_acceptance_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "创建客户验收单",
-    resource = "customer_acceptance",
-    action = "create"
-)]
 /// 创建客户验收单（草稿；分配在过账时校验并写入）。
 ///
 /// # 参数
@@ -109,13 +88,6 @@ pub async fn customer_acceptance_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "原子登记客户验收",
-    resource = "customer_acceptance",
-    action = "post"
-)]
 /// 原子创建或替换客户验收草稿并立即过账。
 ///
 /// # 参数
@@ -138,13 +110,6 @@ pub async fn customer_acceptance_commit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "过账客户验收",
-    resource = "customer_acceptance",
-    action = "post"
-)]
 /// 过账客户验收（验收行锁定 + 履约分配守恒 + 净验收上限校验同事务，§8.2 第 5 条）。
 ///
 /// # 参数
@@ -169,13 +134,6 @@ pub async fn customer_acceptance_post(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "冲正客户验收",
-    resource = "customer_acceptance",
-    action = "reverse"
-)]
 /// 冲正客户验收（误录时新增反向验收与反向分配，不覆盖原事实）。
 ///
 /// # 参数
@@ -200,13 +158,6 @@ pub async fn customer_acceptance_reverse(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询客户验收工作台",
-    resource = "customer_acceptance",
-    action = "list"
-)]
 /// 查询客户验收工作台（W06：销售行 + 可验收事实 + 验收历史）。
 ///
 /// # 参数

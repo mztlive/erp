@@ -14,6 +14,7 @@ use tracing::{error, warn};
 use crate::app_state::AppState;
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
+use crate::permissions::PermissionBinding;
 
 /// Composition-root adapter: expose authorization facts without leaking RbacService.
 struct RbacAuthorizationPort(SharedRbacService);
@@ -44,11 +45,11 @@ impl AuthorizationPort for RbacAuthorizationPort {
 pub fn with_permission(
     route: MethodRouter<AppState>,
     rbac_service: &SharedRbacService,
-    permission: Permission,
+    permission: impl Into<PermissionBinding>,
 ) -> MethodRouter<AppState> {
     route.route_layer(RbacAuthorizeLayer::new(
         std::sync::Arc::new(RbacAuthorizationPort(rbac_service.clone())),
-        permission,
+        permission.into().required.permission(),
     ))
 }
 
@@ -190,3 +191,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "rbac_contract.rs"]
+mod contract_tests;

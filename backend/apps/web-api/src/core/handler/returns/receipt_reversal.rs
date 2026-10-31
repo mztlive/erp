@@ -17,13 +17,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "查询回款冲正详情",
-    resource = "receipt_reversal",
-    action = "detail"
-)]
 /// 查询回款冲正详情。
 ///
 /// # 参数
@@ -44,13 +37,6 @@ pub async fn receipt_reversal_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "登记回款冲正草稿",
-    resource = "receipt_reversal",
-    action = "create"
-)]
 /// 登记回款冲正草稿（冲正单号唯一构成幂等去重；经办/复核分离）。
 ///
 /// # 参数
@@ -76,13 +62,6 @@ pub async fn receipt_reversal_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "一次创建并提交回款冲正审批",
-    resource = "receipt_reversal",
-    action = "submit"
-)]
 /// 按原回款一次创建回款冲正并启动审批。
 ///
 /// # 参数
@@ -107,13 +86,6 @@ pub async fn receipt_reversal_commit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "提交回款冲正审批",
-    resource = "receipt_reversal",
-    action = "submit"
-)]
 /// 提交回款冲正并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
@@ -141,13 +113,6 @@ pub async fn receipt_reversal_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "撤回回款冲正审批",
-    resource = "receipt_reversal",
-    action = "cancel_approval"
-)]
 /// 撤回尚未最终通过的回款冲正审批。
 ///
 /// # 参数
@@ -175,13 +140,6 @@ pub async fn receipt_reversal_cancel_approval(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "退货退款",
-    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "回款冲正过账",
-    resource = "receipt_reversal",
-    action = "post"
-)]
 /// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
 ///
 /// # 参数

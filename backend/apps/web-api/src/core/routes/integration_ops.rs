@@ -11,6 +11,7 @@ use erp_identity::SharedRbacService;
 use crate::app_state::AppState;
 use crate::core::handler::integration_ops;
 use crate::core::middleware::with_permission;
+use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -27,7 +28,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(integration_ops::inbox_message_list),
                 rbac,
-                integration_ops::inbox_message_list_permission_key(),
+                permissions::integration_ops::INBOX_MESSAGE_LIST,
             ),
         )
         .route(
@@ -35,7 +36,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(integration_ops::inbox_message_register),
                 rbac,
-                integration_ops::inbox_message_register_permission_key(),
+                permissions::integration_ops::INBOX_MESSAGE_REGISTER,
             ),
         )
         .route(
@@ -43,7 +44,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(integration_ops::inbox_message_detail),
                 rbac,
-                integration_ops::inbox_message_detail_permission_key(),
+                permissions::integration_ops::INBOX_MESSAGE_DETAIL,
             ),
         )
         .route(
@@ -51,7 +52,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(integration_ops::inbox_message_write_back),
                 rbac,
-                integration_ops::inbox_message_write_back_permission_key(),
+                permissions::integration_ops::INBOX_MESSAGE_WRITE_BACK,
             ),
         )
         // 集成错误任务
@@ -60,7 +61,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(integration_ops::error_task_list),
                 rbac,
-                integration_ops::error_task_list_permission_key(),
+                permissions::integration_ops::ERROR_TASK_LIST,
             ),
         )
         .route(
@@ -68,7 +69,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(integration_ops::error_task_create),
                 rbac,
-                integration_ops::error_task_create_permission_key(),
+                permissions::integration_ops::ERROR_TASK_CREATE,
             ),
         )
         .route(
@@ -76,7 +77,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(integration_ops::error_task_detail),
                 rbac,
-                integration_ops::error_task_detail_permission_key(),
+                permissions::integration_ops::ERROR_TASK_DETAIL,
             ),
         )
         .route(
@@ -84,7 +85,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(integration_ops::integration_task_action),
                 rbac,
-                integration_ops::integration_task_action_permission_key(),
+                permissions::integration_ops::INTEGRATION_TASK_ACTION,
             ),
         )
         .route(
@@ -92,7 +93,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(integration_ops::integration_task_completion),
                 rbac,
-                integration_ops::integration_task_completion_permission_key(),
+                permissions::integration_ops::INTEGRATION_TASK_COMPLETION,
             ),
         )
         // 对账差异
@@ -101,7 +102,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(integration_ops::difference_list),
                 rbac,
-                integration_ops::difference_list_permission_key(),
+                permissions::integration_ops::DIFFERENCE_LIST,
             ),
         )
         .route(
@@ -109,7 +110,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(integration_ops::difference_create),
                 rbac,
-                integration_ops::difference_create_permission_key(),
+                permissions::integration_ops::DIFFERENCE_CREATE,
             ),
         )
         .route(
@@ -117,7 +118,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 get(integration_ops::difference_detail),
                 rbac,
-                integration_ops::difference_detail_permission_key(),
+                permissions::integration_ops::DIFFERENCE_DETAIL,
             ),
         )
         .route(
@@ -125,7 +126,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(
                 post(integration_ops::difference_decision),
                 rbac,
-                integration_ops::difference_decision_permission_key(),
+                permissions::integration_ops::DIFFERENCE_DECISION,
             ),
         )
 }

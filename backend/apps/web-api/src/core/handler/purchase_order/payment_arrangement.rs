@@ -11,13 +11,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购付款安排",
-    resource = "purchase_order",
-    action = "detail"
-)]
 /// 查询当前采购的下一步付款安排。
 /// # 参数
 /// 应用状态、已认证账号及采购身份。
@@ -32,13 +25,6 @@ pub async fn payment_arrangement(
 ) -> Result<PaymentArrangementView> {
     Ok(ApiResponse::ok_with_data(purchase_reads(&state).payment_arrangement(&actor, &id).await?))
 }
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "安排采购付款跟进",
-    resource = "purchase_payment_request",
-    action = "submit"
-)]
 /// 保存采购付款跟进日期。
 /// # 参数
 /// 应用状态、账号、采购身份、任务版本与日期。

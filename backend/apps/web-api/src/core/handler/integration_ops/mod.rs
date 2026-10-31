@@ -23,13 +23,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "查询入站消息列表",
-    resource = "inbox_message",
-    action = "list"
-)]
 /// 查询入站消息列表。
 ///
 /// # 参数
@@ -47,13 +40,6 @@ pub async fn inbox_message_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "查询入站消息详情",
-    resource = "inbox_message",
-    action = "detail"
-)]
 /// 查询入站消息详情（含规范化内容引用）。
 ///
 /// # 参数
@@ -71,13 +57,6 @@ pub async fn inbox_message_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "登记入站消息",
-    resource = "inbox_message",
-    action = "register"
-)]
 /// 登记入站消息（消息层与业务事实层幂等由唯一索引保证，重复投递返回 409）。
 ///
 /// # 参数
@@ -97,13 +76,6 @@ pub async fn inbox_message_register(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "回写入站消息处理结果",
-    resource = "inbox_message",
-    action = "writeback"
-)]
 /// 回写入站消息处理结果（`processed` 标记已处理；`failed` 同事务登记错误任务）。
 ///
 /// # 参数
@@ -125,13 +97,6 @@ pub async fn inbox_message_write_back(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "查询集成错误任务列表",
-    resource = "integration_error_task",
-    action = "list"
-)]
 /// 查询集成错误任务列表。
 ///
 /// # 参数
@@ -153,13 +118,6 @@ pub async fn error_task_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "查询集成错误任务详情",
-    resource = "integration_error_task",
-    action = "detail"
-)]
 /// 查询集成错误任务详情（含解决/关闭证据文本）。
 ///
 /// # 参数
@@ -179,13 +137,6 @@ pub async fn error_task_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "登记集成错误任务",
-    resource = "integration_error_task",
-    action = "create"
-)]
 /// 登记集成错误任务（同一消息与错误分类只允许一个进行中任务）。
 ///
 /// # 参数
@@ -205,13 +156,6 @@ pub async fn error_task_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "执行集成任务非终结动作",
-    resource = "integration_task",
-    action = "process"
-)]
 /// 执行 W29 非终结任务动作；任务保持 `OPEN`。
 pub async fn integration_task_action(
     State(state): State<AppState>,
@@ -222,13 +166,6 @@ pub async fn integration_task_action(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "根据已验证结果完成集成任务",
-    resource = "integration_task",
-    action = "complete"
-)]
 /// 以 W29 强命令形成领域结论并完成正式任务。
 pub async fn integration_task_completion(
     State(state): State<AppState>,
@@ -239,13 +176,6 @@ pub async fn integration_task_completion(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "查询对账差异列表",
-    resource = "reconciliation_difference",
-    action = "list"
-)]
 /// 查询对账差异列表（`status` 由最新处理记录派生）。
 ///
 /// # 参数
@@ -267,13 +197,6 @@ pub async fn difference_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "查询对账差异详情",
-    resource = "reconciliation_difference",
-    action = "detail"
-)]
 /// 查询对账差异详情（含处理记录时间线）。
 ///
 /// # 参数
@@ -293,13 +216,6 @@ pub async fn difference_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "登记对账差异",
-    resource = "reconciliation_difference",
-    action = "create"
-)]
 /// 登记对账差异（正式差异事实，创建后不可修改；重复登记返回 409）。
 ///
 /// # 参数
@@ -319,13 +235,6 @@ pub async fn difference_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "提交无正式任务的对账差异决定",
-    resource = "reconciliation_difference",
-    action = "decide"
-)]
 /// 对未关联正式任务的差异提交 decision-only 命令。
 pub async fn difference_decision(
     State(state): State<AppState>,

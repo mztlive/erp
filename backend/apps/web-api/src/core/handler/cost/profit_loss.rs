@@ -23,24 +23,10 @@ async fn access(state: &AppState, subject: &RbacSubject) -> std::result::Result<
     Ok(ProfitLossAccess { can_drill_cost })
 }
 /// 期间口径元数据不包含经营金额，路由仍要求成本查询权限。
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "查询成本事实列表",
-    resource = "cost_entry",
-    action = "list"
-)]
 pub async fn period_basis() -> Result<PeriodBasisConfig> {
     Ok(ApiResponse::ok_with_data(ActualProfitLossReadModel::period_basis()))
 }
 /// 返回当前权限下的真实经营分析视图。
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "查询成本事实列表",
-    resource = "cost_entry",
-    action = "list"
-)]
 pub async fn view(
     State(state): State<AppState>,
     Extension(subject): Extension<RbacSubject>,
@@ -53,13 +39,6 @@ pub async fn view(
     ))
 }
 /// 全量筛选导出与查询采用相同授权、金额规则和来源快照。
-#[permission_macros::permission(
-    group = "实际经营盈亏",
-    group_desc = "成本事实与成本分配管理（W16）",
-    desc = "查询成本事实列表",
-    resource = "cost_entry",
-    action = "list"
-)]
 pub async fn export(
     State(state): State<AppState>,
     Extension(subject): Extension<RbacSubject>,
@@ -72,32 +51,7 @@ pub async fn export(
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn all_routes_require_existing_cost_read_permission() {
-        assert_eq!(view_permission_key(), super::super::cost_entry_list_permission_key());
-        assert_eq!(period_basis_permission_key(), view_permission_key());
-        assert_eq!(export_permission_key(), view_permission_key());
-    }
-    #[test]
-    fn client_cannot_submit_authorized_customer_scope_or_export_amounts() {
-        let json = serde_json::json!({"from":"2026-09-01","to":"2026-09-30","period_basis":"sales_order_effective_date","authorized_customer_ids":["other-customer"]});
-        assert!(serde_json::from_value::<ProfitLossQuery>(json).is_err());
-        let json = serde_json::json!({"from":"2026-09-01","to":"2026-09-30","period_basis":"sales_order_effective_date","row_count":999,"formula_version":"override"});
-        assert!(serde_json::from_value::<ProfitLossQuery>(json).is_err());
-    }
-}
-
 /// 独立历史候选；只接受期间与客户上下文，不接受报表结果条件。
-#[permission_macros::permission(
-    group = "历史归属目录",
-    group_desc = "冻结归属查询",
-    desc = "查询历史归属候选",
-    resource = "cost_entry",
-    action = "list"
-)]
 pub async fn history_directory(
     State(state): State<AppState>,
     Extension(subject): Extension<RbacSubject>,
@@ -108,4 +62,32 @@ pub async fn history_directory(
     Ok(ApiResponse::ok_with_data(
         ActualProfitLossReadModel::new(state.db(), state.rbac()).history_directory(query, &actor).await?,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::permissions;
+    #[test]
+    fn all_routes_require_existing_cost_read_permission() {
+        assert_eq!(
+            permissions::cost::PROFIT_LOSS_VIEW.permission(),
+            permissions::cost::ENTRY_LIST.permission()
+        );
+        assert_eq!(
+            permissions::cost::PROFIT_LOSS_PERIOD_BASIS.permission(),
+            permissions::cost::PROFIT_LOSS_VIEW.permission()
+        );
+        assert_eq!(
+            permissions::cost::PROFIT_LOSS_EXPORT.permission(),
+            permissions::cost::PROFIT_LOSS_VIEW.permission()
+        );
+    }
+    #[test]
+    fn client_cannot_submit_authorized_customer_scope_or_export_amounts() {
+        let json = serde_json::json!({"from":"2026-09-01","to":"2026-09-30","period_basis":"sales_order_effective_date","authorized_customer_ids":["other-customer"]});
+        assert!(serde_json::from_value::<ProfitLossQuery>(json).is_err());
+        let json = serde_json::json!({"from":"2026-09-01","to":"2026-09-30","period_basis":"sales_order_effective_date","row_count":999,"formula_version":"override"});
+        assert!(serde_json::from_value::<ProfitLossQuery>(json).is_err());
+    }
 }

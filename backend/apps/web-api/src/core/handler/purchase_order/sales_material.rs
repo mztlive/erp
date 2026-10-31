@@ -15,13 +15,6 @@ use crate::app_state::AppState;
 use crate::core::errors::Error;
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "下载采购关联销售合同及凭证",
-    resource = "purchase_order",
-    action = "detail"
-)]
 /// 下载本采购内容精确关联销售版本的合同或建单凭证。
 ///
 /// # 参数

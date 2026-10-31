@@ -14,13 +14,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询发货单列表",
-    resource = "delivery",
-    action = "list"
-)]
 /// 查询发货单列表（W09 发货视图）。
 ///
 /// # 参数
@@ -41,13 +34,6 @@ pub async fn delivery_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询发货单详情",
-    resource = "delivery",
-    action = "detail"
-)]
 /// 查询发货单详情（表头 + 行）。
 ///
 /// # 参数
@@ -68,13 +54,6 @@ pub async fn delivery_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "创建发货单",
-    resource = "delivery",
-    action = "create"
-)]
 /// 创建发货单（草稿；仓发/直发表头与行归属由实体校验）。
 ///
 /// 发货为 `NO_APPROVAL`：HTTP 创建路径不启动审批、不接受定义 ID。
@@ -99,13 +78,6 @@ pub async fn delivery_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "更新发货单",
-    resource = "delivery",
-    action = "update"
-)]
 /// 更新发货单（仅草稿；乐观锁冲突返回 409）。
 ///
 /// # 参数
@@ -130,13 +102,6 @@ pub async fn delivery_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "过账发货",
-    resource = "delivery",
-    action = "post"
-)]
 /// 过账发货（仓发：预占消耗 + 出库流水 + 余额同事务，§8.2 第 2 条；直发：只做门槛校验）。
 ///
 /// # 参数

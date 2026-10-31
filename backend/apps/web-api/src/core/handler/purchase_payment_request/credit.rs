@@ -11,13 +11,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "在批准采购付款申请内登记付款",
-    resource = "purchase_payment_request",
-    action = "pay"
-)]
 /// 查询本付款任务可用留抵。
 /// # 参数
 /// 应用、当前出纳及付款申请身份。
@@ -32,13 +25,6 @@ pub async fn list(
 ) -> Result<Vec<SupplierCredit>> {
     Ok(ApiResponse::ok_with_data(process(&state).supplier_credits(&id, &actor).await?))
 }
-#[permission_macros::permission(
-    group = "采购付款申请",
-    group_desc = "采购申请、财务审核和批准额度内付款",
-    desc = "在批准采购付款申请内登记付款",
-    resource = "purchase_payment_request",
-    action = "pay"
-)]
 /// 按批准额度抵扣留抵。
 /// # 参数
 /// 应用、当前出纳、申请身份及抵扣请求。

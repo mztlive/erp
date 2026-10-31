@@ -28,13 +28,6 @@ use crate::core::response::ApiResponse;
 ///
 /// # 关键业务约束
 /// 不接收合同、客户或其他业务列表条件。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "查询销售人员",
-    resource = "sales_person",
-    action = "list"
-)]
 pub async fn list_salespeople(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -55,13 +48,6 @@ pub async fn list_salespeople(
 ///
 /// # 错误
 /// 参数、权限或读取失败时返回统一错误。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "回显已选销售人员",
-    resource = "sales_person",
-    action = "list"
-)]
 pub async fn list_selected_salespeople(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -82,13 +68,6 @@ pub async fn list_selected_salespeople(
 ///
 /// # 错误
 /// 参数、权限或读取失败时返回统一错误。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "查询采购负责人",
-    resource = "procurement_person",
-    action = "list"
-)]
 pub async fn list_procurement_people(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -109,13 +88,6 @@ pub async fn list_procurement_people(
 ///
 /// # 错误
 /// 参数、权限或读取失败时返回统一错误。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "回显已选采购负责人",
-    resource = "procurement_person",
-    action = "list"
-)]
 pub async fn list_selected_procurement_people(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -136,13 +108,6 @@ pub async fn list_selected_procurement_people(
 ///
 /// # 错误
 /// 参数、权限或读取失败时返回统一错误。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "查询后台人员",
-    resource = "business_person",
-    action = "list"
-)]
 pub async fn list_business_people(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -163,13 +128,6 @@ pub async fn list_business_people(
 ///
 /// # 错误
 /// 参数、权限或读取失败时返回统一错误。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "回显已选后台人员",
-    resource = "business_person",
-    action = "list"
-)]
 pub async fn list_selected_business_people(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -203,13 +161,6 @@ fn service(state: &AppState) -> PersonDirectoryService {
 }
 
 /// 在目标账号管理范围内读取查询资格及乐观锁版本。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "读取人员查询资格",
-    resource = "person_query_qualification",
-    action = "manage"
-)]
 pub async fn get_qualification(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -220,13 +171,6 @@ pub async fn get_qualification(
 }
 
 /// 显式授予、终止或恢复查询资格，不变更账号角色或命令权限。
-#[permission_macros::permission(
-    group = "人员目录",
-    group_desc = "独立人员查询与资格维护",
-    desc = "维护人员查询资格",
-    resource = "person_query_qualification",
-    action = "manage"
-)]
 pub async fn change_qualification(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

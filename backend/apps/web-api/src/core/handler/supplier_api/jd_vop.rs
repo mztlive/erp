@@ -152,13 +152,6 @@ async fn enforce_admission(State(limiter): State<RateLimiter>, request: Request,
     next.run(request).await
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "查询京东账号授权状态",
-    resource = "supplier_api_connection",
-    action = "detail"
-)]
 /// 查询指定京东连接及可选原授权操作的脱敏状态。
 /// # 参数
 /// 应用状态、当前认证人员、连接ID与可选operation_id。
@@ -178,13 +171,6 @@ pub async fn status(
     Ok(ApiResponse::ok_with_data(status))
 }
 
-#[permission_macros::permission(
-    group = "API 供应商连接",
-    group_desc = "供应商 API 连接与能力治理（W20）",
-    desc = "授权京东企业采购账号",
-    resource = "supplier_api_connection",
-    action = "authorize"
-)]
 /// 受理一次京东账号授权，后台保存令牌，响应只交付脱敏pending或原操作状态。
 /// # 参数
 /// 当前连接、已认证操作人及仅本次使用的账号密码、私钥和回调地址。

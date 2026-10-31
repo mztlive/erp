@@ -14,13 +14,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询采购入库单列表",
-    resource = "purchase_receipt",
-    action = "list"
-)]
 /// 查询采购入库单列表（W09 入库视图）。
 ///
 /// # 参数
@@ -41,13 +34,6 @@ pub async fn purchase_receipt_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "查询采购入库单详情",
-    resource = "purchase_receipt",
-    action = "detail"
-)]
 /// 查询采购入库单详情（表头 + 行）。
 ///
 /// # 参数
@@ -68,13 +54,6 @@ pub async fn purchase_receipt_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "创建采购入库单",
-    resource = "purchase_receipt",
-    action = "create"
-)]
 /// 创建采购入库单（草稿）。
 ///
 /// # 参数
@@ -97,13 +76,6 @@ pub async fn purchase_receipt_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "更新采购入库单",
-    resource = "purchase_receipt",
-    action = "update"
-)]
 /// 更新采购入库单（仅草稿；乐观锁冲突返回 409）。
 ///
 /// # 参数
@@ -128,13 +100,6 @@ pub async fn purchase_receipt_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "履约",
-    group_desc = "采购入库、发货、交付、服务与客户验收管理",
-    desc = "过账采购入库",
-    resource = "purchase_receipt",
-    action = "post"
-)]
 /// 过账采购入库（入库行 + 库存流水 + 余额 + 销售预占同事务，§8.2 第 1 条）。
 ///
 /// # 参数

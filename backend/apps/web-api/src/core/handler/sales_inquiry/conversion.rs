@@ -22,13 +22,6 @@ pub struct InquirySalesBasisParams {
     pub round: u32,
 }
 
-#[permission_macros::permission(
-    group = "成本费用",
-    group_desc = "成本事实与费用登记",
-    desc = "读取财务登记询价费用候选",
-    resource = "cost_entry",
-    action = "create"
-)]
 /// 在既有销售费用登记范围内读取 ERP 外费用来源。
 /// # 参数
 /// `state`、`actor` 为当前应用及财务账号，`id` 为生效来源销售。
@@ -46,13 +39,6 @@ pub async fn financial_inquiry_candidates(
     ))
 }
 
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "读取销售来源询价费用候选",
-    resource = "purchase_order",
-    action = "create"
-)]
 /// 在现有费用采购来源范围内读取明确分摊的询价费用。
 /// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为生效来源销售单。
@@ -70,13 +56,6 @@ pub async fn expense_inquiry_candidates(
     ))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "读取询价转销售依据",
-    resource = "sales_inquiry",
-    action = "convert_sales"
-)]
 /// 取得当前已接受且仍有效的转销售依据，不自动使用供给价作为成交价。
 /// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价，`round` 为已接受反馈轮次。
@@ -97,13 +76,6 @@ pub async fn sales_basis(
     ))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "查询询价费用归属销售",
-    resource = "sales_inquiry",
-    action = "detail"
-)]
 /// 读取本询价已有来源关联的销售摘要供费用归属。
 /// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价。
@@ -119,13 +91,6 @@ pub async fn fee_sales(
     Ok(ApiResponse::ok_with_data(state.sales_inquiry_process().fee_sales(&id, &actor).await?))
 }
 
-#[permission_macros::permission(
-    group = "销售询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "分配询价费用归属",
-    resource = "sales_inquiry",
-    action = "convert_sales"
-)]
 /// 按金额明确费用在来源销售间的分配，跨反馈版本累计核算。
 /// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价，`request` 为金额归属及原命令身份。

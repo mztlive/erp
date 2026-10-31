@@ -31,13 +31,6 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询公司商品池",
-    resource = "sellable_sku",
-    action = "list"
-)]
 /// 查询符合销售资格的公司 SKU 只读投影。
 ///
 /// # 参数
@@ -54,13 +47,6 @@ pub async fn sellable_sku_list(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品列表",
-    resource = "product",
-    action = "list"
-)]
 /// 查询商品（SPU）列表。
 ///
 /// # 参数
@@ -79,13 +65,6 @@ pub async fn product_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建商品",
-    resource = "product",
-    action = "create"
-)]
 /// 创建商品（SPU + 首个商品修订 + 媒体 + 全部 SKU 行，跨集合事务）。
 ///
 /// # 参数
@@ -105,13 +84,6 @@ pub async fn product_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "一次创建商品及媒体",
-    resource = "product",
-    action = "create"
-)]
 /// 一次接收商品创建命令与新增媒体，并原子登记文件元数据和商品聚合。
 ///
 /// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
@@ -139,13 +111,6 @@ pub async fn product_create_with_assets(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "规格编辑商品",
-    resource = "product",
-    action = "update"
-)]
 /// 规格编辑商品（按规范化签名分类保留/新增/重新启用/移除，跨集合事务）。
 ///
 /// # 参数
@@ -167,13 +132,6 @@ pub async fn product_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "一次修订商品及媒体",
-    resource = "product",
-    action = "update"
-)]
 /// 一次接收商品修订命令与新增媒体，并原子登记文件元数据和商品新修订。
 ///
 /// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
@@ -203,13 +161,6 @@ pub async fn product_update_with_assets(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "停用商品",
-    resource = "product",
-    action = "update"
-)]
 /// 停用商品；当前修订和媒体由后端读取并在跨集合事务内复制。
 ///
 /// # 参数
@@ -231,13 +182,6 @@ pub async fn product_disable(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "整组上下架商品SKU",
-    resource = "product",
-    action = "update"
-)]
 /// 一次切换商品下全部当前启用 SKU 的上架状态。
 ///
 /// # 参数
@@ -258,13 +202,6 @@ pub async fn product_listing_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品修订列表",
-    resource = "product_revision",
-    action = "list"
-)]
 /// 查询商品修订列表。
 ///
 /// # 参数
@@ -282,13 +219,6 @@ pub async fn product_revision_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询SKU列表",
-    resource = "sku",
-    action = "list"
-)]
 /// 查询 SKU 列表。
 ///
 /// # 参数
@@ -306,13 +236,6 @@ pub async fn sku_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "上下架单个SKU",
-    resource = "product",
-    action = "update"
-)]
 /// 切换单个 SKU 的上架状态。
 ///
 /// # 参数
@@ -333,13 +256,6 @@ pub async fn sku_listing_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询SKU修订列表",
-    resource = "sku_revision",
-    action = "list"
-)]
 /// 查询 SKU 修订列表。
 ///
 /// # 参数
@@ -357,13 +273,6 @@ pub async fn sku_revision_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询卡券类目列表",
-    resource = "voucher_category_profile",
-    action = "list"
-)]
 /// 查询卡券类目扩展修订列表。
 ///
 /// # 参数
@@ -381,13 +290,6 @@ pub async fn voucher_category_profile_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "创建卡券类目",
-    resource = "voucher_category_profile",
-    action = "create"
-)]
 /// 原子创建卡券类目（商品 + 首个修订 + 唯一 SKU + [可选内联新建分类] + 卡券类目
 /// 扩展修订，跨集合事务）。
 ///
@@ -409,13 +311,6 @@ pub async fn voucher_category_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "更新卡券类目",
-    resource = "voucher_category_profile",
-    action = "update"
-)]
 /// 更新卡券类目名称与描述（按 SKU 稳定身份定位，追加商品/SKU/扩展修订）。
 ///
 /// # 参数
@@ -444,13 +339,6 @@ pub struct ProductDetailSkuRevisionQuery {
     pub sku_id: Option<String>,
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品详情",
-    resource = "product",
-    action = "detail"
-)]
 /// 按稳定 ID 查询单个商品，与列表共用同一聚合计数口径。
 ///
 /// # 参数
@@ -469,13 +357,6 @@ pub async fn product_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "交接商品维护人",
-    resource = "product",
-    action = "update"
-)]
 /// 显式交接商品维护人与可选业务组织。
 ///
 /// # 参数
@@ -496,13 +377,6 @@ pub async fn product_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品交接候选",
-    resource = "product",
-    action = "update"
-)]
 /// 查询合格有效的商品维护人交接候选。
 ///
 /// # 参数
@@ -521,13 +395,6 @@ pub async fn product_handover_candidates(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品修订详情",
-    resource = "product",
-    action = "detail"
-)]
 /// 查询指定商品的全部修订（强制路径商品过滤）。
 ///
 /// # 参数
@@ -547,13 +414,6 @@ pub async fn product_detail_revisions(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品SKU详情",
-    resource = "product",
-    action = "detail"
-)]
 /// 查询指定商品的全部 SKU（强制路径商品过滤）。
 ///
 /// # 参数
@@ -573,13 +433,6 @@ pub async fn product_detail_skus(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-#[permission_macros::permission(
-    group = "商品与仓库",
-    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
-    desc = "查询商品SKU修订详情",
-    resource = "product",
-    action = "detail"
-)]
 /// 查询指定商品下的 SKU 修订（可选过滤到单个 SKU）。
 ///
 /// # 参数

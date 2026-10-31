@@ -63,6 +63,18 @@ class CutoverTests(unittest.TestCase):
         self.assertEqual(result.errors, [])
         self.assertEqual(bpm.dependency_errors(self.fixture.metadata), [])
 
+    def test_final_checks_do_not_require_retired_phase_plan(self):
+        plan = self.root / "docs/superpowers/plans/domain-crate-migration/plan-manifest.json"
+        plan.unlink()
+        self.assertEqual(domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors, [])
+        self.fixture.package("erp-read-models")["dependencies"].append({"name": "services", "kind": "dev"})
+        errors = domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors
+        self.assertTrue(any("最终旧依赖" in error for error in errors))
+        self.fixture.package("erp-read-models")["dependencies"].pop()
+        (self.root / "services").mkdir()
+        errors = domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors
+        self.assertTrue(any("最终仍有旧目录" in error for error in errors))
+
     def test_normal_entry_automatically_enforces_final_rules_when_old_members_are_absent(self):
         self.assertEqual(domain.check_workspace(self.root, self.fixture.metadata).errors, [])
         self.fixture.package("erp-read-models")["dependencies"].append({"name": "services", "kind": "dev"})

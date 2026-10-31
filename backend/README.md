@@ -20,7 +20,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 - Other `crates/erp-*` – Business domains with independent normal/build/dev dependency boundaries.
 - Legacy `database/tests` and `services/tests` – Historical archives only; preserve bytes and exclude them from Cargo targets.
 - `config/` – Config loader with CLI args and optional Nacos hot-reload.
-- `crates/` – Shared libraries (`id-generator`, `storage`, `entity-*`, `permission-macros`).
+- `crates/` – Shared libraries (`id-generator`, `storage`, `entity-*`).
 - `config.toml.example` – Minimal local configuration template.
 
 ## API Surface (current)

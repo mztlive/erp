@@ -10,13 +10,6 @@ use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "查看数据范围",
-    resource = "data_scope",
-    action = "list"
-)]
 /// 读取人员配置及有效操作。
 /// # 参数
 /// 人员、当前身份及应用依赖。
@@ -34,13 +27,6 @@ pub async fn list(
     ))
 }
 
-#[permission_macros::permission(
-    group = "权限与审计",
-    group_desc = "权限目录、数据范围、用户授权与审计查询",
-    desc = "创建数据范围",
-    resource = "data_scope",
-    action = "create"
-)]
 /// 保存所选操作的完整附加授权；旧表达式须显式确认转换。
 /// # 参数
 /// 人员、完整选择、预期版本及当前身份。

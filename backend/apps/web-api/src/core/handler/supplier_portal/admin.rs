@@ -74,13 +74,6 @@ impl From<AccountUpdate> for PortalAccountUpdate {
 /// 不含凭证的账号页。
 /// # 错误
 /// 无供应商范围或查询非法时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "查询供应商门户账号",
-    resource = "supplier_portal_account",
-    action = "list"
-)]
 pub async fn accounts(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -97,13 +90,6 @@ pub async fn accounts(
 /// 新账号的安全视图。
 /// # 错误
 /// 范围、身份、输入或账号唯一性不符时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "开通供应商门户账号",
-    resource = "supplier_portal_account",
-    action = "create"
-)]
 pub async fn create_account(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -123,13 +109,6 @@ pub async fn create_account(
 /// 生效后的安全账号状态。
 /// # 错误
 /// 范围或版本失效时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "管理供应商门户账号",
-    resource = "supplier_portal_account",
-    action = "update"
-)]
 pub async fn update_account(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -149,13 +128,6 @@ pub async fn update_account(
 /// SKU必要展示和开放版本。
 /// # 错误
 /// 无范围或读取失败时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "查询供应商定向报价目录",
-    resource = "supplier_portal_catalog",
-    action = "list"
-)]
 pub async fn grants(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -171,13 +143,6 @@ pub async fn grants(
 /// 当前开放事实与版本。
 /// # 错误
 /// 对象范围、目标状态或版本不符时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "维护供应商定向报价目录",
-    resource = "supplier_portal_catalog",
-    action = "update"
-)]
 pub async fn update_grant(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -193,13 +158,6 @@ pub async fn update_grant(
 /// 仅有权读取的申请及对应总数。
 /// # 错误
 /// 范围、身份或分页不符时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "查询供应商门户申请",
-    resource = "supplier_portal_request",
-    action = "list"
-)]
 pub async fn applications(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -215,13 +173,6 @@ pub async fn applications(
 /// 受对象资格保护的内部详情。
 /// # 错误
 /// 未知或越权统一404。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "查看供应商门户申请",
-    resource = "supplier_portal_request",
-    action = "detail"
-)]
 pub async fn application(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -245,13 +196,6 @@ pub async fn application(
 /// 实际正式结果或退回后的内部详情。
 /// # 错误
 /// 任一版本、范围、材料或处理资格失效时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "确认供应商门户申请",
-    resource = "supplier_portal_request",
-    action = "review"
-)]
 pub async fn review(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -269,13 +213,6 @@ pub async fn review(
 /// 有效字典最小投影，不授予字典维护权限。
 /// # 错误
 /// 类型或读取无效时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "查询供应商新品审核字典",
-    resource = "supplier_portal_request",
-    action = "review"
-)]
 pub async fn dictionaries(
     State(state): State<AppState>,
     Path(kind): Path<DictionaryKind>,
@@ -300,13 +237,6 @@ pub struct DuplicateParams {
 /// 安全可读候选及精确冻结引用。
 /// # 错误
 /// 无申请或商品匹配资格时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "匹配供应商新品已有商品",
-    resource = "supplier_portal_request",
-    action = "review"
-)]
 pub async fn duplicates(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -327,13 +257,6 @@ pub async fn duplicates(
 /// 当前采购责任人及仍开放的真实履约任务，不返回财务字段。
 /// # 错误
 /// 来源、对象范围、当前任务资格或分页无效时拒绝。
-#[permission_macros::permission(
-    group = "供应商门户管理",
-    group_desc = "管理外部账号、定向报价与专项申请",
-    desc = "核对供给未完成履约影响",
-    resource = "supplier_portal_request",
-    action = "detail"
-)]
 pub async fn impacts(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
