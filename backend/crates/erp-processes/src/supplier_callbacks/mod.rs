@@ -32,14 +32,18 @@ pub async fn receive(
     connection_id: &str,
     request: &CallbackRequest<'_>,
 ) -> Result<CallbackReply> {
-    let connection = SupplierApiService::new(db.clone())
-        .load_connection(connection_id, &mut NoTransaction).await?;
-    let connector = registry.callback_connector(&connection, kind)
+    let connection =
+        SupplierApiService::new(db.clone()).load_connection(connection_id, &mut NoTransaction).await?;
+    let connector = registry
+        .callback_connector(&connection, kind)
         .map_err(|failure| Error::Unauthenticated(failure.summary))?;
-    let callbacks = connector.callbacks()
-        .ok_or_else(|| Error::ValidationError("供应商未提供回调能力".into()))?;
-    let scope = format!("{}\0{}", connection.endpoint_reference,
-        connection.credential_reference.as_deref().unwrap_or_default());
+    let callbacks =
+        connector.callbacks().ok_or_else(|| Error::ValidationError("供应商未提供回调能力".into()))?;
+    let scope = format!(
+        "{}\0{}",
+        connection.endpoint_reference,
+        connection.credential_reference.as_deref().unwrap_or_default()
+    );
     let (receipt, reply) = intake::prepare(callbacks, connector.connection_id(), &scope, codec, request)?;
     acknowledge_after_persistence(reply, persist_receipt(db, codec, &receipt)).await
 }
@@ -61,7 +65,9 @@ async fn persist_receipt(
     match repository.create(receipt, &mut NoTransaction).await {
         Ok(()) => Ok(()),
         Err(PersistenceError::DuplicateKey(_)) => {
-            let existing = repository.find_by_id(&receipt.base.id, &mut NoTransaction).await?
+            let existing = repository
+                .find_by_id(&receipt.base.id, &mut NoTransaction)
+                .await?
                 .ok_or_else(|| Error::ConflictError("推送接收去重证据无法核实".into()))?;
             intake::verify_replay(codec, &existing, receipt)
         },

@@ -355,6 +355,7 @@ mod tests {
                 writer: None,
                 profile: Some(Arc::new(execution_profile())),
                 evidence_codec: Some(codec.clone()),
+                message_runtime: None,
             },
             transport,
             codec,

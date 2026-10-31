@@ -22,47 +22,70 @@ pub(super) fn prepare(
     let verified = callbacks.verify(request).map_err(|failure| {
         if failure.class == SupplierFailureClass::AuthSignature {
             Error::Unauthenticated(failure.summary)
-        } else { Error::ValidationError(failure.summary) }
+        } else {
+            Error::ValidationError(failure.summary)
+        }
     })?;
     validate(&verified)?;
     let hints = verified.notices.iter().map(hint).collect::<Result<Vec<_>>>()?;
     let route = if hints.iter().all(|hint| matches!(hint.topic.as_str(), "order" | "refund")) {
         "order"
-    } else { "catalog" };
+    } else {
+        "catalog"
+    };
     let event = verified.notices[0].source_event_id.clone();
-    let fingerprint = digest(codec, &[request.method.as_bytes(), request.path_and_query.as_bytes(), request.body]);
+    let fingerprint =
+        digest(codec, &[request.method.as_bytes(), request.path_and_query.as_bytes(), request.body]);
     let id = match &event {
-        Some(event) => format!("spc-event-{}", digest(codec, &[connection.as_ref().as_bytes(), event.as_bytes()])),
+        Some(event) => {
+            format!("spc-event-{}", digest(codec, &[connection.as_ref().as_bytes(), event.as_bytes()]))
+        },
         None => callbacks.reception_id(request).unwrap_or_else(|| {
-            format!("spc-{}", digest(codec, &[connection.as_ref().as_bytes(), scope.as_bytes(), fingerprint.as_bytes()]))
+            format!(
+                "spc-{}",
+                digest(codec, &[connection.as_ref().as_bytes(), scope.as_bytes(), fingerprint.as_bytes()])
+            )
         }),
     };
-    let plaintext = std::str::from_utf8(request.body)
-        .map_err(|_| Error::ValidationError("推送正文不是 UTF-8".into()))?;
-    let mut receipt = SupplierCallbackReceipt::received(id, connection.clone(), request.received_at,
-        route.into(), codec.encrypt(plaintext)?, hints)?;
+    let plaintext =
+        std::str::from_utf8(request.body).map_err(|_| Error::ValidationError("推送正文不是 UTF-8".into()))?;
+    let mut receipt = SupplierCallbackReceipt::received(
+        id,
+        connection.clone(),
+        request.received_at,
+        route.into(),
+        codec.encrypt(plaintext)?,
+        hints,
+    )?;
     receipt.source_event_id = event;
     receipt.integrity = match verified.integrity {
         CallbackIntegrity::EnvelopeOnly => "envelope_only",
         CallbackIntegrity::BodyAuthenticated => "body_authenticated",
-    }.into();
+    }
+    .into();
     receipt.content_fingerprint = Some(fingerprint);
-    if route == "catalog" { receipt.ensure_catalog()?; }
+    if route == "catalog" {
+        receipt.ensure_catalog()?;
+    }
     Ok((receipt, verified.durable_ack))
 }
 
 fn validate(verified: &VerifiedCallback) -> Result<()> {
-    let first = verified.notices.first()
-        .ok_or_else(|| Error::ValidationError("供应商回调缺少刷新意图".into()))?;
+    let first =
+        verified.notices.first().ok_or_else(|| Error::ValidationError("供应商回调缺少刷新意图".into()))?;
     if verified.notices.len() > 1000
         || !(200..300).contains(&verified.durable_ack.status)
         || verified.durable_ack.content_type.is_empty()
         || !verified.durable_ack.content_type.bytes().all(|b| b.is_ascii_graphic() || b == b' ')
         || first.source_event_id.as_ref().is_some_and(|id| id.trim().is_empty() || id.len() > 256)
-        || verified.notices.iter().any(|notice| notice.source_event_id != first.source_event_id
-            || notice.observation.is_some())
+        || verified
+            .notices
+            .iter()
+            .any(|notice| notice.source_event_id != first.source_event_id || notice.observation.is_some())
     {
-        return Err(Error::ValidationError("回调身份、应答或消费模式无效；当前接收器只支持可补查通知".into()));
+        return Err(Error::ValidationError(
+            "回调身份、应答或消费模式无效；当前接收器只支持可补查通知".into(),
+        ));
     }
     Ok(())
 }
@@ -78,7 +101,9 @@ pub(super) fn verify_replay(
             Some(fingerprint) => incoming.content_fingerprint.as_ref() == Some(fingerprint),
             None => codec.decrypt(&existing.body_encrypted)? == codec.decrypt(&incoming.body_encrypted)?,
         };
-    if !same { return Err(Error::ConflictError("同一回调身份的连接或报文不一致，原接收证据保持不变".into())); }
+    if !same {
+        return Err(Error::ConflictError("同一回调身份的连接或报文不一致，原接收证据保持不变".into()));
+    }
     Ok(())
 }
 
@@ -94,9 +119,12 @@ fn digest(codec: &SensitiveDataCodec, parts: &[&[u8]]) -> String {
 
 fn hint(notice: &ChangeNotice) -> Result<SupplierRefreshHint> {
     let topic = match notice.topic {
-        ChangeTopic::Product => "product", ChangeTopic::Availability => "availability",
-        ChangeTopic::Price => "price", ChangeTopic::Region => "region",
-        ChangeTopic::Order => "order", ChangeTopic::Refund => "refund",
+        ChangeTopic::Product => "product",
+        ChangeTopic::Availability => "availability",
+        ChangeTopic::Price => "price",
+        ChangeTopic::Region => "region",
+        ChangeTopic::Order => "order",
+        ChangeTopic::Refund => "refund",
         ChangeTopic::Address => return Err(Error::ValidationError("回调暂不支持地址字典消费".into())),
     };
     let (target_kind, object_id, product_id) = match &notice.target {
@@ -110,6 +138,11 @@ fn hint(notice: &ChangeNotice) -> Result<SupplierRefreshHint> {
     if matches!(topic, "order" | "refund") != matches!(target_kind, "merchant_order" | "external_order") {
         return Err(Error::ValidationError("回调主题与目标不一致".into()));
     }
-    Ok(SupplierRefreshHint { topic: topic.into(), target_kind: target_kind.into(), object_id,
-        product_id, funds_transaction_id: None })
+    Ok(SupplierRefreshHint {
+        topic: topic.into(),
+        target_kind: target_kind.into(),
+        object_id,
+        product_id,
+        funds_transaction_id: None,
+    })
 }

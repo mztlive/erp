@@ -3,17 +3,18 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use config::{Config, JdVopConfig};
+use erp_party::SensitiveDataCodec;
 use erp_processes::connectors::dangaoshushu::DangaoshushuRuntime;
 use erp_processes::connectors::jd_vop::JdVopRuntime;
 use erp_processes::connectors::jd_vop::credential::MongoJdVopTokenProvider;
 use erp_processes::connectors::jd_vop::http_transport::JdVopHttpTransport;
 use erp_processes::connectors::jd_vop::token::JdVopTokenProvider;
 use erp_processes::connectors::registry::SupplierConnectorRegistry;
-use erp_processes::supplier_callbacks;
-use erp_supply::ports::connector::callback::{CallbackReply, CallbackRequest};
 use erp_processes::supplier_catalog_callbacks::SupplierCatalogCallbackProcess;
+use erp_processes::{Error as ProcessError, Result as ProcessResult, supplier_callbacks};
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::SupplierConnectorType;
+use erp_supply::ports::connector::callback::{CallbackReply, CallbackRequest};
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
@@ -75,11 +76,19 @@ impl AppState {
     /// 已持久化后的协议应答。
     /// # 错误
     /// 未装配、验签、绑定或持久化失败时拒绝。
-    pub async fn receive_supplier_callback(&self, kind: SupplierConnectorType, connection: &str,
-        request: &CallbackRequest<'_>) -> erp_processes::Result<CallbackReply> {
-        let registry = self.external_connectors.order_connectors.as_ref()
-            .ok_or_else(|| erp_processes::Error::NotFound("供应商回调未配置".into()))?;
-        supplier_callbacks::receive(&self.db(), registry, &self.sensitive_data(), kind, connection, request).await
+    pub async fn receive_supplier_callback(
+        &self,
+        kind: SupplierConnectorType,
+        connection: &str,
+        request: &CallbackRequest<'_>,
+    ) -> ProcessResult<CallbackReply> {
+        let registry = self
+            .external_connectors
+            .order_connectors
+            .as_ref()
+            .ok_or_else(|| ProcessError::NotFound("供应商回调未配置".into()))?;
+        supplier_callbacks::receive(&self.db(), registry, &self.sensitive_data(), kind, connection, request)
+            .await
     }
 
     /// 返回商品回调的补查及来源应用消费者。
@@ -120,11 +129,11 @@ impl ExternalConnectorPorts {
         Self::with_jd_tokens(config, None)
     }
 
-    /// 在应用数据库就绪后装配京东只读认证及已有供应商协议。
+    /// 在应用数据库就绪后装配京东认证、已核实执行资料及已有供应商协议。
     /// # 参数
     /// `config` 为启动快照，`db` 为应用当前数据库；不单独建立凭据数据库连接。
     /// # 返回
-    /// 京东目录及只读认证已装配；不注入订单、资金或发票执行资料。
+    /// 京东缺省只读；有受控消息或执行资料时装配对应能力。
     /// # 错误
     /// 凭据、加密密钥、调用渠道或 HTTP 构造无效时返回脱敏错误。
     pub fn from_database(config: &Config, db: Database) -> ConnectorResult<Self> {
@@ -161,7 +170,7 @@ impl ExternalConnectorPorts {
             })?;
             ports.jd_vop_credentials =
                 Some(Arc::new(JdVopCredentialMaintenance::new(settings, tokens.clone())));
-            let runtime = Arc::new(jd_read_runtime(settings, tokens)?);
+            let runtime = Arc::new(jd_runtime(config, settings, tokens)?);
             registry.register(SupplierConnectorType::JdVop, runtime).map_err(registry_error)?;
             // Configured 仅表达已注入读取实现；账号授权仍由真实只读健康检查核验。
             ports.readiness.supplier_api = ConnectorMode::Configured;
@@ -177,13 +186,19 @@ impl ExternalConnectorPorts {
     }
 }
 
-fn jd_read_runtime(
+fn jd_runtime(
+    config: &Config,
     settings: &JdVopConfig,
     tokens: Arc<dyn JdVopTokenProvider>,
 ) -> ConnectorResult<JdVopRuntime> {
     settings.validate().map_err(|_| unavailable("JD_VOP_CONFIG_INVALID", "京东启动配置不完整"))?;
     let transport = Arc::new(JdVopHttpTransport::new(settings.clone(), tokens)?);
-    JdVopRuntime::with_verified_transport(settings.clone(), transport)
+    JdVopRuntime::from_configured_transport(
+        settings.clone(),
+        transport.clone(),
+        transport,
+        Arc::new(SensitiveDataCodec::from_secret(config.app.secret.as_bytes())),
+    )
 }
 
 fn unavailable(code: &str, summary: &str) -> ConnectorError {

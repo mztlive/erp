@@ -101,6 +101,7 @@ async fn query_offer(
     sku: SupplierSku,
     registry: &SupplierConnectorRegistry,
 ) -> Result<CatalogUpdate> {
+    let hint = receipt.catalog_hint()?.ok_or_else(|| Error::ConflictError("商品回调已完成".into()))?;
     let source =
         context.connector.offers().ok_or_else(|| Error::BusinessLogicError("来源尚不支持商品补查".into()))?;
     let Lookup::Found(snapshot) =
@@ -224,6 +225,19 @@ mod tests {
                 }
             );
             assert_eq!(item.job_id, "receipt");
+        }
+    }
+
+    #[tokio::test]
+    async fn generic_catalog_topics_keep_price_and_availability_validation() {
+        let registry = SupplierConnectorRegistry::default();
+        for (route, field) in [("price", "clearing_price"), ("status", "can_buy")] {
+            let mut receipt = receipt(route);
+            receipt.route_kind = "catalog".into();
+            query(&context(vec![product()]), &receipt, sku(), &registry).await.unwrap();
+            let mut response = product();
+            response["specs"][0][field] = Value::Null;
+            assert!(query(&context(vec![response]), &receipt, sku(), &registry).await.is_err());
         }
     }
 

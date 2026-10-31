@@ -173,6 +173,7 @@ mod tests {
                 writer: None,
                 profile: None,
                 evidence_codec: None,
+                message_runtime: None,
             },
             transport,
         )

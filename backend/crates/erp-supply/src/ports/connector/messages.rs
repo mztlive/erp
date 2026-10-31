@@ -1,6 +1,7 @@
 //! 主动拉取消息只提供刷新线索；不声明回调验签或直接形成订单、库存和资金事实。
 
 use std::num::NonZeroU32;
+use std::time::Duration;
 
 use async_trait::async_trait;
 
@@ -42,6 +43,17 @@ pub enum MessageAcknowledgement {
 /// 每个实例绑定一个账号范围和连接；账号范围不得随请求载荷改变。
 #[async_trait]
 pub trait SupplierMessageSource: Send + Sync {
+    /// 返回账号消息的最短轮询间隔。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 缺省一分钟；Worker 检查节奏不等于供应商请求频率。
+    /// # 错误
+    /// 不返回错误。
+    fn poll_interval(&self) -> Duration {
+        Duration::from_secs(60)
+    }
+
     /// 返回服务端配置绑定的账号命名空间，不包含密钥或令牌。
     /// # 参数
     /// 无。

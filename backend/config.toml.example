@@ -108,6 +108,31 @@ message_poll_interval_seconds = 60
 
 # source_type = 3 # 可选；默认采用官方接口默认值 3，确有接入差异时覆盖
 
+# 可选：按已核实账号资料单独启用消息。类型清单须来自本账号授权，不复制示例值。
+# [jd_vop.messages]
+# evidence_reference = "<账号消息授权依据>"
+# account_scope = "<须与 jd_vop.account_scope 一致>"
+# app_key = "<须与 jd_vop.app_key 一致>"
+# types = [] # 必须填写非空的已核实消息类型
+#
+# 可选：正式订单执行资料；缺省只读，不配置任何伪造的验收依据。
+# [jd_vop.execution]
+# evidence_reference = "<账号执行验收依据>"
+# account_scope = "<须与 jd_vop.account_scope 一致>"
+# app_key = "<须与 jd_vop.app_key 一致>"
+# external_funds_account_ref = "<已核实资金账号；须与连接预存款绑定一致>"
+# confirmation_funds_evidence = "<确认继续使用原订单资金保障的依据>"
+# preflight_validity_seconds = 60 # 1..300，按核实的业务时效设置
+# ordinary_skus = [] # 已核实普通实物 SKU 范围；不得留空或使用通配符
+# [jd_vop.execution.invoice]
+# invoice_type = 23 # 以下均须按合同及财务资料核实，不代表当前账号已验收
+# invoice_put_type = 2
+# invoice_selected_title = 5
+# invoice_content_type = 1
+# invoice_company_name = "<真实采购主体>"
+# invoice_reg_code = "<真实税号>"
+# 专票收件人、资金交易映射及发布步骤见 docs/supplier-api-implementation.md 第 11 节。
+
 # 必填：XXL-JOB 连接配置；任务按 JobHandler 分发，无需配置任务 ID。
 [xxl_job]
 admin_url = "http://127.0.0.1:18080/xxl-job-admin"

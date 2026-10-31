@@ -1,6 +1,9 @@
 //! 官方5871拉取及5787单次删除，未知删除结果不自动重发。
 
+use std::collections::BTreeSet;
 use std::num::NonZeroU32;
+use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use erp_supply::entity::failure::SupplierFailureClass;
@@ -8,12 +11,38 @@ use erp_supply::ports::connector::common::ConnectorResult;
 use erp_supply::ports::connector::messages::{MessageAcknowledgement, PulledMessage, SupplierMessageSource};
 use serde_json::value::RawValue;
 
-use super::transport::{JdVopReadRequest, JdVopWriteRequest};
+use super::transport::{JdVopReadRequest, JdVopWriteRequest, WriteClient};
 use super::wire::{WireId, WireText};
 use super::{JdVopConnector, mapping, protocol_required};
 
+pub(super) struct MessageRuntime {
+    pub writer: Arc<WriteClient>,
+    pub types: BTreeSet<u32>,
+    pub source_type: u32,
+    pub interval: u64,
+}
+
+impl JdVopConnector {
+    pub(super) fn message_settings(&self) -> ConnectorResult<(&BTreeSet<u32>, u32, &WriteClient)> {
+        if let Some(runtime) = &self.message_runtime {
+            return Ok((&runtime.types, runtime.source_type, &runtime.writer));
+        }
+        let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
+        let types = profile
+            .verified_message_types
+            .as_ref()
+            .filter(|types| !types.is_empty())
+            .ok_or_else(protocol_required)?;
+        Ok((types, profile.source_type, self.writer.as_deref().ok_or_else(protocol_required)?))
+    }
+}
+
 #[async_trait]
 impl SupplierMessageSource for JdVopConnector {
+    fn poll_interval(&self) -> Duration {
+        Duration::from_secs(self.message_runtime.as_ref().map_or(60, |runtime| runtime.interval))
+    }
+
     fn account_scope(&self) -> &str {
         &self.account_scope
     }
@@ -23,8 +52,7 @@ impl SupplierMessageSource for JdVopConnector {
     }
 
     async fn pull(&self, limit: NonZeroU32) -> ConnectorResult<Vec<PulledMessage>> {
-        let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
-        let types = profile.verified_message_types.as_ref().ok_or_else(protocol_required)?;
+        let (types, source_type, _) = self.message_settings()?;
         if types.is_empty() || types.len() > 100 || self.account_scope.trim().is_empty() {
             return Err(mapping("京东消息订阅及消费账号尚未完整核验"));
         }
@@ -33,7 +61,7 @@ impl SupplierMessageSource for JdVopConnector {
             .read(JdVopReadRequest::Messages {
                 types: types.iter().copied().collect(),
                 read_type: 2,
-                source_type: profile.source_type,
+                source_type,
             })
             .await?;
         // 官方查询没有条数参数；只接收本地批次上限，其他远端消息继续保留而不删除。
@@ -45,23 +73,17 @@ impl SupplierMessageSource for JdVopConnector {
     }
 
     async fn acknowledge(&self, source_id: &str) -> ConnectorResult<MessageAcknowledgement> {
-        let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
-        if profile.verified_message_types.as_ref().is_none_or(|types| types.is_empty()) {
-            return Err(protocol_required());
-        }
+        let (_, source_type, writer) = self.message_settings()?;
         let id: WireId = serde_json::from_value(serde_json::Value::String(source_id.into()))
             .map_err(|_| mapping("京东来源消息号无效"))?;
-        let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
-        let result: WireText = match writer
-            .send(JdVopWriteRequest::DeleteMessages { ids: vec![id.0], source_type: profile.source_type })
-            .await
-        {
-            Ok(result) => result,
-            Err(failure) if failure.class == SupplierFailureClass::ResultUnknown => {
-                return Ok(MessageAcknowledgement::Unknown);
-            },
-            Err(failure) => return Err(failure),
-        };
+        let result: WireText =
+            match writer.send(JdVopWriteRequest::DeleteMessages { ids: vec![id.0], source_type }).await {
+                Ok(result) => result,
+                Err(failure) if failure.class == SupplierFailureClass::ResultUnknown => {
+                    return Ok(MessageAcknowledgement::Unknown);
+                },
+                Err(failure) => return Err(failure),
+            };
         match result.0.as_str() {
             "true" => Ok(MessageAcknowledgement::Confirmed),
             _ => Ok(MessageAcknowledgement::Unknown),
@@ -166,6 +188,7 @@ mod tests {
                 writer: Some(writer),
                 profile: Some(Arc::new(profile())),
                 evidence_codec: None,
+                message_runtime: None,
             },
             transport,
         )
@@ -173,6 +196,30 @@ mod tests {
 
     fn deleted() -> Vec<u8> {
         br#"{"jingdong_vop_message_deleteClientMsgByIdList_responce":{"vopOrderRpcResult":{"success":"true","resultCode":"0000","result":"true"}}}"#.to_vec()
+    }
+
+    #[tokio::test]
+    async fn independent_message_transport_pulls_and_acknowledges_without_order_capability() {
+        use erp_supply::ports::connector::SupplierConnector;
+        let (mut connector, transport) = connector(Ok(deleted()));
+        connector.message_runtime = Some(Arc::new(MessageRuntime {
+            writer: connector.writer.take().unwrap(),
+            types: BTreeSet::from([1, 2, 14]),
+            source_type: 3,
+            interval: 90,
+        }));
+        connector.profile = None;
+        assert!(connector.orders().is_none());
+        assert!(connector.cancellations().is_none());
+        let source = connector.messages().unwrap();
+        assert_eq!(source.poll_interval(), Duration::from_secs(90));
+        let records = source.pull(NonZeroU32::new(1).unwrap()).await.unwrap();
+        assert_eq!(
+            source.acknowledge(&records[0].source_id).await.unwrap(),
+            MessageAcknowledgement::Confirmed
+        );
+        assert_eq!(transport.reads.lock().unwrap().len(), 1);
+        assert_eq!(*transport.writes.lock().unwrap(), [vec!["9007199254740993".to_string()]]);
     }
 
     #[tokio::test]

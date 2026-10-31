@@ -4,8 +4,8 @@ use std::fmt;
 use serde::Deserialize;
 use url::Url;
 
-use crate::{Error, Result};
 use crate::jd_vop_execution::{JdVopExecutionConfig, JdVopMessageConfig};
+use crate::{Error, Result};
 
 /// 部署负责账号、Mongo 凭据身份及配额，业务连接不保存京东密钥或令牌。
 #[derive(Clone, Deserialize)]
@@ -147,18 +147,31 @@ impl JdVopConfig {
 
     fn validate_execution_binding(&self) -> Result<()> {
         let valid = |evidence: &str, account: &str, app: &str| {
-            !evidence.trim().is_empty() && evidence.len() <= 1024
-                && evidence.trim() == evidence && !evidence.chars().any(char::is_control)
-                && account == self.account_scope && app == self.app_key
+            !evidence.trim().is_empty()
+                && evidence.len() <= 1024
+                && evidence.trim() == evidence
+                && !evidence.chars().any(char::is_control)
+                && account == self.account_scope
+                && app == self.app_key
         };
-        if self.messages.as_ref().is_some_and(|m| !valid(&m.evidence_reference, &m.account_scope, &m.app_key)
-            || m.types.is_empty() || m.types.len() > 100 || m.types.contains(&0))
-            || self.execution.as_ref().is_some_and(|e| !valid(&e.evidence_reference, &e.account_scope, &e.app_key)
-                || !identifier(&e.external_funds_account_ref) || e.ordinary_skus.is_empty()
-                || e.ordinary_skus.iter().any(|sku| sku.parse::<u64>().is_err() || sku == "0")
-                || !(1..=300).contains(&e.preflight_validity_seconds))
-        {
-            return Err(Error::Invalid("jd_vop execution or messages require verified evidence and matching account/app identity".into()));
+        if self.messages.as_ref().is_some_and(|m| {
+            !valid(&m.evidence_reference, &m.account_scope, &m.app_key)
+                || m.types.is_empty()
+                || m.types.len() > 100
+                || m.types.contains(&0)
+        }) || self.execution.as_ref().is_some_and(|e| {
+            !valid(&e.evidence_reference, &e.account_scope, &e.app_key)
+                || !identifier(&e.external_funds_account_ref)
+                || e.ordinary_skus.is_empty()
+                || e.ordinary_skus.iter().any(|sku| {
+                    !sku.bytes().all(|b| b.is_ascii_digit()) || !sku.parse::<u64>().is_ok_and(|id| id > 0)
+                })
+                || !(1..=300).contains(&e.preflight_validity_seconds)
+        }) {
+            return Err(Error::Invalid(
+                "jd_vop execution or messages require verified evidence and matching account/app identity"
+                    .into(),
+            ));
         }
         Ok(())
     }

@@ -233,6 +233,20 @@ mod tests {
     }
 
     #[test]
+    fn generic_catalog_routes_allow_mixed_catalog_topics_but_never_orders() {
+        let mut value = receipt("catalog", "product", "sku");
+        value.refresh_hints.push(receipt("price", "price", "sku").refresh_hints.remove(0));
+        value.claim_catalog(Instant::from_unix_secs(1)).unwrap();
+        value.advance_catalog("a", true).unwrap();
+        assert!(!value.settle_catalog(Instant::from_unix_secs(2)).unwrap());
+        value.advance_catalog("b", true).unwrap();
+        assert!(value.settle_catalog(Instant::from_unix_secs(3)).unwrap());
+        let mut mixed = receipt("catalog", "product", "sku");
+        mixed.refresh_hints.push(receipt("order", "order", "merchant_order").refresh_hints.remove(0));
+        assert!(mixed.ensure_catalog().is_err());
+    }
+
+    #[test]
     fn price_batch_does_not_finish_after_first_sku() {
         let mut value = receipt("price", "price", "sku");
         value.refresh_hints.push(value.refresh_hints[0].clone());

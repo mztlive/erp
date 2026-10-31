@@ -1,4 +1,5 @@
 //! 由 SafeConfig 装配京东账号，未取得认证实现时明确拒绝远端调用。
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::pin::Pin;
@@ -27,6 +28,7 @@ use serde_json::{json, to_vec};
 use sha2::Sha256;
 
 use super::super::registry::SupplierFulfillmentFactory;
+use super::messages::MessageRuntime;
 use super::transport::{JdVopReadRequest, JdVopReadTransport, JdVopWriteTransport, ReadClient, WriteClient};
 use super::wire::Pools;
 use super::{
@@ -40,6 +42,7 @@ pub struct JdVopRuntime {
     writer: Option<Arc<WriteClient>>,
     profile: Option<Arc<JdVopExecutionProfile>>,
     evidence_codec: Option<Arc<SensitiveDataCodec>>,
+    message_runtime: Option<Arc<MessageRuntime>>,
 }
 
 impl JdVopRuntime {
@@ -69,7 +72,14 @@ impl JdVopRuntime {
                 "京东 VOP 技术配置未登记",
             ));
         }
-        Ok(Self { settings, reader: None, writer: None, profile: None, evidence_codec: None })
+        Ok(Self {
+            settings,
+            reader: None,
+            writer: None,
+            profile: None,
+            evidence_codec: None,
+            message_runtime: None,
+        })
     }
 
     /// 注入已完成 G0 固定向量及账号授权验收的只读认证实现。
@@ -116,6 +126,30 @@ impl JdVopRuntime {
         Ok(runtime)
     }
 
+    /// 装配独立消息通道，不把消息确认传输暴露为订单写能力。
+    /// # 参数
+    /// 受控写传输、已核实类型、调用渠道及轮询间隔。
+    /// # 返回
+    /// 消息通道已登记。
+    /// # 错误
+    /// 缺少读取传输时拒绝。
+    pub(super) fn configure_messages(
+        &mut self,
+        transport: Arc<dyn JdVopWriteTransport>,
+        types: BTreeSet<u32>,
+        source_type: u32,
+        interval: u64,
+    ) -> ConnectorResult<()> {
+        let reader = self.reader.as_ref().ok_or_else(protocol_required)?.clone();
+        self.message_runtime = Some(Arc::new(MessageRuntime {
+            writer: Arc::new(WriteClient { transport, reader }),
+            types,
+            source_type,
+            interval,
+        }));
+        Ok(())
+    }
+
     /// 按当前连接资格取得允许新增业务调用的协议客户端。
     /// # 参数
     /// `connection` 为服务端加载的连接记录。
@@ -158,6 +192,7 @@ impl JdVopRuntime {
             writer: self.writer.clone(),
             profile: self.profile.clone(),
             evidence_codec: self.evidence_codec.clone(),
+            message_runtime: self.message_runtime.clone(),
         })
     }
 
@@ -205,6 +240,15 @@ impl JdVopRuntime {
 }
 
 impl SupplierFulfillmentFactory for JdVopRuntime {
+    fn notification_connector(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        self.tracking_connector(connection)
+            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
+            .map_err(classified)
+    }
+
     fn creation_connector(
         &self,
         connection: &SupplierApiConnection,
@@ -322,6 +366,7 @@ impl SupplierReferenceRegistry for JdVopRuntime {
             writer: self.writer.clone(),
             profile: self.profile.clone(),
             evidence_codec: self.evidence_codec.clone(),
+            message_runtime: self.message_runtime.clone(),
         };
         Ok(connector.capabilities())
     }

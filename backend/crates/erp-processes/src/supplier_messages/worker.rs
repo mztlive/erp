@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use erp_party::SensitiveDataCodec;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
@@ -20,6 +22,7 @@ pub struct SupplierMessageWorker {
     registry: Arc<SupplierConnectorRegistry>,
     codec: SensitiveDataCodec,
     cursor: Mutex<String>,
+    polls: Mutex<PollSchedule>,
     funds: Option<Arc<dyn SupplierMessageFundsInvestigation>>,
 }
 
@@ -32,7 +35,14 @@ impl SupplierMessageWorker {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, registry: Arc<SupplierConnectorRegistry>, codec: SensitiveDataCodec) -> Self {
-        Self { db, registry, codec, cursor: Mutex::new(String::new()), funds: None }
+        Self {
+            db,
+            registry,
+            codec,
+            cursor: Mutex::new(String::new()),
+            polls: Mutex::new(PollSchedule::default()),
+            funds: None,
+        }
     }
 
     /// 注入财务资金调查实现，缺失时退款及支付异常消息保持待核实。
@@ -78,13 +88,16 @@ impl SupplierMessageWorker {
     async fn run_connection(&self, connection: &SupplierApiConnection) -> Result<usize> {
         let connector = self
             .registry
-            .fulfillment_connector(connection)
+            .notification_connector(connection)
             .map_err(|error| Error::BusinessLogicError(error.summary))?;
         let Some(source) = connector.messages() else {
             return Ok(0);
         };
         if connector.connection_id().as_ref() != connection.base.id {
             return Err(Error::Forbidden("供应商消息能力与当前连接归属不一致".into()));
+        }
+        if !self.polls.lock().await.claim(source.account_scope(), source.poll_interval(), Instant::now()) {
+            return Ok(0);
         }
         let Some(store) = MongoSupplierMessageStore::claim(
             self.db.clone(),
@@ -114,5 +127,33 @@ impl SupplierMessageWorker {
                 "供应商消息有未结束处理项，请核对来源证据及补查进度");
         }
         Ok(result.acknowledged)
+    }
+}
+
+#[derive(Default)]
+struct PollSchedule(BTreeMap<String, Instant>);
+impl PollSchedule {
+    fn claim(&mut self, account: &str, interval: Duration, now: Instant) -> bool {
+        if self.0.get(account).is_some_and(|next| *next > now) {
+            return false;
+        }
+        let interval = interval.clamp(Duration::from_secs(1), Duration::from_secs(86400));
+        self.0.insert(account.into(), now + interval);
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn account_interval_is_respected_without_blocking_other_accounts() {
+        let mut schedule = PollSchedule::default();
+        let now = Instant::now();
+        let period = Duration::from_secs(60);
+        assert!(schedule.claim("a", period, now));
+        assert!(!schedule.claim("a", period, now + Duration::from_secs(5)));
+        assert!(schedule.claim("b", period, now + Duration::from_secs(5)));
+        assert!(schedule.claim("a", period, now + period));
     }
 }

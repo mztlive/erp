@@ -89,8 +89,8 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked
 
 `connectors::dangaoshushu::DangaoshushuConnector` 实现商品、可供、地区、地址与配送、单组订单、
 独立支付及回调协议。`DangaoshushuRuntime` 登记技术参数，按后台连接记录和所绑定引用创建客户端；业务操作自动使用当前部署配置，配置变化使旧健康证据失效；
-`reception::receive` 保存推送密文和刷新意图后应答。配置、管理端查询、技术绑定和新增集合
+`supplier_callbacks::receive` 按注册表验签，保存推送密文和刷新意图后应答。配置、管理端查询、技术绑定和新增集合
 的启停回滚须执行[接入合同](../../../docs/dangaoshushu-connector-contract.md)。
 
-旧履约网关继续失败关闭；目录同步保存来源观察和分页检查点，人工匹配不自动建立正式供给，回调尚未装配补查与领域应用 worker。
+旧履约网关继续失败关闭；目录同步保存来源观察和分页检查点，选品由共用流程建立正式供给；商品与订单回调由独立 Worker 补查和应用。京东正式装配按 `jd_vop.messages` 与 `jd_vop.execution` 分别提供消息和订单能力，缺省只读。
 正式业务调用方须先完成各写步骤的意图、回执及恢复持久化，再切换到协议能力。

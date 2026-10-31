@@ -78,13 +78,24 @@ pub struct JdVopFundsConfig {
 }
 
 #[derive(Clone, Copy, Deserialize)]
-pub enum JdVopFundsCurrencyConfig { CNY }
+pub enum JdVopFundsCurrencyConfig {
+    CNY,
+}
 #[derive(Clone, Copy, Deserialize)]
-pub enum JdVopFundsTimeConfig { LocalDateTimeSeconds }
+pub enum JdVopFundsTimeConfig {
+    LocalDateTimeSeconds,
+}
 #[derive(Clone, Copy, Deserialize)]
-pub enum JdVopFundsDirectionConfig { Recharge, Debit, Return }
+pub enum JdVopFundsDirectionConfig {
+    Recharge,
+    Debit,
+    Return,
+}
 #[derive(Clone, Copy, Deserialize)]
-pub enum JdVopFundsSignConfig { Positive, Negative }
+pub enum JdVopFundsSignConfig {
+    Positive,
+    Negative,
+}
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JdVopTradeConfig {

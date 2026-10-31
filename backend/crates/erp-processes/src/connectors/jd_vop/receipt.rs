@@ -298,6 +298,7 @@ mod tests {
             writer: Some(Arc::new(WriteClient { transport: transport.clone(), reader })),
             profile: Some(Arc::new(profile())),
             evidence_codec: None,
+            message_runtime: None,
         };
         let request = ConfirmReceipt {
             action: ActionKey { id: "receipt-action".into(), payload_hash: "a".repeat(64) },

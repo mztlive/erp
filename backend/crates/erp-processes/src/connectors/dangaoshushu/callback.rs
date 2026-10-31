@@ -12,7 +12,8 @@ use super::{DangaoshushuConnector, error, proof, signing};
 
 impl Callbacks for DangaoshushuConnector {
     fn reception_id(&self, request: &CallbackRequest<'_>) -> Option<String> {
-        let body = [self.binding.as_bytes(), b"\0", request.path_and_query.as_bytes(), b"\0", request.body].concat();
+        let body =
+            [self.binding.as_bytes(), b"\0", request.path_and_query.as_bytes(), b"\0", request.body].concat();
         Some(format!("dgss-{}", proof::hash(&self.settings.private_key, &body)))
     }
 

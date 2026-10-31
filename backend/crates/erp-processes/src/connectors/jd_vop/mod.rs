@@ -13,6 +13,7 @@ use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 
 mod address;
 mod catalog;
+mod configured;
 pub mod credential;
 mod delivery;
 mod funds;
@@ -63,6 +64,7 @@ pub struct JdVopConnector {
     writer: Option<Arc<WriteClient>>,
     profile: Option<Arc<JdVopExecutionProfile>>,
     evidence_codec: Option<Arc<SensitiveDataCodec>>,
+    message_runtime: Option<Arc<messages::MessageRuntime>>,
 }
 
 impl SupplierConnector for JdVopConnector {
@@ -103,9 +105,7 @@ impl SupplierConnector for JdVopConnector {
         self.profile.as_ref().map(|_| self as &dyn OrderPreflight)
     }
     fn messages(&self) -> Option<&dyn SupplierMessageSource> {
-        (self.writer.is_some()
-            && self.profile.as_ref().is_some_and(|profile| profile.verified_message_types.is_some()))
-        .then_some(self as &dyn SupplierMessageSource)
+        self.message_settings().is_ok().then_some(self as &dyn SupplierMessageSource)
     }
     fn funds_source(&self) -> Option<&dyn SupplierFundsSource> {
         self.funds_profile().is_ok().then_some(self as &dyn SupplierFundsSource)

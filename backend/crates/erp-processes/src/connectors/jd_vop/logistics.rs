@@ -230,6 +230,7 @@ mod tests {
             writer: None,
             profile: None,
             evidence_codec: Some(Arc::new(SensitiveDataCodec::from_secret(b"logistics-tests"))),
+            message_runtime: None,
         }
     }
 

@@ -4,17 +4,17 @@
 
 本规范规定 API 供应商的配置装配、商品采集、选品入库、通知处理、订单执行和后台调度职责，适用于蛋糕叔叔、京东 VOP 及后续新增协议。
 
-当前架构采用“供应商协议适配器 + 共用业务流程 + 领域持久化 + 独立 Worker”。商品目录、选品、供给更新和任务执行已具备共用实现；HTTP 推送接收与商品回调消费仍包含蛋糕叔叔专用路径。新增供应商须开发并登记协议适配器，不能仅填写接口地址完成接入。
+当前架构采用“供应商协议适配器 + 共用业务流程 + 领域持久化 + 独立 Worker”。商品目录、选品、供给更新和任务执行已具备共用实现；HTTP 推送按注册表选择协议，商品回调按标准刷新语义消费。新增供应商须开发并登记协议适配器，不能仅填写接口地址完成接入。
 
-状态基准为 2026-10-31 工作区代码；基准提交为 `55e3c381a`，包含工作区未提交修改。下述“已装配”指技术配置启用后正常启动代码能够提供相应能力，不代表目标环境已部署、账号授权有效或真实业务验收通过。
+状态基准为 2026-10-31 工作区代码，包含工作区未提交修改。下述“已装配”指技术配置启用后正常启动代码能够提供相应能力，不代表目标环境已部署、账号授权有效或真实业务验收通过。
 
 | 范围 | 蛋糕叔叔 | 京东 VOP |
 | --- | --- | --- |
 | 商品目录与报价 | 已实现并纳入正式装配 | 已实现并纳入正式只读装配 |
 | 目录同步方式 | 部分增量与周期全量校对 | 全量商品池扫描；时间窗口增量不支持 |
 | 选品进入公司商品库 | 复用共用选品流程 | 复用共用选品流程 |
-| 变更通知 | HTTP 推送接收、商品补查及订单回调处理已接入代码路径 | 拉取消息实现及共用消费者已有；当前运行时不提供消息能力 |
-| 订单与履约 | 创建、查询、配送准备及支付结果通知能力已装配 | 相关协议及流程代码已有；正式启动未装配订单执行传输和执行资料 |
+| 变更通知 | HTTP 推送接收、商品补查及订单回调处理已接入代码路径 | 配置已核实的 `jd_vop.messages` 后独立装配拉取与确认能力 |
+| 订单与履约 | 创建、查询、配送准备及支付结果通知能力已装配 | 配置完整 `jd_vop.execution` 后装配；资金、健康和新增下单资格仍须分别满足 |
 | 凭据维护 | 按部署配置绑定渠道与凭据 | 已装配数据库令牌提供器和后台凭据维护 |
 
 “入库”在本文指来源商品采集及选品进入公司商品库；实物收货、库存入账仍执行仓储和库存领域合同，不因接口商品同步而发生。
@@ -34,7 +34,7 @@ flowchart TB
         P["目录采集 / 选品 / 来源同步 / 消息 / 订单 / 资金调查"]
         R["SupplierConnectorRegistry 协议注册表"]
         DG["DangaoshushuRuntime 与 Connector"]
-        JD["JdVopRuntime 与 Connector：当前正式装配为只读"]
+        JD["JdVopRuntime 与 Connector：缺省只读，按受控资料装配消息和执行"]
     end
     PORT["erp-supply ports：网关、能力 trait、标准事实"]
     DOMAIN["领域 Service 与 Repository：供给、商品、履约、财务、集成、任务"]
@@ -90,7 +90,7 @@ flowchart LR
 4. XXL 调度成功、任务被领取、回调接收成功均不得作为业务完成证明；完成状态以相应业务回执为准。
 5. 当前 Worker 部署合同为单副本及 Recreate。不得依据局部租约实现推定整个 Worker 已支持多副本。
 
-实现入口：[进程职责](../backend/apps/web-api/src/runtime/role.rs)、[Worker 装配](../backend/apps/web-api/src/runtime/workers.rs)。部署执行[独立后台执行器合同](background-worker-contract.md)和[XXL-JOB 执行器合同](xxl-job-executor-contract.md)。
+实现入口：[进程职责](../backend/apps/web-api/src/runtime/role.rs)、[Worker 装配](../backend/apps/web-api/src/runtime/workers.rs)。调度执行入口见 [XXL 实现](../backend/apps/web-api/src/runtime/xxl/mod.rs)，进程装配以对应源码入口为准。
 
 ## 3 协议注册与能力合同
 
@@ -104,7 +104,7 @@ flowchart LR
 | --- | --- |
 | `SupplierApiGateway` | 健康检查、目录分页、目录范围及同步策略 |
 | `SupplierReferenceRegistry` | 部署配置、技术引用及实际能力读取 |
-| `SupplierFulfillmentFactory` | 生成绑定连接的 `SupplierConnector`；分别核验新增创建资格与已有订单处理资格 |
+| `SupplierFulfillmentFactory` | 生成绑定连接的 `SupplierConnector`；分别核验新增创建、已有履约和通知消费资格 |
 
 `SupplierConnector` 为能力聚合入口。可选窄 trait 缺失时必须返回 `None`，业务流程须明确拒绝或跳过，不得伪造空结果或成功回执。
 
@@ -194,9 +194,9 @@ sequenceDiagram
 2. 保存成功后才返回供应商成功应答。成功应答只表示可靠接收，不表示业务已应用。
 3. `supplier_callback_receipts` 保存原始正文密文及处理意图。商品回调与订单回调分别消费，失败保留记录、检查点和下次处理时间。
 4. 商品回调调用实际 Connector 补查并复用来源应用流程；订单回调通过原单查询和履约应用流程处理。
-5. 当前路由、接收实现和商品回调连接校验具有蛋糕叔叔专用限制。新增推送协议必须补充接收适配及消费者适用范围，不能只实现 `Callbacks`。
+5. 统一入口为 `/callbacks/{protocol}/{connection_id}/{kind}`，蛋糕叔叔原 URL 保持有效。路由保留原始路径、查询串、请求头和正文，服务端核对协议与连接绑定后调用 `Callbacks`。商品消费者按实际回调及查询能力工作，不再限定蛋糕叔叔类型。
 
-代码入口：[HTTP 路由](../backend/apps/web-api/src/core/routes/supplier_callbacks.rs)、[接收实现](../backend/crates/erp-processes/src/connectors/dangaoshushu/reception.rs)、[商品消费者](../backend/crates/erp-processes/src/supplier_catalog_callbacks/mod.rs)、[订单回调处理](../backend/crates/erp-processes/src/supplier_order_tracking/callbacks.rs)。
+代码入口：[HTTP 路由](../backend/apps/web-api/src/core/routes/supplier_callbacks.rs)、[接收实现](../backend/crates/erp-processes/src/supplier_callbacks/mod.rs)、[商品消费者](../backend/crates/erp-processes/src/supplier_catalog_callbacks/mod.rs)、[订单回调处理](../backend/crates/erp-processes/src/supplier_order_tracking/callbacks.rs)。
 
 ### 5.2 拉取消息
 
@@ -210,11 +210,11 @@ flowchart LR
     ACK --> RESULT["保存确认结果；未知结果保留调查"]
 ```
 
-1. `SupplierMessageWorker` 按注册表取得连接能力，仅处理 `messages()` 返回实际实现的连接。当前候选连接扫描复用目录协议清单；仅有消息、没有目录能力的新协议须扩展候选发现机制。
+1. `SupplierMessageWorker` 按注册表取得连接能力，仅处理 `messages()` 返回实际实现的连接。候选连接扫描使用注册表全部协议，不依赖目录能力。通知连接只核验技术绑定，订单资金准入在对应订单流程独立核验。
 2. `SupplierMessageProcess` 先恢复本地队列，再拉取新消息。接收、应用、远端确认分别记录，不得提前删除供应商消息。
 3. 相同消息身份的重复接收不得重置完成状态；同号异载荷必须隔离。账号租约和连接归属必须在持久化及外部调用边界重新核验。
 4. 消息确认调用结果未知时保留原记录，不得将超时当作未执行并盲目重发。
-5. **京东当前未启用此通道。** 正式装配调用 `with_verified_transport()`；`messages()` 只有在写入传输存在且执行资料包含已核实消息类型时才返回能力。Worker 已存在不构成京东消息可用证明。
+5. 京东正式装配调用 `from_configured_transport()`。`jd_vop.messages` 提供账号、应用、依据和消息类型后，单独装配消息传输；不要求开票及订单执行资料，也不因此开放创建、取消或订单确认。轮询遵守 `message_poll_interval_seconds`，本地恢复后才拉取新消息。
 
 代码入口：[消息 Worker](../backend/crates/erp-processes/src/supplier_messages/worker.rs)、[消息编排](../backend/crates/erp-processes/src/supplier_messages/mod.rs)、[京东能力条件](../backend/crates/erp-processes/src/connectors/jd_vop/mod.rs)。
 
@@ -228,7 +228,7 @@ flowchart LR
 4. 父子单、数量分配、部分发货与多运单必须保留可逆关联和数量守恒；来源事实不足时只保存已知事实并阻断无法确定的应用。
 5. 资金余额与消息只提供调查依据。充值、占用、核销、返款必须由财务流程核实并登记，不能根据余额或消息正文直接记账。
 6. 蛋糕叔叔提供 `Orders` 和 `PaymentConfirmation` 等能力；未声明取消或退款能力时不得假定具备主动取消或退款。
-7. 京东已有执行运行时构造 `with_verified_execution()`，但正式组合根当前仅构造只读运行时。必须接通可信执行资料及读写传输后，再逐项验证订单、确认、取消、收货通知和消息能力。
+7. 京东正常启动根据受控执行配置调用 `with_verified_execution()`；缺省保持只读。完整资料开放相应协议能力；缺少原订单确认资金依据时保留查单、取消等能力，禁止创建及独立订单确认。实际发单仍执行采购审批、资金保障、连接健康及开关校验。
 
 代码入口：[订单执行](../backend/crates/erp-processes/src/supplier_api_orders/mod.rs)、[履约跟踪](../backend/crates/erp-processes/src/supplier_order_tracking/mod.rs)、[京东运行时](../backend/crates/erp-processes/src/connectors/jd_vop/runtime.rs)。供应商专项规则执行[蛋糕叔叔接入合同](dangaoshushu-connector-contract.md)及[京东 VOP 接入计划](jd-vop-integration-plan.md)。
 
@@ -287,10 +287,10 @@ XXL 中的任务触发频率由调度中心配置；每个供应商的目录业�
 
 | 边界 | 当前事实 | 后续接入要求 |
 | --- | --- | --- |
-| HTTP 推送接入 | 蛋糕叔叔专用路由与接收实现 | 新增协议接收适配；共享接收器必须保留各协议验签和应答差异 |
-| 商品回调消费 | 显式校验蛋糕叔叔类型，并使用现有路由类型及刷新线索 | 推广前明确协议无关的通知语义与消费者范围，不得直接放开类型校验 |
-| 消息候选发现 | 当前通过目录协议候选连接扫描消息能力 | 接入没有目录能力的消息型协议时须扩展发现机制 |
-| 京东正式执行 | 正式组合根仅装配只读传输 | 接通可信执行资料、写传输及实际能力后才能开放对应业务 |
+| HTTP 推送接入 | 已按注册表和 `Callbacks` 共用接收 | 新协议实现验签、标准通知及应答；已存在的接收身份可通过 `reception_id` 保留 |
+| 商品回调消费 | 已按 `catalog` 语义消费，兼容历史路由类型 | 支持商品、可供、价格、地区的品牌、商品及规格目标；订单通知单独处理 |
+| 消息候选发现 | 已遍历所有注册协议，再判断实际消息能力 | 不要求目录能力；适配器必须声明账号范围和轮询间隔 |
+| 京东正式执行 | 已具备受控资料到正式读写传输的装配路径 | 部署须填写真实资料并完成账号及资金验收，不得以装配通过代替业务放行 |
 | 协议与账号注册 | 协议枚举当前为蛋糕叔叔、京东；注册表每种协议登记一个运行时 | 多技术账号需求须明确运行时内部账号路由和连接隔离，不能仅增加一个 URL |
 | 执行器扩容 | 当前部署合同为单 Worker | 多副本须单独验证所有任务的认领、外部副作用及失联恢复 |
 
@@ -303,3 +303,54 @@ XXL 中的任务触发频率由调度中心配置；每个供应商的目录业�
 5. **部署验收**：核对 API、Worker、调度中心、索引、对象存储与配置一致性；检查 Worker 重启恢复、队列积压及原操作状态。
 
 代码检查遵循 [后端仓库规则](../backend/AGENTS.md)。当前仓库禁止执行依赖真实 MongoDB 或外部服务的集成验收命令；真实环境验收必须在允许的执行环境中单独安排并记录。编译、单元测试、提交、部署和真实业务完成不得互相替代。
+
+## 11 京东执行配置与发布操作
+
+### 11.1 配置来源及启用边界
+
+配置只从服务端 `SafeConfig` 读取，不接受采购页面或回调载荷覆盖。结构定义见 [执行配置](../backend/config/src/jd_vop_execution.rs)，配置示例见 [config.toml.example](../backend/config.toml.example)。不得把证据引用字段当作自动完成验收；填写人必须核对引用对应的真实账号资料。
+
+| 配置节 | 必填资料 | 生效范围 |
+| --- | --- | --- |
+| `jd_vop.messages` | `evidence_reference`、与主配置一致的 `account_scope/app_key`、非空 `types` | 独立拉取及确认消息；没有订单能力时订单类通知保留待处理，不误删 |
+| `jd_vop.execution` | 执行依据、相同账号及应用、`external_funds_account_ref`、`preflight_validity_seconds`、非空普通实物 `ordinary_skus`、`invoice` | 装配预检、订单查询、取消及收货通知等已实现能力 |
+| `jd_vop.execution.confirmation_funds_evidence` | 原订单确认不重复扣减资金的核实依据 | 允许适配器声明创建和独立确认能力；不替代业务资金保障 |
+| `jd_vop.execution.invoice` | 发票类型、开票方式、抬头类型、内容类型、主体名称及适用税号 | 保留既有电子发票和专票参数校验；资料缺失拒绝启动 |
+| `jd_vop.execution.invoice.recipient` | 专票收件人、电话、地址及四级地址编码 | 专票要求同时具备注册、银行及收票资料，不用订单收件资料代填 |
+| `jd_vop.execution.funds` | 资金依据、外部账号、`expected_pin/account_type`、币种、时间格式及时区、页长、交易类型规则 | 开放只读资金证据；未配置时不声明资金查询能力 |
+
+资金配置的 `currency` 当前仅接受 `CNY`，`time_format` 仅接受 `LocalDateTimeSeconds`；它们必须显式填写。`trade_types` 以来源业务码为键，每项声明 `direction`（`Recharge/Debit/Return`）及 `sign`（`Positive/Negative`）。可选 `message_effects` 映射消息类型到资金方向。资金账号必须与执行资料一致，实际业务连接的预存款绑定还须独立核验。
+
+`ordinary_skus` 为经过核实的普通实物范围，不支持通配符。范围、发票及执行身份资料变化会影响既有技术绑定；发布前须核对未结订单及连接重绑定流程，不得直接覆盖账号或重新创建原订单。
+
+### 11.2 回调兼容与升级
+
+1. 蛋糕叔叔原回调 URL、协议应答及 `dgss-` 接收身份保持有效。新商品通知保存为通用 `catalog` 路由类型；旧 `status/product/cities/price` 记录继续消费。
+2. 接收记录新增可选 `content_fingerprint`。旧记录读取缺省为空，重放时解密原证据比较；新记录使用指纹核验。无需回填旧正文或改写来源事件号，复用既有接收唯一索引和队列索引。
+3. 有来源事件号时以连接和来源事件号定位接收记录，同身份异报文必须报冲突并保留原证据；没有事件号时仅提供字节级接收去重。接收身份不作为业务版本。
+4. 当前共用消费者支持可补查的商品及订单通知。仅推送完整事实、地址字典通知、独立退款动作、同报文多个来源事件号，以及订单与商品混合通知须先扩展相应消费者；现有入口明确拒绝，不接收后假装完成。
+5. 回滚前停止供应商推送和对应消费者，核对仍处于 `received` 的 `catalog` 记录及新增来源事件记录。旧版消费者不能完整处理新语义，不得直接回退后遗弃队列或删除证据；使用保留通用队列能力的版本，或完成受控处理后再回退。
+
+### 11.3 发布与验收步骤
+
+1. 核对真实消息范围、执行资料、预存款账号和发票资料；只需要目录时不配置新增资料节，只需要消息时只配置 `messages`。
+2. 在受控配置源登记资料，保持 API 与 Worker 同一版本、同一账号和同一加密密钥；资料修改后重启对应进程，不依赖热更新重新装配协议客户端。
+3. 核对连接技术引用。执行资料改变导致绑定不一致时，按现有连接治理流程重新绑定并执行只读健康检查；保留原订单、原消息及原动作记录。
+4. 先验证商品消息接收、补查和确认，核对待处理原因与重复消息零重复应用；订单能力未开放时不得将订单类消息人工标记成功。
+5. 开放订单前完成实际账号、采购审批和资金保障验收；按受控范围核对创建、确认、查询、取消、收货通知及结果未知调查。
+6. 分别登记代码检查、部署配置、进程版本、消息验收、订单验收和资金验收结果。未取得真实环境证据的项目保持待验收。
+
+
+### 11.4 本轮代码验证记录
+
+验证范围为 2026-10-31 工作区，真实供应商、真实数据库及部署验收继续执行第 10.2 节，不得由以下结果替代。
+
+| 检查 | 结果与适用范围 |
+| --- | --- |
+| 库单元测试 | `config` 38、`erp-integration` 181、`erp-supply` 595、`erp-processes` 1304、`web-api` 293 项通过；`erp-processes` 另有 6 项既有忽略测试未运行 |
+| workspace 编译 | `cargo check --workspace --locked` 通过 |
+| Rust 静态检查 | 受影响 crate 的 `cargo clippy --all-targets --locked` 通过；格式与差异空白检查通过 |
+| 供应商模块体积 | 使用仓库体积检查器检查供应商相关 69 个源文件，无体积违规；全仓库体积门禁仍报告其他文件超限 |
+| 领域边界门禁 | 未通过：检查器依赖的 `backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json` 已被工作区清理，无法完成工作区检查；未恢复该清理文件或绕过门禁 |
+
+关键行为测试覆盖正式只读装配、独立消息装配且不开放订单、订单执行资料缺失、资金账号不一致、原确认依据缺失、资金映射、通知准入独立于订单资金、通用回调路由、原始查询串及请求头、重复报文、同事件异载荷、旧蛋糕叔叔身份、商品语义补查与轮询间隔。

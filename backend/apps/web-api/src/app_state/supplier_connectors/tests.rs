@@ -129,3 +129,182 @@ async fn maintenance_timeout_preserves_failure_and_never_retries_provider() {
     assert_eq!(maintenance.run_once().await.unwrap_err().code, "JD_VOP_CREDENTIAL_MAINTENANCE_TIMEOUT");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
+
+fn execution_settings() -> String {
+    format!(
+        "{}\n{}",
+        jd_settings(),
+        r#"
+[jd_vop.execution]
+evidence_reference='offline-verified-fixture'
+account_scope='test-account'
+app_key='test-app'
+external_funds_account_ref='funds-account'
+confirmation_funds_evidence='offline-original-funds-fixture'
+preflight_validity_seconds=60
+ordinary_skus=['123']
+[jd_vop.execution.invoice]
+invoice_type=23
+invoice_put_type=2
+invoice_selected_title=4
+invoice_content_type=1
+invoice_company_name='测试公司'
+"#
+    )
+}
+
+fn bound_connection(
+    ports: &ExternalConnectorPorts,
+) -> erp_supply::entity::supplier_api::SupplierApiConnection {
+    use erp_supply::entity::supplier_api::{
+        SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
+    };
+    let mut connection = SupplierApiConnection::new(
+        SupplierApiConnectionId::new("jd-connection"),
+        SupplierApiConnectionData {
+            supplier_id: SupplierAccountId::new("test-supplier"),
+            connection_code: "jd".into(),
+            connector_type: SupplierConnectorType::JdVop,
+            endpoint_reference: String::new(),
+            credential_reference: None,
+            rate_limit_policy: None,
+            status: SupplierApiConnectionStatus::Disabled,
+        },
+        "actor",
+    )
+    .unwrap();
+    let refs = ports
+        .supplier_reference_registry
+        .deployment_config(&SupplierReferenceTarget::from(&connection))
+        .unwrap();
+    connection.endpoint_reference = refs.endpoint;
+    connection.credential_reference = Some(refs.credential);
+    connection.endpoint_reference_bound = true;
+    connection.credential_reference_bound = true;
+    connection.supplier_deposit_external_account_ref = Some("funds-account".into());
+    connection
+}
+
+#[test]
+fn startup_execution_uses_verified_profile_without_reading_tokens_or_bypassing_business_gate() {
+    let config = connector_config(&execution_settings());
+    let tokens = Arc::new(Tokens::default());
+    let ports = ExternalConnectorPorts::with_jd_tokens(&config, Some(tokens.clone())).unwrap();
+    let mut connection = bound_connection(&ports);
+    let registry = ports.order_connectors.as_ref().unwrap();
+    let connector = registry.fulfillment_connector(&connection).unwrap();
+    assert!(connector.orders().unwrap().supports_creation());
+    assert!(connector.preflight().is_some());
+    assert!(connector.order_confirmation().is_some());
+    assert!(connector.receipt_confirmation().is_some());
+    assert!(connector.cancellations().is_some());
+    assert!(connector.messages().is_none());
+    assert!(registry.creation_connector(&connection).is_err());
+    connection.supplier_deposit_external_account_ref = Some("different-account".into());
+    assert_eq!(
+        registry.fulfillment_connector(&connection).err().unwrap().code,
+        "JD_VOP_FUNDS_ACCOUNT_MISMATCH"
+    );
+    assert_eq!(tokens.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn startup_messages_work_without_order_profile_and_do_not_expose_order_writes() {
+    let config = connector_config(&format!(
+        "{}\n{}",
+        jd_settings(),
+        r#"
+[jd_vop.messages]
+evidence_reference='offline-message-fixture'
+account_scope='test-account'
+app_key='test-app'
+types=[1,2]
+"#
+    ));
+    let tokens = Arc::new(Tokens::default());
+    let ports = ExternalConnectorPorts::with_jd_tokens(&config, Some(tokens.clone())).unwrap();
+    let connection = bound_connection(&ports);
+    let connector = ports.order_connectors.as_ref().unwrap().fulfillment_connector(&connection).unwrap();
+    let messages = connector.messages().unwrap();
+    assert_eq!(messages.account_scope(), "test-account");
+    assert_eq!(messages.poll_interval(), Duration::from_secs(60));
+    assert!(connector.orders().is_none());
+    assert!(connector.order_confirmation().is_none());
+    assert!(connector.preflight().is_none());
+    assert_eq!(tokens.calls.load(Ordering::SeqCst), 0);
+    assert!(messages.pull(std::num::NonZeroU32::new(1).unwrap()).await.is_err());
+    assert_eq!(tokens.calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn startup_rejects_invalid_execution_and_keeps_missing_confirmation_read_only_for_orders() {
+    let mut config = connector_config(&execution_settings());
+    config.jd_vop.as_mut().unwrap().execution.as_mut().unwrap().invoice.invoice_company_name.clear();
+    assert!(ExternalConnectorPorts::with_jd_tokens(&config, Some(Arc::new(Tokens::default()))).is_err());
+    let mut config = connector_config(&execution_settings());
+    config.jd_vop.as_mut().unwrap().execution.as_mut().unwrap().account_scope = "other-account".into();
+    assert!(ExternalConnectorPorts::with_jd_tokens(&config, Some(Arc::new(Tokens::default()))).is_err());
+    let mut config = connector_config(&execution_settings());
+    config.jd_vop.as_mut().unwrap().execution.as_mut().unwrap().confirmation_funds_evidence = None;
+    let ports = ExternalConnectorPorts::with_jd_tokens(&config, Some(Arc::new(Tokens::default()))).unwrap();
+    let connector =
+        ports.order_connectors.as_ref().unwrap().fulfillment_connector(&bound_connection(&ports)).unwrap();
+    assert!(!connector.orders().unwrap().supports_creation());
+    assert!(connector.order_confirmation().is_none());
+    assert!(connector.cancellations().is_some());
+}
+
+#[test]
+fn generic_callback_registry_uses_connection_protocol_and_actual_capability() {
+    let config = connector_config(&format!(
+        "[dangaoshushu]\nenabled=true\nchannel_no='test-channel'\nprivate_key='test-key'\n{}",
+        jd_settings()
+    ));
+    let ports = ExternalConnectorPorts::with_jd_tokens(&config, Some(Arc::new(Tokens::default()))).unwrap();
+    let registry = ports.order_connectors.as_ref().unwrap();
+    let mut connection = bound_connection(&ports);
+    assert!(registry.callback_connector(&connection, SupplierConnectorType::JdVop).is_err());
+    assert!(registry.callback_connector(&connection, SupplierConnectorType::Dangaoshushu).is_err());
+    connection.connector_type = Some(SupplierConnectorType::Dangaoshushu);
+    let refs = ports
+        .supplier_reference_registry
+        .deployment_config(&SupplierReferenceTarget::from(&connection))
+        .unwrap();
+    connection.endpoint_reference = refs.endpoint;
+    connection.credential_reference = Some(refs.credential);
+    assert!(
+        registry
+            .callback_connector(&connection, SupplierConnectorType::Dangaoshushu)
+            .unwrap()
+            .callbacks()
+            .is_some()
+    );
+    assert_eq!(
+        registry.connector_types(),
+        vec![SupplierConnectorType::Dangaoshushu, SupplierConnectorType::JdVop]
+    );
+}
+
+#[test]
+fn notification_binding_is_independent_of_order_funds_admission() {
+    let config = connector_config(&format!(
+        "{}\n{}",
+        execution_settings(),
+        r#"
+[jd_vop.messages]
+evidence_reference='offline-message-fixture'
+account_scope='test-account'
+app_key='test-app'
+types=[1,2]
+"#
+    ));
+    let ports = ExternalConnectorPorts::with_jd_tokens(&config, Some(Arc::new(Tokens::default()))).unwrap();
+    let mut connection = bound_connection(&ports);
+    connection.supplier_deposit_external_account_ref = None;
+    let registry = ports.order_connectors.as_ref().unwrap();
+    assert!(registry.notification_connector(&connection).unwrap().messages().is_some());
+    assert_eq!(
+        registry.fulfillment_connector(&connection).err().unwrap().code,
+        "JD_VOP_FUNDS_ACCOUNT_MISMATCH"
+    );
+}

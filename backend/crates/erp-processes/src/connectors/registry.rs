@@ -22,6 +22,20 @@ use erp_supply::ports::supplier_reference_registry::{
 
 /// 按服务器连接身份绑定履约能力；新增写操作与既有订单调查分别核验资格。
 pub trait SupplierFulfillmentFactory: Send + Sync {
+    /// 绑定通知消费能力，缺省沿用既有履约校验。
+    /// # 参数
+    /// connection 为服务端连接。
+    /// # 返回
+    /// 不受新增下单开关控制的协议能力。
+    /// # 错误
+    /// 技术身份、协议或部署绑定失效时拒绝。
+    fn notification_connector(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        self.fulfillment_connector(connection)
+    }
+
     /// 绑定允许新增创建及未发送确认的连接。
     /// # 参数
     /// `connection` 为服务端读取的当前连接记录。
@@ -60,6 +74,20 @@ pub struct SupplierConnectorRegistry {
 }
 
 impl SupplierConnectorRegistry {
+    /// 解析通知消费连接，不把订单资金准入当作商品通知准入。
+    /// # 参数
+    /// connection 为服务端加载的原连接。
+    /// # 返回
+    /// 技术身份已核验的通知适配器。
+    /// # 错误
+    /// 协议或技术绑定无效时拒绝。
+    pub fn notification_connector(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        self.adapter(connection.connector_type)?.fulfillment.notification_connector(connection)
+    }
+
     /// 返回所有已登记协议，不依赖目录能力筛选通知消费者。
     /// # 参数
     /// 无。
@@ -78,12 +106,20 @@ impl SupplierConnectorRegistry {
     /// 绑定同一连接且提供回调能力的适配器。
     /// # 错误
     /// 协议、连接身份或回调能力不符时拒绝。
-    pub fn callback_connector(&self, connection: &SupplierApiConnection, kind: SupplierConnectorType)
-        -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        let invalid = || ClassifiedError { class: SupplierFailureClass::CapabilityGap,
-            code: "SUPPLIER_CALLBACK_UNAVAILABLE".into(), summary: "供应商回调协议或能力不匹配".into() };
-        if connection.connector_type != Some(kind) { return Err(invalid()); }
-        let connector = self.fulfillment_connector(connection)?;
+    pub fn callback_connector(
+        &self,
+        connection: &SupplierApiConnection,
+        kind: SupplierConnectorType,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        let invalid = || ClassifiedError {
+            class: SupplierFailureClass::CapabilityGap,
+            code: "SUPPLIER_CALLBACK_UNAVAILABLE".into(),
+            summary: "供应商回调协议或能力不匹配".into(),
+        };
+        if connection.connector_type != Some(kind) {
+            return Err(invalid());
+        }
+        let connector = self.notification_connector(connection)?;
         if connector.connection_id().as_ref() != connection.base.id || connector.callbacks().is_none() {
             return Err(invalid());
         }
