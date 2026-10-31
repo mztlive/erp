@@ -5,6 +5,7 @@ use std::pin::Pin;
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 use serde::{Deserialize, Serialize};
 
+use super::connector::description::ConnectorDescription;
 use super::supplier_api_gateway::ClassifiedError;
 use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection, SupplierConnectorType};
@@ -69,6 +70,23 @@ pub struct SupplierDeploymentConfig {
 
 /// 服务端不透明引用注册表端口。
 pub trait SupplierReferenceRegistry: Send + Sync {
+    /// 读取当前部署提供的完整能力描述，未知不能用空能力对象冒充。
+    /// # 参数
+    /// `target` 为服务端连接身份；不要求开启自动下单。
+    /// # 返回
+    /// 无敏感资料的实际接口与执行要求。
+    /// # 错误
+    /// 未装配或描述不可用时明确拒绝。
+    fn description(
+        &self,
+        _target: &SupplierReferenceTarget,
+    ) -> Result<ConnectorDescription, ClassifiedError> {
+        Err(ClassifiedError {
+            class: SupplierFailureClass::CapabilityGap,
+            code: "SUPPLIER_CONNECTOR_DESCRIPTION_UNAVAILABLE".into(),
+            summary: "供应商接口能力资料尚未就绪".into(),
+        })
+    }
     /// 读取适配器实际提供的操作，不以历史数据库能力记录为依据。
     /// # 参数
     /// `target` 为服务端读取的连接身份。
@@ -78,13 +96,9 @@ pub trait SupplierReferenceRegistry: Send + Sync {
     /// 未装配适配器时返回明确错误。
     fn capabilities(
         &self,
-        _target: &SupplierReferenceTarget,
+        target: &SupplierReferenceTarget,
     ) -> Result<Vec<SupplierApiCapabilityCode>, ClassifiedError> {
-        Err(ClassifiedError {
-            class: SupplierFailureClass::CapabilityGap,
-            code: "SUPPLIER_CONNECTOR_UNAVAILABLE".into(),
-            summary: "供应商接口未配置，无法读取能力".into(),
-        })
+        Ok(self.description(target)?.operations)
     }
 
     /// 按后台身份取得当前部署配置，无需用户选择地址或凭据。

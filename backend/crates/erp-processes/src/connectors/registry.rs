@@ -11,7 +11,9 @@ use erp_supply::entity::supplier_api::{
 use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
 use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Lookup, Scan, Snapshot};
+use erp_supply::ports::connector::description::ConnectorDescription;
 use erp_supply::ports::connector::order::{OrderKey, OrderLine, OrderSnapshot};
+use erp_supply::ports::connector::runtime::{ConnectorPurpose, SupplierRuntime, bind_checked};
 use erp_supply::ports::supplier_api_gateway::{
     CatalogRead, CatalogScopeRead, ClassifiedError, SupplierApiGateway,
 };
@@ -20,57 +22,10 @@ use erp_supply::ports::supplier_reference_registry::{
     SupplierReferenceRegistry, SupplierReferenceTarget,
 };
 
-/// 按服务器连接身份绑定履约能力；新增写操作与既有订单调查分别核验资格。
-pub trait SupplierFulfillmentFactory: Send + Sync {
-    /// 绑定通知消费能力，缺省沿用既有履约校验。
-    /// # 参数
-    /// connection 为服务端连接。
-    /// # 返回
-    /// 不受新增下单开关控制的协议能力。
-    /// # 错误
-    /// 技术身份、协议或部署绑定失效时拒绝。
-    fn notification_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.fulfillment_connector(connection)
-    }
-
-    /// 绑定允许新增创建及未发送确认的连接。
-    /// # 参数
-    /// `connection` 为服务端读取的当前连接记录。
-    /// # 返回
-    /// 已绑定供应商、连接及技术账号的窄能力集合。
-    /// # 错误
-    /// 停用、健康检查失效、技术绑定无效或协议未实现时拒绝。
-    fn creation_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError>;
-
-    /// 绑定既有订单调查、跟踪及取消的连接。
-    /// # 参数
-    /// `connection` 为服务端读取的原连接记录。
-    /// # 返回
-    /// 不受新增下单开关限制的已绑定能力集合。
-    /// # 错误
-    /// 删除、账号归属或技术绑定失效时拒绝。
-    fn fulfillment_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError>;
-}
-
-struct Adapter {
-    gateway: Arc<dyn SupplierApiGateway>,
-    references: Arc<dyn SupplierReferenceRegistry>,
-    fulfillment: Arc<dyn SupplierFulfillmentFactory>,
-}
-
 /// 组合根按协议注册适配器；业务身份和部署配置不参与类型推断。
 #[derive(Default)]
 pub struct SupplierConnectorRegistry {
-    adapters: BTreeMap<SupplierConnectorType, Adapter>,
+    adapters: BTreeMap<SupplierConnectorType, Arc<dyn SupplierRuntime>>,
 }
 
 impl SupplierConnectorRegistry {
@@ -85,7 +40,11 @@ impl SupplierConnectorRegistry {
         &self,
         connection: &SupplierApiConnection,
     ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.adapter(connection.connector_type)?.fulfillment.notification_connector(connection)
+        bind_checked(
+            self.adapter(connection.connector_type)?.as_ref(),
+            connection,
+            ConnectorPurpose::Notification,
+        )
     }
 
     /// 返回所有已登记协议，不依赖目录能力筛选通知消费者。
@@ -135,7 +94,7 @@ impl SupplierConnectorRegistry {
     /// 相同协议重复登记时拒绝覆盖。
     pub fn register<T>(&mut self, kind: SupplierConnectorType, runtime: Arc<T>) -> Result<(), ClassifiedError>
     where
-        T: SupplierApiGateway + SupplierReferenceRegistry + SupplierFulfillmentFactory + 'static,
+        T: SupplierRuntime + 'static,
     {
         if self.adapters.contains_key(&kind) {
             return Err(ClassifiedError {
@@ -144,10 +103,14 @@ impl SupplierConnectorRegistry {
                 summary: "供应商接口类型重复登记".into(),
             });
         }
-        self.adapters.insert(
-            kind,
-            Adapter { gateway: runtime.clone(), references: runtime.clone(), fulfillment: runtime },
-        );
+        if kind != runtime.connector_type() {
+            return Err(ClassifiedError {
+                class: SupplierFailureClass::MappingError,
+                code: "SUPPLIER_CONNECTOR_TYPE_MISMATCH".into(),
+                summary: "登记协议与适配器实现不一致".into(),
+            });
+        }
+        self.adapters.insert(kind, runtime);
         Ok(())
     }
 
@@ -162,7 +125,11 @@ impl SupplierConnectorRegistry {
         &self,
         connection: &SupplierApiConnection,
     ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.adapter(connection.connector_type)?.fulfillment.creation_connector(connection)
+        bind_checked(
+            self.adapter(connection.connector_type)?.as_ref(),
+            connection,
+            ConnectorPurpose::Creation,
+        )
     }
 
     /// 为原请求调查、跟踪及取消解析当前连接协议。
@@ -176,7 +143,29 @@ impl SupplierConnectorRegistry {
         &self,
         connection: &SupplierApiConnection,
     ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.adapter(connection.connector_type)?.fulfillment.fulfillment_connector(connection)
+        bind_checked(
+            self.adapter(connection.connector_type)?.as_ref(),
+            connection,
+            ConnectorPurpose::Fulfillment,
+        )
+    }
+
+    /// 为退款及结算绑定原技术连接，不借用新增下单或付款准入。
+    /// # 参数
+    /// `connection` 为服务端原连接。
+    /// # 返回
+    /// 已验证身份的可选能力集合。
+    /// # 错误
+    /// 技术身份或协议不一致时拒绝。
+    pub fn after_sales_connector(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        bind_checked(
+            self.adapter(connection.connector_type)?.as_ref(),
+            connection,
+            ConnectorPurpose::AfterSales,
+        )
     }
 
     /// 按原订单身份只读调查，不受新增下单开关影响。
@@ -225,7 +214,10 @@ impl SupplierConnectorRegistry {
             .await
     }
 
-    fn adapter(&self, kind: Option<SupplierConnectorType>) -> Result<&Adapter, ClassifiedError> {
+    fn adapter(
+        &self,
+        kind: Option<SupplierConnectorType>,
+    ) -> Result<&Arc<dyn SupplierRuntime>, ClassifiedError> {
         let kind = kind.ok_or_else(|| ClassifiedError {
             class: SupplierFailureClass::CapabilityGap,
             code: "CONNECTOR_TYPE_REQUIRED".into(),
@@ -241,15 +233,13 @@ impl SupplierConnectorRegistry {
 
 impl SupplierApiGateway for SupplierConnectorRegistry {
     fn catalog_scope<'a>(&'a self, connection: &'a SupplierApiConnection) -> CatalogScopeRead<'a> {
-        Box::pin(
-            async move { self.adapter(connection.connector_type)?.gateway.catalog_scope(connection).await },
-        )
+        Box::pin(async move { self.adapter(connection.connector_type)?.catalog_scope(connection).await })
     }
 
     fn catalog_availability_validity(&self, connection: &SupplierApiConnection) -> Option<u64> {
         self.adapter(connection.connector_type)
             .ok()
-            .and_then(|adapter| adapter.gateway.catalog_availability_validity(connection))
+            .and_then(|adapter| adapter.catalog_availability_validity(connection))
     }
     fn catalog_connector_types(&self) -> Vec<SupplierConnectorType> {
         self.adapters.keys().copied().collect()
@@ -262,13 +252,11 @@ impl SupplierApiGateway for SupplierConnectorRegistry {
         let Some(adapter) = connection.connector_type.and_then(|kind| self.adapters.get(&kind)) else {
             return Ok(None);
         };
-        adapter.gateway.catalog_policy(connection)
+        adapter.catalog_policy(connection)
     }
 
     fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
-        Box::pin(async move {
-            self.adapter(connection.connector_type)?.gateway.catalog_page(connection, scan).await
-        })
+        Box::pin(async move { self.adapter(connection.connector_type)?.catalog_page(connection, scan).await })
     }
 
     fn health_check<'a>(
@@ -277,24 +265,28 @@ impl SupplierApiGateway for SupplierConnectorRegistry {
         check_type: SupplierHealthCheckType,
     ) -> Pin<Box<dyn Future<Output = Result<(), ClassifiedError>> + Send + 'a>> {
         Box::pin(async move {
-            self.adapter(connection.connector_type)?.gateway.health_check(connection, check_type).await
+            self.adapter(connection.connector_type)?.health_check(connection, check_type).await
         })
     }
 }
 
 impl SupplierReferenceRegistry for SupplierConnectorRegistry {
+    fn description(&self, target: &SupplierReferenceTarget) -> Result<ConnectorDescription, ClassifiedError> {
+        self.adapter(target.connector_type)?.description(target)
+    }
+
     fn capabilities(
         &self,
         target: &SupplierReferenceTarget,
     ) -> Result<Vec<SupplierApiCapabilityCode>, ClassifiedError> {
-        self.adapter(target.connector_type)?.references.capabilities(target)
+        self.adapter(target.connector_type)?.capabilities(target)
     }
 
     fn deployment_config(
         &self,
         target: &SupplierReferenceTarget,
     ) -> Result<SupplierDeploymentConfig, ClassifiedError> {
-        self.adapter(target.connector_type)?.references.deployment_config(target)
+        self.adapter(target.connector_type)?.deployment_config(target)
     }
 
     fn is_available(&self) -> bool {
@@ -307,7 +299,7 @@ impl SupplierReferenceRegistry for SupplierConnectorRegistry {
         target: &'a SupplierReferenceTarget,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<SupplierReferenceOption>, ClassifiedError>> + Send + 'a>>
     {
-        Box::pin(async move { self.adapter(target.connector_type)?.references.options(kind, target).await })
+        Box::pin(async move { self.adapter(target.connector_type)?.options(kind, target).await })
     }
 
     fn resolve<'a>(
@@ -317,7 +309,7 @@ impl SupplierReferenceRegistry for SupplierConnectorRegistry {
         target: &'a SupplierReferenceTarget,
     ) -> Pin<Box<dyn Future<Output = Result<ResolvedSupplierReference, ClassifiedError>> + Send + 'a>> {
         Box::pin(async move {
-            self.adapter(target.connector_type)?.references.resolve(kind, payload_reference, target).await
+            self.adapter(target.connector_type)?.resolve(kind, payload_reference, target).await
         })
     }
 }
@@ -329,42 +321,43 @@ mod tests {
 
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
-    use erp_supply::ports::connector::common::ScanWindow;
-    use erp_supply::ports::connector::offer::IncrementalSupport;
-    use erp_supply::ports::supplier_api_gateway::CatalogPage;
+    use erp_supply::ports::connector::common::{Page, ScanWindow, SupplierSku};
+    use erp_supply::ports::connector::offer::{
+        IncrementalSupport, Offer, OfferChange, OfferSource, ScopedOfferPage,
+    };
 
     use super::*;
 
     #[derive(Default)]
-    struct RecordingAdapter(Mutex<Vec<&'static str>>);
+    struct RecordingAdapter(Mutex<Vec<&'static str>>, Option<&'static str>, bool);
 
-    impl SupplierFulfillmentFactory for RecordingAdapter {
-        fn creation_connector(
+    impl SupplierRuntime for RecordingAdapter {
+        fn connector_type(&self) -> SupplierConnectorType {
+            SupplierConnectorType::Dangaoshushu
+        }
+        fn bind(
             &self,
-            _: &SupplierApiConnection,
+            connection: &SupplierApiConnection,
+            purpose: ConnectorPurpose,
         ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-            self.0.lock().unwrap().push("create-binding");
+            if purpose == ConnectorPurpose::Catalog {
+                self.0.lock().unwrap().push("catalog");
+                return Ok(Arc::new(RecordingConnector(
+                    SupplierApiConnectionId::new(self.1.unwrap_or(&connection.base.id)),
+                    !self.2,
+                )));
+            }
+            self.0.lock().unwrap().push(match purpose {
+                ConnectorPurpose::Creation => "create-binding",
+                _ => "tracking-binding",
+            });
             Err(ClassifiedError {
                 class: SupplierFailureClass::CapabilityGap,
                 code: "TEST_NO_ORDER".into(),
                 summary: "未实现订单".into(),
             })
         }
-        fn fulfillment_connector(
-            &self,
-            _: &SupplierApiConnection,
-        ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-            self.0.lock().unwrap().push("tracking-binding");
-            Err(ClassifiedError {
-                class: SupplierFailureClass::CapabilityGap,
-                code: "TEST_NO_ORDER".into(),
-                summary: "未实现订单".into(),
-            })
-        }
-    }
-
-    impl SupplierApiGateway for RecordingAdapter {
-        fn catalog_policy(
+        fn catalog_schedule(
             &self,
             _: &SupplierApiConnection,
         ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError> {
@@ -378,8 +371,7 @@ mod tests {
                 incremental: IncrementalSupport::Complete,
             }))
         }
-
-        fn health_check<'a>(
+        fn check_health<'a>(
             &'a self,
             _: &'a SupplierApiConnection,
             _: SupplierHealthCheckType,
@@ -389,11 +381,34 @@ mod tests {
                 Ok(())
             })
         }
-        fn catalog_page<'a>(&'a self, _: &'a SupplierApiConnection, _: &'a Scan) -> CatalogRead<'a> {
-            Box::pin(async move {
-                self.0.lock().unwrap().push("catalog");
-                Ok(CatalogPage { items: vec![], next: None, skipped: vec![], membership: None })
+    }
+
+    struct RecordingConnector(SupplierApiConnectionId, bool);
+    impl SupplierConnector for RecordingConnector {
+        fn connection_id(&self) -> &SupplierApiConnectionId {
+            &self.0
+        }
+        fn offers(&self) -> Option<&dyn OfferSource> {
+            self.1.then_some(self as &dyn OfferSource)
+        }
+    }
+    #[async_trait::async_trait]
+    impl OfferSource for RecordingConnector {
+        fn incremental_support(&self) -> IncrementalSupport {
+            IncrementalSupport::Complete
+        }
+        async fn scan(&self, _: &Scan) -> ConnectorResult<Page<Snapshot<OfferChange>>> {
+            Ok(Page { items: vec![], next: Some("next".into()) })
+        }
+        async fn scan_scoped(&self, scan: &Scan) -> ConnectorResult<ScopedOfferPage> {
+            Ok(ScopedOfferPage {
+                page: self.scan(scan).await?,
+                skipped: vec!["来源缺少规格".into()],
+                membership: None,
             })
+        }
+        async fn offer(&self, _: &SupplierSku) -> ConnectorResult<Lookup<Snapshot<Offer>>> {
+            Ok(Lookup::NotVisible)
         }
     }
 
@@ -476,7 +491,9 @@ mod tests {
         let target = SupplierReferenceTarget::from(&connection);
         let scan = Scan { window: ScanWindow::Full, cursor: None, limit: NonZeroU32::new(50).unwrap() };
         registry.health_check(&connection, SupplierHealthCheckType::Authentication).await.unwrap();
-        registry.catalog_page(&connection, &scan).await.unwrap();
+        let page = registry.catalog_page(&connection, &scan).await.unwrap();
+        assert_eq!(page.next.as_deref(), Some("next"));
+        assert_eq!(page.skipped, ["来源缺少规格"]);
         let options = registry.options(SupplierReferenceKind::Endpoint, &target).await.unwrap();
         assert_eq!(options[0].reference_id, "ticket");
         let resolved = registry.resolve(SupplierReferenceKind::Endpoint, "ticket", &target).await.unwrap();
@@ -547,5 +564,33 @@ mod tests {
         connection.connector_type = None;
         assert_eq!(registry.creation_connector(&connection).err().unwrap().code, "CONNECTOR_TYPE_REQUIRED");
         assert!(provider.0.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn mismatched_connection_and_missing_catalog_never_produce_successful_pages() {
+        let scan = Scan { window: ScanWindow::Full, cursor: None, limit: NonZeroU32::new(1).unwrap() };
+        for (bound_id, missing, code) in [
+            (Some("another-connection"), false, "SUPPLIER_CONNECTOR_BINDING_MISMATCH"),
+            (None, true, "CATALOG_SYNC_ADAPTER_UNAVAILABLE"),
+        ] {
+            let mut registry = SupplierConnectorRegistry::default();
+            let runtime = Arc::new(RecordingAdapter(Mutex::new(vec![]), bound_id, missing));
+            registry.register(SupplierConnectorType::Dangaoshushu, runtime).unwrap();
+            assert_eq!(registry.catalog_page(&connection(), &scan).await.unwrap_err().code, code);
+            assert_eq!(registry.catalog_scope(&connection()).await.unwrap_err().code, code);
+        }
+    }
+
+    #[test]
+    fn registration_cannot_relabel_another_supplier_protocol() {
+        let mut registry = SupplierConnectorRegistry::default();
+        assert_eq!(
+            registry
+                .register(SupplierConnectorType::JdVop, Arc::new(RecordingAdapter::default()))
+                .unwrap_err()
+                .code,
+            "SUPPLIER_CONNECTOR_TYPE_MISMATCH"
+        );
+        assert!(registry.connector_types().is_empty());
     }
 }

@@ -14,7 +14,7 @@ mod read_access;
 pub use read_access::SupplierDepositReadAccess;
 mod funds;
 pub use access::authorize_deposit_account;
-pub use funds::{SupplierDepositFundsAdapter, ensure_execution_funds, mark_execution_funds_sent};
+pub use funds::SupplierDepositFundsAdapter;
 
 mod management;
 pub use management::*;

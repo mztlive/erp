@@ -14,11 +14,13 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::Result;
+use crate::after_sales::{SettlementEvidenceView, SettlementScanView};
 use crate::entity::supplier_api::{
     BusinessCapabilityRequirement, HealthCheckResult, RateLimitPolicy, SupplierApiCapabilityCode,
     SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionStatus, SupplierCommandOutcome,
     SupplierConnectionAction, SupplierConnectorType, SupplierHealthCheckStatus, SupplierHealthCheckType,
 };
+use crate::ports::connector::description::ConnectorDescription;
 
 /// 接口类型的稳定代码与展示名称，不包含供应商账号或凭据。
 #[derive(Serialize)]
@@ -484,6 +486,12 @@ pub struct RateLimitPolicyView {
 /// 连接详情响应视图（连接身份 + 能力清单）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SupplierApiConnectionDetailView {
+    /// 结算来源采集状态；None 表示尚未检查，不能解释为已结算。
+    pub settlement_scan: Option<SettlementScanView>,
+    /// 最多50项待关联的来源流水，供结算来源命令引用。
+    pub settlement_evidence: Vec<SettlementEvidenceView>,
+    /// 当前运行时完整能力；不可取得时为 None，不代表无能力或已授权。
+    pub connector_description: Option<ConnectorDescription>,
     /// 当前部署是否登记可用技术配置；不返回地址或密钥。
     pub deployment_ready: bool,
     /// 缺失或变化时面向操作人的下一步说明。

@@ -1,7 +1,7 @@
 //! 域 D32 `supplier_fulfillment` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/supplier-fulfillment-orders`、
-//! `/admin/supplier-refund-facts`；每条路由统一走 JWT + RBAC（`with_permission`），
+//! `/admin/supplier-fulfillment-orders/{id}/refund-facts`；每条路由统一走 JWT + RBAC（`with_permission`），
 //! handler 标注 `#[permission_macros::permission]`。
 
 use axum::Router;
@@ -125,7 +125,7 @@ fn order_handover_routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/supplier-refund-facts",
+            "/supplier-fulfillment-orders/{id}/refund-facts",
             with_permission(
                 post(supplier_fulfillment::supplier_refund_fact_post),
                 rbac,

@@ -112,16 +112,16 @@ mod tests {
             Ok(dictionary()),
         ]);
         let page = connector.scan_with_details(&scan()).await.unwrap();
-        assert_eq!(page.next.as_deref(), Some("2"));
+        assert_eq!(page.page.next.as_deref(), Some("2"));
         assert!(page.skipped.is_empty());
-        assert_eq!(page.items.len(), 2);
-        for item in &page.items {
+        assert_eq!(page.page.items.len(), 2);
+        for item in &page.page.items {
             let OfferChange::Upsert(offer) = &item.value else { panic!("商品观察") };
             assert_eq!(offer.details.category_id.as_deref(), Some("89"));
             assert_eq!(offer.details.category_name.as_deref(), Some("下午茶甜品"));
         }
         assert_eq!(transport.requests.lock().unwrap().len(), 3);
-        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("商品观察") };
+        let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("商品观察") };
         let Lookup::Found(current) = connector.offer(&offer.sku).await.unwrap() else {
             panic!("商品详情")
         };
@@ -149,7 +149,7 @@ mod tests {
     async fn missing_dictionary_entry_keeps_source_id_without_using_product_label() {
         let (connector, _) = recording_connector(vec![Ok(listed()), Ok(detail()), Ok(json!([]))]);
         let page = connector.scan_with_details(&scan()).await.unwrap();
-        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("商品观察") };
+        let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("商品观察") };
         assert_eq!(offer.details.category_id.as_deref(), Some("89"));
         assert!(offer.details.category_name.is_none());
     }

@@ -67,7 +67,7 @@ impl SourceRevision {
 }
 
 /// 每份查询结果的来源证据；来源时间缺失时必须保留 None。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceStamp {
     pub revision: SourceRevision,
     /// 供应商明确声明的业务变更时间，不能用签名时间戳代替。
@@ -77,7 +77,7 @@ pub struct SourceStamp {
 }
 
 /// 查询取得的快照。事实生效、来源可信度和有效期由消费方校验。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snapshot<T> {
     pub stamp: SourceStamp,
     pub value: T,
@@ -91,14 +91,14 @@ pub enum Lookup<T> {
 }
 
 /// 固定扫描窗口。Changes 的上下界为包含关系；跨窗口重叠由消费方去重。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScanWindow {
     Full,
     Changes { since: Instant, through: Instant },
 }
 
 /// 适配器封装供应商页号/游标；恢复时连接、窗口和筛选条件必须保持一致。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Scan {
     pub window: ScanWindow,
     pub cursor: Option<String>,

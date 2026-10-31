@@ -307,6 +307,10 @@ impl SupplierOrderActionBlockerView {
 /// 供应商取消/退款动作提交请求（动作行冻结实际提交给供应商的范围）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SubmitAfterSalesActionRequest {
+    /// API 退款的稳定售后申请身份；不同合法分次退款须使用不同身份，旧客户端缺省按载荷幂等。
+    #[serde(default)]
+    #[validate(length(min = 1, max = 128, message = "售后申请身份长度必须在1-128之间"))]
+    pub request_id: Option<String>,
     /// 提交给供应商的动作行。
     #[validate(length(min = 1, message = "动作行至少一行"))]
     pub lines: Vec<AfterSalesActionLineRequest>,

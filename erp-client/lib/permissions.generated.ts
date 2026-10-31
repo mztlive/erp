@@ -6696,7 +6696,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/supplier-refund-facts",
+                path: "/admin/supplier-fulfillment-orders/{id}/refund-facts",
                 description: "登记供应商退款成功结果",
                 permission: {
                     resource: "supplier_refund_fact",

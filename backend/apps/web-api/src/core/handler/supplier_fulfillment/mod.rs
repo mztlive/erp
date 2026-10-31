@@ -234,6 +234,13 @@ pub async fn supplier_fulfillment_order_refund(
     Path(id): Path<String>,
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
+    if let Some(process) = state.supplier_after_sales_process()
+        && let Some(view) = process
+            .submit_refund_if_api(&id, req.clone(), &actor, &state.supplier_fulfillment_service().access())
+            .await?
+    {
+        return Ok(ApiResponse::ok_with_data(view));
+    }
     let view = state.supplier_fulfillment_process().submit_refund(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -291,6 +298,13 @@ pub async fn supplier_refund_fact_post(
     Path(id): Path<String>,
     Json(req): Json<RecordRefundResultRequest>,
 ) -> Result<SupplierRefundFactView> {
+    if let Some(process) = state.supplier_after_sales_process()
+        && let Some(view) = process
+            .record_refund_if_api(&id, req.clone(), &actor, &state.supplier_fulfillment_service().access())
+            .await?
+    {
+        return Ok(ApiResponse::ok_with_data(view));
+    }
     let view = state.supplier_fulfillment_process().record_refund_result(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -329,4 +343,97 @@ pub async fn supplier_fulfillment_order_handover_candidates(
 ) -> Result<Vec<FulfillmentHandoverCandidateView>> {
     let view = state.supplier_fulfillment_process().handover_candidates(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use config::{Config, SafeConfig};
+    use mongodb::Client;
+    use mongodb::options::ClientOptions;
+    use storage::{S3Storage, S3StorageConfig};
+    use tower::ServiceExt;
+
+    use super::*;
+    use crate::core::routes;
+
+    // 只构造本地客户端；请求在认证边界结束，不访问数据库或对象存储。
+    fn state() -> AppState {
+        let settings = Config::from_toml_str(
+            r#"
+            [xxl_job]
+admin_url = "http://admin.invalid/xxl-job-admin"
+executor_url = "http://worker.invalid:10002"
+app_name = "erp-test"
+access_token = "test-token-123456"
+
+[app]
+            port=10001
+            secret="unit-test-only-secret-at-least-32-bytes"
+            [database]
+            uri="mongodb://127.0.0.1:1/unit_test"
+            db_name="unit_test"
+            [s3]
+            bucket="unit-test"
+            region="unit-test"
+            access_key_id="unit-test"
+            secret_access_key="unit-test"
+            public_base_url="http://127.0.0.1:1"
+        "#,
+        )
+        .unwrap();
+        let db = Client::with_options(ClientOptions::default()).unwrap().database("unit_test");
+        let storage = S3Storage::new(S3StorageConfig::new(
+            "unit-test",
+            "unit-test",
+            "unit-test",
+            "unit-test",
+            "http://127.0.0.1:1",
+        ))
+        .unwrap();
+        AppState::new(db, SafeConfig::new(settings), storage)
+    }
+
+    #[tokio::test]
+    async fn refund_commands_require_authentication_before_supplier_or_financial_access() {
+        let app = routes::create(state());
+        for path in [
+            "/admin/supplier-fulfillment-orders/order/refund",
+            "/admin/supplier-fulfillment-orders/order/refund-facts",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post(path)
+                        .header("content-type", "application/json")
+                        .body(Body::from("{}"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    #[tokio::test]
+    async fn refund_fact_handler_extracts_order_path_before_rejecting_malformed_body() {
+        use axum::Router;
+        use axum::routing::post;
+        use erp_core::AccountKind;
+        let app = Router::new()
+            .route("/orders/{id}/refund-facts", post(supplier_refund_fact_post))
+            .with_state(state())
+            .layer(Extension(AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin)));
+        let response = app
+            .oneshot(
+                Request::post("/orders/order/refund-facts")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 }

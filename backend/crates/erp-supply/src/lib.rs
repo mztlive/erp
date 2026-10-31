@@ -1,5 +1,6 @@
 //! 供应供给、连接能力、供应商履约和结算的领域规则与持久化。
 
+pub mod after_sales;
 pub mod api_order;
 pub mod catalog_adoption;
 pub mod catalog_membership;

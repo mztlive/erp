@@ -46,6 +46,7 @@ pub mod sellable_projection_refresh;
 pub mod source_media;
 pub mod source_registry;
 pub mod supplier;
+pub mod supplier_after_sales;
 pub mod supplier_api_orders;
 pub mod supplier_callbacks;
 pub mod supplier_catalog_adoption;

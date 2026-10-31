@@ -140,6 +140,7 @@ impl CancellationScope {
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(SubmitAfterSalesActionRequest {
+            request_id: request.request_id.clone(),
             lines,
             reason_code: Some(self.reason_code.clone()),
             comment: request.comment.clone(),
@@ -430,6 +431,7 @@ mod tests {
             .apply_order_tree(OrderTree { root_order_no: "root".into(), version: 1, nodes }, from_ref(&line))
             .unwrap();
         let request = SubmitAfterSalesActionRequest {
+            request_id: None,
             lines: vec![AfterSalesActionLineRequest {
                 supplier_fulfillment_item_id: SupplierFulfillmentItemId::new("item"),
                 quantity: "2".parse().unwrap(),

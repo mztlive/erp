@@ -7,15 +7,16 @@ use config::DangaoshushuConfig;
 use erp_core::common::time::Instant;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
-    SupplierApiCapabilityCode, SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType,
-    SupplierHealthCheckType,
+    SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType, SupplierHealthCheckType,
 };
 use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
 use erp_supply::ports::connector::SupplierConnector;
-use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Lookup, Scan, Snapshot};
+use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Lookup, Snapshot};
+use erp_supply::ports::connector::description::ConnectorDescription;
 use erp_supply::ports::connector::offer::IncrementalSupport;
 use erp_supply::ports::connector::order::{OrderKey, OrderSnapshot, Orders};
-use erp_supply::ports::supplier_api_gateway::{CatalogRead, ClassifiedError, SupplierApiGateway};
+use erp_supply::ports::connector::runtime::{ConnectorPurpose, SupplierRuntime};
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::ports::supplier_reference_registry::{
     ResolvedSupplierReference, SupplierDeploymentConfig, SupplierReferenceKind, SupplierReferenceOption,
     SupplierReferenceRegistry, SupplierReferenceTarget,
@@ -26,7 +27,6 @@ use serde_json::Value;
 use super::parsing::mapping;
 use super::transport::{HttpTransport, Transport};
 use super::{DangaoshushuConnector, DangaoshushuReadQuery, error, proof};
-use crate::connectors::registry::SupplierFulfillmentFactory;
 
 /// 技术配置注册表；每次按后台连接绑定客户端，共享 HTTP 连接池与渠道限流。
 pub struct DangaoshushuRuntime {
@@ -312,11 +312,31 @@ fn reference_kind(kind: SupplierReferenceKind) -> ConnectorResult<&'static str> 
     }
 }
 
-impl SupplierApiGateway for DangaoshushuRuntime {
-    fn catalog_availability_validity(&self, _: &SupplierApiConnection) -> Option<u64> {
+impl SupplierRuntime for DangaoshushuRuntime {
+    fn connector_type(&self) -> SupplierConnectorType {
+        SupplierConnectorType::Dangaoshushu
+    }
+
+    fn bind(
+        &self,
+        connection: &SupplierApiConnection,
+        purpose: ConnectorPurpose,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        let connector = match purpose {
+            ConnectorPurpose::Creation => self.connector(connection),
+            ConnectorPurpose::Catalog
+            | ConnectorPurpose::Notification
+            | ConnectorPurpose::Fulfillment
+            | ConnectorPurpose::AfterSales => self.tracking_connector(connection),
+        }
+        .map_err(classified)?;
+        Ok(Arc::new(connector))
+    }
+
+    fn availability_validity(&self, _: &SupplierApiConnection) -> Option<u64> {
         self.settings.availability_validity_seconds
     }
-    fn catalog_policy(
+    fn catalog_schedule(
         &self,
         _connection: &SupplierApiConnection,
     ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError> {
@@ -331,17 +351,7 @@ impl SupplierApiGateway for DangaoshushuRuntime {
         }))
     }
 
-    fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
-        Box::pin(async move {
-            self.bound_connector(connection)
-                .map_err(classified)?
-                .scan_with_details(scan)
-                .await
-                .map_err(classified)
-        })
-    }
-
-    fn health_check<'a>(
+    fn check_health<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,
         check_type: SupplierHealthCheckType,
@@ -361,14 +371,11 @@ impl SupplierApiGateway for DangaoshushuRuntime {
     }
 }
 impl SupplierReferenceRegistry for DangaoshushuRuntime {
-    fn capabilities(
-        &self,
-        target: &SupplierReferenceTarget,
-    ) -> Result<Vec<SupplierApiCapabilityCode>, ClassifiedError> {
+    fn description(&self, target: &SupplierReferenceTarget) -> Result<ConnectorDescription, ClassifiedError> {
         self.validate_target(target).map_err(classified)?;
         let connector = DangaoshushuConnector::bind(self.settings.clone(), target, self.transport.clone())
             .map_err(classified)?;
-        Ok(connector.capabilities())
+        Ok(ConnectorDescription::from_connector(&connector))
     }
 
     fn deployment_config(
@@ -408,34 +415,17 @@ fn classified(error: ConnectorError) -> ClassifiedError {
     ClassifiedError { class: error.class, code: error.code, summary: error.summary }
 }
 
-impl SupplierFulfillmentFactory for DangaoshushuRuntime {
-    fn creation_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.connector(connection)
-            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
-            .map_err(|error| ClassifiedError { class: error.class, code: error.code, summary: error.summary })
-    }
-    fn fulfillment_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.tracking_connector(connection)
-            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
-            .map_err(|error| ClassifiedError { class: error.class, code: error.code, summary: error.summary })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU32;
 
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::{
-        HealthCheckResult, SupplierApiConnectionData, SupplierApiConnectionStatus,
+        HealthCheckResult, SupplierApiCapabilityCode, SupplierApiConnectionData, SupplierApiConnectionStatus,
     };
-    use erp_supply::ports::connector::common::ScanWindow;
+    use erp_supply::ports::connector::common::{Scan, ScanWindow};
+    use erp_supply::ports::connector::description::NotificationMode;
+    use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
     use serde_json::{from_value, json};
 
     use super::super::test_support::{recording_connector, settings};
@@ -661,6 +651,27 @@ mod tests {
         connection.stable.status = SupplierApiConnectionStatus::Disabled;
         assert!(runtime.connector(&connection).is_err());
         assert!(runtime.tracking_connector(&connection).is_ok());
+        for purpose in [
+            ConnectorPurpose::Catalog,
+            ConnectorPurpose::Notification,
+            ConnectorPurpose::Fulfillment,
+            ConnectorPurpose::AfterSales,
+        ] {
+            assert!(runtime.bind(&connection, purpose).is_ok());
+        }
+        assert_eq!(
+            runtime.bind(&connection, ConnectorPurpose::Creation).err().unwrap().code,
+            "DGSS_CONNECTION_DISABLED"
+        );
+        let description = runtime.description(&SupplierReferenceTarget::from(&connection)).unwrap();
+        assert_eq!(
+            description,
+            ConnectorDescription::from_connector(&runtime.tracking_connector(&connection).unwrap())
+        );
+        assert_eq!(description.notification_mode, NotificationMode::Callback);
+        assert!(!description.funds_source);
+        assert!(!description.operations.contains(&SupplierApiCapabilityCode::Refund));
+        assert!(!description.operations.contains(&SupplierApiCapabilityCode::Settlement));
         assert!(
             runtime
                 .capabilities(&SupplierReferenceTarget::from(&connection))

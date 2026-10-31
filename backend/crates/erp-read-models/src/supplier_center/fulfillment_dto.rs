@@ -1,10 +1,13 @@
 //! 履约响应的唯一消费方 DTO；原字段和序列化保持。
+use erp_supply::after_sales::RefundExecutionView;
 use erp_supply::dto::supplier_fulfillment::*;
 use serde::Serialize;
 use serde_json::Value as WorkItemView;
 /// 供应商履约订单详情视图（订单 + 明细 + 动作 + 状态历史 + 退款事实）。
 #[derive(Debug, Clone, Serialize)]
 pub struct SupplierFulfillmentOrderDetailView {
+    /// API 退款原动作、来源收据和财务分配状态。
+    pub api_refunds: Vec<RefundExecutionView>,
     /// 订单头。
     pub order: SupplierFulfillmentOrderView,
     /// 履约明细。

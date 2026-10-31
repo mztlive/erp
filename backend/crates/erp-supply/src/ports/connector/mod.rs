@@ -9,6 +9,7 @@
 pub mod address;
 pub mod callback;
 pub mod common;
+pub mod description;
 pub mod funds;
 pub mod messages;
 pub mod offer;
@@ -17,6 +18,7 @@ pub mod order_tree;
 mod order_tree_tracking;
 pub mod preflight;
 pub mod receipt;
+pub mod runtime;
 pub mod settlement;
 pub mod transform;
 

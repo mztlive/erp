@@ -460,7 +460,7 @@ pub struct CancelOrder {
     pub reason_code: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReturnLine {
     pub line_id: String,
     pub sku: SupplierSku,
@@ -513,7 +513,7 @@ pub trait Cancellations: Send + Sync {
     async fn cancel(&self, request: &CancelOrder) -> ConnectorResult<ActionAccepted>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestRefund {
     pub action: ActionKey,
     pub order: OrderReference,
@@ -523,7 +523,7 @@ pub struct RequestRefund {
 }
 
 /// 单笔退款事实；不得把订单累计退款额当作新一笔退款入账。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RefundReceipt {
     pub action_id: String,
     pub external_refund_no: String,

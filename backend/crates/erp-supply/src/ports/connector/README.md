@@ -5,13 +5,49 @@
 执行[蛋糕叔叔接入合同](../../../../../../docs/dangaoshushu-connector-contract.md)。
 业务基线与数据兼容要求见[第二期方案第 6、7、10、13、14、17 章](../../../../../../docs/erp-phase-2.md)。
 
-## 审阅入口
+## 统一接入与实现验收
+
+1. 协议运行时必须在组合层实现本模块定义的 `SupplierRuntime`，由 `SupplierConnectorRegistry` 唯一登记。运行时按 `ConnectorPurpose` 绑定连接，目录读取、通知消费、新建订单和既有订单操作不得互相借用准入资格。
+2. 目录页与范围读取必须经 `OfferSource`；`SupplierApiGateway` 仅保留为既有消费方合同，协议运行时不得重复实现目录分派。详情补全、跳过项与商品池范围证据必须由 `scan_scoped` 完整返回。
+3. 连接器能力描述必须从实际窄接口生成，包括操作清单、地址要求、地址候选、消息方式、资金要求及资金证据读取。描述只读、不含凭据、不写入历史能力配置，不授予业务执行权限。连接详情缺少描述时必须保持未知。
+4. `SupplierFundsSource` 只返回供应商资金证据；ERP 执行组保障通过 `SupplierOrderFunds` 校验。发单与未发送确认须在原事务内核对批准预算、账号、付款资格和独占占用；缺失端口必须拒绝，远端余额不得代替本地资格。
+5. 退款与结算继续使用独立 `Refunds`、`Settlements`。接入前必须分别落实原动作恢复、稳定流水身份、数量和金额核验、可靠存储、领域应用和审计；接口存在或来源请求受理均不得解释为已退款、已结算或已核销。
+6. 本轮统一基础框架不得为蛋糕叔叔或京东伪造退款、结算能力，不得改走旧 `SupplierGateway::dispatch` 隐藏多步操作。未提供真实协议实现的能力继续返回 `None`，正式退款和结算流程按各自合同保留。
+7. 必须验证目录读取保留详情与跳过项、停用连接仍可同步与调查、创建资格独立、连接身份错配被拒绝、能力缺失失败关闭、资金资格端口确实参与生产调用。公开合同改动须通过 workspace 编译、受影响库测试及 Clippy。
+
+## 新供应商接入步骤
+
+1. 在 `erp-processes/src/connectors/<protocol>/` 实现协议解析、认证、传输和状态映射；技术配置经 `SafeConfig` 注入，不允许业务请求覆盖账号、端点或凭据。
+2. 在绑定后的 `SupplierConnector` 中仅提供真实实现的能力；使用 `ConnectorDescription::from_connector` 生成部署描述，不复制固定能力清单。只读订单查询能力不得声明创建能力，读取余额不得声明资金已到账。
+3. 实现 `SupplierReferenceRegistry` 的技术引用解析及部署描述，并实现 `SupplierRuntime` 的协议类型、用途绑定、目录策略和只读健康检查。无需单独实现 `SupplierApiGateway` 或目录转换网关。
+4. `Creation` 必须核验新增下单状态、当前健康证据和协议要求；`Fulfillment` 保留原订单技术账号及资金账号绑定；`Catalog` 与 `Notification` 不使用新增下单开关或订单资金门槛作为读取准入。
+5. 在应用组合根登记运行时，并注入 ERP 资金资格实现；目录、选品、采购执行、通知、履约及财务必须复用公共流程。禁止按供应商名称、连接编码或前端参数推断协议。
+6. 以替身执行实际公共流程，覆盖原始字段映射、不可用能力、错配身份、停用后读取、部分目录异常、未知写结果及资金资格失败。真实供应商验收须另行验证远端幂等、协议状态及到账证据，不以库单元测试替代。
+
+## 连接详情响应与兼容
+
+`SupplierApiConnectionDetailView` 必须返回可空的 `connector_description`。缺失运行时或无法取得描述时返回 `null`；不得填充默认能力或默认资金要求。既有 `declared_capabilities` 保留，取得描述时与 `connector_description.operations` 一致。
+
+| 字段 | 合同 |
+| --- | --- |
+| `operations` | 既有能力代码清单；从实际窄接口生成 |
+| `address_requirement` | `{"type":"text"}`、`{"type":"four_level"}` 或 `{"type":"geocoded","coordinate_system":"Bd09"}`；坐标基准按协议声明 |
+| `address_candidates` | 是否具备供应商原生地址查询及核验接口 |
+| `notification_mode` | `unavailable`、`callback`、`pull`、`callback_and_pull` |
+| `funding_requirement` | `posted_payment_gate` 或 `verified_supplier_deposit`，不表示已满足资金资格 |
+| `funds_source` | 是否具备外部资金证据查询，不能解释为自动充值或付款权限 |
+
+上述字段只扩展读取响应，不修改 MongoDB 存储结构或历史能力记录。客户端须兼容旧服务端未返回描述的情况；回滚时可移除新增响应，既有能力代码和单据数据保持兼容。`SUPPLIER_CONNECTOR_BINDING_MISMATCH` 必须阻断跨连接调用；`SUPPLIER_CONNECTOR_TYPE_MISMATCH` 必须阻断将一种协议登记为另一种协议。
+
+## 接口审阅清单
 
 按下列顺序检查接口职责、输入输出及恢复边界。
 
 | 文件 | 必须检查的合同 |
 | --- | --- |
 | [mod.rs](mod.rs) | `SupplierConnector` 绑定连接；各能力独立可选；未提供的能力返回 `None` |
+| [runtime.rs](runtime.rs) | 用途绑定、协议与连接身份重验、统一目录读取及只读健康检查 |
+| [description.rs](description.rs) | 从实际接口生成操作、地址、通知和资金能力描述，不表达业务授权 |
 | [offer.rs](offer.rs) | 商品分页、增量覆盖、两种供货报价、可供数量、完整可售地区、地址准备与配送分组 |
 | [transform.rs](transform.rs) | `OfferTransform<Source>::transform`：供应商原始商品转换为标准 `Offer` |
 | [order.rs](order.rs) | 单组创建、我方单号查单、订单确认、支付通知、取消、单笔退款及独立状态轨道 |
@@ -106,3 +142,24 @@
 2. 历史能力启停与采购确认只用于保留旧记录，不参与新连接初始化、能力展示或业务资格。能力写接口必须删除。
 3. 连接状态控制新增自动下单；商品同步与选品独立校验配置、来源及业务权限。关闭开关阻止新建及尚未发送的预占订单确认，保留原动作调查、取消、消息和订单跟踪；旧支付通知协议按其既有合同执行。
 4. 新增下单须验证当前配置健康、已有采购审批与执行资格。开启开关的检查只允许读取，不得创建测试订单；事务外完成检查，事务内重验版本并保存状态和审计。
+
+## 退款与结算处理器执行合同
+
+1. API 退款必须经统一处理器登记原订单、原动作、范围和金额；同载荷重放返回原动作。同一订单的累计有效申请数量与金额不得超过原冻结采购。支持能力的动作先可靠保存 `UNKNOWN` 再发送一次；重启、超时和受理之后只能查询原动作。
+2. 缺少退款能力必须保存 `UNSUPPORTED` 和待人工动作，不发 HTTP、不自动重试、不生成退款事实。能力在发送后消失必须保留未知，不得改成从未发送。
+3. 查询完成必须核对动作、订单、金额、外部退款号与业务时间。只保存来源收据；成本、应付和现金拆分须在既有退款结果登记入口核对原收据及分配，不能从退款总额猜造财务归属。
+4. 结算处理器按连接保存固定窗口和游标，每次至多读取50条。整页证据与游标同事务保存；同连接、同流水身份不同载荷必须阻断，空页不得形成已结算结论。
+5. 缺少结算能力必须持久化 `UNSUPPORTED`，停止自动采集。已收到的证据必须保留。采集流水只成为待核对来源；正式结算仍经既有来源录入、差异处理和审核过账，不得跳过税额、期间及逐行分配。
+6. 两类处理器必须装配到生产入口及后台 worker，并覆盖不支持、成功、重放、未知、保存失败、错配和分页恢复的单元测试。协议实现仍为可选，不能用模拟成功替代真实供应商能力。
+
+### 处理器接口与上线要求
+
+1. `POST /admin/supplier-fulfillment-orders/{id}/refund` 必须沿原退款权限及订单范围登记。`request_id` 为可选的稳定售后申请身份；不同分次退款必须使用不同身份，同身份异载荷必须冲突。旧客户端不传时按规范化完整载荷幂等，不能据此重复提交同范围退款。
+2. 订单详情新增 `api_refunds`，提供 `action_id/state/amount/blocker/receipt/receipt_version/fact_id`。`READY → UNKNOWN → ACCEPTED → RECEIVED → APPLIED` 分别表示未发、可能发送、受理、来源核实、供应商退款事实及分配已登记。`APPLIED` 不表示现金到账或财务核销。`UNSUPPORTED` 和 `REJECTED` 均不自动重发。
+3. `POST /admin/supplier-fulfillment-orders/{id}/refund-facts` 必须同时具备原退款事实登记权限及订单退款范围；API 订单的 `source_event_id` 必须取原 `action_id`，自动来源的版本必须取详情的 `receipt_version`（内容指纹，不声明供应商单调版本），人工来源按第9项提交核实凭证版本。金额、时间、数量及逐行财务归属必须一致。原不含订单参数的 `/admin/supplier-refund-facts` 无法满足 handler 合同，移除；仓库不存在业务客户端调用方，权限清单由构建生成。
+4. 连接详情新增 `settlement_scan` 和 `settlement_evidence`。首次未采集为 `null`；`UNSUPPORTED` 表示缺少能力；`BLOCKED` 表示原窗口受阻。待关联流水一次最多50项，其 `reference_id` 可在既有结算来源录入的逐行 `evidence_reference_ids` 中使用。关联必须核对供应商、连接、原订单、期间及费用；退款流水还必须匹配正式退款号、金额与事实。
+5. 结算来源采集与退款恢复必须由售后后台循环运行，与新建订单、凭据续期分开。停用新增下单不得阻止原售后调查；`ConnectorPurpose::AfterSales` 只授予技术绑定，不能授予付款或新增下单资格。
+6. 新增 `supplier_api_refunds`、`supplier_api_settlement_scans`、`supplier_api_settlement_evidence` 三个集合。应用索引入口及 `backend/scripts/migrations/20261031-supplier-after-sales.mongosh.js` 必须一致；上线前建立唯一与有界查询索引。迁移脚本默认只读，不得在单元验证阶段连接真实 MongoDB。
+7. 回滚前停止新售后任务领取。三个集合全空时才允许移除新增索引；一旦存在动作或来源证据，必须保留数据及唯一身份索引，并保留能够查询原未知退款的兼容 worker。不得通过删除意图、重置状态或重换动作身份回滚。
+8. 不支持的供应商仅提供明确待人工状态和既有人工售后/对账路径，不伪造协议成功。新接口字段为增量扩展；本轮不新增前端操作页面。财务分配及结算审核沿既有流程，真实供应商协议验收与 Mongo 事务并发验收必须单独执行。
+9. 未支持退款的人工接管复用同一退款事实登记入口：必须提供 `manual_evidence_reference`、真实外部退款号及凭证版本，并保留操作人。只允许原状态 `UNSUPPORTED`；`UNKNOWN/ACCEPTED` 禁止通过该入口覆盖。人工核实仍重验原申请累计数量、金额、成本、应付和付款归属，并将 `manual_evidence` 随订单详情返回。自动来源的证据版本须取收据指纹，人工来源的版本须取核实凭证版本，二者不得混用。

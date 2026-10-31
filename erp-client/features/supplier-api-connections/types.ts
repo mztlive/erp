@@ -130,7 +130,22 @@ export type ConnectionListItem = {
     actionBlockers: ActionBlocker[]
 }
 
+/** 来源于运行时接口；不包含账号凭据，不授予下单或资金权限。 */
+export type ConnectorDescription = {
+    operations: CapabilityCode[]
+    addressRequirement:
+        | { type: "text" }
+        | { type: "four_level" }
+        | { type: "geocoded"; coordinate_system: "Bd09" | "Gcj02" | "Wgs84" }
+    addressCandidates: boolean
+    notificationMode: "unavailable" | "callback" | "pull" | "callback_and_pull"
+    fundingRequirement: "posted_payment_gate" | "verified_supplier_deposit"
+    fundsSource: boolean
+}
+
 export type ConnectionCenterView = {
+    /** 缺失表示当前无法取得描述，不能解释为没有能力。 */
+    connectorDescription?: ConnectorDescription
     deploymentReady: boolean
     deploymentMessage: string
     /** 接口适配器自报的可执行能力；不随连接启停变化。 */

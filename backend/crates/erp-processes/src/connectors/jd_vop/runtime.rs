@@ -9,16 +9,15 @@ use config::JdVopConfig;
 use erp_party::SensitiveDataCodec;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{
-    SupplierApiCapabilityCode, SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType,
-    SupplierHealthCheckType,
+    SupplierApiConnection, SupplierApiConnectionStatus, SupplierConnectorType, SupplierHealthCheckType,
 };
 use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
 use erp_supply::ports::connector::SupplierConnector;
-use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult, Scan};
-use erp_supply::ports::connector::offer::{IncrementalSupport, OfferSource};
-use erp_supply::ports::supplier_api_gateway::{
-    CatalogPage, CatalogRead, CatalogScopeRead, ClassifiedError, SupplierApiGateway,
-};
+use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
+use erp_supply::ports::connector::description::ConnectorDescription;
+use erp_supply::ports::connector::offer::IncrementalSupport;
+use erp_supply::ports::connector::runtime::{ConnectorPurpose, SupplierRuntime};
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::ports::supplier_reference_registry::{
     ResolvedSupplierReference, SupplierDeploymentConfig, SupplierReferenceKind, SupplierReferenceRegistry,
     SupplierReferenceTarget,
@@ -27,7 +26,6 @@ use hmac::{Hmac, KeyInit, Mac};
 use serde_json::{json, to_vec};
 use sha2::Sha256;
 
-use super::super::registry::SupplierFulfillmentFactory;
 use super::messages::MessageRuntime;
 use super::transport::{JdVopReadRequest, JdVopReadTransport, JdVopWriteTransport, ReadClient, WriteClient};
 use super::wire::Pools;
@@ -239,37 +237,6 @@ impl JdVopRuntime {
     }
 }
 
-impl SupplierFulfillmentFactory for JdVopRuntime {
-    fn notification_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.tracking_connector(connection)
-            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
-            .map_err(classified)
-    }
-
-    fn creation_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.validate_funds_binding(connection).map_err(classified)?;
-        self.connector(connection)
-            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
-            .map_err(classified)
-    }
-
-    fn fulfillment_connector(
-        &self,
-        connection: &SupplierApiConnection,
-    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
-        self.validate_funds_binding(connection).map_err(classified)?;
-        self.tracking_connector(connection)
-            .map(|connector| Arc::new(connector) as Arc<dyn SupplierConnector>)
-            .map_err(classified)
-    }
-}
-
 impl JdVopRuntime {
     fn validate_funds_binding(&self, connection: &SupplierApiConnection) -> ConnectorResult<()> {
         if let Some(profile) = &self.profile
@@ -286,18 +253,31 @@ impl JdVopRuntime {
     }
 }
 
-impl SupplierApiGateway for JdVopRuntime {
-    fn catalog_scope<'a>(&'a self, connection: &'a SupplierApiConnection) -> CatalogScopeRead<'a> {
-        Box::pin(async move {
-            self.tracking_connector(connection).map_err(classified)?.scope().await.map_err(classified)
-        })
+impl SupplierRuntime for JdVopRuntime {
+    fn connector_type(&self) -> SupplierConnectorType {
+        SupplierConnectorType::JdVop
     }
 
-    fn catalog_connector_types(&self) -> Vec<SupplierConnectorType> {
-        vec![SupplierConnectorType::JdVop]
+    fn bind(
+        &self,
+        connection: &SupplierApiConnection,
+        purpose: ConnectorPurpose,
+    ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError> {
+        if matches!(purpose, ConnectorPurpose::Creation | ConnectorPurpose::Fulfillment) {
+            self.validate_funds_binding(connection).map_err(classified)?;
+        }
+        let connector = match purpose {
+            ConnectorPurpose::Creation => self.connector(connection),
+            ConnectorPurpose::Catalog
+            | ConnectorPurpose::Notification
+            | ConnectorPurpose::Fulfillment
+            | ConnectorPurpose::AfterSales => self.tracking_connector(connection),
+        }
+        .map_err(classified)?;
+        Ok(Arc::new(connector))
     }
 
-    fn catalog_policy(
+    fn catalog_schedule(
         &self,
         connection: &SupplierApiConnection,
     ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError> {
@@ -312,24 +292,7 @@ impl SupplierApiGateway for JdVopRuntime {
         }))
     }
 
-    fn catalog_page<'a>(&'a self, connection: &'a SupplierApiConnection, scan: &'a Scan) -> CatalogRead<'a> {
-        Box::pin(async move {
-            let page = self
-                .tracking_connector(connection)
-                .map_err(classified)?
-                .scan_scoped(scan)
-                .await
-                .map_err(classified)?;
-            Ok(CatalogPage {
-                items: page.page.items,
-                next: page.page.next,
-                skipped: page.skipped,
-                membership: page.membership,
-            })
-        })
-    }
-
-    fn health_check<'a>(
+    fn check_health<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,
         check_type: SupplierHealthCheckType,
@@ -351,10 +314,7 @@ impl SupplierApiGateway for JdVopRuntime {
 }
 
 impl SupplierReferenceRegistry for JdVopRuntime {
-    fn capabilities(
-        &self,
-        target: &SupplierReferenceTarget,
-    ) -> Result<Vec<SupplierApiCapabilityCode>, ClassifiedError> {
+    fn description(&self, target: &SupplierReferenceTarget) -> Result<ConnectorDescription, ClassifiedError> {
         self.validate_target(target).map_err(classified)?;
         let connector = JdVopConnector {
             connection_id: target.connection_id.clone(),
@@ -368,7 +328,7 @@ impl SupplierReferenceRegistry for JdVopRuntime {
             evidence_codec: self.evidence_codec.clone(),
             message_runtime: self.message_runtime.clone(),
         };
-        Ok(connector.capabilities())
+        Ok(ConnectorDescription::from_connector(&connector))
     }
 
     fn deployment_config(
@@ -410,6 +370,7 @@ fn binding_error() -> ConnectorError {
 mod tests {
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::SupplierApiConnectionData;
+    use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 
     use super::*;
 
@@ -454,6 +415,11 @@ mod tests {
         assert!(connector.offers().is_none());
         assert!(connector.orders().is_none());
         assert!(connector.payment_confirmation().is_none());
+        let description = runtime.description(&SupplierReferenceTarget::from(&connection)).unwrap();
+        assert!(description.operations.is_empty());
+        assert_eq!(description, ConnectorDescription::from_connector(&connector));
+        assert!(!description.address_candidates);
+        assert!(!description.funds_source);
         assert!(runtime.catalog_policy(&connection).unwrap().is_none());
         assert_eq!(
             runtime

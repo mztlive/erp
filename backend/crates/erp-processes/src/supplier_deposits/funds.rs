@@ -2,7 +2,6 @@
 
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_core::money::Amount;
 use erp_finance::entity::supplier_deposit::SupplierDepositAccount;
 use erp_finance::repository::SupplierDepositExt;
 use erp_finance::service::supplier_deposit::SupplierDepositService;
@@ -10,7 +9,6 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt};
 use erp_supply::ports::connector::funds::{OrderFundsCoverage, OrderFundsQuery, SupplierOrderFunds};
 use erp_supply::repository::SupplierApiExt;
-use erp_supply::{Error as SupplyError, Result as SupplyResult};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -112,77 +110,19 @@ impl SupplierDepositFundsAdapter {
 
 #[async_trait]
 impl SupplierOrderFunds for SupplierDepositFundsAdapter {
+    type Error = Error;
     async fn execution_coverage(
         &self,
         query: &OrderFundsQuery,
         executor: &mut dyn Executor,
-    ) -> SupplyResult<OrderFundsCoverage> {
-        self.coverage(query, executor)
-            .await
-            .map_err(|error| SupplyError::BusinessLogicError(error.to_string()))
+    ) -> Result<OrderFundsCoverage> {
+        self.coverage(query, executor).await
     }
-}
-
-/// 在创建及未发送确认入口重验当前连接的全部资金保障。
-/// # 参数
-/// * `db` / `executor` - 当前业务数据源和执行器。
-/// * `execution` - 服务端冻结执行记录。
-/// * `approved_total` - 全部批准商品与运费预算。
-/// # 返回
-/// 全部归属、版本、批准额度、授权及资金条件满足才成功。
-/// # 错误
-/// 任何缺少或跨账号资金资格均阻断写操作。
-pub async fn ensure_execution_funds(
-    db: &Database,
-    execution: &ApiOrderExecution,
-    approved_total: Amount,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    SupplierDepositFundsAdapter::new(db.clone())
-        .coverage(
-            &OrderFundsQuery {
-                execution_group_id: execution.base.id.clone(),
-                connection_id: execution.connection_id.clone(),
-                supplier_id: execution.supplier_id.clone(),
-                purchase_order_id: execution.purchase_order_id.clone(),
-                purchase_revision_id: execution.purchase_order_revision_id.clone(),
-                approved_total,
-            },
-            executor,
-        )
-        .await?;
-    Ok(())
-}
-
-/// 在外部写动作意图登记的同一事务保护原资金占用。
-/// # 参数
-/// * `db` / `executor` - 包含创建或确认意图写入的同一事务。
-/// * `execution` / `approved_total` - 原执行和完整批准预算。
-/// # 返回
-/// 当前归属和授权重验后标记可能发送；已有标记幂等保持。
-/// # 错误
-/// 资金不合格、未加入事务或原占用已释放时阻断写意图。
-pub async fn mark_execution_funds_sent(
-    db: &Database,
-    execution: &ApiOrderExecution,
-    approved_total: Amount,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let coverage = SupplierDepositFundsAdapter::new(db.clone())
-        .coverage(
-            &OrderFundsQuery {
-                execution_group_id: execution.base.id.clone(),
-                connection_id: execution.connection_id.clone(),
-                supplier_id: execution.supplier_id.clone(),
-                purchase_order_id: execution.purchase_order_id.clone(),
-                purchase_revision_id: execution.purchase_order_revision_id.clone(),
-                approved_total,
-            },
-            executor,
-        )
-        .await?;
-    SupplierDepositService::new(db.clone())
-        .mark_external_write_sent(&coverage.reservation_id, executor)
-        .await?;
-    Ok(())
+    async fn mark_sent(&self, query: &OrderFundsQuery, executor: &mut dyn Executor) -> Result<()> {
+        let coverage = self.coverage(query, executor).await?;
+        SupplierDepositService::new(self.db.clone())
+            .mark_external_write_sent(&coverage.reservation_id, executor)
+            .await?;
+        Ok(())
+    }
 }

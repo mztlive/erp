@@ -2,10 +2,9 @@
 use std::collections::BTreeMap;
 
 use erp_supply::entity::failure::SupplierFailureClass;
-use erp_supply::ports::connector::common::{ConnectorResult, Scan, Snapshot};
-use erp_supply::ports::connector::offer::{Offer, OfferChange};
+use erp_supply::ports::connector::common::{ConnectorResult, Page, Scan, Snapshot};
+use erp_supply::ports::connector::offer::{Offer, OfferChange, ScopedOfferPage};
 use erp_supply::ports::connector::transform::OfferTransform;
-use erp_supply::ports::supplier_api_gateway::CatalogPage;
 use serde_json::Value;
 
 use super::catalog::{scan_parameters, spec_value};
@@ -21,7 +20,7 @@ impl DangaoshushuConnector {
     /// 有效来源、跳过原因及按原始商品数计算的下一页。
     /// # 错误
     /// 页面结构、网络或鉴权等非单项映射失败时返回错误，禁止推进游标。
-    pub(super) async fn scan_with_details(&self, scan: &Scan) -> ConnectorResult<CatalogPage> {
+    pub(super) async fn scan_with_details(&self, scan: &Scan) -> ConnectorResult<ScopedOfferPage> {
         let (number, parameters) = scan_parameters(scan)?;
         let value = self
             .transport
@@ -33,13 +32,14 @@ impl DangaoshushuConnector {
         } else {
             None
         };
-        let mut page = CatalogPage { items: vec![], skipped: vec![], next, membership: None };
+        let mut page =
+            ScopedOfferPage { page: Page { items: vec![], next }, skipped: vec![], membership: None };
         let mut details = BTreeMap::new();
         for (index, product) in products.iter().enumerate() {
             let position = format!("第 {number} 页第 {} 个商品", index + 1);
             self.scan_product(product, &position, &mut page, &mut details).await?;
         }
-        self.name_catalog_categories(&mut page.items).await?;
+        self.name_catalog_categories(&mut page.page.items).await?;
         Ok(page)
     }
 
@@ -47,7 +47,7 @@ impl DangaoshushuConnector {
         &self,
         product: &Value,
         position: &str,
-        page: &mut CatalogPage,
+        page: &mut ScopedOfferPage,
         details: &mut BTreeMap<String, ConnectorResult<Value>>,
     ) -> ConnectorResult<()> {
         let Some(specs) = product["specs"].as_array().filter(|specs| !specs.is_empty()) else {
@@ -73,7 +73,7 @@ impl DangaoshushuConnector {
             let result =
                 root.as_ref().map_err(Clone::clone).and_then(|root| self.detail_observation(offer, root));
             if let Some(item) = collect_item(result, &format!("{position}（商品详情）"), page)? {
-                page.items.push(item);
+                page.page.items.push(item);
             }
         }
         Ok(())
@@ -93,7 +93,7 @@ impl DangaoshushuConnector {
 fn collect_item<T>(
     result: ConnectorResult<T>,
     position: &str,
-    page: &mut CatalogPage,
+    page: &mut ScopedOfferPage,
 ) -> ConnectorResult<Option<T>> {
     match result {
         Ok(item) => Ok(Some(item)),
@@ -141,11 +141,11 @@ mod tests {
             ]})),
         ]);
         let page = connector.scan_with_details(&scan(4)).await.unwrap();
-        assert_eq!(page.items.len(), 3);
+        assert_eq!(page.page.items.len(), 3);
         assert_eq!(page.skipped.len(), 3);
         assert!(page.skipped[0].contains("第 135 页第 1 个商品第 1 个规格"));
         assert!(page.skipped[1].contains("第 135 页第 2 个商品第 1 个规格"));
-        assert_eq!(page.next.as_deref(), Some("136"));
+        assert_eq!(page.page.next.as_deref(), Some("136"));
         assert_eq!(transport.requests.lock().unwrap().len(), 2);
     }
 
@@ -166,10 +166,10 @@ mod tests {
         assert!(page.skipped[0].contains("商品详情）"));
         assert!(page.skipped[0].contains("clearing_price"));
         assert!(page.skipped[1].contains("找不到列表对应的规格"));
-        assert_eq!(page.items.len(), 1);
-        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("expected offer") };
+        assert_eq!(page.page.items.len(), 1);
+        let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("expected offer") };
         assert_eq!(offer.sku.spec_id, "s2");
-        assert!(page.next.is_none());
+        assert!(page.page.next.is_none());
     }
 
     #[tokio::test]
@@ -180,7 +180,7 @@ mod tests {
                 "images":[{"m_path":"//img31.hua.com/a.jpg"}]})),
         ]);
         let page = connector.scan_with_details(&scan(5)).await.unwrap();
-        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("expected offer") };
+        let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("expected offer") };
         assert_eq!(offer.details.images.as_ref().unwrap()[0].url, "https://img31.hua.com/a.jpg");
         assert!(page.skipped.is_empty());
 
@@ -190,7 +190,7 @@ mod tests {
                 "images":[{"m_path":"file:///private"}]})),
         ]);
         let page = connector.scan_with_details(&scan(5)).await.unwrap();
-        let OfferChange::Upsert(offer) = &page.items[0].value else { panic!("expected offer") };
+        let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("expected offer") };
         assert_eq!(offer.details.images.as_ref().unwrap()[0].url, "");
         assert!(page.skipped.is_empty());
     }
@@ -199,9 +199,9 @@ mod tests {
     async fn all_invalid_page_still_advances_but_malformed_page_and_transport_failures_stop() {
         let (connector, _) = recording_connector(vec![Ok(json!({"product_list":[{"specs":[]}]}))]);
         let page = connector.scan_with_details(&scan(1)).await.unwrap();
-        assert!(page.items.is_empty());
+        assert!(page.page.items.is_empty());
         assert_eq!(page.skipped.len(), 1);
-        assert_eq!(page.next.as_deref(), Some("136"));
+        assert_eq!(page.page.next.as_deref(), Some("136"));
         let (connector, _) = recording_connector(vec![Ok(json!({"unexpected":[]}))]);
         assert!(connector.scan_with_details(&scan(1)).await.is_err());
         for class in [

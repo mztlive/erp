@@ -8,6 +8,7 @@ import type {
     ConnectionCenterView,
     ConnectionListItem,
     ConnectionStatus,
+    ConnectorDescription,
     HealthResult,
     ReferenceState,
 } from "@/features/supplier-api-connections/types"
@@ -96,6 +97,14 @@ export type BackendHealthRun = {
 }
 
 export type BackendConnectionDetail = BackendConnection & {
+    connector_description?: {
+        operations: string[]
+        address_requirement: ConnectorDescription["addressRequirement"]
+        address_candidates: boolean
+        notification_mode: ConnectorDescription["notificationMode"]
+        funding_requirement: ConnectorDescription["fundingRequirement"]
+        funds_source: boolean
+    } | null
     deployment_ready: boolean
     deployment_message: string
     declared_capabilities: string[]
@@ -273,7 +282,18 @@ export function toCenter(
         }
     })
     const latest = records[0]
+    const description = detail.connector_description
     return {
+        connectorDescription: description
+            ? {
+                  operations: description.operations.map(mapCapabilityCode),
+                  addressRequirement: description.address_requirement,
+                  addressCandidates: description.address_candidates,
+                  notificationMode: description.notification_mode,
+                  fundingRequirement: description.funding_requirement,
+                  fundsSource: description.funds_source,
+              }
+            : undefined,
         deploymentReady: detail.deployment_ready,
         deploymentMessage: detail.deployment_message,
         declaredCapabilities: Array.from(

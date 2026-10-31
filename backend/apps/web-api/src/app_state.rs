@@ -23,7 +23,7 @@ use erp_processes::contract_import::{ContractImportProcess, RecognitionProviders
 use erp_processes::integration_resolution::IntegrationResolutionProcess;
 use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
 use erp_processes::sales_inquiry::SalesInquiryProcess;
-use erp_processes::supplier_deposits::SupplierFundsInvestigationWorker;
+use erp_processes::supplier_deposits::{SupplierDepositFundsAdapter, SupplierFundsInvestigationWorker};
 use erp_processes::supplier_messages::SupplierMessageWorker;
 use erp_read_models::integration_center::IntegrationCenterReadService;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
@@ -415,6 +415,25 @@ impl AppState {
                 self.db(),
                 Arc::clone(runtime),
                 self.sensitive_data(),
+                Arc::new(SupplierDepositFundsAdapter::new(self.db())),
+            )
+        })
+    }
+
+    /// 装配统一退款与结算处理器。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已配置运行时返回处理器。
+    /// # 错误
+    /// 无。
+    pub fn supplier_after_sales_process(
+        &self,
+    ) -> Option<erp_processes::supplier_after_sales::SupplierAfterSalesProcess> {
+        self.external_connectors.order_connectors.as_ref().map(|runtime| {
+            erp_processes::supplier_after_sales::SupplierAfterSalesProcess::new(
+                self.db(),
+                Arc::clone(runtime),
             )
         })
     }

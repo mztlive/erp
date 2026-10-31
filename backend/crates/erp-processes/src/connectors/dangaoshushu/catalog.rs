@@ -11,7 +11,8 @@ use erp_supply::ports::connector::common::{
 };
 use erp_supply::ports::connector::offer::{
     Availability, AvailabilityBlock, AvailabilityQuery, AvailabilitySource, AvailabilityState,
-    AvailableQuantity, IncrementalSupport, Offer, OfferChange, OfferSource, RegionCoverage, ServiceAreas,
+    AvailableQuantity, IncrementalSupport, Offer, OfferChange, OfferSource, RegionCoverage, ScopedOfferPage,
+    ServiceAreas,
 };
 use erp_supply::ports::connector::transform::OfferTransform;
 use rust_decimal::Decimal;
@@ -230,6 +231,10 @@ fn status_flag(value: &Value, field: &str) -> ConnectorResult<bool> {
 
 #[async_trait]
 impl OfferSource for DangaoshushuConnector {
+    async fn scan_scoped(&self, scan: &Scan) -> ConnectorResult<ScopedOfferPage> {
+        self.scan_with_details(scan).await
+    }
+
     fn incremental_support(&self) -> IncrementalSupport {
         IncrementalSupport::Partial
     }

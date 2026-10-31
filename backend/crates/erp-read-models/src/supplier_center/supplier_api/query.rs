@@ -6,6 +6,7 @@ use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
+use erp_supply::after_sales::{AfterSalesExt, pending_settlements};
 use erp_supply::dto::supplier_api::{
     PageView, SafeReferencesView, SupplierActionBlockerView, SupplierApiCapabilitySummaryView,
     SupplierApiConnectionDetailView, SupplierApiConnectionListItemView, SupplierApiConnectionListParams,
@@ -138,10 +139,13 @@ impl SupplierApiReadService {
     ) -> Result<SupplierApiConnectionDetailView> {
         let reference_visible =
             self.has_permission(actor, "supplier_api_connection:view_reference_metadata").await?;
-        let declared_capabilities = self
+        let connector_description = self
             .reference_registry
             .as_ref()
-            .and_then(|registry| registry.capabilities(&SupplierReferenceTarget::from(&connection)).ok())
+            .and_then(|registry| registry.description(&SupplierReferenceTarget::from(&connection)).ok());
+        let declared_capabilities = connector_description
+            .as_ref()
+            .map(|description| description.operations.clone())
             .unwrap_or_default();
 
         let (allowed_actions, action_blockers) =
@@ -157,6 +161,18 @@ impl SupplierApiReadService {
             registry.deployment_config(&SupplierReferenceTarget::from(&connection)).is_ok()
         });
         Ok(SupplierApiConnectionDetailView {
+            settlement_scan: self
+                .db
+                .api_settlement_scans()
+                .find_by_id(&connection.base.id, &mut NoTransaction)
+                .await?
+                .map(Into::into),
+            settlement_evidence: pending_settlements(&self.db, &connection.base.id, &mut NoTransaction)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            connector_description,
             deployment_ready,
             deployment_message: if deployment_ready {
                 "已自动使用服务端接口地址和凭据"

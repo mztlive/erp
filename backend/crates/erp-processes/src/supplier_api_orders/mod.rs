@@ -25,6 +25,7 @@ pub use delivery_drafts::create_api_delivery_drafts;
 pub use enqueue::enqueue_purchase;
 use erp_party::SensitiveDataCodec;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt, ApiOrderStage};
+use erp_supply::ports::connector::funds::SupplierOrderFunds;
 pub use funds::execution_budget;
 use mongodb::Database;
 use persistence_core::NoTransaction;
@@ -42,12 +43,13 @@ pub struct SupplierApiOrderProcess {
     db: Database,
     runtime: Arc<SupplierConnectorRegistry>,
     codec: Arc<SensitiveDataCodec>,
+    funds: Arc<dyn SupplierOrderFunds<Error = Error>>,
 }
 
 impl SupplierApiOrderProcess {
     /// 装配真实连接器运行时与应用敏感资料加密器。
     /// # 参数
-    /// `db`、`runtime`、`codec` 来自应用组合根。
+    /// `db`、`runtime`、`codec` 与 ERP 资金资格 `funds` 均来自应用组合根。
     /// # 返回
     /// 不执行外部调用的流程实例。
     /// # 错误
@@ -56,8 +58,9 @@ impl SupplierApiOrderProcess {
         db: Database,
         runtime: Arc<SupplierConnectorRegistry>,
         codec: Arc<SensitiveDataCodec>,
+        funds: Arc<dyn SupplierOrderFunds<Error = Error>>,
     ) -> Self {
-        Self { db, runtime, codec }
+        Self { db, runtime, codec, funds }
     }
 
     /// 处理一批到期意图；单个异常只延迟该订单，后续订单继续执行。

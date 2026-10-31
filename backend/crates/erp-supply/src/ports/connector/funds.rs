@@ -1,5 +1,6 @@
 //! 发单资格声明与付款核销分别建模；占用不代表已付。
 
+use std::error::Error as StdError;
 use std::fmt;
 use std::num::NonZeroU32;
 
@@ -10,10 +11,11 @@ use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
 
 use super::common::{ConnectorResult, Page, Snapshot};
-use crate::Result;
+use crate::{Error, Result as SupplyResult};
 
 /// 适配器的资金执行要求，由装配事实决定，不能由采购请求降级。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum OrderFundingRequirement {
     /// 既有供应商沿用原普通实付门槛。
     PostedPaymentGate,
@@ -40,9 +42,31 @@ pub struct OrderFundsCoverage {
     pub approved_total: Amount,
 }
 
+impl OrderFundsCoverage {
+    /// 核对资格回执覆盖原批准预算且关联真实账户与占用。
+    /// # 参数
+    /// `query` 为服务端冻结的原执行资金请求。
+    /// # 返回
+    /// 回执金额与原请求一致且关联完整时成功。
+    /// # 错误
+    /// 缺失身份或预算不一致时拒绝发单。
+    pub fn ensure_matches(&self, query: &OrderFundsQuery) -> SupplyResult<()> {
+        if self.reservation_id.trim().is_empty()
+            || self.account_id.trim().is_empty()
+            || self.approved_total != query.approved_total
+        {
+            return Err(Error::BusinessLogicError("资金保障回执未覆盖原执行组批准预算".into()));
+        }
+        Ok(())
+    }
+}
+
 /// erp-supply 消费的窄资金资格接口，不依赖财务领域。
 #[async_trait]
 pub trait SupplierOrderFunds: Send + Sync {
+    /// 保留拥有领域的错误分类，存储失败和提交未知不得压成业务拒绝。
+    type Error: StdError + Send + Sync;
+
     /// 核对本执行组全额、专属且当前有效的预存款保障。
     /// # 参数
     /// * `query` - 冻结采购、连接、执行组和预算。
@@ -55,7 +79,20 @@ pub trait SupplierOrderFunds: Send + Sync {
         &self,
         query: &OrderFundsQuery,
         executor: &mut dyn Executor,
-    ) -> Result<OrderFundsCoverage>;
+    ) -> Result<OrderFundsCoverage, Self::Error>;
+
+    /// 在外部发送意图的同一事务内重验并保护资金占用。
+    /// # 参数
+    /// `query` 为原执行与全部批准预算，`executor` 为保存发送意图的事务执行器。
+    /// # 返回
+    /// 资金已标记为可能被远端使用，不能作为未发送占用自动释放。
+    /// # 错误
+    /// 资格无效、占用已释放、缺少事务或持久化失败时拒绝发送。
+    async fn mark_sent(
+        &self,
+        query: &OrderFundsQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<(), Self::Error>;
 }
 
 /// 币种必须由本账号合同核验；来源缺失币种时不能使用未经核实的默认值。

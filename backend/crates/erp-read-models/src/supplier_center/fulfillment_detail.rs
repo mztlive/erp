@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_supply::after_sales::{RefundExecutionView, refunds_for_order};
 use erp_supply::api_order::ApiOrderExt;
 use erp_supply::dto::supplier_fulfillment::{
     SupplierFulfillmentOrderDetailParams, SupplierOrderActionBlockerView, SupplierOrderAddressView,
@@ -126,7 +127,13 @@ impl SupplierFulfillmentDetailReadService {
             .await?
             .map(|connection| connection.connection_code);
         let (tracking_error, purchase_order_id, purchase_order_no) = self.api_tracking_context(id).await?;
+        let api_refunds = refunds_for_order(&self.db, id, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(RefundExecutionView::try_from)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(SupplierFulfillmentOrderDetailView {
+            api_refunds,
             order: order.into(),
             items: display_items,
             status_history: facts.histories.into_iter().map(Into::into).collect(),

@@ -8,7 +8,8 @@ use super::order::CoordinateSystem;
 use crate::{Error, Result};
 
 /// 明确地址准备要求，流程不得对所有供应商统一要求地图坐标。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", content = "coordinate_system", rename_all = "snake_case")]
 pub enum AddressRequirement {
     Text,
     Geocoded(CoordinateSystem),

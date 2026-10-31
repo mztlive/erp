@@ -3,12 +3,13 @@
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
+use serde::{Deserialize, Serialize};
 
 use super::common::{ConnectorResult, Page, Scan, Snapshot};
 use super::order::OrderReference;
 
 /// 对账来源明细，不直接生成应付或资金流水。所有金额为人民币且非负。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SettlementEntry {
     /// 必须是供应商稳定账单行/流水 ID，不能用页码或当前时间生成。
     pub external_entry_id: String,
@@ -17,7 +18,7 @@ pub struct SettlementEntry {
     pub movement: SettlementMovement,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SettlementMovement {
     Charge { goods: Amount, shipping: Amount, service: Amount },
     Refund { external_refund_no: String, amount: Amount },

@@ -27,6 +27,7 @@ pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     supplier_offering::ensure(db).await?;
     supplier_fulfillment::ensure(db).await?;
     crate::api_order::ensure_indexes(db).await?;
+    crate::after_sales::ensure_indexes(db).await?;
     supplier_settlement::ensure(db).await?;
     command_receipt::ensure(db).await?;
     handover_receipt::ensure(db).await?;

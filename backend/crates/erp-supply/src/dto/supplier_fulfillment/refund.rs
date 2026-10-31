@@ -62,6 +62,10 @@ pub struct SupplierRefundAllocationView {
 /// external_refund_version)`，§6.19；分配行冻结冲减范围）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RecordRefundResultRequest {
+    /// 仅未发送且缺少自动能力的 API 退款允许人工核实凭证；必须填写可追溯引用。
+    #[serde(default)]
+    #[validate(length(min = 1, max = 512, message = "人工退款凭证引用长度必须在1-512之间"))]
+    pub manual_evidence_reference: Option<String>,
     /// 外部退款号。
     #[validate(custom(function = "non_blank", message = "外部退款号不能为空"))]
     pub external_refund_no: String,

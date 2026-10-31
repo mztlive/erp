@@ -64,6 +64,7 @@ pub fn spawn(state: AppState) -> SupplierOrderWorker {
     let join = tokio::spawn(async move {
         tokio::join!(
             execution_workers(state.clone(), receiver.clone()),
+            after_sales_workers(state.clone(), receiver.clone()),
             integration_workers(state, receiver),
         );
     });
@@ -87,6 +88,24 @@ async fn execution_workers(state: AppState, receiver: watch::Receiver<bool>) {
                 if let Err(error) = result {
                     tracing::warn!(error = %error, "供应商履约跟踪调度失败");
                 }
+            }
+        }),
+    );
+}
+
+async fn after_sales_workers(state: AppState, receiver: watch::Receiver<bool>) {
+    let Some(process) = state.supplier_after_sales_process() else {
+        return;
+    };
+    tokio::join!(
+        periodic(receiver.clone(), || async {
+            if let Err(error) = process.run_refunds_once().await {
+                tracing::warn!(error = %error, "供应商退款调度失败");
+            }
+        }),
+        periodic(receiver, || async {
+            if let Err(error) = process.run_settlements_once().await {
+                tracing::warn!(error = %error, "供应商结算来源调度失败");
             }
         }),
     );
