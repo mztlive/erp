@@ -3,12 +3,13 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::procure_to_pay::PurchaseOrderProcess;
+use erp_procure_to_pay::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::PurchaseChangeDraftView;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
+use crate::wiring::purchase_ports;
 
 /// 读取可原单修改重提的采购变更完整目标。
 ///
@@ -25,6 +26,9 @@ pub async fn purchase_change_draft(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseChangeDraftView> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac()).change_draft(&id, &actor).await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .change_draft(&id, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

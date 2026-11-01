@@ -6,7 +6,6 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::response::Response;
-use erp_processes::adapters::workflow::work_item_service;
 use erp_read_models::finance::document_files::{BusinessFinanceFiles, FinancialFileView, matching_file};
 use erp_workflow::WorkItemType;
 
@@ -14,6 +13,7 @@ use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::core::response::ApiResponse;
+use crate::wiring::workflow::work_item_service;
 
 /// 按本单详情资格读取发票文件，不要求完整财务详情权限。
 /// # 参数

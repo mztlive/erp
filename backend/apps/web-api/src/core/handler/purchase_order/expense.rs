@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, Path, State};
-use erp_processes::procure_to_pay::PurchaseOrderProcess;
+use erp_procure_to_pay::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
     ConfirmExpenseOccurrenceRequest, ConfirmExpenseOccurrenceResult, CreateExpensePurchaseRequest,
     CreatePurchaseOrderResult,
@@ -21,6 +21,7 @@ use crate::core::handler::file_asset::{
     should_compensate_pending_assets, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
+use crate::wiring::purchase_ports;
 
 /// 查询费用采购可选的来源销售单。
 /// # 参数
@@ -73,10 +74,11 @@ pub async fn expense_purchase_create(
     Path(id): Path<String>,
     Json(req): Json<CreateExpensePurchaseRequest>,
 ) -> Result<CreatePurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .create_expense_purchase(&id, req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .create_expense_purchase(&id, req, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -106,9 +108,10 @@ pub async fn expense_occurrence_confirm(
         extract_command_with_asset_files::<ConfirmExpenseOccurrenceRequest>(&mut multipart).await?;
     validate_expense_evidence(req.evidence_attachment_id.as_ref(), &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let result = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .confirm_expense_occurrence(&id, &expense_line_id, req, pending.clone(), &actor)
-        .await;
+    let result =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .confirm_expense_occurrence(&id, &expense_line_id, req, pending.clone(), &actor)
+            .await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(error) => {

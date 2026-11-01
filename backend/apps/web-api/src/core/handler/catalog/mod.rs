@@ -21,7 +21,7 @@ use erp_catalog::{
     UnitOfMeasureListParams, UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest,
     UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest,
 };
-use erp_processes::{
+use erp_master_data::{
     create_product_category, create_sku_attribute, create_sku_attribute_value, create_unit_of_measure,
     product_brand_create_with_assets as create_brand_with_assets,
     product_brand_update_with_assets as update_brand_with_assets,
@@ -67,7 +67,7 @@ pub async fn product_category_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view = create_product_category(state.db(), req, actor).await?;
+    let view = create_product_category(state.db(), state.catalog_service(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -188,7 +188,7 @@ pub async fn product_brand_create_with_assets(
 ) -> Result<ProductBrandView> {
     let (req, files) = extract_command_with_asset_files::<CreateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = create_brand_with_assets(state.db(), req, pending.clone(), actor).await;
+    let result = create_brand_with_assets(state.catalog_service(), req, pending.clone(), actor).await;
     let view = finish_asset_command(&state, &pending, result, |_| true).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -235,7 +235,7 @@ pub async fn product_brand_update_with_assets(
 ) -> Result<ProductBrandView> {
     let (req, files) = extract_command_with_asset_files::<UpdateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = update_brand_with_assets(state.db(), id, req, pending.clone(), actor).await;
+    let result = update_brand_with_assets(state.catalog_service(), id, req, pending.clone(), actor).await;
     let view = finish_asset_command(&state, &pending, result, |_| true).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -442,7 +442,7 @@ pub async fn sku_attribute_value_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSkuAttributeValueRequest>,
 ) -> Result<SkuAttributeValueView> {
-    let view = create_sku_attribute_value(state.db(), req, actor).await?;
+    let view = create_sku_attribute_value(state.db(), state.catalog_service(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

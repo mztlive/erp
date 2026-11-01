@@ -10,6 +10,8 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_identity::Permission;
+use erp_master_data::offering_handover::OfferingHandoverPorts;
+use erp_master_data::{handover_offering, offering_handover_candidates as load_offering_handover_candidates};
 use erp_read_models::supplier_center::offering::dto::SupplierOfferingListParams;
 use erp_read_models::supplier_center::{
     MongoOfferingProcurementOwners, SupplierOfferingListView, SupplierOfferingReadService,
@@ -27,6 +29,7 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
+use crate::wiring::{offering_access, scoped_offering_service};
 
 /// 查询供应商供给列表。
 ///
@@ -45,7 +48,7 @@ pub async fn list(
 ) -> Result<SupplierOfferingListView> {
     let mut page = SupplierOfferingReadService::new(
         state.db(),
-        erp_processes::adapters::MongoOfferingDataScope::shared(state.db(), state.rbac()),
+        crate::wiring::MongoOfferingDataScope::shared(state.db(), state.rbac()),
         MongoOfferingProcurementOwners::shared(state.db()),
     )
     .list(&params, &actor)
@@ -72,9 +75,7 @@ pub async fn create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSupplierOfferingRequest>,
 ) -> Result<CreateSupplierOfferingResult> {
-    let result = erp_processes::adapters::scoped_offering_process(state.db(), state.rbac())
-        .create(req, &actor)
-        .await?;
+    let result = crate::wiring::scoped_offering_process(state.db(), state.rbac()).create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -94,9 +95,8 @@ pub async fn revise(
     Path(id): Path<String>,
     Json(req): Json<ReviseSupplierOfferingRequest>,
 ) -> Result<ReviseSupplierOfferingResult> {
-    let result = erp_processes::adapters::scoped_offering_process(state.db(), state.rbac())
-        .revise(&id, req, &actor)
-        .await?;
+    let result =
+        crate::wiring::scoped_offering_process(state.db(), state.rbac()).revise(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -116,7 +116,7 @@ pub async fn update_availability(
     Path(id): Path<String>,
     Json(req): Json<UpdateSupplierOfferingAvailabilityRequest>,
 ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-    let result = erp_processes::adapters::scoped_offering_process(state.db(), state.rbac())
+    let result = crate::wiring::scoped_offering_process(state.db(), state.rbac())
         .update_availability(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -131,7 +131,7 @@ pub async fn complete_supply_exception_task(
     Path(id): Path<String>,
     Json(req): Json<CompleteSupplierSupplyExceptionTaskRequest>,
 ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
-    let result = erp_processes::adapters::scoped_offering_process(state.db(), state.rbac())
+    let result = crate::wiring::scoped_offering_process(state.db(), state.rbac())
         .complete_supply_exception_task(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -153,7 +153,18 @@ pub async fn offering_handover(
     Path(id): Path<String>,
     Json(req): Json<HandoverSupplierOfferingRequest>,
 ) -> Result<HandoverSupplierOfferingView> {
-    let view = erp_processes::handover_offering(state.db(), state.rbac(), &id, req, &actor).await?;
+    let view = handover_offering(
+        state.db(),
+        state.rbac(),
+        OfferingHandoverPorts::new(
+            offering_access(state.db(), state.rbac()),
+            scoped_offering_service(state.db(), state.rbac()),
+        ),
+        &id,
+        req,
+        &actor,
+    )
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -171,7 +182,17 @@ pub async fn offering_handover_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let view = erp_processes::offering_handover_candidates(state.db(), state.rbac(), &id, &actor).await?;
+    let view = load_offering_handover_candidates(
+        state.db(),
+        state.rbac(),
+        OfferingHandoverPorts::new(
+            offering_access(state.db(), state.rbac()),
+            scoped_offering_service(state.db(), state.rbac()),
+        ),
+        &id,
+        &actor,
+    )
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

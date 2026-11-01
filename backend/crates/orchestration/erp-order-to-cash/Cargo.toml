@@ -1,0 +1,41 @@
+[package]
+name = "erp-order-to-cash"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+background-runtime = { workspace = true }
+erp-supplier = { workspace = true }
+application-core = { workspace = true }
+async-trait = { workspace = true }
+bpm = { workspace = true }
+erp-approval-runtime = { workspace = true }
+erp-audit = { workspace = true }
+erp-catalog = { workspace = true }
+erp-contract = { workspace = true }
+erp-core = { workspace = true }
+erp-customer = { workspace = true }
+erp-finance = { workspace = true }
+erp-finance-posting = { workspace = true }
+erp-identity = { workspace = true }
+erp-party = { workspace = true }
+erp-procure-to-pay = { workspace = true }
+erp-procurement = { workspace = true }
+erp-read-models = { workspace = true }
+erp-sales = { workspace = true }
+erp-supplier-catalog = { workspace = true }
+erp-supply = { workspace = true }
+erp-support = { workspace = true }
+erp-workflow = { workspace = true }
+hex = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+storage = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
+tracing = { workspace = true }
+validator = { workspace = true }

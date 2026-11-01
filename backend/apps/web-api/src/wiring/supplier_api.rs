@@ -1,0 +1,79 @@
+//! 供应商 API 与引用注册表的默认失败关闭生产实现。
+
+use erp_supply::entity::failure::SupplierFailureClass;
+use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckType};
+use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
+/// 默认网关：端点引用不可解析时失败关闭（可观测降级）。
+pub struct UnavailableSupplierApiGateway;
+
+impl SupplierApiGateway for UnavailableSupplierApiGateway {
+    /// 执行一次连接健康检查（默认实现恒失败关闭）。
+    ///
+    /// # 参数
+    /// * `connection` - 目标连接。
+    /// * `check_type` - 本次启动运行冻结的检查种类。
+    ///
+    /// # 返回
+    /// 不返回成功值。
+    ///
+    /// # 错误
+    /// 恒返回 `TransientFailure`、代码 `ENDPOINT_UNRESOLVED`：端点引用是配置引用，未注册可调用地址。
+    fn health_check<'a>(
+        &'a self,
+        connection: &'a SupplierApiConnection,
+        _check_type: SupplierHealthCheckType,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            Err(ClassifiedError {
+                class: SupplierFailureClass::TransientFailure,
+                code: "ENDPOINT_UNRESOLVED".to_string(),
+                summary: format!(
+                    "连接 {} 的端点引用未解析为可调用地址，健康检查失败关闭",
+                    connection.connection_code
+                ),
+            })
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+    use erp_supply::entity::failure::SupplierFailureClass;
+    use erp_supply::entity::supplier_api::{
+        SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierConnectorType,
+        SupplierHealthCheckType,
+    };
+
+    use super::{ClassifiedError, SupplierApiGateway, UnavailableSupplierApiGateway};
+
+    fn sample_connection() -> SupplierApiConnection {
+        SupplierApiConnection::new(
+            SupplierApiConnectionId::new("conn-1"),
+            SupplierApiConnectionData {
+                supplier_id: SupplierAccountId::new("sup-1"),
+                connection_code: "CN-1".to_string(),
+                connector_type: SupplierConnectorType::Dangaoshushu,
+                endpoint_reference: "config://supplier/001".to_string(),
+                credential_reference: Some("kms://prod/sup-001".to_string()),
+                rate_limit_policy: None,
+                status: SupplierApiConnectionStatus::Active,
+            },
+            "admin-1",
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn default_gateway_fails_closed_with_classified_error() {
+        let gateway = UnavailableSupplierApiGateway;
+        let error: ClassifiedError = gateway
+            .health_check(&sample_connection(), SupplierHealthCheckType::Connectivity)
+            .await
+            .expect_err("默认网关必须失败关闭");
+        assert_eq!(error.class, SupplierFailureClass::TransientFailure);
+        assert_eq!(error.code, "ENDPOINT_UNRESOLVED");
+    }
+}

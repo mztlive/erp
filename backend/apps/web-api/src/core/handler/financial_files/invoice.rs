@@ -3,13 +3,13 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::response::Response;
-use erp_processes::adapters::{funds_access_with_rbac, purchase_access};
 use erp_read_models::finance::document_files::{FinancialFileView, matching_file};
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::core::response::ApiResponse;
+use crate::wiring::{funds_access_with_rbac, purchase_access};
 
 /// 复用财务详情授权，文件清单与资格由读取事务同时核验。
 async fn files(

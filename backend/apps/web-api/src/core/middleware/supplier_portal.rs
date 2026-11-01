@@ -6,8 +6,8 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use erp_core::AccountKind;
 use erp_identity::{PortalActor, PortalIdentityService};
-use erp_processes::Error as ProcessError;
-use erp_processes::supplier_portal::SupplierPortalProcess;
+use erp_supplier_catalog::Error as ProcessError;
+use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 use persistence_core::NoTransaction;
 
 use super::authentication::bearer_token;
@@ -54,9 +54,13 @@ async fn verified_actor(state: &AppState, token: &str) -> StdResult<PortalActor,
             &mut NoTransaction,
         )
         .await?;
-    match SupplierPortalProcess::new(state.db(), state.rbac())
-        .session_validate(&actor, &mut NoTransaction)
-        .await
+    match SupplierPortalProcess::new(
+        state.db(),
+        state.rbac(),
+        crate::wiring::catalog_services(state.db(), state.rbac()),
+    )
+    .session_validate(&actor, &mut NoTransaction)
+    .await
     {
         Ok(actor) => Ok(actor),
         Err(ProcessError::Forbidden(_) | ProcessError::NotFound(_)) => Err(invalid_session()),

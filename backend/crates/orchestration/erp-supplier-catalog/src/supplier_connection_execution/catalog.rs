@@ -1,0 +1,144 @@
+//! 目录同步启动与结果事务；保留与健康检查不同的读取时点。
+use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
+use erp_audit::execution::persist_log;
+use erp_core::common::time::Instant;
+use erp_supply::catalog_membership::repository as memberships;
+use erp_supply::entity::supplier_api::SupplierApiConnection;
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
+use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
+use erp_supply::service::supplier_api::SupplierApiService;
+use erp_supply::service::supplier_api::context::digest;
+use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
+use persistence_core::{NoTransaction, Transactional};
+
+use super::SupplierConnectionExecutionProcess;
+use super::execution::{ConnectionJobExecutionPort, execute};
+use super::failure::persist_health_failure_task;
+use crate::{Error, Result};
+
+impl SupplierConnectionExecutionProcess {
+    /// 按启动前读取连接、启动事务、事务外目录同步、结果事务的顺序执行目录任务。
+    ///
+    /// # 参数
+    /// * `job` - 已登记的目录同步后台任务。
+    /// * `actor` - 结果事务使用的审计操作人。
+    ///
+    /// # 返回
+    /// 启动与结果事务都成功时返回；网关失败由结果事务登记。
+    ///
+    /// # 错误
+    /// 任务缺少连接 ID、加载连接失败，或启动与结果事务失败时返回错误。
+    pub(super) async fn process_catalog_job(&self, job: BackgroundJob, actor: &AuditActor) -> Result<()> {
+        execute(&CatalogExecution { process: self, actor }, job, actor).await
+    }
+
+    async fn start_background_job(&self, job: BackgroundJob) -> Result<BackgroundJob> {
+        let db = self.db.clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let mut job = db
+                        .background_jobs()
+                        .find_by_id(&job.base.id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
+                    if job.status != JobStatus::Pending {
+                        return Err(Error::ConflictError("后台任务已开始或已结束".to_string()));
+                    }
+                    job.start(Instant::now())?;
+                    db.background_jobs().update(&mut job, executor).await?;
+                    Ok(job)
+                })
+            })
+            .await
+    }
+
+    async fn finish_catalog_job(
+        &self,
+        job: BackgroundJob,
+        connection: SupplierApiConnection,
+        outcome: std::result::Result<(), ClassifiedError>,
+        actor: &AuditActor,
+    ) -> Result<()> {
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let actor = actor.clone();
+        client
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let mut job = db
+                        .background_jobs()
+                        .find_by_id(&job.base.id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("目录同步任务不存在".to_string()))?;
+                    if job.is_terminal() {
+                        memberships::abort_scan(&db, &job.base.id, executor).await?;
+                        return Ok(());
+                    }
+                    let mut run = db
+                        .supplier_catalog_runs()
+                        .find_by_id(&job.base.id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("同步记录不存在".into()))?;
+                    let at = Instant::now();
+                    run.resume_requested =
+                        outcome.as_ref().is_err_and(|error| error.code == "CATALOG_SHUTDOWN");
+                    if let Err(error) = &outcome {
+                        job.record_progress(0, 0, 1, at)?;
+                        job.mark_failed(Some(format!("{}: {}", error.code, error.summary)), at)?;
+                        if !run.resume_requested {
+                            memberships::abort_scan(&db, &job.base.id, executor).await?;
+                            persist_health_failure_task(&db, &connection, &job, error, &actor, executor)
+                                .await?;
+                        }
+                    } else {
+                        job.record_progress(1, 0, 0, at)?;
+                        job.mark_succeeded(at)?;
+                        run.complete()?;
+                    }
+                    db.supplier_catalog_runs().update(&mut run, executor).await?;
+                    db.background_jobs().update(&mut job, executor).await?;
+                    let audit = actor.clone().resource_log_with_id(
+                        format!("w20-catalog-audit-{}", digest(&[&job.base.id])),
+                        "supplier_api_connection.catalog_sync.settle",
+                        "supplier_api_connection",
+                        connection.base.id,
+                        Some(format!("job_id={};status={}", job.base.id, job.status.as_str())),
+                    )?;
+                    persist_log(&db, &audit, executor).await?;
+                    Ok(())
+                })
+            })
+            .await
+    }
+}
+
+/// 生产适配器：连接在启动事务之前读取，结果事务不增加配置复验。
+struct CatalogExecution<'a> {
+    process: &'a SupplierConnectionExecutionProcess,
+    actor: &'a AuditActor,
+}
+impl ConnectionJobExecutionPort for CatalogExecution<'_> {
+    type Job = BackgroundJob;
+    type Started = (SupplierApiConnection, BackgroundJob);
+    type Outcome = std::result::Result<(), ClassifiedError>;
+    async fn start(&self, job: Self::Job) -> Result<Self::Started> {
+        let connection_id = job
+            .domain_job_id
+            .clone()
+            .ok_or_else(|| Error::BusinessLogicError("目录同步任务缺少连接ID".to_string()))?;
+        let connection = SupplierApiService::new(self.process.db.clone())
+            .load_connection(&connection_id, &mut NoTransaction)
+            .await?;
+        let started_job = self.process.start_background_job(job).await?;
+        Ok((connection, started_job))
+    }
+    async fn invoke(&self, started: &Self::Started) -> Self::Outcome {
+        self.process.scan_catalog(&started.0, &started.1, self.actor).await
+    }
+    async fn finish(&self, started: Self::Started, outcome: Self::Outcome, actor: &AuditActor) -> Result<()> {
+        self.process.finish_catalog_job(started.1, started.0, outcome, actor).await
+    }
+}

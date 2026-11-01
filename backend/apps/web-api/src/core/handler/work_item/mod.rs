@@ -9,8 +9,6 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
-use erp_processes::Error as ProcessError;
-use erp_processes::adapters::workflow::{work_item_service, workflow_auth};
 use erp_read_models::workbench::{SearchOptions, WorkItemSearchParams};
 use erp_read_models::{
     Error as ReadModelError, FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams,
@@ -30,6 +28,8 @@ use crate::core::errors::{Error as HttpError, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::handler::approval_instance::error::{ApprovalHttpError, correlation_id};
 use crate::core::response::ApiResponse;
+use crate::wiring::errors::Error as ProcessError;
+use crate::wiring::workflow::{work_item_service, workflow_auth};
 
 pub mod finance_responsibility;
 

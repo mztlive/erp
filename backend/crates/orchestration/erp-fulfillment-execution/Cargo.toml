@@ -1,0 +1,38 @@
+[package]
+name = "erp-fulfillment-execution"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+application-core = { workspace = true }
+async-trait = { workspace = true }
+bpm = { workspace = true }
+entity-core = { workspace = true }
+erp-approval-runtime = { workspace = true }
+erp-audit = { workspace = true }
+erp-core = { workspace = true }
+erp-file-assets = { workspace = true }
+erp-finance = { workspace = true }
+erp-fulfillment = { workspace = true }
+erp-identity = { workspace = true }
+erp-integration = { workspace = true }
+erp-inventory = { workspace = true }
+erp-party = { workspace = true }
+erp-procurement = { workspace = true }
+erp-read-models = { workspace = true }
+erp-sales = { workspace = true }
+erp-supplier = { workspace = true }
+erp-supply = { workspace = true }
+erp-support = { workspace = true }
+erp-warehouse = { workspace = true }
+erp-workflow = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
+tracing = { workspace = true }
+validator = { workspace = true }

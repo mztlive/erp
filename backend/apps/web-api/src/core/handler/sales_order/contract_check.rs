@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::order_to_cash::SalesOrderCommandProcess;
+use erp_order_to_cash::order_to_cash::SalesOrderCommandProcess;
 use erp_sales::dto::sales_order::BindSalesOrderContractRequest;
 use erp_sales::entity::sales_order::contract_terms::ContractBindingCheck;
 
@@ -26,10 +26,14 @@ pub async fn sales_order_contract_check(
     Path(id): Path<String>,
     Query(req): Query<BindSalesOrderContractRequest>,
 ) -> Result<ContractBindingCheck> {
-    let check = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .check_sales_order_contract(&id, req, &actor)
-        .await?;
+    let check = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .check_sales_order_contract(&id, req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(check))
 }
 

@@ -8,7 +8,7 @@ use mongodb::bson::{deserialize_from_document, doc};
 use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
 use serde_json::{Value, json};
 
-use super::Error;
+use super::{Error, wiring_errors};
 
 const INTERNAL_MESSAGE: &str = "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员";
 const UNKNOWN_MESSAGE: &str = "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试";
@@ -222,10 +222,24 @@ async fn all_nineteen_domain_common_variants_keep_http_contract() {
 }
 
 #[tokio::test]
-async fn process_and_read_model_common_variants_keep_http_contract() {
-    for (boundary, cases) in
-        [("process", common_cases!(erp_processes)), ("read_model", common_cases!(erp_read_models))]
-    {
+async fn orchestration_and_read_model_common_variants_keep_http_contract() {
+    for (boundary, cases) in [
+        ("wiring", common_cases!(wiring_errors)),
+        ("read_model", common_cases!(erp_read_models)),
+        ("erp_approval_runtime", common_cases!(erp_approval_runtime)),
+        ("erp_data_import", common_cases!(erp_data_import)),
+        ("erp_demo_data", common_cases!(erp_demo_data)),
+        ("erp_file_assets", common_cases!(erp_file_assets)),
+        ("erp_finance_posting", common_cases!(erp_finance_posting)),
+        ("erp_fulfillment_execution", common_cases!(erp_fulfillment_execution)),
+        ("erp_master_data", common_cases!(erp_master_data)),
+        ("erp_order_to_cash", common_cases!(erp_order_to_cash)),
+        ("erp_procure_to_pay", common_cases!(erp_procure_to_pay)),
+        ("erp_reverse_flow", common_cases!(erp_reverse_flow)),
+        ("erp_supplier_catalog", common_cases!(erp_supplier_catalog)),
+        ("erp_supplier_orders", common_cases!(erp_supplier_orders)),
+        ("erp_supply_settlement", common_cases!(erp_supply_settlement)),
+    ] {
         for (variant, error, expected) in cases {
             assert_response(&format!("{boundary}::{variant}"), error, expected).await;
         }
@@ -237,7 +251,37 @@ async fn rbac_errors_remain_internal_at_every_real_provider() {
     for (label, error) in [
         ("identity", Error::from(erp_identity::Error::Rbac("secret policy details".into()))),
         ("workflow", Error::from(erp_workflow::Error::Rbac("secret policy details".into()))),
-        ("process", Error::from(erp_processes::Error::Rbac("secret policy details".into()))),
+        ("process", Error::from(wiring_errors::Error::Rbac("secret policy details".into()))),
+        (
+            "erp_approval_runtime",
+            Error::from(erp_approval_runtime::Error::Rbac("secret policy details".into())),
+        ),
+        ("erp_data_import", Error::from(erp_data_import::Error::Rbac("secret policy details".into()))),
+        ("erp_demo_data", Error::from(erp_demo_data::Error::Rbac("secret policy details".into()))),
+        (
+            "erp_finance_posting",
+            Error::from(erp_finance_posting::Error::Rbac("secret policy details".into())),
+        ),
+        (
+            "erp_fulfillment_execution",
+            Error::from(erp_fulfillment_execution::Error::Rbac("secret policy details".into())),
+        ),
+        ("erp_master_data", Error::from(erp_master_data::Error::Rbac("secret policy details".into()))),
+        ("erp_order_to_cash", Error::from(erp_order_to_cash::Error::Rbac("secret policy details".into()))),
+        ("erp_procure_to_pay", Error::from(erp_procure_to_pay::Error::Rbac("secret policy details".into()))),
+        ("erp_reverse_flow", Error::from(erp_reverse_flow::Error::Rbac("secret policy details".into()))),
+        (
+            "erp_supplier_catalog",
+            Error::from(erp_supplier_catalog::Error::Rbac("secret policy details".into())),
+        ),
+        (
+            "erp_supplier_orders",
+            Error::from(erp_supplier_orders::Error::Rbac("secret policy details".into())),
+        ),
+        (
+            "erp_supply_settlement",
+            Error::from(erp_supply_settlement::Error::Rbac("secret policy details".into())),
+        ),
         ("read_model", Error::from(erp_read_models::Error::Rbac("secret policy details".into()))),
     ] {
         assert_response(label, error, Expected::internal()).await;
@@ -288,7 +332,18 @@ async fn all_workflow_codes_keep_http_contract_across_three_boundaries() {
         let message = body["errorMessage"].as_str().unwrap();
         for (boundary, error) in [
             ("workflow", Error::from(erp_workflow::Error::Coded(code))),
-            ("process", Error::from(erp_processes::Error::Coded(code))),
+            ("process", Error::from(wiring_errors::Error::Coded(code))),
+            ("erp_approval_runtime", Error::from(erp_approval_runtime::Error::Coded(code))),
+            ("erp_data_import", Error::from(erp_data_import::Error::Coded(code))),
+            ("erp_demo_data", Error::from(erp_demo_data::Error::Coded(code))),
+            ("erp_finance_posting", Error::from(erp_finance_posting::Error::Coded(code))),
+            ("erp_fulfillment_execution", Error::from(erp_fulfillment_execution::Error::Coded(code))),
+            ("erp_order_to_cash", Error::from(erp_order_to_cash::Error::Coded(code))),
+            ("erp_procure_to_pay", Error::from(erp_procure_to_pay::Error::Coded(code))),
+            ("erp_reverse_flow", Error::from(erp_reverse_flow::Error::Coded(code))),
+            ("erp_supplier_catalog", Error::from(erp_supplier_catalog::Error::Coded(code))),
+            ("erp_supplier_orders", Error::from(erp_supplier_orders::Error::Coded(code))),
+            ("erp_supply_settlement", Error::from(erp_supply_settlement::Error::Coded(code))),
             ("read_model", Error::from(erp_read_models::Error::Coded(code))),
         ] {
             assert_response(
@@ -345,7 +400,7 @@ async fn duplicate_indexes_keep_seventeen_messages_and_exact_name_fallbacks() {
         let index = index.as_deref();
         for (boundary, error) in [
             ("direct_persistence", Error::from(duplicate(index))),
-            ("process_from_persistence", Error::from(erp_processes::Error::from(duplicate(index)))),
+            ("process_from_persistence", Error::from(wiring_errors::Error::from(duplicate(index)))),
             ("read_model_from_persistence", Error::from(erp_read_models::Error::from(duplicate(index)))),
         ] {
             assert_response(&format!("{boundary}:{index:?}"), error, Expected::conflict(message)).await;
@@ -363,7 +418,7 @@ macro_rules! domain_historical_wrapper {
 async fn historical_repository_wrappers_are_special_only_at_application_boundaries() {
     for (index, message) in HISTORICAL_INDEXES {
         for (boundary, error) in [
-            ("process", Error::from(erp_processes::Error::RepositoryError(duplicate(Some(index))))),
+            ("process", Error::from(wiring_errors::Error::RepositoryError(duplicate(Some(index))))),
             ("read_model", Error::from(erp_read_models::Error::RepositoryError(duplicate(Some(index))))),
         ] {
             assert_response(&format!("{boundary}:{index}"), error, Expected::conflict(message)).await;
@@ -423,7 +478,7 @@ macro_rules! ordinary_repository_wrappers {
 #[tokio::test]
 async fn other_application_repository_wrappers_remain_internal() {
     for (boundary, cases) in [
-        ("process", ordinary_repository_wrappers!(erp_processes)),
+        ("process", ordinary_repository_wrappers!(wiring_errors)),
         ("read_model", ordinary_repository_wrappers!(erp_read_models)),
     ] {
         for (kind, error) in cases {
@@ -434,7 +489,7 @@ async fn other_application_repository_wrappers_remain_internal() {
     for (historical, _) in HISTORICAL_INDEXES {
         for similar in [format!("prefix_{historical}"), format!("{historical}_suffix")] {
             for (boundary, error) in [
-                ("process", Error::from(erp_processes::Error::RepositoryError(duplicate(Some(&similar))))),
+                ("process", Error::from(wiring_errors::Error::RepositoryError(duplicate(Some(&similar))))),
                 (
                     "read_model",
                     Error::from(erp_read_models::Error::RepositoryError(duplicate(Some(&similar)))),
@@ -483,7 +538,7 @@ async fn validator_fields_survive_domain_and_application_boundaries() {
     let sources = [
         ("direct", Error::from(validation_errors())),
         ("customer", Error::from(erp_customer::Error::from(validation_errors()))),
-        ("process", Error::from(erp_processes::Error::from(erp_customer::Error::from(validation_errors())))),
+        ("process", Error::from(wiring_errors::Error::from(erp_customer::Error::from(validation_errors())))),
         (
             "read_model",
             Error::from(erp_read_models::Error::from(erp_sales::Error::from(validation_errors()))),

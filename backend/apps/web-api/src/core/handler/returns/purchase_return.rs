@@ -3,18 +3,18 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::MongoPurchaseDataScope;
-use erp_processes::reverse_flow::ReturnsProcess;
 use erp_procurement::entity::purchase_order::ReturnSettlementDecision;
 use erp_read_models::returns_center::dto::{PurchaseReturnOrderListParams, PurchaseReturnOrderView};
 use erp_read_models::returns_center::{PurchaseReturnListView, ReturnsReadService};
 use erp_returns::dto::CreatePurchaseReturnOrderRequest;
 use erp_returns::entity::returns::DirectReturnRequest;
+use erp_reverse_flow::reverse_flow::ReturnsProcess;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::{MongoPurchaseDataScope, local_reverse_flow_ports, reverse_flow_ports};
 
 /// 查询采购退货单列表。
 ///
@@ -89,7 +89,7 @@ pub async fn purchase_return_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseReturnOrderRequest>,
 ) -> Result<PurchaseReturnOrderView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .create_purchase_return_order(req, &actor)
         .await?;
@@ -113,8 +113,7 @@ pub async fn purchase_direct_return_confirm(
     Path(id): Path<String>,
     Json(req): Json<DirectReturnRequest>,
 ) -> Result<String> {
-    let result = ReturnsProcess::new(state.db())
-        .with_rbac(state.rbac())
+    let result = ReturnsProcess::new(state.db(), reverse_flow_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .confirm_direct_return(&id, req, &actor)
         .await?;
@@ -136,8 +135,7 @@ pub async fn purchase_return_finance_sync(
     Path(id): Path<String>,
     Json(decision): Json<ReturnSettlementDecision>,
 ) -> Result<()> {
-    ReturnsProcess::new(state.db())
-        .with_rbac(state.rbac())
+    ReturnsProcess::new(state.db(), reverse_flow_ports(state.db(), state.rbac()))
         .reconcile_return_finance(&id, decision, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(()))

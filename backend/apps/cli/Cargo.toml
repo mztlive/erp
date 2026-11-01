@@ -5,6 +5,10 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+entity-core = { workspace = true }
+async-trait = { workspace = true }
+erp-supplier-orders = { workspace = true }
+erp-demo-data = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
@@ -54,6 +58,5 @@ erp-supply = { workspace = true }
 
 erp-warehouse = { workspace = true }
 
-erp-processes = { workspace = true }
 
 mongodb = { workspace = true }

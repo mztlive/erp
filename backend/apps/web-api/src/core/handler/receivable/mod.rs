@@ -3,6 +3,7 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `erp_finance::dto::receivable` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use crate::wiring::receivable_posting_ports;
 pub(crate) mod invoice_files;
 pub(crate) mod receipt_files;
 
@@ -19,7 +20,7 @@ use erp_finance::dto::receivable::{
     PostCustomerReceiptRequest, PostInvoiceRequest, ReceivableAccountListParams,
     SubmitCustomerReceiptRequest,
 };
-use erp_processes::finance_posting::receivable::ReceivableProcess;
+use erp_finance_posting::finance_posting::receivable::ReceivableProcess;
 use erp_read_models::finance::dto::{CustomerReceiptView, ReceivableAccountView};
 use erp_read_models::finance::funds_scope::{
     FundsScopedPage, FundsScopedResult, ScopedCustomerReceiptRow, ScopedInvoiceRow,
@@ -48,7 +49,7 @@ pub async fn receivable_account_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<ReceivableAccountListParams>,
 ) -> Result<FundsScopedPage<ScopedReceivableAccountRow>> {
-    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let page = crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
         .receivable_account_list_scoped(&params, &actor)
         .await?;
 
@@ -69,7 +70,7 @@ pub async fn receivable_account_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedReceivableAccountRow>> {
-    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let view = crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
         .receivable_account_detail_scoped(&id, &actor)
         .await?;
 
@@ -90,7 +91,7 @@ pub async fn receivable_account_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateReceivableAccountRequest>,
 ) -> Result<ReceivableAccountView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .create_receivable_account(req, &actor)
         .await?;
@@ -115,7 +116,7 @@ pub async fn customer_receipt_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CustomerReceiptListParams>,
 ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
-    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let page = crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
         .customer_receipt_list_scoped(&params, &actor)
         .await?;
 
@@ -136,7 +137,7 @@ pub async fn customer_receipt_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedCustomerReceiptRow>> {
-    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let view = crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
         .customer_receipt_detail_scoped(&id, &actor)
         .await?;
 
@@ -157,7 +158,7 @@ pub async fn customer_receipt_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .create_customer_receipt(req, &actor)
         .await?;
@@ -179,7 +180,7 @@ pub async fn customer_receipt_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .commit_customer_receipt(req, &actor)
         .await?;
@@ -203,7 +204,7 @@ pub async fn customer_receipt_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .submit_customer_receipt(&id, req, &actor)
         .await?;
@@ -227,7 +228,7 @@ pub async fn customer_receipt_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelCustomerReceiptApprovalRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .cancel_customer_receipt_approval(&id, req, &actor)
         .await?;
@@ -274,8 +275,8 @@ pub async fn invoice_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<InvoiceListParams>,
 ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
-    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
-    let page = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let purchase_access = crate::wiring::purchase_access(state.db(), state.rbac());
+    let page = crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
         .invoice_list_scoped(&params, &actor, &purchase_access)
         .await?;
 
@@ -296,8 +297,8 @@ pub async fn invoice_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
-    let purchase_access = erp_processes::adapters::purchase_access(state.db(), state.rbac());
-    let view = erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+    let purchase_access = crate::wiring::purchase_access(state.db(), state.rbac());
+    let view = crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
         .invoice_detail_scoped(&id, &actor, &purchase_access)
         .await?;
 
@@ -318,7 +319,7 @@ pub async fn invoice_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .create_invoice(req, &actor)
         .await?;
@@ -340,7 +341,7 @@ pub async fn invoice_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .commit_invoice(req, &actor)
         .await?;
@@ -364,7 +365,7 @@ pub async fn invoice_post(
     Path(id): Path<String>,
     Json(req): Json<PostInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .post_invoice(&id, req, &actor)
         .await?;
@@ -388,7 +389,7 @@ pub async fn invoice_red_issue(
     Path(id): Path<String>,
     Json(req): Json<CommitRedInvoiceRequest>,
 ) -> Result<InvoiceView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .issue_red_invoice(&id, req, &actor)
         .await?;

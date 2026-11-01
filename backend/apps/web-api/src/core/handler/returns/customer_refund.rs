@@ -3,7 +3,6 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::reverse_flow::ReturnsProcess;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::{CustomerRefundListParams, CustomerRefundView, PageView};
 use erp_returns::dto::{
@@ -11,11 +10,13 @@ use erp_returns::dto::{
     PostCustomerRefundRequest, SubmitCustomerRefundRequest,
 };
 use erp_returns::service::ReturnsService;
+use erp_reverse_flow::reverse_flow::ReturnsProcess;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::local_reverse_flow_ports;
 
 /// 查询客户退款列表。
 ///
@@ -74,7 +75,7 @@ pub async fn customer_refund_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .create_customer_refund(req, &actor)
         .await?;
@@ -99,7 +100,7 @@ pub async fn customer_refund_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .commit_customer_refund(req, &actor)
         .await?;
@@ -125,7 +126,7 @@ pub async fn customer_refund_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .submit_customer_refund(&id, req, &actor)
         .await?;
@@ -152,7 +153,7 @@ pub async fn customer_refund_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelCustomerRefundApprovalRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .cancel_customer_refund_approval(&id, req, &actor)
         .await?;

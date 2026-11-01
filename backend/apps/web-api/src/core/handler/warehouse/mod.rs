@@ -7,7 +7,6 @@ use application_core::AuditActor;
 use application_core::directory::ScopedPage;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::warehouse_directory;
 use erp_warehouse::{
     CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
     UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
@@ -19,6 +18,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::warehouse_directory;
 
 /// 查询仓库列表。
 ///
@@ -160,7 +160,7 @@ pub async fn warehouse_sku_policy_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateWarehouseSkuPolicyRequest>,
 ) -> Result<WarehouseSkuPolicyView> {
-    let view = erp_processes::create_warehouse_sku_policy(state.db(), req, actor).await?;
+    let view = erp_master_data::create_warehouse_sku_policy(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

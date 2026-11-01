@@ -6,21 +6,24 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 
 - **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
 - **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password without depending on `web-api`.
-- **Persistence (`crates/persistence-core`)**: Generic repositories, executors, transaction support, and Mongo helpers. Domain crates own concrete repositories, collection accessors, and index definitions.
-- **Business domains (`crates/erp-*`)**: 19 domains own entities, DTOs, rules, repositories and services. Cross-domain writes belong to `erp-processes`; mixed queries belong to `erp-read-models`. Ordinary domains must not depend on other business domains.
+- **Persistence (`crates/foundation/persistence-core`)**: Generic repositories, executors, transaction support, and Mongo helpers. Domain crates own concrete repositories, collection accessors, and index definitions.
+- **Business domains (`crates/domains/erp-*`)**: 19 domains own entities, DTOs, rules, repositories and services. Cross-domain writes belong to `erp-processes`; mixed queries belong to `erp-read-models`. Ordinary domains must not depend on other business domains.
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), S3-compatible object storage (`storage`), and proc macros for entities and permissions.
 
 ## Project Layout
 
 - `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
 - `apps/cli/` – Operator CLI for `init-admin` and `reset-password`.
-- `crates/erp-core`, `application-core`, `persistence-core` – Shared value, application and persistence contracts.
+- `crates/foundation/` – Shared values (`erp-core`), application contracts (`application-core`) and persistence mechanisms (`persistence-core`).
 - `crates/erp-processes` – Named cross-domain processes and concrete consumer adapters.
-- `crates/erp-read-models` – Mixed queries, display projections and the shared work-item fact reader.
-- Other `crates/erp-*` – Business domains with independent normal/build/dev dependency boundaries.
+- `crates/read-models/erp-read-models` – Mixed queries, display projections and the shared work-item fact reader.
+- Other `crates/domains/erp-*` – Business domains with independent normal/build/dev dependency boundaries.
 - Legacy `database/tests` and `services/tests` – Historical archives only; preserve bytes and exclude them from Cargo targets.
 - `config/` – Config loader with CLI args and optional Nacos hot-reload.
-- `crates/` – Shared libraries (`id-generator`, `storage`, `entity-*`).
+- `crates/platform/` – Shared technical libraries (`bpm`, `aliyun-ocr`, `id-generator`, `storage`, `entity-*`).
+- `crates/adapters/` – Concrete external protocol and contract recognition adapters.
+- `crates/testing/` – Shared test support, restricted to permitted dev-dependencies.
+- `crates/orchestration/` – Business-specific cross-domain coordination; new crates must not depend on the transitional `erp-processes`.
 - `config.toml.example` – Minimal local configuration template.
 
 ## API Surface (current)
@@ -89,7 +92,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 
 ## Implementation Contract
 
-- Extend the owning domain under `crates/erp-<domain>/src/`; use only modules required by real use cases. Place mixed writes in a named Process, mixed reads in a ReadModel, and protocol adapters in the existing HTTP handler tree.
+- Extend the owning domain under `crates/domains/erp-<domain>/src/`; use only modules required by real use cases. Place mixed writes in a named Process, mixed reads in a ReadModel, and protocol adapters in the existing HTTP handler tree.
 - Reuse service-layer DTOs in handlers instead of duplicating request structs; prefer thin wrappers only when HTTP validation differs.
 - Use domain-owned repositories through their collection accessors and `persistence_core::Executor` for all persistence, and keep business rules inside entities/value objects.
 - Add external-provider abstractions only when a real integration has at least one caller.

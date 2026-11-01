@@ -19,7 +19,7 @@ export const FOUNDATION = JSON.parse(
   readFileSync(
     join(
       dirname(fileURLToPath(import.meta.url)),
-      "../backend/crates/erp-processes/src/demo_master_data/dev-foundation.json",
+      "../backend/crates/orchestration/erp-demo-data/src/demo_master_data/dev-foundation.json",
     ),
     "utf8",
   ),

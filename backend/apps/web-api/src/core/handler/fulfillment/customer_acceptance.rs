@@ -1,5 +1,7 @@
 //! 客户验收 HTTP 协议适配。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
@@ -8,8 +10,9 @@ use erp_fulfillment::dto::{
     CustomerAcceptanceListParams, CustomerAcceptanceView, PageView, PostCustomerAcceptanceRequest,
     ReverseCustomerAcceptanceRequest,
 };
-use erp_processes::Error as ProcessError;
-use erp_processes::fulfillment_execution::customer_acceptance::CustomerAcceptanceProcess;
+use erp_fulfillment_execution::Error as ProcessError;
+use erp_fulfillment_execution::fulfillment_execution::customer_acceptance::CustomerAcceptanceProcess;
+use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
 use erp_read_models::fulfillment_center::access::AcceptanceReadService;
 use erp_read_models::fulfillment_center::dto::{AcceptanceEligibilityView, CommitCustomerAcceptanceView};
 
@@ -18,10 +21,22 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::workflow::work_item_service;
+use crate::wiring::{approval_runtime, fulfillment_identity_factory};
 
 /// 装配客户验收命令入口，沿用对象读取授权与 RBAC 服务。
 fn acceptance_process(state: &AppState) -> CustomerAcceptanceProcess {
-    CustomerAcceptanceProcess::new(state.db(), service(state), state.rbac(), state.approval_object_read())
+    CustomerAcceptanceProcess::new(
+        state.db(),
+        service(state),
+        state.rbac(),
+        fulfillment_identity_factory(state.db()),
+        state.approval_object_read(),
+        Arc::new(FulfillmentWorkflowServices::new(
+            work_item_service(state.db(), state.rbac()),
+            approval_runtime(state.db(), state.rbac()),
+        )),
+    )
 }
 
 /// 查询客户验收单列表（W06 验收历史视图）。

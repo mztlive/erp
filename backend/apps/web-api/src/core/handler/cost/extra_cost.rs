@@ -6,7 +6,7 @@ use axum::extract::{Multipart, Path, State};
 use erp_finance::dto::extra_cost::{
     ExtraCostCommandResult, ReduceExtraCostRequest, RegisterExtraCostRequest, SalesExtraCostListView,
 };
-use erp_processes::finance_posting::extra_cost::SalesExtraCostProcess;
+use erp_finance_posting::finance_posting::extra_cost::SalesExtraCostProcess;
 use erp_read_models::finance::extra_cost::SalesExtraCostReadModel;
 use erp_support::SensitivityClass;
 
@@ -100,7 +100,7 @@ pub async fn sales_extra_cost_reduce(
 async fn finish(
     state: &AppState,
     pending: &[erp_support::PendingFileAssetRequest],
-    result: erp_processes::Result<ExtraCostCommandResult>,
+    result: erp_finance_posting::Result<ExtraCostCommandResult>,
 ) -> Result<ExtraCostCommandResult> {
     match result {
         Ok(view) => {

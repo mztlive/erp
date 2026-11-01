@@ -73,7 +73,7 @@ pub async fn instance_list(
     let mut executor = persistence_core::NoTransaction;
     let reader = erp_read_models::workbench::WorkbenchReadService::new(
         state.db(),
-        erp_processes::adapters::workflow::workflow_auth(state.db(), state.rbac()),
+        crate::wiring::workflow::workflow_auth(state.db(), state.rbac()),
     );
     let page = match page {
         Some(page) => {
@@ -240,7 +240,7 @@ pub async fn upgrade_binding(
 /// 构造运行服务。
 fn runtime_service(
     state: &AppState,
-) -> std::sync::Arc<ApprovalRuntimeService<erp_processes::adapters::workflow::WorkflowAuth>> {
+) -> std::sync::Arc<ApprovalRuntimeService<crate::wiring::workflow::WorkflowAuth>> {
     state.approval_runtime_service()
 }
 
@@ -248,7 +248,7 @@ fn runtime_service(
 fn ok_json<T: serde::Serialize>(data: T) -> ApprovalResult<serde_json::Value> {
     serde_json::to_value(data)
         .map(ApiResponse::ok_with_data)
-        .map_err(|error| ApprovalHttpError::from(erp_processes::Error::Internal(error.to_string())))
+        .map_err(|error| ApprovalHttpError::from(crate::wiring::errors::Error::Internal(error.to_string())))
 }
 
 /// 协议层已注入 actor 的决定命令。

@@ -3,16 +3,18 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use erp_processes::background::{
-    BackgroundRunner, DeliveryCoverageRefreshAdapter, ProductImportTaskAdapter, SalesSelectionTaskAdapter,
-    SellableProjectionRefreshAdapter, SupplierCatalogAdoptionTaskAdapter, SupplierCatalogTaskAdapter,
-    SupplierImportTaskAdapter,
+use background_runtime::BackgroundRunner;
+use erp_data_import::background::{ProductImportTaskAdapter, SupplierImportTaskAdapter};
+use erp_order_to_cash::background::SalesSelectionTaskAdapter;
+use erp_order_to_cash::sales_selection::SalesSelectionProcess;
+use erp_supplier_catalog::background::{
+    DeliveryCoverageRefreshAdapter, SellableProjectionRefreshAdapter, SupplierCatalogAdoptionTaskAdapter,
+    SupplierCatalogTaskAdapter,
 };
-use erp_processes::delivery_coverage_refresh::DeliveryCoverageRefreshProcess;
-use erp_processes::sales_selection::SalesSelectionProcess;
-use erp_processes::sellable_projection_refresh::SellableProjectionRefresher;
-use erp_processes::source_media::SourceMediaWorker;
-use erp_processes::supplier_connection_execution::CatalogTaskControl;
+use erp_supplier_catalog::delivery_coverage_refresh::DeliveryCoverageRefreshProcess;
+use erp_supplier_catalog::sellable_projection_refresh::SellableProjectionRefresher;
+use erp_supplier_catalog::source_media::SourceMediaWorker;
+use erp_supplier_catalog::supplier_connection_execution::CatalogTaskControl;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
@@ -58,7 +60,11 @@ impl Workers {
         let (stop, receive) = watch::channel(false);
         let mut tasks = xxl.spawn(receive.clone());
         if let Some(preparer) = source_media {
-            let media = SourceMediaWorker::new(state.db(), preparer);
+            let media = SourceMediaWorker::new(
+                state.db(),
+                preparer,
+                crate::wiring::scoped_catalog_service(state.db(), state.rbac()),
+            );
             let receive = receive.clone();
             tasks.push(tokio::spawn(async move {
                 media.run(receive).await;
@@ -125,6 +131,7 @@ fn build_runner(state: &AppState) -> Result<BackgroundRunner> {
             state.db(),
             state.storage().clone(),
             state.config_snapshot().app.secret.as_bytes(),
+            crate::wiring::sales::sales_services(state.db(), state.rbac()),
         )))
         .register(DeliveryCoverageRefreshAdapter::new(DeliveryCoverageRefreshProcess::new(state.db())))
         .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db()))))

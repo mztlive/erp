@@ -1,0 +1,30 @@
+//! 供应目录消费方的领域服务接线；最终由应用持有。
+
+use std::sync::Arc;
+
+use erp_identity::SharedRbacService;
+use erp_supplier_catalog::wiring::CatalogServices;
+use mongodb::Database;
+
+use super::workflow::work_item_service;
+use super::{
+    catalog_access, offering_access, scoped_catalog_service, scoped_offering_service, supplier_access,
+};
+
+/// 为供应目录装配同一数据库和身份政策下的消费合同。
+/// # 参数
+/// 数据库及应用已有的共享权限实例。
+/// # 返回
+/// 已注入范围、审计、文件和正式任务端口的目录依赖。
+/// # 错误
+/// 不返回错误；构造不读取或写入事实。
+pub fn catalog_services(db: Database, rbac: SharedRbacService) -> Arc<CatalogServices> {
+    Arc::new(CatalogServices {
+        catalog: scoped_catalog_service(db.clone(), rbac.clone()),
+        catalog_access: catalog_access(db.clone(), rbac.clone()),
+        offerings: scoped_offering_service(db.clone(), rbac.clone()),
+        offering_access: offering_access(db.clone(), rbac.clone()),
+        suppliers: supplier_access(db.clone(), rbac.clone()),
+        work_items: Arc::new(work_item_service(db, rbac)),
+    })
+}

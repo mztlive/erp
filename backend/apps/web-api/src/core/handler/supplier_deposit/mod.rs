@@ -8,21 +8,25 @@ use erp_finance::entity::supplier_deposit::{
     SupplierDepositRechargeRequest, SupplierDepositReconciliation, SupplierDepositReservation,
     SupplierDepositUsage,
 };
-use erp_processes::supplier_deposits::{
+use erp_read_models::finance::supplier_deposits::{DepositAccountDetail, DepositAccountRow};
+use erp_supplier_orders::supplier_deposits::{
     ApproveDepositRecharge, AuthorizeDepositExecution, BindDepositConnection, DepositAccountList,
     DepositAccountQuery, DepositExpectedVersion, OpenDepositAccount, PayDepositRecharge,
     ReceiveDepositRecharge, ReconcileDepositAccount, RecordDepositDebit, RequestDepositRecharge,
     ReserveDepositExecution, ReturnDepositUsage, SettleDepositUsage, SupplierDepositManagementProcess,
 };
-use erp_read_models::finance::supplier_deposits::{DepositAccountDetail, DepositAccountRow};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 fn process(state: &AppState) -> SupplierDepositManagementProcess {
-    SupplierDepositManagementProcess::new(state.db(), state.sensitive_data().as_ref().clone())
-        .with_rbac(state.rbac())
+    SupplierDepositManagementProcess::new(
+        state.db(),
+        state.sensitive_data().as_ref().clone(),
+        state.rbac(),
+        state.supplier_payment_tasks(),
+    )
 }
 
 /// 查询预存款账户。

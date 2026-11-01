@@ -33,6 +33,7 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 use crate::core::upload;
+use crate::wiring::workflow::workflow_auth;
 
 /// 查询文件资产列表（列表不暴露敏感对象存储键）。
 ///
@@ -147,7 +148,7 @@ pub async fn file_asset_upload(
     let mut asset = match result {
         Ok(asset) => asset,
         Err(error) => {
-            let error = erp_processes::Error::from(error);
+            let error = crate::wiring::errors::Error::from(error);
             if should_compensate_pending_assets(&error) {
                 delete_pending_asset_objects(&state, &cleanup).await;
             }
@@ -236,9 +237,9 @@ pub async fn document_attachment_create(
     erp_read_models::sales_center::access::SalesAccess::new(state.db(), state.rbac())
         .require_attachment(&actor, "update", req.document_id.as_ref())
         .await?;
-    erp_processes::approval_materials::authorize_attachment(
+    erp_approval_runtime::approval_materials::authorize_attachment(
         &state.db(),
-        &state.rbac(),
+        &workflow_auth(state.db(), state.rbac()),
         &actor,
         req.file_asset_id.as_ref(),
     )
@@ -760,8 +761,8 @@ mod tests {
         let database_error = persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom(
             "unknown commit result",
         ));
-        let unknown = erp_processes::Error::OutcomeUnknown(database_error);
-        let definite = erp_processes::Error::ConflictError("已确定回滚".to_string());
+        let unknown = crate::wiring::errors::Error::OutcomeUnknown(database_error);
+        let definite = crate::wiring::errors::Error::ConflictError("已确定回滚".to_string());
 
         assert!(!should_compensate_pending_assets(&unknown));
         assert!(should_compensate_pending_assets(&definite));

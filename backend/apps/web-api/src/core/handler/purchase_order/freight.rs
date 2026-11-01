@@ -3,13 +3,14 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::procure_to_pay::PurchaseOrderProcess;
+use erp_procure_to_pay::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{WaivePurchaseFreightRequest, WaivePurchaseFreightResult};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::purchase_ports;
 
 /// 标记采购单某商品的运费另计由供应商免收。
 ///
@@ -28,6 +29,8 @@ pub async fn freight_waiver_create(
     Json(req): Json<WaivePurchaseFreightRequest>,
 ) -> Result<WaivePurchaseFreightResult> {
     let result =
-        PurchaseOrderProcess::with_rbac(state.db(), state.rbac()).waive_freight(&id, req, &actor).await?;
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .waive_freight(&id, req, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(result))
 }

@@ -3,14 +3,14 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::response::Response;
-use erp_processes::adapters::funds_access_with_rbac;
-use erp_processes::finance_posting::receivable::ReceivableProcess;
+use erp_finance_posting::finance_posting::receivable::ReceivableProcess;
 use erp_read_models::finance::document_files::{FinancialFileView, matching_file};
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
 use crate::core::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::core::response::ApiResponse;
+use crate::wiring::{funds_access_with_rbac, receivable_posting_ports};
 
 /// 编辑入口与查看入口分别核验各自权限，下载前后均重新读取。
 async fn files(
@@ -20,7 +20,7 @@ async fn files(
     draft: bool,
 ) -> std::result::Result<Vec<FinancialFileView>, Error> {
     if draft {
-        Ok(ReceivableProcess::new(state.db())
+        Ok(ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
             .with_object_read(state.approval_object_read())
             .customer_receipt_draft_files(id, actor)
             .await?)

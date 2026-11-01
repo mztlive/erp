@@ -25,9 +25,11 @@ pub async fn list(
     State(state): State<AppState>,
     Path(supplier_id): Path<String>,
 ) -> Result<Vec<DeliveryTemplateView>> {
-    let templates =
-        erp_processes::supplier_delivery_template::supplier_delivery_templates(state.db(), supplier_id)
-            .await?;
+    let templates = erp_supplier_catalog::supplier_delivery_template::supplier_delivery_templates(
+        state.db(),
+        supplier_id,
+    )
+    .await?;
     Ok(ApiResponse::ok_with_data(templates))
 }
 
@@ -47,7 +49,7 @@ pub async fn create(
     Path(supplier_id): Path<String>,
     Json(req): Json<SaveDeliveryTemplateRequest>,
 ) -> Result<DeliveryTemplateView> {
-    let view = erp_processes::supplier_delivery_template::create_delivery_template(
+    let view = erp_supplier_catalog::supplier_delivery_template::create_delivery_template(
         state.db(),
         supplier_id,
         req,
@@ -73,9 +75,13 @@ pub async fn update(
     Path(id): Path<String>,
     Json(req): Json<SaveDeliveryTemplateRequest>,
 ) -> Result<DeliveryTemplateView> {
-    let view =
-        erp_processes::supplier_delivery_template::update_delivery_template(state.db(), id, req, actor)
-            .await?;
+    let view = erp_supplier_catalog::supplier_delivery_template::update_delivery_template(
+        state.db(),
+        id,
+        req,
+        actor,
+    )
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -95,7 +101,8 @@ pub async fn delete(
     Path(id): Path<String>,
     Json(req): Json<DeleteDeliveryTemplateRequest>,
 ) -> Result<()> {
-    erp_processes::supplier_delivery_template::delete_delivery_template(state.db(), id, req, actor).await?;
+    erp_supplier_catalog::supplier_delivery_template::delete_delivery_template(state.db(), id, req, actor)
+        .await?;
     Ok(ApiResponse::ok())
 }
 
@@ -113,9 +120,9 @@ pub async fn assign(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<AssignDeliveryTemplateRequest>,
 ) -> Result<AssignDeliveryTemplateResult> {
-    let result = erp_processes::supplier_delivery_template::assign_offering_delivery_template(
+    let result = erp_supplier_catalog::supplier_delivery_template::assign_offering_delivery_template(
         state.db(),
-        state.rbac(),
+        crate::wiring::offering_access(state.db(), state.rbac()),
         req,
         actor,
     )

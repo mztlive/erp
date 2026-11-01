@@ -8,12 +8,12 @@ use erp_identity::dto::authorization_bundle::{
 use erp_identity::entity::authorization_bundle::PolicyDocument;
 use erp_identity::service::access_control::policy_bundle::PolicyBundleService;
 use erp_identity::{Permission, Result as IdentityResult};
-use erp_processes::adapters::scope_configuration;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::scope_configuration;
 
 include!(concat!(env!("OUT_DIR"), "/policy_permissions.rs"));
 

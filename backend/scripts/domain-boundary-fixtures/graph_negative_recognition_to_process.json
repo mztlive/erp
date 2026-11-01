@@ -4,13 +4,13 @@
       "name": "erp-contract-recognition",
       "deps": [
         {
-          "name": "erp-processes",
+          "name": "erp-order-to-cash",
           "kind": "normal"
         }
       ]
     },
     {
-      "name": "erp-processes",
+      "name": "erp-order-to-cash",
       "deps": []
     }
   ]

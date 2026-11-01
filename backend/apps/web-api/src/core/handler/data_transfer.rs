@@ -4,9 +4,8 @@ use axum::extract::{Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::CACHE_CONTROL;
 use axum::response::{IntoResponse, Response};
+use erp_data_import::data_transfer::{TransferKind, TransferRequest};
 use erp_identity::PortalActor;
-use erp_processes::Error as ProcessError;
-use erp_processes::data_transfer::{TransferKind, TransferRequest};
 use erp_support::BackgroundJobListParams;
 use serde_json::json;
 
@@ -15,6 +14,7 @@ use crate::core::data_transfer::process;
 use crate::core::errors::Error;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::errors::Error as ProcessError;
 
 /// 登记当前业务权限允许的私有任务。
 /// # 参数

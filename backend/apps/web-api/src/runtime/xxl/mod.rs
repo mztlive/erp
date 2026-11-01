@@ -1,4 +1,5 @@
 //! 独立 Worker 的 XXL 协议和运行时装配。
+mod admin;
 mod protocol;
 mod routes;
 
@@ -8,16 +9,18 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::Router;
+use background_runtime::periodic;
 use chrono::Utc;
 use config::XxlJobConfig;
-use erp_processes::background::{SupplierCatalogTaskAdapter, periodic};
-use erp_processes::scheduled_execution::{ScheduledExecutionProcess, ScheduledWork, XxlAdmin};
-use erp_processes::supplier_order_tracking::SupplierOrderTrackingProcess;
+use erp_supplier_catalog::background::SupplierCatalogTaskAdapter;
+use erp_supplier_orders::supplier_order_tracking::SupplierOrderTrackingProcess;
 use erp_support::entity::scheduled_run::ScheduledHandler;
 use erp_support::repository::scheduled_runs::ScheduledRunExt;
+use erp_support::service::scheduled_execution::{ScheduledExecutionProcess, ScheduledWork};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
+use self::admin::XxlAdmin;
 use super::Result;
 use crate::app_state::AppState;
 
@@ -140,10 +143,10 @@ struct Jobs {
 #[async_trait]
 impl ScheduledWork for Jobs {
     async fn run(&self, handler: ScheduledHandler) -> std::result::Result<usize, &'static str> {
-        let result = match handler {
-            ScheduledHandler::Catalog => self.catalog.schedule_due().await,
-            ScheduledHandler::Tracking => self.tracking.poll_due().await,
-        };
-        result.map_err(|_| "本轮扫描未确认完成，请核对 ERP 原记录和执行日志")
+        const UNCONFIRMED: &str = "本轮扫描未确认完成，请核对 ERP 原记录和执行日志";
+        match handler {
+            ScheduledHandler::Catalog => self.catalog.schedule_due().await.map_err(|_| UNCONFIRMED),
+            ScheduledHandler::Tracking => self.tracking.poll_due().await.map_err(|_| UNCONFIRMED),
+        }
     }
 }

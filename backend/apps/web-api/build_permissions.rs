@@ -1,6 +1,6 @@
 //! 权限构建目录的值类型及非路由政策权限。
 use std::collections::HashMap;
-#[path = "../../crates/erp-identity/src/entity/policy_permission.rs"]
+#[path = "../../crates/domains/erp-identity/src/entity/policy_permission.rs"]
 mod policy_permission;
 
 /// 权限扫描覆盖的业务域模块：既有业务域、审批定义管理，以及演示主数据。

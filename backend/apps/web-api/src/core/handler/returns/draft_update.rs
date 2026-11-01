@@ -3,16 +3,17 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::reverse_flow::ReturnsProcess;
 use erp_read_models::returns_center::dto::{
     CustomerRefundView, PaymentReversalView, ReceiptReversalView, SupplierRefundView,
 };
 use erp_returns::dto::UpdateFinancialReturnRequest;
+use erp_reverse_flow::reverse_flow::ReturnsProcess;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::local_reverse_flow_ports;
 
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
 ///
@@ -33,7 +34,7 @@ pub async fn customer_refund_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .update_customer_refund(&id, req, &actor)
         .await?;
@@ -59,7 +60,7 @@ pub async fn supplier_refund_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<SupplierRefundView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .update_supplier_refund(&id, req, &actor)
         .await?;
@@ -85,7 +86,7 @@ pub async fn receipt_reversal_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .update_receipt_reversal(&id, req, &actor)
         .await?;
@@ -111,7 +112,7 @@ pub async fn payment_reversal_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .update_payment_reversal(&id, req, &actor)
         .await?;

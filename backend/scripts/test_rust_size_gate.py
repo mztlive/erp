@@ -198,7 +198,7 @@ where
         self.assertIn("SIZE-FN", self.rules("src/lib.rs", source, max_file=800, max_fn=0))
 
     def test_is_excluded_path(self):
-        self.assertTrue(gate.is_excluded_path("crates/id-generator/tests/smoke.rs"))
+        self.assertTrue(gate.is_excluded_path("crates/platform/id-generator/tests/smoke.rs"))
         self.assertTrue(gate.is_excluded_path("crates/erp-x/src/foo/tests.rs"))
         self.assertTrue(gate.is_excluded_path("crates/erp-x/src/foo_tests.rs"))
         self.assertTrue(gate.is_excluded_path("apps/web-api/examples/s2_verify.rs"))
@@ -207,10 +207,10 @@ where
 
     def test_macro_crate_skips_function_limit(self):
         source = fn_body(8, "expand")
-        self.assertFalse(self.rules("crates/entity-macros/src/lib.rs", source, max_file=800, max_fn=3))
+        self.assertFalse(self.rules("crates/platform/entity-macros/src/lib.rs", source, max_file=800, max_fn=3))
         self.assertIn(
             "SIZE-FN",
-            self.rules("crates/erp-core/src/lib.rs", source, max_file=800, max_fn=3),
+            self.rules("crates/foundation/erp-core/src/lib.rs", source, max_file=800, max_fn=3),
         )
 
 

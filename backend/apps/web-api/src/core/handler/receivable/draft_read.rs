@@ -3,12 +3,13 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::finance_posting::receivable::ReceivableProcess;
+use erp_finance_posting::finance_posting::receivable::ReceivableProcess;
 use erp_read_models::finance::dto::CustomerReceiptView;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
+use crate::wiring::receivable_posting_ports;
 
 /// 读取原登记人的完整回款，保留真实状态供未知提交确认。
 ///
@@ -27,6 +28,8 @@ pub async fn customer_receipt_draft(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableProcess::new(state.db()).customer_receipt_draft(&id, &actor).await?;
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
+        .customer_receipt_draft(&id, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

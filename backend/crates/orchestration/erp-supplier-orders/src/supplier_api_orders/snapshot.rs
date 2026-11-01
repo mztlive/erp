@@ -1,0 +1,194 @@
+use erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine;
+use erp_procurement::repository::PurchaseOrderExt;
+pub(super) use erp_supply::api_order::ApiOrderRequestSnapshot as ExecutionSnapshot;
+use erp_supply::api_order::{ApiOrderExecution, ApiOrderSourceLine, FrozenLinePurchaseTerms};
+use erp_supply::ports::connector::common::SupplierSku;
+use erp_supply::ports::connector::order::{OrderLine, Recipient};
+use erp_supply::repository::SupplierOfferingExt;
+use persistence_core::NoTransaction;
+
+use super::SupplierApiOrderProcess;
+use crate::{Error, Result};
+
+impl SupplierApiOrderProcess {
+    pub(super) async fn build_snapshot(&self, execution: &ApiOrderExecution) -> Result<ExecutionSnapshot> {
+        let purchase_lines = self
+            .db
+            .purchase_order()
+            .list_revision_lines(&execution.purchase_order_revision_id.clone().into(), &mut NoTransaction)
+            .await?;
+        let budget = self.approved_budget(execution, &purchase_lines).await?;
+        let mut lines = Vec::new();
+        let mut source_purchase_terms = Vec::new();
+        let mut recipient = None;
+        let mut expected_delivery_date = None;
+        for source in &execution.source_lines {
+            let line = purchase_lines
+                .iter()
+                .find(|line| line.base.id == source.purchase_order_revision_line_id)
+                .ok_or_else(|| Error::NotFound("冻结采购行不存在".into()))?;
+            let value = if source.delivery_allocation_index == u32::MAX {
+                self.warehouse_recipient(execution).await?
+            } else {
+                recipient_for(line, source.delivery_allocation_index)?
+            };
+            recipient.get_or_insert(value);
+            expected_delivery_date = line.expected_delivery_date;
+            let (order_line, source_terms) = self.order_line(execution, source, line).await?;
+            lines.push(order_line);
+            source_purchase_terms.push(source_terms);
+        }
+        Ok(ExecutionSnapshot {
+            recipient: recipient.ok_or_else(|| Error::BusinessLogicError("采购执行无明细".into()))?,
+            lines,
+            approved_total: budget.approved_total,
+            approved_budget: Some(budget),
+            source_purchase_terms,
+            expected_delivery_date,
+            context: None,
+            choices: Vec::new(),
+            selected_choice: None,
+            actual_payable: None,
+            requires_payment: false,
+        })
+    }
+
+    async fn order_line(
+        &self,
+        execution: &ApiOrderExecution,
+        source: &ApiOrderSourceLine,
+        line: &PurchaseOrderRevisionLine,
+    ) -> Result<(OrderLine, FrozenLinePurchaseTerms)> {
+        let frozen = line
+            .supplier_offering_source
+            .as_ref()
+            .ok_or_else(|| Error::BusinessLogicError("采购行未冻结供给".into()))?;
+        let terms = self
+            .frozen_purchase_terms(
+                source,
+                frozen.supplier_offering_id.as_ref(),
+                frozen.supplier_offering_revision_id.as_ref(),
+                frozen.revision_version,
+            )
+            .await?;
+        let offering = self
+            .db
+            .supplier_offerings()
+            .find_by_id(frozen.supplier_offering_id.as_ref(), &mut NoTransaction)
+            .await?
+            .filter(|offering| {
+                offering.supplier_id.as_ref() == execution.supplier_id
+                    && offering
+                        .source_connection_id
+                        .as_ref()
+                        .is_some_and(|id| id.as_ref() == execution.connection_id)
+            })
+            .ok_or_else(|| Error::BusinessLogicError("采购供给与接口连接不一致".into()))?;
+        Ok((
+            OrderLine {
+                source_purchase_terms: terms.terms.clone(),
+                line_id: source.fulfillment_item_id.clone(),
+                sku: SupplierSku {
+                    product_id: offering.supplier_product_code,
+                    spec_id: offering.supplier_sku_code,
+                },
+                quantity: source.quantity,
+                approved_unit_price: line
+                    .unit_cost_gross
+                    .ok_or_else(|| Error::BusinessLogicError("采购单价缺失".into()))?,
+                attributes: Vec::new(),
+            },
+            terms,
+        ))
+    }
+
+    async fn frozen_purchase_terms(
+        &self,
+        source: &ApiOrderSourceLine,
+        offering: &str,
+        revision_id: &str,
+        revision_version: u64,
+    ) -> Result<FrozenLinePurchaseTerms> {
+        if source.supplier_offering_revision_id != revision_id {
+            return Err(Error::BusinessLogicError("执行行与已批准供给版本不一致".into()));
+        }
+        let revision = self
+            .db
+            .supplier_offering_revisions()
+            .find_by_id(revision_id, &mut NoTransaction)
+            .await?
+            .filter(|revision| {
+                revision.supplier_offering_id.as_ref() == offering
+                    && revision.base.version == revision_version
+            })
+            .ok_or_else(|| Error::BusinessLogicError("已批准供给修订不存在或版本不一致".into()))?;
+        if let Some(terms) = &revision.source_purchase_terms {
+            terms.ensure_quantity(source.quantity)?;
+            terms.ensure_automatic_order()?;
+        }
+        Ok(FrozenLinePurchaseTerms {
+            line_id: source.fulfillment_item_id.clone(),
+            supplier_offering_revision_id: revision_id.into(),
+            terms: revision.source_purchase_terms,
+        })
+    }
+
+    pub(super) fn decode(&self, execution: &ApiOrderExecution) -> Result<ExecutionSnapshot> {
+        let encrypted = execution
+            .request_encrypted
+            .as_ref()
+            .ok_or_else(|| Error::BusinessLogicError("接口配送资料尚未建立".into()))?;
+        serde_json::from_str(&self.codec.decrypt(encrypted)?)
+            .map_err(|_| Error::Internal("接口请求快照无法读取".into()))
+    }
+
+    pub(super) fn encode(
+        &self,
+        execution: &mut ApiOrderExecution,
+        snapshot: &ExecutionSnapshot,
+    ) -> Result<()> {
+        let text =
+            serde_json::to_string(snapshot).map_err(|_| Error::Internal("接口请求快照无法保存".into()))?;
+        execution.request_encrypted = Some(self.codec.encrypt(&text)?);
+        Ok(())
+    }
+
+    async fn warehouse_recipient(&self, execution: &ApiOrderExecution) -> Result<Recipient> {
+        use erp_warehouse::WarehouseExt;
+        let id = execution.warehouse_revision_id.as_ref().ok_or_else(|| {
+            Error::BusinessLogicError("采购未冻结有效收货仓资料，请通过正式采购变更补齐交付安排".into())
+        })?;
+        let revision = self
+            .db
+            .warehouse_revisions()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("收货仓冻结修订不存在".into()))?;
+        let region = revision
+            .region_code
+            .ok_or_else(|| Error::BusinessLogicError("收货仓未维护地区代码，请先完善仓库资料".into()))?;
+        Ok(Recipient {
+            name: self.codec.decrypt(revision.contact.encrypted())?,
+            phone: String::new(),
+            region: region.as_str().into(),
+            address: format!("{}{}", region.full_name(), self.codec.decrypt(revision.address.encrypted())?),
+            geocoded_address: None,
+            supplier_address: None,
+        })
+    }
+}
+
+fn recipient_for(line: &PurchaseOrderRevisionLine, index: u32) -> Result<Recipient> {
+    let index = usize::try_from(index).map_err(|_| Error::ValidationError("采购地址序号无效".into()))?;
+    let row = line.delivery_allocations.get(index).ok_or_else(|| {
+        Error::BusinessLogicError("采购未冻结接口收货地址，请通过正式采购变更补齐交付安排".into())
+    })?;
+    Ok(Recipient {
+        name: row.recipient.clone(),
+        phone: row.phone.clone(),
+        region: row.region_code.as_str().into(),
+        address: row.full_address(),
+        geocoded_address: None,
+        supplier_address: None,
+    })
+}

@@ -11,14 +11,14 @@ use erp_identity::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension,
 };
 use erp_inventory::{AdjustmentReasonType, StockAdjustment, StockAdjustmentData};
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::workflow::workflow_auth;
 use erp_workflow::service::approval::execution::{
     ApprovalRuntimeService, RuntimeInstanceListQuery, RuntimeInstanceListView,
 };
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::{Client, Database};
 use test_support::seed_admin_account;
+use web_api::wiring::identity::shared_rbac_service;
+use web_api::wiring::workflow::workflow_auth;
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 

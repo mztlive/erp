@@ -1,0 +1,570 @@
+use std::collections::HashSet;
+
+use application_core::AuditActor;
+use bpm::engine::{DefinitionGraph, TaskIntent};
+use bpm::model::ApprovalNodeExecution;
+use bpm::model::types::{
+    ApprovalCommandKind, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
+    ApprovalProcessInstanceStatus,
+};
+use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
+use erp_audit::AuditActorLogs;
+use erp_audit::execution::persist_log;
+use erp_core::common::time::Instant;
+use erp_core::ids::ApprovalNotificationOutboxId;
+use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
+use erp_inventory::{
+    ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
+    StockAdjustmentView,
+};
+use erp_read_models::inventory_center::load_approval_binding;
+use erp_read_models::workbench::capture_stock_adjustment_display;
+use erp_workflow::entity::approval_integration::{
+    ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
+    ApprovalSubjectSnapshotPayload,
+};
+use erp_workflow::entity::document_registry::DocumentType;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
+use erp_workflow::service::approval::execution::map_receipt_first_write_error;
+use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
+
+use super::adapter::require_frozen_binding;
+use super::approval_prepare::{
+    ensure_submit_authorized, load_bound_definition_graph_with_executor,
+    revalidate_stock_adjustment_start_candidates,
+};
+use super::mapping::stock_adjustment_start_scopes;
+use crate::{Error, Result};
+
+/// 库存调整启动事务写入集合。
+///
+/// # 用途
+/// 收拢提交后需一并写入的调整单、快照、启动计划与审计身份。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
+pub struct StockAdjustmentStartPersistInput {
+    /// 授权服务；事务内重验提交人与节点候选人权限。
+    pub workflow: std::sync::Arc<dyn crate::workflow::FulfillmentWorkflow>,
+    /// 已进入 `IN_APPROVAL` 的调整单。
+    pub adjustment: StockAdjustment,
+    /// 审计操作人。
+    pub actor: AuditActor,
+    /// 调整单主键。
+    pub id: String,
+    /// 冻结快照载荷。
+    pub snapshot_payload: ApprovalSubjectSnapshotPayload,
+    /// `prepare_start` 的 Apply 写入计划。
+    pub writes: PlannedWrites,
+    /// 创建时冻结的定义绑定。
+    pub binding: ApprovalDefinitionBinding,
+    /// 合同签署的责任角色。
+    pub owner_role: &'static str,
+    /// 责任组织。
+    pub organization_id: String,
+    /// 调用方时间。
+    pub now: Instant,
+    /// 已完成服务端校验、用于冻结快照的最终明细。
+    pub lines: Vec<StockAdjustmentLine>,
+    /// 提交时必须仍匹配的余额版本。
+    pub balances: Vec<ExpectedStockBalanceVersion>,
+    /// 提交命令读取到的单据乐观锁版本。
+    pub expected_document_version: u64,
+    /// 本次启动必须冻结的审批主题版本。
+    pub expected_subject_version: u32,
+}
+
+/// 在同一事务中写入单据迁移、快照、BPM 运行事实与入口任务。
+///
+/// # 用途
+/// 提交启动后原子写入调整单、快照与运行事实。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `input` - 调整单、快照与启动计划
+///
+/// # 返回
+/// 返回提交后的调整单视图。
+///
+/// # 错误
+/// 仓储写入失败或计划不完整时返回错误，事务回滚。
+///
+/// # 关键业务约束
+/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
+pub async fn persist_stock_adjustment_start(
+    db: &Database,
+    input: StockAdjustmentStartPersistInput,
+) -> Result<StockAdjustmentView> {
+    let audit =
+        input.actor.clone().resource_log("stock_adjustment.submit", "stock_adjustment", input.id.clone())?;
+    let db = db.clone();
+    let client = db.client().clone();
+    let updated = client
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                validate_stock_adjustment_start(&db, &input, executor).await?;
+                let mut input = input;
+                persist_start_document(&db, &mut input, executor).await?;
+                persist_runtime_writes(
+                    &db,
+                    &input.writes,
+                    &input.snapshot_payload,
+                    StartRuntimeContext {
+                        workflow: input.workflow.as_ref(),
+                        owner_role: input.owner_role,
+                        organization_id: &input.organization_id,
+                        adjustment: &input.adjustment,
+                        lines: &input.lines,
+                        submitted_by: input.actor.id(),
+                        now: input.now,
+                    },
+                    executor,
+                )
+                .await?;
+                persist_log(&db, &audit, executor).await?;
+                Ok::<StockAdjustment, Error>(input.adjustment)
+            })
+        })
+        .await?;
+    Ok(updated.into())
+}
+
+/// 在原启动事务内按既有顺序重验单据、提交资格、绑定、候选人、明细和余额。
+async fn validate_stock_adjustment_start(
+    db: &Database,
+    input: &StockAdjustmentStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let current = db
+        .inventory()
+        .stock_adjustment(&input.id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+    ensure_fresh_start_document(
+        &current,
+        &input.adjustment,
+        input.expected_document_version,
+        input.expected_subject_version,
+    )?;
+    ensure_submit_authorized(db, input.workflow.as_ref(), &current, &input.actor, executor).await?;
+    let persisted_binding = load_approval_binding(db, &input.id, executor).await?;
+    let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
+    if persisted_binding != &input.binding {
+        return Err(Error::ConflictError("库存调整审批定义绑定已变化，请刷新后重试".to_string()));
+    }
+    let graph = load_bound_definition_graph_with_executor(db, persisted_binding, executor)
+        .await?
+        .with_frozen_assignees(&input.writes.instance, &input.writes.created_assignees)
+        .map_err(|e| Error::ValidationError(e.to_string()))?;
+    revalidate_stock_adjustment_start_candidates(
+        db,
+        input.workflow.as_ref(),
+        &graph,
+        input.actor.id(),
+        &input.organization_id,
+        executor,
+    )
+    .await?;
+    revalidate_start_lines(db, &current, &input.lines, executor).await?;
+    validate_balance_versions(db, &input.adjustment, &input.lines, &input.balances, executor).await?;
+    validate_start_writes(
+        &input.writes,
+        &graph,
+        &input.binding,
+        &input.id,
+        input.actor.id(),
+        input.expected_subject_version,
+    )
+}
+
+/// 以命令收据为首写，随后写启动守卫、最终明细与表头；保持原事务边界。
+async fn persist_start_document(
+    db: &Database,
+    input: &mut StockAdjustmentStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    // 并发 loser 退出失败事务后只允许新会话回读 winner，不得先留下业务或 BPM 写入。
+    db.bpm_workflow()
+        .insert_command_receipt(&input.writes.receipt, executor)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    let guarded = db
+        .business_documents()
+        .mark_approval_started(
+            &input.id,
+            DocumentType::StockAdjustment,
+            &input.writes.instance.process_definition_id,
+            input.writes.instance.definition_version,
+            input.now,
+            executor,
+        )
+        .await?;
+    if guarded.is_none() {
+        return Err(Error::ConflictError("库存调整单审批启动守卫冲突，请刷新后重试".to_string()));
+    }
+    for line in &input.lines {
+        if !db
+            .inventory()
+            .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), executor)
+            .await?
+        {
+            return Err(Error::NotFound("调整明细不存在".to_string()));
+        }
+    }
+    db.stock_adjustments().update(&mut input.adjustment, executor).await?;
+    Ok(())
+}
+
+/// 校验事务内草稿与预先构造的启动后单据仍为同一条原子迁移。
+fn ensure_fresh_start_document(
+    current: &StockAdjustment,
+    target: &StockAdjustment,
+    expected_document_version: u64,
+    expected_subject_version: u32,
+) -> Result<()> {
+    let expected_next_subject = current
+        .approval_subject_version
+        .checked_add(1)
+        .ok_or_else(|| Error::ConflictError("库存调整审批主题版本已达上限".to_string()))?;
+    if current.base.id != target.base.id
+        || current.base.version != expected_document_version
+        || target.base.version != expected_document_version
+        || current.status != StockAdjustmentState::Draft
+        || target.status != StockAdjustmentState::InApproval
+        || expected_next_subject != expected_subject_version
+        || target.approval_subject_version != expected_subject_version
+        || current.warehouse_id != target.warehouse_id
+        || current.prepared_by != target.prepared_by
+    {
+        return Err(Error::ConflictError("库存调整单事务内版本、状态或审批主题已变化".to_string()));
+    }
+    Ok(())
+}
+
+/// 在事务快照内重读明细身份与版本；数量和方向可由本次提交命令修改。
+async fn revalidate_start_lines(
+    db: &Database,
+    current: &StockAdjustment,
+    target_lines: &[StockAdjustmentLine],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let persisted = db
+        .inventory()
+        .adjustment_lines_by_adjustment_ids(
+            &[erp_core::ids::StockAdjustmentId::new(current.base.id.clone())],
+            executor,
+        )
+        .await?;
+    if persisted.len() != target_lines.len()
+        || persisted.iter().any(|line| {
+            !target_lines.iter().any(|target| {
+                target.base.id == line.base.id
+                    && target.base.version == line.base.version
+                    && target.stock_adjustment_id == line.stock_adjustment_id
+                    && target.sku_id == line.sku_id
+            })
+        })
+    {
+        return Err(Error::ConflictError("库存调整明细身份或版本已变化，请刷新后重试".to_string()));
+    }
+    Ok(())
+}
+
+/// 校验引擎启动计划精确绑定本次业务命令。
+fn validate_start_writes(
+    writes: &PlannedWrites,
+    graph: &DefinitionGraph,
+    binding: &ApprovalDefinitionBinding,
+    adjustment_id: &str,
+    actor_id: &str,
+    expected_subject_version: u32,
+) -> Result<()> {
+    let expected_scope = stock_adjustment_start_scopes(adjustment_id, expected_subject_version)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::Internal("库存调整启动命令缺少 V3 scope".to_string()))?;
+    if writes.receipt.command_kind != ApprovalCommandKind::StartApproval
+        || writes.receipt.scope_id != expected_scope
+        || writes.receipt.result_ref != writes.instance.base.id
+        || writes.instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
+        || writes.instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
+        || writes.instance.subject.subject_id() != adjustment_id
+        || writes.instance.subject_version != expected_subject_version
+        || writes.instance.process_definition_id != binding.approval_process_definition_id
+        || writes.instance.definition_version != binding.approval_definition_version
+        || writes.instance.started_by.as_str() != actor_id
+        || writes.instance.status != ApprovalProcessInstanceStatus::Running
+        || writes.instance.current_round_no != 1
+        || writes.instance.blocker_code.is_some()
+        || writes.instance.ended_at.is_some()
+    {
+        return Err(Error::Internal("库存调整启动计划与签署命令身份不一致".to_string()));
+    }
+    let [first] = writes.created_executions.as_slice() else {
+        return Err(Error::Internal("库存调整启动计划必须且只能创建一个入口执行".to_string()));
+    };
+    validate_start_execution(writes, graph, first)
+}
+
+fn validate_start_execution(
+    writes: &PlannedWrites,
+    graph: &DefinitionGraph,
+    first: &ApprovalNodeExecution,
+) -> Result<()> {
+    if first.process_instance_id.as_ref() != writes.instance.base.id
+        || first.round_no != writes.instance.current_round_no
+        || first.status != ApprovalNodeExecutionStatus::Active
+        || first.assignment_source != ApprovalExecutionAssignmentSource::Definition
+        || first.replaces_execution_id.is_some()
+        || writes.instance.current_node_execution_id.as_ref().map(|id| id.as_ref())
+            != Some(first.base.id.as_str())
+    {
+        return Err(Error::Internal("库存调整启动计划的入口执行身份不一致".to_string()));
+    }
+    let entry =
+        graph.entry_node().map_err(|_| Error::Internal("库存调整事务内定义缺少入口节点".to_string()))?;
+    if first.node_key != entry.node_key
+        || first.node_name != entry.node_name
+        || first.additional_assignees != entry.additional_assignees
+        || Some(&first.assignee_participant_id) != entry.assignee_participant_id.as_ref()
+        || first.assignee_name_snapshot != entry.assignee_label_snapshot
+    {
+        return Err(Error::ConflictError("库存调整启动入口执行与事务内定义事实不一致".to_string()));
+    }
+    ensure_start_tasks(writes, first)?;
+    if writes.created_assignees.len() != graph.nodes.len()
+        || graph.nodes.iter().any(|node| {
+            !writes.created_assignees.iter().any(|assignee| {
+                assignee.process_instance_id.as_ref() == writes.instance.base.id
+                    && assignee.node_key == node.node_key
+                    && Some(&assignee.definition_assignee_participant_id)
+                        == node.assignee_participant_id.as_ref()
+                    && Some(&assignee.current_assignee_participant_id)
+                        == node.assignee_participant_id.as_ref()
+                    && assignee.additional_assignees == node.additional_assignees
+            })
+        })
+        || !writes.created_assignees.iter().any(|assignee| {
+            assignee.node_key == first.node_key
+                && assignee.current_assignee_participant_id == first.assignee_participant_id
+        })
+        || !writes.updated_executions.is_empty()
+        || !writes.complete_tasks.is_empty()
+        || !writes.close_tasks.is_empty()
+    {
+        return Err(Error::Internal("库存调整启动计划的审批人绑定或写入集合不一致".to_string()));
+    }
+    Ok(())
+}
+
+fn ensure_start_tasks(writes: &PlannedWrites, first: &ApprovalNodeExecution) -> Result<()> {
+    if writes.create_tasks.len() != first.participants().len() {
+        return Err(Error::Internal("库存调整启动任务必须覆盖全部审批人".into()));
+    }
+    let mut seen = HashSet::new();
+    for task in &writes.create_tasks {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, node_key, node_name, round_no } = task
+        else {
+            return Err(Error::Internal("库存调整启动任务类型非法".into()));
+        };
+        if execution_id.as_ref() != first.base.id
+            || !first.has_participant(assignee.as_str())
+            || !seen.insert(assignee)
+            || node_key != &first.node_key
+            || node_name != &first.node_name
+            || *round_no != first.round_no
+        {
+            return Err(Error::Internal("库存调整启动计划的入口任务身份不一致".into()));
+        }
+    }
+    Ok(())
+}
+
+/// 在提交事务内校验余额身份、维度与乐观锁版本。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `adjustment` - 待提交调整单
+/// * `lines` - 最终调整明细
+/// * `expected` - 客户端编辑时冻结的余额版本
+/// * `executor` - 数据访问执行器
+///
+/// # 错误
+/// 余额缺失、版本冲突、重复或不能完整覆盖明细维度时返回错误。
+async fn validate_balance_versions(
+    db: &Database,
+    adjustment: &StockAdjustment,
+    lines: &[StockAdjustmentLine],
+    expected: &[ExpectedStockBalanceVersion],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let ids = expected.iter().map(|item| item.balance_id.clone()).collect::<Vec<_>>();
+    let balances = db.inventory().stock_balances_by_ids(&ids, executor).await?;
+    let expected =
+        expected.iter().map(|item| (item.balance_id.as_str(), item.expected_version)).collect::<Vec<_>>();
+    StockAdjustmentBalanceVersions::new(&balances).validate(adjustment, lines, &expected).map_err(Error::from)
+}
+
+/// 启动运行事实写入时已冻结的单据、责任与时间。
+struct StartRuntimeContext<'a> {
+    workflow: &'a dyn crate::workflow::FulfillmentWorkflow,
+    owner_role: &'a str,
+    organization_id: &'a str,
+    adjustment: &'a StockAdjustment,
+    lines: &'a [StockAdjustmentLine],
+    submitted_by: &'a str,
+    now: Instant,
+}
+
+/// 使用已写入的业务事实冻结审批展示，并沿原事务写入运行事实与入口任务。
+async fn persist_runtime_writes(
+    db: &Database,
+    writes: &PlannedWrites,
+    snapshot_payload: &ApprovalSubjectSnapshotPayload,
+    context: StartRuntimeContext<'_>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let first = writes
+        .created_executions
+        .first()
+        .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交库存调整".to_string()))?;
+    let mut snapshot = persist_start_runtime(
+        db,
+        writes,
+        DocumentType::StockAdjustment,
+        snapshot_payload,
+        context.now,
+        "启动计划缺少入口执行，不得提交库存调整",
+        executor,
+    )
+    .await?;
+    snapshot.display =
+        Some(capture_stock_adjustment_display(db, context.adjustment, context.lines, executor).await?);
+    context.workflow.persist_start_snapshot(snapshot, executor).await?;
+    persist_start_tasks(
+        db,
+        writes,
+        StartTaskContext {
+            document_type: DocumentType::StockAdjustment,
+            owner_role: context.owner_role,
+            organization_id: context.organization_id,
+            now: context.now,
+        },
+        executor,
+    )
+    .await?;
+    persist_start_notifications(
+        db,
+        writes,
+        first,
+        &context.adjustment.adjustment_no,
+        context.submitted_by,
+        context.now,
+        executor,
+    )
+    .await
+}
+
+/// 严格消费启动计划的 `Started`/`Entered` 通知意图并同事务追加 outbox。
+async fn persist_start_notifications(
+    db: &Database,
+    writes: &PlannedWrites,
+    first: &ApprovalNodeExecution,
+    document_no: &str,
+    submitted_by: &str,
+    now: Instant,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let notification_identities = writes
+        .notifications
+        .iter()
+        .map(|intent| (intent.event_kind, intent.dedup_key.clone()))
+        .collect::<Vec<_>>();
+    validate_start_notification_identities(
+        &notification_identities,
+        &writes.instance.base.id,
+        &first.base.id,
+    )?;
+    for intent in &writes.notifications {
+        let mut recipients = first
+            .participants()
+            .iter()
+            .map(|person| person.participant_id.as_str().to_string())
+            .collect::<Vec<_>>();
+        if intent.event_kind == ApprovalNotificationEventKind::Started {
+            recipients.push(submitted_by.to_string());
+        }
+        recipients.sort();
+        recipients.dedup();
+        let record = ApprovalNotificationOutbox::enqueue(
+            ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
+            intent.dedup_key.clone(),
+            intent.event_kind,
+            recipients,
+            ApprovalNotificationTemplateParams {
+                document_type_label: DocumentType::StockAdjustment.label().to_string(),
+                document_no: document_no.to_string(),
+                current_node_name: first.node_name.clone(),
+                current_approver_display_name: first.assignee_display_name(),
+                round_no: writes.instance.current_round_no,
+                reject_reason_summary: None,
+            },
+            now,
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+        db.approval_notification_outbox().create(&record, executor).await?;
+    }
+    Ok(())
+}
+
+/// 校验启动通知恰为一条 Started 与一条 Entered，且去重键绑定运行身份。
+///
+/// # 参数
+/// * `notifications` - 计划中的通知种类与去重键。
+/// * `instance_id` - 新审批实例 ID。
+/// * `execution_id` - 入口执行 ID。
+///
+/// # 返回
+/// 恰好一条匹配的 `Started` 和一条匹配的 `Entered` 时无返回值。
+///
+/// # 错误
+/// 条数或去重键不匹配时返回 `Internal`。
+pub(super) fn validate_start_notification_identities(
+    notifications: &[(ApprovalNotificationEventKind, String)],
+    instance_id: &str,
+    execution_id: &str,
+) -> Result<()> {
+    let expected_started = format!("started:{instance_id}");
+    let expected_entered = format!("entered:{execution_id}");
+    if notifications.len() != 2
+        || notifications
+            .iter()
+            .filter(|(kind, key)| *kind == ApprovalNotificationEventKind::Started && key == &expected_started)
+            .count()
+            != 1
+        || notifications
+            .iter()
+            .filter(|(kind, key)| *kind == ApprovalNotificationEventKind::Entered && key == &expected_entered)
+            .count()
+            != 1
+    {
+        return Err(Error::Internal(
+            "库存调整启动计划必须包含唯一且身份一致的 Started/Entered 通知意图".to_string(),
+        ));
+    }
+    Ok(())
+}

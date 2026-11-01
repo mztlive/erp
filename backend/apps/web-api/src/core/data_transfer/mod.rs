@@ -3,15 +3,27 @@ mod reads;
 use std::sync::Arc;
 use std::time::Duration;
 
-use erp_processes::background::periodic;
-use erp_processes::data_transfer::{BusinessTransfers, DataTransferProcess};
+use background_runtime::periodic;
+use erp_data_import::data_transfer::{BusinessTransferServices, BusinessTransfers, DataTransferProcess};
+use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 use tokio::sync::watch;
 
 use crate::app_state::AppState;
+use crate::wiring::{catalog_services, scoped_offering_process};
 
 pub(crate) fn process(state: &AppState) -> DataTransferProcess {
     let reader = Arc::new(reads::Reads(state.clone()));
-    let handler = Arc::new(BusinessTransfers::new(state.db(), state.rbac(), reader, state.storage().clone()));
+    let services = BusinessTransferServices {
+        inquiry: state.inquiry_import_process(),
+        offerings: Arc::new(scoped_offering_process(state.db(), state.rbac())),
+        portal: Arc::new(SupplierPortalProcess::new(
+            state.db(),
+            state.rbac(),
+            catalog_services(state.db(), state.rbac()),
+        )),
+    };
+    let handler =
+        Arc::new(BusinessTransfers::new(state.db(), state.rbac(), reader, state.storage().clone(), services));
     DataTransferProcess::new(state.db(), state.storage().clone(), state.sensitive_data(), handler)
 }
 /// 执行持久化导入导出，停止后等待当前轮次结束。

@@ -1,5 +1,6 @@
 //! 采购付款申请 HTTP 边界；来源、金额、任务和事务由组合层执行。
 
+use crate::wiring::finance_posting_ports;
 pub mod candidate_list;
 pub mod credit;
 pub mod deposit;
@@ -14,8 +15,7 @@ use erp_finance::dto::payable::payment_request::{
     SavePurchasePaymentRequest, SubmitPurchasePaymentRequest,
 };
 use erp_finance::entity::payable::PurchasePaymentRequest;
-use erp_processes::adapters::MongoPurchaseDataScope;
-use erp_processes::finance_posting::payable::PurchasePaymentRequestProcess;
+use erp_finance_posting::finance_posting::payable::PurchasePaymentRequestProcess;
 use erp_read_models::finance::payment_request::{
     PurchasePaymentRequestCandidate, PurchasePaymentRequestReadService, PurchasePaymentRequestView,
 };
@@ -24,6 +24,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::MongoPurchaseDataScope;
 
 fn reads(state: &AppState) -> PurchasePaymentRequestReadService {
     PurchasePaymentRequestReadService::new(
@@ -34,8 +35,7 @@ fn reads(state: &AppState) -> PurchasePaymentRequestReadService {
 }
 
 fn process(state: &AppState) -> PurchasePaymentRequestProcess {
-    PurchasePaymentRequestProcess::new(state.db())
-        .with_rbac(state.rbac())
+    PurchasePaymentRequestProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
 }
 

@@ -2,12 +2,12 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::order_to_cash::SalesOrderCommandProcess;
-use erp_processes::sales_inquiry::dto::InquiryMutationView;
-use erp_processes::sales_inquiry::expense_read::{
+use erp_order_to_cash::order_to_cash::SalesOrderCommandProcess;
+use erp_order_to_cash::sales_inquiry::dto::InquiryMutationView;
+use erp_order_to_cash::sales_inquiry::expense_read::{
     FinancialInquiryExpenseCandidates, InquiryExpenseCandidates, InquiryExpenseReadService,
 };
-use erp_processes::sales_inquiry::fee_allocation::{AllocateInquiryFeesCommand, InquiryFeeSalesView};
+use erp_order_to_cash::sales_inquiry::fee_allocation::{AllocateInquiryFeesCommand, InquiryFeeSalesView};
 use erp_sales::dto::sales_order::inquiry_basis::InquirySalesBasis;
 use serde::Deserialize;
 
@@ -70,9 +70,13 @@ pub async fn sales_basis(
     Query(params): Query<InquirySalesBasisParams>,
 ) -> Result<InquirySalesBasis> {
     Ok(ApiResponse::ok_with_data(
-        SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-            .inquiry_sales_basis(&id, params.round, &actor)
-            .await?,
+        SalesOrderCommandProcess::with_rbac(
+            state.db(),
+            state.rbac(),
+            crate::wiring::sales::sales_services(state.db(), state.rbac()),
+        )
+        .inquiry_sales_basis(&id, params.round, &actor)
+        .await?,
     ))
 }
 

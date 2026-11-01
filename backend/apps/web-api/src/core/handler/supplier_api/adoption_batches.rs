@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::supplier_catalog_adoption::{
+use erp_supplier_catalog::supplier_catalog_adoption::{
     BatchSubmissionView, BatchVersionRequest, BatchView, CreateBatchRequest, SaveBatchRequest,
     SubmitBatchRequest,
 };

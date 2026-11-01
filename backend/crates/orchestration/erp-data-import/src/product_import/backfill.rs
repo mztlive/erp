@@ -1,0 +1,256 @@
+//! 给已导入但缺图的商品补齐轮播图与 SKU 主图。
+
+use std::collections::HashMap;
+
+use application_core::AuditActor;
+use erp_catalog::entity::catalog::{EnableStatus, Product, Sku, SkuRevision, parse_specification_signature};
+use erp_catalog::repository::prelude::*;
+use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, SpecEntryInput, UpdateProductRequest};
+use erp_core::ids::{FileAssetId, ProductId, SkuId, SkuRevisionId};
+use erp_master_data::product_update_with_assets;
+use persistence_core::NoTransaction;
+
+use super::ProductImportProcess;
+use super::images::{RowMedia, RowMediaSource, resolve_row_media};
+use super::row::RowImportOutcome;
+use crate::{Error, Result};
+
+impl ProductImportProcess {
+    /// 已存在的商品若还没有图片，则用本行图片补齐。
+    ///
+    /// # 参数
+    /// * `product` - 已存在商品
+    /// * `cells` - 当前行单元格
+    /// * `media_source` - 行媒体来源（清单复用或源文件提取）
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 补图成功、无需补图或仍跳过时的行结果。
+    ///
+    /// # 错误
+    /// 读取现有商品、上传图片或更新失败时返回错误。
+    pub(super) async fn import_existing_with_images(
+        &self,
+        product: Product,
+        cells: &[String],
+        media_source: &RowMediaSource<'_>,
+        actor: &AuditActor,
+    ) -> Result<RowImportOutcome> {
+        if self.product_has_images(&product).await? {
+            return Ok(already_imported(product.base.id));
+        }
+        let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
+        if media.pending.is_empty() {
+            return Ok(already_imported(product.base.id));
+        }
+        let pending = media.pending.clone();
+        let request = self.update_request_with_images(&product, media).await?;
+        match product_update_with_assets(
+            self.services.scoped_catalog.clone(),
+            product.base.id.clone(),
+            request,
+            pending,
+            actor.clone(),
+        )
+        .await
+        .map_err(Error::from)
+        {
+            Ok(_) => {
+                Ok(RowImportOutcome::new("商品已存在，已补齐图片".into())
+                    .with_product_id(Some(product.base.id)))
+            },
+            Err(Error::ConflictError(_)) => Ok(already_imported(product.base.id)),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub(super) async fn product_has_images(&self, product: &Product) -> Result<bool> {
+        let snapshot = self
+            .db
+            .catalog()
+            .product_disable_snapshot(&product.base.id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("商品不存在".into()))?;
+        if !snapshot.media.is_empty() {
+            return Ok(true);
+        }
+        let skus = self
+            .db
+            .skus()
+            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
+            .await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
+        Ok(revisions.values().any(|revision| revision.source_main_image_asset_id.is_some()))
+    }
+
+    pub(super) async fn update_request_with_images(
+        &self,
+        product: &Product,
+        media: RowMedia,
+    ) -> Result<UpdateProductRequest> {
+        let snapshot = self
+            .db
+            .catalog()
+            .product_disable_snapshot(&product.base.id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("商品不存在".into()))?;
+        let revision = snapshot
+            .current_revision
+            .ok_or_else(|| Error::BusinessLogicError("商品缺少当前资料，无法补图".into()))?;
+        let skus = self
+            .db
+            .skus()
+            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
+            .await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
+        let sku_inputs = sku_inputs_with_main_image(&skus, &revisions, media.main_image)?;
+        Ok(UpdateProductRequest {
+            version: product.base.version,
+            change_reason: Some("产品报价表导入补齐图片".into()),
+            name: revision.name,
+            description: revision.description,
+            specification: revision.specification,
+            category_id: revision.category_id,
+            brand_id: revision.brand_id,
+            status: product.stable.status,
+            effective_from: revision.effective_from,
+            effective_to: revision.effective_to,
+            carousel_media: media
+                .carousel
+                .into_iter()
+                .map(|(id, sort_order)| ProductMediaInput { file_asset_id: id, sort_order, alt_text: None })
+                .collect(),
+            detail_media: Vec::new(),
+            skus: sku_inputs,
+        })
+    }
+}
+
+fn already_imported(product_id: String) -> RowImportOutcome {
+    RowImportOutcome::new("商品已存在，本行未重复写入".into())
+        .with_product_id(Some(product_id))
+        .with_skipped(true)
+}
+
+/// 把当前启用 SKU 转成编辑请求中的保留行。
+///
+/// # 参数
+/// * `skus` - 商品下 SKU
+/// * `revisions` - 当前修订
+/// * `main_image` - 可选覆盖到第一个 SKU 的主图
+///
+/// # 返回
+/// 返回可提交的 SKU 行。
+///
+/// # 错误
+/// 规格签名无法解析或没有启用 SKU 时返回错误。
+pub(super) fn sku_inputs_with_main_image(
+    skus: &[Sku],
+    revisions: &HashMap<String, SkuRevision>,
+    main_image: Option<FileAssetId>,
+) -> Result<Vec<ProductSkuInput>> {
+    let mut inputs = Vec::new();
+    let mut assigned_main = false;
+    for sku in skus.iter().filter(|sku| sku.stable.status == EnableStatus::Active) {
+        let Some(revision) = revisions.get(&sku.base.id) else {
+            continue;
+        };
+        let spec_entries = parse_specification_signature(&sku.specification_signature)
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?
+            .into_iter()
+            .map(|entry| SpecEntryInput {
+                attribute_code: entry.attribute_code,
+                attribute_value_code: entry.value_code,
+            })
+            .collect();
+        let main_image_asset_id = if assigned_main {
+            revision.source_main_image_asset_id.clone()
+        } else {
+            assigned_main = true;
+            main_image.clone().or_else(|| revision.source_main_image_asset_id.clone())
+        };
+        inputs.push(ProductSkuInput {
+            sku_id: Some(SkuId::new(sku.base.id.clone())),
+            expected_sku_revision_id: Some(SkuRevisionId::new(
+                sku.stable.current_revision_id.clone().unwrap_or_else(|| revision.base.id.clone()),
+            )),
+            reenable: false,
+            sku_no: sku.sku_no.clone(),
+            name: revision.name.clone(),
+            base_unit_id: sku.base_unit_id.clone(),
+            barcode: revision.barcode.clone(),
+            main_image_asset_id,
+            weight_kg: revision.weight_kg,
+            volume_m3: revision.volume_m3,
+            sales_visible_price_gross: revision.sales_visible_price_gross,
+            bulk_price_gross: revision.bulk_price_gross,
+            bulk_min_quantity: revision.bulk_min_quantity,
+            market_price: revision.market_price,
+            spec_entries,
+        });
+    }
+    if inputs.is_empty() {
+        return Err(Error::BusinessLogicError("商品没有可补图的 SKU".into()));
+    }
+    Ok(inputs)
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_catalog::entity::catalog::ListingStatus;
+    use erp_catalog::entity::sku::SkuData;
+    use erp_catalog::entity::sku_revision::SkuRevisionData;
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{ProductId, UnitOfMeasureId};
+
+    use super::*;
+
+    /// 既有商品补图和新增同 SPU 的 SKU 必须保留现存 SKU 的三价与集采门槛。
+    #[test]
+    fn image_backfill_keeps_existing_company_price_facts() {
+        let sku = Sku::new(
+            SkuId::new("sku-1"),
+            SkuData {
+                sku_no: "SKU-1".into(),
+                product_id: ProductId::new("product-1"),
+                base_unit_id: UnitOfMeasureId::new("unit-1"),
+                specification_signature: String::new(),
+                status: EnableStatus::Active,
+                listing_status: ListingStatus::Listed,
+            },
+            "actor-1",
+        )
+        .unwrap();
+        let revision = SkuRevision::new(
+            SkuRevisionId::new("revision-1"),
+            SkuRevisionData {
+                sku_id: SkuId::new("sku-1"),
+                revision_no: 1,
+                name: "商品".into(),
+                description: None,
+                specification: None,
+                barcode: None,
+                source_main_image_asset_id: None,
+                weight_kg: None,
+                volume_m3: None,
+                sales_visible_price_gross: Some("45.00".parse().unwrap()),
+                bulk_price_gross: Some("40.00".parse().unwrap()),
+                bulk_min_quantity: Some("12".parse().unwrap()),
+                market_price: Some("60.00".parse().unwrap()),
+                status: EnableStatus::Active,
+                effective_from: "2026-10-03".parse::<BusinessDate>().unwrap(),
+                effective_to: None,
+            },
+        )
+        .unwrap();
+        let revisions = HashMap::from([("sku-1".into(), revision.clone())]);
+        let inputs =
+            sku_inputs_with_main_image(&[sku], &revisions, Some(FileAssetId::new("image-1"))).unwrap();
+        let input = &inputs[0];
+        assert_eq!(input.main_image_asset_id.as_ref().unwrap().as_ref(), "image-1");
+        assert_eq!(input.sales_visible_price_gross, revision.sales_visible_price_gross);
+        assert_eq!(input.bulk_price_gross, revision.bulk_price_gross);
+        assert_eq!(input.bulk_min_quantity, revision.bulk_min_quantity);
+        assert_eq!(input.market_price, revision.market_price);
+    }
+}

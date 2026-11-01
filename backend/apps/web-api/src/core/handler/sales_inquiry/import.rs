@@ -2,9 +2,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, Path, State};
-use erp_processes::sales_inquiry_import::{
-    ConfirmInquiryImportCommand, InquiryImportPreviewView, SalesInquiryImportProcess,
-};
+use erp_data_import::sales_inquiry_import::{ConfirmInquiryImportCommand, InquiryImportPreviewView};
 use erp_sales::entity::sales_inquiry_import::{INQUIRY_IMPORT_MAX_BYTES, InquiryImportResult};
 
 use crate::app_state::AppState;
@@ -26,7 +24,8 @@ pub async fn sales_import_preview(
     multipart: Multipart,
 ) -> Result<InquiryImportPreviewView> {
     let upload = read_upload(multipart).await?;
-    let result = SalesInquiryImportProcess::new(state.db(), state.rbac())
+    let result = state
+        .inquiry_import_process()
         .preview(&actor, &id, upload.version, &upload.file_name, upload.bytes)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -45,9 +44,7 @@ pub async fn sales_import_confirm(
     Path(id): Path<String>,
     Json(request): Json<ConfirmInquiryImportCommand>,
 ) -> Result<InquiryImportResult> {
-    Ok(ApiResponse::ok_with_data(
-        SalesInquiryImportProcess::new(state.db(), state.rbac()).confirm(&actor, &id, request).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(state.inquiry_import_process().confirm(&actor, &id, request).await?))
 }
 
 struct WorkbookUpload {

@@ -1,0 +1,89 @@
+//! 在不把目录 crate 引入销售的前提下适配当前可售资格。
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use erp_catalog::entity::catalog::SkuSalesPrices;
+use erp_catalog::ports::supply::CatalogSupplyQueryPort;
+use erp_core::common::time::BusinessDate;
+use erp_core::money::UnitPrice;
+use erp_sales::ports::sales_order::{
+    SalesReferencePriceFact, SalesReferencePricePort, SalesReferencePriceRequest, SellableSkuPort,
+};
+use persistence_core::Executor;
+
+/// Catalog provider for exact SKU revision qualification.
+pub struct CatalogQualificationAdapter {
+    query: Arc<dyn CatalogSupplyQueryPort>,
+}
+impl CatalogQualificationAdapter {
+    /// 绑定目录查询，不加载当前目录事实。
+    ///
+    /// # 参数
+    /// * `query` - 应用已装配的当前目录资格读取 Port。
+    ///
+    /// # 返回
+    /// 返回未发起查询的适配器。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn new(query: Arc<dyn CatalogSupplyQueryPort>) -> Self {
+        Self { query }
+    }
+}
+#[async_trait]
+impl SellableSkuPort for CatalogQualificationAdapter {
+    async fn qualified_refs(
+        &self,
+        refs: &[(String, String)],
+        date: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> erp_sales::Result<Vec<(String, String)>> {
+        Ok(self
+            .query
+            .find_sellable_sku_refs(refs, date, executor)
+            .await?
+            .into_iter()
+            .map(|row| (row.sku_id, row.sku_revision_id))
+            .collect())
+    }
+}
+
+#[async_trait]
+impl SalesReferencePricePort for CatalogQualificationAdapter {
+    async fn reference_prices(
+        &self,
+        requests: &[SalesReferencePriceRequest],
+        date: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> erp_sales::Result<Vec<SalesReferencePriceFact>> {
+        let refs = requests
+            .iter()
+            .map(|request| (request.sku_id.clone(), request.sku_revision_id.clone()))
+            .collect::<Vec<_>>();
+        let rows = self.query.find_sellable_sku_refs(&refs, date, executor).await?;
+        let mut facts = Vec::with_capacity(requests.len());
+        for request in requests {
+            let Some(row) = rows
+                .iter()
+                .find(|row| row.sku_id == request.sku_id && row.sku_revision_id == request.sku_revision_id)
+            else {
+                continue;
+            };
+            let prices = SkuSalesPrices {
+                sales_visible_price_gross: Some(row.sales_visible_price_gross),
+                bulk_price_gross: row.bulk_price_gross,
+                bulk_min_quantity: row.bulk_min_quantity,
+            };
+            if let Some(price) = prices.reference_price(request.quantity) {
+                facts.push(SalesReferencePriceFact {
+                    request: request.clone(),
+                    unit_price_gross: UnitPrice::try_from(price.to_decimal())?,
+                });
+            }
+        }
+        Ok(facts)
+    }
+}
+
+#[cfg(test)]
+mod tests;

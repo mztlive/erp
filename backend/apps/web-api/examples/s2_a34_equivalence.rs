@@ -12,14 +12,14 @@ use erp_customer::service::customer::access::customer_scope;
 use erp_customer::{CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope};
 use erp_identity::access_control::{ResolvedScope, ScopeClause};
 use erp_identity::service::access_control::resolve::AuthorizedDataScope;
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::{MongoContractDataScope, MongoCustomerDataScope, MongoPurchaseDataScope};
 use erp_procurement::ports::PurchaseScopeObject;
 use erp_procurement::service::purchase_order::access::purchase_scope;
 use erp_procurement::{PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope};
 use erp_read_models::sales_center::access::{SalesAccess, sales_scope};
 use mongodb::bson::{Document, doc};
 use mongodb::{Client, Collection, Database};
+use web_api::wiring::identity::shared_rbac_service;
+use web_api::wiring::{MongoContractDataScope, MongoCustomerDataScope, MongoPurchaseDataScope};
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 

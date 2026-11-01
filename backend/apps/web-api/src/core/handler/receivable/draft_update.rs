@@ -4,13 +4,14 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_finance::dto::receivable::{SaveCustomerReceiptDraftRequest, UpdateCustomerReceiptRequest};
-use erp_processes::finance_posting::receivable::ReceivableProcess;
+use erp_finance_posting::finance_posting::receivable::ReceivableProcess;
 use erp_read_models::finance::dto::CustomerReceiptView;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::receivable_posting_ports;
 
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
 ///
@@ -31,7 +32,7 @@ pub async fn customer_receipt_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .update_customer_receipt(&id, req, &actor)
         .await?;
@@ -52,7 +53,7 @@ pub async fn customer_receipt_save_draft(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<SaveCustomerReceiptDraftRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view = ReceivableProcess::new(state.db())
+    let view = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .save_customer_receipt_draft(req, &actor)
         .await?;

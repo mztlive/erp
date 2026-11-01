@@ -6,7 +6,6 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::workflow::{workflow_audit, workflow_object_facts};
 use erp_workflow::service::document_registry::{
     AppendWorkflowActionRequest, BusinessDocumentListParams, BusinessDocumentView,
     CreateDocumentParticipantRequest, CreateDocumentRelationRequest, DocumentParticipantView,
@@ -18,6 +17,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::workflow::{workflow_audit, workflow_object_facts};
 
 fn document_registry_service(state: &AppState) -> DocumentRegistryService {
     DocumentRegistryService::with_ports(

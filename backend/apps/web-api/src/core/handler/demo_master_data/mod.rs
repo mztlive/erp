@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use axum::extract::{Extension, State};
-use erp_processes::demo_master_data::{
+use erp_demo_data::demo_master_data::{
     ApplyDemoMasterDataRequest, DemoChunkReport, DemoFoundationReport, DemoResetReport, DemoStatus,
 };
 

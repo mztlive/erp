@@ -1,0 +1,23 @@
+[package]
+name = "erp-audit"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+async-trait = { workspace = true }
+tracing = { workspace = true }
+application-core = { workspace = true }
+entity-core = { workspace = true }
+entity-macros = { workspace = true }
+erp-core = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+validator = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }

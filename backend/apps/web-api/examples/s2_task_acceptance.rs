@@ -21,9 +21,6 @@ use erp_identity::access_control::{
 };
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::organization_service;
-use erp_processes::adapters::workflow::{work_item_service, workflow_auth};
 use erp_workflow::dto::work_item::{
     ProcessingState, ReassignWorkItemRequest, WorkItemAllowedAction, WorkItemMutationOutcome, WorkItemScope,
     WorkItemSort,
@@ -32,6 +29,9 @@ use mongodb::bson::{Document, doc};
 use mongodb::{Client, Database};
 use persistence_core::NoTransaction;
 use test_support::seed_admin_account;
+use web_api::wiring::identity::shared_rbac_service;
+use web_api::wiring::organization_service;
+use web_api::wiring::workflow::{work_item_service, workflow_auth};
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 

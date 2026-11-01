@@ -24,10 +24,12 @@ from cutover_workspace import (
     active_source_paths, legacy_graph_errors, legacy_source_errors,
     legacy_tree_errors, workspace_errors,
 )
+from crate_layers import dependency_errors as layer_dependency_errors, load_registry, member_directories
 
 
 FOUNDATION = {"erp-core", "application-core", "persistence-core"}
-COMPOSITION = {"erp-processes", "erp-read-models"}
+ORCHESTRATION = {name for name, entry in load_registry().items() if entry["layer"] == "orchestration"}
+COMPOSITION = ORCHESTRATION | {"erp-read-models"}
 CONTRACT_RECOGNITION = "erp-contract-recognition"
 BUSINESS_DOMAINS = {
     "erp-identity",
@@ -69,9 +71,14 @@ BPM_FORBIDDEN_PACKAGES = {
 PLANNED_DOMAIN_PACKAGES = FOUNDATION | COMPOSITION | BUSINESS_DOMAINS
 KINDS = ("normal", "build", "dev")
 CUTOVER_REQUIRED_PACKAGES = (
-    FOUNDATION | COMPOSITION | (BUSINESS_DOMAINS - {"erp-commerce"})
+    FOUNDATION | {"erp-read-models"} | (BUSINESS_DOMAINS - {"erp-commerce"})
     | {"bpm", "cli", "web-api", "config", "entity-core", "entity-macros",
-       "storage", "aliyun-ocr", CONTRACT_RECOGNITION, "id-generator", "test-support"}
+       "storage", "aliyun-ocr", CONTRACT_RECOGNITION, "id-generator", "test-support",
+       "background-runtime", "erp-connector-jd-vop", "erp-connector-dangaoshushu",
+       "erp-master-data", "erp-data-import", "erp-supplier-catalog", "erp-supplier-orders",
+       "erp-order-to-cash", "erp-procure-to-pay", "erp-fulfillment-execution",
+       "erp-finance-posting", "erp-reverse-flow", "erp-supply-settlement", "erp-demo-data",
+       "erp-approval-runtime", "erp-file-assets"}
 )
 
 
@@ -318,12 +325,14 @@ def graph_from_metadata(metadata: Mapping[str, Any]) -> Graph:
 
 def forbidden_graph_errors(graph: Graph) -> list[str]:
     """Return forbidden-edge errors for an instantiated package graph."""
-    errors: list[str] = []
+    errors: list[str] = layer_dependency_errors(graph.edges)
     present_domains = sorted(graph.packages & BUSINESS_DOMAINS)
     present_foundations = sorted(graph.packages & FOUNDATION)
     for edge in graph.edges:
         src, dst, kind = edge.from_package, edge.to_package, edge.kind
         label = f"{src} -[{kind}{f', rename={edge.rename}' if edge.rename else ''}]-> {dst}"
+        if src == "erp-processes" or dst == "erp-processes":
+            errors.append(f"退休 erp-processes 不得进入任何活动依赖图: {label}")
         if src in FOUNDATION | BUSINESS_DOMAINS and dst == "aliyun-ocr":
             errors.append(f"领域和基础 crate 必须通过 Port 使用 OCR，不能依赖供应商客户端: {label}")
         if src in FOUNDATION | BUSINESS_DOMAINS and dst in {"rig-core", "rig-agent"}:
@@ -343,7 +352,7 @@ def forbidden_graph_errors(graph: Graph) -> list[str]:
             errors.append(f"普通领域 crate 之间禁止直接依赖: {label}")
         if src in FOUNDATION and dst in BUSINESS_DOMAINS | OLD_BUSINESS | COMPOSITION:
             errors.append(f"基础 crate 不得依赖业务/组合层: {label}")
-        if src == "bpm" and dst in BPM_FORBIDDEN_PACKAGES:
+        if src == "bpm" and dst in BPM_FORBIDDEN_PACKAGES | BUSINESS_DOMAINS | COMPOSITION:
             errors.append(f"BPM 不得依赖 ERP 业务或 I/O crate: {label}")
         if src in BUSINESS_DOMAINS and dst == "test-support":
             errors.append(f"新领域不得依赖共享 test-support 夹具: {label}")
@@ -701,6 +710,7 @@ def iter_rs(root: Path) -> Iterable[Path]:
 
 def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool = False) -> CheckResult:
     """Apply boundary rules to the current workspace."""
+    backend = backend.resolve()
     result = CheckResult()
     # Once old members are absent, the normal CI entry must not silently retain
     # migration-era composition exemptions. --cutover also catches partial cuts.
@@ -711,6 +721,8 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
     result.errors.extend(workspace_errors(
         backend, metadata, CUTOVER_REQUIRED_PACKAGES if cutover else set()
     ))
+    directories, directory_errors = member_directories(backend, metadata)
+    result.errors.extend(directory_errors)
     if result.errors:
         return result
     if cutover:
@@ -749,15 +761,9 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
     else:
         result.notes.append("cargo metadata 无 kind=test 集成目标")
 
-    crates_root = backend / "crates"
     for name in present_planned:
-        crate_dir = crates_root / name
-        if not crate_dir.is_dir():
-            # application-core / persistence-core / erp-core use those directory names.
-            continue
+        crate_dir = directories[name]
         src = crate_dir / "src"
-        if not src.is_dir():
-            continue
         for path in src.rglob("*.rs"):
             rel = path.relative_to(backend).as_posix()
             text = path.read_text(encoding="utf-8")
@@ -777,8 +783,8 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
                 result.errors.extend(scan_service_mongo(rel, text))
             result.errors.extend(scan_facade(rel, text))
 
-    bpm_src = backend / "crates/bpm/src"
-    if bpm_src.is_dir():
+    bpm_src = directories.get("bpm", backend / "__missing_bpm__") / "src"
+    if "bpm" in directories:
         for path in bpm_src.rglob("*.rs"):
             rel = path.relative_to(backend).as_posix()
             result.errors.extend(scan_bpm_source(rel, path.read_text(encoding="utf-8")))
@@ -789,13 +795,13 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
     for name in present_planned:
         if name not in BUSINESS_DOMAINS:
             continue
-        crate_owned[name] = crate_collection_literals(crates_root / name / "src" / "repository")
+        crate_owned[name] = crate_collection_literals(directories[name] / "src" / "repository")
         migrated |= crate_owned[name]
     leftover_old = set(old_owned) - migrated
     for name in present_planned:
         if name not in BUSINESS_DOMAINS:
             continue
-        repo_root = crates_root / name / "src" / "repository"
+        repo_root = directories[name] / "src" / "repository"
         if not repo_root.is_dir():
             continue
         own = crate_owned.get(name, set())

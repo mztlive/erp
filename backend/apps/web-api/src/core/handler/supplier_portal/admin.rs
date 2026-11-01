@@ -6,13 +6,11 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use erp_catalog::portal::{CatalogPortalService, DictionaryCandidate, DictionaryKind};
 use erp_identity::{PortalAccountCreate, PortalAccountUpdate, PortalAccountView, PortalRole};
-use erp_processes::adapters::purchase_access;
-use erp_processes::adapters::workflow::workflow_auth;
-use erp_processes::supplier_portal::authorization::PortalReadAuthorization;
-use erp_processes::supplier_portal::{PortalGrantInput, PortalReview};
 use erp_read_models::supplier_portal::{
     PortalAdminListParams, PortalListParams, PortalOfferingImpactReadService, SupplierPortalReadService,
 };
+use erp_supplier_catalog::supplier_portal::authorization::PortalReadAuthorization;
+use erp_supplier_catalog::supplier_portal::{PortalGrantInput, PortalReview};
 use erp_supply::portal::QuoteAccessGrant;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
@@ -24,6 +22,8 @@ use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::purchase_access;
+use crate::wiring::workflow::workflow_auth;
 
 /// 协议层账号开通允许字段；内部角色及组织不属于外部身份。
 #[derive(Deserialize)]
@@ -266,15 +266,20 @@ pub async fn impacts(
     let service = PortalOfferingImpactReadService::new(
         state.db(),
         purchase_access(state.db(), state.rbac()),
-        Arc::new(PortalReadAuthorization::new(state.db(), state.rbac())),
+        Arc::new(PortalReadAuthorization::new(
+            state.db(),
+            crate::wiring::catalog_services(state.db(), state.rbac()),
+        )),
         workflow_auth(state.db(), state.rbac()),
     );
     ok_value(service.offering_impacts(&actor, &id, &params).await?)
 }
 
 fn reads(state: &AppState) -> SupplierPortalReadService {
-    SupplierPortalReadService::new(state.db())
-        .with_authorization(Arc::new(PortalReadAuthorization::new(state.db(), state.rbac())))
+    SupplierPortalReadService::new(state.db()).with_authorization(Arc::new(PortalReadAuthorization::new(
+        state.db(),
+        crate::wiring::catalog_services(state.db(), state.rbac()),
+    )))
 }
 
 fn ok_value(data: impl Serialize) -> Result<Value> {

@@ -7,7 +7,7 @@ use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use erp_contract::PageView;
 use erp_contract::entity::recognition::{ConfirmImport, ImportCommand, ImportView};
-use erp_processes::contract_import::inspect_pdf;
+use erp_data_import::contract_import::inspect_pdf;
 use erp_support::{RetentionClass, SensitivityClass};
 use serde::Deserialize;
 

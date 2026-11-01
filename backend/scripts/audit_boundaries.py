@@ -82,7 +82,7 @@ def dependencies(source: str, path: str) -> Counter[Dependency]:
         findings[Dependency(path, "module", "legacy_command_receipt_adapter")] += 1
     if RETIRED_READERS.search(code):
         findings[Dependency(path, "module", "retired_audit_business_reader")] += 1
-    owns_audit = path.startswith("crates/erp-audit/") or path.startswith("crates/erp-identity/")
+    owns_audit = path.startswith("crates/domains/erp-audit/") or path.startswith("crates/domains/erp-identity/")
     if not owns_audit:
         if re.search(r"\b(?:AUDIT_LOGS|AUDIT_EVENTS|AUDIT_ATTEMPTS|AuditLogRepository|AuditAttemptRepository)\b", code):
             findings[Dependency(path, "module", "raw_audit_repository")] += 1
@@ -178,7 +178,7 @@ def execution_entries(source: str, path: str) -> dict[tuple[str, str], dict]:
             re.sub(r"\s+", "", next(group for group in call.groups() if group))
             for call in ENTRY_CALL.finditer(body)
         )
-        if key == ("crates/erp-processes/src/integration_resolution/transaction.rs", "run_audited"):
+        if key == ("crates/orchestration/erp-supplier-catalog/src/integration_resolution/transaction.rs", "run_audited"):
             calls[".with_transaction"] += len(re.findall(r"\.\s*with_transaction\s*\(", body))
         if calls:
             actual.setdefault(key, Counter()).update(calls)

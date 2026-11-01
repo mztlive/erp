@@ -1,8 +1,8 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
+use erp_connector_dangaoshushu::{DangaoshushuReadQuery, SupplierReferenceTickets};
 use erp_core::common::time::Instant;
-use erp_processes::connectors::dangaoshushu::{DangaoshushuReadQuery, SupplierReferenceTickets};
 use persistence_core::NoTransaction;
 use serde_json::Value;
 

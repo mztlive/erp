@@ -1,0 +1,41 @@
+[package]
+name = "erp-demo-data"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+application-core = { workspace = true }
+entity-core = { workspace = true }
+erp-audit = { workspace = true }
+erp-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-party = { workspace = true }
+erp-customer = { workspace = true }
+erp-supplier = { workspace = true }
+erp-catalog = { workspace = true }
+erp-warehouse = { workspace = true }
+erp-support = { workspace = true }
+erp-supply = { workspace = true }
+erp-procurement = { workspace = true }
+erp-workflow = { workspace = true }
+erp-master-data = { workspace = true }
+erp-supplier-catalog = { workspace = true }
+erp-procure-to-pay = { workspace = true }
+id-generator = { workspace = true }
+image = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+storage = { workspace = true }
+thiserror = { workspace = true }
+validator = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+zune-jpeg = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }

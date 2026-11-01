@@ -3,7 +3,6 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::reverse_flow::ReturnsProcess;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::PaymentReversalView;
 use erp_returns::dto::{
@@ -11,11 +10,13 @@ use erp_returns::dto::{
     PostPaymentReversalRequest, SubmitPaymentReversalRequest,
 };
 use erp_returns::service::ReturnsService;
+use erp_reverse_flow::reverse_flow::ReturnsProcess;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::local_reverse_flow_ports;
 
 /// 查询付款冲正详情。
 ///
@@ -54,7 +55,7 @@ pub async fn payment_reversal_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .create_payment_reversal(req, &actor)
         .await?;
@@ -79,7 +80,7 @@ pub async fn payment_reversal_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .commit_payment_reversal(req, &actor)
         .await?;
@@ -105,7 +106,7 @@ pub async fn payment_reversal_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .submit_payment_reversal(&id, req, &actor)
         .await?;
@@ -132,7 +133,7 @@ pub async fn payment_reversal_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPaymentReversalApprovalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsProcess::new(state.db())
+    let view = ReturnsProcess::new(state.db(), local_reverse_flow_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .cancel_payment_reversal_approval(&id, req, &actor)
         .await?;

@@ -1,0 +1,4161 @@
+{
+  "schema_version": 2,
+  "date": "2026-11-01",
+  "status": "local_runtime_partially_verified_preexisting_approval_replay_defect",
+  "source_revisions": {
+    "baseline": "bf53f397dcc70cbe1f0d4a254ccdf0f2f14e0fc8",
+    "candidate": "06e2f4ca7a7228e334ddaada30e384b4376b4418",
+    "candidate_private_backend": "/tmp/erp-crate-candidate-06e2f4ca7a/backend"
+  },
+  "source_freeze": {
+    "delivery": "current_branch_commit_matching_source_manifest",
+    "checked_backend_files": 3882,
+    "excluded_generated_files": [
+      "**/__pycache__/**",
+      "*.pyc",
+      "*.pyo"
+    ],
+    "compared_to": "/tmp/erp-crate-semantic-fix/start-hashes.json",
+    "changed_rust_files_since_composition_validation": 33,
+    "added_backend_files": 0,
+    "removed_backend_files": 0,
+    "manifest_changes_since_composition_validation": false,
+    "all_rust_sources_identical_to_measured_snapshot": false,
+    "hash_manifest": "/tmp/erp-crate-semantic-fix/backend-source-hashes.json",
+    "hash_manifest_sha256": "01e2bdcd4745185ee0b30fa32f3807b04c31ad8460800eb8f88b5f835852be55",
+    "comparison": "/tmp/erp-crate-semantic-fix/source-comparison.json",
+    "last_validated_by": "full_workspace_validation"
+  },
+  "structure": {
+    "workspace_member_count": 50,
+    "direct_dependency_edges": 1021,
+    "dependency_kinds": {
+      "normal": 990,
+      "dev": 29,
+      "build": 2
+    },
+    "path_errors": [],
+    "graph_errors": [],
+    "missing_required": [],
+    "domains": 19,
+    "orchestration_crates": 13,
+    "new_protocol_crates": 2,
+    "new_runtime_crates": 1,
+    "migrated_existing_crates": 31,
+    "retained_existing_packages": 34,
+    "original_process_modules": 64,
+    "original_process_source_paths": 66,
+    "legacy_process_in_active_rust_or_cargo": false
+  },
+  "third_party_lock": {
+    "baseline_count": 585,
+    "candidate_count": 585,
+    "added": [],
+    "removed": [],
+    "all_versions_sources_checksums_unchanged": true
+  },
+  "required_gates": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-static/fmt-verified.log"
+    },
+    {
+      "command": "cargo check --workspace --locked",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-check-final.log"
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-clippy-8.log"
+    },
+    {
+      "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-lib-tests-4.log"
+    },
+    {
+      "command": "./scripts/check-domain-boundaries.sh --cutover",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-static/org-domain-final-2.log"
+    },
+    {
+      "command": "./scripts/check-bpm-boundaries.sh",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-static/bpm-final-1.log"
+    },
+    {
+      "command": "./scripts/check-audit-boundaries.sh",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-static/audit-final-2.log"
+    },
+    {
+      "command": "./scripts/check-permissions-drift.sh",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-permissions-final.log"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "candidate-static/diff-final.log"
+    }
+  ],
+  "gate_execution_details": {
+    "cwd": "backend",
+    "clippy_extra_flags": [
+      "--keep-going",
+      "--message-format=json"
+    ],
+    "library_test_extra_flags": [
+      "--no-fail-fast",
+      "--message-format=json"
+    ],
+    "domain_command": "Invoked unchanged by the final organizational data-scope gate; domain and audit subprocesses both returned zero. The enclosing ODS command remains blocked by three existing findings.",
+    "examples": "Nine existing examples had import paths synchronized by explicit user authorization. Clippy compiled all targets; no example was executed.",
+    "python_bytecode": "Tracked caches remain at baseline bytes; no task-generated pyc is included."
+  },
+  "unit_tests": {
+    "summary": {
+      "baseline_cases": 7223,
+      "candidate_cases": 7423,
+      "baseline_results": {
+        "ok": 7160,
+        "ignored": 63
+      },
+      "candidate_results": {
+        "ok": 7360,
+        "ignored": 63
+      },
+      "mapping_kinds": {
+        "same_package_and_name": 5899,
+        "registered_owner_and_longest_module_suffix": 1300,
+        "local_error_tests_preserved_in_multiple_consumers": 19,
+        "explicit_split_owner": 2,
+        "explicit_rename_and_fixture_boundary_change": 2,
+        "explicit_rename": 1
+      },
+      "unresolved_missing_cases": 0,
+      "status_or_should_panic_changes": 0,
+      "unmapped_candidate_cases": 47
+    },
+    "product_import": {
+      "baseline_cases": 52,
+      "candidate_cases": 52,
+      "missing": [],
+      "added": [],
+      "same_set": true,
+      "candidate_all_passed": true
+    },
+    "comparison_contract": "This compares actual executed test identities, registered ownership and explicit rename/split mappings. It does not substitute test counts or names for assertion/body equivalence, runtime database acceptance or preserved cross-component fixture coverage.",
+    "missing_cases": [],
+    "status_changes": [],
+    "remaining_fixture_boundary_review": [],
+    "protocol_side_evidence": [
+      {
+        "package": "erp-connector-dangaoshushu",
+        "test": "callback::tests::original_order_callback_preserves_fixed_signature_identity_and_acknowledgement",
+        "source": "backend/crates/adapters/erp-connector-dangaoshushu/src/callback.rs",
+        "execution_status": "passed",
+        "assertion_scope": "Real production Callbacks::verify/reception_id with original fixed signed body and URL; checks identity, OrderKey, EnvelopeOnly, no source event, original acknowledgement bytes, bad-signature rejection and zero transport calls.",
+        "actual_test_log": "/tmp/erp-crate-migration-evidence/candidate-lib-tests-4.log",
+        "actual_test_log_sha256": "71e19927e002c1b7c35a214afefe32497e8a014274b20744b5342492632a21c0"
+      },
+      {
+        "package": "erp-connector-dangaoshushu",
+        "test": "catalog::tests::detail_offer_preserves_attributes_precise_price_and_parent_availability",
+        "source": "backend/crates/adapters/erp-connector-dangaoshushu/src/catalog.rs",
+        "execution_status": "passed",
+        "assertion_scope": "Real dyn OfferSource::offer over an HTTP transport substitute serving the original product JSON; checks attributes, exact price123.45, parent can_buy availability, stock5 and one get_product_details request.",
+        "actual_test_log": "/tmp/erp-crate-migration-evidence/candidate-lib-tests-4.log",
+        "actual_test_log_sha256": "71e19927e002c1b7c35a214afefe32497e8a014274b20744b5342492632a21c0"
+      }
+    ],
+    "scope": "Initial migration snapshot. Current delivery results are recorded in behavior_fix_validation.unit_tests."
+  },
+  "unchanged_baseline_debt": {
+    "rust_size": {
+      "exit_code": 1,
+      "summary": {
+        "baseline": {
+          "FN": 93,
+          "FILE": 6
+        },
+        "candidate": {
+          "FN": 93,
+          "FILE": 6
+        },
+        "baseline_total": 99,
+        "candidate_total": 99,
+        "matched_exact_measured_size": 99,
+        "new": 0,
+        "removed": 0,
+        "changed_size": 0,
+        "no_new_or_worsened_violations": true
+      },
+      "parse_failures": 0,
+      "candidate_log": "candidate-static/size-final-3.log"
+    },
+    "organization_data_scope": {
+      "exit_code": 1,
+      "summary": {
+        "baseline_gate_status": "BLOCKED",
+        "candidate_gate_status": "BLOCKED",
+        "baseline_blockers": 3,
+        "candidate_blockers": 3,
+        "matched_exact_rule_and_diagnostic": 3,
+        "new": 0,
+        "removed": 0,
+        "no_new_blockers": true
+      }
+    },
+    "navigation": {
+      "baseline_missing": 11,
+      "candidate_missing": 11,
+      "missing_target_names_unchanged": true
+    }
+  },
+  "compile_performance": {
+    "configuration": {
+      "toolchain": "rustc 1.101.0-nightly (41089d07a 2026-10-27)\nbinary: rustc\ncommit-hash: 41089d07a0a2afc16adfe28a760d94d73d7298a4\ncommit-date: 2026-10-27\nhost: aarch64-apple-darwin\nrelease: 1.101.0-nightly\nLLVM version: 23.1.4\n",
+      "profile": "dev",
+      "features": "default",
+      "jobs": 4,
+      "third_party_cache": "Each revision prewarmed before formal sampling; all workspace packages cleaned before each complete-build sample.",
+      "command_equivalence": "Formal Cargo commands and probe transformations match the baseline. Targeted test package changes from erp-processes to erp-data-import while retaining the exact same 52 test names.",
+      "background_workload": "Private source snapshots; no other manually started Cargo jobs during accepted samples. Baseline rejected overlapping importer sample is excluded."
+    },
+    "scenes": {
+      "full-build": {
+        "baseline": {
+          "samples_seconds": [
+            109.81632658399758,
+            108.15590024999983,
+            105.5534722500015
+          ],
+          "median_seconds": 108.15590024999983,
+          "application_span_median_seconds": 37.89
+        },
+        "candidate": {
+          "samples_seconds": [
+            93.27785745800065,
+            91.88942029200552,
+            93.10390258400002
+          ],
+          "median_seconds": 93.10390258400002,
+          "application_span_median_seconds": 38.25000000000001
+        },
+        "change_seconds": -15.051997665999806,
+        "change_percent": -13.91694547519596,
+        "candidate_faster": true
+      },
+      "incremental-no-change": {
+        "baseline": {
+          "samples_seconds": [
+            0.7433295829978306,
+            0.23874150000483496,
+            0.2430462920019636
+          ],
+          "median_seconds": 0.2430462920019636
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.6628529170120601,
+            0.2367842079984257,
+            0.23803441699419636
+          ],
+          "median_seconds": 0.23803441699419636
+        },
+        "change_seconds": -0.00501187500776723,
+        "change_percent": -2.062107167521296,
+        "candidate_faster": true
+      },
+      "jd-internal": {
+        "baseline": {
+          "samples_seconds": [
+            14.681681082998693,
+            15.36952504200599,
+            15.659585166002216
+          ],
+          "median_seconds": 15.36952504200599,
+          "application_span_median_seconds": 10.14
+        },
+        "candidate": {
+          "samples_seconds": [
+            8.249371708996478,
+            7.8505980409972835,
+            7.832796583010349
+          ],
+          "median_seconds": 7.8505980409972835,
+          "application_span_median_seconds": 7.2
+        },
+        "change_seconds": -7.518927001008706,
+        "change_percent": -48.92101076942164,
+        "candidate_faster": true
+      },
+      "product-import-internal": {
+        "baseline": {
+          "samples_seconds": [
+            15.334449625006528,
+            12.322568541996588,
+            19.495271333005803
+          ],
+          "median_seconds": 15.334449625006528,
+          "application_span_median_seconds": 9.71
+        },
+        "candidate": {
+          "samples_seconds": [
+            8.238106208009413,
+            12.835372665998875,
+            8.132397124994895
+          ],
+          "median_seconds": 8.238106208009413,
+          "application_span_median_seconds": 7.2299999999999995
+        },
+        "change_seconds": -7.096343416997115,
+        "change_percent": -46.27713149498898,
+        "candidate_faster": true
+      },
+      "targeted-product-import-test": {
+        "baseline": {
+          "samples_seconds": [
+            10.9763143329983,
+            6.289239666002686,
+            11.305656666998402
+          ],
+          "median_seconds": 10.9763143329983
+        },
+        "candidate": {
+          "samples_seconds": [
+            2.316909042012412,
+            2.173439624995808,
+            2.181513542003813
+          ],
+          "median_seconds": 2.181513542003813
+        },
+        "change_seconds": -8.794800790994486,
+        "change_percent": -80.12526358282682,
+        "candidate_faster": true
+      }
+    },
+    "local_change_samples": {
+      "jd-internal": {
+        "baseline": [
+          {
+            "sample": 1,
+            "elapsed_seconds": 14.681681082998693,
+            "rebuilt_workspace_packages": [
+              "erp-processes",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Not present in this revision",
+              "erp-procure-to-pay": "Not present in this revision",
+              "erp-finance-posting": "Not present in this revision",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 10.07,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 3.15
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 3.02
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/baseline/jd-internal-1.html"
+          },
+          {
+            "sample": 2,
+            "elapsed_seconds": 15.36952504200599,
+            "rebuilt_workspace_packages": [
+              "erp-processes",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Not present in this revision",
+              "erp-procure-to-pay": "Not present in this revision",
+              "erp-finance-posting": "Not present in this revision",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 10.14,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 3.13
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.76
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/baseline/jd-internal-2.html"
+          },
+          {
+            "sample": 3,
+            "elapsed_seconds": 15.659585166002216,
+            "rebuilt_workspace_packages": [
+              "erp-processes",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Not present in this revision",
+              "erp-procure-to-pay": "Not present in this revision",
+              "erp-finance-posting": "Not present in this revision",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 10.219999999999999,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.89
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.98
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/baseline/jd-internal-3.html"
+          }
+        ],
+        "candidate": [
+          {
+            "sample": 1,
+            "elapsed_seconds": 8.249371708996478,
+            "rebuilt_workspace_packages": [
+              "erp-connector-jd-vop",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Fresh",
+              "erp-procure-to-pay": "Fresh",
+              "erp-finance-posting": "Fresh",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 7.609999999999999,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.38
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.3
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/candidate-performance/jd-internal-1.html"
+          },
+          {
+            "sample": 2,
+            "elapsed_seconds": 7.8505980409972835,
+            "rebuilt_workspace_packages": [
+              "erp-connector-jd-vop",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Fresh",
+              "erp-procure-to-pay": "Fresh",
+              "erp-finance-posting": "Fresh",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 7.2,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.21
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.21
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/candidate-performance/jd-internal-2.html"
+          },
+          {
+            "sample": 3,
+            "elapsed_seconds": 7.832796583010349,
+            "rebuilt_workspace_packages": [
+              "erp-connector-jd-vop",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Fresh",
+              "erp-procure-to-pay": "Fresh",
+              "erp-finance-posting": "Fresh",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 7.129999999999999,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.15
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.04
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/candidate-performance/jd-internal-3.html"
+          }
+        ]
+      },
+      "product-import-internal": {
+        "baseline": [
+          {
+            "sample": 1,
+            "elapsed_seconds": 15.334449625006528,
+            "rebuilt_workspace_packages": [
+              "erp-processes",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Not present in this revision",
+              "erp-procure-to-pay": "Not present in this revision",
+              "erp-finance-posting": "Not present in this revision",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 9.71,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.63
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.53
+              }
+            ],
+            "timings": "/tmp/erp-crate-migration-evidence/baseline/product-import-internal-1.html"
+          },
+          {
+            "sample": 2,
+            "elapsed_seconds": 12.322568541996588,
+            "rebuilt_workspace_packages": [
+              "erp-processes",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Not present in this revision",
+              "erp-procure-to-pay": "Not present in this revision",
+              "erp-finance-posting": "Not present in this revision",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 7.24,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 1.93
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.05
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/baseline/product-import-internal-2.html"
+          },
+          {
+            "sample": 3,
+            "elapsed_seconds": 19.495271333005803,
+            "rebuilt_workspace_packages": [
+              "erp-processes",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Not present in this revision",
+              "erp-procure-to-pay": "Not present in this revision",
+              "erp-finance-posting": "Not present in this revision",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 14.41,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.41
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.73
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/baseline/product-import-internal-3.html"
+          }
+        ],
+        "candidate": [
+          {
+            "sample": 1,
+            "elapsed_seconds": 8.238106208009413,
+            "rebuilt_workspace_packages": [
+              "erp-data-import",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Fresh",
+              "erp-procure-to-pay": "Fresh",
+              "erp-finance-posting": "Fresh",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 7.2299999999999995,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.06
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.17
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/candidate-performance/product-import-internal-1.html"
+          },
+          {
+            "sample": 2,
+            "elapsed_seconds": 12.835372665998875,
+            "rebuilt_workspace_packages": [
+              "erp-data-import",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Fresh",
+              "erp-procure-to-pay": "Fresh",
+              "erp-finance-posting": "Fresh",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 11.840000000000002,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 6.65
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 6.71
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/candidate-performance/product-import-internal-2.html"
+          },
+          {
+            "sample": 3,
+            "elapsed_seconds": 8.132397124994895,
+            "rebuilt_workspace_packages": [
+              "erp-data-import",
+              "web-api"
+            ],
+            "relevant_package_status": {
+              "erp-order-to-cash": "Fresh",
+              "erp-procure-to-pay": "Fresh",
+              "erp-finance-posting": "Fresh",
+              "erp-sales": "Fresh",
+              "erp-procurement": "Fresh",
+              "erp-finance": "Fresh"
+            },
+            "application_span_seconds": 7.08,
+            "application_binary_units": [
+              {
+                "target": " erp-worker \"bin\"",
+                "duration_seconds": 2.0
+              },
+              {
+                "target": " web-api \"bin\"",
+                "duration_seconds": 2.08
+              }
+            ],
+            "timings": "/private/tmp/erp-crate-migration-evidence/candidate-performance/product-import-internal-3.html"
+          }
+        ]
+      }
+    },
+    "unrelated_packages_fresh": true,
+    "targeted_business_tests": {
+      "expected_count": 52,
+      "samples": [
+        {
+          "sample": 1,
+          "elapsed_seconds": 2.316909042012412,
+          "actual_count": 52,
+          "same_test_set_as_baseline": true,
+          "missing": [],
+          "added": [],
+          "test_results": [
+            "ok. 52 passed; 0 failed; 0 ignored; 0 measured; 169 filtered out; finished in 0.10s"
+          ]
+        },
+        {
+          "sample": 2,
+          "elapsed_seconds": 2.173439624995808,
+          "actual_count": 52,
+          "same_test_set_as_baseline": true,
+          "missing": [],
+          "added": [],
+          "test_results": [
+            "ok. 52 passed; 0 failed; 0 ignored; 0 measured; 169 filtered out; finished in 0.10s"
+          ]
+        },
+        {
+          "sample": 3,
+          "elapsed_seconds": 2.181513542003813,
+          "actual_count": 52,
+          "same_test_set_as_baseline": true,
+          "missing": [],
+          "added": [],
+          "test_results": [
+            "ok. 52 passed; 0 failed; 0 ignored; 0 measured; 169 filtered out; finished in 0.10s"
+          ]
+        }
+      ],
+      "all_three_same_set_and_passed": true
+    },
+    "full_build": {
+      "baseline_slowest_units": [
+        {
+          "package": "erp-processes",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            40.43,
+            40.44,
+            40.36
+          ],
+          "median_unit_duration_seconds": 40.43
+        },
+        {
+          "package": "web-api",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            34.89,
+            35.12,
+            34.67
+          ],
+          "median_unit_duration_seconds": 34.89
+        },
+        {
+          "package": "erp-read-models",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            18.16,
+            17.02,
+            16.84
+          ],
+          "median_unit_duration_seconds": 17.02
+        },
+        {
+          "package": "erp-supply",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            12.19,
+            11.7,
+            16.29
+          ],
+          "median_unit_duration_seconds": 12.19
+        },
+        {
+          "package": "erp-finance",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            10.64,
+            11.53,
+            11.03
+          ],
+          "median_unit_duration_seconds": 11.03
+        },
+        {
+          "package": "erp-sales",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            11.95,
+            10.29,
+            10.32
+          ],
+          "median_unit_duration_seconds": 10.32
+        },
+        {
+          "package": "erp-identity",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            8.39,
+            7.84,
+            7.13
+          ],
+          "median_unit_duration_seconds": 7.84
+        },
+        {
+          "package": "erp-workflow",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            9.17,
+            7.02,
+            7.61
+          ],
+          "median_unit_duration_seconds": 7.61
+        },
+        {
+          "package": "erp-procurement",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            7.02,
+            6.88,
+            4.62
+          ],
+          "median_unit_duration_seconds": 6.88
+        },
+        {
+          "package": "erp-catalog",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            6.65,
+            6.72,
+            6.58
+          ],
+          "median_unit_duration_seconds": 6.65
+        },
+        {
+          "package": "erp-fulfillment",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            4.61,
+            3.6,
+            3.51
+          ],
+          "median_unit_duration_seconds": 3.6
+        },
+        {
+          "package": "erp-supplier",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            3.29,
+            3.04,
+            2.97
+          ],
+          "median_unit_duration_seconds": 3.04
+        }
+      ],
+      "candidate_slowest_units": [
+        {
+          "package": "web-api",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            35.82,
+            35.74,
+            35.72
+          ],
+          "median_unit_duration_seconds": 35.74
+        },
+        {
+          "package": "erp-read-models",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            19.31,
+            19.92,
+            19.22
+          ],
+          "median_unit_duration_seconds": 19.31
+        },
+        {
+          "package": "erp-supply",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            16.83,
+            16.85,
+            16.79
+          ],
+          "median_unit_duration_seconds": 16.83
+        },
+        {
+          "package": "erp-finance",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            11.1,
+            10.53,
+            11.09
+          ],
+          "median_unit_duration_seconds": 11.09
+        },
+        {
+          "package": "erp-sales",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            7.88,
+            10.36,
+            7.54
+          ],
+          "median_unit_duration_seconds": 7.88
+        },
+        {
+          "package": "erp-supplier-catalog",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            7.96,
+            7.83,
+            7.79
+          ],
+          "median_unit_duration_seconds": 7.83
+        },
+        {
+          "package": "erp-workflow",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            7.5,
+            7.56,
+            7.5
+          ],
+          "median_unit_duration_seconds": 7.5
+        },
+        {
+          "package": "erp-identity",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            7.25,
+            7.22,
+            7.25
+          ],
+          "median_unit_duration_seconds": 7.25
+        },
+        {
+          "package": "erp-procurement",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            6.58,
+            6.67,
+            6.57
+          ],
+          "median_unit_duration_seconds": 6.58
+        },
+        {
+          "package": "erp-catalog",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            6.33,
+            6.33,
+            6.32
+          ],
+          "median_unit_duration_seconds": 6.33
+        },
+        {
+          "package": "erp-supplier-orders",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            5.91,
+            5.89,
+            5.79
+          ],
+          "median_unit_duration_seconds": 5.89
+        },
+        {
+          "package": "erp-master-data",
+          "target": "",
+          "sample_unit_durations_seconds": [
+            5.15,
+            5.13,
+            5.06
+          ],
+          "median_unit_duration_seconds": 5.13
+        }
+      ],
+      "observed_final_blocker_chain_method": "Start from the unit finishing last and follow the latest recorded predecessor release from Cargo unblocked_units/unblocked_rmeta_units. Rmeta release uses recorded frontend completion. This is an observed dependency release chain, not the sum of overlapping durations or an attribution of scheduler gaps.",
+      "baseline_observed_final_blocker_chains": [
+        {
+          "sample": 1,
+          "chain": [
+            {
+              "package": "entity-macros",
+              "target": "",
+              "start_seconds": 0.36,
+              "duration_seconds": 0.26,
+              "end_seconds": 0.62
+            },
+            {
+              "package": "erp-core",
+              "target": "",
+              "start_seconds": 0.62,
+              "duration_seconds": 1.56,
+              "end_seconds": 2.18,
+              "recorded_predecessor_release_seconds": 0.62,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "application-core",
+              "target": "",
+              "start_seconds": 2.15,
+              "duration_seconds": 0.61,
+              "end_seconds": 2.76,
+              "recorded_predecessor_release_seconds": 1.6800000000000002,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.46999999999999975
+            },
+            {
+              "package": "erp-supply",
+              "target": "",
+              "start_seconds": 18.6,
+              "duration_seconds": 12.19,
+              "end_seconds": 30.79,
+              "recorded_predecessor_release_seconds": 2.3899999999999997,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 16.21
+            },
+            {
+              "package": "erp-read-models",
+              "target": "",
+              "start_seconds": 27.5,
+              "duration_seconds": 18.16,
+              "end_seconds": 45.66,
+              "recorded_predecessor_release_seconds": 27.51,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -0.010000000000001563
+            },
+            {
+              "package": "erp-processes",
+              "target": "",
+              "start_seconds": 40.75,
+              "duration_seconds": 40.43,
+              "end_seconds": 81.18,
+              "recorded_predecessor_release_seconds": 40.74,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.00999999999999801
+            },
+            {
+              "package": "web-api",
+              "target": "",
+              "start_seconds": 71.58,
+              "duration_seconds": 34.89,
+              "end_seconds": 106.47,
+              "recorded_predecessor_release_seconds": 71.59,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -0.010000000000005116
+            },
+            {
+              "package": "web-api",
+              "target": " erp-worker \"bin\"",
+              "start_seconds": 106.47,
+              "duration_seconds": 3.26,
+              "end_seconds": 109.73,
+              "recorded_predecessor_release_seconds": 106.47,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "chain": [
+            {
+              "package": "entity-macros",
+              "target": "",
+              "start_seconds": 0.49,
+              "duration_seconds": 0.34,
+              "end_seconds": 0.8300000000000001
+            },
+            {
+              "package": "erp-core",
+              "target": "",
+              "start_seconds": 0.83,
+              "duration_seconds": 1.21,
+              "end_seconds": 2.04,
+              "recorded_predecessor_release_seconds": 0.8300000000000001,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": -1.1102230246251565e-16
+            },
+            {
+              "package": "application-core",
+              "target": "",
+              "start_seconds": 2.0,
+              "duration_seconds": 0.54,
+              "end_seconds": 2.54,
+              "recorded_predecessor_release_seconds": 1.6099999999999999,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.3900000000000001
+            },
+            {
+              "package": "erp-supply",
+              "target": "",
+              "start_seconds": 19.17,
+              "duration_seconds": 11.7,
+              "end_seconds": 30.87,
+              "recorded_predecessor_release_seconds": 2.22,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 16.950000000000003
+            },
+            {
+              "package": "erp-read-models",
+              "target": "",
+              "start_seconds": 27.74,
+              "duration_seconds": 17.02,
+              "end_seconds": 44.76,
+              "recorded_predecessor_release_seconds": 27.740000000000002,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -3.552713678800501e-15
+            },
+            {
+              "package": "erp-processes",
+              "target": "",
+              "start_seconds": 39.87,
+              "duration_seconds": 40.44,
+              "end_seconds": 80.31,
+              "recorded_predecessor_release_seconds": 39.87,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": "",
+              "start_seconds": 70.2,
+              "duration_seconds": 35.12,
+              "end_seconds": 105.32,
+              "recorded_predecessor_release_seconds": 70.19999999999999,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 1.4210854715202004e-14
+            },
+            {
+              "package": "web-api",
+              "target": " erp-worker \"bin\"",
+              "start_seconds": 105.31,
+              "duration_seconds": 2.78,
+              "end_seconds": 108.09,
+              "recorded_predecessor_release_seconds": 105.32,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": -0.009999999999990905
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "chain": [
+            {
+              "package": "entity-macros",
+              "target": "",
+              "start_seconds": 0.53,
+              "duration_seconds": 0.26,
+              "end_seconds": 0.79
+            },
+            {
+              "package": "erp-core",
+              "target": "",
+              "start_seconds": 0.79,
+              "duration_seconds": 1.36,
+              "end_seconds": 2.1500000000000004,
+              "recorded_predecessor_release_seconds": 0.79,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "application-core",
+              "target": "",
+              "start_seconds": 2.08,
+              "duration_seconds": 0.57,
+              "end_seconds": 2.65,
+              "recorded_predecessor_release_seconds": 1.69,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.3900000000000001
+            },
+            {
+              "package": "erp-procurement",
+              "target": "",
+              "start_seconds": 22.42,
+              "duration_seconds": 4.62,
+              "end_seconds": 27.040000000000003,
+              "recorded_predecessor_release_seconds": 2.31,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 20.110000000000003
+            },
+            {
+              "package": "erp-read-models",
+              "target": "",
+              "start_seconds": 25.67,
+              "duration_seconds": 16.84,
+              "end_seconds": 42.510000000000005,
+              "recorded_predecessor_release_seconds": 25.67,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "erp-processes",
+              "target": "",
+              "start_seconds": 37.58,
+              "duration_seconds": 40.36,
+              "end_seconds": 77.94,
+              "recorded_predecessor_release_seconds": 37.58,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": "",
+              "start_seconds": 67.89,
+              "duration_seconds": 34.67,
+              "end_seconds": 102.56,
+              "recorded_predecessor_release_seconds": 67.89,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": " web-api \"bin\"",
+              "start_seconds": 102.56,
+              "duration_seconds": 2.93,
+              "end_seconds": 105.49000000000001,
+              "recorded_predecessor_release_seconds": 102.56,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            }
+          ]
+        }
+      ],
+      "candidate_observed_final_blocker_chains": [
+        {
+          "sample": 1,
+          "chain": [
+            {
+              "package": "entity-macros",
+              "target": "",
+              "start_seconds": 0.5,
+              "duration_seconds": 0.29,
+              "end_seconds": 0.79
+            },
+            {
+              "package": "erp-core",
+              "target": "",
+              "start_seconds": 0.79,
+              "duration_seconds": 1.18,
+              "end_seconds": 1.97,
+              "recorded_predecessor_release_seconds": 0.79,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "application-core",
+              "target": "",
+              "start_seconds": 1.92,
+              "duration_seconds": 0.55,
+              "end_seconds": 2.4699999999999998,
+              "recorded_predecessor_release_seconds": 1.55,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.3699999999999999
+            },
+            {
+              "package": "erp-sales",
+              "target": "",
+              "start_seconds": 21.12,
+              "duration_seconds": 7.88,
+              "end_seconds": 29.0,
+              "recorded_predecessor_release_seconds": 2.14,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 18.98
+            },
+            {
+              "package": "erp-read-models",
+              "target": "",
+              "start_seconds": 26.97,
+              "duration_seconds": 19.31,
+              "end_seconds": 46.28,
+              "recorded_predecessor_release_seconds": 26.770000000000003,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.19999999999999574
+            },
+            {
+              "package": "erp-approval-runtime",
+              "target": "",
+              "start_seconds": 37.97,
+              "duration_seconds": 0.72,
+              "end_seconds": 38.69,
+              "recorded_predecessor_release_seconds": 37.98,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -0.00999999999999801
+            },
+            {
+              "package": "erp-fulfillment-execution",
+              "target": "",
+              "start_seconds": 38.7,
+              "duration_seconds": 3.57,
+              "end_seconds": 42.27,
+              "recorded_predecessor_release_seconds": 38.4,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.30000000000000426
+            },
+            {
+              "package": "erp-supplier-orders",
+              "target": "",
+              "start_seconds": 41.09,
+              "duration_seconds": 5.91,
+              "end_seconds": 47.0,
+              "recorded_predecessor_release_seconds": 41.09,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "erp-procure-to-pay",
+              "target": "",
+              "start_seconds": 44.71,
+              "duration_seconds": 3.65,
+              "end_seconds": 48.36,
+              "recorded_predecessor_release_seconds": 44.650000000000006,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.05999999999999517
+            },
+            {
+              "package": "erp-finance-posting",
+              "target": "",
+              "start_seconds": 47.23,
+              "duration_seconds": 2.68,
+              "end_seconds": 49.91,
+              "recorded_predecessor_release_seconds": 47.230000000000004,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -7.105427357601002e-15
+            },
+            {
+              "package": "erp-order-to-cash",
+              "target": "",
+              "start_seconds": 49.46,
+              "duration_seconds": 3.5,
+              "end_seconds": 52.96,
+              "recorded_predecessor_release_seconds": 49.459999999999994,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 7.105427357601002e-15
+            },
+            {
+              "package": "erp-data-import",
+              "target": "",
+              "start_seconds": 51.99,
+              "duration_seconds": 4.37,
+              "end_seconds": 56.36,
+              "recorded_predecessor_release_seconds": 51.99,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": "",
+              "start_seconds": 54.96,
+              "duration_seconds": 35.82,
+              "end_seconds": 90.78,
+              "recorded_predecessor_release_seconds": 54.96,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": " erp-worker \"bin\"",
+              "start_seconds": 90.78,
+              "duration_seconds": 2.43,
+              "end_seconds": 93.21000000000001,
+              "recorded_predecessor_release_seconds": 90.78,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            }
+          ]
+        },
+        {
+          "sample": 2,
+          "chain": [
+            {
+              "package": "entity-macros",
+              "target": "",
+              "start_seconds": 0.51,
+              "duration_seconds": 0.25,
+              "end_seconds": 0.76
+            },
+            {
+              "package": "erp-core",
+              "target": "",
+              "start_seconds": 0.76,
+              "duration_seconds": 1.23,
+              "end_seconds": 1.99,
+              "recorded_predecessor_release_seconds": 0.76,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "application-core",
+              "target": "",
+              "start_seconds": 1.98,
+              "duration_seconds": 0.57,
+              "end_seconds": 2.55,
+              "recorded_predecessor_release_seconds": 1.53,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.44999999999999996
+            },
+            {
+              "package": "erp-finance",
+              "target": "",
+              "start_seconds": 19.16,
+              "duration_seconds": 10.53,
+              "end_seconds": 29.689999999999998,
+              "recorded_predecessor_release_seconds": 2.2199999999999998,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 16.94
+            },
+            {
+              "package": "erp-read-models",
+              "target": "",
+              "start_seconds": 25.16,
+              "duration_seconds": 19.92,
+              "end_seconds": 45.08,
+              "recorded_predecessor_release_seconds": 24.9,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.26000000000000156
+            },
+            {
+              "package": "erp-approval-runtime",
+              "target": "",
+              "start_seconds": 36.59,
+              "duration_seconds": 0.73,
+              "end_seconds": 37.32,
+              "recorded_predecessor_release_seconds": 36.59,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "erp-fulfillment-execution",
+              "target": "",
+              "start_seconds": 37.33,
+              "duration_seconds": 3.54,
+              "end_seconds": 40.87,
+              "recorded_predecessor_release_seconds": 37.03,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.29999999999999716
+            },
+            {
+              "package": "erp-supplier-orders",
+              "target": "",
+              "start_seconds": 39.71,
+              "duration_seconds": 5.89,
+              "end_seconds": 45.6,
+              "recorded_predecessor_release_seconds": 39.72,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -0.00999999999999801
+            },
+            {
+              "package": "erp-procure-to-pay",
+              "target": "",
+              "start_seconds": 43.26,
+              "duration_seconds": 3.67,
+              "end_seconds": 46.93,
+              "recorded_predecessor_release_seconds": 43.230000000000004,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.02999999999999403
+            },
+            {
+              "package": "erp-finance-posting",
+              "target": "",
+              "start_seconds": 45.78,
+              "duration_seconds": 2.67,
+              "end_seconds": 48.45,
+              "recorded_predecessor_release_seconds": 45.78,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "erp-order-to-cash",
+              "target": "",
+              "start_seconds": 48.01,
+              "duration_seconds": 3.45,
+              "end_seconds": 51.46,
+              "recorded_predecessor_release_seconds": 48.01,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "erp-data-import",
+              "target": "",
+              "start_seconds": 50.48,
+              "duration_seconds": 4.41,
+              "end_seconds": 54.89,
+              "recorded_predecessor_release_seconds": 50.48,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": "",
+              "start_seconds": 53.5,
+              "duration_seconds": 35.74,
+              "end_seconds": 89.24000000000001,
+              "recorded_predecessor_release_seconds": 53.5,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": " web-api \"bin\"",
+              "start_seconds": 89.24,
+              "duration_seconds": 2.59,
+              "end_seconds": 91.83,
+              "recorded_predecessor_release_seconds": 89.24000000000001,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": -1.4210854715202004e-14
+            }
+          ]
+        },
+        {
+          "sample": 3,
+          "chain": [
+            {
+              "package": "entity-macros",
+              "target": "",
+              "start_seconds": 0.5,
+              "duration_seconds": 0.24,
+              "end_seconds": 0.74
+            },
+            {
+              "package": "erp-core",
+              "target": "",
+              "start_seconds": 0.74,
+              "duration_seconds": 1.21,
+              "end_seconds": 1.95,
+              "recorded_predecessor_release_seconds": 0.74,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "application-core",
+              "target": "",
+              "start_seconds": 1.91,
+              "duration_seconds": 0.59,
+              "end_seconds": 2.5,
+              "recorded_predecessor_release_seconds": 1.5,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.4099999999999999
+            },
+            {
+              "package": "erp-sales",
+              "target": "",
+              "start_seconds": 21.46,
+              "duration_seconds": 7.54,
+              "end_seconds": 29.0,
+              "recorded_predecessor_release_seconds": 2.14,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 19.32
+            },
+            {
+              "package": "erp-read-models",
+              "target": "",
+              "start_seconds": 27.13,
+              "duration_seconds": 19.22,
+              "end_seconds": 46.349999999999994,
+              "recorded_predecessor_release_seconds": 27.130000000000003,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -3.552713678800501e-15
+            },
+            {
+              "package": "erp-approval-runtime",
+              "target": "",
+              "start_seconds": 38.13,
+              "duration_seconds": 0.72,
+              "end_seconds": 38.85,
+              "recorded_predecessor_release_seconds": 38.129999999999995,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 7.105427357601002e-15
+            },
+            {
+              "package": "erp-fulfillment-execution",
+              "target": "",
+              "start_seconds": 38.84,
+              "duration_seconds": 3.53,
+              "end_seconds": 42.370000000000005,
+              "recorded_predecessor_release_seconds": 38.550000000000004,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.28999999999999915
+            },
+            {
+              "package": "erp-supplier-orders",
+              "target": "",
+              "start_seconds": 41.23,
+              "duration_seconds": 5.79,
+              "end_seconds": 47.019999999999996,
+              "recorded_predecessor_release_seconds": 41.220000000000006,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.009999999999990905
+            },
+            {
+              "package": "erp-procure-to-pay",
+              "target": "",
+              "start_seconds": 44.78,
+              "duration_seconds": 3.63,
+              "end_seconds": 48.410000000000004,
+              "recorded_predecessor_release_seconds": 44.75,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.030000000000001137
+            },
+            {
+              "package": "erp-finance-posting",
+              "target": "",
+              "start_seconds": 47.27,
+              "duration_seconds": 2.68,
+              "end_seconds": 49.95,
+              "recorded_predecessor_release_seconds": 47.27,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "erp-order-to-cash",
+              "target": "",
+              "start_seconds": 49.5,
+              "duration_seconds": 3.49,
+              "end_seconds": 52.99,
+              "recorded_predecessor_release_seconds": 49.510000000000005,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": -0.010000000000005116
+            },
+            {
+              "package": "erp-data-import",
+              "target": "",
+              "start_seconds": 52.0,
+              "duration_seconds": 4.32,
+              "end_seconds": 56.32,
+              "recorded_predecessor_release_seconds": 52.0,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            },
+            {
+              "package": "web-api",
+              "target": "",
+              "start_seconds": 54.93,
+              "duration_seconds": 35.72,
+              "end_seconds": 90.65,
+              "recorded_predecessor_release_seconds": 54.92,
+              "recorded_predecessor_kind": "metadata_available_after_frontend",
+              "gap_after_recorded_predecessor_seconds": 0.00999999999999801
+            },
+            {
+              "package": "web-api",
+              "target": " web-api \"bin\"",
+              "start_seconds": 90.65,
+              "duration_seconds": 2.39,
+              "end_seconds": 93.04,
+              "recorded_predecessor_release_seconds": 90.65,
+              "recorded_predecessor_kind": "unit_complete",
+              "gap_after_recorded_predecessor_seconds": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    "restoration": {
+      "jd": {
+        "expected_sha256": "589556387eff146af0c4585f709b9aad41b3f03c7d77a6f1beda62c01d74b017",
+        "actual_sha256": "589556387eff146af0c4585f709b9aad41b3f03c7d77a6f1beda62c01d74b017",
+        "original_bytes_restored": true
+      },
+      "product_import": {
+        "expected_sha256": "dc0303803aaac1320e1c5d6aa4b52a4b63ff494882519f070a3b556b1d1b4448",
+        "actual_sha256": "dc0303803aaac1320e1c5d6aa4b52a4b63ff494882519f070a3b556b1d1b4448",
+        "original_bytes_restored": true
+      },
+      "snapshot_git_status": ""
+    },
+    "acceptance": {
+      "local_jd_faster": true,
+      "local_product_import_faster": true,
+      "targeted_test_compile_and_run_faster": true,
+      "unrelated_sales_procurement_finance_fresh": true,
+      "same_52_business_tests": true,
+      "probe_original_bytes_restored": true,
+      "snapshot_clean": true
+    },
+    "scope": "Compilation and inline library tests only; no integration/ignored tests, examples, real MongoDB, external business services or browser acceptance. Application spans and binary units include compilation/linking; no linker-only duration is claimed.",
+    "measured_revision": "06e2f4ca7a7228e334ddaada30e384b4376b4418",
+    "current_delivery_remeasured": false
+  },
+  "delivery_scope": {
+    "current_branch_commit": true,
+    "push": false,
+    "deploy_or_restart": false,
+    "database_migration": false,
+    "live_mongo_supplier_storage_browser_acceptance": false,
+    "integration_tests": false,
+    "ignored_tests_executed": true,
+    "examples_executed": false,
+    "read_only_test_environment_checks": true,
+    "live_mongo_acceptance": true,
+    "temporary_local_api_started_and_stopped": true,
+    "temporary_local_mongo_started_and_removed": true,
+    "existing_application_services_restarted": false,
+    "live_supplier_acceptance": false,
+    "live_real_object_storage_acceptance": false,
+    "browser_acceptance": false,
+    "production_changes_for_local_acceptance": false,
+    "commit_scope": [
+      "backend crate migration and assembly",
+      "behavior-preserving corrections",
+      "migration navigation, gates and scripts",
+      "acceptance evidence and known pre-existing ARP-01"
+    ]
+  },
+  "raw_evidence_root": "/tmp/erp-crate-migration-evidence",
+  "evidence_sha256": {
+    "candidate-static/fmt-verified.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "candidate-check-final.log": "b70ff777c927871cfc765ff1bf899fad6e961b09f7ae7d1ad1f7274e7a35dbf2",
+    "candidate-clippy-8.log": "bac58e58096b844241cea06f4a2e388844ea6b62648b34bf69914c026393d333",
+    "candidate-lib-tests-4.log": "71e19927e002c1b7c35a214afefe32497e8a014274b20744b5342492632a21c0",
+    "candidate-static/org-domain-final-2.log": "07896c714f6c9661b2186214fe7cc3f56fe16f426aaa5ee976397799a2ac41c1",
+    "candidate-static/bpm-final-1.log": "5b0d90cc8438d3175ac06589a68115ad71651a08c5a4832ea01d2cea439b04b2",
+    "candidate-static/audit-final-2.log": "6ad41bc61411cbcb2533043f704231b5f423b465ae39f46b5b968ca4f9ba7fec",
+    "candidate-permissions-final.log": "0b43b37cd23fe97c7084934c48834759ea29c5e676746da66901859d7f90d4b1",
+    "candidate-size-comparison.json": "4b08fb9be79fb6e47858a2cc88bc527d1d539e4703b07f335b260acc0437418b",
+    "candidate-ods-comparison.json": "3bf6719e41ed0a7b00df60c0ab659fbdf244539e44b343970774f581fa6d01fd",
+    "candidate-test-preservation.json": "58a7827102ba77bda7d49a340de4ee7dd68d309668b584d41b8ffb52ed192c72",
+    "candidate-static/metadata-layer-check.json": "cbc16bd71a01dcc8e34b267fd453874aea2f9d792964b2d86e1620e44c22de83",
+    "candidate-static/delivery-light-audit.json": "48ffb6f303d75587d882889692dcf1847d22b848c7435a14c3f4b8e30afde43b",
+    "candidate-source-freeze-final.json": "d973068a8754124426834ac982551420cdd017ad5c5ba9f652a308215c9a022c",
+    "candidate-performance/comparison-summary.json": "04af33e770b76d3c2853186f947979e38c83e9bb4a05dd7f30dd84d23f935c53",
+    "candidate-static/diff-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "whitespace_checks": [
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "GIT_INDEX_FILE=<task temporary index> git diff --cached --check",
+      "exit_code": 0
+    }
+  ],
+  "initial_migration_source_freeze": {
+    "frozen_commit": "06e2f4ca7a7228e334ddaada30e384b4376b4418",
+    "checked_backend_files": 3880,
+    "additional_consumers": 1,
+    "changed_bytes": [
+      "backend/crates/adapters/erp-connector-jd-vop/Cargo.toml",
+      "backend/crates/orchestration/erp-fulfillment-execution/Cargo.toml",
+      "backend/crates/orchestration/erp-order-to-cash/Cargo.toml",
+      "backend/crates/orchestration/erp-supplier-catalog/Cargo.toml"
+    ],
+    "added_backend_paths": [],
+    "removed_backend_paths": [],
+    "unexpected_changed_bytes": [],
+    "format_only_manifest_changes": [
+      {
+        "path": "backend/crates/adapters/erp-connector-jd-vop/Cargo.toml",
+        "measured_sha256": "0635cce81a030e4f960163474f1c53ce6b00d31ec81d287a770fd2fde134c849",
+        "delivery_sha256": "209b21edd3a78a2e39be6e827ba528de26b1545408e62a8729424258962332e1",
+        "only_trailing_blank_lines_removed": true,
+        "toml_parsed_structure_identical": true
+      },
+      {
+        "path": "backend/crates/orchestration/erp-fulfillment-execution/Cargo.toml",
+        "measured_sha256": "a4e6e3f1ee7bc0249a276525929293e3160ae154a3c02a7952ff650ec779ac7e",
+        "delivery_sha256": "5f5199ba643e7efe4c0caebe7428787a6e4c2297a55ac29a0cbb4ea50b9f97a2",
+        "only_trailing_blank_lines_removed": true,
+        "toml_parsed_structure_identical": true
+      },
+      {
+        "path": "backend/crates/orchestration/erp-order-to-cash/Cargo.toml",
+        "measured_sha256": "41e7f21694d43d232d21442513d9dc963b031602a1ed101060f31cb0ba0f67ca",
+        "delivery_sha256": "be70ea8f09aa628a464eb37096d17e20a5d45debfec11b603abccfee9d6f1d81",
+        "only_trailing_blank_lines_removed": true,
+        "toml_parsed_structure_identical": true
+      },
+      {
+        "path": "backend/crates/orchestration/erp-supplier-catalog/Cargo.toml",
+        "measured_sha256": "ab405656a54e387e9ac4eb33a944eddc42dcb39b9de9336e120c7fe517fa027a",
+        "delivery_sha256": "2b53a0c4fbdc5252c5ea88e48dfe2dcd53566093b799831cca555002bcb3a1f1",
+        "only_trailing_blank_lines_removed": true,
+        "toml_parsed_structure_identical": true
+      }
+    ],
+    "all_rust_sources_identical_to_measured_snapshot": true,
+    "all_manifest_semantics_identical_to_measured_snapshot": true
+  },
+  "required_gates_scope": "Current repaired source: full_workspace_validation. Initial migration, behavior_fix_validation, composition_validation and semantic_correction_validation retain their historical phase evidence.",
+  "behavior_fix_validation": {
+    "status": "passed_with_unchanged_baseline_debt",
+    "evidence_root": "/tmp/erp-crate-behavior-fix",
+    "environment": {
+      "cwd": "backend",
+      "CARGO_TARGET_DIR": "/tmp/erp-crate-migration-target-baseline",
+      "CARGO_BUILD_JOBS": 4,
+      "CARGO_INCREMENTAL": 0,
+      "unset": [
+        "ERP_TEST_MONGO_URI"
+      ]
+    },
+    "required_gates": [
+      {
+        "command": "cargo fmt --all -- --check",
+        "exit_code": 0,
+        "log": "fmt-check.log"
+      },
+      {
+        "command": "cargo check --workspace --locked",
+        "exit_code": 0,
+        "log": "workspace-check.log"
+      },
+      {
+        "command": "cargo clippy --workspace --all-targets --all-features --locked --keep-going -- -D warnings",
+        "exit_code": 0,
+        "log": "workspace-clippy.log"
+      },
+      {
+        "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked --no-fail-fast",
+        "exit_code": 0,
+        "log": "workspace-lib-tests-verified.log"
+      },
+      {
+        "command": "./scripts/check-domain-boundaries.sh --cutover",
+        "exit_code": 0,
+        "log": "domain-audit-final.log"
+      },
+      {
+        "command": "./scripts/check-bpm-boundaries.sh",
+        "exit_code": 0,
+        "log": "bpm.log"
+      },
+      {
+        "command": "git diff --check",
+        "exit_code": 0,
+        "log": "diff-check.log"
+      },
+      {
+        "command": "GIT_INDEX_FILE=<temporary review index> git diff --cached --check 06e2f4ca7a",
+        "exit_code": 0,
+        "log": "tracked-and-new-diff-check.log"
+      }
+    ],
+    "unit_tests": {
+      "passed": 7373,
+      "failed": 0,
+      "ignored": 63,
+      "result_groups": 50,
+      "cases": 7436,
+      "before_cases_preserved": 7423,
+      "missing": [],
+      "status_changes": [],
+      "added": [
+        "erp-connector-jd-vop::authorization_http::tests::invalid_local_configuration_keeps_binding_error_when_http_is_unavailable",
+        "erp-connector-jd-vop::authorization_http::tests::unavailable_http_preserves_local_binding_and_preflight_but_rejects_communication",
+        "erp-data-import::import_apply::work_items::tests::decision_failure_does_not_reuse_identity_or_change_caller_and_executor",
+        "erp-supplier-orders::supplier_credentials::authorization::tests::missing_authorization_configuration_keeps_unavailable_binding",
+        "erp-supplier-orders::supplier_credentials::authorization::tests::unavailable_authorization_engine_does_not_block_local_token_binding",
+        "web-api::app_state::tests::integration_commands_and_replays_have_independent_policy_state",
+        "web-api::wiring::fulfillment_identity::tests::fulfillment_task_authorizations_have_independent_policy_state",
+        "web-api::wiring::offering_data_scope::tests::supply_exception_factory_isolates_each_policy_state_from_caller",
+        "web-api::wiring::sales::tests::handover_target_revalidation_has_fresh_identity_per_call",
+        "web-api::wiring::settlement_data_scope::tests::settlement_command_factory_isolates_each_policy_state_from_caller",
+        "web-api::wiring::supplier_composition_tests::jd_false_delete_keeps_unknown_state_without_reapplying_or_sending_again",
+        "web-api::wiring::supplier_composition_tests::jd_order_notices_preserve_protocol_identity_and_wait_for_application_before_acknowledging",
+        "web-api::wiring::supplier_fulfillment_identity::tests::supplier_fulfillment_checks_have_independent_policy_state"
+      ]
+    },
+    "identity_contracts": [
+      "settlement submit, decision and replay use separate command identities; reviewer options retain caller identity",
+      "supply exceptions, sales handover and import decisions retain original identity creation points",
+      "ordinary fulfillment and customer acceptance task creation and execution use independent identities after original guards",
+      "supplier fulfillment task, handover and investigation stages use separate identities; handover scope and qualification share the same local identity",
+      "integration direct decisions, task actions, completions and replays create independent identities"
+    ],
+    "jd_authorization_contract": "Local binding survives HTTP initialization failure; missing configuration, binding mismatch and remote readiness preserve baseline categories and ordering.",
+    "jd_composition_contract": "Real runtime, registry, protocol and message process are exercised with fake transport/store/applier; original message identity, evidence, application-before-ack ordering and unknown acknowledgement non-replay are asserted.",
+    "baseline_debt": {
+      "rust_size": {
+        "baseline_total": 99,
+        "current_total": 99,
+        "added": [],
+        "removed": [],
+        "changed": []
+      },
+      "organization_scope": {
+        "baseline_count": 3,
+        "current_count": 3,
+        "unchanged": true,
+        "added": [],
+        "removed": []
+      }
+    },
+    "generated_artifacts_comparison": {
+      "command": "git diff --exit-code -- erp-client/lib/permissions.generated.ts erp-client/lib/audit-actions.generated.ts",
+      "exit_code": 0
+    },
+    "limitations": [
+      "Identity construction tests and source review do not constitute real MongoDB unknown-commit fault injection.",
+      "Full Dangaoshushu protocol-to-orchestration composition was not restored; protocol and orchestration Port tests remain separate.",
+      "No integration tests, ignored tests, examples, real MongoDB, supplier, storage or browser acceptance were executed.",
+      "Compilation performance was not remeasured after these behavior fixes."
+    ],
+    "evidence_sha256": {
+      "fmt-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "workspace-check.log": "f0d529cfab0a3c7db47cc507f850887736873b48ad4b8f7af3c21a5be9d543f0",
+      "workspace-clippy.log": "7eda24e45f6bd76f174382049e1f4a9c71e6f6f4c4ffbf88e22d46aabc678c46",
+      "workspace-lib-tests-verified.log": "ed00a64a2309f1f9d8ba8ee63ffcaff66a02495b51eeabf33bc8fedca9dfb40b",
+      "domain-audit-final.log": "7ccb6283a46d8414513f861203badd14f6ec1f1be8ee118f1174e5577fa417fd",
+      "bpm.log": "5b0d90cc8438d3175ac06589a68115ad71651a08c5a4832ea01d2cea439b04b2",
+      "diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "identity-unknown-test.log": "53c6b99ab5aa2b63415ca328eb0c6c409d50b14ad13894580707f14aef6b398b",
+      "test-preservation.json": "80b4cdd181e5335a451c08fd2ccc1c3c1c8f3af4eb023d13421eb80e7947c3fb",
+      "source-comparison.json": "ae2a3adb857bb9dbd1d2d39fe25ce909ba01fa924e6c6204a9a61378ddf5e20e",
+      "backend-source-hashes.json": "896cf035bdfa26384ae705c69e50a8b51af296634bd951cb638430913435182f",
+      "size-final.log": "4cdcab89321c1b5cccab3b3bb340847fc2afe2d377bf716d40cb1db9c58fbfb6",
+      "size-comparison.json": "1c9580422a6a5db53b645ee6c0d3e1e748a568141dd54696247d8e469b344e6f",
+      "org-data-scope-final.log": "cccb22fc592406e37510e33f7871022ab04632745f567db4221e021e79220811",
+      "org-comparison.json": "ad3e800c87848d179f80bee57421a9bbba3c39bdc4389472792b9b59791511c1",
+      "tracked-and-new-diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "scope": "Historical verification of behavior_fix_source_freeze. Current delivery is verified by composition_validation."
+  },
+  "behavior_fix_source_freeze": {
+    "delivery": "current_uncommitted_working_tree",
+    "compared_to_measured_snapshot": "06e2f4ca7a7228e334ddaada30e384b4376b4418",
+    "checked_backend_files": 3885,
+    "changed_rust_files": 62,
+    "added_rust_files": 5,
+    "removed_backend_files": 0,
+    "all_rust_sources_identical_to_measured_snapshot": false,
+    "manifest_changes_since_initial_delivery": false,
+    "hash_manifest": "/tmp/erp-crate-behavior-fix/backend-source-hashes.json",
+    "hash_manifest_sha256": "896cf035bdfa26384ae705c69e50a8b51af296634bd951cb638430913435182f",
+    "comparison": "/tmp/erp-crate-behavior-fix/source-comparison.json"
+  },
+  "composition_validation": {
+    "status": "passed_with_unchanged_baseline_debt",
+    "evidence_root": "/tmp/erp-crate-composition-fix",
+    "environment": {
+      "cwd": "backend",
+      "CARGO_TARGET_DIR": "/tmp/erp-crate-migration-target-baseline",
+      "CARGO_BUILD_JOBS": 4,
+      "CARGO_INCREMENTAL": 0,
+      "unset": [
+        "ERP_TEST_MONGO_URI"
+      ],
+      "locked": true,
+      "offline": true
+    },
+    "required_gates": [
+      {
+        "command": "cargo fmt --all -- --check",
+        "exit_code": 0,
+        "log": "fmt-check.log"
+      },
+      {
+        "command": "cargo check --workspace --locked --offline",
+        "exit_code": 0,
+        "log": "workspace-check.log"
+      },
+      {
+        "command": "cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings",
+        "exit_code": 0,
+        "log": "workspace-clippy.log"
+      },
+      {
+        "command": "cargo test --workspace --lib --locked --offline --no-fail-fast",
+        "exit_code": 0,
+        "log": "workspace-lib-tests.log"
+      },
+      {
+        "command": "./scripts/check-domain-boundaries.sh --cutover",
+        "exit_code": 0,
+        "log": "domain-boundaries.log",
+        "note": "Includes the audit boundary subgate."
+      },
+      {
+        "command": "PYTHONDONTWRITEBYTECODE=1 ./scripts/check-bpm-boundaries.sh",
+        "exit_code": 0,
+        "log": "bpm-boundaries.log"
+      },
+      {
+        "command": "git diff --exit-code -- erp-client/lib/permissions.generated.ts erp-client/lib/audit-actions.generated.ts",
+        "exit_code": 0,
+        "log": "generated-artifacts.log"
+      },
+      {
+        "command": "git diff --check",
+        "exit_code": 0,
+        "log": "diff-check.log"
+      },
+      {
+        "command": "GIT_INDEX_FILE=<temporary review index> git diff --cached --check HEAD",
+        "exit_code": 0,
+        "log": "tracked-and-new-diff-check.log",
+        "scope": "Only the 13 changed/added Rust files and two acceptance documents are added to the temporary index; the real index is unchanged."
+      }
+    ],
+    "affected_library_tests": {
+      "packages": [
+        "web-api",
+        "erp-fulfillment-execution",
+        "erp-supplier-orders",
+        "erp-supplier-catalog",
+        "erp-connector-dangaoshushu"
+      ],
+      "passed": 927,
+      "failed": 0,
+      "ignored": 0,
+      "log": "affected-lib-tests-final.log"
+    },
+    "unit_tests": {
+      "passed": 7385,
+      "failed": 0,
+      "ignored": 63,
+      "result_groups": 50,
+      "cases": 7448,
+      "before_cases_preserved": 7436,
+      "missing": [],
+      "status_changes": [],
+      "added": [
+        "erp-connector-dangaoshushu::runtime::tests::injected_transport_preserves_configuration_rejection_without_requests",
+        "erp-fulfillment-execution::fulfillment_execution::task::command::tests::next_activity_or_completion_creates_fresh_identity_after_authorization_failure",
+        "erp-fulfillment-execution::fulfillment_execution::task::creation::tests::authorization_failure_cannot_reuse_the_identity_on_the_next_command",
+        "erp-fulfillment-execution::fulfillment_execution::task::creation::tests::creation_failure_stops_every_later_step_and_preserves_executor_and_error",
+        "erp-fulfillment-execution::fulfillment_execution::task::creation::tests::existing_task_replay_does_not_resolve_owner_create_identity_or_write",
+        "erp-fulfillment-execution::fulfillment_execution::task::creation::tests::invalid_or_duplicate_existing_tasks_stop_before_identity_and_writes",
+        "erp-fulfillment-execution::fulfillment_execution::task::creation::tests::task_creation_resolves_owner_before_fresh_identity_and_preserves_frozen_fields",
+        "web-api::wiring::dangaoshushu_composition_tests::callback_rejects_signature_binding_write_and_replay_failures_without_success_ack",
+        "web-api::wiring::dangaoshushu_composition_tests::catalog_callback_uses_real_protocol_query_for_price_attributes_and_parent_availability",
+        "web-api::wiring::dangaoshushu_composition_tests::catalog_protocol_and_orchestration_reject_incomplete_or_mismatched_observations",
+        "web-api::wiring::dangaoshushu_composition_tests::city_callback_preserves_explicit_empty_regions_and_rejects_partial_protocol_mapping",
+        "web-api::wiring::dangaoshushu_composition_tests::original_order_callback_preserves_binding_identity_evidence_and_ack_after_save"
+      ]
+    },
+    "contracts": {
+      "dangaoshushu_receipt": "Real runtime and registry bind the stored connection; real verification and intake preserve encrypted original evidence, order hint, receipt identity and durable success response. Invalid signature/binding, replay mismatch and typed unknown write reject success without automatic replay.",
+      "dangaoshushu_catalog": "Real adapter parses transport responses and executes the actual catalog query. Product, price, availability and city topics preserve source identity, exact quote, specification, quantity, parent availability and explicit empty regions; incomplete, mismatched, stale or partially mapped observations preserve concrete errors.",
+      "dangaoshushu_configuration": "Injected and default transports share original settings validation and reject disabled/invalid settings with the same classification/message before requests.",
+      "w01_creation": "The real production sequence checks existing tasks, resolves ownership, creates identity, authorizes and writes with one Executor. Valid replay creates no identity or write. Every provider failure stops later steps; a later invocation receives a fresh identity.",
+      "w01_activity_completion": "The real production sequence reads, validates frozen responsibility, mutates the entity, creates identity, authorizes and writes. Failed reads/guards/authorization stop before write; later commands create a fresh identity and retain caller Executor and original errors."
+    },
+    "source_changes": {
+      "reference": "/tmp/erp-crate-composition-fix/before-hashes.json",
+      "excluded_generated_files": [
+        "**/__pycache__/**",
+        "*.pyc",
+        "*.pyo"
+      ],
+      "before_files": 3878,
+      "current_files": 3882,
+      "changed": [
+        "backend/apps/web-api/src/wiring/mod.rs",
+        "backend/crates/adapters/erp-connector-dangaoshushu/src/lib.rs",
+        "backend/crates/adapters/erp-connector-dangaoshushu/src/runtime.rs",
+        "backend/crates/adapters/erp-connector-dangaoshushu/src/transport.rs",
+        "backend/crates/orchestration/erp-fulfillment-execution/src/fulfillment_execution/task.rs",
+        "backend/crates/orchestration/erp-fulfillment-execution/src/fulfillment_execution/task/command.rs",
+        "backend/crates/orchestration/erp-supplier-catalog/src/supplier_catalog_callbacks/mod.rs",
+        "backend/crates/orchestration/erp-supplier-catalog/src/supplier_catalog_callbacks/query.rs",
+        "backend/crates/orchestration/erp-supplier-orders/src/supplier_callbacks/mod.rs"
+      ],
+      "added": [
+        "backend/apps/web-api/src/wiring/dangaoshushu_composition_tests.rs",
+        "backend/crates/orchestration/erp-fulfillment-execution/src/fulfillment_execution/task/creation.rs",
+        "backend/crates/orchestration/erp-fulfillment-execution/src/fulfillment_execution/task/fixtures.rs",
+        "backend/crates/orchestration/erp-supplier-orders/src/supplier_callbacks/store.rs"
+      ],
+      "removed": []
+    },
+    "baseline_debt": {
+      "rust_size": {
+        "previous_count": 99,
+        "current_count": 99,
+        "added": [],
+        "removed": [],
+        "exit_code": 1,
+        "oversized_files": 6,
+        "oversized_methods": 93
+      },
+      "organization_scope": {
+        "previous_count": 3,
+        "current_count": 3,
+        "unchanged": true,
+        "added": [],
+        "removed": [],
+        "exit_code": 1
+      }
+    },
+    "limitations": [
+      "Composition replaces network transport and receipt persistence; HTTP signing, real network and Mongo durability are not executed by these composition tests.",
+      "Catalog coverage executes the actual query, not the Mongo worker lease, checkpoint or business application transaction.",
+      "W01 port traces and existing factory-isolation tests do not prove real Mongo rollback, concurrency or unknown-commit recovery; other identity factory call sites do not acquire equivalent phase coverage from this result.",
+      "No integration tests, ignored tests, examples, real MongoDB, supplier, storage or browser acceptance were executed.",
+      "Compilation performance was not remeasured after the behavior and composition changes."
+    ],
+    "evidence_sha256": {
+      "fmt-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "workspace-check.log": "ee6a2ac79e1906027df84bfbe3a1c19956881838e66db8b32e3f046994de3c6d",
+      "workspace-clippy.log": "2c96d9eb70aad2f051f7773e9a1c9a3de92c8a1f24caf6da19c1a3ea0c133680",
+      "workspace-lib-tests.log": "0339e296a7e06cea559801eb4358556f404efb14e5d3571fc9507aeb00d8eb34",
+      "affected-lib-tests-final.log": "dcc38bb13d02b587901560649393a32059e1bffa068cedd013d0a5bdbfb77c32",
+      "domain-boundaries.log": "2e4f2c6d9dce6c207f5f8f714ecca32b46e406c9f607e4f131b681e4ebc06c99",
+      "bpm-boundaries.log": "5b0d90cc8438d3175ac06589a68115ad71651a08c5a4832ea01d2cea439b04b2",
+      "rust-size.log": "82ab1d99f26649ad6d5845bff405f6d13181e810ef33978dcff4d0ddce822bd3",
+      "org-data-scope.log": "ecce5c206a55c159199d9f8de4f5e44679315dc365021d1ee570fdf9ec6b59a4",
+      "generated-artifacts.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test-preservation.json": "f9e98d508d7e5238a4c9b4f586b600fbd32f584acee200ce56b55d3c2173d9bd",
+      "source-comparison.json": "c41ad80cada9be304e0c893a3ada170804341c73c04a6e141f9fcfef918c129d",
+      "backend-source-hashes.json": "4dfba5876d29c42646b9a6ba4b082b901e00b1ac358189ab94e71bc42f62f32b",
+      "before-hashes.json": "923f4c18f9f1afd4b8aa651a317babf08dd9f0efe9eb533fad6fb13c4031dbee",
+      "size-comparison.json": "d5f7fdca594ff967ddb2e428cc8ed82a1421532cc255cd5033d6f0288bfa2aa0",
+      "org-comparison.json": "6a864eaff933a03d4b0f38d7e630736a5b2a5c345201436c34848bcccb0e8a7a",
+      "diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tracked-and-new-diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "semantic_review": {
+    "schema_version": 1,
+    "status": "static_review_complete_with_known_contract_differences_runtime_acceptance_excluded",
+    "date": "2026-11-01",
+    "baseline_commit": "bf53f397dcc70cbe1f0d4a254ccdf0f2f14e0fc8",
+    "candidate": "current_uncommitted_working_tree",
+    "backend_hash_manifest": "/tmp/erp-crate-composition-fix/backend-source-hashes.json",
+    "backend_hash_manifest_sha256": "4dfba5876d29c42646b9a6ba4b082b901e00b1ac358189ab94e71bc42f62f32b",
+    "backend_source_edits": false,
+    "backend_matches_previously_tested_composition_snapshot": true,
+    "confirmed_current_production_business_regressions": 0,
+    "confirmed_contract_or_log_difference_count": 4,
+    "unresolved_static_items_in_declared_scope": [],
+    "scope_limit": "当前生产装配、实际调用者及明确列出的公开 Rust API 输入合同；不构成所有输入、平台与环境的形式化等价证明",
+    "coverage": {
+      "baseline_rust_files": 3553,
+      "candidate_rust_files": 3633,
+      "old_erp_processes_rust_files": 795,
+      "baseline_unmapped": [],
+      "candidate_unreferenced": [],
+      "files_include_tests_build_scripts_and_boundary_fixtures": true,
+      "coverage_count_is_not_behavior_proof": true,
+      "deleted_without_active_production_replacement": [
+        {
+          "baseline": "backend/crates/erp-processes/src/connectors/dangaoshushu/reception.rs",
+          "targets": [],
+          "reports": [
+            "runtime_protocol.inventory.json"
+          ],
+          "disposition": [
+            {
+              "report": "runtime_protocol.inventory.json",
+              "note": "No production call in baseline; handler uses AppState::receive_supplier_callback -> supplier_callbacks::receive. Protocol receipt_id already lives in callback.rs. Legacy module is not mapped to registry."
+            }
+          ]
+        }
+      ],
+      "retained_packages": {
+        "mapped_rust_files": 2745,
+        "byte_equal": 2596,
+        "byte_changed": 149,
+        "repository_files": 496,
+        "repository_byte_equal": 496,
+        "entity_files": 526,
+        "entity_byte_equal": 525,
+        "index_files": 85,
+        "index_byte_equal": 83,
+        "changed_indexes": [
+          "backend/apps/cli/src/indexes.rs",
+          "backend/apps/web-api/src/indexes.rs"
+        ]
+      },
+      "report": "/tmp/erp-crate-semantic-audit/source-coverage.json"
+    },
+    "parallel_reviewers": [
+      {
+        "agent": "/root/audit_approval",
+        "scope": "审批材料、授权生命周期、分派与只读恢复",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/approval.json",
+        "sha256": "5f87d801d22fe99de14a6c39f24819dae73ea2b9d591a1906d83c29381396f61"
+      },
+      {
+        "agent": "/root/audit_fulfillment",
+        "scope": "履约、库存调整、供应履约与逆向流程",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/fulfillment.report.json",
+        "sha256": "e3554a817e865677aa27a137f3e76bb8cda7eae889a862ad378feb170a5bbf55"
+      },
+      {
+        "agent": "/root/audit_commerce",
+        "scope": "销售与采购、责任资格、构造点和辅助提供方",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/commerce.json",
+        "sha256": "9d71644cc62d5b1953aac4c5a653fb92d07afad4a5510182953e46b2b1bfb8c2"
+      },
+      {
+        "agent": "/root/audit_finance",
+        "scope": "财务过账、供应商结算及审批财务能力",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/finance.json",
+        "sha256": "21a5b8cb051161aaac1e07c1e11befb596081cdd5d3435a20607777a6ac4d9c8"
+      },
+      {
+        "agent": "/root/audit_suppliers",
+        "scope": "供应商订单、目录、回调、消息与凭据业务",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/suppliers.json",
+        "sha256": "b63c5686bc6479b12b33100ef53e647e6bf6038558c03d41cf5b692c8c03a024"
+      },
+      {
+        "agent": "/root/audit_runtime_protocol",
+        "scope": "协议适配、后台运行、生命周期和调度",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/runtime_protocol.report.json",
+        "sha256": "5c91291436c721e13365ecd62b5e9e6eaa4aabc11bb8d921155694740b90cf1e"
+      },
+      {
+        "agent": "/root/audit_import_support",
+        "scope": "导入、主档、文件资产、演示数据及装配",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/import_support.json",
+        "sha256": "5509310e3f392a69aa81335e9ec2eb9be744fbc51d4da10614cd494a934c2b56"
+      },
+      {
+        "agent": "/root/audit_application_contract",
+        "scope": "HTTP、CLI、错误转换、依赖与配置合同",
+        "status": "completed",
+        "report": "/tmp/erp-crate-semantic-audit/reports/application_contract.json",
+        "sha256": "8d5171ff5f273cb7fafbc0d7bc8d17f24321b8326c97422315491178a87e1352"
+      }
+    ],
+    "root_review": {
+      "report": "/tmp/erp-crate-semantic-audit/reports/root.json",
+      "sha256": "94cafd9817ffba6dde35f74c8bc41da607ed286aaca4fc9cd4a54943c9afb0cc",
+      "scope": "审计、Executor、只读恢复、保留领域、ownership/organization helper 和剩余装配"
+    },
+    "confirmed_differences": [
+      {
+        "id": "RP-01",
+        "kind": "production_error_log_message",
+        "trigger": "目录采纳批次或目录连接分页的 Mongo 查询失败",
+        "before": "数据库错误：database error: <原因>",
+        "after": "database error: <原因>",
+        "cause": "run_due 返回通用 TaskResult 后，仓储 await? 直接装箱，绕过原流程 Error::from",
+        "current_production_reachable": true,
+        "business_result_regression_confirmed": false,
+        "consumer_boundary": "runner 只输出错误、记录当前 adapter 计数 0 并继续；无生产 downcast、分类重试、worker health 或 XXL 返回结果消费者",
+        "candidate_refs": [
+          "backend/crates/orchestration/erp-supplier-catalog/src/background/supplier_catalog_adoption_adapter.rs:54",
+          "backend/crates/orchestration/erp-supplier-catalog/src/background/supplier_catalog_adapter.rs:208",
+          "backend/crates/platform/background-runtime/src/runner.rs:88"
+        ],
+        "disposition": "confirmed_not_fixed",
+        "recommended_change": "两处查询恢复 .await.map_err(crate::Error::from)?，保留原错误正文且不改变通用 runner 依赖",
+        "evidence": "reports/runtime_protocol.report.json"
+      },
+      {
+        "id": "COM-01",
+        "kind": "public_rust_api_first_error_and_query_order",
+        "trigger": "非法 action=\"bad:action\" 同时账号缺失、失效或查询失败",
+        "before": "先读取并校验账号，再解析权限；失效账号返回 Forbidden(\"账号已失效\")",
+        "after": "先解析权限，返回 Logic(erp_core::Error::LogicError(\"权限只能包含一个冒号分隔符\"))，跳过账号读取",
+        "current_production_reachable": false,
+        "reachability_evidence": "当前 HTTP、审批与 worker 的参数为已核对合法常量或封闭枚举映射",
+        "baseline_refs": [
+          "backend/crates/erp-processes/src/sales_inquiry/access.rs:264"
+        ],
+        "candidate_refs": [
+          "backend/crates/orchestration/erp-order-to-cash/src/sales_inquiry/access.rs:255",
+          "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/responsibility/eligibility.rs:79"
+        ],
+        "disposition": "confirmed_not_fixed",
+        "recommended_change": "通过保持原顺序的窄 helper 恢复账号校验后解析，不重复查询账号",
+        "evidence": "reports/commerce.json"
+      },
+      {
+        "id": "COM-02",
+        "kind": "public_rust_constructor_assembly_precondition",
+        "trigger": "PurchaseOrderProcess::new/with_rbac 或 PurchaseOrderFormalizationProcess::new 未 with_ports 即执行相关命令",
+        "before": "进入原业务校验或执行流程",
+        "after": "新增 Internal(\"采购命令应用能力未装配\") 或 Internal(\"采购应用能力尚未装配\")，部分先于原请求校验",
+        "current_production_reachable": false,
+        "reachability_evidence": "当前生产 handler、审批注册、形式化工厂及内部构造均提供所需 ports",
+        "baseline_refs": [
+          "backend/crates/erp-processes/src/procure_to_pay/mod.rs:87",
+          "backend/crates/erp-processes/src/procure_to_pay/formalization_root.rs:36"
+        ],
+        "candidate_refs": [
+          "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/mod.rs:92",
+          "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/mod.rs:111",
+          "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/mod.rs:148",
+          "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/formalization_root.rs:39",
+          "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/formalization_root.rs:56"
+        ],
+        "disposition": "confirmed_api_contract_change_not_accepted",
+        "recommended_change": "命令构造显式要求 ports，或以类型区分只读与命令入口；明确新的 Rust API 合同",
+        "evidence": "reports/commerce.json"
+      },
+      {
+        "id": "APP-LOG",
+        "kind": "diagnostic_metadata",
+        "trigger": "迁移代码执行未显式指定 target 的 tracing 事件",
+        "before": "默认 target 使用 erp_processes 命名空间及原 file/line",
+        "after": "默认 target、file、line 使用新 crate 和源码位置",
+        "current_production_reachable": true,
+        "business_result_regression_confirmed": false,
+        "repo_filter_result": "默认和 Helm RUST_LOG=info；仓内无 erp_processes= 定向规则",
+        "external_filter_verification": "not_performed",
+        "candidate_refs": [
+          "backend/apps/web-api/src/core/tracing/setup.rs:85",
+          "backend/crates/orchestration/erp-supplier-orders/src/supplier_messages/worker.rs:91"
+        ],
+        "disposition": "confirmed_diagnostic_contract_change_not_accepted",
+        "recommended_change": "登记诊断合同差异；消费旧 target 或路径的外部查询、过滤和告警须同步映射",
+        "evidence": "reports/application_contract.json"
+      }
+    ],
+    "dependency_resolution": {
+      "workspace": {
+        "baseline_third_party": 585,
+        "current_third_party": 585,
+        "added": [],
+        "removed": [],
+        "feature_changes": [],
+        "dependency_changes": []
+      },
+      "selected_packages": {
+        "web-api": {
+          "baseline_packages": 459,
+          "current_packages": 459,
+          "removed": [],
+          "added": [],
+          "feature_changes": []
+        },
+        "cli": {
+          "baseline_packages": 432,
+          "current_packages": 418,
+          "removed": [
+            {
+              "package": "cfg_aliases v0.2.2",
+              "features": []
+            },
+            {
+              "package": "libm v0.2.16",
+              "features": [
+                "arch",
+                "default"
+              ]
+            },
+            {
+              "package": "nix v0.31.3",
+              "features": [
+                "fs"
+              ]
+            },
+            {
+              "package": "num-bigint-dig v0.8.6",
+              "features": [
+                "i128",
+                "prime",
+                "rand",
+                "u64_digit",
+                "zeroize"
+              ]
+            },
+            {
+              "package": "num-iter v0.1.46",
+              "features": []
+            },
+            {
+              "package": "pkcs1 v0.7.5",
+              "features": [
+                "alloc",
+                "pem",
+                "pkcs8",
+                "std",
+                "zeroize"
+              ]
+            },
+            {
+              "package": "rand v0.8.7",
+              "features": [
+                "rand_chacha",
+                "std_rng"
+              ]
+            },
+            {
+              "package": "rand_chacha v0.3.1",
+              "features": []
+            },
+            {
+              "package": "rsa v0.9.10",
+              "features": [
+                "default",
+                "getrandom",
+                "pem",
+                "std",
+                "u64_digit"
+              ]
+            },
+            {
+              "package": "rust_xlsxwriter v0.100.0",
+              "features": [
+                "default"
+              ]
+            },
+            {
+              "package": "spin v0.9.8",
+              "features": [
+                "once"
+              ]
+            },
+            {
+              "package": "typed-path v0.12.4",
+              "features": [
+                "default",
+                "std"
+              ]
+            },
+            {
+              "package": "zip v9.0.5",
+              "features": [
+                "_deflate-any",
+                "deflate",
+                "deflate-flate2",
+                "deflate-flate2-zlib-rs",
+                "deflate-zopfli"
+              ]
+            },
+            {
+              "package": "zlib-rs v0.6.8",
+              "features": [
+                "rust-allocator",
+                "std"
+              ]
+            }
+          ],
+          "added": [],
+          "feature_changes": [
+            {
+              "package": "crypto-common v0.1.7",
+              "baseline": [
+                "std"
+              ],
+              "current": []
+            },
+            {
+              "package": "digest v0.10.7",
+              "baseline": [
+                "alloc",
+                "block-buffer",
+                "const-oid",
+                "core-api",
+                "default",
+                "mac",
+                "oid",
+                "std",
+                "subtle"
+              ],
+              "current": [
+                "alloc",
+                "block-buffer",
+                "const-oid",
+                "core-api",
+                "default",
+                "mac",
+                "oid",
+                "subtle"
+              ]
+            },
+            {
+              "package": "flate2 v1.1.10",
+              "baseline": [
+                "any_impl",
+                "any_zlib",
+                "default",
+                "miniz_oxide",
+                "runtime_detection",
+                "rust_backend",
+                "zlib-rs"
+              ],
+              "current": [
+                "any_impl",
+                "default",
+                "miniz_oxide",
+                "runtime_detection",
+                "rust_backend"
+              ]
+            },
+            {
+              "package": "lazy_static v1.5.0",
+              "baseline": [
+                "spin",
+                "spin_no_std"
+              ],
+              "current": []
+            },
+            {
+              "package": "libc v0.2.186",
+              "baseline": [
+                "default",
+                "extra_traits",
+                "std"
+              ],
+              "current": [
+                "default",
+                "std"
+              ]
+            },
+            {
+              "package": "num-integer v0.1.46",
+              "baseline": [
+                "default",
+                "i128",
+                "std"
+              ],
+              "current": [
+                "default",
+                "std"
+              ]
+            },
+            {
+              "package": "num-traits v0.2.19",
+              "baseline": [
+                "default",
+                "i128",
+                "libm",
+                "std"
+              ],
+              "current": [
+                "default",
+                "i128",
+                "std"
+              ]
+            }
+          ]
+        }
+      },
+      "cli_implementation_effects": [
+        "flate2 zlib-rs -> miniz_oxide；当前 CLI 命令不触达 PDF/ZIP/PNG 编解码入口",
+        "lazy_static spin Once -> std Once；正常初始化值未变，不声明初始化调度相同",
+        "其余 feature 逐项核对到接口、标准库条件或未消费能力，未确认现有 CLI 业务输出偏移"
+      ],
+      "scope": "当前主机目标与默认包选择；不代表所有平台或构建参数",
+      "commands": [
+        "cargo metadata --locked --offline",
+        "cargo tree -p web-api -e features --locked --offline",
+        "cargo tree -p cli -e features --locked --offline"
+      ]
+    },
+    "validation": {
+      "new_builds_or_tests_run": false,
+      "live_services_or_real_acceptance_run": false,
+      "read_only_cargo_metadata_and_tree_run": true,
+      "previous_library_test_results": {
+        "passed": 7385,
+        "failed": 0,
+        "ignored": 63,
+        "scope": "composition_validation; same backend source manifest"
+      },
+      "documentation_checks": {
+        "status": "passed",
+        "report": "/tmp/erp-crate-semantic-audit/document-checks.json",
+        "sha256": "15d9985497400f3abc88c10f17ad7574ef06acd91316eb50ad3b725c6394ed99"
+      }
+    },
+    "runtime_facts_not_proven": [
+      "Mongo 实际回滚、并发、未知提交故障与部署索引",
+      "存量数据及实际权限配置",
+      "供应商真实协议、凭据、网络、S3/OCR/AI 响应",
+      "外部日志过滤和告警配置"
+    ],
+    "report_document": "docs/backend-crate-migration-semantic-review.md",
+    "acceptance_document_section": "docs/backend-crate-migration-acceptance.md#9",
+    "raw_evidence_root": "/tmp/erp-crate-semantic-audit",
+    "evidence_manifest": "/tmp/erp-crate-semantic-audit/evidence-sha256.json",
+    "evidence_manifest_sha256": "4a705d8b1aa436876e35e2b3d2a61fb3d8a0cf9e8e02980d09d4e746e1e547fa",
+    "source_guard": "/tmp/erp-crate-semantic-audit/source-guard.json",
+    "evidence_scope": "Historical pre-correction source snapshot; current dispositions are recorded in semantic_correction_validation."
+  },
+  "composition_source_freeze": {
+    "delivery": "current_uncommitted_working_tree",
+    "compared_to_behavior_fix_hash_manifest": "/tmp/erp-crate-behavior-fix/backend-source-hashes.json",
+    "checked_backend_files": 3882,
+    "excluded_generated_files": [
+      "**/__pycache__/**",
+      "*.pyc",
+      "*.pyo"
+    ],
+    "changed_rust_files_since_behavior_fix": 9,
+    "added_rust_files_since_behavior_fix": 4,
+    "removed_backend_files": 0,
+    "all_rust_sources_identical_to_measured_snapshot": false,
+    "manifest_changes_since_initial_delivery": false,
+    "hash_manifest": "/tmp/erp-crate-composition-fix/backend-source-hashes.json",
+    "hash_manifest_sha256": "4dfba5876d29c42646b9a6ba4b082b901e00b1ac358189ab94e71bc42f62f32b",
+    "comparison": "/tmp/erp-crate-composition-fix/source-comparison.json"
+  },
+  "semantic_correction_validation": {
+    "schema_version": 1,
+    "status": "corrections_verified_new_architecture_contracts_accepted_runtime_acceptance_excluded",
+    "date": "2026-11-01",
+    "baseline_commit": "bf53f397dcc70cbe1f0d4a254ccdf0f2f14e0fc8",
+    "source_manifest": "/tmp/erp-crate-semantic-fix/backend-source-hashes.json",
+    "source_manifest_sha256": "01e2bdcd4745185ee0b30fa32f3807b04c31ad8460800eb8f88b5f835852be55",
+    "source_changes": {
+      "before_manifest": "/tmp/erp-crate-semantic-fix/start-hashes.json",
+      "backend_files": 3882,
+      "changed": [
+        "backend/DEPLOY.md",
+        "backend/apps/web-api/src/approval_dispatch/action_registry.rs",
+        "backend/apps/web-api/src/core/handler/purchase_order/change_draft.rs",
+        "backend/apps/web-api/src/core/handler/purchase_order/change_void.rs",
+        "backend/apps/web-api/src/core/handler/purchase_order/expense.rs",
+        "backend/apps/web-api/src/core/handler/purchase_order/freight.rs",
+        "backend/apps/web-api/src/core/handler/purchase_order/mod.rs",
+        "backend/apps/web-api/src/core/handler/purchase_order/payment_arrangement.rs",
+        "backend/apps/web-api/src/wiring/purchase.rs",
+        "backend/crates/domains/erp-identity/src/service/account_permissions.rs",
+        "backend/crates/orchestration/erp-order-to-cash/src/sales_inquiry/access.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/authorization.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/cancel_approval.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/change/draft.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/change/effect.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/change/submit.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/change/void.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/creation_basis/create.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/draft_edit.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/expense_confirm.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/expense_create.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/formalization_root.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/freight_waiver.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/mod.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/payment_follow_up.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/responsibility/eligibility.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/review.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/source_maintain.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/sourcing_create.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/submission/preparation.rs",
+        "backend/crates/orchestration/erp-procure-to-pay/src/procure_to_pay/void_order.rs",
+        "backend/crates/orchestration/erp-supplier-catalog/src/background/mod.rs",
+        "backend/crates/orchestration/erp-supplier-catalog/src/background/supplier_catalog_adapter.rs",
+        "backend/crates/orchestration/erp-supplier-catalog/src/background/supplier_catalog_adoption_adapter.rs"
+      ],
+      "added": [],
+      "removed": [],
+      "changed_rust_files": 33
+    },
+    "source_guard": {
+      "backend_files": 3882,
+      "checked_protected_files": 764,
+      "protected_files_changed": [],
+      "all_final_backend_hashes_match": true,
+      "all_33_agent_before_and_after_hashes_match": true,
+      "all_62_application_contract_source_hashes_match": true,
+      "generated_permission_and_audit_artifacts_unchanged": true
+    },
+    "architecture": {
+      "old_crates_or_path_aliases_or_facades_added": false,
+      "cargo_manifests_and_lock_changed": false,
+      "domain_owns_account_qualification": "erp-identity",
+      "orchestration_owns_polling_error_conversion": "erp-supplier-catalog",
+      "application_owns_purchase_port_assembly": true,
+      "background_runtime_stays_business_independent": true
+    },
+    "finding_dispositions": [
+      {
+        "id": "RP-01",
+        "status": "fixed",
+        "contract": "两处真实查询均经 polling_result：持久化错误先转本业务 Error，再装箱；保留原消息、分类、typed payload/source 和成功值。",
+        "new_inline_tests": 3,
+        "report": "/tmp/erp-crate-semantic-fix/runtime.json"
+      },
+      {
+        "id": "COM-01",
+        "status": "fixed",
+        "contract": "identity 在调用方 Executor 上查询一次账号并校验有效性后解析动作；typed API 及原 RBAC/策略/角色顺序保持。",
+        "new_inline_tests": 6,
+        "report": "/tmp/erp-crate-semantic-fix/permission-order.json"
+      },
+      {
+        "id": "COM-02",
+        "status": "fixed_by_required_constructor_dependency",
+        "contract": "PurchaseOrderPorts 改为必需 Arc 字段及构造参数；消除缺装配状态和错误；20 个构造点、12 个检查器调用沿用原身份和 Executor。",
+        "public_api_change": "构造函数必须提供 ports，不恢复旧隐式装配或旧无 ports 签名。",
+        "new_inline_tests": 0,
+        "proof": "类型系统、全工作区编译、既有业务测试及独立静态复核",
+        "report": "/tmp/erp-crate-semantic-fix/commerce.json",
+        "independent_review": "/tmp/erp-crate-semantic-fix/commerce-review.json"
+      },
+      {
+        "id": "APP-LOG",
+        "status": "accepted_new_structure_verified",
+        "contract": "target/file/line 使用新所有者与真实位置；45 个事件和 23 个 instrument 属性的级别、消息和参数保持。",
+        "event_sites_matched": 45,
+        "instrument_sites_matched": 23,
+        "repo_default_filter": "info",
+        "repo_old_target_filter_matches": 0,
+        "external_filter_and_alert_verification": "not_executed",
+        "deployment_contract": "backend/DEPLOY.md#日志定位与过滤合同",
+        "report": "/tmp/erp-crate-semantic-fix/application-contract.json"
+      }
+    ],
+    "accepted_structural_contracts": {
+      "explicit_user_choice": "保留新结构，验证并明确新合同（推荐）",
+      "scope": [
+        "日志的新 crate 名及真实源码位置",
+        "CLI 删除未使用依赖及合理 feature 收窄"
+      ],
+      "cli": {
+        "baseline_third_party_packages": 432,
+        "current_third_party_packages": 418,
+        "removed_packages": 14,
+        "narrowed_shared_dependency_features": 7,
+        "current_tree_matches_prior_review": true,
+        "features_no_dev_equal_default": true,
+        "unused_rsa_or_xlsx_dependencies_restored": false,
+        "flate2": "当前 miniz_oxide；现有命令不调用受影响 PDF/ZIP/PNG 编解码",
+        "lazy_static": "标准库 Once；当前仅经 sharded-slab / tracing-subscriber 消费",
+        "scope": "当前主机默认包选择，不证明全部平台、压缩输出或初始化调度一致"
+      }
+    },
+    "validation": {
+      "cargo_environment": {
+        "cwd": "backend",
+        "CARGO_TARGET_DIR": "/tmp/erp-crate-migration-target-baseline",
+        "CARGO_BUILD_JOBS": 4,
+        "CARGO_INCREMENTAL": 0,
+        "unset": [
+          "ERP_TEST_MONGO_URI"
+        ],
+        "locked": true,
+        "offline": true
+      },
+      "cargo_gates": [
+        {
+          "name": "fmt-check",
+          "command": [
+            "cargo",
+            "fmt",
+            "--all",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "seconds": 2.92,
+          "log": "fmt-check.log"
+        },
+        {
+          "name": "workspace-check",
+          "command": [
+            "cargo",
+            "check",
+            "--workspace",
+            "--locked",
+            "--offline"
+          ],
+          "exit_code": 0,
+          "seconds": 28.32,
+          "log": "workspace-check.log"
+        },
+        {
+          "name": "affected-clippy",
+          "command": [
+            "cargo",
+            "clippy",
+            "-p",
+            "erp-identity",
+            "-p",
+            "erp-procure-to-pay",
+            "-p",
+            "erp-order-to-cash",
+            "-p",
+            "erp-supplier-catalog",
+            "-p",
+            "web-api",
+            "-p",
+            "cli",
+            "--all-targets",
+            "--all-features",
+            "--locked",
+            "--offline",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "seconds": 43.03,
+          "log": "affected-clippy.log"
+        },
+        {
+          "name": "affected-lib-tests",
+          "command": [
+            "cargo",
+            "test",
+            "-p",
+            "erp-identity",
+            "-p",
+            "erp-procure-to-pay",
+            "-p",
+            "erp-order-to-cash",
+            "-p",
+            "erp-supplier-catalog",
+            "-p",
+            "web-api",
+            "-p",
+            "cli",
+            "--lib",
+            "--locked",
+            "--offline",
+            "--no-fail-fast"
+          ],
+          "exit_code": 0,
+          "seconds": 84.9,
+          "log": "affected-lib-tests.log"
+        }
+      ],
+      "affected_library_tests": {
+        "packages": [
+          "cli",
+          "erp-identity",
+          "erp-order-to-cash",
+          "erp-procure-to-pay",
+          "erp-supplier-catalog",
+          "web-api"
+        ],
+        "groups": [
+          {
+            "package": "cli",
+            "passed": 12,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 0
+          },
+          {
+            "package": "erp-identity",
+            "passed": 354,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 0
+          },
+          {
+            "package": "erp-order-to-cash",
+            "passed": 87,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 0
+          },
+          {
+            "package": "erp-procure-to-pay",
+            "passed": 139,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 0
+          },
+          {
+            "package": "erp-supplier-catalog",
+            "passed": 152,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 0
+          },
+          {
+            "package": "web-api",
+            "passed": 476,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 0
+          }
+        ],
+        "passed": 1220,
+        "failed": 0,
+        "ignored": 0,
+        "previous_cases": 1211,
+        "current_cases": 1220,
+        "missing": [],
+        "status_changes": [],
+        "added": [
+          "erp-identity::service::account_permissions::tests::account_read_failure_precedes_invalid_action",
+          "erp-identity::service::account_permissions::tests::active_account_rejects_invalid_action_before_rbac",
+          "erp-identity::service::account_permissions::tests::missing_inactive_or_wrong_kind_account_precedes_invalid_action",
+          "erp-identity::service::account_permissions::tests::typed_permissions_are_forwarded_without_reparsing_or_replacing_the_slice",
+          "erp-identity::service::account_permissions::tests::valid_actions_keep_permission_order_duplicates_and_policy_revision",
+          "erp-identity::service::account_permissions::tests::valid_actions_preserve_rbac_policy_and_role_failures",
+          "erp-supplier-catalog::background::tests::polling_database_errors_keep_application_message_and_typed_payload",
+          "erp-supplier-catalog::background::tests::polling_results_preserve_successful_values",
+          "erp-supplier-catalog::background::tests::polling_transaction_conflicts_keep_application_class_and_typed_source"
+        ]
+      },
+      "workspace_library_tests_rerun": false,
+      "domain_and_audit_boundaries": {
+        "exit_code": 0,
+        "invocation": "./scripts/check-domain-boundaries.sh --cutover (within org-data-scope gate)",
+        "evidence": "org-data-scope.log",
+        "note": "外层组织范围门禁仍返回 1，原因仅为原 3 项债务。"
+      },
+      "baseline_debt": {
+        "rust_size": {
+          "previous_count": 99,
+          "current_count": 99,
+          "added": [],
+          "removed": [],
+          "changed_size": [],
+          "exit_code": 1
+        },
+        "organization_scope": {
+          "previous_count": 3,
+          "current_count": 3,
+          "unchanged": true,
+          "added": [],
+          "removed": [],
+          "findings": [
+            "[ODS-ADAPTER][整改项] apps/web-api/src/wiring/funds_data_scope.rs: resolve 必须实际调用 DataScopeService 公共解析；类型名/注释不构成接入（9.2.3）",
+            "[ODS-RAW][整改项] crates/orchestration/erp-demo-data/src/demo_master_data/spec.rs: 消费路径携带或解释原始 scope_type/scope_targets；必须接入公共解析（9.2.3/9.5.5）",
+            "[ODS-SAMPLE][整改项] crates/domains/erp-identity/src/service/access_control/resolve.rs: 缺少生产样例结构：\\bScopeResolution\\s*\\{（9.4）"
+          ],
+          "exit_code": 1
+        }
+      },
+      "generated_permission_and_audit_artifacts": {
+        "exit_code": 0,
+        "log": "generated-artifacts.log"
+      },
+      "document_and_diff_checks": {
+        "status": "passed",
+        "report": "/tmp/erp-crate-semantic-fix/final-checks.json",
+        "sha256": "cd40d3c67cf983303b0d191ef39ebae78c29a6fe08bc222d071dc0c8317154c0"
+      }
+    },
+    "execution_exclusions": [
+      "integration tests",
+      "ignored tests",
+      "examples",
+      "real Mongo/supplier/storage/browser acceptance",
+      "deployment or restart"
+    ],
+    "remaining_known_code_corrections": [],
+    "raw_evidence_root": "/tmp/erp-crate-semantic-fix",
+    "evidence_manifest": "/tmp/erp-crate-semantic-fix/evidence-sha256.json",
+    "evidence_manifest_sha256": "943d910b765bf091e77be8c3997556b3ef5bb4676c6f1efc7a260303721a052e",
+    "evidence_scope": "Historical targeted correction verification; current full-workspace results are full_workspace_validation."
+  },
+  "current_validation": "full_workspace_validation",
+  "full_workspace_validation": {
+    "schema_version": 1,
+    "status": "full_offline_gates_passed_runtime_business_acceptance_pending",
+    "date": "2026-11-01",
+    "source_manifest": "/tmp/erp-crate-semantic-fix/backend-source-hashes.json",
+    "source_manifest_sha256": "01e2bdcd4745185ee0b30fa32f3807b04c31ad8460800eb8f88b5f835852be55",
+    "source_guard": {
+      "backend_files_checked": 3882,
+      "source_manifest": "/tmp/erp-crate-semantic-fix/backend-source-hashes.json",
+      "source_manifest_sha256": "01e2bdcd4745185ee0b30fa32f3807b04c31ad8460800eb8f88b5f835852be55",
+      "backend_files_changed_during_validation": [],
+      "generated_files_checked": [
+        "erp-client/lib/permissions.generated.ts",
+        "erp-client/lib/audit-actions.generated.ts"
+      ],
+      "generated_files_changed_during_validation": [],
+      "cargo_lock_changed": false,
+      "production_source_edits": false
+    },
+    "environment": {
+      "cwd": "backend",
+      "CARGO_TARGET_DIR": "/tmp/erp-crate-migration-target-baseline",
+      "CARGO_BUILD_JOBS": 4,
+      "CARGO_INCREMENTAL": 0,
+      "CARGO_NET_OFFLINE": true,
+      "unset": [
+        "ERP_TEST_MONGO_URI"
+      ],
+      "permissions_script": "官方脚本调用 cargo build；强制离线，Cargo.lock 与源码核验无变更"
+    },
+    "cargo_gates": [
+      {
+        "name": "fmt-check",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 3.08,
+        "log": "fmt-check.log"
+      },
+      {
+        "name": "workspace-check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--locked",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "seconds": 0.58,
+        "log": "workspace-check.log"
+      },
+      {
+        "name": "workspace-clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--all-targets",
+          "--all-features",
+          "--locked",
+          "--offline",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 33.3,
+        "log": "workspace-clippy.log"
+      },
+      {
+        "name": "workspace-lib-tests",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--lib",
+          "--locked",
+          "--offline",
+          "--no-fail-fast"
+        ],
+        "exit_code": 0,
+        "seconds": 101.12,
+        "log": "workspace-lib-tests.log"
+      },
+      {
+        "name": "permissions-drift",
+        "command": [
+          "./scripts/check-permissions-drift.sh"
+        ],
+        "exit_code": 0,
+        "seconds": 51.77,
+        "log": "permissions-drift.log"
+      }
+    ],
+    "static_gates": [
+      {
+        "name": "domain-boundaries",
+        "command": [
+          "./scripts/check-domain-boundaries.sh",
+          "--cutover"
+        ],
+        "exit_code": 0,
+        "seconds": 157.01,
+        "log": "domain-boundaries.log"
+      },
+      {
+        "name": "bpm-boundaries",
+        "command": [
+          "./scripts/check-bpm-boundaries.sh"
+        ],
+        "exit_code": 0,
+        "seconds": 8.07,
+        "log": "bpm-boundaries.log"
+      }
+    ],
+    "workspace_library_tests": {
+      "reference_log": "/tmp/erp-crate-composition-fix/workspace-lib-tests.log",
+      "result_groups": 50,
+      "groups": [
+        {
+          "package": "aliyun-ocr",
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "application-core",
+          "passed": 43,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "background-runtime",
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "bpm",
+          "passed": 117,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "cli",
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "config",
+          "passed": 38,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "entity-core",
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "entity-macros",
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-approval-runtime",
+          "passed": 31,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-audit",
+          "passed": 64,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-catalog",
+          "passed": 291,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-connector-dangaoshushu",
+          "passed": 78,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-connector-jd-vop",
+          "passed": 105,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-contract",
+          "passed": 110,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-contract-recognition",
+          "passed": 35,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-core",
+          "passed": 69,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-customer",
+          "passed": 90,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-data-import",
+          "passed": 221,
+          "failed": 0,
+          "ignored": 1,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-demo-data",
+          "passed": 55,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-file-assets",
+          "passed": 15,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-finance",
+          "passed": 514,
+          "failed": 0,
+          "ignored": 13,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-finance-posting",
+          "passed": 100,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-fulfillment",
+          "passed": 163,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-fulfillment-execution",
+          "passed": 89,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-identity",
+          "passed": 354,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-import",
+          "passed": 79,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-integration",
+          "passed": 181,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-inventory",
+          "passed": 120,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-master-data",
+          "passed": 16,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-order-to-cash",
+          "passed": 87,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-party",
+          "passed": 112,
+          "failed": 0,
+          "ignored": 2,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-procure-to-pay",
+          "passed": 139,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-procurement",
+          "passed": 392,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-read-models",
+          "passed": 660,
+          "failed": 0,
+          "ignored": 35,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-returns",
+          "passed": 102,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-reverse-flow",
+          "passed": 77,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-sales",
+          "passed": 462,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-supplier",
+          "passed": 180,
+          "failed": 0,
+          "ignored": 4,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-supplier-catalog",
+          "passed": 152,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-supplier-orders",
+          "passed": 135,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-supply",
+          "passed": 615,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-supply-settlement",
+          "passed": 36,
+          "failed": 0,
+          "ignored": 5,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-support",
+          "passed": 159,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-warehouse",
+          "passed": 48,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "erp-workflow",
+          "passed": 463,
+          "failed": 0,
+          "ignored": 3,
+          "filtered_out": 0
+        },
+        {
+          "package": "id-generator",
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "persistence-core",
+          "passed": 44,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "storage",
+          "passed": 27,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "test-support",
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        },
+        {
+          "package": "web-api",
+          "passed": 476,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 0
+        }
+      ],
+      "passed": 7394,
+      "failed": 0,
+      "ignored": 63,
+      "before_cases": 7448,
+      "after_cases": 7457,
+      "missing": [],
+      "status_changes": [],
+      "added": [
+        "erp-identity::service::account_permissions::tests::account_read_failure_precedes_invalid_action",
+        "erp-identity::service::account_permissions::tests::active_account_rejects_invalid_action_before_rbac",
+        "erp-identity::service::account_permissions::tests::missing_inactive_or_wrong_kind_account_precedes_invalid_action",
+        "erp-identity::service::account_permissions::tests::typed_permissions_are_forwarded_without_reparsing_or_replacing_the_slice",
+        "erp-identity::service::account_permissions::tests::valid_actions_keep_permission_order_duplicates_and_policy_revision",
+        "erp-identity::service::account_permissions::tests::valid_actions_preserve_rbac_policy_and_role_failures",
+        "erp-supplier-catalog::background::tests::polling_database_errors_keep_application_message_and_typed_payload",
+        "erp-supplier-catalog::background::tests::polling_results_preserve_successful_values",
+        "erp-supplier-catalog::background::tests::polling_transaction_conflicts_keep_application_class_and_typed_source"
+      ]
+    },
+    "workspace_library_tests_rerun": true,
+    "baseline_debt": {
+      "source": "semantic_correction_validation.validation.baseline_debt",
+      "same_source_manifest": true,
+      "rust_size": {
+        "violations": 99,
+        "oversized_files": 6,
+        "oversized_functions": 93,
+        "new_or_worsened": 0,
+        "gate_passed": false
+      },
+      "organization_scope": {
+        "blockers": 3,
+        "new": 0,
+        "gate_passed": false
+      },
+      "rerun_this_phase": false,
+      "reason": "全部 backend 文件与逐项对照时相同；沿用该版本的债务证据，不重复运行。"
+    },
+    "integration_tests_run": false,
+    "ignored_tests_executed": false,
+    "examples_executed": false,
+    "document_diff_checks": {
+      "status": "passed",
+      "report": "/tmp/erp-crate-final-validation/final-checks.json",
+      "sha256": "16b3c0fcbb20ac77802bac01a4edf0b83aaa30dd01ab089c82ae6909a3afd8fb"
+    },
+    "raw_evidence_root": "/tmp/erp-crate-final-validation",
+    "evidence_manifest": "/tmp/erp-crate-final-validation/evidence-sha256.json",
+    "evidence_manifest_sha256": "392b5a639035ca55ad3ec1ccf80ddb2b8130b0d42a7240074f32d06f5d7d093a"
+  },
+  "runtime_acceptance_readiness": {
+    "status": "blocked_selected_existing_test_environment_has_no_accessible_erp_target",
+    "user_selected": "使用现有 ERP 测试环境",
+    "checked_at_utc": "2026-11-01T15:21:39.430469+00:00",
+    "context": "cls-edji3o1g-100035608984-context-default",
+    "namespace": "test",
+    "namespace_status": "Active",
+    "api_url": "https://erp-api-test.fushangyunfu.com",
+    "web_url": "https://erp-test.fushangyunfu.com",
+    "erp_deployments": [],
+    "erp_image_pods": [],
+    "erp_services": [],
+    "erp_domain_ingresses": [],
+    "public_health_probes": [
+      {
+        "target": "api-health",
+        "url": "https://erp-api-test.fushangyunfu.com/health",
+        "http_status": "000",
+        "exit_code": 35,
+        "error": "curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to erp-api-test.fushangyunfu.com:443"
+      },
+      {
+        "target": "web-root",
+        "url": "https://erp-test.fushangyunfu.com/",
+        "http_status": "000",
+        "exit_code": 35,
+        "error": "curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to erp-test.fushangyunfu.com:443"
+      }
+    ],
+    "candidate_runtime_identity_verified": false,
+    "business_acceptance_executed": false,
+    "database_or_supplier_business_operations_executed": false,
+    "production_namespace_inspected": false,
+    "deployment_or_restart_performed": false,
+    "required_information": "实际现有 ERP 测试 API 地址，或正确集群 context / namespace；确认目标后核对运行版本、验收账号及允许写入的数据范围。",
+    "interpretation": "当前配置集群及仓库登记目标不可用于 ERP 验收；不推定所有其他环境不存在，不将连通性失败登记为业务回归。",
+    "readiness_report": "/tmp/erp-crate-final-validation/environment-readiness.json",
+    "minimum_acceptance_checklist": [
+      {
+        "id": "ENV-01",
+        "prerequisite": "Actual test target supplied by user.",
+        "actions": [
+          "Pin exact context/namespace and test URLs.",
+          "Record running API/Worker image digests, erp/release and config-revision; correlate a successful artifact with the frozen candidate source.",
+          "GET API /health and management root."
+        ],
+        "pass_criteria": [
+          "ERP workload exists and is reachable.",
+          "Running candidate identity is proven; API/Worker digest agreement established when Worker exists."
+        ],
+        "write_scope": "Read-only deployment metadata and HTTP reachability.",
+        "current_status": "blocked_no_ERP_target"
+      },
+      {
+        "id": "AUTH-01",
+        "prerequisite": "ENV-01 and existing authorized test operator accounts; account credentials remain out of reports.",
+        "actions": [
+          "Log in with a permitted test operator and load their identity/role/person lists.",
+          "Call a protected read without authentication.",
+          "Use a second existing restricted test operator to attempt an approved out-of-scope read."
+        ],
+        "pass_criteria": [
+          "Login and response envelope match the frozen HTTP contract.",
+          "Unauthorized/forbidden behavior and message classification remain stable.",
+          "Restricted operator never receives objects outside the established test data scope."
+        ],
+        "write_scope": "Login/session/audit records only; no supplier or object-storage actions.",
+        "current_status": "not_run_blocked_by_ENV-01"
+      },
+      {
+        "id": "DATA-01",
+        "prerequisite": "ENV-01, AUTH-01, and one designated existing test customer/entity owned by the acceptance scope.",
+        "actions": [
+          "Load one permitted detail and a stable paged list; record business ID and version only.",
+          "Attempt the same read with the restricted account."
+        ],
+        "pass_criteria": [
+          "Permitted response preserves exact IDs, required fields and decimal serialization.",
+          "Scope denial does not expose the record."
+        ],
+        "write_scope": "Business read-only; normal application audit may write internally.",
+        "current_status": "not_run_blocked_by_ENV-01"
+      },
+      {
+        "id": "COMMAND-01",
+        "prerequisite": "ENV-01, AUTH-01 and explicitly designated internal test data; manual fulfillment path with real supplier dispatch disabled for the case.",
+        "actions": [
+          "Adapt the existing flow-14 purchase rejection/resubmission scenario as a manual or API acceptance case against task-owned records.",
+          "Reject a draft through the approved test role, edit and resubmit the original purchase order.",
+          "Repeat the same supported idempotent action with the original operation identity, then verify the original record through API/UI."
+        ],
+        "pass_criteria": [
+          "Original document number/ID is retained across rejection/edit/resubmission.",
+          "Approved state and internal payable consequences match the expected contract.",
+          "Replay does not create duplicate orders, ledger facts or supplier requests; version conflicts preserve original data."
+        ],
+        "write_scope": "Task-owned test database records only; no supplier orders, transfers or real funding actions.",
+        "reference": "e2e/tests/flow-14-purchase-order-rejection.spec.ts:308",
+        "execution_constraint": "Use the case definition only; do not launch run-flow.sh/reset scripts against the remote environment.",
+        "current_status": "not_run_environment_and_test_data_ownership_pending"
+      },
+      {
+        "id": "PERMISSION-01",
+        "prerequisite": "ENV-01, task-owned disposable role/account records and existing administrator authorization.",
+        "actions": [
+          "Adapt flow-24 role/person save and permission revocation case using acceptance-specific role/account identities.",
+          "Revoke access, verify the old session/request cannot expand customer scope, and restore only the task-owned policy state."
+        ],
+        "pass_criteria": [
+          "Role/person saves preserve intended permissions.",
+          "Revocation blocks subsequent protected reads/actions without broadening DataScope.",
+          "No shared user role or existing unrelated policy is altered."
+        ],
+        "write_scope": "Task-owned test role/account/policy and audit records only.",
+        "reference": "e2e/tests/flow-24-identity-workflow-admin.spec.ts:97",
+        "current_status": "not_run_environment_and_policy_ownership_pending"
+      },
+      {
+        "id": "SEPARATE-ACCEPTANCE",
+        "prerequisite": "Explicitly verified test-only provider/S3/account/job ownership and controlled operational scope.",
+        "actions": [
+          "Treat uploads, import/background completion, worker drain/restart recovery, XXL callbacks, live provider authorization/messages/orders/funds as separate cases."
+        ],
+        "pass_criteria": [
+          "Record actual side effects and original recovery identities; do not substitute offline tests or API-only E2E results."
+        ],
+        "write_scope": "Potentially external; excluded from initial minimum slice.",
+        "current_status": "not_ready_provider_and_operational_boundaries_unknown"
+      }
+    ],
+    "scope": "Historical remote test deployment discovery; current authorized execution uses local_runtime_acceptance.",
+    "superseded_as_execution_target_by": "local_runtime_acceptance"
+  },
+  "current_runtime_validation": "local_runtime_acceptance",
+  "local_runtime_acceptance": {
+    "schema_version": 1,
+    "status": "partially_verified_preexisting_approval_replay_defect",
+    "checked_at_utc": "2026-11-01T15:58:58.269913+00:00",
+    "authorization": "User explicitly authorized local ERP database acceptance; targeted live Mongo tests and isolated local service execution are within this scope.",
+    "source_guard": {
+      "manifest": "/tmp/erp-crate-semantic-fix/backend-source-hashes.json",
+      "manifest_sha256": "01e2bdcd4745185ee0b30fa32f3807b04c31ad8460800eb8f88b5f835852be55",
+      "files_checked": 3882,
+      "changed_files": [],
+      "web_api_sha256": "4850c74155edbf3373745eb9fb99dd29d9a0afb810798c885b184c64191626b3",
+      "source_database_backup_sha256": "4d76f2787a3084f5d846fabc712bb2fe13de6a4b25b9298265c8518ff4be0b57"
+    },
+    "candidate_unchanged": true,
+    "environment": {
+      "source": "loopback:27017 / rs0 / erp",
+      "source_collections": 277,
+      "source_documents": 301098,
+      "backup_bytes": 28973642,
+      "original_instance_blocker": "OutOfDiskSpace: approximately 255 MiB free, index creation requires 500 MiB",
+      "restore_successful_documents": 301098,
+      "restore_failed_documents": 0,
+      "business_target": "loopback:29017 / erp_crate_acceptance / erp; isolated copy of authorized local ERP",
+      "api": "loopback:19001; candidate server binds 0.0.0.0",
+      "fault_target": "loopback:29018 / erp_crate_faults; independent empty test process",
+      "real_supplier_connectors_enabled": false,
+      "full_worker_started": false,
+      "storage": "Local S3 HTTP test double with actual uploaded PNG and file asset; real S3/signature verification not accepted",
+      "source_config_modified": false
+    },
+    "real_mongo_library_tests": {
+      "passed": 5,
+      "failed": 0,
+      "selected_ignored_tests": true,
+      "integration_targets_run": false,
+      "examples_run": false,
+      "tests": [
+        {
+          "id": "TX01",
+          "test": "import_apply::batch::tests::persist_rolls_back_when_later_row_cas_fails",
+          "argv": [
+            "/tmp/erp-crate-migration-target-baseline/debug/build/erp-data-import/33ae59ffc82ba764/out/erp_data_import-33ae59ffc82ba764",
+            "import_apply::batch::tests::persist_rolls_back_when_later_row_cas_fails",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit_code": 0,
+          "passed": true,
+          "seconds": 0.375,
+          "binary_sha256": "cbcc0478a53af3ff9e693dca6f476e939b664a99979315181321361803633f02",
+          "log": "/tmp/erp-crate-local-acceptance/TX01.log"
+        },
+        {
+          "id": "TX02",
+          "test": "purchase_center::procurement_responsibility::repository::isolation_tests::transaction_reuses_caller_executor_read_your_writes",
+          "argv": [
+            "/tmp/erp-crate-migration-target-baseline/debug/build/erp-read-models/70e67a6674bf8237/out/erp_read_models-70e67a6674bf8237",
+            "purchase_center::procurement_responsibility::repository::isolation_tests::transaction_reuses_caller_executor_read_your_writes",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit_code": 0,
+          "passed": true,
+          "seconds": 6.514,
+          "binary_sha256": "bc7d088d1e66cb568c924970a20b25916a00c1745feea62e8666bc066657beec",
+          "log": "/tmp/erp-crate-local-acceptance/TX02.log"
+        },
+        {
+          "id": "TX03",
+          "test": "repository::receivable::snapshot::tests::historical_and_approval_batch_writes_conserve_and_rollback",
+          "argv": [
+            "/tmp/erp-crate-migration-target-baseline/debug/build/erp-finance/13ee38f967aeaf3c/out/erp_finance-13ee38f967aeaf3c",
+            "repository::receivable::snapshot::tests::historical_and_approval_batch_writes_conserve_and_rollback",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit_code": 0,
+          "passed": true,
+          "seconds": 1.171,
+          "binary_sha256": "e94caa70504fcc7ceac3846e87892f582cf83d1fadf329c0abcf1a9323212245",
+          "log": "/tmp/erp-crate-local-acceptance/TX03.log"
+        },
+        {
+          "id": "TX04_OPTIONAL",
+          "test": "repository::payable::account::tests::batch_settlement_rejected_rolls_back_whole_transaction",
+          "argv": [
+            "/tmp/erp-crate-migration-target-baseline/debug/build/erp-finance/13ee38f967aeaf3c/out/erp_finance-13ee38f967aeaf3c",
+            "repository::payable::account::tests::batch_settlement_rejected_rolls_back_whole_transaction",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit_code": 0,
+          "passed": true,
+          "seconds": 1.006,
+          "binary_sha256": "e94caa70504fcc7ceac3846e87892f582cf83d1fadf329c0abcf1a9323212245",
+          "log": "/tmp/erp-crate-local-acceptance/TX04_OPTIONAL.log"
+        },
+        {
+          "id": "TX05_OPTIONAL",
+          "test": "repository::payable::account::tests::concurrent_batch_settlement_never_exceeds_open_balance",
+          "argv": [
+            "/tmp/erp-crate-migration-target-baseline/debug/build/erp-finance/13ee38f967aeaf3c/out/erp_finance-13ee38f967aeaf3c",
+            "repository::payable::account::tests::concurrent_batch_settlement_never_exceeds_open_balance",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit_code": 0,
+          "passed": true,
+          "seconds": 1.179,
+          "binary_sha256": "e94caa70504fcc7ceac3846e87892f582cf83d1fadf329c0abcf1a9323212245",
+          "log": "/tmp/erp-crate-local-acceptance/TX05_OPTIONAL.log"
+        }
+      ],
+      "owned_databases_cleaned": 5,
+      "remaining_owned_databases": [],
+      "initial_original_instance_attempt": "TX01 passed; TX02 failed before business assertion due to OutOfDiskSpace; preserved separately"
+    },
+    "transaction_fault_and_concurrency_probes": {
+      "passed": true,
+      "cases": [
+        {
+          "callbacks": 1,
+          "case": "normal",
+          "commit_commands": 1,
+          "insert_commands": 1,
+          "passed": true,
+          "persisted_rows": 1,
+          "same_session_and_transaction": true,
+          "unknown_commit_failures": 0
+        },
+        {
+          "callbacks": 1,
+          "case": "two_unknown_commits",
+          "commit_commands": 3,
+          "insert_commands": 1,
+          "passed": true,
+          "persisted_rows": 1,
+          "same_session_and_transaction": true,
+          "unknown_commit_failures": 2
+        },
+        {
+          "callbacks": [
+            1,
+            1
+          ],
+          "case": "version_race",
+          "distinct_sessions": true,
+          "failed_transactions": 1,
+          "loser_kind": "transient_transaction_conflict",
+          "passed": true,
+          "successful_transactions": 1,
+          "version": 1,
+          "winner": "right"
+        }
+      ],
+      "production_entrypoint": "/Users/huangjiajiang/Development/erp/backend/crates/foundation/persistence-core/src/transaction.rs",
+      "failpoint_disabled": true,
+      "database_dropped": true,
+      "final_120_second_unknown_timeout_tested": false,
+      "scope_limit": "Real server-labelled errors with the production transaction helper; does not establish post-commit network acknowledgement loss or full business receipt recovery after final timeout.",
+      "reference": "https://github.com/mongodb/mongo/wiki/The-failCommand-fail-point"
+    },
+    "http_contracts": {
+      "smoke": [
+        {
+          "case": "health",
+          "http": 200,
+          "expected_http": 200,
+          "status_match": true,
+          "success": true,
+          "envelope_status": 200,
+          "message": "OK"
+        },
+        {
+          "case": "anonymous_profile",
+          "http": 401,
+          "expected_http": 401,
+          "status_match": true,
+          "success": false,
+          "envelope_status": 401,
+          "message": "登录状态已失效，请重新登录"
+        },
+        {
+          "case": "invalid_token",
+          "http": 401,
+          "expected_http": 401,
+          "status_match": true,
+          "success": false,
+          "envelope_status": 401,
+          "message": "登录状态已失效，请重新登录"
+        },
+        {
+          "case": "wrong_password",
+          "http": 401,
+          "expected_http": 401,
+          "status_match": true,
+          "success": false,
+          "envelope_status": 401,
+          "message": "登录状态已失效，请重新登录"
+        },
+        {
+          "case": "sales_forbidden_admins",
+          "http": 403,
+          "expected_http": 403,
+          "status_match": true,
+          "success": false,
+          "envelope_status": 403,
+          "message": "缺少功能权限：admin:list，请联系管理员授权后重试"
+        },
+        {
+          "case": "missing_order",
+          "http": 404,
+          "expected_http": 404,
+          "status_match": true,
+          "success": false,
+          "envelope_status": 404,
+          "message": "销售单不存在或无权查看，请刷新后重新选择"
+        }
+      ],
+      "queries": [
+        {
+          "path": "/admin/purchase-orders",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null
+        },
+        {
+          "path": "/admin/sales-orders",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 6,
+          "message": null
+        },
+        {
+          "path": "/admin/suppliers",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null
+        },
+        {
+          "path": "/admin/supplier-offerings",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null
+        },
+        {
+          "path": "/admin/receivable-accounts",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 5,
+          "message": null
+        },
+        {
+          "path": "/admin/payable-accounts",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null
+        },
+        {
+          "path": "/admin/products",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null
+        },
+        {
+          "path": "/admin/warehouses",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 6,
+          "message": null
+        },
+        {
+          "path": "/admin/legacy-import-batches",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 0,
+          "message": null
+        },
+        {
+          "path": "/admin/integration/error-tasks",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null
+        },
+        {
+          "path": "/admin/deliveries",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null
+        },
+        {
+          "path": "/admin/service-fulfillments",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 0,
+          "message": null
+        },
+        {
+          "path": "/admin/work-items",
+          "http": 200,
+          "success": true,
+          "response_kind": "dict",
+          "items_returned": 10,
+          "message": null,
+          "query": "scope=mine&page=1&page_size=10&timezone=Asia%2FShanghai"
+        }
+      ],
+      "query_passed": 13,
+      "identity": {
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "new active identity discovered uniquely",
+            "passed": true,
+            "actual": null
+          },
+          {
+            "name": "new identity original session works",
+            "passed": true,
+            "actual": null
+          },
+          {
+            "name": "only target inspected as suspended",
+            "passed": true,
+            "actual": null
+          },
+          {
+            "name": "GET /account/profile expected rejection",
+            "passed": true,
+            "actual": {
+              "status": 401,
+              "success": false,
+              "code": "UNAUTHENTICATED"
+            }
+          },
+          {
+            "name": "POST /login expected rejection",
+            "passed": true,
+            "actual": {
+              "status": 401,
+              "success": false,
+              "code": "UNAUTHENTICATED"
+            }
+          }
+        ],
+        "owned_account_suspended": true,
+        "existing_accounts_or_roles_modified": false
+      }
+    },
+    "commerce": {
+      "status": "happy_path_and_purchase_replay_passed_approval_replay_failed",
+      "run_id": "ca-20261101T154903Z-07ec69",
+      "created_ids": {
+        "customer_id": "7fcb1b3cd03e41ca9736caf4fcc80a44",
+        "sales_order_id": "d0d00618413b49d3aadea5669e495546",
+        "sales_order_no": "ca-20261101T154903Z-07ec69-S",
+        "sales_line_ids": [
+          "2942ee26d7ee45dd87a461703cfad05e"
+        ],
+        "approval_task_ids": [
+          "8978c6f98e434c0eb864bb534ecfe952",
+          "836cf8deb4f14c60ae78b6094f409b4f"
+        ],
+        "approval_instance_ids": [
+          "1f9109e9ed8547bea66e29cf805d0c05",
+          "90dd01aad7df4ac09dd301692b528471"
+        ],
+        "sales_revision_id": "6daa675dd4b04ae89c0c8cbc34f3454e",
+        "purchase_order_id": "caf83c2c509948378227c65e099c386b",
+        "purchase_order_no": "PO-caf83c2c509948378227c65e099c386b",
+        "purchase_submission_id": "474891e0124447b5accce69e674aa610",
+        "purchase_revision_id": "79b503465511493a90652b1c857ef1e5",
+        "service_fulfillment_ids": [
+          "22e84a0988ff4f09893c060c547d96f7"
+        ]
+      },
+      "pre_failure_assertions_passed": 21,
+      "closeout_assertions_passed": 13,
+      "sales_gross": "200.00",
+      "purchase_gross": "120.00",
+      "payable_open": "120.00",
+      "persisted_facts": {
+        "sales_order": {
+          "id": "d0d00618413b49d3aadea5669e495546",
+          "commercial_status": "EFFECTIVE",
+          "current_revision_id": "6daa675dd4b04ae89c0c8cbc34f3454e"
+        },
+        "purchase_order": {
+          "id": "caf83c2c509948378227c65e099c386b",
+          "status": "EFFECTIVE",
+          "current_revision_id": "79b503465511493a90652b1c857ef1e5",
+          "current_submission_id": "474891e0124447b5accce69e674aa610"
+        },
+        "sales_revisions": 1,
+        "purchase_revisions": 1,
+        "purchase_submission_statuses": {
+          "SUPERSEDED": 1,
+          "APPROVED": 1
+        },
+        "service_fulfillments": 1,
+        "payable_accounts": [
+          {
+            "_id": "6ae76061dc574a3bf8ae483f",
+            "id": "24de01a2d1964b78bfbe9ad18b086e19",
+            "gross_total": {
+              "$numberDecimal": "120.00"
+            },
+            "settled_total": {
+              "$numberDecimal": "0"
+            },
+            "open_total": {
+              "$numberDecimal": "120.00"
+            },
+            "purchase_revision_id": "79b503465511493a90652b1c857ef1e5"
+          }
+        ],
+        "supplier_api_orders_for_purchase": 0,
+        "supplier_fulfillments_for_purchase": 0
+      },
+      "post_terminal_purchase_replay": "closeout_passed_approval_replay_still_failed",
+      "new_business_records_during_closeout": 0,
+      "approval_retry_failure_mutated_business_facts": false
+    },
+    "findings": [
+      {
+        "id": "ARP-01",
+        "classification": "confirmed_pre_existing_defect",
+        "migration_regression": false,
+        "script_error": false,
+        "expected": "200 and IDEMPOTENT_REPLAY for the same terminal approval command",
+        "actual": "404 NOT_FOUND after successful 200 APPLIED APPROVED",
+        "request_sha256": "58a5f1f0f9a722fa8aa3313d8cae3a4bf462165b6ed25a43c50dd958feaba6bd",
+        "root_cause": "新写收据 scope_id 是当前 decision_identity 生成的 v3:<SHA-256>，终态回放却在 verify_decision_receipt_runtime_identity 中无条件要求 scope_id 等于原始 execution_id。该拒绝发生在收据已找到之后、is_current_v3 和 SamePayload 分类之前。有效 V3 收据因此被转成 hidden_not_found，再映射为当前 HTTP 404 文案。",
+        "source": "backend/crates/domains/erp-workflow/src/service/approval/execution/runtime_service/decision_apply.rs:410",
+        "baseline_path": "backend/crates/erp-workflow/src/service/approval/execution/runtime_service/decision_apply.rs:410",
+        "baseline_commit": "bf53f397dcc70cbe1f0d4a254ccdf0f2f14e0fc8",
+        "identical_file_git_blob": "ee7f79d35857129aaaa974d667814487c31644da",
+        "actual_receipt_scope": "v3:8f73040351d0f5f5374bcf041d45f9dc3c1489a9f403f103199821df3d75cfdc",
+        "actual_execution_id": "1ebcd29adc9b45e98882f93a5c388bda",
+        "production_fix_applied": false,
+        "disposition": "Separate existing business defect; runtime approval idempotency acceptance remains failed. Do not alter request identity or expected result to pass migration acceptance."
+      }
+    ],
+    "harness_corrections": {
+      "missing_procurement_supply_price": "Initial sales request returned explicit 422; reused original customer/run/key and added price from actual manual offering revision.",
+      "approval_task_lookup": "Resolved current task through the work-item endpoint; reused original existing sale, no replacement customer or sale.",
+      "production_code_changes": false
+    },
+    "cleanup": {
+      "checked_at_utc": "2026-11-01T15:57:57.608744+00:00",
+      "owned_processes_stopped": [
+        {
+          "pid": 60963,
+          "command": "/tmp/erp-crate-migration-target-baseline/debug/web-api --config-path /tmp/erp-crate-local-acceptance/api-config.toml"
+        },
+        {
+          "pid": 61845,
+          "command": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /tmp/erp-crate-local-acceptance/object-store-stub.py"
+        },
+        {
+          "pid": 60032,
+          "command": "/Volumes/Kingston/erp-e2e-tools/mongodb-macos-aarch64--8.0.30/bin/mongod --dbpath /Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/data --bind_ip 127.0.0.1 --port 29017 --replSet erp_crate_acceptance --logpath /Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/mongo.log --pidfilepath /Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/mongo.pid --fork --wiredTigerCacheSizeGB 0.5"
+        },
+        {
+          "pid": 64116,
+          "command": "/Volumes/Kingston/erp-e2e-tools/mongodb-macos-aarch64--8.0.30/bin/mongod --dbpath /Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/fault-probe/data --bind_ip 127.0.0.1 --port 29018 --replSet erp_crate_faults --logpath /Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/fault-probe/mongo.log --pidfilepath /Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/fault-probe/mongo.pid --fork --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1"
+        }
+      ],
+      "owned_ports_closed": {
+        "19001": true,
+        "19999": true,
+        "29017": true,
+        "29018": true
+      },
+      "owned_data_and_private_credentials_removed": [
+        "/Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/fault-probe/data",
+        "/Volumes/Kingston/erp-e2e/crate_acceptance_20261101t154339/data",
+        "/tmp/erp-crate-local-acceptance/api-config.toml",
+        "/tmp/erp-crate-local-acceptance/mongo-tools.yaml",
+        "/tmp/erp-crate-local-acceptance/http-tokens.private.json"
+      ],
+      "original_erp_collection_set_and_counts_unchanged": true,
+      "original_erp_collections": 277,
+      "original_mongo_primary_still_available": true,
+      "original_erp_database_reset": false,
+      "backup_retained_private": "/tmp/erp-crate-local-acceptance/erp-before.archive.gz",
+      "source_count_check_limit": "Collection identities/counts verified; not a claim of whole database byte equality.",
+      "initial_original_instance_temporary_databases_cleaned": 2,
+      "isolated_library_test_databases_cleaned": 5,
+      "fault_probe_databases_cleaned": 1
+    },
+    "unverified": [
+      "Final persistent unknown commit at the production 120-second bound and business receipt recovery",
+      "Full worker lifecycle, supplier Mongo leases and cursor persistence",
+      "Real JD VOP/Dangaoshushu supplier protocol or business actions",
+      "Real S3 provider and signature enforcement",
+      "External log collection and deployment",
+      "Browser and complete frontend E2E suite"
+    ],
+    "evidence_directory": "/tmp/erp-crate-local-acceptance",
+    "evidence_sha256": {
+      "candidate-source-guard.json": "d95a2b898f02d22d1ca96dff2fbf75830526835ce21128d9e5a6d453d1423a91",
+      "mongo-before.json": "a6e050badd1e455146adf5bae9c1c5f1c6b834ffafbc6805c30663ecd84922c6",
+      "mongo-source-final.json": "24ba9cc0ef7d7e8ccb1ae92a2c4f1362455487138463c1d7662d4e755d2d02ef",
+      "mongo-test-results-original-server.json": "70bbf1a0575992ac3b2331cc559364a24074a2092e04b633180cdd27bf16f482",
+      "mongo-test-results.json": "0a1d82b0a2c8df6916c1451191e6db9235d0cbcab80b38d84ba67c0b56112d53",
+      "tx-harness-result.json": "69597c26d4c09f88f0aaae49fac3b8ede4e59134d20a6775408abdfca44d63d9",
+      "http-smoke-results.json": "8968d990438f7f692ff389922afae6f78c9070c99d2a66bbbf7033502532eac2",
+      "http-query-results.json": "cf121c90273fdc76332c04014e755498d78b0d2d012f42bfb78512e7b8599956",
+      "business-persisted-facts.json": "8ecc290eb51ff34aae90e31af5a3e291093d05e459c7f8983d8d3a6e489fbf6e",
+      "approval-replay-review.json": "b5780fa177753b171f8bb86898833a73c3ddb645d175173f72ffa0b4f87d986b",
+      "approval-replay-persisted-evidence.json": "1d5c92f98df6c9acb69af6c8c6eb5da56cf39ecaf97b2d61fda313fa75e44bfa",
+      "commerce-replay-script-review.json": "7be9bac91f0d3344ebc13b9edd4774152c923faf363cc87c075101f06b668198",
+      "test-evidence-upload.json": "82912021abe798fe31e0b1310b7dd03acf44a5f5018eb368b63bf5052c0f4038",
+      "cleanup-result.json": "21af00bd1699203e21157b870f680b4fb502fdf1f288102e42d7caf7e31530b8",
+      "ca-20261101T154903Z-07ec69-commerce-execute-resume-e1e4a3.json": "9044e8e7ce12dcdc325b37999d97b56c1c4afff03948d2010cf1cf7e7a3ff319",
+      "ca-20261101T154903Z-07ec69-commerce-closeout-0fb03f.json": "28c27df98c4f5f023f9077fa8c361aad56bef14e39cb97d93f434e45d26782ca",
+      "ca-20261101T154924Z-c0e688-identity-execute.json": "623f8d35093f9e9ab700ad5a8d835069a3f0dc0672fbf97f26d1b92fee048d28",
+      "final-source-guard.json": "a680cd0fa2f7ebac2704f9276c5b1ec31a91ad155e205e873512d5c843eb9d2c"
+    },
+    "final_source_guard": {
+      "backend_files_checked": 3882,
+      "changed": [],
+      "added": [],
+      "missing": [],
+      "index_sha256": "3a372c8db0a7e271c944adb1ae9d4da4fc1b55af5d77832d28d68eaa7db158f7",
+      "tracked_index_unchanged": true
+    }
+  }
+}

@@ -2,12 +2,12 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::workflow::work_item_authorization::WorkItemAuthorizationAdapter;
 use erp_read_models::finance::document_files::{BusinessFinanceFiles, FulfillmentPaymentView};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
+use crate::wiring::workflow::work_item_authorization::WorkItemAuthorizationAdapter;
 
 /// 读取当前履约来源的采购付款和申请进度。
 /// # 参数

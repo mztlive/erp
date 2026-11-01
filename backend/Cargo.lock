@@ -736,6 +736,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "background-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1152,13 +1161,16 @@ name = "cli"
 version = "0.1.0"
 dependencies = [
  "application-core",
+ "async-trait",
  "clap",
  "config",
+ "entity-core",
  "erp-audit",
  "erp-catalog",
  "erp-contract",
  "erp-core",
  "erp-customer",
+ "erp-demo-data",
  "erp-finance",
  "erp-fulfillment",
  "erp-identity",
@@ -1166,11 +1178,11 @@ dependencies = [
  "erp-integration",
  "erp-inventory",
  "erp-party",
- "erp-processes",
  "erp-procurement",
  "erp-returns",
  "erp-sales",
  "erp-supplier",
+ "erp-supplier-orders",
  "erp-supply",
  "erp-support",
  "erp-warehouse",
@@ -1734,10 +1746,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "erp-approval-runtime"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bpm",
+ "erp-core",
+ "erp-identity",
+ "erp-read-models",
+ "erp-support",
+ "erp-workflow",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "validator",
+]
+
+[[package]]
 name = "erp-audit"
 version = "0.1.0"
 dependencies = [
  "application-core",
+ "async-trait",
  "entity-core",
  "entity-macros",
  "erp-core",
@@ -1748,6 +1782,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
  "validator",
 ]
 
@@ -1770,6 +1805,53 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "validator",
+]
+
+[[package]]
+name = "erp-connector-dangaoshushu"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "config",
+ "erp-core",
+ "erp-supply",
+ "hex",
+ "hmac 0.13.0",
+ "md5",
+ "reqwest",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.11.0",
+ "subtle",
+ "tokio",
+]
+
+[[package]]
+name = "erp-connector-jd-vop"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.23.1",
+ "chrono",
+ "config",
+ "erp-core",
+ "erp-party",
+ "erp-supply",
+ "hex",
+ "hmac 0.13.0",
+ "md5",
+ "reqwest",
+ "rsa",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -1854,6 +1936,115 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-data-import"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "background-runtime",
+ "base64 0.23.1",
+ "chrono",
+ "entity-core",
+ "erp-audit",
+ "erp-catalog",
+ "erp-contract",
+ "erp-core",
+ "erp-customer",
+ "erp-file-assets",
+ "erp-identity",
+ "erp-import",
+ "erp-inventory",
+ "erp-master-data",
+ "erp-order-to-cash",
+ "erp-party",
+ "erp-procurement",
+ "erp-read-models",
+ "erp-sales",
+ "erp-supplier",
+ "erp-supplier-catalog",
+ "erp-supply",
+ "erp-support",
+ "erp-workflow",
+ "futures-util",
+ "hex",
+ "id-generator",
+ "image",
+ "mongodb",
+ "persistence-core",
+ "regex",
+ "roxmltree 0.21.1",
+ "rust_decimal",
+ "rust_xlsxwriter",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "storage",
+ "test-support",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+ "zip 2.4.2",
+ "zune-jpeg",
+]
+
+[[package]]
+name = "erp-demo-data"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "entity-core",
+ "erp-audit",
+ "erp-catalog",
+ "erp-core",
+ "erp-customer",
+ "erp-identity",
+ "erp-master-data",
+ "erp-party",
+ "erp-procure-to-pay",
+ "erp-procurement",
+ "erp-supplier",
+ "erp-supplier-catalog",
+ "erp-supply",
+ "erp-support",
+ "erp-warehouse",
+ "erp-workflow",
+ "hex",
+ "id-generator",
+ "image",
+ "mongodb",
+ "persistence-core",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "storage",
+ "thiserror 2.0.20",
+ "tokio",
+ "validator",
+ "zune-jpeg",
+]
+
+[[package]]
+name = "erp-file-assets"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "erp-audit",
+ "erp-catalog",
+ "erp-core",
+ "erp-support",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde_json",
+ "thiserror 2.0.20",
+ "validator",
+]
+
+[[package]]
 name = "erp-finance"
 version = "0.1.0"
 dependencies = [
@@ -1880,6 +2071,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-finance-posting"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bpm",
+ "entity-core",
+ "erp-approval-runtime",
+ "erp-audit",
+ "erp-core",
+ "erp-file-assets",
+ "erp-finance",
+ "erp-identity",
+ "erp-party",
+ "erp-procure-to-pay",
+ "erp-procurement",
+ "erp-read-models",
+ "erp-returns",
+ "erp-sales",
+ "erp-supplier",
+ "erp-supply",
+ "erp-support",
+ "erp-workflow",
+ "hex",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "test-support",
+ "thiserror 2.0.20",
+ "tokio",
+ "validator",
+]
+
+[[package]]
 name = "erp-fulfillment"
 version = "0.1.0"
 dependencies = [
@@ -1900,6 +2128,43 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
+name = "erp-fulfillment-execution"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bpm",
+ "entity-core",
+ "erp-approval-runtime",
+ "erp-audit",
+ "erp-core",
+ "erp-file-assets",
+ "erp-finance",
+ "erp-fulfillment",
+ "erp-identity",
+ "erp-integration",
+ "erp-inventory",
+ "erp-party",
+ "erp-procurement",
+ "erp-read-models",
+ "erp-sales",
+ "erp-supplier",
+ "erp-supply",
+ "erp-support",
+ "erp-warehouse",
+ "erp-workflow",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -2000,6 +2265,74 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-master-data"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "entity-core",
+ "erp-audit",
+ "erp-catalog",
+ "erp-contract",
+ "erp-core",
+ "erp-customer",
+ "erp-file-assets",
+ "erp-identity",
+ "erp-party",
+ "erp-supplier",
+ "erp-supply",
+ "erp-support",
+ "erp-warehouse",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "validator",
+]
+
+[[package]]
+name = "erp-order-to-cash"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "background-runtime",
+ "bpm",
+ "erp-approval-runtime",
+ "erp-audit",
+ "erp-catalog",
+ "erp-contract",
+ "erp-core",
+ "erp-customer",
+ "erp-finance",
+ "erp-finance-posting",
+ "erp-identity",
+ "erp-party",
+ "erp-procure-to-pay",
+ "erp-procurement",
+ "erp-read-models",
+ "erp-sales",
+ "erp-supplier",
+ "erp-supplier-catalog",
+ "erp-supply",
+ "erp-support",
+ "erp-workflow",
+ "hex",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "serde_json",
+ "storage",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "erp-party"
 version = "0.1.0"
 dependencies = [
@@ -2025,67 +2358,49 @@ dependencies = [
 ]
 
 [[package]]
-name = "erp-processes"
+name = "erp-procure-to-pay"
 version = "0.1.0"
 dependencies = [
  "application-core",
  "async-trait",
  "base64 0.23.1",
  "bpm",
- "chrono",
  "config",
  "entity-core",
+ "erp-approval-runtime",
  "erp-audit",
  "erp-catalog",
- "erp-contract",
  "erp-core",
- "erp-customer",
+ "erp-file-assets",
  "erp-finance",
  "erp-fulfillment",
+ "erp-fulfillment-execution",
  "erp-identity",
- "erp-import",
- "erp-integration",
  "erp-inventory",
- "erp-party",
  "erp-procurement",
  "erp-read-models",
  "erp-returns",
  "erp-sales",
  "erp-supplier",
+ "erp-supplier-catalog",
+ "erp-supplier-orders",
  "erp-supply",
  "erp-support",
  "erp-warehouse",
  "erp-workflow",
- "futures-util",
  "hex",
- "hmac 0.13.0",
  "id-generator",
- "image",
- "md5",
  "mongodb",
  "persistence-core",
- "regex",
  "reqwest",
- "roxmltree 0.21.1",
- "rsa",
  "rust_decimal",
- "rust_xlsxwriter",
  "serde",
  "serde_json",
- "sha1",
  "sha2 0.11.0",
- "storage",
- "subtle",
  "test-support",
  "thiserror 2.0.20",
  "tokio",
- "tracing",
- "url",
- "uuid",
  "validator",
- "zeroize",
- "zip 2.4.2",
- "zune-jpeg",
 ]
 
 [[package]]
@@ -2182,6 +2497,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-reverse-flow"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "bpm",
+ "entity-core",
+ "erp-approval-runtime",
+ "erp-audit",
+ "erp-core",
+ "erp-customer",
+ "erp-finance",
+ "erp-identity",
+ "erp-procure-to-pay",
+ "erp-procurement",
+ "erp-read-models",
+ "erp-returns",
+ "erp-sales",
+ "erp-supplier",
+ "erp-workflow",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde_json",
+ "test-support",
+ "thiserror 2.0.20",
+ "tokio",
+ "validator",
+]
+
+[[package]]
 name = "erp-sales"
 version = "0.1.0"
 dependencies = [
@@ -2237,6 +2583,88 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-supplier-catalog"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "background-runtime",
+ "entity-core",
+ "erp-audit",
+ "erp-catalog",
+ "erp-core",
+ "erp-file-assets",
+ "erp-identity",
+ "erp-integration",
+ "erp-party",
+ "erp-read-models",
+ "erp-returns",
+ "erp-supplier",
+ "erp-supply",
+ "erp-support",
+ "erp-workflow",
+ "hex",
+ "id-generator",
+ "image",
+ "mongodb",
+ "persistence-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "storage",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+ "zune-jpeg",
+]
+
+[[package]]
+name = "erp-supplier-orders"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "base64 0.23.1",
+ "config",
+ "entity-core",
+ "erp-audit",
+ "erp-catalog",
+ "erp-core",
+ "erp-finance",
+ "erp-fulfillment",
+ "erp-fulfillment-execution",
+ "erp-identity",
+ "erp-integration",
+ "erp-party",
+ "erp-procurement",
+ "erp-read-models",
+ "erp-returns",
+ "erp-supplier",
+ "erp-supply",
+ "erp-support",
+ "erp-warehouse",
+ "erp-workflow",
+ "hex",
+ "hmac 0.13.0",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "subtle",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "uuid",
+ "validator",
+ "zeroize",
+]
+
+[[package]]
 name = "erp-supply"
 version = "0.1.0"
 dependencies = [
@@ -2260,6 +2688,39 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "url",
+ "uuid",
+ "validator",
+ "zeroize",
+]
+
+[[package]]
+name = "erp-supply-settlement"
+version = "0.1.0"
+dependencies = [
+ "application-core",
+ "async-trait",
+ "entity-core",
+ "erp-audit",
+ "erp-core",
+ "erp-finance",
+ "erp-fulfillment-execution",
+ "erp-identity",
+ "erp-party",
+ "erp-read-models",
+ "erp-supplier",
+ "erp-supplier-orders",
+ "erp-supply",
+ "erp-workflow",
+ "id-generator",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "test-support",
+ "thiserror 2.0.20",
+ "tokio",
  "validator",
 ]
 
@@ -6436,28 +6897,44 @@ dependencies = [
  "application-core",
  "async-trait",
  "axum",
+ "background-runtime",
  "chrono",
  "config",
+ "entity-core",
+ "erp-approval-runtime",
  "erp-audit",
  "erp-catalog",
+ "erp-connector-dangaoshushu",
+ "erp-connector-jd-vop",
  "erp-contract",
  "erp-contract-recognition",
  "erp-core",
  "erp-customer",
+ "erp-data-import",
+ "erp-demo-data",
+ "erp-file-assets",
  "erp-finance",
+ "erp-finance-posting",
  "erp-fulfillment",
+ "erp-fulfillment-execution",
  "erp-identity",
  "erp-import",
  "erp-integration",
  "erp-inventory",
+ "erp-master-data",
+ "erp-order-to-cash",
  "erp-party",
- "erp-processes",
+ "erp-procure-to-pay",
  "erp-procurement",
  "erp-read-models",
  "erp-returns",
+ "erp-reverse-flow",
  "erp-sales",
  "erp-supplier",
+ "erp-supplier-catalog",
+ "erp-supplier-orders",
  "erp-supply",
+ "erp-supply-settlement",
  "erp-support",
  "erp-warehouse",
  "erp-workflow",
@@ -6471,6 +6948,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "persistence-core",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_path_to_error",

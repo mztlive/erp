@@ -14,7 +14,7 @@ use erp_customer::{
     RevealCustomerSensitiveRequest, SaveCustomerProfileRequest, SensitiveFieldKind, UpdateCustomerRequest,
 };
 use erp_identity::Permission;
-use erp_processes::adapters::{contract_access, customer_access, funds_access_with_rbac};
+use erp_master_data::delete_customer;
 use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
 
 use crate::app_state::AppState;
@@ -22,6 +22,7 @@ use crate::core::errors::{Error, Result};
 use crate::core::extractor::{Json, Query};
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
+use crate::wiring::{contract_access, customer_access, funds_access_with_rbac};
 
 /// 原子创建完整客户资料。
 pub async fn customer_profile_create(
@@ -39,7 +40,7 @@ pub async fn customer_profile_create(
     if req.bank_accounts.is_some() {
         ensure_permission(&state, &subject, "party_bank_account:create").await?;
     }
-    erp_processes::adapters::customer_access(state.db(), state.rbac()).ensure_create(&actor).await?;
+    crate::wiring::customer_access(state.db(), state.rbac()).ensure_create(&actor).await?;
     let view = state.customer_profile_process().create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -298,7 +299,14 @@ pub async fn customer_delete(
     Path(id): Path<String>,
 ) -> Result<()> {
     ensure_customer_access(&state, &actor, "delete", &id).await?;
-    erp_processes::delete_customer(state.db(), state.rbac(), id, actor).await?;
+    delete_customer(
+        state.db(),
+        state.customer_service(),
+        customer_access(state.db(), state.rbac()),
+        id,
+        actor,
+    )
+    .await?;
     Ok(ApiResponse::ok())
 }
 
@@ -425,9 +433,7 @@ pub(crate) async fn ensure_customer_access(
     action: &str,
     customer_id: &str,
 ) -> std::result::Result<(), Error> {
-    erp_processes::adapters::customer_access(state.db(), state.rbac())
-        .require(actor, action, customer_id)
-        .await?;
+    crate::wiring::customer_access(state.db(), state.rbac()).require(actor, action, customer_id).await?;
     Ok(())
 }
 

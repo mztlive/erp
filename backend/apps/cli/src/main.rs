@@ -2,6 +2,7 @@
 //!
 //! 本 crate 复用身份用例与领域增量索引入口，禁止依赖 `web-api`。
 
+mod adapters;
 mod indexes;
 mod migrate_contract_templates;
 mod migrate_scopes;

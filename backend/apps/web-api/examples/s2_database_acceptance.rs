@@ -11,12 +11,12 @@ use erp_identity::access_control::{
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
 use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::organization_service;
 use mongodb::bson::{Document, doc};
 use mongodb::{Client, Database};
 use persistence_core::NoTransaction;
 use test_support::seed_admin_account;
+use web_api::wiring::identity::shared_rbac_service;
+use web_api::wiring::organization_service;
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 

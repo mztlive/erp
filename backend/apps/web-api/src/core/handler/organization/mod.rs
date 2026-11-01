@@ -5,12 +5,12 @@ use axum::Extension;
 use axum::extract::State;
 use erp_identity::OrganizationStateView;
 use erp_identity::entity::organization_change::{OrganizationChangeReceipt, OrganizationChangeRequest};
-use erp_processes::adapters::organization_service;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::organization_service;
 
 /// 查询组织管理范围内的组织和关系。
 ///

@@ -296,10 +296,10 @@ async fn verify_binding_source(
 ) -> Outcome {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use erp_processes::adapters::workflow::WorkflowAuth;
     use erp_workflow::DocumentType;
     use erp_workflow::ports::WorkflowAuthorizationPort;
     use persistence_core::NoTransaction;
+    use web_api::wiring::workflow::WorkflowAuth;
     let auth = WorkflowAuth::new(db.clone(), rbac);
     let object =
         auth.approval_scope_object(DocumentType::SalesOrder, "s2-order-0", &mut NoTransaction).await?;

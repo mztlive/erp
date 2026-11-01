@@ -3,19 +3,20 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use config::{Config, JdVopConfig};
+use erp_connector_dangaoshushu::DangaoshushuRuntime;
+use erp_connector_jd_vop::JdVopRuntime;
+use erp_connector_jd_vop::http_transport::JdVopHttpTransport;
+use erp_connector_jd_vop::oauth_http::OAuthHttp;
 use erp_party::SensitiveDataCodec;
-use erp_processes::connectors::dangaoshushu::DangaoshushuRuntime;
-use erp_processes::connectors::jd_vop::JdVopRuntime;
-use erp_processes::connectors::jd_vop::credential::MongoJdVopTokenProvider;
-use erp_processes::connectors::jd_vop::http_transport::JdVopHttpTransport;
-use erp_processes::connectors::jd_vop::token::JdVopTokenProvider;
-use erp_processes::connectors::registry::SupplierConnectorRegistry;
-use erp_processes::supplier_catalog_callbacks::SupplierCatalogCallbackProcess;
-use erp_processes::{Error as ProcessError, Result as ProcessResult, supplier_callbacks};
+use erp_supplier_catalog::supplier_catalog_callbacks::SupplierCatalogCallbackProcess;
+use erp_supplier_orders::supplier_credentials::MongoJdVopTokenProvider;
+use erp_supplier_orders::{Error as ProcessError, Result as ProcessResult, supplier_callbacks};
+use erp_supply::connector_registry::SupplierConnectorRegistry;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::SupplierConnectorType;
 use erp_supply::ports::connector::callback::{CallbackReply, CallbackRequest};
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
+use erp_supply::ports::jd_vop::token::{JdVopTokenProvider, token_error};
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use mongodb::Database;
@@ -99,10 +100,14 @@ impl AppState {
     /// # 错误
     /// 不返回错误。
     pub fn supplier_catalog_callback_process(&self) -> Option<SupplierCatalogCallbackProcess> {
-        self.external_connectors
-            .order_connectors
-            .as_ref()
-            .map(|runtime| SupplierCatalogCallbackProcess::new(self.db(), Arc::clone(runtime), self.rbac()))
+        self.external_connectors.order_connectors.as_ref().map(|runtime| {
+            SupplierCatalogCallbackProcess::new(
+                self.db(),
+                Arc::clone(runtime),
+                self.rbac(),
+                crate::wiring::scoped_catalog_service(self.db(), self.rbac()),
+            )
+        })
     }
 
     /// 返回独立于新增下单开关的账号凭据维护任务。
@@ -142,8 +147,12 @@ impl ExternalConnectorPorts {
             .as_ref()
             .filter(|settings| settings.enabled)
             .map(|settings| {
-                MongoJdVopTokenProvider::new(db, settings)
-                    .map(|provider| Arc::new(provider) as Arc<dyn JdVopTokenProvider>)
+                MongoJdVopTokenProvider::new(
+                    db,
+                    settings,
+                    Arc::new(OAuthHttp::new(settings.timeout_seconds).map_err(|_| token_error())?),
+                )
+                .map(|provider| Arc::new(provider) as Arc<dyn JdVopTokenProvider>)
             })
             .transpose()?;
         Self::with_jd_tokens(config, tokens)

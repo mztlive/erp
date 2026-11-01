@@ -3,9 +3,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, State};
-use erp_processes::sales_inquiry_import::{
-    CreateInquiryImportCommand, InquiryImportPreviewView, SalesInquiryImportProcess,
-};
+use erp_data_import::sales_inquiry_import::{CreateInquiryImportCommand, InquiryImportPreviewView};
 use erp_sales::entity::sales_inquiry_import::{INQUIRY_IMPORT_MAX_BYTES, InquiryImportResult};
 
 use super::import::{read_field, upload_error, validate_workbook_type};
@@ -28,9 +26,7 @@ pub async fn creation_preview(
 ) -> Result<InquiryImportPreviewView> {
     let (customer, name, bytes) = read_upload(multipart).await?;
     Ok(ApiResponse::ok_with_data(
-        SalesInquiryImportProcess::new(state.db(), state.rbac())
-            .preview_creation(&actor, &customer, &name, bytes)
-            .await?,
+        state.inquiry_import_process().preview_creation(&actor, &customer, &name, bytes).await?,
     ))
 }
 
@@ -46,9 +42,7 @@ pub async fn creation_confirm(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<CreateInquiryImportCommand>,
 ) -> Result<InquiryImportResult> {
-    Ok(ApiResponse::ok_with_data(
-        SalesInquiryImportProcess::new(state.db(), state.rbac()).create_from_preview(&actor, request).await?,
-    ))
+    Ok(ApiResponse::ok_with_data(state.inquiry_import_process().create_from_preview(&actor, request).await?))
 }
 
 async fn read_upload(mut multipart: Multipart) -> std::result::Result<(String, String, Vec<u8>), Error> {

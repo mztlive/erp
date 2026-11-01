@@ -7,6 +7,7 @@ use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
 
 use super::*;
+use crate::wiring::receivable_posting_ports;
 
 /// 查询开票申请列表。
 ///
@@ -20,7 +21,7 @@ pub async fn invoice_request_list(
     Query(params): Query<InvoiceRequestQuery>,
 ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
     Ok(ApiResponse::ok_with_data(
-        erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
             .request_list_scoped(&params, &actor)
             .await?,
     ))
@@ -35,7 +36,7 @@ pub async fn invoice_request_detail(
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedInvoiceRequestRow>> {
     Ok(ApiResponse::ok_with_data(
-        erp_processes::adapters::funds_access_with_rbac(state.db(), state.rbac())
+        crate::wiring::funds_access_with_rbac(state.db(), state.rbac())
             .request_detail_scoped(&id, &actor)
             .await?,
     ))
@@ -60,7 +61,7 @@ pub async fn invoice_request_submit(
     Json(req): Json<SubmitInvoiceRequest>,
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
-        ReceivableProcess::new(state.db())
+        ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
             .with_object_read(state.approval_object_read())
             .submit_invoice_request(req, &actor)
             .await?,
@@ -77,7 +78,7 @@ pub async fn invoice_request_cancel(
     Json(req): Json<CancelInvoiceRequest>,
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
-        ReceivableProcess::new(state.db())
+        ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
             .with_object_read(state.approval_object_read())
             .cancel_invoice_request(&id, req, &actor)
             .await?,

@@ -3,12 +3,12 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_identity::dto::person_scope::{PersonScopeView, SavePersonScopeRequest};
-use erp_processes::adapters::scope_configuration;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::scope_configuration;
 
 /// 读取人员配置及有效操作。
 /// # 参数

@@ -10,7 +10,7 @@ mod tests;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, Path, State};
-use erp_processes::{
+use erp_master_data::{
     delete_supplier, supplier_profile_create_with_assets as create_supplier_profile_with_assets,
     supplier_profile_update_with_assets as update_supplier_profile_with_assets,
 };
@@ -29,6 +29,8 @@ use crate::core::handler::file_asset::{
     extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
+use crate::wiring::identity::shared_rbac_service;
+use crate::wiring::{supplier_access, supplier_service};
 
 /// 原子创建完整供应商资料。
 pub async fn supplier_profile_create(
@@ -187,7 +189,14 @@ pub async fn supplier_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    delete_supplier(state.db(), id, actor).await?;
+    delete_supplier(
+        state.db(),
+        supplier_service(state.db()),
+        supplier_access(state.db(), shared_rbac_service(state.db())),
+        id,
+        actor,
+    )
+    .await?;
     Ok(ApiResponse::ok())
 }
 

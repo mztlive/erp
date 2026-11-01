@@ -7,7 +7,7 @@ use erp_fulfillment::dto::{
     ConfirmElectronicDeliveryRequest, CreateElectronicDeliveryRequest, ElectronicDeliveryListParams,
     ElectronicDeliveryView, PageView,
 };
-use erp_processes::confirm_electronic_delivery_with_assets;
+use erp_fulfillment_execution::confirm_electronic_delivery_with_assets;
 use erp_support::SensitivityClass;
 
 use super::evidence_upload::validate_evidence_upload;

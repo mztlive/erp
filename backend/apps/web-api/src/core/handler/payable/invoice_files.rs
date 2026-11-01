@@ -2,9 +2,9 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, State};
+use erp_file_assets::PendingFileAssets;
 use erp_finance::dto::payable::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
-use erp_processes::attachments::PendingFileAssets;
-use erp_processes::finance_posting::payable::PayableProcess;
+use erp_finance_posting::finance_posting::payable::PayableProcess;
 use erp_support::SensitivityClass;
 
 use crate::app_state::AppState;
@@ -14,6 +14,7 @@ use crate::core::handler::file_asset::{
     store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
+use crate::wiring::finance_posting_ports;
 
 /// 在登记进项发票时上传文件，复用原登记权限与事务。
 /// # 参数
@@ -37,8 +38,7 @@ pub async fn purchase_invoice_allocation_post_with_files(
             return Err(error.into());
         },
     };
-    let outcome = PayableProcess::new(state.db())
-        .with_rbac(state.rbac())
+    let outcome = PayableProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .register_purchase_invoice_with_assets(req, pending, &actor)
         .await;

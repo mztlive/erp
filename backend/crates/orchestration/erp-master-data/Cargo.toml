@@ -1,0 +1,31 @@
+[package]
+name = "erp-master-data"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+application-core = { workspace = true }
+async-trait = { workspace = true }
+erp-audit = { workspace = true }
+erp-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-party = { workspace = true }
+erp-customer = { workspace = true }
+erp-supplier = { workspace = true }
+erp-catalog = { workspace = true }
+erp-warehouse = { workspace = true }
+erp-contract = { workspace = true }
+erp-support = { workspace = true }
+erp-supply = { workspace = true }
+erp-file-assets = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+validator = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[dev-dependencies]
+entity-core = { workspace = true }

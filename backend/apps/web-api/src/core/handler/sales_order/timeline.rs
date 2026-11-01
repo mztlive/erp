@@ -2,13 +2,13 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::sales_timeline_service;
 use erp_read_models::sales_timeline::{TimelinePage, TimelineQuery};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
+use crate::wiring::sales_timeline_service;
 
 /// 读取销售单及关联单据的已授权时间线。
 /// # 参数

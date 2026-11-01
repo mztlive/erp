@@ -1,6 +1,6 @@
 use application_core::AuditActor;
 use axum::extract::{Extension, Path, State};
-use erp_processes::procure_to_pay::responsibility::ProcurementResponsibilityProcess;
+use erp_procure_to_pay::procure_to_pay::responsibility::ProcurementResponsibilityProcess;
 use erp_procurement::dto::procurement_responsibility::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveRequest,
     ProcurementResponsibilityResolveView, UpdateProcurementResponsibilityRuleRequest,

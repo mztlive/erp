@@ -12,6 +12,7 @@ import unittest
 import cutover_workspace as workspace
 import domain_boundaries as domain
 import bpm_workspace as bpm
+from crate_layers import load_registry
 
 SCRIPTS = Path(__file__).resolve().parent
 
@@ -24,7 +25,7 @@ class TemporaryWorkspace:
         self.metadata = {"workspace_root": str(root), "workspace_members": [], "packages": []}
         members = []
         for name in self.names:
-            relative = ("apps/" if name in {"cli", "web-api"} else "crates/") + name
+            relative = load_registry()[name]["paths"][0]
             directory = root / relative
             (directory / "src").mkdir(parents=True)
             manifest = directory / "Cargo.toml"
@@ -117,7 +118,7 @@ class CutoverTests(unittest.TestCase):
         self.assertTrue(workspace.workspace_errors(self.root, metadata, set()))
 
     def test_legacy_edges_in_every_entry_composition_and_fixture_kind_fail(self):
-        for name in ("cli", "web-api", "erp-processes", "erp-read-models", "test-support"):
+        for name in ("cli", "web-api", "erp-order-to-cash", "erp-read-models", "test-support"):
             for kind in (None, "build", "dev"):
                 for old in sorted(workspace.LEGACY):
                     with self.subTest(package=name, kind=kind, old=old):
@@ -172,7 +173,7 @@ class CutoverTests(unittest.TestCase):
         for source in cases:
             with self.subTest(source=source):
                 self.assertTrue(workspace.legacy_source_errors(Path("source.rs"), source))
-        for name in ("web-api", "cli", "erp-processes", "erp-read-models", "test-support"):
+        for name in ("web-api", "cli", "erp-order-to-cash", "erp-read-models", "test-support"):
             with self.subTest(name=name):
                 path = self.fixture.source(name)
                 path.write_text("pub type Failure = services::Error;\n")
@@ -219,9 +220,73 @@ class CutoverTests(unittest.TestCase):
         self.assertTrue(bpm.dependency_errors(self.fixture.metadata))
 
     def test_composition_cycle_fails_final_checker(self):
-        self.fixture.package("erp-processes")["dependencies"].append({"name": "erp-read-models"})
-        self.fixture.package("erp-read-models")["dependencies"].append({"name": "erp-processes"})
+        self.fixture.package("erp-order-to-cash")["dependencies"].append({"name": "erp-read-models"})
+        self.fixture.package("erp-read-models")["dependencies"].append({"name": "erp-order-to-cash"})
         self.assertTrue(any("回边" in e for e in domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors))
+
+    def test_nested_manifest_paths_keep_source_and_collection_checks_active(self):
+        import shutil
+        for name in ("erp-sales", "erp-customer", "bpm"):
+            package = self.fixture.package(name)
+            old = Path(package["manifest_path"]).parent
+            new = self.root / load_registry()[name]["paths"][-1]
+            new.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(old, new)
+            package["manifest_path"] = str(new / "Cargo.toml")
+            package["targets"][0]["src_path"] = str(new / "src/lib.rs")
+        members = [str(Path(p["manifest_path"]).parent.relative_to(self.root)) for p in self.fixture.metadata["packages"]]
+        (self.root / "Cargo.toml").write_text('[workspace]\nmembers = ' + json.dumps(members) + '\n')
+        self.assertEqual(domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors, [])
+        self.fixture.source("erp-sales").write_text("use erp_customer::Customer;\n")
+        self.assertTrue(any("领域源码" in e for e in domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors))
+        self.fixture.source("erp-sales").write_text("pub struct Fixture;\n")
+        self.fixture.source("bpm").write_text("use mongodb::Database;\n")
+        self.assertTrue(any("BPM 源码" in e for e in domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors))
+        self.fixture.source("bpm").write_text("pub struct Fixture;\n")
+        for name, collection in (("erp-customer", "fixture_customers"), ("erp-sales", "fixture_sales")):
+            repository = self.fixture.source(name).parent / "repository"
+            repository.mkdir()
+            (repository / "mod.rs").write_text(f'const COLLECTION: &\'static str = "{collection}";\n')
+        foreign_access = self.fixture.source("erp-sales").parent / "repository/foreign.rs"
+        foreign_access.write_text('fn query() { collection("fixture_customers"); }\n')
+        self.assertTrue(any("外域集合 fixture_customers" in e for e in domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors))
+
+    def test_unknown_member_wrong_layer_and_missing_source_fail_closed(self):
+        package = self.fixture.package("erp-sales")
+        original_name = package["name"]
+        package["name"] = "unregistered-business"
+        self.assertTrue(any("未登记层次" in e for e in domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors))
+        package["name"] = original_name
+        manifest = package["manifest_path"]
+        package["manifest_path"] = str(self.root / "crates/platform/erp-sales/Cargo.toml")
+        self.assertTrue(any("登记层次" in e for e in domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors))
+        package["manifest_path"] = manifest
+        source = self.fixture.source("erp-sales")
+        source.unlink()
+        source.parent.rmdir()
+        external = self.root / "custom-sales.rs"
+        external.write_text("pub struct Fixture;\n")
+        package["targets"][0]["src_path"] = str(external)
+        self.assertTrue(any("缺失源码目录" in e for e in domain.check_workspace(self.root, self.fixture.metadata, cutover=True).errors))
+
+    def test_layer_rules_cover_every_kind_and_unregistered_orchestration_edges(self):
+        forbidden = [("erp-sales", "erp-read-models"), ("erp-sales", "erp-order-to-cash"),
+                     ("erp-read-models", "erp-order-to-cash"), ("background-runtime", "erp-sales"),
+                     ("erp-core", "erp-connector-jd-vop"), ("erp-connector-jd-vop", "erp-order-to-cash"),
+                     ("erp-order-to-cash", "web-api"), ("erp-order-to-cash", "erp-connector-jd-vop"),
+                     ("erp-order-to-cash", "erp-processes"), ("erp-order-to-cash", "erp-master-data"),
+                     ("erp-master-data", "erp-demo-data"),
+                     ("cli", "web-api")]
+        for kind in ("normal", "build", "dev"):
+            for src, dst in forbidden:
+                with self.subTest(kind=kind, source=src, target=dst):
+                    graph = domain.Graph(packages={src, dst}, edges=[domain.DepEdge(src, dst, kind, "alias")])
+                    self.assertTrue(domain.forbidden_graph_errors(graph))
+        for kind in ("normal", "build"):
+            graph = domain.Graph(edges=[domain.DepEdge("web-api", "test-support", kind)])
+            self.assertTrue(domain.forbidden_graph_errors(graph))
+        graph = domain.Graph(edges=[domain.DepEdge("web-api", "test-support", "dev")])
+        self.assertEqual(domain.forbidden_graph_errors(graph), [])
 
     def test_negative_workspace_check_has_real_nonzero_process_exit(self):
         metadata = Path(self.temporary.name) / "metadata.json"
@@ -261,7 +326,7 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual((output / "transaction-contract.json").read_bytes(), original)
 
     def test_real_comparator_drift_exit_is_not_swallowed(self):
-        source = self.root / "after/backend/crates/erp-sales/src/lib.rs"
+        source = self.root / "after/backend" / load_registry()["erp-sales"]["paths"][0] / "src/lib.rs"
         source.write_text('#[derive(Serialize, Deserialize)] pub struct Request { pub value: bool }\n')
         result = self.invoke(self.root / "drift-evidence")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)

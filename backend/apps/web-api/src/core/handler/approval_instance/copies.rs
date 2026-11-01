@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::CACHE_CONTROL;
 use axum::response::{IntoResponse, Response};
-use erp_processes::approval_materials::ApprovalMaterialTarget;
+use erp_approval_runtime::approval_materials::ApprovalMaterialTarget;
 use erp_read_models::sales_center::approval_materials::copy_detail;
 use erp_workflow::repository::approval_copy::CopyListQuery;
 use erp_workflow::service::approval::copies::CopyReadRequest;

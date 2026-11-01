@@ -29,28 +29,32 @@ backend/
 │   │           └── upload.rs
 │   └── cli/                          # init-admin、reset-password
 ├── crates/
-│   ├── erp-<domain>/                 # 19 个业务领域：identity audit workflow support party customer
-│   │   │                             #   supplier catalog warehouse contract import inventory finance
-│   │   │                             #   sales procurement fulfillment returns integration supply
-│   │   └── src/
-│   │       ├── entity/               # 实体、值对象、不变式
-│   │       ├── dto/
-│   │       ├── service/              # 本域用例
-│   │       ├── repository/           # owned/ 集合仓储；extensions/ *Ext 访问器
-│   │       ├── ports/                # 本域消费的外域窄接口
-│   │       ├── indexes               # 公开索引入口
-│   │       └── error.rs
-│   ├── erp-processes/                # 跨域写用例、adapter、外部 I/O
-│   ├── erp-read-models/              # 跨域查询、中心页/工作台投影、正式任务事实读取器
-│   ├── erp-core/                     # 共享业务值对象
-│   ├── application-core/             # 共享应用合同（分页、调用人、命令幂等）
-│   ├── persistence-core/             # Executor、事务、通用仓储
-│   ├── bpm/                          # 流程定义、运行状态、引擎规则
-│   ├── entity-core/                  # BaseModel
-│   ├── entity-macros/                # Entity 派生、id_type
-│   ├── id-generator/
-│   ├── storage/                      # S3Storage
-│   └── test-support/                 # 仅 dev-dependency
+│   ├── domains/                     # 19 个业务领域，包名保持 erp-<domain>
+│   │   └── erp-<domain>/
+│   │       └── src/
+│   │           ├── entity/           # 实体、值对象、不变式
+│   │           ├── dto/
+│   │           ├── service/          # 本域用例
+│   │           ├── repository/       # owned/ 集合仓储；extensions/ *Ext 访问器
+│   │           ├── ports/            # 本域消费的外域窄 Port
+│   │           ├── indexes           # 公开索引入口
+│   │           └── error.rs
+│   ├── orchestration/                # 按业务职责拆分的跨域编排库
+│   ├── read-models/erp-read-models/   # 跨域查询、工作台投影、只读事实
+│   ├── adapters/                     # 具体外部协议与技术适配
+│   │   └── erp-contract-recognition/
+│   ├── foundation/                   # 共享值对象、应用合同与持久化机制
+│   │   ├── erp-core/
+│   │   ├── application-core/
+│   │   └── persistence-core/
+│   ├── platform/                     # 无 ERP 业务依赖的技术组件
+│   │   ├── bpm/
+│   │   ├── storage/
+│   │   ├── aliyun-ocr/
+│   │   ├── entity-core/
+│   │   ├── entity-macros/
+│   │   └── id-generator/
+│   └── testing/test-support/         # 仅 dev-dependency
 ├── config/                           # SafeConfig
 ├── scripts/                          # 边界与权限漂移门禁
 └── docs/archive/legacy-crates/       # 旧三层原始字节档案（只读）
@@ -59,14 +63,16 @@ backend/
 ## 架构与依赖
 
 - 调用链：Handler → 本域 Service 或 Process/ReadModel → 拥有领域 Repository → MongoDB；Handler 禁直连数据库。
-- 业务领域的 normal/build/dev 依赖禁指向其他业务领域、`erp-processes`、`erp-read-models`；跨域事实经本域 `ports/` 窄 Port 获取，实现由组合层装配。
-- 跨域写入放 `erp-processes` 命名 Process；跨域读取放 `erp-read-models`。Process 可依赖 ReadModel，禁反向；事实权限政策由拥有领域执行。
+- 业务领域的 normal/build/dev 依赖禁指向其他业务领域、编排库、`erp-read-models`；跨域事实经本域 `ports/` 窄 Port 获取，实现由组合层装配。
+- 跨域写入放 `crates/orchestration/` 的所属业务库，命名为 Process；跨域读取放 `erp-read-models`。编排可依赖 ReadModel，禁反向；事实权限政策由拥有领域执行。
 - 单域查询留在本域 Service/Repository，禁放 ReadModel。
 - `erp-core`、`application-core`、`persistence-core` 禁放业务实体（AccountCore、Role、AuditLog、WorkItem、SalesOrder 等），禁依赖业务领域。
 - `bpm` 禁依赖 ERP crate、MongoDB、HTTP、配置、ID 生成器、通知客户端；ERP 审批政策、工作项、BPM 持久化归 `erp-workflow`。
 - `apps/cli` 复用 `erp-identity` 用例与组合层 adapter，禁依赖 `web-api`。
 - 禁恢复 `entities/`、`database/`、`services/` 旧三层 crate 或转发 façade；`docs/archive/legacy-crates/` 保持原始字节，禁接入 Cargo target。
-- 新增 crate 同步更新 workspace 成员、边界检查配置、`crates/README.md` 与该 crate README。
+- 父目录表示架构层次，包名表示职责；只使用 `backend/Cargo.toml` 这一个 workspace，不为分组目录建立 crate 或嵌套 workspace。
+- 新增或迁移 crate 同步更新 workspace 成员、`scripts/crate-layers.json` 层次与依赖登记、边界检查配置、`crates/README.md` 与该 crate README；依赖方使用 `workspace = true`。所有活动成员必须有登记，缺失 manifest、源码或层次归属必须使门禁失败。
+- 不得恢复旧 `erp-processes`、旧路径别名或兼容 façade；编排间只允许显式登记的单向依赖。具体协议适配不得反向依赖编排或应用。
 
 ## 新功能落点
 
@@ -124,7 +130,7 @@ backend/
 - 创建/更新入参用独立 `*Data`/`*Update` 结构，与系统字段分离。
 - 校验用 `erp_core::validation::non_empty_trimmed` 与 `*_MAX_LEN` 常量；关键字段（如 `category_code`、`parent_category_id`）只许专门方法修改。
 - 树形实体用邻接表 `parent_*_id: Option<Id>`（`None` 为根），实体方法拒绝自环；跨节点成环检测与子树移动在 Service 事务内完成。
-- 实体测试用 `BaseModel::fake()` 构造；范例 `crates/erp-identity/src/entity/account_core.rs`、`role.rs`。
+- 实体测试用 `BaseModel::fake()` 构造；范例 `crates/domains/erp-identity/src/entity/account_core.rs`、`role.rs`。
 
 ## 兼容、安全与数据
 

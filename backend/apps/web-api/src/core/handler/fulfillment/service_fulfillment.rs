@@ -7,7 +7,7 @@ use erp_fulfillment::dto::{
     ConfirmServiceFulfillmentRequest, CreateServiceFulfillmentRequest, PageView,
     ServiceFulfillmentListParams, ServiceFulfillmentView,
 };
-use erp_processes::confirm_service_fulfillment_with_assets;
+use erp_fulfillment_execution::confirm_service_fulfillment_with_assets;
 use erp_support::SensitivityClass;
 
 use super::evidence_upload::validate_evidence_upload;

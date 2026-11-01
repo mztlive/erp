@@ -8,6 +8,7 @@ use axum::response::IntoResponse;
 use erp_identity::Permission;
 
 use super::response::ApiResponse;
+use crate::wiring::errors as wiring_errors;
 
 mod diagnostics;
 
@@ -171,6 +172,8 @@ macro_rules! boundary_error {
         }
     };
 }
+
+mod application;
 
 impl From<erp_identity::Error> for Error {
     /// 将身份领域错误映射为 HTTP 边界错误。
@@ -344,28 +347,6 @@ impl From<erp_import::Error> for Error {
     /// 将导入领域错误映射为 HTTP 边界错误。
     fn from(err: erp_import::Error) -> Self {
         boundary_error!(err, erp_import;
-        )
-    }
-}
-
-impl From<erp_processes::Error> for Error {
-    /// 将实际组合边界错误转换为稳定 HTTP 响应。
-    fn from(err: erp_processes::Error) -> Self {
-        boundary_error!(err, erp_processes;
-            error @ erp_processes::Error::Rbac(_) => Self::Internal(error.to_string()),
-            erp_processes::Error::Coded(code) => Self::Coded(code),
-            erp_processes::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
-        )
-    }
-}
-
-impl From<erp_read_models::Error> for Error {
-    /// 将实际组合边界错误转换为稳定 HTTP 响应。
-    fn from(err: erp_read_models::Error) -> Self {
-        boundary_error!(err, erp_read_models;
-            error @ erp_read_models::Error::Rbac(_) => Self::Internal(error.to_string()),
-            erp_read_models::Error::Coded(code) => Self::Coded(code),
-            erp_read_models::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
         )
     }
 }
@@ -696,7 +677,7 @@ mod tests {
     use axum::response::IntoResponse;
     use serde_json::Value;
 
-    use super::{Error, duplicate_index_conflict_message};
+    use super::{Error, duplicate_index_conflict_message, wiring_errors};
 
     #[test]
     fn nested_permission_diagnostic_requires_explicit_valid_permission() {
@@ -711,23 +692,23 @@ mod tests {
 
     #[test]
     fn maps_service_error_with_semantics() {
-        let not_found: Error = erp_processes::Error::NotFound("x".into()).into();
-        let conflict: Error = erp_processes::Error::ConflictError("x".into()).into();
-        let validation: Error = erp_processes::Error::ValidationError("x".into()).into();
-        let business: Error = erp_processes::Error::BusinessLogicError("x".into()).into();
-        let forbidden: Error = erp_processes::Error::Forbidden("x".into()).into();
-        let unauthorized: Error = erp_processes::Error::Unauthenticated("x".into()).into();
-        let logic: Error = erp_processes::Error::Logic(erp_core::Error::from("x")).into();
-        let outcome_unknown: Error = erp_processes::Error::from(
+        let not_found: Error = wiring_errors::Error::NotFound("x".into()).into();
+        let conflict: Error = wiring_errors::Error::ConflictError("x".into()).into();
+        let validation: Error = wiring_errors::Error::ValidationError("x".into()).into();
+        let business: Error = wiring_errors::Error::BusinessLogicError("x".into()).into();
+        let forbidden: Error = wiring_errors::Error::Forbidden("x".into()).into();
+        let unauthorized: Error = wiring_errors::Error::Unauthenticated("x".into()).into();
+        let logic: Error = wiring_errors::Error::Logic(erp_core::Error::from("x")).into();
+        let outcome_unknown: Error = wiring_errors::Error::from(
             persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown")),
         )
         .into();
-        let receipt_duplicate: Error = erp_processes::Error::ReceiptDuplicate(
+        let receipt_duplicate: Error = wiring_errors::Error::ReceiptDuplicate(
             persistence_core::Error::DuplicateKey(mongodb::error::Error::custom("duplicate receipt source")),
         )
         .into();
         let transient: Error =
-            erp_processes::Error::from(persistence_core::Error::TransientTransactionConflict(
+            wiring_errors::Error::from(persistence_core::Error::TransientTransactionConflict(
                 mongodb::error::Error::custom("transient source"),
             ))
             .into();
@@ -757,7 +738,7 @@ mod tests {
     fn duplicate_key_race_maps_to_http_conflict() {
         let repository_error =
             persistence_core::Error::DuplicateKey(mongodb::error::Error::custom("duplicate key"));
-        let service_error = erp_processes::Error::from(repository_error);
+        let service_error = wiring_errors::Error::from(repository_error);
         let response = Error::from(service_error).into_response();
 
         assert_eq!(response.status(), StatusCode::CONFLICT);
@@ -846,7 +827,7 @@ mod tests {
             Error::from(erp_customer::Error::ConflictError(
                 "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
             )),
-            Error::from(erp_processes::Error::ConflictError(
+            Error::from(wiring_errors::Error::ConflictError(
                 "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
             )),
         ];

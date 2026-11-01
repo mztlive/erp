@@ -1,0 +1,64 @@
+//! 销售提交和最终生效阶段的采购责任计划。
+
+use erp_procure_to_pay::procure_to_pay::responsibility::{ProcurementResponsibilityProcess, ResolutionInput};
+use erp_sales::entity::sales_order::{
+    BusinessType, SalesOrder, SalesOrderSubmissionLine, SalesOrderWorkingCopyLine,
+};
+
+use super::SalesOrderCommandProcess;
+use crate::Result;
+
+impl SalesOrderCommandProcess {
+    /// 在销售提交审批前严格校验全部实物及服务行的采购责任。
+    ///
+    /// # 参数
+    /// * `order` - 待提交销售单
+    /// * `lines` - 当前工作副本行
+    ///
+    /// # 返回
+    /// 非实物服务单直接通过；全部行解析到合格具体负责人时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一行缺少 SKU、规则冲突、无默认调度人或负责人不合格时失败关闭。
+    pub(super) async fn ensure_procurement_responsibility_before_submit(
+        &self,
+        order: &SalesOrder,
+        lines: &[SalesOrderWorkingCopyLine],
+    ) -> Result<()> {
+        if order.business_type != BusinessType::GoodsService {
+            return Ok(());
+        }
+        let inputs = erp_sales::service::sales_order::procurement::working_copy_inputs(lines)?
+            .into_iter()
+            .map(resolution_input)
+            .collect::<Vec<_>>();
+        ProcurementResponsibilityProcess::new(self.db.clone(), self.require_rbac()?.clone())
+            .resolve_strict(&inputs)
+            .await?;
+        Ok(())
+    }
+}
+
+fn resolution_input(
+    fact: erp_sales::service::sales_order::procurement::SalesProcurementLineFact,
+) -> ResolutionInput {
+    ResolutionInput { line_key: fact.line_key, sku_id: fact.sku_id }
+}
+/// 把已冻结的销售明细事实映射为采购责任解析输入。
+///
+/// # 参数
+/// * `lines` - 已冻结的销售提交行。
+///
+/// # 返回
+/// 返回与原行对应的解析输入。
+///
+/// # 错误
+/// 销售明细无法形成采购事实时返回下层错误。
+pub(super) fn submission_procurement_inputs(
+    lines: &[SalesOrderSubmissionLine],
+) -> Result<Vec<ResolutionInput>> {
+    Ok(erp_sales::service::sales_order::procurement::submission_procurement_inputs(lines)?
+        .into_iter()
+        .map(resolution_input)
+        .collect())
+}

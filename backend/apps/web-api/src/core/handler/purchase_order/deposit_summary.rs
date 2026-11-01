@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_identity::Permission;
-use erp_processes::supplier_deposits::SupplierDepositReadAccess;
 use erp_read_models::Error as ReadError;
 use erp_read_models::purchase_center::dto::PurchaseOrderCenterView;
+use erp_supplier_orders::supplier_deposits::SupplierDepositReadAccess;
 
 use super::purchase_reads;
 use crate::app_state::AppState;

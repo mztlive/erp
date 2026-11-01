@@ -89,7 +89,7 @@ impl ApprovalHttpError {
     ///
     /// # 返回
     /// 返回稳定码、状态与关联 ID。
-    pub fn from_service(error: impl Into<erp_processes::Error>, headers: &HeaderMap) -> Self {
+    pub fn from_service(error: impl Into<crate::wiring::errors::Error>, headers: &HeaderMap) -> Self {
         let error = error.into();
         let correlation_id = correlation_id(headers);
         if let Some(code) = error.code() {
@@ -157,7 +157,7 @@ impl ApprovalHttpError {
     }
 }
 
-impl From<erp_processes::Error> for ApprovalHttpError {
+impl From<crate::wiring::errors::Error> for ApprovalHttpError {
     /// 在缺少请求头时用新关联 ID 映射服务错误。
     ///
     /// # 参数
@@ -165,7 +165,7 @@ impl From<erp_processes::Error> for ApprovalHttpError {
     ///
     /// # 返回
     /// 返回审批 HTTP 错误。
-    fn from(error: erp_processes::Error) -> Self {
+    fn from(error: crate::wiring::errors::Error) -> Self {
         Self::from_service(error, &HeaderMap::new())
     }
 }
@@ -322,7 +322,7 @@ mod tests {
         let mut headers = axum::http::HeaderMap::new();
         headers.insert(TRACE_ID_HEADER, HeaderValue::from_static("corr-1"));
         let response = ApprovalHttpError::from_service(
-            erp_processes::Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked),
+            crate::wiring::errors::Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked),
             &headers,
         )
         .into_response();
@@ -351,7 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_not_registered_response_is_500() {
-        let response = ApprovalHttpError::from(erp_processes::Error::from_approval_code(
+        let response = ApprovalHttpError::from(crate::wiring::errors::Error::from_approval_code(
             ErrorCode::ApprovalPolicyNotRegistered,
         ))
         .into_response();
@@ -365,7 +365,7 @@ mod tests {
     /// 库存调整更新的越权与不存在必须经实际 Handler 适配器保持不可区分。
     #[tokio::test]
     async fn stock_adjustment_update_hidden_failures_have_identical_http_projection() {
-        async fn project(error: erp_processes::Error) -> (StatusCode, Value) {
+        async fn project(error: crate::wiring::errors::Error) -> (StatusCode, Value) {
             let response =
                 ApprovalHttpError::from_service(error, &axum::http::HeaderMap::new()).into_response();
             let status = response.status();
@@ -375,8 +375,9 @@ mod tests {
             (status, body)
         }
 
-        let unauthorized = project(erp_processes::Error::NotFound("库存调整单不存在".to_string())).await;
-        let missing = project(erp_processes::Error::NotFound("库存调整单不存在".to_string())).await;
+        let unauthorized =
+            project(crate::wiring::errors::Error::NotFound("库存调整单不存在".to_string())).await;
+        let missing = project(crate::wiring::errors::Error::NotFound("库存调整单不存在".to_string())).await;
 
         assert_eq!(unauthorized, missing);
         assert_eq!(unauthorized.0, StatusCode::NOT_FOUND);

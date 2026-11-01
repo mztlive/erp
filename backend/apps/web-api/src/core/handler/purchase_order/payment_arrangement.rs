@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::procure_to_pay::{PurchaseOrderProcess, SchedulePaymentFollowUp};
+use erp_procure_to_pay::procure_to_pay::{PurchaseOrderProcess, SchedulePaymentFollowUp};
 use erp_read_models::purchase_center::payment_arrangement::PaymentArrangementView;
 
 use super::purchase_reads;
@@ -10,6 +10,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::purchase_ports;
 
 /// 查询当前采购的下一步付款安排。
 /// # 参数
@@ -38,7 +39,7 @@ pub async fn schedule_payment_follow_up(
     Path(id): Path<String>,
     Json(req): Json<SchedulePaymentFollowUp>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+    PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
         .schedule_payment_follow_up(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok())

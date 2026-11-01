@@ -33,7 +33,7 @@ fn read_model(state: &AppState) -> CustomerQualityReadModel {
     CustomerQualityReadModel::new(
         state.db(),
         state.rbac(),
-        erp_processes::adapters::MongoCustomerDataScope::shared(state.db(), state.rbac()),
+        crate::wiring::MongoCustomerDataScope::shared(state.db(), state.rbac()),
     )
 }
 

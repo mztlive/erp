@@ -2,8 +2,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::State;
-use erp_processes::adapters::scoped_offering_process;
-use erp_processes::supply_governance::offering::batch::{BatchRequest, BatchResult, Targeted};
+use erp_supplier_catalog::supply_governance::offering::batch::{BatchRequest, BatchResult, Targeted};
 use erp_supply::dto::supplier_offering::{
     ReviseSupplierOfferingRequest, UpdateSupplierOfferingAvailabilityRequest,
 };
@@ -12,6 +11,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::scoped_offering_process;
 
 /// 批量校验或追加商业条款修订。
 ///

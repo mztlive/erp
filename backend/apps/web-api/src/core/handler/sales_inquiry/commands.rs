@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::sales_inquiry::dto::{
+use erp_order_to_cash::sales_inquiry::dto::{
     AcceptInquiryCommand, CreateInquiryCommand, InquiryMutationView, InquiryReasonCommand,
     InquiryTaskReasonCommand, PublishInquiryCommand, ReassignInquiryCommand, ReinquireInquiryCommand,
     SaveInquiryCommand, SaveInquiryFeedbackCommand, SubmitInquiryCommand,

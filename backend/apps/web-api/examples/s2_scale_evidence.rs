@@ -14,9 +14,6 @@ use erp_identity::access_control::{
 };
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::organization_service;
-use erp_processes::adapters::workflow::workflow_auth;
 use erp_workflow::WorkItemRepository;
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
@@ -28,6 +25,9 @@ use mongodb::bson::{Document, doc};
 use mongodb::{Client, Database};
 use persistence_core::{NoTransaction, QueryFilter};
 use test_support::seed_admin_account;
+use web_api::wiring::identity::shared_rbac_service;
+use web_api::wiring::organization_service;
+use web_api::wiring::workflow::workflow_auth;
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -123,7 +123,7 @@ async fn verify(db: &Database) -> Outcome {
 
     // E5：库存仓库 20000 超限整体拒绝。单条 scope_targets 上限 128，改用 160 条×128 个仓库的多规则并集触发。
     insert_overflow_warehouse_scopes(db, &role).await?;
-    match erp_processes::adapters::authorize_inventory(
+    match web_api::wiring::authorize_inventory(
         db,
         &shared_rbac_service(db.clone()),
         &manager,

@@ -3,10 +3,10 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::response::Response;
-use erp_processes::sales_inquiry::dto::InquiryMutationView;
-use erp_processes::sales_inquiry::internal_quote::{SaveInquiryFeeBasisCommand, SaveInquiryQuoteCommand};
-use erp_processes::sales_inquiry::quote_import::ImportInquiryQuotesCommand;
-use erp_processes::sales_inquiry::read::{InquiryFeeBasisParams, InquiryReadService};
+use erp_order_to_cash::sales_inquiry::dto::InquiryMutationView;
+use erp_order_to_cash::sales_inquiry::internal_quote::{SaveInquiryFeeBasisCommand, SaveInquiryQuoteCommand};
+use erp_order_to_cash::sales_inquiry::quote_import::ImportInquiryQuotesCommand;
+use erp_order_to_cash::sales_inquiry::read::{InquiryFeeBasisParams, InquiryReadService};
 use erp_supply::inquiry::InquiryFeeBasis;
 
 use crate::app_state::AppState;

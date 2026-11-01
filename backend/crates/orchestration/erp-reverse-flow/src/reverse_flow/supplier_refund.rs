@@ -1,0 +1,618 @@
+use crate::ReverseFlowPorts;
+mod commit;
+
+use erp_approval_runtime::approval_recovery::recover_approval_command;
+use erp_audit::execution::persist_log;
+
+mod commit_source;
+mod posting;
+use application_core::{AuditActor, CommandReceipt};
+use erp_audit::AuditActorLogs;
+use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierAccountId, SupplierPaymentId};
+use erp_finance::entity::payable::SupplierPaymentStatus;
+use erp_finance::repository::PayableExt;
+use erp_read_models::returns_center::dto::SupplierRefundView;
+use erp_returns::ReturnsCommandReceiptService;
+use erp_returns::dto::{
+    CancelSupplierRefundApprovalRequest, CreateSupplierRefundRequest, SubmitSupplierRefundRequest,
+};
+use erp_returns::entity::returns::SupplierRefund;
+use erp_returns::service::ReturnsService;
+use erp_returns::service::approval::start_supplier_refund_approval;
+use erp_returns::service::shared::ensure_posted_source;
+use erp_returns::service::supplier_refund::{
+    SupplierRefundSourceFact, new_supplier_refund, new_supplier_refund_commit,
+};
+use erp_returns::service::version_conflict::conflict_if_stale_version;
+use erp_supplier::SupplierExt;
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
+use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
+use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
+use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
+use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
+pub(super) use posting::apply_supplier_refund_final_post;
+use validator::Validate;
+
+use super::ReturnsProcess;
+use super::adapter::{
+    build_supplier_refund_snapshot, execute_supplier_refund_domain_action, require_supplier_refund_binding,
+    supplier_refund_adapter, supplier_refund_object_readable, supplier_refund_responsible_org_id,
+    supplier_refund_subject_ref,
+};
+use super::cancel_approval::{
+    SupplierRefundCancelPersistInput, build_supplier_refund_cancel_input, load_cancel_runtime,
+    persist_supplier_refund_cancel,
+};
+use super::start_approval::{
+    ReplayReturnStartInput, ReverseStartInput, SupplierRefundStartPersistInput,
+    build_supplier_refund_start_input, ensure_return_start_actor_active,
+    ensure_return_start_replay_authorized, load_start_graph, load_supplier_refund_start_receipt,
+    persist_supplier_refund_start, replay_return_start_with_executor, replay_subject_versions,
+};
+use crate::{Error, Result};
+
+impl ReturnsProcess {
+    // -----------------------------------------------------------------------
+    // 供应商退款
+    // -----------------------------------------------------------------------
+
+    /// 登记供应商退款草稿，并在同一事务绑定已发布审批定义。
+    ///
+    /// 退款单号全局唯一（唯一索引）构成幂等去重。经办人与复核人必须不同。
+    /// 绑定失败必须回滚业务实体，不得把绑定推迟到提交。
+    ///
+    /// # 参数
+    /// * `req` - 创建请求
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回新建退款单视图。
+    ///
+    /// # 错误
+    /// * `ConflictError` - 退款单号重复或流程未配置
+    pub async fn create_supplier_refund(
+        &self,
+        req: CreateSupplierRefundRequest,
+        actor: &AuditActor,
+    ) -> Result<SupplierRefundView> {
+        req.validate()?;
+        let refund = new_supplier_refund(req, actor.id())?;
+        persist_created_supplier_refund(
+            &self.db,
+            &self.rbac,
+            std::sync::Arc::clone(&self.object_read),
+            refund.clone(),
+            actor.clone(),
+        )
+        .await?;
+        self.reads().supplier_refund_detail(&refund.base.id).await.map_err(crate::Error::from)
+    }
+
+    /// 提交供应商退款并调用统一 `start_approval`。
+    ///
+    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
+    /// 单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
+    ///
+    /// # 参数
+    /// * `id` - 退款单主键
+    /// * `req` - 提交请求（版本与幂等键）
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回提交后的退款单视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 退款单或供应商不存在
+    /// * `ConflictError` - 非草稿、无绑定或并发冲突
+    pub async fn submit_supplier_refund(
+        &self,
+        id: &str,
+        mut req: SubmitSupplierRefundRequest,
+        actor: &AuditActor,
+    ) -> Result<SupplierRefundView> {
+        req.validate()?;
+        req.idempotency_key = normalize_idempotency_key(&req.idempotency_key)?.as_str().to_string();
+        if self.replay_supplier_refund_start(id, &req.idempotency_key, actor).await?.is_some() {
+            return self.reads().supplier_refund_detail(id).await.map_err(crate::Error::from);
+        }
+        let adapter = supplier_refund_adapter()?;
+        let mut refund = self.domain().load_supplier_refund(id, &mut NoTransaction).await?;
+        conflict_if_stale_version(refund.matches_version(req.expected_version))?;
+        start_supplier_refund_approval(&mut refund)?;
+        self.dispatch_supplier_refund_start(id, refund, req.idempotency_key, actor, adapter).await
+    }
+
+    /// 撤回供应商退款审批，成功后回到草稿且 `subject_version` 不回退。
+    ///
+    /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
+    ///
+    /// # 参数
+    /// * `id` - 退款单主键
+    /// * `req` - 撤回请求（原因必填）
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回撤回后的退款单视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 退款单不存在
+    /// * `ConflictError` - 非审批中、已最终通过或并发冲突
+    pub async fn cancel_supplier_refund_approval(
+        &self,
+        id: &str,
+        req: CancelSupplierRefundApprovalRequest,
+        actor: &AuditActor,
+    ) -> Result<SupplierRefundView> {
+        req.validate()?;
+        let mut refund = self.domain().load_supplier_refund(id, &mut NoTransaction).await?;
+        conflict_if_stale_version(refund.matches_version(req.expected_version))?;
+        self.persist_cancelled_supplier_refund(id, &mut refund, &req, actor).await?;
+        self.reads().supplier_refund_detail(id).await.map_err(crate::Error::from)
+    }
+
+    /// 从绑定读取定义并持久化启动事实。
+    ///
+    /// # 错误
+    /// 无绑定、定义缺失或写入失败时返回错误。
+    async fn dispatch_supplier_refund_start(
+        &self,
+        id: &str,
+        refund: SupplierRefund,
+        idempotency_key: String,
+        actor: &AuditActor,
+        adapter: super::adapter::SupplierRefundAdapter,
+    ) -> Result<SupplierRefundView> {
+        let subject = supplier_refund_subject_ref(id)?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let binding = require_supplier_refund_binding(binding.as_ref())?.clone();
+        let now = Instant::now();
+        let organization_id = self.supplier_refund_responsible_org(&refund.supplier_id).await?;
+        let snapshot = build_supplier_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
+        let _ = supplier_refund_object_readable(&organization_id, actor.id())?;
+        let existing_receipt = load_supplier_refund_start_receipt(
+            &self.db,
+            &subject,
+            refund.approval_subject_version,
+            &idempotency_key,
+        )
+        .await?;
+        let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
+        let start_input = build_supplier_refund_start_input(ReverseStartInput {
+            graph,
+            binding: &binding,
+            subject,
+            subject_version: refund.approval_subject_version,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &idempotency_key,
+            receipt: existing_receipt,
+            now,
+        })?;
+        let prepared = prepare_start(start_input)?;
+        self.complete_supplier_refund_start(
+            SupplierRefundStartPersistInput {
+                refund,
+                actor: actor.clone(),
+                id: id.to_string(),
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+            },
+            &idempotency_key,
+        )
+        .await
+    }
+
+    /// 持久化失败时按原主题版本执行有界恢复，然后读取业务视图。
+    async fn complete_supplier_refund_start(
+        &self,
+        input: SupplierRefundStartPersistInput,
+        idempotency_key: &str,
+    ) -> Result<SupplierRefundView> {
+        let recovery_subject_version = input.refund.approval_subject_version;
+        let id = input.id.clone();
+        let actor = input.actor.clone();
+        let persisted = persist_supplier_refund_start(&self.db, &self.rbac, input).await;
+        if let Err(error) = persisted {
+            if !error.command_may_have_committed() {
+                return Err(error);
+            }
+            self.recover_supplier_refund_start(&id, recovery_subject_version, idempotency_key, &actor, error)
+                .await?;
+        }
+        self.reads().supplier_refund_detail(&id).await.map_err(crate::Error::from)
+    }
+
+    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    async fn recover_supplier_refund_start(
+        &self,
+        refund_id: &str,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        original_error: Error,
+    ) -> Result<String> {
+        recover_approval_command(original_error, || {
+            self.replay_supplier_refund_start_version(refund_id, subject_version, idempotency_key, actor)
+        })
+        .await
+    }
+
+    /// 在任何当前状态/版本门禁前，以当前或下一主题版本精确回放既有启动。
+    async fn replay_supplier_refund_start(
+        &self,
+        refund_id: &str,
+        idempotency_key: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<String>> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let refund_id = refund_id.to_string();
+        let idempotency_key = idempotency_key.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let refund = authorized_supplier_refund(&db, &rbac, &actor, &refund_id, executor).await?;
+                    let binding =
+                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
+                    let binding = require_supplier_refund_binding(binding.as_ref())?;
+                    let subject = supplier_refund_subject_ref(&refund_id)?;
+                    for subject_version in replay_subject_versions(refund.approval_subject_version)? {
+                        if let Some(instance_id) = replay_return_start_with_executor(
+                            &db,
+                            ReplayReturnStartInput {
+                                document_type: DocumentType::SupplierRefund,
+                                subject: &subject,
+                                subject_version,
+                                idempotency_key: &idempotency_key,
+                                binding,
+                                actor_id: actor.id(),
+                            },
+                            executor,
+                        )
+                        .await?
+                        {
+                            return Ok(Some(instance_id));
+                        }
+                    }
+                    Ok(None)
+                })
+            })
+            .await
+    }
+
+    /// 单一候选版本的 fresh-session 当前授权与 exact receipt 回放。
+    async fn replay_supplier_refund_start_version(
+        &self,
+        refund_id: &str,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<String>> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let refund_id = refund_id.to_string();
+        let idempotency_key = idempotency_key.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorized_supplier_refund(&db, &rbac, &actor, &refund_id, executor).await?;
+                    let binding =
+                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
+                    let binding = require_supplier_refund_binding(binding.as_ref())?;
+                    let subject = supplier_refund_subject_ref(&refund_id)?;
+                    replay_return_start_with_executor(
+                        &db,
+                        ReplayReturnStartInput {
+                            document_type: DocumentType::SupplierRefund,
+                            subject: &subject,
+                            subject_version,
+                            idempotency_key: &idempotency_key,
+                            binding,
+                            actor_id: actor.id(),
+                        },
+                        executor,
+                    )
+                    .await
+                })
+            })
+            .await
+    }
+
+    /// 加载撤回运行事实并写回草稿。
+    ///
+    /// # 错误
+    /// 无绑定、实例终态或写入失败时返回错误。
+    async fn persist_cancelled_supplier_refund(
+        &self,
+        id: &str,
+        refund: &mut SupplierRefund,
+        req: &CancelSupplierRefundApprovalRequest,
+        actor: &AuditActor,
+    ) -> Result<()> {
+        let adapter = supplier_refund_adapter()?;
+        let binding =
+            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let binding = require_supplier_refund_binding(binding.as_ref())?.clone();
+        let subject = supplier_refund_subject_ref(id)?;
+        let runtime =
+            load_cancel_runtime(&self.db, &binding, &subject, refund.approval_subject_version).await?;
+        let now = Instant::now();
+        let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
+        let input = build_supplier_refund_cancel_input(
+            &runtime,
+            &req.reason,
+            actor.id(),
+            &idempotency_key,
+            None,
+            now,
+        )?;
+        let prepared = prepare_cancel(input)?;
+        execute_supplier_refund_domain_action(refund, adapter.cancel_action)?;
+        let audit = actor.clone().resource_log(
+            "supplier_refund.cancel_approval",
+            "supplier_refund",
+            id.to_string(),
+        )?;
+        persist_supplier_refund_cancel(
+            &self.db,
+            &self.rbac,
+            SupplierRefundCancelPersistInput {
+                refund: refund.clone(),
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
+        )
+        .await
+    }
+
+    /// 读取供应商往来主体作为责任组织。
+    ///
+    /// # 错误
+    /// 供应商不存在或往来主体为空时返回错误。
+    async fn supplier_refund_responsible_org(&self, supplier_id: &SupplierAccountId) -> Result<String> {
+        load_supplier_refund_org_id(&self.db, supplier_id).await
+    }
+
+    /// 最终通过过账（§8.3-3 事务不变量，应付侧镜像）。
+    ///
+    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
+    /// 按原付款（或其核销分配）反向写入 `REVERSE` 付款核销分配；按条件原子
+    /// 冲减子账已核销进度；写反向应付分录（减少）与分录抵销；退款单迁移为
+    /// 已过账。任一校验失败整体回滚，保留原事实。
+    ///
+    /// # 参数
+    /// * `id` - 退款单 ID
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回过账后退款单视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 退款单或原付款不存在
+    /// * `ConflictError` - 非审批中
+    /// * `BusinessLogicError` - 累计退款超原付款、重复过账或超额冲减
+    pub async fn post_supplier_refund(&self, id: &str, actor: &AuditActor) -> Result<SupplierRefundView> {
+        let db = self.db.clone();
+        let _object_read = std::sync::Arc::clone(&self.object_read);
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let actor_owned = actor.clone();
+        let actor_id = actor.id().to_string();
+        let refund_id = id.to_string();
+        let detail_id = refund_id.clone();
+        client
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    apply_supplier_refund_final_post(
+                        &db,
+                        &rbac,
+                        &refund_id,
+                        &actor_id,
+                        &actor_owned,
+                        executor,
+                    )
+                    .await
+                })
+            })
+            .await?;
+
+        self.reads().supplier_refund_detail(&detail_id).await.map_err(crate::Error::from)
+    }
+
+    // -----------------------------------------------------------------------
+    // 私有视图装配
+    // -----------------------------------------------------------------------
+}
+
+/// 在创建事务内写入退款单、绑定发布定义并登记单据。
+///
+/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
+///
+/// # 错误
+/// 无发布定义、人员重验失败或写入失败时返回错误。
+async fn persist_created_supplier_refund(
+    db: &Database,
+    rbac: &ReverseFlowPorts,
+    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
+    refund: SupplierRefund,
+    actor: AuditActor,
+) -> Result<()> {
+    let organization_id = load_supplier_refund_org_id(db, &refund.supplier_id).await?;
+    let bind_command = BindPublishedDefinitionCommand {
+        document_type: DocumentType::SupplierRefund,
+        business_object_id: refund.base.id.clone(),
+        business_object_version: refund.base.version,
+        context: BindingRevalidationContext::new(organization_id, actor.id().to_string()),
+    };
+    let document =
+        new_registered_document(&refund.base.id, DocumentType::SupplierRefund, refund.refund_no.clone())
+            .map_err(crate::Error::from)?;
+    let audit =
+        actor.clone().resource_log("supplier_refund.create", "supplier_refund", refund.base.id.clone())?;
+    let db = db.clone();
+    let rbac = rbac.clone();
+    let object_read = object_read.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                persist_bound_supplier_refund_document(
+                    &db,
+                    &rbac,
+                    object_read.as_ref(),
+                    document,
+                    &bind_command,
+                    &actor,
+                    executor,
+                )
+                .await?;
+                ReturnsService::new(db.clone()).create_supplier_refund(&refund, executor).await?;
+                persist_log(&db, &audit, executor).await?;
+                Ok::<(), crate::Error>(())
+            })
+        })
+        .await
+}
+
+/// 查询供应商往来主体作为责任组织。
+///
+/// # 错误
+/// 供应商不存在或往来主体为空时返回错误。
+async fn load_supplier_refund_org_id(db: &Database, supplier_id: &SupplierAccountId) -> Result<String> {
+    let supplier = db
+        .supplier_accounts()
+        .find_by_id(supplier_id, &mut NoTransaction)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+    supplier_refund_responsible_org_id(supplier.party_id.as_ref())
+}
+
+/// 按原顺序重验原付款权限、版本及既有命令结果的退款权限。
+async fn replay_supplier_commit(
+    db: &Database,
+    rbac: &ReverseFlowPorts,
+    actor: &AuditActor,
+    source: (&SupplierPaymentId, u64),
+    receipt: &CommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    ensure_return_start_replay_authorized(
+        db,
+        rbac,
+        actor,
+        DocumentType::SupplierPayment,
+        "supplier_refund:submit",
+        source.0.as_ref(),
+        executor,
+    )
+    .await?;
+    validate_supplier_refund_source(db, source.0, source.1, executor).await?;
+    let result =
+        ReturnsCommandReceiptService::new(db.clone()).committed_resource_id(receipt, executor).await?;
+    if let Some(existing_id) = &result {
+        ensure_return_start_replay_authorized(
+            db,
+            rbac,
+            actor,
+            DocumentType::SupplierRefund,
+            "supplier_refund:submit",
+            existing_id,
+            executor,
+        )
+        .await?;
+    }
+    Ok(result)
+}
+
+/// 在创建退款的同一事务中重读并校验原供应商付款事实。
+///
+/// 原事实必须仍为调用前读取的版本且已经过账，避免从草稿、审批中或已冲正付款
+/// 派生无法最终执行的退款审批。
+async fn validate_supplier_refund_source(
+    db: &Database,
+    source_fact_id: &SupplierPaymentId,
+    expected_version: u64,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let payment = db
+        .supplier_payments()
+        .find_by_id(source_fact_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("原供应商付款不存在".to_string()))?;
+    Ok(ensure_posted_source(
+        payment.base.version,
+        expected_version,
+        payment.status == SupplierPaymentStatus::Posted,
+        "只有已过账的供应商付款才能发起退款",
+    )?)
+}
+
+/// 查询发布定义、写入绑定并持久化注册行。
+///
+/// # 错误
+/// 无发布定义或绑定失败时返回错误。
+async fn persist_bound_supplier_refund_document(
+    db: &Database,
+    rbac: &ReverseFlowPorts,
+    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
+    mut document: BusinessDocument,
+    bind_command: &BindPublishedDefinitionCommand,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
+    let _ = supplier_refund_object_readable(
+        &bind_command.context.organization_id,
+        &bind_command.context.creator_id,
+    )?;
+    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = binding.ok_or_else(|| Error::Internal("供应商退款单必须绑定已发布定义".to_string()))?;
+    attach_published_binding(&mut document, binding.clone())?;
+    db.business_documents().create(&document, executor).await?;
+    Ok(binding)
+}
+
+/// 按原顺序重验账号、退款来源和提交权限，沿用调用方事务。
+async fn authorized_supplier_refund(
+    db: &Database,
+    rbac: &ReverseFlowPorts,
+    actor: &AuditActor,
+    refund_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<SupplierRefund> {
+    ensure_return_start_actor_active(db, rbac, actor, executor).await?;
+    let refund = ReturnsService::new(db.clone()).load_supplier_refund(refund_id, executor).await?;
+    let supplier = db
+        .supplier_accounts()
+        .find_by_id(&refund.supplier_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+    supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
+    ensure_return_start_replay_authorized(
+        db,
+        rbac,
+        actor,
+        DocumentType::SupplierRefund,
+        "supplier_refund:submit",
+        refund_id,
+        executor,
+    )
+    .await?;
+    Ok(refund)
+}

@@ -1,5 +1,5 @@
 //! 结算复核候选查询的协议适配，复用提交权限。
-use erp_processes::supply_settlement::SettlementReviewerOption;
+use erp_supply_settlement::supply_settlement::SettlementReviewerOption;
 
 use super::*;
 

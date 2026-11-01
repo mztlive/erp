@@ -4,11 +4,12 @@
 
 use std::future::Future;
 
-use erp_processes::{Error, Result};
+use erp_audit::execution::AuditFailure;
 use erp_support::PendingFileAssetRequest;
 use tracing::error;
 
 use crate::app_state::AppState;
+use crate::wiring::errors::{Error, Result};
 
 /// 根据数据库命令结果完成本次上传，保持原成功值及错误分类。
 ///
@@ -24,13 +25,16 @@ use crate::app_state::AppState;
 /// # 错误
 /// 保留原命令错误；提交结果未知时不删除对象。已确认提交后的读取错误不得转换为
 /// 外层失败而触发补偿。清理失败只记日志，不覆盖命令结果或载荷中的读取错误。
-pub(crate) async fn finish_asset_command<T>(
+pub(crate) async fn finish_asset_command<T, E: Into<Error>>(
     state: &AppState,
     requests: &[PendingFileAssetRequest],
-    result: Result<T>,
+    result: std::result::Result<T, E>,
     assets_committed: impl FnOnce(&T) -> bool,
 ) -> Result<T> {
-    finish_with_cleanup(result, assets_committed, || delete_pending_asset_objects(state, requests)).await
+    finish_with_cleanup(result.map_err(Into::into), assets_committed, || {
+        delete_pending_asset_objects(state, requests)
+    })
+    .await
 }
 
 async fn finish_with_cleanup<T, F, Fut>(
@@ -85,15 +89,16 @@ pub(crate) async fn delete_pending_asset_objects(state: &AppState, requests: &[P
 ///
 /// # 错误
 /// 无。
-pub(crate) fn should_compensate_pending_assets(error: &Error) -> bool {
-    !matches!(error, Error::OutcomeUnknown(_))
+pub(crate) fn should_compensate_pending_assets(error: &impl AuditFailure) -> bool {
+    !error.outcome_unknown()
 }
 
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
 
-    use erp_processes::finance_posting::payable::SupplierPaymentWithAssetsResult;
+    use erp_finance_posting::Error as FinanceError;
+    use erp_finance_posting::finance_posting::payable::SupplierPaymentWithAssetsResult;
     use mongodb::error::Error as MongoError;
     use persistence_core::Error as PersistenceError;
 
@@ -166,7 +171,7 @@ mod tests {
     async fn committed_payment_with_detail_failure_keeps_upload_and_original_read_error() {
         let cleanup_count = Cell::new(0);
         let payment = SupplierPaymentWithAssetsResult {
-            view: Err(Error::Internal("付款详情读取失败".to_string())),
+            view: Err(FinanceError::Internal("付款详情读取失败".to_string())),
             assets_committed: true,
         };
         let result = finish_with_cleanup(
@@ -179,14 +184,14 @@ mod tests {
 
         assert_eq!(cleanup_count.get(), 0);
         assert!(result.assets_committed);
-        assert!(matches!(result.view, Err(Error::Internal(message)) if message == "付款详情读取失败"));
+        assert!(matches!(result.view, Err(FinanceError::Internal(message)) if message == "付款详情读取失败"));
     }
 
     #[tokio::test]
     async fn replayed_payment_with_detail_failure_cleans_unused_upload_before_returning_read_error() {
         let cleanup_count = Cell::new(0);
         let payment = SupplierPaymentWithAssetsResult {
-            view: Err(Error::NotFound("原付款详情暂不可读取".to_string())),
+            view: Err(FinanceError::NotFound("原付款详情暂不可读取".to_string())),
             assets_committed: false,
         };
         let result = finish_with_cleanup(
@@ -199,7 +204,9 @@ mod tests {
 
         assert_eq!(cleanup_count.get(), 1);
         assert!(!result.assets_committed);
-        assert!(matches!(result.view, Err(Error::NotFound(message)) if message == "原付款详情暂不可读取"));
+        assert!(
+            matches!(result.view, Err(FinanceError::NotFound(message)) if message == "原付款详情暂不可读取")
+        );
     }
 
     #[tokio::test]
@@ -209,7 +216,7 @@ mod tests {
             PersistenceError::CommitOutcomeUnknown(MongoError::custom("original unknown commit result"));
         let original_display = original_unknown.to_string();
         let payment = SupplierPaymentWithAssetsResult {
-            view: Err(Error::OutcomeUnknown(original_unknown)),
+            view: Err(FinanceError::OutcomeUnknown(original_unknown)),
             assets_committed: true,
         };
         let result = finish_with_cleanup(
@@ -222,7 +229,7 @@ mod tests {
 
         assert_eq!(cleanup_count.get(), 0);
         assert!(result.assets_committed);
-        let Err(Error::OutcomeUnknown(source)) = result.view else {
+        let Err(FinanceError::OutcomeUnknown(source)) = result.view else {
             panic!("详情读取失败必须保留最初的提交未知错误");
         };
         assert_eq!(source.to_string(), original_display);

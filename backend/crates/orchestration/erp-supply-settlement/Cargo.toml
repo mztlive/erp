@@ -1,0 +1,33 @@
+[package]
+name = "erp-supply-settlement"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+application-core = { workspace = true }
+async-trait = { workspace = true }
+entity-core = { workspace = true }
+erp-audit = { workspace = true }
+erp-core = { workspace = true }
+erp-finance = { workspace = true }
+erp-fulfillment-execution = { workspace = true }
+erp-identity = { workspace = true }
+erp-party = { workspace = true }
+erp-read-models = { workspace = true }
+erp-supplier = { workspace = true }
+erp-supplier-orders = { workspace = true }
+erp-supply = { workspace = true }
+erp-workflow = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+validator = { workspace = true }
+
+[dev-dependencies]
+test-support = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }

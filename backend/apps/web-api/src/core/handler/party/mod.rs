@@ -8,6 +8,7 @@ pub mod company;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
+use erp_master_data::delete_party;
 use erp_party::{
     CreatePartyAddressRequest, CreatePartyBankAccountRequest, CreatePartyContactRequest, CreatePartyRequest,
     CreatePartyTaxProfileRequest, PageView, PartyAddressListParams, PartyAddressView,
@@ -21,6 +22,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::MongoSupplierRole;
 
 /// 查询主体列表。
 ///
@@ -103,7 +105,7 @@ pub async fn party_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    erp_processes::delete_party(state.db(), id, actor).await?;
+    delete_party(state.db(), state.party_service(), MongoSupplierRole::shared(state.db()), id, actor).await?;
     Ok(ApiResponse::ok())
 }
 

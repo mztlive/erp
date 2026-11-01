@@ -164,7 +164,7 @@ impl IntoResponse for RequestError {
 #[cfg(test)]
 mod tests {
     use axum::body::{Body, to_bytes};
-    use erp_processes::supplier_catalog_adoption::SaveBatchRequest;
+    use erp_supplier_catalog::supplier_catalog_adoption::SaveBatchRequest;
     use serde::Deserialize;
     use serde_json::json;
 

@@ -1,18 +1,20 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_contract::Error as ContractError;
+use erp_data_import::data_transfer::{TransferKind, TransferReader};
 use erp_identity::{Permission, subject};
-use erp_processes::adapters::{
+
+use crate::wiring::{
     MongoCustomerDataScope, MongoOfferingDataScope, MongoPurchaseDataScope, funds_access_with_rbac,
     purchase_access,
 };
-use erp_processes::data_transfer::{TransferKind, TransferReader};
-use erp_processes::{Error, Result};
+mod error;
 use erp_read_models::customer_quality::CustomerQualityReadModel;
 use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, ProfitLossAccess};
 use erp_read_models::purchase_center::PurchaseOrderReadService;
 use erp_read_models::sales_center::order::SalesOrderReadService;
 use erp_read_models::supplier_center::{MongoOfferingProcurementOwners, SupplierOfferingReadService};
+use error::{ReadError as Error, Result};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -37,7 +39,25 @@ fn output<T: Serialize>(value: T) -> Result<Value> {
 }
 #[async_trait]
 impl TransferReader for Reads {
-    async fn page(&self, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
+    async fn page(
+        &self,
+        kind: TransferKind,
+        query: &Value,
+        actor: &AuditActor,
+    ) -> erp_data_import::Result<Value> {
+        self.read_page(kind, query, actor).await.map_err(Into::into)
+    }
+    async fn report(
+        &self,
+        kind: TransferKind,
+        query: &Value,
+        actor: &AuditActor,
+    ) -> erp_data_import::Result<Value> {
+        self.read_report(kind, query, actor).await.map_err(Into::into)
+    }
+}
+impl Reads {
+    async fn read_page(&self, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
         use TransferKind::*;
         let state = &self.0;
         match kind {
@@ -82,7 +102,7 @@ impl TransferReader for Reads {
             _ => Err(Error::ValidationError("此任务不是列表查询".into())),
         }
     }
-    async fn report(&self, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
+    async fn read_report(&self, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
         let state = &self.0;
         match kind {
             TransferKind::ProfitLoss => {

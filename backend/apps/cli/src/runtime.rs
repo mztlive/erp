@@ -1,8 +1,8 @@
 use config::ConfigArgs;
 use erp_identity::AdminService;
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::connectors::jd_vop::credential::JdVopCredentialProcess;
+use erp_supplier_orders::supplier_credentials::JdVopCredentialProcess;
 
+use crate::adapters::shared_rbac_service;
 use crate::error::{Error, Result};
 
 /// 只装配配置绑定凭据用例；不启动供应商调用、刷新或业务 worker。

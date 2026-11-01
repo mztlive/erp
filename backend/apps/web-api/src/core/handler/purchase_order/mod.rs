@@ -17,8 +17,7 @@ pub mod sales_material;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::MongoPurchaseDataScope;
-use erp_processes::procure_to_pay::PurchaseOrderProcess;
+use erp_procure_to_pay::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
@@ -39,6 +38,7 @@ use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
+use crate::wiring::{MongoPurchaseDataScope, purchase_ports};
 
 /// 构造已注入采购范围 Port 的只读服务。
 ///
@@ -124,10 +124,11 @@ pub async fn purchase_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseOrderFromBasisRequest>,
 ) -> Result<CreatePurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .create_from_basis(req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .create_from_basis(req, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -146,10 +147,11 @@ pub async fn purchase_order_create_from_sourcing(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseOrdersFromSourcingRequest>,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .create_from_sourcing(req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .create_from_sourcing(req, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -170,10 +172,11 @@ pub async fn purchase_order_save_draft(
     Path(id): Path<String>,
     Json(req): Json<SavePurchaseOrderDraftRequest>,
 ) -> Result<SavePurchaseOrderDraftResult> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .save_draft(&id, req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .save_draft(&id, req, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -194,10 +197,11 @@ pub async fn purchase_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidPurchaseOrderRequest>,
 ) -> Result<VoidPurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .void_draft(&id, req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .void_draft(&id, req, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -218,10 +222,11 @@ pub async fn purchase_order_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseOrderRequest>,
 ) -> Result<SubmitPurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .submit(&id, req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .submit(&id, req, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -242,7 +247,9 @@ pub async fn purchase_order_maintain_source(
     Path(id): Path<String>,
     Json(req): Json<MaintainPurchaseSourceRequest>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(state.db(), state.rbac()).maintain_source(&id, req, &actor).await?;
+    PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+        .maintain_source(&id, req, &actor)
+        .await?;
     Ok(ApiResponse::ok())
 }
 
@@ -262,7 +269,7 @@ pub async fn purchase_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPurchaseOrderApprovalRequest>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+    PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .cancel_approval(&id, req, &actor)
         .await?;
@@ -305,10 +312,11 @@ pub async fn purchase_change_create(
     Path(id): Path<String>,
     Json(req): Json<StartPurchaseChangeRequest>,
 ) -> Result<StartPurchaseChangeResult> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .start_change(&id, req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .start_change(&id, req, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -329,10 +337,11 @@ pub async fn purchase_change_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .submit_change_view(&id, req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .submit_change_view(&id, req, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -375,7 +384,7 @@ pub async fn purchase_change_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPurchaseChangeApprovalRequest>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+    PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .cancel_change_approval(&id, req, &actor)
         .await?;

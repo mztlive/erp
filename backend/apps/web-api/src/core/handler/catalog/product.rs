@@ -15,7 +15,8 @@ use erp_catalog::{
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
-use erp_processes::{
+use erp_master_data::product_handover::CatalogHandoverPorts;
+use erp_master_data::{
     handover_product, product_create_with_assets as create_product_with_assets,
     product_handover_candidates as load_product_handover_candidates,
     product_update_with_assets as update_product_with_assets,
@@ -30,6 +31,7 @@ use crate::core::handler::file_asset::{
     extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
+use crate::wiring::catalog_access;
 
 /// 查询符合销售资格的公司 SKU 只读投影。
 ///
@@ -106,7 +108,7 @@ pub async fn product_create_with_assets(
 ) -> Result<ProductView> {
     let (req, files) = extract_command_with_asset_files::<CreateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = create_product_with_assets(state.db(), state.rbac(), req, pending.clone(), actor).await;
+    let result = create_product_with_assets(state.catalog_service(), req, pending.clone(), actor).await;
     let view = finish_asset_command(&state, &pending, result, |_| true).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -156,7 +158,7 @@ pub async fn product_update_with_assets(
 ) -> Result<ProductView> {
     let (req, files) = extract_command_with_asset_files::<UpdateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
-    let result = update_product_with_assets(state.db(), state.rbac(), id, req, pending.clone(), actor).await;
+    let result = update_product_with_assets(state.catalog_service(), id, req, pending.clone(), actor).await;
     let view = finish_asset_command(&state, &pending, result, |_| true).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -373,7 +375,15 @@ pub async fn product_handover(
     Path(id): Path<String>,
     Json(req): Json<HandoverProductRequest>,
 ) -> Result<HandoverProductView> {
-    let view = handover_product(state.db(), state.rbac(), &id, req, &actor).await?;
+    let view = handover_product(
+        state.db(),
+        state.rbac(),
+        CatalogHandoverPorts::new(catalog_access(state.db(), state.rbac()), state.catalog_service()),
+        &id,
+        req,
+        &actor,
+    )
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -391,7 +401,14 @@ pub async fn product_handover_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let view = load_product_handover_candidates(state.db(), state.rbac(), &id, &actor).await?;
+    let view = load_product_handover_candidates(
+        state.db(),
+        state.rbac(),
+        CatalogHandoverPorts::new(catalog_access(state.db(), state.rbac()), state.catalog_service()),
+        &id,
+        &actor,
+    )
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

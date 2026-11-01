@@ -3,12 +3,12 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, Path, State};
+use erp_file_assets::PendingFileAssets;
 use erp_finance::dto::payable::{
     CommitSupplierPaymentRequest, PaymentRecipientRevealView, RevealPaymentRecipientRequest,
     SupplierPaymentView,
 };
-use erp_processes::attachments::PendingFileAssets;
-use erp_processes::finance_posting::payable::PayableProcess;
+use erp_finance_posting::finance_posting::payable::PayableProcess;
 use erp_support::SensitivityClass;
 
 use super::process;
@@ -20,6 +20,7 @@ use crate::core::handler::file_asset::{
 };
 use crate::core::handler::payable::validate_bank_receipt_upload;
 use crate::core::response::ApiResponse;
+use crate::wiring::finance_posting_ports;
 
 /// 原子登记付款、回单、逐行核销、占用扣减、任务进度及命令结果。
 /// # 参数
@@ -47,8 +48,7 @@ pub async fn pay(
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let result = async {
         let batch = PendingFileAssets::prepare(pending.clone(), &actor)?.shared();
-        PayableProcess::new(state.db())
-            .with_rbac(state.rbac())
+        PayableProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
             .with_object_read(state.approval_object_read())
             .commit_purchase_payment_request_with_assets(&id, req, batch, &actor)
             .await

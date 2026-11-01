@@ -1,0 +1,26 @@
+[package]
+name = "erp-connector-jd-vop"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+config = { workspace = true }
+chrono = { workspace = true }
+erp-core = { workspace = true }
+erp-supply = { workspace = true }
+async-trait = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+md5 = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
+reqwest = { workspace = true }
+base64 = { workspace = true }
+erp-party = { workspace = true }
+url = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
+rsa = { version = "=0.9.10", features = ["getrandom"] }
+zeroize = { version = "1.8.2", features = ["serde"] }

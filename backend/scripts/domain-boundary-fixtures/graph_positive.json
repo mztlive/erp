@@ -1,53 +1,86 @@
 {
   "packages": [
-    { "name": "aliyun-ocr", "deps": [] },
+    {
+      "name": "aliyun-ocr",
+      "deps": []
+    },
     {
       "name": "erp-core",
       "deps": []
     },
     {
       "name": "application-core",
-      "deps": [{ "name": "erp-core", "kind": "normal" }]
+      "deps": [
+        {
+          "name": "erp-core",
+          "kind": "normal"
+        }
+      ]
     },
     {
       "name": "persistence-core",
-      "deps": [{ "name": "erp-core", "kind": "normal" }]
+      "deps": [
+        {
+          "name": "erp-core",
+          "kind": "normal"
+        }
+      ]
     },
     {
       "name": "erp-customer",
       "deps": [
-        { "name": "erp-core", "kind": "normal" },
-        { "name": "application-core", "kind": "normal" },
-        { "name": "persistence-core", "kind": "normal" }
+        {
+          "name": "erp-core",
+          "kind": "normal"
+        },
+        {
+          "name": "application-core",
+          "kind": "normal"
+        },
+        {
+          "name": "persistence-core",
+          "kind": "normal"
+        }
       ]
     },
     {
       "name": "erp-sales",
       "deps": [
-        { "name": "erp-core", "kind": "normal" },
-        { "name": "application-core", "kind": "normal" }
+        {
+          "name": "erp-core",
+          "kind": "normal"
+        },
+        {
+          "name": "application-core",
+          "kind": "normal"
+        }
       ]
     },
     {
-      "name": "erp-processes",
+      "name": "erp-order-to-cash",
       "deps": [
-        { "name": "aliyun-ocr", "kind": "normal" },
-        { "name": "erp-customer", "kind": "normal" },
-        { "name": "erp-sales", "kind": "normal" },
-        { "name": "services", "kind": "normal" },
-        { "name": "entities", "kind": "normal" }
+        {
+          "name": "erp-customer",
+          "kind": "normal"
+        },
+        {
+          "name": "erp-sales",
+          "kind": "normal"
+        }
       ]
     },
     {
       "name": "erp-read-models",
-      "deps": [
-        { "name": "database", "kind": "normal" },
-        { "name": "entities", "kind": "normal" }
-      ]
+      "deps": []
     },
     {
       "name": "bpm",
-      "deps": [{ "name": "entity-core", "kind": "normal" }]
+      "deps": [
+        {
+          "name": "entity-core",
+          "kind": "normal"
+        }
+      ]
     },
     {
       "name": "erp-contract",
@@ -56,14 +89,28 @@
     {
       "name": "erp-contract-recognition",
       "deps": [
-        { "name": "erp-contract", "kind": "normal" },
-        { "name": "aliyun-ocr", "kind": "normal" },
-        { "name": "rig-agent", "kind": "normal" }
+        {
+          "name": "erp-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "aliyun-ocr",
+          "kind": "normal"
+        },
+        {
+          "name": "rig-agent",
+          "kind": "normal"
+        }
       ]
     },
     {
       "name": "web-api",
-      "deps": [{ "name": "erp-contract-recognition", "kind": "normal" }]
+      "deps": [
+        {
+          "name": "erp-contract-recognition",
+          "kind": "normal"
+        }
+      ]
     }
   ]
 }

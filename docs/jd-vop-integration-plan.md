@@ -20,17 +20,17 @@
 
 | 当前入口 | 已有责任 | 本期实施要求 |
 | --- | --- | --- |
-| `backend/crates/erp-supply/src/ports/connector/` | 标准商品、可供、配送、订单、支付通知等窄接口 | 扩展订单确认、按数量预检、订单树及包裹数量表达 |
-| `backend/crates/erp-processes/src/connectors/registry.rs` | 按类型分派目录、健康及配置引用 | 增加已绑定连接的履约适配器解析入口 |
-| `backend/crates/erp-processes/src/connectors/dangaoshushu/` | 已有协议实现 | 保持其独立协议实现，作为行为回归对象 |
-| `backend/crates/erp-processes/src/supplier_api_orders/` | 冻结正式采购意图、地址、创建及支付通知 | 移除对蛋糕叔叔具体运行时与客户端的依赖，接入通用能力 |
-| `backend/crates/erp-processes/src/supplier_order_tracking/` | 查询观察、回调唤醒、真实履约应用 | 支持订单树刷新、叶子订单观察和部分数量应用 |
-| `backend/crates/erp-supply/src/api_order/` | 持久化执行步骤、动作指纹及采购关联 | 扩展订单发现、确认与恢复状态 |
-| `backend/crates/erp-finance/src/entity/payable/`、`service/payable/` | 供应商付款、留抵及应付核销 | 新增预存款账户、充值批次、占用、使用及冲回，复用财务金额和核销不变式 |
-| `backend/crates/erp-processes/src/finance_posting/payable/`、`fulfillment_execution/purchase_context.rs` | 付款申请执行及实付门槛 | 增加受控余额执行与发单资金保障判断，区分占用和实付 |
-| `backend/crates/erp-supply/src/entity/supplier_catalog.rs` | 来源目录、采购报价与公司关联 | 复用身份和版本机制，补充来源分组策略及采购限制 |
-| `backend/crates/erp-processes/src/supplier_catalog_adoption/` | 自动匹配、建品、供给和资料同步 | 复用既有流程，不在京东适配器内建品 |
-| `backend/crates/erp-integration/src/entity/supplier_callback.rs` | 已认证推送证据和补查意图 | 增加独立的拉取消息收件箱，不把拉取消息伪装成已验签回调 |
+| `backend/crates/domains/erp-supply/src/ports/connector/` | 标准商品、可供、配送、订单、支付通知等窄接口 | 扩展订单确认、按数量预检、订单树及包裹数量表达 |
+| `backend/crates/domains/erp-supply/src/connector_registry.rs` | 按类型分派目录、健康及配置引用 | 增加已绑定连接的履约适配器解析入口 |
+| `backend/crates/adapters/erp-connector-dangaoshushu/src/` | 已有协议实现 | 保持其独立协议实现，作为行为回归对象 |
+| `backend/crates/orchestration/erp-master-data/src/supplier_api_orders/` | 冻结正式采购意图、地址、创建及支付通知 | 移除对蛋糕叔叔具体运行时与客户端的依赖，接入通用能力 |
+| `backend/crates/orchestration/erp-master-data/src/supplier_order_tracking/` | 查询观察、回调唤醒、真实履约应用 | 支持订单树刷新、叶子订单观察和部分数量应用 |
+| `backend/crates/domains/erp-supply/src/api_order/` | 持久化执行步骤、动作指纹及采购关联 | 扩展订单发现、确认与恢复状态 |
+| `backend/crates/domains/erp-finance/src/entity/payable/`、`service/payable/` | 供应商付款、留抵及应付核销 | 新增预存款账户、充值批次、占用、使用及冲回，复用财务金额和核销不变式 |
+| `backend/crates/orchestration/erp-finance-posting/src/finance_posting/payable/`、`fulfillment_execution/purchase_context.rs` | 付款申请执行及实付门槛 | 增加受控余额执行与发单资金保障判断，区分占用和实付 |
+| `backend/crates/domains/erp-supply/src/entity/supplier_catalog.rs` | 来源目录、采购报价与公司关联 | 复用身份和版本机制，补充来源分组策略及采购限制 |
+| `backend/crates/orchestration/erp-master-data/src/supplier_catalog_adoption/` | 自动匹配、建品、供给和资料同步 | 复用既有流程，不在京东适配器内建品 |
+| `backend/crates/domains/erp-integration/src/entity/supplier_callback.rs` | 已认证推送证据和补查意图 | 增加独立的拉取消息收件箱，不把拉取消息伪装成已验签回调 |
 | `backend/apps/web-api/src/app_state.rs`、`core/supplier_order_worker.rs` | 生产装配与后台运行 | 仅配置京东时也必须启动发单、跟踪及消息处理 |
 | `erp-client/features/supplier-api-connections/` | 连接设置、商品库、单项及批量选品 | 复用入口，补充京东只读状态和失败原因 |
 
@@ -58,7 +58,7 @@
 
 ### 2.3 线下销售自动履约的必做改造
 
-以下各项均为首期完成条件；代码路径相对 `backend/crates/erp-processes/src/`，前端展示由对应销售、采购和履约页面承接。
+以下各项均为首期完成条件；业务模块路径按本方案第 2 节所属编排 crate 的 `src/` 定位；具体协议实现位于 `backend/crates/adapters/`，前端展示由对应销售、采购和履约页面承接。
 
 | 编号 | 必须改造的环节 | 实施落点与交付要求 | 对应验收 |
 | --- | --- | --- | --- |
@@ -103,7 +103,7 @@
 ## 4. 配置、认证与运行时
 
 1. 在 `backend/config/src/` 新增 `JdVopConfig` 并纳入 `SafeConfig`；部署配置负责网关地址、应用凭据、授权令牌引用、账号范围、超时、限流、同步和轮询参数。采购页面不重复配置地址、密钥或环境。
-2. 在 `erp-processes/src/connectors/jd_vop/` 实现 `runtime`、`transport`、`auth`、`wire`、`catalog`、`transform`、`delivery`、`preflight`、`order`、`tracking`、`messages` 模块。目录名为职责划分，允许按仓库大小门禁继续拆分。
+2. 在 `crates/adapters/erp-connector-jd-vop/src/` 实现 `runtime`、`transport`、`auth`、`wire`、`catalog`、`transform`、`delivery`、`preflight`、`order`、`tracking`、`messages` 模块。目录名为职责划分，允许按仓库大小门禁继续拆分。
 3. 原始京东 DTO、字段类型兼容和响应封装只留在适配器；标准领域模型不得包含任意京东 JSON。`OfferTransform` 必须为纯转换，不执行 HTTP、数据库或文件上传。
 4. 请求签名执行[官方 HTTP 调用指南](https://vop.jd.com/doc/guide?id=93e984c4-2fd3-4b5b-9745-1b197d30d6ab)：除 `sign` 外的实际请求参数按名称升序排列，顺序拼接参数名与原始值，首尾加 `appSecret`，以 UTF-8 字节计算 MD5 并输出大写十六进制。`360buy_param_json` 只序列化一次，签名与发送使用同一字符串；签名完成后再进行 URL 编码，不得以 ERP 内部 HMAC 凭据代替京东签名。G0 阶段仍须冻结本账号适用的网关、公共参数、时间格式、授权和令牌续期机制及错误码样本；固定向量须保存同一次请求的完整非敏感测试输入和预期摘要，离线算法测试不替代账号授权及真实调用验收。
 5. 技术账号、合同授权范围与连接绑定。首期一个京东采购账号只允许一个负责消费该账号消息的连接；同账号多消费者必须共享账号级租约与收件箱，禁止相互删除未处理消息。更换账号不得复用原来源身份及历史订单命名空间。

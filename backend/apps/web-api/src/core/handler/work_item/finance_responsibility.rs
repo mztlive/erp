@@ -2,7 +2,6 @@
 
 use application_core::AuditActor;
 use axum::extract::{Extension, Path, State};
-use erp_processes::adapters::workflow::work_item_service;
 use erp_workflow::service::work_item::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
     FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest,
@@ -13,6 +12,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::workflow::work_item_service;
 
 /// 查询财务责任规则。
 pub async fn finance_responsibility_rule_list(

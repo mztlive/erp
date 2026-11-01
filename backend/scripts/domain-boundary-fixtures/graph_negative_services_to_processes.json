@@ -2,7 +2,7 @@
   "packages": [
     {
       "name": "services",
-      "deps": [{ "name": "erp-processes", "kind": "normal" }]
+      "deps": [{ "name": "erp-order-to-cash", "kind": "normal" }]
     }
   ]
 }

@@ -1,19 +1,19 @@
 //! 域 D22 `legacy_import` 的 HTTP handler。
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
-//! 直接复用 `erp_import` 的领域 DTO 与 `erp_processes::import_apply::dto` 的组合响应，禁止重复定义同构类型、禁止直连数据库。
+//! 直接复用 `erp_import` 的领域 DTO 与 `erp_data_import::import_apply::dto` 的组合响应，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
+use erp_data_import::import_apply::dto::{
+    CompleteImportBusinessConfirmationResult, LegacyImportConfirmationView,
+};
 use erp_import::{
     ApplyLegacyImportBatchRequest, CompleteImportBusinessConfirmationCommand, CreateLegacyImportBatchRequest,
     CreateLegacyImportConfirmationRequest, ImportExecutionCommand, ImportExecutionResult,
     LegacyImportBatchListItem, LegacyImportBatchListParams, LegacyImportBatchView,
     LegacyImportConfirmationListParams, LegacyImportRowListParams, LegacyImportRowView, PageView,
-};
-use erp_processes::import_apply::dto::{
-    CompleteImportBusinessConfirmationResult, LegacyImportConfirmationView,
 };
 use erp_read_models::import_center;
 
@@ -152,7 +152,7 @@ pub async fn legacy_import_confirmation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<LegacyImportConfirmationListParams>,
 ) -> Result<PageView<LegacyImportConfirmationView>> {
-    let page = state.import_apply_process().confirmation_list(&params, &actor, state.rbac()).await?;
+    let page = state.import_apply_process().confirmation_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

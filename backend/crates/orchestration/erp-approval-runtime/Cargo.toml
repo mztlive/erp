@@ -1,0 +1,24 @@
+[package]
+name = "erp-approval-runtime"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+application-core = { workspace = true }
+async-trait = { workspace = true }
+bpm = { workspace = true }
+erp-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-read-models = { workspace = true }
+erp-support = { workspace = true }
+erp-workflow = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
+validator = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

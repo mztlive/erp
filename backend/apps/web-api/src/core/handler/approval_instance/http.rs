@@ -102,8 +102,8 @@ impl PreparedInstanceListQuery {
             query.limit,
             query.q,
         )
-        .map_err(|error| match erp_processes::Error::from(error) {
-            erp_processes::Error::ValidationError(message) => {
+        .map_err(|error| match crate::wiring::errors::Error::from(error) {
+            crate::wiring::errors::Error::ValidationError(message) => {
                 ApprovalHttpError::unprocessable(message, headers)
             },
             error => ApprovalHttpError::from_service(error, headers),

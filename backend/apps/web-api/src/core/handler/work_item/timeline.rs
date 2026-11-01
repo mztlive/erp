@@ -2,8 +2,6 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::sales_timeline_service;
-use erp_processes::adapters::workflow::workflow_auth;
 use erp_read_models::WorkbenchReadService;
 use erp_read_models::sales_timeline::{TaskTimeline, TimelineQuery};
 
@@ -11,6 +9,8 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
+use crate::wiring::sales_timeline_service;
+use crate::wiring::workflow::workflow_auth;
 
 /// 读取当前任务的办理动态及可查看的销售单入口。
 /// # 参数

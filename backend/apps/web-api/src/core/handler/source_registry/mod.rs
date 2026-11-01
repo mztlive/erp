@@ -47,7 +47,7 @@ pub async fn source_system_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSourceSystemRequest>,
 ) -> Result<SourceSystemView> {
-    let view = erp_processes::create_source_system(state.db(), req, actor).await?;
+    let view = erp_supplier_catalog::source_registry::create_source_system(state.db(), req, actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

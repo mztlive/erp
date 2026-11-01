@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::MethodRouter;
-use erp_processes::connectors::jd_vop::credential::authorization::{
+use erp_supplier_orders::supplier_credentials::authorization::{
     AuthorizationError, JdVopAuthorizationRequest, JdVopAuthorizationStatus, JdVopAuthorizationStatusQuery,
 };
 

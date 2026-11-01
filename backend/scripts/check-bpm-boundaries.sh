@@ -21,7 +21,14 @@ fail() {
 search_rs() {
     # Keep the same ERE and exact metadata-derived files; batch subprocesses
     # within the platform argv limit instead of spawning grep for every file.
-    printf '%s\0' "${ACTIVE_RUST_SOURCES[@]}" | xargs -0 grep -Hn -E "$1" || true
+    printf '%s\0' "${ACTIVE_RUST_SOURCES[@]}" | xargs -0 sh -c '
+        pattern=$1
+        shift
+        grep -Hn -E "$pattern" "$@"
+        result=$?
+        # A normal no-match is allowed; missing/unreadable source is fatal.
+        test "$result" -le 1
+    ' sh "$1"
 }
 
 require_file() {
@@ -60,9 +67,9 @@ require_single_definition() {
 }
 
 echo "检查 BPM crate 与成员 manifest…"
-require_file "${BACKEND_DIR}/crates/bpm/Cargo.toml"
+require_file "${BACKEND_DIR}/crates/platform/bpm/Cargo.toml"
 require_file "${BACKEND_DIR}/scripts/check-bpm-boundaries.sh"
-require_file "${BACKEND_DIR}/crates/erp-workflow/src/service/approval/process_kind.rs"
+require_file "${BACKEND_DIR}/crates/domains/erp-workflow/src/service/approval/process_kind.rs"
 
 # The final workspace no longer contains legacy manifests. Resolve the actual
 # members and all normal/build/dev edges once; do not infer them from old paths.
@@ -96,25 +103,25 @@ for symbol in 'Uuid::new' 'Uuid::new_v4' 'uuid::Uuid::new' 'nanoid' 'IdGenerator
     fi
 done
 
-BPM_HITS="$(grep -RIn --include='*.rs' -E "${BPM_FORBIDDEN_RE}" "${BACKEND_DIR}/crates/bpm/src" || true)"
+BPM_HITS="$(grep -RIn --include='*.rs' -E "${BPM_FORBIDDEN_RE}" "${BACKEND_DIR}/crates/platform/bpm/src" || true)"
 if [[ -n "${BPM_HITS}" ]]; then
     fail "bpm 源码包含禁止的 ERP/I-O/时钟/ID 生成符号"
     printf '%s\n' "${BPM_HITS}" >&2
 fi
 
 echo "检查 ID 定义源…"
-require_single_definition "ApprovalProcessDefinitionId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalNodeDefinitionId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalTransitionDefinitionId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalProcessInstanceId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalNodeExecutionId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalInstanceAssigneeId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalCommandReceiptId" "crates/bpm/src/ids.rs"
-require_single_definition "ApprovalSubjectSnapshotId" "crates/erp-core/src/ids.rs"
-require_single_definition "ApprovalNotificationOutboxId" "crates/erp-core/src/ids.rs"
+require_single_definition "ApprovalProcessDefinitionId" "crates/platform/bpm/src/ids.rs"
+require_single_definition "ApprovalNodeDefinitionId" "crates/platform/bpm/src/ids.rs"
+require_single_definition "ApprovalTransitionDefinitionId" "crates/platform/bpm/src/ids.rs"
+require_single_definition "ApprovalProcessInstanceId" "crates/platform/bpm/src/ids.rs"
+require_single_definition "ApprovalNodeExecutionId" "crates/platform/bpm/src/ids.rs"
+require_single_definition "ApprovalInstanceAssigneeId" "crates/platform/bpm/src/ids.rs"
+require_single_definition "ApprovalCommandReceiptId" "crates/platform/bpm/src/ids.rs"
+require_single_definition "ApprovalSubjectSnapshotId" "crates/foundation/erp-core/src/ids.rs"
+require_single_definition "ApprovalNotificationOutboxId" "crates/foundation/erp-core/src/ids.rs"
 
 echo "检查 id_type 过程宏定义源…"
-MACRO_COUNT="$(python3 - "${BACKEND_DIR}/crates/entity-macros/src/lib.rs" <<'PY'
+MACRO_COUNT="$(python3 - "${BACKEND_DIR}/crates/platform/entity-macros/src/lib.rs" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -132,7 +139,7 @@ if [[ -n "${MACRO_RULES}" ]]; then
 fi
 
 echo "检查 DocumentType -> ProcessKind 映射入口…"
-PROCESS_KIND_FILE="${BACKEND_DIR}/crates/erp-workflow/src/service/approval/process_kind.rs"
+PROCESS_KIND_FILE="${BACKEND_DIR}/crates/domains/erp-workflow/src/service/approval/process_kind.rs"
 if ! grep -E -q 'pub fn process_kind_of\(' "${PROCESS_KIND_FILE}"; then
     fail "缺少 process_kind_of 映射入口"
 fi

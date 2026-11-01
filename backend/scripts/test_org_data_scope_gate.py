@@ -45,7 +45,7 @@ class SourceTests(unittest.TestCase):
 
     def test_composition_may_depend_on_identity_and_customer(self):
         graph = graph_from_packages({"packages": [
-            {"name": "erp-processes", "deps": [{"name": "erp-identity"}, {"name": "erp-customer"}]},
+            {"name": "erp-order-to-cash", "deps": [{"name": "erp-identity"}, {"name": "erp-customer"}]},
             {"name": "erp-identity", "deps": []}, {"name": "erp-customer", "deps": []},
         ]})
         self.assertFalse(forbidden_graph_errors(graph))
@@ -63,29 +63,46 @@ class SourceTests(unittest.TestCase):
                                            "struct Fact { scope_type: Kind, scope_targets: Vec<String> }"))
 
     def test_legacy_gap_remains_blocking(self):
-        findings = gate.scan_source("crates/erp-workflow/src/ports/authorization.rs", "scope.scope_type")
+        findings = gate.scan_source("crates/domains/erp-workflow/src/ports/authorization.rs", "scope.scope_type")
         self.assertEqual(findings[0].category, "待接入项")
         self.assertEqual(findings[0].rule, "ODS-RAW")
 
     def test_foundation_must_not_own_scope(self):
-        path = "crates/application-core/src/access.rs"
+        path = "crates/foundation/application-core/src/access.rs"
         self.assertIn("ODS-OWNER", self.rules(path, "struct ResolvedScope {}"))
         self.assertFalse(self.rules(path, "struct AuditActor {}"))
 
     def test_second_engine_rejected(self):
-        self.assertIn("ODS-ENGINE", self.rules("crates/erp-sales/src/service/access.rs",
+        self.assertIn("ODS-ENGINE", self.rules("crates/domains/erp-sales/src/service/access.rs",
                                               "struct DataScopeService {}"))
 
     def test_repository_explicit_condition_allowed_auth_rejected(self):
-        path = "crates/erp-customer/src/repository/scope.rs"
+        path = "crates/domains/erp-customer/src/repository/scope.rs"
         self.assertFalse(self.rules(path, "fn document(scope: &CustomerReadScope) { scope.roles.iter(); }"))
         self.assertIn("ODS-REPOSITORY", self.rules(path, "db.data_scopes().list_by_subject(user, executor)"))
 
     def test_identity_repository_may_read_raw_storage(self):
-        self.assertFalse(self.rules("crates/erp-identity/src/repository/scope.rs", "rule.scope_type"))
+        self.assertFalse(self.rules("crates/domains/erp-identity/src/repository/scope.rs", "rule.scope_type"))
+
+    def test_nested_domain_and_foundation_paths_keep_source_rules(self):
+        for prefix in ("crates/", "crates/domains/"):
+            with self.subTest(prefix=prefix):
+                self.assertIn("ODS-PORT", self.rules(prefix + "erp-customer/src/ports/scope.rs",
+                                                    "use erp_identity::AuthorizedDataScope;"))
+        self.assertIn("ODS-OWNER", self.rules("crates/foundation/application-core/src/scope.rs",
+                                             "struct ResolvedScope {}"))
 
     def test_production_adapter_allowed(self):
         self.assertFalse(self.rules(gate.CUSTOMER_ADAPTER, GOOD_ADAPTER))
+
+    def test_application_and_cli_adapters_keep_executor_and_failure_rules(self):
+        for path in (gate.CUSTOMER_ADAPTER, "apps/cli/src/adapters/customer_scope.rs"):
+            with self.subTest(path=path):
+                self.assertFalse(self.rules(path, GOOD_ADAPTER))
+                broken = GOOD_ADAPTER.replace("convert(access)", "let _ = NoTransaction; convert(access)")
+                self.assertIn("ODS-EXECUTOR", self.rules(path, broken))
+                fallback = GOOD_ADAPTER.replace("convert(access)", "convert(access).unwrap_or_default()")
+                self.assertIn("ODS-FALLBACK", self.rules(path, fallback))
 
     def test_adapter_alias_allowed(self):
         source = GOOD_ADAPTER.replace("::DataScopeService;", "::DataScopeService as Resolver;")

@@ -126,16 +126,17 @@ mod tests {
     use axum::body::{Body, to_bytes};
     use axum::http::Request as HttpRequest;
     use config::XxlJobConfig;
-    use erp_processes::scheduled_execution::{
-        ScheduleCallback, ScheduledExecutionProcess, ScheduledWork, XxlAdmin,
-    };
     use erp_support::entity::scheduled_run::{ScheduledHandler, ScheduledRun};
     use erp_support::ports::scheduled_runs::ScheduledRunStore;
+    use erp_support::service::scheduled_execution::{
+        ScheduleCallback, ScheduledExecutionProcess, ScheduledWork,
+    };
     use persistence_core::{Error, Result as StoreResult};
     use serde_json::Value;
     use tower::ServiceExt;
 
     use super::*;
+    use crate::runtime::xxl::admin::XxlAdmin;
 
     #[derive(Default)]
     struct Store(Mutex<Option<ScheduledRun>>);

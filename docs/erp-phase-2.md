@@ -271,7 +271,7 @@ flowchart LR
 能力声明只表示供应商接口具备该操作，不表示每个商品都必然可用。商品发布版本还需保存商品级能力标识。
 
 供应商协议接口统一采用 `erp-supply::ports::connector`，执行细则见
-[供应商 Connector trait 合同](../backend/crates/erp-supply/src/ports/connector/README.md)。
+[供应商 Connector trait 合同](../backend/crates/domains/erp-supply/src/ports/connector/README.md)。
 一个适配器实例只绑定一个服务端已验证的连接；连接、接口地址和凭据不得由业务载荷或回调字段切换。
 
 | 接口 | 能力边界 |
@@ -1217,8 +1217,8 @@ ERP 按供应商和结算周期汇总已完成、已取消和已退款订单，�
 第二期逻辑实体应复用第一期稳定身份、不可变版本、结构化快照和追加式纠错原则。
 
 本章规定第二期业务增量实体、关键字段及兼容启用要求；供应商协议类型见
-[Connector trait 合同](../backend/crates/erp-supply/src/ports/connector/README.md)，现有持久化实体见
-[erp-supply 实体入口](../backend/crates/erp-supply/src/entity/mod.rs)。目标字段合同不代表数据库迁移已经完成，
+[Connector trait 合同](../backend/crates/domains/erp-supply/src/ports/connector/README.md)，现有持久化实体见
+[erp-supply 实体入口](../backend/crates/domains/erp-supply/src/entity/mod.rs)。目标字段合同不代表数据库迁移已经完成，
 接入前必须完成相应兼容改造及验证。
 
 ### 14.1 供应商接入与供给
@@ -1663,7 +1663,7 @@ P0、P1 和 P2 均属于第二期范围。P0、P1 允许按优先级先后研发
 | `erp-phase-1.md`                | 第一期系统边界、商业单据、卡券销售单同步和跨部门流程                                                  |
 | **本文**                        | 第二期缺口、销售单切换、商城消费、供应商协同、数据扩展和验收基线                                      |
 | `approval-workflow-contract.md` | 审批定义、运行实例、节点分派、待办责任（全系统只有指定到人一种）、多级推进、统一工作台和 BPM 接入边界 |
-| [供应商 Connector trait 合同](../backend/crates/erp-supply/src/ports/connector/README.md) | 已确认的供应商协议接口、输入输出、恢复和启用约束；逻辑数据增量见本文第 14 章，当前实体见 erp-supply |
+| [供应商 Connector trait 合同](../backend/crates/domains/erp-supply/src/ports/connector/README.md) | 已确认的供应商协议接口、输入输出、恢复和启用约束；逻辑数据增量见本文第 14 章，当前实体见 erp-supply |
 | `erp-mall-data-mapping.md`      | 商城旧表、历史数据和接口到规范模型的兼容与迁移规则                                                    |
 | `erp-ui-design.md`              | 应用壳、工作面、页面模式、导航与组件约定（UI 事实源）                                                 |
 | `erp-ui-flows.md`               | 主业务路径如何在工作面内连续完成、避免跨页割裂                                                        |

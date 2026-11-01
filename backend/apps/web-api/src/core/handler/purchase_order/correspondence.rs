@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::purchase_correspondence::{
+use erp_procure_to_pay::purchase_correspondence::{
     self, PurchaseEmailHistory, PurchaseEmailResult, PurchasePaper,
 };
 use erp_procurement::entity::purchase_email::SendPurchaseEmail;
@@ -11,6 +11,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::MongoPurchaseDataScope;
 
 /// 下载当前保存内容的独立采购单文件。
 /// # 参数
@@ -25,7 +26,14 @@ pub async fn purchase_paper(
     Path(id): Path<String>,
 ) -> Result<PurchasePaper> {
     Ok(ApiResponse::ok_with_data(
-        purchase_correspondence::download(state.db(), state.rbac(), &id, &actor).await?,
+        purchase_correspondence::download(
+            state.db(),
+            state.rbac(),
+            MongoPurchaseDataScope::shared(state.db(), state.rbac()),
+            &id,
+            &actor,
+        )
+        .await?,
     ))
 }
 /// 发送已生效采购单，所有正文由服务端生成。
@@ -46,6 +54,7 @@ pub async fn send_purchase_email(
         purchase_correspondence::send(
             state.db(),
             state.rbac(),
+            MongoPurchaseDataScope::shared(state.db(), state.rbac()),
             config.purchase_mail.as_ref(),
             &id,
             req,
@@ -68,6 +77,13 @@ pub async fn purchase_email_history(
     Path(id): Path<String>,
 ) -> Result<Vec<PurchaseEmailHistory>> {
     Ok(ApiResponse::ok_with_data(
-        purchase_correspondence::history(state.db(), state.rbac(), &id, &actor).await?,
+        purchase_correspondence::history(
+            state.db(),
+            state.rbac(),
+            MongoPurchaseDataScope::shared(state.db(), state.rbac()),
+            &id,
+            &actor,
+        )
+        .await?,
     ))
 }

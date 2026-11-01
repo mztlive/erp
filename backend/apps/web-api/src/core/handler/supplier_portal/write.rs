@@ -2,10 +2,10 @@
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_identity::PortalActor;
-use erp_processes::supplier_portal::{
+use erp_read_models::supplier_portal::SupplierPortalReadService;
+use erp_supplier_catalog::supplier_portal::{
     CooperationSave, NewProductSave, PortalBatchInput, PortalBatchResult, PortalTransition,
 };
-use erp_read_models::supplier_portal::SupplierPortalReadService;
 use erp_supply::portal::{PortalAvailabilityInput, PortalQuoteInput};
 use serde_json::{Value, to_value};
 

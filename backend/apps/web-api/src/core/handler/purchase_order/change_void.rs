@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::procure_to_pay::PurchaseOrderProcess;
+use erp_procure_to_pay::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::VoidPurchaseChangeRequest;
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
 
@@ -11,6 +11,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
+use crate::wiring::purchase_ports;
 
 /// 作废采购改单草稿（仅草稿态，乐观锁）。
 ///
@@ -31,9 +32,10 @@ pub async fn purchase_change_void(
     Path(id): Path<String>,
     Json(req): Json<VoidPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .void_change(&id, req, &actor)
-        .await?;
+    let view =
+        PurchaseOrderProcess::with_rbac(state.db(), state.rbac(), purchase_ports(state.db(), state.rbac()))
+            .with_object_read(state.approval_object_read())
+            .void_change(&id, req, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

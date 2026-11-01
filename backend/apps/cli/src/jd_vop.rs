@@ -4,7 +4,7 @@ use cli::args::JdVopCredentialImportArgs;
 use cli::jd_vop_input::read_input;
 use config::ConfigArgs;
 use erp_core::AccountKind;
-use erp_processes::connectors::jd_vop::credential::{JdVopCredentialImport, JdVopCredentialStatus};
+use erp_supplier_orders::supplier_credentials::{JdVopCredentialImport, JdVopCredentialStatus};
 
 use crate::error::{Error, Result};
 use crate::runtime::JdVopCredentialRuntime;

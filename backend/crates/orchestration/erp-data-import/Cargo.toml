@@ -1,0 +1,56 @@
+[package]
+name = "erp-data-import"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+futures-util = { workspace = true }
+regex = { workspace = true }
+zune-jpeg = { workspace = true }
+image = { workspace = true }
+chrono = { workspace = true }
+erp-procurement = { workspace = true }
+erp-inventory = { workspace = true }
+base64 = { workspace = true }
+erp-order-to-cash = { workspace = true }
+erp-sales = { workspace = true }
+rust_xlsxwriter = { workspace = true }
+application-core = { workspace = true }
+async-trait = { workspace = true }
+background-runtime = { workspace = true }
+entity-core = { workspace = true }
+erp-audit = { workspace = true }
+erp-catalog = { workspace = true }
+erp-contract = { workspace = true }
+erp-core = { workspace = true }
+erp-customer = { workspace = true }
+erp-file-assets = { workspace = true }
+erp-identity = { workspace = true }
+erp-import = { workspace = true }
+erp-master-data = { workspace = true }
+erp-party = { workspace = true }
+erp-read-models = { workspace = true }
+erp-supplier = { workspace = true }
+erp-supplier-catalog = { workspace = true }
+erp-supply = { workspace = true }
+erp-support = { workspace = true }
+erp-workflow = { workspace = true }
+hex = { workspace = true }
+id-generator = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+roxmltree = "0.21.1"
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+storage = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
+tracing = { workspace = true }
+validator = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+test-support = { workspace = true }

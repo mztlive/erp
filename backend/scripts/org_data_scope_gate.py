@@ -18,21 +18,21 @@ import sys
 import unittest
 
 from cutover_workspace import _code_and_literals, active_source_paths
-from domain_boundaries import BUSINESS_DOMAINS, FOUNDATION, cargo_metadata
+from domain_boundaries import BUSINESS_DOMAINS, COMPOSITION, FOUNDATION, cargo_metadata
 
 
-RESOLVER = "crates/erp-identity/src/service/access_control/resolve.rs"
-CUSTOMER_PORT = "crates/erp-customer/src/ports/data_scope.rs"
-CUSTOMER_ADAPTER = "crates/erp-processes/src/adapters/customer_data_scope.rs"
-CUSTOMER_ACCESS = "crates/erp-customer/src/service/customer/access.rs"
+RESOLVER = "crates/domains/erp-identity/src/service/access_control/resolve.rs"
+CUSTOMER_PORT = "crates/domains/erp-customer/src/ports/data_scope.rs"
+CUSTOMER_ADAPTER = "apps/web-api/src/wiring/customer_data_scope.rs"
+CUSTOMER_ACCESS = "crates/domains/erp-customer/src/service/customer/access.rs"
 REQUIRED = (RESOLVER, CUSTOMER_PORT, CUSTOMER_ADAPTER, CUSTOMER_ACCESS)
 # These labels describe existing migration gaps, never exemptions from failure.
 LEGACY = {
-    "crates/erp-workflow/src/ports/authorization.rs",
-    "crates/erp-workflow/src/service/work_item/access.rs",
-    "crates/erp-workflow/src/service/approval/business_adapter.rs",
-    "crates/erp-workflow/src/service/approval/scope.rs",
-    "crates/erp-processes/src/adapters/workflow/authorization.rs",
+    "crates/domains/erp-workflow/src/ports/authorization.rs",
+    "crates/domains/erp-workflow/src/service/work_item/access.rs",
+    "crates/domains/erp-workflow/src/service/approval/business_adapter.rs",
+    "crates/domains/erp-workflow/src/service/approval/scope.rs",
+    "apps/web-api/src/wiring/workflow/authorization.rs",
 }
 RAW = r"\b(?:scope_type|scope_targets)\b"
 INTERNAL = r"\b(?:AuthorizedDataScope|SharedRbacService|OrganizationState|OrgTree|ScopeResolution|DataScopeService)\b"
@@ -93,8 +93,9 @@ def scan_source(path: str, source: str) -> list[Finding]:
         return []
     code = production_code(source)
     parts = path.split("/")
-    package = parts[1] if len(parts) > 2 and parts[0] == "crates" else ""
+    package = parts[parts.index("src") - 1] if "src" in parts and parts[0] == "crates" else ""
     consumer = package in BUSINESS_DOMAINS - {"erp-identity"}
+    composition = package in COMPOSITION or path.startswith(("apps/web-api/src/wiring/", "apps/cli/src/adapters/"))
     findings: list[Finding] = []
 
     def reject(rule: str, pattern: str, message: str, category: str = "整改项") -> None:
@@ -105,7 +106,7 @@ def scan_source(path: str, source: str) -> list[Finding]:
 
     if consumer and "/ports/" in path:
         reject("ODS-PORT", INTERNAL, "Port 不得暴露身份域内部类型或具体解析实现（9.2/9.3/9.4）")
-    if consumer or package in {"erp-processes", "erp-read-models"}:
+    if consumer or composition:
         reject("ODS-RAW", RAW, "消费路径携带或解释原始 scope_type/scope_targets；必须接入公共解析（9.2.3/9.5.5）",
                "待接入项" if path in LEGACY else "整改项")
     if package in FOUNDATION:
@@ -117,7 +118,7 @@ def scan_source(path: str, source: str) -> list[Finding]:
     if consumer and "/repository/" in path:
         reject("ODS-REPOSITORY", r"\b(?:DataScopeService|ScopeResolution|SharedRbacService|AuthorizedDataScope)\b|\.(?:data_scopes|role_permission_snapshot|granting_role_ids_for_all)\s*\(",
                "业务 Repository 只能编译明确对象条件，不得加载/解释登录授权（9.1.2/9.2）")
-    adapter = package == "erp-processes" and re.search(r"\bimpl\s+\w*DataScopePort\s+for\b", code)
+    adapter = composition and re.search(r"\bimpl\s+\w*DataScopePort\s+for\b", code)
     if adapter:
         reject("ODS-EXECUTOR", r"\bNoTransaction\b|\.(?:with_transaction|start_session|start_transaction)\s*\(",
                "授权 adapter 不得替换执行器或另开事务（9.3 执行上下文）")

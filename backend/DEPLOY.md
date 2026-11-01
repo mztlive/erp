@@ -101,6 +101,26 @@ scripts/release-deploy.sh current
 scripts/release-deploy.sh rollback <release-tag>
 ```
 
+## 日志定位与过滤合同
+
+`web-api` 与 `erp-worker` 使用当前 crate 的 tracing target 和真实源码 `file`、
+`line`。这些字段用于定位当前实现，不作为跨版本固定值；不得伪造旧 crate 名、旧路径
+或旧行号。业务事件的级别、消息及结构化字段保持各事件合同，HTTP 访问日志继续使用
+显式 `target=http`，保留 `trace_id`、`status`、`latency_ms` 等关联字段。
+
+默认 `RUST_LOG=info` 继续适用于拆分后的全部 crate。需要定向排查时，按当前责任库配置，
+例如供应商目录、订单和通用调度：
+
+```text
+RUST_LOG=info,erp_supplier_catalog=debug,erp_supplier_orders=debug,background_runtime=debug
+```
+
+其他业务前缀包括 `erp_data_import`、`erp_fulfillment_execution`、`erp_order_to_cash`、
+`erp_support` 和 `erp_audit`。过滤表达式中的 crate 名使用下划线。外部采集、检索或告警
+若匹配旧 `erp_processes` target 或源码路径，发布前必须改为当前责任库或既有业务字段；
+通用 `info` 规则无需修改。凭据保护过滤保持生效，`RUST_LOG` 不得重新开启 `nacos_sdk`
+日志。
+
 ## Kubernetes
 
 生产和测试环境统一通过 `deploy/helm/erp` Chart 部署 `erp-api` 和 `erp-client`，

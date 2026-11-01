@@ -2,7 +2,7 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_identity::Permission;
-use erp_processes::supplier_api_orders::{
+use erp_supplier_orders::supplier_api_orders::{
     ExecutionAddressCandidates, ExecutionAddressQuery, ExecutionQueryRequest, ExecutionSetupRequest,
     ExecutionSetupView,
 };
@@ -31,9 +31,9 @@ pub async fn supplier_order_execution_setup(
         .supplier_fulfillment_process()
         .require_scoped_order(&id, &actor, "detail", &mut NoTransaction)
         .await?;
-    let process = state
-        .supplier_api_order_process()
-        .ok_or_else(|| erp_processes::Error::NotFound("此订单没有已配置的 API 自动执行入口".into()))?;
+    let process = state.supplier_api_order_process().ok_or_else(|| {
+        crate::wiring::errors::Error::NotFound("此订单没有已配置的 API 自动执行入口".into())
+    })?;
     let view = mask_execution_costs(&state, &subject, process.execution_setup(&id).await?).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -58,7 +58,7 @@ pub async fn save_supplier_order_execution_setup(
         .await?;
     let process = state
         .supplier_api_order_process()
-        .ok_or_else(|| erp_processes::Error::BusinessLogicError("供应商协议尚未配置".into()))?;
+        .ok_or_else(|| crate::wiring::errors::Error::BusinessLogicError("供应商协议尚未配置".into()))?;
     let view = process
         .save_execution_setup(&id, request, &actor, &state.supplier_fulfillment_service().access())
         .await?;
@@ -84,7 +84,7 @@ pub async fn supplier_order_execution_address_candidates(
         .await?;
     let process = state
         .supplier_api_order_process()
-        .ok_or_else(|| erp_processes::Error::NotFound("供应商协议尚未配置".into()))?;
+        .ok_or_else(|| crate::wiring::errors::Error::NotFound("供应商协议尚未配置".into()))?;
     Ok(ApiResponse::ok_with_data(process.execution_address_candidates(&id, query).await?))
 }
 
@@ -108,7 +108,7 @@ pub async fn query_supplier_order_execution_result(
         .await?;
     let process = state
         .supplier_api_order_process()
-        .ok_or_else(|| erp_processes::Error::NotFound("供应商协议尚未配置".into()))?;
+        .ok_or_else(|| crate::wiring::errors::Error::NotFound("供应商协议尚未配置".into()))?;
     let view = process
         .query_execution_result(&id, request, &actor, &state.supplier_fulfillment_service().access())
         .await?;

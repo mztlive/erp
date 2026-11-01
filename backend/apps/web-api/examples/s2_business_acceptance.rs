@@ -18,14 +18,14 @@ use erp_identity::access_control::{
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
 use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::organization_service;
-use erp_processes::adapters::workflow::workflow_auth;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::bson::{Document, doc};
 use mongodb::{Client, Database};
 use persistence_core::NoTransaction;
 use test_support::seed_admin_account;
+use web_api::wiring::identity::shared_rbac_service;
+use web_api::wiring::organization_service;
+use web_api::wiring::workflow::workflow_auth;
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -104,8 +104,7 @@ async fn verify(db: &Database) -> Outcome {
     println!("PASS b2_manage_narrowing_traceable");
 
     // B1/A21：只读查询不触发写入（解析＋真实 find 前后业务集合计数不变）。
-    let port =
-        erp_processes::adapters::MongoCustomerDataScope::new(db.clone(), shared_rbac_service(db.clone()));
+    let port = web_api::wiring::MongoCustomerDataScope::new(db.clone(), shared_rbac_service(db.clone()));
     seed_company(db, &member_role, "customer", &["list", "detail"]).await?;
     let counts_before = business_counts(db).await?;
     for action in ["list", "detail"] {

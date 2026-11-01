@@ -4,7 +4,7 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_finance::entity::supplier_deposit::{SupplierDepositReconciliation, SupplierDepositReservation};
-use erp_processes::supplier_deposits::{ReleaseDepositReservation, ResolveDepositReconciliation};
+use erp_supplier_orders::supplier_deposits::{ReleaseDepositReservation, ResolveDepositReconciliation};
 
 use super::process;
 use crate::app_state::AppState;

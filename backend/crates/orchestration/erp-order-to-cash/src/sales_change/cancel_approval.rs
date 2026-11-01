@@ -1,0 +1,181 @@
+//! 销售变更撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
+
+use std::sync::Arc;
+
+use bpm::model::{IdempotencyKey, SubjectRef};
+use erp_approval_runtime::ApprovalRuntimePort;
+use erp_audit::execution::persist_log;
+use erp_core::common::time::Instant;
+use erp_sales::entity::sales_review::SalesChangeOrder;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
+use erp_workflow::entity::work_item::WorkItem;
+pub(super) use erp_workflow::service::approval::execution::cancel_prepare::DocumentCancelRuntime as LoadedCancelRuntime;
+use erp_workflow::service::approval::execution::cancel_prepare::document_cancel_runtime;
+use erp_workflow::service::approval::execution::{
+    CancelExecutionInput, PreparedExecution, claim_and_persist_document_cancel_runtime,
+};
+use mongodb::Database;
+use persistence_core::{NoTransaction, Transactional};
+
+use crate::Result;
+
+/// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
+///
+/// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `binding` - 创建时冻结的定义绑定
+/// * `subject` - 业务对象引用
+/// * `subject_version` - 冻结提交版本
+///
+/// # 返回
+/// 返回定义图、实例、当前执行、任务关闭策略与开放任务快照。
+///
+/// # 错误
+/// 实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
+pub(super) async fn load_cancel_runtime(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+    subject: &SubjectRef,
+    subject_version: u32,
+) -> Result<LoadedCancelRuntime> {
+    Ok(document_cancel_runtime(
+        db,
+        binding,
+        subject,
+        subject_version,
+        "销售变更单绑定的审批定义不存在",
+        &mut NoTransaction,
+    )
+    .await?)
+}
+
+/// 构造统一 `cancel_approval` 输入。
+///
+/// 人员失效走业务取消；非人员一致性 blocker 必须走受阻取消。
+///
+/// # 参数
+/// * `runtime` - 已加载运行事实
+/// * `reason` - 已校验的非空原因
+/// * `actor_id` - 撤回人
+/// * `idempotency_key` - 幂等键
+/// * `receipt` - 已存在收据
+/// * `now` - 调用方时间
+///
+/// # 返回
+/// 返回可交给统一 `prepare_cancel` 的取消编排输入。
+///
+/// # 错误
+/// 原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
+pub fn build_sales_change_cancel_input(
+    runtime: &LoadedCancelRuntime,
+    reason: &str,
+    actor_id: &str,
+    idempotency_key: &IdempotencyKey,
+    receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    now: Instant,
+) -> Result<CancelExecutionInput> {
+    Ok(runtime.cancel_input(reason, actor_id, idempotency_key, receipt, now)?)
+}
+
+/// 销售变更撤回事务写入集合。
+///
+/// # 用途
+/// 收拢取消计划、开放任务、撤回人与审计，供同一事务写入。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、任务关闭与单据回写必须同事务；CAS 失败时回滚。
+pub(super) struct SalesChangeCancelPersistInput {
+    pub approvals: Arc<dyn ApprovalRuntimePort>,
+    /// 已执行 `cancel_action` 的变更单。
+    pub change_order: SalesChangeOrder,
+    /// `prepare_cancel` 结果。
+    pub prepared: PreparedExecution,
+    /// 待关闭的开放任务。
+    pub open_tasks: Vec<WorkItem>,
+    /// 撤回人。
+    pub actor_id: String,
+    /// 撤回原因。
+    pub reason: String,
+    /// 调用方时间。
+    pub now: Instant,
+    /// 已构造审计。
+    pub audit: erp_audit::AuditLog,
+    /// 已认证操作人，用于事务内重验来源销售单范围。
+    pub actor: application_core::AuditActor,
+    /// 与写事务绑定的授权源。
+    pub rbac: erp_identity::SharedRbacService,
+}
+
+/// 在同一事务内应用取消计划、关闭任务并写回变更单。
+///
+/// # 用途
+/// 撤回审批后原子写回运行事实与变更单。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `input` - 变更单、取消计划与开放任务
+///
+/// # 返回
+/// 成功时无返回值。
+///
+/// # 错误
+/// CAS 冲突或仓储失败时返回错误，事务回滚。
+///
+/// # 关键业务约束
+/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
+pub(super) async fn persist_sales_change_cancel(
+    db: &Database,
+    input: SalesChangeCancelPersistInput,
+) -> Result<()> {
+    let SalesChangeCancelPersistInput {
+        approvals,
+        mut change_order,
+        prepared,
+        open_tasks,
+        actor_id,
+        reason,
+        now,
+        audit,
+        actor,
+        rbac,
+    } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(());
+    };
+    let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
+    let db = db.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
+                    .require_object(
+                        &actor,
+                        "cancel_approval",
+                        change_order.sales_order_id.as_ref(),
+                        &[],
+                        executor,
+                    )
+                    .await
+                    .map_err(crate::Error::from)?;
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                approvals.persist_cancel_copies(&db, &writes, executor).await?;
+                erp_sales::service::sales_review::persist_cancelled_change(&db, &mut change_order, executor)
+                    .await?;
+                persist_log(&db, &audit, executor).await?;
+                Ok::<(), crate::Error>(())
+            })
+        })
+        .await
+}

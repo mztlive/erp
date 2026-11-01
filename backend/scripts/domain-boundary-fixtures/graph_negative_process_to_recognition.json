@@ -1,7 +1,7 @@
 {
   "packages": [
     {
-      "name": "erp-processes",
+      "name": "erp-order-to-cash",
       "deps": [
         {
           "name": "erp-contract-recognition",

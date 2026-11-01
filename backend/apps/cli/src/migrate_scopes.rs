@@ -1,9 +1,8 @@
 //! 显式人员范围迁移命令，默认只输出报告。
 use config::ConfigArgs;
 use erp_identity::indexes::ensure_person_scopes;
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::scope_configuration;
 
+use crate::adapters::{scope_configuration, shared_rbac_service};
 use crate::args::MigrateScopeArgs;
 use crate::error::{Error, Result};
 

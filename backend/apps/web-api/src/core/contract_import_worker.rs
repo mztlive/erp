@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use application_core::AuditActor;
 use erp_contract::entity::recognition::{ImportStatus, ImportView};
-use erp_processes::contract_import::{ContractImportProcess, ImportAttempt};
-use erp_processes::{Error as ProcessError, Result as ProcessResult};
+use erp_data_import::contract_import::{ContractImportProcess, ImportAttempt};
+use erp_data_import::{Error as ProcessError, Result as ProcessResult};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, oneshot};
 use tokio::time::timeout;
 

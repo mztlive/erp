@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::sales_inquiry::read::{
+use erp_order_to_cash::sales_inquiry::read::{
     InquiryListParams, InquiryListView, InquiryReadService, InquiryTaskParams, InquiryTemplateProduct,
     InquiryTemplateProductsRequest, ProcurementInquiryDetail,
 };

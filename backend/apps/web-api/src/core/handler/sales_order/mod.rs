@@ -10,7 +10,7 @@ pub mod selection;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::order_to_cash::SalesOrderCommandProcess;
+use erp_order_to_cash::order_to_cash::SalesOrderCommandProcess;
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_read_models::sales_center::order::{SalesListParams, SalesListView, SalesOrderReadService};
 use erp_sales::dto::sales_order::{
@@ -69,8 +69,12 @@ pub async fn sales_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read());
+    let service = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read());
     if let Some(contract_id) = req.contract_id.as_ref() {
         ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
     }
@@ -126,8 +130,12 @@ pub async fn sales_order_save_working_copy(
     if let Some(contract_id) = req.contract_id.as_ref() {
         ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
     }
-    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read());
+    let service = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read());
     let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.save_working_copy(&id, req, &actor).await?;
@@ -160,8 +168,12 @@ pub async fn sales_order_submit(
     if let Some(contract_id) = req.contract_id.as_ref() {
         ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
     }
-    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read());
+    let service = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read());
     let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.submit_sales_order(&id, req, &actor).await?;
@@ -185,10 +197,14 @@ pub async fn sales_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelSalesOrderApprovalRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .cancel_approval_submission(&id, req, &actor)
-        .await?;
+    let view = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .cancel_approval_submission(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -209,10 +225,14 @@ pub async fn sales_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .void_sales_order(&id, req, &actor)
-        .await?;
+    let view = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .void_sales_order(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -236,10 +256,14 @@ pub async fn sales_order_handover(
     Path(id): Path<String>,
     Json(req): Json<HandoverSalesOrderRequest>,
 ) -> Result<HandoverSalesOrderView> {
-    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .handover_sales_order(&id, req, &actor)
-        .await?;
+    let view = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .handover_sales_order(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -258,10 +282,14 @@ pub async fn sales_order_handover_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let candidates = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .handover_candidates(&id, &actor)
-        .await?;
+    let candidates = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .handover_candidates(&id, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(candidates))
 }
@@ -339,10 +367,14 @@ pub async fn sales_order_bind_contract(
     Path(id): Path<String>,
     Json(req): Json<BindSalesOrderContractRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .bind_sales_order_contract(&id, req, &actor)
-        .await?;
+    let view = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .bind_sales_order_contract(&id, req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

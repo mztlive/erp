@@ -1,0 +1,714 @@
+{
+  "schema_version": 1,
+  "packages": {
+    "aliyun-ocr": {
+      "layer": "platform",
+      "paths": [
+        "crates/platform/aliyun-ocr"
+      ]
+    },
+    "application-core": {
+      "layer": "foundation",
+      "paths": [
+        "crates/foundation/application-core"
+      ]
+    },
+    "background-runtime": {
+      "layer": "platform",
+      "paths": [
+        "crates/platform/background-runtime"
+      ]
+    },
+    "bpm": {
+      "layer": "platform",
+      "paths": [
+        "crates/platform/bpm"
+      ]
+    },
+    "cli": {
+      "layer": "apps",
+      "paths": [
+        "apps/cli"
+      ]
+    },
+    "config": {
+      "layer": "configuration",
+      "paths": [
+        "config"
+      ]
+    },
+    "entity-core": {
+      "layer": "platform",
+      "paths": [
+        "crates/platform/entity-core"
+      ]
+    },
+    "entity-macros": {
+      "layer": "platform",
+      "paths": [
+        "crates/platform/entity-macros"
+      ]
+    },
+    "erp-approval-runtime": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-approval-runtime"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "bpm",
+        "erp-core",
+        "erp-identity",
+        "erp-read-models",
+        "erp-support",
+        "erp-workflow",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "validator"
+      ]
+    },
+    "erp-audit": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-audit"
+      ]
+    },
+    "erp-catalog": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-catalog"
+      ]
+    },
+    "erp-connector-dangaoshushu": {
+      "layer": "adapters",
+      "paths": [
+        "crates/adapters/erp-connector-dangaoshushu"
+      ]
+    },
+    "erp-connector-jd-vop": {
+      "layer": "adapters",
+      "paths": [
+        "crates/adapters/erp-connector-jd-vop"
+      ]
+    },
+    "erp-contract": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-contract"
+      ]
+    },
+    "erp-contract-recognition": {
+      "layer": "adapters",
+      "paths": [
+        "crates/adapters/erp-contract-recognition"
+      ]
+    },
+    "erp-core": {
+      "layer": "foundation",
+      "paths": [
+        "crates/foundation/erp-core"
+      ]
+    },
+    "erp-customer": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-customer"
+      ]
+    },
+    "erp-data-import": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-data-import"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "background-runtime",
+        "base64",
+        "chrono",
+        "entity-core",
+        "erp-audit",
+        "erp-catalog",
+        "erp-contract",
+        "erp-core",
+        "erp-customer",
+        "erp-file-assets",
+        "erp-identity",
+        "erp-import",
+        "erp-inventory",
+        "erp-master-data",
+        "erp-order-to-cash",
+        "erp-party",
+        "erp-procurement",
+        "erp-read-models",
+        "erp-sales",
+        "erp-supplier",
+        "erp-supplier-catalog",
+        "erp-supply",
+        "erp-support",
+        "erp-workflow",
+        "futures-util",
+        "hex",
+        "id-generator",
+        "image",
+        "mongodb",
+        "persistence-core",
+        "regex",
+        "roxmltree",
+        "rust_decimal",
+        "rust_xlsxwriter",
+        "serde",
+        "serde_json",
+        "sha2",
+        "storage",
+        "test-support",
+        "thiserror",
+        "tokio",
+        "tracing",
+        "validator",
+        "zip",
+        "zune-jpeg"
+      ]
+    },
+    "erp-demo-data": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-demo-data"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "entity-core",
+        "erp-audit",
+        "erp-catalog",
+        "erp-core",
+        "erp-customer",
+        "erp-identity",
+        "erp-master-data",
+        "erp-party",
+        "erp-procure-to-pay",
+        "erp-procurement",
+        "erp-supplier",
+        "erp-supplier-catalog",
+        "erp-supply",
+        "erp-support",
+        "erp-warehouse",
+        "erp-workflow",
+        "hex",
+        "id-generator",
+        "image",
+        "mongodb",
+        "persistence-core",
+        "rust_decimal",
+        "serde",
+        "serde_json",
+        "sha2",
+        "storage",
+        "thiserror",
+        "tokio",
+        "validator",
+        "zune-jpeg"
+      ]
+    },
+    "erp-file-assets": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-file-assets"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "erp-audit",
+        "erp-catalog",
+        "erp-core",
+        "erp-support",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde_json",
+        "thiserror",
+        "validator"
+      ]
+    },
+    "erp-finance": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-finance"
+      ]
+    },
+    "erp-finance-posting": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-finance-posting"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "bpm",
+        "entity-core",
+        "erp-approval-runtime",
+        "erp-audit",
+        "erp-core",
+        "erp-file-assets",
+        "erp-finance",
+        "erp-identity",
+        "erp-party",
+        "erp-procure-to-pay",
+        "erp-procurement",
+        "erp-read-models",
+        "erp-returns",
+        "erp-sales",
+        "erp-supplier",
+        "erp-supply",
+        "erp-support",
+        "erp-workflow",
+        "hex",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde",
+        "serde_json",
+        "sha2",
+        "test-support",
+        "thiserror",
+        "tokio",
+        "validator"
+      ]
+    },
+    "erp-fulfillment": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-fulfillment"
+      ]
+    },
+    "erp-fulfillment-execution": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-fulfillment-execution"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "bpm",
+        "entity-core",
+        "erp-approval-runtime",
+        "erp-audit",
+        "erp-core",
+        "erp-file-assets",
+        "erp-finance",
+        "erp-fulfillment",
+        "erp-identity",
+        "erp-integration",
+        "erp-inventory",
+        "erp-party",
+        "erp-procurement",
+        "erp-read-models",
+        "erp-sales",
+        "erp-supplier",
+        "erp-supply",
+        "erp-support",
+        "erp-warehouse",
+        "erp-workflow",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tracing",
+        "validator"
+      ]
+    },
+    "erp-identity": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-identity"
+      ]
+    },
+    "erp-import": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-import"
+      ]
+    },
+    "erp-integration": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-integration"
+      ]
+    },
+    "erp-inventory": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-inventory"
+      ]
+    },
+    "erp-master-data": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-master-data"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "entity-core",
+        "erp-audit",
+        "erp-catalog",
+        "erp-contract",
+        "erp-core",
+        "erp-customer",
+        "erp-file-assets",
+        "erp-identity",
+        "erp-party",
+        "erp-supplier",
+        "erp-supply",
+        "erp-support",
+        "erp-warehouse",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "validator"
+      ]
+    },
+    "erp-order-to-cash": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-order-to-cash"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "background-runtime",
+        "bpm",
+        "erp-approval-runtime",
+        "erp-audit",
+        "erp-catalog",
+        "erp-contract",
+        "erp-core",
+        "erp-customer",
+        "erp-finance",
+        "erp-finance-posting",
+        "erp-identity",
+        "erp-party",
+        "erp-procure-to-pay",
+        "erp-procurement",
+        "erp-read-models",
+        "erp-sales",
+        "erp-supplier",
+        "erp-supplier-catalog",
+        "erp-supply",
+        "erp-support",
+        "erp-workflow",
+        "hex",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde",
+        "serde_json",
+        "storage",
+        "thiserror",
+        "tokio",
+        "tracing",
+        "validator"
+      ]
+    },
+    "erp-party": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-party"
+      ]
+    },
+    "erp-procure-to-pay": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-procure-to-pay"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "base64",
+        "bpm",
+        "config",
+        "entity-core",
+        "erp-approval-runtime",
+        "erp-audit",
+        "erp-catalog",
+        "erp-core",
+        "erp-file-assets",
+        "erp-finance",
+        "erp-fulfillment",
+        "erp-fulfillment-execution",
+        "erp-identity",
+        "erp-inventory",
+        "erp-procurement",
+        "erp-read-models",
+        "erp-returns",
+        "erp-sales",
+        "erp-supplier",
+        "erp-supplier-catalog",
+        "erp-supplier-orders",
+        "erp-supply",
+        "erp-support",
+        "erp-warehouse",
+        "erp-workflow",
+        "hex",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "reqwest",
+        "rust_decimal",
+        "serde",
+        "serde_json",
+        "sha2",
+        "test-support",
+        "thiserror",
+        "tokio",
+        "validator"
+      ]
+    },
+    "erp-procurement": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-procurement"
+      ]
+    },
+    "erp-read-models": {
+      "layer": "read-models",
+      "paths": [
+        "crates/read-models/erp-read-models"
+      ]
+    },
+    "erp-returns": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-returns"
+      ]
+    },
+    "erp-reverse-flow": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-reverse-flow"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "bpm",
+        "entity-core",
+        "erp-approval-runtime",
+        "erp-audit",
+        "erp-core",
+        "erp-customer",
+        "erp-finance",
+        "erp-identity",
+        "erp-procure-to-pay",
+        "erp-procurement",
+        "erp-read-models",
+        "erp-returns",
+        "erp-sales",
+        "erp-supplier",
+        "erp-workflow",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde_json",
+        "test-support",
+        "thiserror",
+        "tokio",
+        "validator"
+      ]
+    },
+    "erp-sales": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-sales"
+      ]
+    },
+    "erp-supplier": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-supplier"
+      ]
+    },
+    "erp-supplier-catalog": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-supplier-catalog"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "background-runtime",
+        "entity-core",
+        "erp-audit",
+        "erp-catalog",
+        "erp-core",
+        "erp-file-assets",
+        "erp-identity",
+        "erp-integration",
+        "erp-party",
+        "erp-read-models",
+        "erp-returns",
+        "erp-supplier",
+        "erp-supply",
+        "erp-support",
+        "erp-workflow",
+        "hex",
+        "id-generator",
+        "image",
+        "mongodb",
+        "persistence-core",
+        "reqwest",
+        "serde",
+        "serde_json",
+        "sha2",
+        "storage",
+        "thiserror",
+        "tokio",
+        "tracing",
+        "validator",
+        "zune-jpeg"
+      ]
+    },
+    "erp-supplier-orders": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-supplier-orders"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "base64",
+        "config",
+        "entity-core",
+        "erp-audit",
+        "erp-catalog",
+        "erp-core",
+        "erp-finance",
+        "erp-fulfillment",
+        "erp-fulfillment-execution",
+        "erp-identity",
+        "erp-integration",
+        "erp-party",
+        "erp-procurement",
+        "erp-read-models",
+        "erp-returns",
+        "erp-supplier",
+        "erp-supply",
+        "erp-support",
+        "erp-warehouse",
+        "erp-workflow",
+        "hex",
+        "hmac",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "rust_decimal",
+        "serde",
+        "serde_json",
+        "sha2",
+        "subtle",
+        "thiserror",
+        "tokio",
+        "tracing",
+        "uuid",
+        "validator",
+        "zeroize"
+      ]
+    },
+    "erp-supply": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-supply"
+      ]
+    },
+    "erp-supply-settlement": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-supply-settlement"
+      ],
+      "dependencies": [
+        "application-core",
+        "async-trait",
+        "entity-core",
+        "erp-audit",
+        "erp-core",
+        "erp-finance",
+        "erp-fulfillment-execution",
+        "erp-identity",
+        "erp-party",
+        "erp-read-models",
+        "erp-supplier",
+        "erp-supplier-orders",
+        "erp-supply",
+        "erp-workflow",
+        "id-generator",
+        "mongodb",
+        "persistence-core",
+        "serde",
+        "serde_json",
+        "sha2",
+        "test-support",
+        "thiserror",
+        "tokio",
+        "validator"
+      ]
+    },
+    "erp-support": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-support"
+      ]
+    },
+    "erp-warehouse": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-warehouse"
+      ]
+    },
+    "erp-workflow": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-workflow"
+      ]
+    },
+    "id-generator": {
+      "layer": "platform",
+      "paths": [
+        "crates/platform/id-generator"
+      ]
+    },
+    "persistence-core": {
+      "layer": "foundation",
+      "paths": [
+        "crates/foundation/persistence-core"
+      ]
+    },
+    "storage": {
+      "layer": "platform",
+      "paths": [
+        "crates/platform/storage"
+      ]
+    },
+    "test-support": {
+      "layer": "testing",
+      "paths": [
+        "crates/testing/test-support"
+      ]
+    },
+    "web-api": {
+      "layer": "apps",
+      "paths": [
+        "apps/web-api"
+      ]
+    }
+  }
+}

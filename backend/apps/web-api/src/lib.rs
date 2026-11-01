@@ -17,3 +17,7 @@ mod build_catalog;
 #[cfg(test)]
 #[path = "../build_permissions.rs"]
 mod build_permissions;
+
+pub mod approval_dispatch;
+
+pub mod wiring;

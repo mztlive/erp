@@ -1,0 +1,129 @@
+//! 域 D33 `supplier_settlement` 的跨域事务编排。
+//!
+//! 事务边界由本流程建立：
+//! - 创建结算草稿：结算单 + 全部明细同事务（本域
+//!   `create_statement_with_items` 要求事务执行器，§6.20）；
+//! - 结算确认（§8.4 第 6 条）：锁定结算单并重验差异处理结果、形成结算单应付
+//!   （财务 `PayableRepository::create_payable_with_entry`，来源类型
+//!   `SupplierSettlement`）并更新结算状态，同一事务完成；最终成本差额由财务
+//!   provider 判定，缺少权威原成本链时保持原错误，不伪造 `CostEntry`。
+//!
+//! 结算单域规则与写入归 `erp-supply`；履约订单与明细存在性由同域仓储提供，
+//! 应付账户与原始分录归财务 provider；正式复核任务与审计在本流程编排。
+//!
+//! 资金/状态机入口一律幂等：创建键为 `statement_no`，确认/提交复核/作废重复提交
+//! 返回原结算单当前视图（不重复形成应付、不重复推进状态）；差异处理以版本 CAS
+//! 防并发覆盖。
+use erp_workflow::ports::WorkflowAuthorizationPort;
+mod difference;
+mod draft;
+mod evidence;
+mod handover;
+mod list;
+mod review;
+mod reviewers;
+pub use reviewers::SettlementReviewerOption;
+mod review_posting;
+mod review_preparation;
+mod shared;
+mod source;
+mod void;
+use std::sync::Arc;
+
+use application_core::AuditActor;
+use erp_identity::SharedRbacService;
+use erp_read_models::supplier_center::settlement::dto::SettlementReviewDecisionResult;
+use erp_supply::dto::supplier_settlement as dto;
+use erp_supply::dto::supplier_settlement::*;
+use erp_supply::ports::{FailClosedSettlementDataScopePort, SettlementDataScopePort};
+use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply::service::supplier_settlement::shared::*;
+use erp_workflow::WorkItemService;
+use mongodb::Database;
+use shared::*;
+/// 供应商结算跨工作流、审计与财务的唯一命令入口。
+pub struct SupplierSettlementProcess<A: WorkflowAuthorizationPort> {
+    db: Database,
+    data_scope: Arc<dyn SettlementDataScopePort>,
+    rbac: Option<SharedRbacService>,
+    // 候选查询沿用调用方身份；写入、决定和重放在原调用点创建独立身份。
+    work_items: WorkItemService<A>,
+    fresh_work_items: Arc<dyn Fn() -> WorkItemService<A> + Send + Sync>,
+}
+struct SettlementWriteContext {
+    db: Database,
+    data_scope: Arc<dyn SettlementDataScopePort>,
+    actor: AuditActor,
+}
+
+impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
+    /// 使用原数据库依赖构造结算流程；范围 Port 缺省失败关闭。
+    ///
+    /// # 参数
+    /// * `db` - MongoDB 数据库。
+    /// * `work_items` - 应用注入且复用同一授权源的工作项服务。
+    /// * `fresh_work_items` - 每次调用创建独立授权实例的工作项工厂。
+    ///
+    /// # 返回
+    /// 返回未注入 RBAC 的流程；范围查询使用 `FailClosedSettlementDataScopePort`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn new(
+        db: Database,
+        work_items: WorkItemService<A>,
+        fresh_work_items: Arc<dyn Fn() -> WorkItemService<A> + Send + Sync>,
+    ) -> Self {
+        Self {
+            db,
+            data_scope: FailClosedSettlementDataScopePort::shared(),
+            rbac: None,
+            work_items,
+            fresh_work_items,
+        }
+    }
+
+    /// 注入结算范围 Port 与 RBAC。消耗 `self` 并返回同一流程。
+    ///
+    /// # 参数
+    /// * `data_scope` - 结算数据范围。
+    /// * `rbac` - 权限服务。
+    ///
+    /// # 返回
+    /// 返回已注入依赖的流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_scope(
+        mut self,
+        data_scope: Arc<dyn SettlementDataScopePort>,
+        rbac: SharedRbacService,
+    ) -> Self {
+        self.data_scope = data_scope;
+        self.rbac = Some(rbac);
+        self
+    }
+
+    fn write_context(&self, actor: &AuditActor) -> SettlementWriteContext {
+        SettlementWriteContext {
+            db: self.db.clone(),
+            data_scope: self.data_scope.clone(),
+            actor: actor.clone(),
+        }
+    }
+
+    fn domain(&self) -> SupplierSettlementService {
+        SupplierSettlementService::new(self.db.clone()).with_data_scope(self.data_scope.clone())
+    }
+
+    fn require_rbac(&self) -> crate::Result<&SharedRbacService> {
+        self.rbac.as_ref().ok_or_else(|| crate::Error::Internal("结算范围 RBAC 未接线".into()))
+    }
+}
+
+use erp_supply::service::supplier_settlement::review::SETTLEMENT_REVIEW_OWNER_ROLE;
+
+#[cfg(test)]
+mod repository;
+#[cfg(test)]
+mod tests;

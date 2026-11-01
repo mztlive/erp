@@ -9,6 +9,24 @@ default-run = "web-api"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+entity-core = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+erp-supply-settlement = { workspace = true }
+erp-supplier-orders = { workspace = true }
+erp-reverse-flow = { workspace = true }
+erp-finance-posting = { workspace = true }
+erp-fulfillment-execution = { workspace = true }
+erp-procure-to-pay = { workspace = true }
+erp-order-to-cash = { workspace = true }
+erp-demo-data = { workspace = true }
+erp-supplier-catalog = { workspace = true }
+erp-data-import = { workspace = true }
+erp-master-data = { workspace = true }
+erp-connector-dangaoshushu = { workspace = true }
+erp-connector-jd-vop = { workspace = true }
+erp-file-assets = { workspace = true }
+erp-approval-runtime = { workspace = true }
+background-runtime = { workspace = true }
 subtle = { workspace = true }
 serde_path_to_error = "0.1"
 erp-sales = { workspace = true }
@@ -61,7 +79,6 @@ application-core = { workspace = true }
 erp-identity = { workspace = true }
 erp-audit = { workspace = true }
 erp-workflow = { workspace = true }
-erp-processes = { workspace = true }
 erp-read-models = { workspace = true }
 erp-support = { workspace = true }
 erp-party = { workspace = true }

@@ -1,39 +1,63 @@
 [workspace]
 members = [
+  # 应用
   "apps/cli",
   "apps/web-api",
-  "crates/bpm",
-  "crates/erp-core",
-  "crates/application-core",
-  "crates/persistence-core",
-  "crates/erp-identity",
-  "crates/erp-audit",
-  "crates/erp-workflow",
-  "crates/erp-processes",
-  "crates/erp-read-models",
-  "crates/erp-support",
-  "crates/erp-party",
-  "crates/erp-customer",
-  "crates/erp-supplier",
-  "crates/erp-catalog",
-  "crates/erp-warehouse",
-  "crates/erp-contract",
-  "crates/erp-contract-recognition",
-  "crates/erp-import",
-  "crates/erp-inventory",
-  "crates/erp-finance",
-  "crates/erp-sales",
-  "crates/erp-procurement",
-  "crates/erp-fulfillment",
-  "crates/erp-returns",
-  "crates/erp-integration",
-  "crates/erp-supply",
-  "crates/entity-macros", # 过程宏项目
-  "crates/entity-core",
-  "crates/storage",
-  "crates/aliyun-ocr",
-  "crates/id-generator",
-  "crates/test-support",
+  # 领域
+  "crates/domains/erp-audit",
+  "crates/domains/erp-catalog",
+  "crates/domains/erp-contract",
+  "crates/domains/erp-customer",
+  "crates/domains/erp-finance",
+  "crates/domains/erp-fulfillment",
+  "crates/domains/erp-identity",
+  "crates/domains/erp-import",
+  "crates/domains/erp-integration",
+  "crates/domains/erp-inventory",
+  "crates/domains/erp-party",
+  "crates/domains/erp-procurement",
+  "crates/domains/erp-returns",
+  "crates/domains/erp-sales",
+  "crates/domains/erp-supplier",
+  "crates/domains/erp-supply",
+  "crates/domains/erp-support",
+  "crates/domains/erp-warehouse",
+  "crates/domains/erp-workflow",
+  # 业务编排
+  "crates/orchestration/erp-approval-runtime",
+  "crates/orchestration/erp-data-import",
+  "crates/orchestration/erp-demo-data",
+  "crates/orchestration/erp-file-assets",
+  "crates/orchestration/erp-finance-posting",
+  "crates/orchestration/erp-fulfillment-execution",
+  "crates/orchestration/erp-master-data",
+  "crates/orchestration/erp-order-to-cash",
+  "crates/orchestration/erp-procure-to-pay",
+  "crates/orchestration/erp-reverse-flow",
+  "crates/orchestration/erp-supplier-catalog",
+  "crates/orchestration/erp-supplier-orders",
+  "crates/orchestration/erp-supply-settlement",
+  # 读模型
+  "crates/read-models/erp-read-models",
+  # 外部适配器
+  "crates/adapters/erp-connector-dangaoshushu",
+  "crates/adapters/erp-connector-jd-vop",
+  "crates/adapters/erp-contract-recognition",
+  # 基础合同
+  "crates/foundation/application-core",
+  "crates/foundation/erp-core",
+  "crates/foundation/persistence-core",
+  # 技术组件
+  "crates/platform/aliyun-ocr",
+  "crates/platform/background-runtime",
+  "crates/platform/bpm",
+  "crates/platform/entity-core",
+  "crates/platform/entity-macros",
+  "crates/platform/id-generator",
+  "crates/platform/storage",
+  # 测试支持
+  "crates/testing/test-support",
+  # 配置
   "config",
 ]
 resolver = "2"
@@ -49,43 +73,66 @@ lopdf = { version = "=0.45.0", default-features = false }
 zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }
 # Workspace crates
-bpm = { path = "crates/bpm" }
-erp-core = { path = "crates/erp-core" }
-application-core = { path = "crates/application-core" }
-persistence-core = { path = "crates/persistence-core" }
-erp-identity = { path = "crates/erp-identity" }
-erp-audit = { path = "crates/erp-audit" }
-erp-workflow = { path = "crates/erp-workflow" }
-erp-processes = { path = "crates/erp-processes" }
-erp-read-models = { path = "crates/erp-read-models" }
-erp-support = { path = "crates/erp-support" }
-erp-party = { path = "crates/erp-party" }
-erp-customer = { path = "crates/erp-customer" }
-erp-supplier = { path = "crates/erp-supplier" }
-erp-catalog = { path = "crates/erp-catalog" }
-erp-warehouse = { path = "crates/erp-warehouse" }
-erp-contract = { path = "crates/erp-contract" }
-erp-contract-recognition = { path = "crates/erp-contract-recognition" }
-erp-import = { path = "crates/erp-import" }
-erp-inventory = { path = "crates/erp-inventory" }
-erp-finance = { path = "crates/erp-finance" }
-erp-sales = { path = "crates/erp-sales" }
-erp-procurement = { path = "crates/erp-procurement" }
-erp-fulfillment = { path = "crates/erp-fulfillment" }
-erp-returns = { path = "crates/erp-returns" }
-erp-integration = { path = "crates/erp-integration" }
-erp-supply = { path = "crates/erp-supply" }
+# 领域
+erp-audit = { path = "crates/domains/erp-audit" }
+erp-catalog = { path = "crates/domains/erp-catalog" }
+erp-contract = { path = "crates/domains/erp-contract" }
+erp-customer = { path = "crates/domains/erp-customer" }
+erp-finance = { path = "crates/domains/erp-finance" }
+erp-fulfillment = { path = "crates/domains/erp-fulfillment" }
+erp-identity = { path = "crates/domains/erp-identity" }
+erp-import = { path = "crates/domains/erp-import" }
+erp-integration = { path = "crates/domains/erp-integration" }
+erp-inventory = { path = "crates/domains/erp-inventory" }
+erp-party = { path = "crates/domains/erp-party" }
+erp-procurement = { path = "crates/domains/erp-procurement" }
+erp-returns = { path = "crates/domains/erp-returns" }
+erp-sales = { path = "crates/domains/erp-sales" }
+erp-supplier = { path = "crates/domains/erp-supplier" }
+erp-supply = { path = "crates/domains/erp-supply" }
+erp-support = { path = "crates/domains/erp-support" }
+erp-warehouse = { path = "crates/domains/erp-warehouse" }
+erp-workflow = { path = "crates/domains/erp-workflow" }
+# 业务编排
+erp-approval-runtime = { path = "crates/orchestration/erp-approval-runtime" }
+erp-data-import = { path = "crates/orchestration/erp-data-import" }
+erp-demo-data = { path = "crates/orchestration/erp-demo-data" }
+erp-file-assets = { path = "crates/orchestration/erp-file-assets" }
+erp-finance-posting = { path = "crates/orchestration/erp-finance-posting" }
+erp-fulfillment-execution = { path = "crates/orchestration/erp-fulfillment-execution" }
+erp-master-data = { path = "crates/orchestration/erp-master-data" }
+erp-order-to-cash = { path = "crates/orchestration/erp-order-to-cash" }
+erp-procure-to-pay = { path = "crates/orchestration/erp-procure-to-pay" }
+erp-reverse-flow = { path = "crates/orchestration/erp-reverse-flow" }
+erp-supplier-catalog = { path = "crates/orchestration/erp-supplier-catalog" }
+erp-supplier-orders = { path = "crates/orchestration/erp-supplier-orders" }
+erp-supply-settlement = { path = "crates/orchestration/erp-supply-settlement" }
+# 读模型
+erp-read-models = { path = "crates/read-models/erp-read-models" }
+# 外部适配器
+erp-connector-dangaoshushu = { path = "crates/adapters/erp-connector-dangaoshushu" }
+erp-connector-jd-vop = { path = "crates/adapters/erp-connector-jd-vop" }
+erp-contract-recognition = { path = "crates/adapters/erp-contract-recognition" }
+# 基础合同
+application-core = { path = "crates/foundation/application-core" }
+erp-core = { path = "crates/foundation/erp-core" }
+persistence-core = { path = "crates/foundation/persistence-core" }
+# 技术组件
+aliyun-ocr = { path = "crates/platform/aliyun-ocr" }
+background-runtime = { path = "crates/platform/background-runtime" }
+bpm = { path = "crates/platform/bpm" }
+entity-core = { path = "crates/platform/entity-core" }
+entity-macros = { path = "crates/platform/entity-macros" }
+id-generator = { path = "crates/platform/id-generator" }
+storage = { path = "crates/platform/storage" }
+# 测试支持
+test-support = { path = "crates/testing/test-support" }
+# 配置
 config = { path = "config" }
-entity-core = { path = "crates/entity-core" }
-entity-macros = { path = "crates/entity-macros" }
-id-generator = { path = "crates/id-generator" }
-storage = { path = "crates/storage" }
-aliyun-ocr = { path = "crates/aliyun-ocr" }
 reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls"] }
 rig-core = { version = "=0.43.0", default-features = false }
 rig-agent = { version = "=0.43.0", default-features = false }
 bytes = "1"
-test-support = { path = "crates/test-support" }
 
 # 异步运行时
 tokio = { version = "1.53.1" }

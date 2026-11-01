@@ -3,6 +3,7 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `erp_finance::dto::payable` 的 DTO。
 
+use crate::wiring::finance_posting_ports;
 pub(crate) mod invoice_files;
 
 use application_core::AuditActor;
@@ -19,9 +20,8 @@ use erp_finance::dto::payable::{
     SupplierPaymentView,
 };
 use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
-use erp_processes::adapters::{funds_access_with_rbac, purchase_access};
-use erp_processes::commit_supplier_payment_with_assets;
-use erp_processes::finance_posting::payable::PayableProcess;
+use erp_finance_posting::commit_supplier_payment_with_assets;
+use erp_finance_posting::finance_posting::payable::PayableProcess;
 use erp_read_models::finance::funds_scope::{
     FundsScopedPage, FundsScopedResult, ScopedPayableAccountRow, ScopedPurchaseInvoiceAllocationRow,
     ScopedSupplierPaymentRow,
@@ -36,6 +36,7 @@ use crate::core::handler::file_asset::{
     PendingAssetFile, extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
+use crate::wiring::{funds_access_with_rbac, purchase_access};
 
 /// 查询应付往来子账列表。
 ///
@@ -101,8 +102,7 @@ pub async fn payment_recipient_reveal(
     Json(req): Json<RevealPaymentRecipientRequest>,
 ) -> Result<PaymentRecipientRevealView> {
     let sensitive_data = state.sensitive_data();
-    let view = PayableProcess::new(state.db())
-        .with_rbac(state.rbac())
+    let view = PayableProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .reveal_payment_recipient(&id, req, &actor, sensitive_data.as_ref())
         .await?;
@@ -124,8 +124,7 @@ pub async fn payable_account_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePayableAccountRequest>,
 ) -> Result<PayableAccountView> {
-    let view = PayableProcess::new(state.db())
-        .with_rbac(state.rbac())
+    let view = PayableProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .create_payable_account(req, &actor)
         .await?;
@@ -194,8 +193,7 @@ pub async fn supplier_payment_merge_candidates(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PaymentMergeCandidatesParams>,
 ) -> Result<PaymentMergeCandidatesView> {
-    let view = PayableProcess::new(state.db())
-        .with_rbac(state.rbac())
+    let view = PayableProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .payment_merge_candidates(params, &actor)
         .await?;
@@ -227,7 +225,7 @@ pub async fn supplier_payment_commit(
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let result = commit_supplier_payment_with_assets(
         state.db(),
-        state.rbac(),
+        finance_posting_ports(state.db(), state.rbac()),
         state.approval_object_read(),
         req,
         pending.clone(),
@@ -247,8 +245,7 @@ pub async fn supplier_payment_bank_receipt(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> std::result::Result<Response, Error> {
-    let payable = PayableProcess::new(state.db())
-        .with_rbac(state.rbac())
+    let payable = PayableProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read());
     let snapshot = payable.supplier_payment_bank_receipt(&id, &actor).await?;
     let view = &snapshot.asset;
@@ -318,8 +315,7 @@ pub async fn purchase_invoice_allocation_post(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterPurchaseInvoiceRequest>,
 ) -> Result<PurchaseInvoiceRegisteredView> {
-    let view = PayableProcess::new(state.db())
-        .with_rbac(state.rbac())
+    let view = PayableProcess::new(state.db(), finance_posting_ports(state.db(), state.rbac()))
         .with_object_read(state.approval_object_read())
         .register_purchase_invoice(req, &actor)
         .await?;

@@ -12,7 +12,7 @@ use axum::extract::{ConnectInfo, Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
-use erp_processes::sales_selection::{
+use erp_order_to_cash::sales_selection::{
     SalesSelectionProcess, SelectionBookletListView, SelectionProposalListView,
 };
 use erp_sales::dto::sales_selection::{
@@ -36,6 +36,7 @@ fn process(state: &AppState) -> SalesSelectionProcess {
         state.db(),
         state.storage().clone(),
         state.config_snapshot().app.secret.as_bytes(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
     )
     .with_rbac(state.rbac())
 }

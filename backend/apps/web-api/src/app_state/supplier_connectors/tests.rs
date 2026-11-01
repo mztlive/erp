@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
-use erp_processes::connectors::jd_vop::token::JdVopAccessToken;
 use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
+use erp_supply::ports::jd_vop::token::JdVopAccessToken;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 
 use super::super::tests::connector_config;

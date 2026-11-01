@@ -7,7 +7,7 @@ use axum::extract::{Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::response::{IntoResponse, Response};
-use erp_processes::approval_materials::{self, ApprovalMaterialTarget};
+use erp_approval_runtime::approval_materials::{self, ApprovalMaterialTarget};
 use erp_read_models::sales_center::approval_materials::{ApprovalDocumentMaterials, materials};
 use erp_read_models::workbench::{InvoiceApprovalReview, invoice_approval_review};
 use serde::Deserialize;

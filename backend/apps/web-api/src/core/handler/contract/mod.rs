@@ -212,9 +212,7 @@ pub(crate) async fn ensure_contract_access(
     action: &str,
     contract_id: &str,
 ) -> std::result::Result<(), Error> {
-    erp_processes::adapters::contract_access(state.db(), state.rbac())
-        .require(actor, action, contract_id)
-        .await?;
+    crate::wiring::contract_access(state.db(), state.rbac()).require(actor, action, contract_id).await?;
     Ok(())
 }
 

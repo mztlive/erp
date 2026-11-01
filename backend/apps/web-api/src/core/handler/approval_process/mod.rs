@@ -8,7 +8,6 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
-use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::definition::{
     ApprovalDefinitionService, definition_management_visibility,
@@ -23,6 +22,7 @@ use crate::app_state::AppState;
 use crate::core::extractor::{Json, Query};
 use crate::core::handler::approval_instance::error::{ApprovalHttpError, parse_version};
 use crate::core::response::ApiResponse;
+use crate::wiring::workflow::{WorkflowAuth, workflow_audit, workflow_auth};
 
 /// 定义 Handler 结果。
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;

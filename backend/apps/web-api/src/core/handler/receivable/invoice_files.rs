@@ -2,11 +2,11 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, State};
+use erp_file_assets::PendingFileAssets;
 use erp_finance::dto::receivable::{
     CommitInvoiceRequest, CompleteInvoiceRequest, CreateInvoiceRequest, InvoiceView,
 };
-use erp_processes::attachments::PendingFileAssets;
-use erp_processes::finance_posting::receivable::ReceivableProcess;
+use erp_finance_posting::finance_posting::receivable::ReceivableProcess;
 use erp_support::SensitivityClass;
 
 use crate::app_state::AppState;
@@ -16,6 +16,7 @@ use crate::core::handler::file_asset::{
     store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
+use crate::wiring::receivable_posting_ports;
 
 /// 登记发票草稿同时上传图片或 PDF。
 ///
@@ -43,7 +44,7 @@ pub async fn invoice_create_with_files(
             return Err(error.into());
         },
     };
-    let outcome = ReceivableProcess::new(state.db())
+    let outcome = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .create_invoice_with_assets(req, pending, &actor)
         .await;
@@ -77,7 +78,7 @@ pub async fn invoice_commit_with_files(
             return Err(error.into());
         },
     };
-    let outcome = ReceivableProcess::new(state.db())
+    let outcome = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .commit_invoice_with_assets(req, pending, &actor)
         .await;
@@ -111,7 +112,7 @@ pub async fn invoice_complete_with_files(
             return Err(error.into());
         },
     };
-    let outcome = ReceivableProcess::new(state.db())
+    let outcome = ReceivableProcess::new(state.db(), receivable_posting_ports(state.db()))
         .with_object_read(state.approval_object_read())
         .complete_invoice_with_assets(req, pending, &actor)
         .await;

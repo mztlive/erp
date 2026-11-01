@@ -16,10 +16,6 @@ use erp_identity::access_control::{
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::entity::organization_change::{OrganizationChangeRequest, OrganizationOperation};
 use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_processes::adapters::identity::shared_rbac_service;
-use erp_processes::adapters::{
-    MongoContractDataScope, MongoCustomerDataScope, MongoPurchaseDataScope, organization_service,
-};
 use erp_procurement::service::purchase_order::access::purchase_scope;
 use erp_procurement::{PurchaseDataScopePort, PurchaseScopeObject};
 use erp_read_models::sales_center::access::sales_scope;
@@ -27,6 +23,10 @@ use mongodb::bson::{Document, doc};
 use mongodb::{Client, Database};
 use persistence_core::NoTransaction;
 use test_support::seed_admin_account;
+use web_api::wiring::identity::shared_rbac_service;
+use web_api::wiring::{
+    MongoContractDataScope, MongoCustomerDataScope, MongoPurchaseDataScope, organization_service,
+};
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 

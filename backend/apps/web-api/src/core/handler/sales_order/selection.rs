@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::order_to_cash::SalesOrderCommandProcess;
+use erp_order_to_cash::order_to_cash::SalesOrderCommandProcess;
 use erp_sales::dto::sales_order::selection_basis::SelectionOrderBasis;
 
 use crate::app_state::AppState;
@@ -21,9 +21,13 @@ pub async fn selection_basis(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SelectionOrderBasis> {
-    let basis = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .selection_order_basis(&id, &actor)
-        .await?;
+    let basis = SalesOrderCommandProcess::with_rbac(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .selection_order_basis(&id, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(basis))
 }
 

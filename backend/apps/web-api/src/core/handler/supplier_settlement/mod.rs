@@ -9,7 +9,6 @@ pub mod reviewer_options;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::supply_settlement::SupplierSettlementProcess;
 use erp_read_models::supplier_center::settlement::SupplierSettlementReadService;
 use erp_read_models::supplier_center::settlement::display_dto::{
     SettlementEvidenceDisplayView, SettlementItemDisplayView, SettlementStatementDisplayDetail,
@@ -29,14 +28,16 @@ use erp_supply::dto::supplier_settlement::{
     SupplierSettlementSourceEvidenceView, SupplierSettlementStatementListParams, VoidSettlementRequest,
 };
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply_settlement::supply_settlement::SupplierSettlementProcess;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
+use crate::wiring::workflow::WorkflowAuth;
 
-fn settlement_process(state: &AppState) -> SupplierSettlementProcess {
-    erp_processes::adapters::scoped_settlement_process(state.db(), state.rbac())
+fn settlement_process(state: &AppState) -> SupplierSettlementProcess<WorkflowAuth> {
+    crate::wiring::scoped_settlement_process(state.db(), state.rbac())
 }
 
 /// 查询供应商结算单列表。

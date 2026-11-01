@@ -18,12 +18,12 @@
 
 | 入口 | 执行要求 |
 | --- | --- |
-| `erp-processes::audit::execute_audited` | 接收已验证上下文、`AuditedCommand`、`AuditEventSink` 及调用方的 `Executor`；不启动事务。首次成功执行完成结果校验后写一次事件；`AuditedWrite::Replayed` 直接返回原结果，不追加成功事件 |
-| `erp-processes::audit::run_audited_event` | 在用例入口建立唯一事务，事务内调用 `execute_audited`；命令只包含必须原子的数据库规则与读写，外部 HTTP/S3/文件 I/O 位于事务之外 |
-| `erp-processes::audit::execute_prepared` | 统一执行普通写闭包，先验证静态登记和成功语义，实际写入后在相同 Executor 保存一次安全事件；首错立即停止 |
-| `erp-processes::audit::run_audited` | 接收领域已登记动作的准备记录，事务开始前校验目录、身份及目标；实际业务写入后经 `persist_log` 保存安全事件 |
-| `erp-processes::audit::persist_log` / `persist_logs` | 普通写入的统一物理持久化入口。仅接受登记动作，重建安全中文模板，不复制自由说明。批量入口先校验全部事件再保序 `create_many_ordered`，不得改变业务批次与审计批次原顺序 |
-| `erp-processes::audit::finish_attempt` | 必须在原事务返回之后执行。失败、拒绝及未知分别记录到 `audit_attempts`；成功不写尝试，失败写尝试也不得覆盖原命令错误 |
+| `erp-audit::execution::execute_audited` | 接收已验证上下文、`AuditedCommand`、`AuditEventSink` 及调用方的 `Executor`；不启动事务。首次成功执行完成结果校验后写一次事件；`AuditedWrite::Replayed` 直接返回原结果，不追加成功事件 |
+| `erp-audit::execution::run_audited_event` | 在用例入口建立唯一事务，事务内调用 `execute_audited`；命令只包含必须原子的数据库规则与读写，外部 HTTP/S3/文件 I/O 位于事务之外 |
+| `erp-audit::execution::execute_prepared` | 统一执行普通写闭包，先验证静态登记和成功语义，实际写入后在相同 Executor 保存一次安全事件；首错立即停止 |
+| `erp-audit::execution::run_audited` | 接收领域已登记动作的准备记录，事务开始前校验目录、身份及目标；实际业务写入后经 `persist_log` 保存安全事件 |
+| `erp-audit::execution::persist_log` / `persist_logs` | 普通写入的统一物理持久化入口。仅接受登记动作，重建安全中文模板，不复制自由说明。批量入口先校验全部事件再保序 `create_many_ordered`，不得改变业务批次与审计批次原顺序 |
+| `erp-audit::execution::finish_attempt` | 必须在原事务返回之后执行。失败、拒绝及未知分别记录到 `audit_attempts`；成功不写尝试，失败写尝试也不得覆盖原命令错误 |
 | `backend/scripts/audit-entrypoints.json` | 逐个生产入口声明实际边界阶段和 `Audited` / 带理由的 `Exempt`；动作目录数量、工厂调用或登记表不能代替实际命令执行及结果事实验收 |
 | 身份策略事务 | 继续执行 `RbacService::run_authorized_audited_policy_transaction` 的授权 revision 重验、policy 写入、审计与提交后刷新合同，不得用普通业务入口替代其生命周期 |
 

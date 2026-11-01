@@ -1,4 +1,4 @@
-use erp_processes::connectors::jd_vop::credential::authorization::JdVopTokenConfiguration;
+use erp_supplier_orders::supplier_credentials::authorization::JdVopTokenConfiguration;
 
 use super::*;
 

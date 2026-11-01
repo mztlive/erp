@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use erp_processes::Result;
-use erp_processes::source_media::SourceMediaPreparer;
-use erp_processes::supplier_catalog_adoption::SupplierCatalogAdoptionProcess;
+use erp_supplier_catalog::Result;
+use erp_supplier_catalog::source_media::SourceMediaPreparer;
+use erp_supplier_catalog::supplier_catalog_adoption::SupplierCatalogAdoptionProcess;
 
 use super::AppState;
 
@@ -33,8 +33,12 @@ impl AppState {
     /// # 错误
     /// 已启用的素材配置非法时拒绝。
     pub fn supplier_catalog_adoption_process(&self) -> Result<SupplierCatalogAdoptionProcess> {
-        let process = SupplierCatalogAdoptionProcess::new(self.db(), self.rbac())
-            .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry));
+        let process = SupplierCatalogAdoptionProcess::new(
+            self.db(),
+            self.rbac(),
+            crate::wiring::catalog_services(self.db(), self.rbac()),
+        )
+        .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry));
         Ok(match self.supplier_source_media_preparer()? {
             Some(preparer) => process.with_media_preparer(preparer),
             None => process,

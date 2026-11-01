@@ -8,8 +8,8 @@ use axum::Extension;
 use axum::extract::{Multipart, Path, State};
 use axum::response::Response;
 use erp_identity::PortalActor;
-use erp_processes::supplier_portal::{PortalAssetView, PreparedPortalAsset, SupplierPortalProcess};
 use erp_read_models::supplier_portal::PortalSkuImageSource;
+use erp_supplier_catalog::supplier_portal::{PortalAssetView, PreparedPortalAsset, SupplierPortalProcess};
 use erp_support::{
     FileAssetView, PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass, SensitivityClass,
     content_fingerprint,

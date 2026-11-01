@@ -3,7 +3,6 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::adapters::MongoOfferingDataScope;
 use erp_read_models::supplier_center::offering::SupplierOfferingView;
 use erp_read_models::supplier_center::{MongoOfferingProcurementOwners, SupplierOfferingReadService};
 use erp_supply::SupplierOfferingService;
@@ -15,6 +14,7 @@ use crate::core::errors::Result;
 use crate::core::extractor::Query;
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
+use crate::wiring::MongoOfferingDataScope;
 
 /// 查询供给资料，复用列表动作和供给自身的数据范围。
 ///

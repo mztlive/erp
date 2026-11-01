@@ -5,7 +5,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_processes::sales_change::SalesChangeProcess;
+use erp_order_to_cash::sales_change::SalesChangeProcess;
 use erp_read_models::sales_center::review::{
     SalesChangeListView, SalesChangeOrderDetailView, SalesChangeReadService,
 };
@@ -37,7 +37,15 @@ pub async fn sales_change_draft(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesChangeDraftView> {
-    Ok(ApiResponse::ok_with_data(SalesChangeProcess::new(state.db(), state.rbac()).draft(&id, &actor).await?))
+    Ok(ApiResponse::ok_with_data(
+        SalesChangeProcess::new(
+            state.db(),
+            state.rbac(),
+            crate::wiring::sales::sales_services(state.db(), state.rbac()),
+        )
+        .draft(&id, &actor)
+        .await?,
+    ))
 }
 
 /// 保存原变更可修改内容。
@@ -60,7 +68,13 @@ pub async fn sales_change_save_draft(
     Json(request): Json<SaveSalesChangeDraftRequest>,
 ) -> Result<SalesChangeDraftView> {
     Ok(ApiResponse::ok_with_data(
-        SalesChangeProcess::new(state.db(), state.rbac()).save_draft(&id, request, &actor).await?,
+        SalesChangeProcess::new(
+            state.db(),
+            state.rbac(),
+            crate::wiring::sales::sales_services(state.db(), state.rbac()),
+        )
+        .save_draft(&id, request, &actor)
+        .await?,
     ))
 }
 
@@ -133,10 +147,14 @@ pub async fn sales_change_order_create(
     Json(req): Json<CreateSalesChangeOrderRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
     let rbac = state.rbac();
-    let view = SalesChangeProcess::new(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .create_sales_change_order(req, &actor, &rbac)
-        .await?;
+    let view = SalesChangeProcess::new(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .create_sales_change_order(req, &actor, &rbac)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -157,10 +175,14 @@ pub async fn sales_change_order_submit_impact(
     Path(id): Path<String>,
     Json(req): Json<SubmitSalesChangeRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesChangeProcess::new(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .submit_sales_change(&id, req, &actor)
-        .await?;
+    let view = SalesChangeProcess::new(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .submit_sales_change(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -181,10 +203,14 @@ pub async fn sales_change_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSalesChangeOrderRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesChangeProcess::new(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .void_sales_change(&id, req, &actor)
-        .await?;
+    let view = SalesChangeProcess::new(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .void_sales_change(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -205,10 +231,14 @@ pub async fn sales_change_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelSalesChangeApprovalRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesChangeProcess::new(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .cancel_approval(&id, req, &actor)
-        .await?;
+    let view = SalesChangeProcess::new(
+        state.db(),
+        state.rbac(),
+        crate::wiring::sales::sales_services(state.db(), state.rbac()),
+    )
+    .with_object_read(state.approval_object_read())
+    .cancel_approval(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
