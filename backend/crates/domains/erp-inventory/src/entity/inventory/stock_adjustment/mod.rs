@@ -466,7 +466,6 @@ impl StockAdjustment {
         }
         let next =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
-        ensure_transition(self.status, StockAdjustmentState::InApproval)?;
         self.approval_subject_version = next;
         self.status = StockAdjustmentState::InApproval;
         Ok(next)
@@ -486,7 +485,6 @@ impl StockAdjustment {
         if self.status != StockAdjustmentState::InApproval {
             return Err(Error::from("只有审批中的库存调整单可以撤回审批"));
         }
-        ensure_transition(self.status, StockAdjustmentState::Draft)?;
         self.status = StockAdjustmentState::Draft;
         Ok(())
     }
@@ -508,7 +506,7 @@ impl StockAdjustment {
         if self.status != StockAdjustmentState::InApproval {
             return Err(Error::from("只有审批中的库存调整单可以由最终通过动作过账"));
         }
-        ensure_transition(self.status, StockAdjustmentState::Posted)
+        Ok(())
     }
 
     /// 提交仓储复核（草稿/驳回 → 待仓储复核）。
@@ -908,9 +906,10 @@ mod tests {
             StockAdjustmentState::Reversed,
         ];
         for status in forbidden {
-            let mut adjustment = adjustment_in_state(status, 7);
+            let mut adjustment = adjustment_in_state(status, u32::MAX);
             let before = adjustment.clone();
-            assert!(adjustment.start_approval().is_err(), "{status:?} 不得提交审批");
+            assert!(matches!(adjustment.start_approval(), Err(Error::LogicError(message))
+                if message == "只有草稿状态的库存调整单可以提交审批"));
             assert_eq!(adjustment, before, "{status:?} 提交失败后实体必须不变");
         }
     }
@@ -920,7 +919,8 @@ mod tests {
     fn approval_submit_overflow_is_atomic() {
         let mut adjustment = adjustment_in_state(StockAdjustmentState::Draft, u32::MAX);
         let before = adjustment.clone();
-        assert!(adjustment.start_approval().is_err());
+        assert!(matches!(adjustment.start_approval(), Err(Error::LogicError(message))
+            if message == "审批提交版本溢出"));
         assert_eq!(adjustment, before);
     }
 

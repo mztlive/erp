@@ -1455,3 +1455,65 @@ fn historical_fee_terms_allow_zero_reduction_without_bypassing_new_reservation_g
         Err(Error::BusinessLogicError(message)) if message == "只能引用当前已接受且未关闭的询价结果"
     ));
 }
+
+#[test]
+fn fee_sales_attribution_requires_handled_goods_in_the_fee_scope() {
+    let mut inquiry = accepted();
+    inquiry.reserve_quantities("reservation", "sales-order", 1, selected("2"), now()).unwrap();
+    for state in [InquiryReservationState::Reserved, InquiryReservationState::Released] {
+        inquiry.quantity_ledger[0].state = state;
+        assert!(matches!(
+            inquiry.ensure_fee_sales_attribution(1, "fee", "sales-order", now()),
+            Err(Error::BusinessLogicError(message)) if message == "销售单不在本费用关联的商品范围内"
+        ));
+    }
+    inquiry.quantity_ledger[0].state = InquiryReservationState::Reserved;
+    inquiry.consume_quantities("reservation").unwrap();
+    inquiry.ensure_fee_sales_attribution(1, "fee", "sales-order", now()).unwrap();
+    assert!(inquiry.ensure_fee_sales_attribution(1, "fee", "another-sales", now()).is_err());
+    inquiry.feedbacks[0].data.fees[0].line_ids = vec!["another-line".into()];
+    assert!(inquiry.ensure_fee_sales_attribution(1, "fee", "sales-order", now()).is_err());
+    inquiry.feedbacks[0].data.fees[0].line_ids.clear();
+    inquiry.ensure_fee_sales_attribution(1, "fee", "sales-order", now()).unwrap();
+    inquiry.quantity_ledger[0].selections.clear();
+    assert!(inquiry.ensure_fee_sales_attribution(1, "fee", "sales-order", now()).is_err());
+}
+
+#[test]
+fn fee_sales_attribution_preserves_feedback_then_fee_then_scope_errors() {
+    let inquiry = accepted();
+    assert!(matches!(
+        inquiry.ensure_fee_sales_attribution(2, "missing", "missing", now()),
+        Err(Error::BusinessLogicError(message)) if message == "只能引用当前已接受且未关闭的询价结果"
+    ));
+    assert!(matches!(
+        inquiry.ensure_fee_sales_attribution(1, "missing", "missing", now()),
+        Err(Error::NotFound(message)) if message == "询价费用不存在"
+    ));
+    assert!(matches!(
+        inquiry.ensure_fee_sales_attribution(1, "fee", "missing", now()),
+        Err(Error::BusinessLogicError(message)) if message == "销售单不在本费用关联的商品范围内"
+    ));
+}
+
+#[test]
+fn fee_balance_validates_fee_before_allocation_and_preserves_exhausted_zero() {
+    let mut inquiry = accepted();
+    assert!(matches!(
+        inquiry.fee_available_amount("missing", "missing", 1, now()),
+        Err(Error::NotFound(message)) if message == "已接受费用"
+    ));
+    inquiry.feedbacks[0].data.fees[0].amount_gross = amount("0");
+    assert!(matches!(
+        inquiry.fee_available_amount("fee", "missing", 1, now()),
+        Err(Error::BusinessLogicError(message)) if message == "零额费用不能新增办理"
+    ));
+    inquiry.feedbacks[0].data.fees[0].amount_gross = amount("100");
+    assert!(matches!(
+        inquiry.fee_available_amount("fee", "missing", 1, now()),
+        Err(Error::BusinessLogicError(message)) if message == "费用尚无有效销售金额归属"
+    ));
+    inquiry.allocate_fee("allocation", "sales-order", 1, "fee", amount("100"), now()).unwrap();
+    inquiry.reserve_fee(fee_reservation("reservation", "100"), now()).unwrap();
+    assert_eq!(inquiry.fee_available_amount("fee", "allocation", 1, now()).unwrap(), Amount::zero());
+}

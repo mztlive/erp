@@ -7,7 +7,8 @@ use erp_core::money::Amount;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::{add, positive, required, subtract};
+use super::{DepositBatchAllocation, add, positive, required, subtract};
+use crate::{Error as FinanceError, Result as FinanceResult};
 
 /// 充值申请、真实银行付款及供应商到账的共同依据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,6 +120,17 @@ impl SupplierDepositBatch {
         Ok(())
     }
 
+    fn reserve_up_to(&mut self, remaining: Amount) -> Result<Amount> {
+        let allocated = self.available()?.min(remaining);
+        if allocated == Amount::zero() {
+            return Ok(allocated);
+        }
+        positive(allocated)?;
+        // 金额来自本次可用额度与剩余预算的较小值，无需再次计算同一批次余额。
+        self.reserved_amount = add(self.reserved_amount, allocated)?;
+        Ok(allocated)
+    }
+
     /// 消耗原占用并记录实际资金使用。
     /// # 参数
     /// * `amount` - 可归属本批次的扣款。
@@ -168,5 +180,38 @@ impl SupplierDepositBatch {
         }
         self.returned_amount = returned;
         Ok(())
+    }
+}
+
+impl DepositBatchAllocation {
+    /// 按已确定的到账批次顺序分配原执行组预算。
+    /// # 参数
+    /// * `batches` - 仓储按到账时间与稳定身份排序的真实批次。
+    /// * `amount` - 原执行组待占用预算。
+    /// # 返回
+    /// 返回保持来源顺序的非零分配，并增加对应批次占用。
+    /// # 错误
+    /// 损坏历史余额、运算失败或合计不足时保留原错误；调用方须回滚整个事务。
+    pub(crate) fn reserve_from(
+        batches: &mut [SupplierDepositBatch],
+        amount: Amount,
+    ) -> FinanceResult<Vec<Self>> {
+        let mut remaining = amount;
+        let mut allocations = Vec::new();
+        for batch in batches {
+            if remaining == Amount::zero() {
+                break;
+            }
+            let allocated = batch.reserve_up_to(remaining)?;
+            if allocated == Amount::zero() {
+                continue;
+            }
+            remaining = remaining.checked_sub(allocated);
+            allocations.push(Self { batch_id: batch.base.id.clone(), amount: allocated });
+        }
+        if remaining > Amount::zero() {
+            return Err(FinanceError::BusinessLogicError("到账批次可分配额度不足".into()));
+        }
+        Ok(allocations)
     }
 }

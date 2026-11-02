@@ -7,8 +7,7 @@ use persistence_core::Executor;
 
 use super::{SupplierDepositService, fingerprint, identity, replay, require_transaction};
 use crate::entity::supplier_deposit::{
-    DepositBatchAllocation, DepositExposure, DepositReservationBasis, SupplierDepositBatch,
-    SupplierDepositReservation,
+    DepositBatchAllocation, DepositExposure, DepositReservationBasis, SupplierDepositReservation,
 };
 use crate::repository::supplier_deposit_query::allocatable_batches;
 use crate::repository::{PurchasePaymentRequestExt, SupplierDepositExt};
@@ -90,7 +89,7 @@ impl SupplierDepositService {
         executor: &mut dyn Executor,
     ) -> Result<Vec<DepositBatchAllocation>> {
         let mut batches = allocatable_batches(&self.db, account, executor).await?;
-        let allocations = allocate_batches(&mut batches, amount)?;
+        let allocations = DepositBatchAllocation::reserve_from(&mut batches, amount)?;
         for batch in &mut batches {
             if allocations.iter().any(|allocation| allocation.batch_id == batch.base.id) {
                 self.db.supplier_deposit_batches().update(batch, executor).await?;
@@ -98,31 +97,6 @@ impl SupplierDepositService {
         }
         Ok(allocations)
     }
-}
-
-fn allocate_batches(
-    batches: &mut [SupplierDepositBatch],
-    amount: Amount,
-) -> Result<Vec<DepositBatchAllocation>> {
-    let mut remaining = amount;
-    let mut allocations = Vec::new();
-    for batch in batches {
-        if remaining == Amount::zero() {
-            break;
-        }
-        let available = batch.available()?;
-        let allocated = available.min(remaining);
-        if allocated == Amount::zero() {
-            continue;
-        }
-        batch.reserve(allocated)?;
-        remaining = remaining.checked_sub(allocated);
-        allocations.push(DepositBatchAllocation { batch_id: batch.base.id.clone(), amount: allocated });
-    }
-    if remaining > Amount::zero() {
-        return Err(Error::BusinessLogicError("到账批次可分配额度不足".into()));
-    }
-    Ok(allocations)
 }
 
 fn checked_actor(actor: &str) -> Result<String> {

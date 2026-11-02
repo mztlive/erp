@@ -7,7 +7,6 @@
 use super::task_decision::{
     DirectReconciliationCommand, DirectReconciliationConclusion, IntegrationNonTerminalTaskAction,
     IntegrationTaskActionCommand, IntegrationTaskActionKind, IntegrationTaskCompletionCommand,
-    decimal_version,
 };
 use crate::Result;
 
@@ -27,28 +26,27 @@ pub struct PreparedWorkItemTarget {
 }
 
 impl PreparedWorkItemTarget {
-    /// 从原始字段解析规范化目标身份与版本。
+    /// 从已校验字段与解析后的版本构造规范化目标。
     ///
     /// # 参数
     /// * `work_item_id` - 原始正式任务 ID（允许首尾空白）
-    /// * `task_version` - 原始任务版本字符串（十进制，不允许为 0）
+    /// * `task_version` - 命令边界校验得到的任务版本
     /// * `subject_version` - 原始业务主题版本（允许首尾空白）
     ///
     /// # 返回
     /// 返回持有 typed 版本与规范化字段的 `PreparedWorkItemTarget`。
     ///
     /// # 错误
-    /// 任务版本非十进制整数、为 0 或超出 `u64` 上限时返回 `ValidationError`。
+    /// 不返回错误，版本约束由命令边界校验保证。
     ///
     /// # 约束
-    /// 解析规则与 [`decimal_version`] 同源；wire 仍保持字符串合同。
-    fn parse(work_item_id: &str, task_version: &str, subject_version: &str) -> Result<Self> {
-        let task_version = decimal_version(task_version, false, "任务版本")?;
-        Ok(Self {
+    /// 仅规范化身份字段，不重复解析已校验版本；wire 仍保持字符串合同。
+    fn new(work_item_id: &str, task_version: u64, subject_version: &str) -> Self {
+        Self {
             work_item_id: work_item_id.trim().to_string(),
             task_version,
             subject_version: subject_version.trim().to_string(),
-        })
+        }
     }
 }
 
@@ -67,10 +65,10 @@ impl TryFrom<&IntegrationTaskActionCommand> for PreparedWorkItemTarget {
     /// 命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。
     ///
     /// # 约束
-    /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。
+    /// 命令边界校验保留解析后的版本；Service 不得二次解析。
     fn try_from(command: &IntegrationTaskActionCommand) -> Result<Self> {
-        command.validate()?;
-        Self::parse(&command.work_item_id, &command.expected_task_version, &command.expected_subject_version)
+        let version = command.validated_version()?;
+        Ok(Self::new(&command.work_item_id, version, &command.expected_subject_version))
     }
 }
 
@@ -89,10 +87,10 @@ impl TryFrom<&IntegrationTaskCompletionCommand> for PreparedWorkItemTarget {
     /// 命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。
     ///
     /// # 约束
-    /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。
+    /// 命令边界校验保留解析后的版本；Service 不得二次解析。
     fn try_from(command: &IntegrationTaskCompletionCommand) -> Result<Self> {
-        command.validate()?;
-        Self::parse(&command.work_item_id, &command.expected_task_version, &command.expected_subject_version)
+        let version = command.validated_version()?;
+        Ok(Self::new(&command.work_item_id, version, &command.expected_subject_version))
     }
 }
 
@@ -123,10 +121,9 @@ impl TryFrom<&DirectReconciliationCommand> for PreparedDirectDecisionTarget {
     /// 命令边界校验失败，或差异版本非十进制、溢出时返回 `ValidationError`。
     ///
     /// # 约束
-    /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。
+    /// 命令边界校验保留解析后的版本；Service 不得二次解析。
     fn try_from(command: &DirectReconciliationCommand) -> Result<Self> {
-        command.validate()?;
-        let difference_version = decimal_version(&command.expected_difference_version, true, "差异版本")?;
+        let difference_version = command.validated_version()?;
         Ok(Self { difference_id: command.difference_id.trim().to_string(), difference_version })
     }
 }
@@ -184,6 +181,7 @@ mod tests {
         DirectReconciliationCommand, IntegrationTaskActionCommand, IntegrationTaskCompletionCommand,
     };
     use super::{PreparedDirectDecisionTarget, PreparedWorkItemTarget};
+    use crate::Error;
 
     fn action_command(version: &str) -> IntegrationTaskActionCommand {
         serde_json::from_value(json!({
@@ -279,6 +277,76 @@ mod tests {
     fn direct_target_rejects_non_decimal() {
         assert!(PreparedDirectDecisionTarget::try_from(&direct_command("bad")).is_err());
         assert!(PreparedDirectDecisionTarget::try_from(&direct_command("")).is_err());
+        assert!(PreparedDirectDecisionTarget::try_from(&direct_command("18446744073709551616")).is_err());
+    }
+
+    #[test]
+    fn prepared_targets_preserve_existing_integer_syntax() {
+        let action = action_command(" +0007 ");
+        action.validate().unwrap();
+        assert_eq!(PreparedWorkItemTarget::try_from(&action).unwrap().task_version, 7);
+        let completion = completion_command(" +0007 ");
+        completion.validate().unwrap();
+        assert_eq!(PreparedWorkItemTarget::try_from(&completion).unwrap().task_version, 7);
+        let direct = direct_command(" +0000 ");
+        direct.validate().unwrap();
+        assert_eq!(PreparedDirectDecisionTarget::try_from(&direct).unwrap().difference_version, 0);
+    }
+
+    #[test]
+    fn action_preparation_preserves_validation_error_priority() {
+        let mut command = action_command("bad");
+        command.work_item_id = " ".into();
+        command.action.item_id = " ".into();
+        for expected in ["任务 ID不能为空", "任务版本必须为十进制整数字符串", "业务项 ID不能为空"]
+        {
+            assert_validation_error(command.validate().unwrap_err(), expected);
+            assert_validation_error(PreparedWorkItemTarget::try_from(&command).unwrap_err(), expected);
+            if command.work_item_id.trim().is_empty() {
+                command.work_item_id = "wi-1".into();
+            } else {
+                command.expected_task_version = "1".into();
+            }
+        }
+    }
+
+    #[test]
+    fn completion_preparation_preserves_policy_before_empty_evidence_error() {
+        let mut command = completion_command("bad");
+        command.decision.evidence_policy_version = 0;
+        command.decision.evidence_refs.clear();
+        for expected in
+            ["任务版本必须为十进制整数字符串", "证据策略版本必须大于 0", "完成任务必须提供终态证据引用"]
+        {
+            assert_validation_error(command.validate().unwrap_err(), expected);
+            assert_validation_error(PreparedWorkItemTarget::try_from(&command).unwrap_err(), expected);
+            if command.expected_task_version == "bad" {
+                command.expected_task_version = "1".into();
+            } else {
+                command.decision.evidence_policy_version = 1;
+            }
+        }
+    }
+
+    #[test]
+    fn direct_preparation_preserves_identity_before_version_error() {
+        let mut command = direct_command("bad");
+        command.difference_id = " ".into();
+        command.operation_id = " ".into();
+        for expected in ["差异 ID不能为空", "差异版本必须为十进制整数字符串", "操作 ID不能为空"]
+        {
+            assert_validation_error(command.validate().unwrap_err(), expected);
+            assert_validation_error(PreparedDirectDecisionTarget::try_from(&command).unwrap_err(), expected);
+            if command.difference_id.trim().is_empty() {
+                command.difference_id = "diff-1".into();
+            } else {
+                command.expected_difference_version = "0".into();
+            }
+        }
+    }
+
+    fn assert_validation_error(error: Error, expected: &str) {
+        assert!(matches!(error, Error::ValidationError(message) if message == expected));
     }
 
     #[test]

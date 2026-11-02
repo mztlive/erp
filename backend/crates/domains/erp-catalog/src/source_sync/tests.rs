@@ -31,6 +31,44 @@ fn unedited_source_changes_auto_apply_only_changed_field() {
     assert_eq!(state.pending_count, 0);
     assert!(!state.fields[0].manually_maintained);
 }
+
+#[test]
+fn repeated_source_fields_apply_in_observation_order() {
+    let mut state = source();
+    let mut values = content("第一次更新");
+    values.extend(content("第二次更新"));
+    let changes = state
+        .observe(&content("原名"), SourceObservation { values: values.clone(), observed_at: 30 })
+        .unwrap();
+    assert_eq!(changes, values);
+    assert_eq!(state.fields[0].company, text("第二次更新"));
+    assert_eq!(state.fields[0].baseline, text("第二次更新"));
+    assert_eq!(state.observed_at, 30);
+    assert_eq!(state.pending_count, 0);
+}
+
+#[test]
+fn existing_source_field_still_rejects_invalid_external_values() {
+    let mut state = source();
+    let before = state.fields.clone();
+    assert!(matches!(
+        state.observe(&content("原名"), observation("   ")),
+        Err(crate::Error::ValidationError(message)) if message == "商品资料字段类型或内容无效"
+    ));
+    assert_eq!(state.fields, before);
+    assert_eq!(state.observed_at, 20);
+}
+
+#[test]
+fn historical_duplicate_field_updates_only_first_registered_state() {
+    let mut state = source();
+    let duplicate = state.fields[0].clone();
+    state.fields.push(duplicate.clone());
+    assert_eq!(state.observe(&content("原名"), observation("新名")).unwrap(), content("新名"));
+    assert_eq!(state.fields[0].company, text("新名"));
+    assert_eq!(state.fields[1], duplicate);
+}
+
 #[test]
 fn same_field_manual_edit_is_retained_until_decision() {
     let mut state = source();

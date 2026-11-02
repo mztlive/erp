@@ -4,6 +4,19 @@ use crate::entity::sales_order::BusinessType;
 use crate::{Error, Result};
 
 impl SalesOrder {
+    /// 判断本单是否可接收询价费用分摊。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 实物与服务销售已生效且保有正式版本时返回 `true`，关闭展示态不影响资格。
+    /// # 错误
+    /// 不返回错误；历史记录缺少正式版本时返回 `false`。
+    pub fn can_receive_inquiry_fees(&self) -> bool {
+        self.business_type.is_goods_service()
+            && self.commercial_status == CommercialStatus::Effective
+            && self.current_revision_id().is_some()
+    }
+
     /// 校验本单可作为附加费用来源；关闭展示态不影响资格。
     /// # 参数
     /// 无。

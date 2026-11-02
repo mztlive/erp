@@ -3,7 +3,7 @@ use erp_core::AccountKind;
 use erp_core::ids::SupplierCommercialProfileRevisionId;
 
 use super::application::ensure_actor;
-use super::{CooperationApplication, CooperationResult};
+use super::{CooperationApplication, CooperationRequest, CooperationResult};
 use crate::profile_change::{PlanCommercialProfileRevisionParams, plan_commercial_profile_revision};
 use crate::{Error, Result, SupplierAccount, SupplierCommercialProfileRevision};
 
@@ -37,10 +37,10 @@ pub fn plan_confirmed_cooperation(
     now: u64,
 ) -> Result<ConfirmedCooperation> {
     ensure_actor(actor, AccountKind::Admin)?;
-    application.ensure_confirmer(actor)?;
     let proposal = &application.pending_submission()?.proposal;
-    ensure_current(application, supplier, current)?;
-    if revision_id.to_string().trim().is_empty() || revision_id.to_string() == current.base.id {
+    ensure_current(application, proposal, supplier, current)?;
+    let revision_key: &str = revision_id.as_ref();
+    if revision_key.trim().is_empty() || revision_key == current.base.id {
         return Err(Error::ValidationError("新商务修订身份无效".into()));
     }
     let revision_no = current
@@ -80,21 +80,21 @@ pub fn plan_confirmed_cooperation(
 /// 供应商须启用且与申请绑定，商务指针和期望版本必须仍是当前值。
 fn ensure_current(
     application: &CooperationApplication,
+    proposal: &CooperationRequest,
     supplier: &SupplierAccount,
     current: &SupplierCommercialProfileRevision,
 ) -> Result<()> {
-    let proposal = &application.pending_submission()?.proposal;
     if supplier.base.is_deleted()
         || !supplier.stable.status.is_active()
         || supplier.base.id != application.supplier_id
-        || current.supplier_id.to_string() != supplier.base.id
+        || current.supplier_id.as_ref() != supplier.base.id
     {
         return Err(Error::Forbidden("供应商当前状态不允许确认合作条款".into()));
     }
     if supplier.base.version != proposal.expected_supplier_version
         || current.base.is_deleted()
         || current.base.id != proposal.expected_profile_id
-        || supplier.current_commercial_profile_revision_id.as_ref().map(ToString::to_string).as_deref()
+        || supplier.current_commercial_profile_revision_id.as_ref().map(|id| id.as_ref())
             != Some(proposal.expected_profile_id.as_str())
     {
         return Err(Error::ConflictError("供应商商务档案已改变，请退回供应商重新核对提交".into()));

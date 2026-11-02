@@ -395,7 +395,7 @@ impl SupplierRefund {
         }
         let next = next_approval_version(self.approval_subject_version)?;
         self.approval_subject_version = next;
-        self.transition(SupplierRefundStatus::InApproval)?;
+        self.status = SupplierRefundStatus::InApproval;
         Ok(next)
     }
 
@@ -413,7 +413,8 @@ impl SupplierRefund {
         if self.status != SupplierRefundStatus::InApproval {
             return Err(Error::from("只有审批中的供应商退款单可以撤回审批"));
         }
-        self.transition(SupplierRefundStatus::Draft)
+        self.status = SupplierRefundStatus::Draft;
+        Ok(())
     }
 
     /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
@@ -430,7 +431,8 @@ impl SupplierRefund {
         if self.status != SupplierRefundStatus::InApproval {
             return Err(Error::from("只有审批中的供应商退款单可以由最终通过动作过账"));
         }
-        self.transition(SupplierRefundStatus::Posted)
+        self.status = SupplierRefundStatus::Posted;
+        Ok(())
     }
 
     /// 判断退款是否已过账。
@@ -593,6 +595,39 @@ pub(crate) mod tests {
         assert!(refund.transition(S::Posted).is_err(), "草稿不得直接过账");
         refund.start_approval().unwrap();
         assert!(refund.mark_posted().is_ok());
+    }
+
+    #[test]
+    fn approval_commands_keep_source_guards_and_overflow_atomicity() -> Result<()> {
+        let mut record = SupplierRefund::new(SupplierRefundId::new("guard-test"), data(), "creator-1")?;
+        record.approval_subject_version = u32::MAX;
+        let before = record.clone();
+        assert!(matches!(record.start_approval(), Err(Error::LogicError(message))
+            if message == "审批提交版本溢出"));
+        assert_eq!(record, before);
+
+        for status in
+            [SupplierRefundStatus::Draft, SupplierRefundStatus::Posted, SupplierRefundStatus::Reversed]
+        {
+            record.status = status;
+            let before = record.clone();
+            assert!(matches!(record.cancel_approval(), Err(Error::LogicError(message))
+                if message == "只有审批中的供应商退款单可以撤回审批"));
+            assert_eq!(record, before);
+            assert!(matches!(record.mark_posted(), Err(Error::LogicError(message))
+                if message == "只有审批中的供应商退款单可以由最终通过动作过账"));
+            assert_eq!(record, before);
+        }
+        for status in
+            [SupplierRefundStatus::InApproval, SupplierRefundStatus::Posted, SupplierRefundStatus::Reversed]
+        {
+            record.status = status;
+            let before = record.clone();
+            assert!(matches!(record.start_approval(), Err(Error::LogicError(message))
+                if message == "只有草稿状态的供应商退款单可以提交审批"));
+            assert_eq!(record, before);
+        }
+        Ok(())
     }
 
     #[test]

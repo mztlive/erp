@@ -1,11 +1,48 @@
-//! 办理历史费用时核对明确反馈轮次的金额与税率，不替代当前接受及额度守卫。
+//! 费用商品归属与明确反馈轮次的商业条款；历史条款核对不替代当前接受及额度守卫。
 
+use erp_core::common::time::Instant;
 use erp_core::money::{Amount, Rate};
 
-use super::{InquiryFee, InquiryFeedbackSnapshot, SalesInquiry};
+use super::{InquiryFee, InquiryFeedbackSnapshot, InquiryReservationState, SalesInquiry};
 use crate::{Error, Result};
 
 impl SalesInquiry {
+    /// 核对已接受费用与来源销售已办理商品的归属关系。
+    ///
+    /// # 参数
+    /// `round`、`fee_id` 为已接受反馈费用；`sales_order_id` 为待分摊销售，`now` 为业务时刻。
+    /// # 返回
+    /// 销售存在已办理商品，且至少一项落在费用商品范围内时通过；费用无指定行时适用全部商品。
+    /// # 错误
+    /// 先拒绝未接受反馈或不存在的费用，再拒绝缺少匹配已办理商品的销售。
+    pub fn ensure_fee_sales_attribution(
+        &self,
+        round: u32,
+        fee_id: &str,
+        sales_order_id: &str,
+        now: Instant,
+    ) -> Result<()> {
+        let feedback = self.accepted_feedback(round, now)?;
+        let fee = feedback
+            .data
+            .fees
+            .iter()
+            .find(|fee| fee.fee_id == fee_id)
+            .ok_or_else(|| Error::NotFound("询价费用不存在".into()))?;
+        let matches = self
+            .quantity_ledger
+            .iter()
+            .filter(|row| {
+                row.sales_order_id == sales_order_id && row.state == InquiryReservationState::Handled
+            })
+            .flat_map(|row| &row.selections)
+            .any(|selection| fee.line_ids.is_empty() || fee.line_ids.contains(&selection.line_id));
+        if !matches {
+            return Err(Error::BusinessLogicError("销售单不在本费用关联的商品范围内".into()));
+        }
+        Ok(())
+    }
+
     /// 取得明确反馈轮次的冻结快照。
     ///
     /// # 参数

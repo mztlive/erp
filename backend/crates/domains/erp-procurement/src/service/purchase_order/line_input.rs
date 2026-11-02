@@ -107,9 +107,5 @@ pub fn compute_request_totals(inputs: &[PurchaseLineInput]) -> Result<(Amount, A
 /// # 错误
 /// 无；本方法只转换错误分类。
 pub fn map_line_amount_violation(violation: LineAmountViolation) -> Error {
-    match violation {
-        LineAmountViolation::MissingQuantity
-        | LineAmountViolation::MissingUnitCostGross
-        | LineAmountViolation::MissingGrossAmount => Error::ValidationError(violation.to_string()),
-    }
+    Error::ValidationError(violation.to_string())
 }

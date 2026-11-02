@@ -67,9 +67,6 @@ impl SalesOrderCommandProcess {
             return Err(Error::ValidationError("交接原因不能为空".to_string()));
         }
         let target = req.target_owner_user_id.trim().to_string();
-        if target.is_empty() {
-            return Err(Error::ValidationError("目标负责销售不能为空".to_string()));
-        }
         let audit_id = sales_handover_audit_id(actor.id(), id, &idempotency_key);
         let fingerprint = sales_handover_fingerprint(actor.id(), id, &req)?;
         let expected_key_hash = CommandFingerprint::from_parts([idempotency_key.clone()]);

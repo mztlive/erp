@@ -96,7 +96,7 @@ impl SupplierProfileCommand {
         {
             return Err(Error::from("供应商命令结果身份、请求指纹或变更原因不能为空"));
         }
-        validate_fingerprint_format(&data.request_fingerprint)?;
+        ProfileFingerprint::parse(&data.request_fingerprint)?;
         Ok(Self {
             base: BaseModel::new(id.into()),
             idempotency_key,
@@ -126,7 +126,7 @@ impl SupplierProfileCommand {
     /// 操作、指纹或目标任一不一致时返回校验错误。
     ///
     /// # 约束
-    /// 纯内存校验，不触及 MongoDB 或时钟；指纹按摘要兼容比较（前缀与大小写不敏感）。
+    /// 纯内存校验，不触及 MongoDB 或时钟；兼容版本前缀与裸摘要，摘要大小写不敏感。
     pub fn ensure_replayable(
         &self,
         operation: &str,
@@ -205,50 +205,28 @@ impl SupplierProfileCommand {
     }
 }
 
-/// 提取指纹摘要部分，兼容 `sha256-v1:` 前缀与历史裸摘要。
-///
-/// # 参数
-/// * `value` - 完整指纹字符串
-///
-/// # 返回
-/// 返回去掉 `sha256-v1:` 前缀后的摘要切片；未带该前缀时原样返回，不改变大小写。非法格式由外层校验失败。
-fn fingerprint_digest(value: &str) -> &str {
-    value.strip_prefix(FINGERPRINT_V1_PREFIX).unwrap_or(value)
-}
+/// 已解析的资料请求指纹；只保存合法摘要视图，不改写持久化原值。
+struct ProfileFingerprint<'a>(&'a str);
 
-/// 校验指纹格式：接受 `sha256-v1:<64hex>` 或历史裸 `64hex`。
-///
-/// # 参数
-/// * `value` - 待校验指纹
-///
-/// # 返回
-/// 格式合法返回 `Ok(())`。
-///
-/// # 错误
-/// 非法长度、非十六进制或空白时返回错误。
-fn validate_fingerprint_format(value: &str) -> Result<()> {
-    let digest = fingerprint_digest(value.trim());
-    if digest.len() != FINGERPRINT_HEX_LEN
-        || !digest.bytes().all(|b| b.is_ascii_hexdigit())
-        || value.trim() != value
-    {
-        return Err(Error::from("供应商资料请求指纹格式无效"));
+impl<'a> ProfileFingerprint<'a> {
+    /// 在创建或历史回执读取边界解析一次，内部比较直接使用合法摘要。
+    fn parse(value: &'a str) -> Result<Self> {
+        let digest = value.strip_prefix(FINGERPRINT_V1_PREFIX).unwrap_or(value);
+        if digest.len() != FINGERPRINT_HEX_LEN
+            || !digest.bytes().all(|b| b.is_ascii_hexdigit())
+            || value.trim() != value
+        {
+            return Err(Error::from("供应商资料请求指纹格式无效"));
+        }
+        Ok(Self(digest))
     }
-    Ok(())
 }
 
-/// 指纹按摘要兼容比较，前缀与大小写不敏感。
-///
-/// # 参数
-/// * `a` - 已持久化指纹
-/// * `b` - 当前请求指纹
-///
-/// # 返回
-/// 摘要一致返回 `true`。
+/// 持久化记录和当前请求分别解析后，按大小写不敏感的摘要比较。
 fn fingerprints_match(a: &str, b: &str) -> bool {
-    fingerprint_digest(a).eq_ignore_ascii_case(fingerprint_digest(b))
-        && validate_fingerprint_format(a).is_ok()
-        && validate_fingerprint_format(b).is_ok()
+    let Ok(stored) = ProfileFingerprint::parse(a) else { return false };
+    let Ok(requested) = ProfileFingerprint::parse(b) else { return false };
+    stored.0.eq_ignore_ascii_case(requested.0)
 }
 
 #[cfg(test)]
@@ -335,6 +313,41 @@ mod tests {
         let padded =
             SupplierProfileCommandData { request_fingerprint: format!(" {ZERO_DIGEST}"), ..command_data() };
         assert!(SupplierProfileCommand::new("bad-2", padded).is_err());
+    }
+
+    #[test]
+    fn replay_parses_historical_fingerprints_without_rewriting_stored_values() {
+        let digest = "a".repeat(64);
+        let stored = format!("{FINGERPRINT_V1_PREFIX}{}", digest.to_ascii_uppercase());
+        let command = SupplierProfileCommand::new("command", bare_data(&stored)).unwrap();
+        command.ensure_replayable("update", Some("supplier-1"), &digest).unwrap();
+        assert_eq!(command.request_fingerprint, stored);
+
+        // 数据库反序列化可绕过构造；历史坏值与缺失值仍须在重放边界拒绝。
+        for invalid in [
+            String::new(),
+            "g".repeat(64),
+            format!(" {digest}"),
+            format!("{digest} "),
+            format!("SHA256-V1:{digest}"),
+        ] {
+            assert!(SupplierProfileCommand::new("command", bare_data(&invalid)).is_err());
+            let mut document = serde_json::to_value(&command).unwrap();
+            document["request_fingerprint"] = serde_json::json!(invalid);
+            let historical: SupplierProfileCommand = serde_json::from_value(document).unwrap();
+            assert_eq!(
+                historical
+                    .ensure_replayable("update", Some("other-supplier"), &invalid)
+                    .unwrap_err()
+                    .to_string(),
+                "幂等键已用于不同的供应商资料请求"
+            );
+            assert!(command.ensure_replayable("update", Some("supplier-1"), &invalid).is_err());
+        }
+        let mut document = serde_json::to_value(&command).unwrap();
+        document.as_object_mut().unwrap().remove("request_fingerprint");
+        let historical: SupplierProfileCommand = serde_json::from_value(document).unwrap();
+        assert!(historical.ensure_replayable("update", Some("supplier-1"), &digest).is_err());
     }
 
     /// 覆盖版本与身份合同：版本一致通过，不一致或缺失时失败。

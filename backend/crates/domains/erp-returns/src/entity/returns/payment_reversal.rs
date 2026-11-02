@@ -350,7 +350,7 @@ impl PaymentReversal {
         }
         let next = next_approval_version(self.approval_subject_version)?;
         self.approval_subject_version = next;
-        self.transition(PaymentReversalStatus::InApproval)?;
+        self.status = PaymentReversalStatus::InApproval;
         Ok(next)
     }
 
@@ -368,7 +368,8 @@ impl PaymentReversal {
         if self.status != PaymentReversalStatus::InApproval {
             return Err(Error::from("只有审批中的付款冲正单可以撤回审批"));
         }
-        self.transition(PaymentReversalStatus::Draft)
+        self.status = PaymentReversalStatus::Draft;
+        Ok(())
     }
 
     /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
@@ -385,7 +386,8 @@ impl PaymentReversal {
         if self.status != PaymentReversalStatus::InApproval {
             return Err(Error::from("只有审批中的付款冲正单可以由最终通过动作过账"));
         }
-        self.transition(PaymentReversalStatus::Posted)
+        self.status = PaymentReversalStatus::Posted;
+        Ok(())
     }
 
     /// 判断冲正是否已过账。
@@ -549,6 +551,41 @@ pub(crate) mod tests {
         assert!(reversal.transition(S::Posted).is_err(), "草稿不得直接过账");
         reversal.start_approval().unwrap();
         assert!(reversal.mark_posted().is_ok());
+    }
+
+    #[test]
+    fn approval_commands_keep_source_guards_and_overflow_atomicity() -> Result<()> {
+        let mut record = PaymentReversal::new(PaymentReversalId::new("guard-test"), data(), "creator-1")?;
+        record.approval_subject_version = u32::MAX;
+        let before = record.clone();
+        assert!(matches!(record.start_approval(), Err(Error::LogicError(message))
+            if message == "审批提交版本溢出"));
+        assert_eq!(record, before);
+
+        for status in
+            [PaymentReversalStatus::Draft, PaymentReversalStatus::Posted, PaymentReversalStatus::Reversed]
+        {
+            record.status = status;
+            let before = record.clone();
+            assert!(matches!(record.cancel_approval(), Err(Error::LogicError(message))
+                if message == "只有审批中的付款冲正单可以撤回审批"));
+            assert_eq!(record, before);
+            assert!(matches!(record.mark_posted(), Err(Error::LogicError(message))
+                if message == "只有审批中的付款冲正单可以由最终通过动作过账"));
+            assert_eq!(record, before);
+        }
+        for status in [
+            PaymentReversalStatus::InApproval,
+            PaymentReversalStatus::Posted,
+            PaymentReversalStatus::Reversed,
+        ] {
+            record.status = status;
+            let before = record.clone();
+            assert!(matches!(record.start_approval(), Err(Error::LogicError(message))
+                if message == "只有草稿状态的付款冲正单可以提交审批"));
+            assert_eq!(record, before);
+        }
+        Ok(())
     }
 
     #[test]

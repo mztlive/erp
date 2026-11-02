@@ -168,7 +168,7 @@ impl PurchaseLineInput {
             sales_order_revision_line_id: self.sales_order_revision_line_id,
             sales_order_submission_line_id: self.sales_order_submission_line_id,
             allocated_quantity: self.allocated_quantity,
-            expense: self.expense.clone(),
+            expense: self.expense,
         })
     }
 
@@ -216,7 +216,7 @@ impl PurchaseLineInput {
             sales_order_revision_line_id: self.sales_order_revision_line_id,
             sales_order_submission_line_id: self.sales_order_submission_line_id,
             allocated_quantity: self.allocated_quantity,
-            expense: self.expense.clone(),
+            expense: self.expense,
         })
     }
 }

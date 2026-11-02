@@ -161,13 +161,26 @@ impl IntegrationTaskActionCommand {
     /// 任务版本不是大于 0 的十进制整数，原因代码或备注非法，
     /// 证据超过 8 条或证据记录 ID、标签为空或超长时返回 `ValidationError`。
     pub fn validate(&self) -> Result<()> {
-        validate_command_identity(
+        self.validated_version().map(|_| ())
+    }
+
+    /// 按命令首错顺序校验边界，并保留已解析的任务版本供 Prepared 目标使用。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回已校验的任务版本。
+    /// # 错误
+    /// 任一命令字段非法时返回与 `validate` 一致的校验错误。
+    pub(super) fn validated_version(&self) -> Result<u64> {
+        let version = validate_command_identity(
             &self.work_item_id,
             &self.expected_task_version,
             &self.expected_subject_version,
             &self.idempotency_key,
         )?;
-        validate_action(&self.action)
+        validate_action(&self.action)?;
+        Ok(version)
     }
 }
 
@@ -271,7 +284,19 @@ impl IntegrationTaskCompletionCommand {
     /// 身份或决定字段为空或超长、任务版本不是大于 0 的十进制整数、
     /// 证据策略版本为 0、证据引用非法或为空时返回 `ValidationError`。
     pub fn validate(&self) -> Result<()> {
-        validate_command_identity(
+        self.validated_version().map(|_| ())
+    }
+
+    /// 按命令首错顺序校验边界，并保留已解析的任务版本供 Prepared 目标使用。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回已校验的任务版本。
+    /// # 错误
+    /// 任一命令字段非法时返回与 `validate` 一致的校验错误。
+    pub(super) fn validated_version(&self) -> Result<u64> {
+        let version = validate_command_identity(
             &self.work_item_id,
             &self.expected_task_version,
             &self.expected_subject_version,
@@ -291,7 +316,7 @@ impl IntegrationTaskCompletionCommand {
         if self.decision.evidence_refs.is_empty() {
             return Err(Error::ValidationError("完成任务必须提供终态证据引用".to_string()));
         }
-        Ok(())
+        Ok(version)
     }
 }
 
@@ -454,8 +479,20 @@ impl DirectReconciliationCommand {
     /// 终态分支的注册表版本为 0 或注册身份为空，备注或证据引用非法，
     /// 或终态证据为空时返回 `ValidationError`。
     pub fn validate(&self) -> Result<()> {
+        self.validated_version().map(|_| ())
+    }
+
+    /// 按命令首错顺序校验边界，并保留已解析的差异版本供 Prepared 目标使用。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回已校验的差异版本，允许为零。
+    /// # 错误
+    /// 任一命令字段非法时返回与 `validate` 一致的校验错误。
+    pub(super) fn validated_version(&self) -> Result<u64> {
         required(&self.difference_id, "差异 ID", ID_MAX_LEN)?;
-        decimal_version(&self.expected_difference_version, true, "差异版本")?;
+        let version = decimal_version(&self.expected_difference_version, true, "差异版本")?;
         required(&self.operation_id, "操作 ID", OPERATION_ID_MAX_LEN)?;
         required(&self.idempotency_key, "幂等键", IDEMPOTENCY_KEY_MAX_LEN)?;
         match &self.decision {
@@ -483,7 +520,8 @@ impl DirectReconciliationCommand {
                 }
                 Ok(())
             },
-        }
+        }?;
+        Ok(version)
     }
 }
 
@@ -627,11 +665,12 @@ fn validate_command_identity(
     task_version: &str,
     subject_version: &str,
     idempotency_key: &str,
-) -> Result<()> {
+) -> Result<u64> {
     required(work_item_id, "任务 ID", ID_MAX_LEN)?;
-    decimal_version(task_version, false, "任务版本")?;
+    let version = decimal_version(task_version, false, "任务版本")?;
     required(subject_version, "业务主题版本", VERSION_MAX_LEN)?;
-    required(idempotency_key, "幂等键", IDEMPOTENCY_KEY_MAX_LEN)
+    required(idempotency_key, "幂等键", IDEMPOTENCY_KEY_MAX_LEN)?;
+    Ok(version)
 }
 
 fn validate_action(action: &IntegrationNonTerminalTaskAction) -> Result<()> {
@@ -666,7 +705,7 @@ fn validate_evidence_refs(refs: &[ControlledEvidenceRef]) -> Result<()> {
 ///
 /// # 错误
 /// 去空白后为空、超长、非十进制 `u64`，或不允许 0 却为 0 时返回 `ValidationError`。
-pub(super) fn decimal_version(value: &str, allow_zero: bool, label: &str) -> Result<u64> {
+fn decimal_version(value: &str, allow_zero: bool, label: &str) -> Result<u64> {
     required(value, label, VERSION_MAX_LEN)?;
     let version = value
         .trim()

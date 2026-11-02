@@ -301,6 +301,33 @@ fn confirmation_rejects_current_supplier_or_profile_drift_and_disabled_supplier(
 }
 
 #[test]
+fn confirmation_rejects_invalid_frozen_history_before_checking_current_facts() {
+    let (mut supplier, profile) = formal_facts();
+    supplier.stable.status = SupplierAccountStatus::Disabled;
+    let plan = |app: &CooperationApplication, actor: &AuditActor| {
+        plan_confirmed_cooperation(
+            app,
+            &supplier,
+            &profile,
+            SupplierCommercialProfileRevisionId::new("profile-2"),
+            actor,
+            200,
+        )
+        .unwrap_err()
+        .to_string()
+    };
+    assert_eq!(plan(&draft(), &supplier_actor()), "权限不足: 操作人身份不允许执行合作条款动作");
+    assert_eq!(plan(&draft(), &confirmer()), "数据冲突: 申请已不处于待确认状态");
+
+    let mut app = submitted();
+    app.submissions.clear();
+    assert_eq!(plan(&app, &confirmer()), "系统内部错误: 申请缺少冻结提交");
+    let mut app = submitted();
+    app.proposal.reason = "被改写的申请".into();
+    assert_eq!(plan(&app, &confirmer()), "数据冲突: 待确认提交内容不得修改");
+}
+
+#[test]
 fn command_replay_preserves_original_result_and_detects_payload_identity_conflict() {
     let app = submitted();
     let command = cooperation_command(

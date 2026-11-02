@@ -415,3 +415,32 @@ fn extra_cost_source_accepts_only_effective_goods_and_keeps_closed_orders() {
     order.closed_at = Some(Instant::from_unix_secs(1_800_000_000));
     assert!(order.ensure_extra_cost_source().is_ok());
 }
+
+#[test]
+fn inquiry_fee_sales_require_effective_goods_and_a_revision_pointer() {
+    let mut order = SalesOrder::new(SalesOrderId::new("fee-sales"), data(), "admin-1").unwrap();
+    for business in [BusinessType::GoodsService, BusinessType::Voucher] {
+        for status in [
+            CommercialStatus::Draft,
+            CommercialStatus::PendingReview,
+            CommercialStatus::Effective,
+            CommercialStatus::Voided,
+        ] {
+            for revision in [None, Some("revision"), Some("")] {
+                order.business_type = business;
+                order.commercial_status = status;
+                order.stable.current_revision_id = revision.map(str::to_string);
+                assert_eq!(
+                    order.can_receive_inquiry_fees(),
+                    business == BusinessType::GoodsService
+                        && status == CommercialStatus::Effective
+                        && revision.is_some()
+                );
+            }
+        }
+    }
+    order.business_type = BusinessType::GoodsService;
+    order.commercial_status = CommercialStatus::Effective;
+    order.closed_at = Some(Instant::from_unix_secs(1_800_000_000));
+    assert!(order.can_receive_inquiry_fees());
+}

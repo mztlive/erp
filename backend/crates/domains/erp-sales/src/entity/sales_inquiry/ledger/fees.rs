@@ -267,11 +267,7 @@ impl SalesInquiry {
     /// # 错误
     /// 未接受、重询、关闭、零额时返回公开业务原因。
     pub fn ensure_fee_available(&self, round: u32, fee_id: &str, now: Instant) -> Result<()> {
-        let fee = self.accepted_fee(round, fee_id, now)?;
-        if fee.amount_gross.to_decimal() <= Decimal::ZERO {
-            return Err(Error::BusinessLogicError("零额费用不能新增办理".into()));
-        }
-        Ok(())
+        self.available_fee(round, fee_id, now).map(|_| ())
     }
 
     /// 计算当前有效费用和明确销售分摊的共同可办理余额。
@@ -288,8 +284,7 @@ impl SalesInquiry {
         round: u32,
         now: Instant,
     ) -> Result<Amount> {
-        self.ensure_fee_available(round, fee_id, now)?;
-        let fee = self.accepted_fee(round, fee_id, now)?;
+        let fee = self.available_fee(round, fee_id, now)?;
         let allocation = self
             .fee_allocations
             .iter()
@@ -314,6 +309,14 @@ impl SalesInquiry {
             .checked_sub(used)
             .ok_or_else(|| Error::ValidationError("费用分摊余额计算溢出".into()))?;
         Ok(Amount::try_from(fee_remaining.min(allocation_remaining).max(Decimal::ZERO))?)
+    }
+
+    fn available_fee(&self, round: u32, fee_id: &str, now: Instant) -> Result<&InquiryFee> {
+        let fee = self.accepted_fee(round, fee_id, now)?;
+        if fee.amount_gross.to_decimal() <= Decimal::ZERO {
+            return Err(Error::BusinessLogicError("零额费用不能新增办理".into()));
+        }
+        Ok(fee)
     }
 
     fn accepted_fee(&self, round: u32, fee_id: &str, now: Instant) -> Result<&InquiryFee> {

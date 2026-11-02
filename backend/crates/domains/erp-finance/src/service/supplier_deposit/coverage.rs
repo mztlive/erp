@@ -5,7 +5,7 @@ use erp_core::money::Amount;
 use persistence_core::Executor;
 
 use super::SupplierDepositService;
-use crate::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
+use crate::entity::payable::PurchasePaymentRequest;
 use crate::entity::supplier_deposit::{
     DepositAccountIdentity, DepositReservationBasis, SupplierDepositAccount, SupplierDepositReservation,
 };
@@ -100,34 +100,7 @@ impl SupplierDepositService {
             .find_by_id(&basis.payment_request_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购付款申请不存在".into()))?;
-        let frozen_account = request.require_deposit_account(account_id)?;
-        if &frozen_account.identity != identity {
-            return Err(Error::BusinessLogicError("预存款真实账号身份与原批准快照不一致".into()));
-        }
-        if !matches!(
-            request.status,
-            PurchasePaymentRequestStatus::Approved
-                | PurchasePaymentRequestStatus::PartiallyPaid
-                | PurchasePaymentRequestStatus::Paid
-        ) {
-            return Err(Error::BusinessLogicError("原付款申请未批准或授权已关闭".into()));
-        }
-        if request.supplier_id != identity.supplier_id
-            || request.payer_party_id != identity.payer_party_id
-            || request.submission_version != basis.payment_request_version
-        {
-            return Err(Error::BusinessLogicError("预存款与原付款申请主体、供应商或审批版本不一致".into()));
-        }
-        let line = request
-            .lines
-            .iter()
-            .find(|line| line.payable_account_id == basis.payable_account_id)
-            .ok_or_else(|| Error::BusinessLogicError("执行采购不在原付款申请内".into()))?;
-        if line.purchase_order_id != basis.purchase_order_id
-            || line.purchase_revision_id != basis.purchase_revision_id
-        {
-            return Err(Error::BusinessLogicError("资金执行采购修订与原批准来源不一致".into()));
-        }
+        request.ensure_deposit_reservation(account_id, identity, basis)?;
         Ok(request)
     }
 }

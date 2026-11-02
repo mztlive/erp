@@ -75,17 +75,11 @@ async fn post_with_store(
         .find_reservation(reservation_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("库存预占不存在".to_string()))?;
-    if reservation.sales_order_line_id != input.sales_order_line_id {
-        return Err(Error::BusinessLogicError("库存预占不属于本销售明细，不能消耗".to_string()));
-    }
-    if reservation.reserved_quantity.to_decimal() < input.quantity.to_decimal() {
-        return Err(Error::BusinessLogicError("为这单留的货不足，无法发货".to_string()));
-    }
-    let warehouse_id =
-        input.warehouse_id.clone().ok_or_else(|| Error::BusinessLogicError("仓发缺少发货仓".to_string()))?;
-    if reservation.warehouse_id != warehouse_id {
-        return Err(Error::BusinessLogicError("库存预占不属于本发货仓，无法发货".to_string()));
-    }
+    let warehouse_id = reservation.shipment_warehouse(
+        &input.sales_order_line_id,
+        input.quantity,
+        input.warehouse_id.as_ref(),
+    )?;
     let balance = store
         .balance(&warehouse_id, &reservation.sku_id, executor)
         .await?

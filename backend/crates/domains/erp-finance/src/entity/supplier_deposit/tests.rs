@@ -135,6 +135,42 @@ fn reservation_consumption_does_not_count_occupancy_twice() {
 }
 
 #[test]
+fn batch_reservation_preserves_source_order_and_skips_exhausted_batches() {
+    let mut batches = vec![batch(), batch(), batch()];
+    for (index, batch) in batches.iter_mut().enumerate() {
+        batch.base.id = format!("batch-{index}");
+    }
+    batches[0].reserve(amount("10000")).unwrap();
+    batches[1].reserve(amount("9999.99")).unwrap();
+    let allocations = DepositBatchAllocation::reserve_from(&mut batches, amount("0.03")).unwrap();
+    assert_eq!(
+        allocations,
+        vec![
+            DepositBatchAllocation { batch_id: "batch-1".into(), amount: amount("0.01") },
+            DepositBatchAllocation { batch_id: "batch-2".into(), amount: amount("0.02") },
+        ]
+    );
+    assert_eq!(batches[0].reserved_amount, amount("10000"));
+    assert_eq!(batches[1].available().unwrap(), Amount::zero());
+    assert_eq!(batches[2].reserved_amount.to_string(), "0.02");
+}
+
+#[test]
+fn batch_reservation_preserves_insufficient_and_corrupt_history_errors() {
+    let error = DepositBatchAllocation::reserve_from(&mut [batch()], amount("10000.01")).unwrap_err();
+    assert!(matches!(error, crate::Error::BusinessLogicError(ref text) if text == "到账批次可分配额度不足"));
+    let mut damaged = batch();
+    damaged.reserved_amount = amount("10001");
+    let error = DepositBatchAllocation::reserve_from(&mut [damaged.clone()], amount("0.01")).unwrap_err();
+    assert!(matches!(error, crate::Error::Logic(ref error) if error.to_string() == "充值批次余额异常"));
+    // 已全额分配时不读取后续批次；历史损坏不扩大到原先未访问的来源。
+    let allocations = DepositBatchAllocation::reserve_from(&mut [batch(), damaged], amount("10000")).unwrap();
+    assert_eq!(allocations.len(), 1);
+    assert_eq!(allocations[0].amount, amount("10000"));
+    assert!(DepositBatchAllocation::reserve_from(&mut [], Amount::zero()).unwrap().is_empty());
+}
+
+#[test]
 fn unknown_write_never_releases_on_timeout_or_authorization_revocation() {
     let mut value = reservation();
     value.mark_sent().unwrap();

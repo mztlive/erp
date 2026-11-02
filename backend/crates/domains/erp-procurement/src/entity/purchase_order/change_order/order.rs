@@ -259,6 +259,30 @@ impl PurchaseChangeOrder {
         self.apply_content(update, updated_by)
     }
 
+    /// 提交时更新变更原因；缺省、空白或与现值相同时沿用原原因。
+    ///
+    /// # 参数
+    /// * `reason` - 提交携带的可选变更原因
+    /// * `updated_by` - 提交人
+    ///
+    /// # 返回
+    /// 原因沿用或更新成功时返回 `Ok(())`；沿用时不改写更新人。
+    ///
+    /// # 错误
+    /// 原因发生变化且变更单不是草稿，或原因超长时返回领域错误。
+    pub fn update_submission_reason(&mut self, reason: Option<&str>, updated_by: &str) -> Result<()> {
+        let Some(reason) = reason.map(str::trim).filter(|value| !value.is_empty()) else {
+            return Ok(());
+        };
+        if reason == self.reason {
+            return Ok(());
+        }
+        self.update(
+            PurchaseChangeOrderUpdate { reason: Some(reason.to_string()), ..Default::default() },
+            updated_by,
+        )
+    }
+
     /// 应用内容更新（草稿门禁）。
     ///
     /// # 参数
@@ -390,12 +414,27 @@ impl PurchaseChangeOrder {
         effective_revision_id: PurchaseOrderRevisionId,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        if self.stable.status != PurchaseChangeOrderStatus::InApproval {
-            return Err(Error::from("只有审批中的采购变更单可以由最终通过动作生效"));
-        }
+        self.ensure_can_take_effect()?;
         self.effective_revision_id = Some(effective_revision_id);
         self.stable.status = PurchaseChangeOrderStatus::Effective;
         self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 校验采购变更单是否允许最终生效。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 审批中返回 `Ok(())`；只检查主状态，不附加冻结提交或版本条件。
+    ///
+    /// # 错误
+    /// 非审批中状态返回最终生效的领域错误。
+    pub fn ensure_can_take_effect(&self) -> Result<()> {
+        if self.stable.status != PurchaseChangeOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购变更单可以由最终通过动作生效"));
+        }
         Ok(())
     }
 }
@@ -553,5 +592,75 @@ mod tests {
     fn change_order_new_rejects_empty_reason() {
         let data = PurchaseChangeOrderData { reason: "   ".to_string(), ..change_data() };
         assert!(PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-2"), data, "admin-1").is_err());
+    }
+
+    #[test]
+    fn final_effect_guard_checks_only_state_without_mutating_order() {
+        for status in [
+            PurchaseChangeOrderStatus::Draft,
+            PurchaseChangeOrderStatus::InApproval,
+            PurchaseChangeOrderStatus::Effective,
+            PurchaseChangeOrderStatus::Voided,
+        ] {
+            let mut order =
+                PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1")
+                    .unwrap();
+            order.stable.status = status;
+            let before = order.clone();
+            let result = order.ensure_can_take_effect();
+            if status == PurchaseChangeOrderStatus::InApproval {
+                result.unwrap();
+                assert!(order.current_submission_id.is_none());
+            } else {
+                assert_eq!(result.unwrap_err().to_string(), "只有审批中的采购变更单可以由最终通过动作生效");
+            }
+            assert_eq!(order, before);
+        }
+    }
+
+    #[test]
+    fn submission_reason_reuses_existing_values_without_reopening_content_editing() {
+        for status in [
+            PurchaseChangeOrderStatus::Draft,
+            PurchaseChangeOrderStatus::InApproval,
+            PurchaseChangeOrderStatus::Effective,
+            PurchaseChangeOrderStatus::Voided,
+        ] {
+            let mut order =
+                PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1")
+                    .unwrap();
+            order.stable.status = status;
+            let before = order.clone();
+            for reason in [None, Some("  "), Some(" 成本上涨调整 ")] {
+                order.update_submission_reason(reason, "submitter").unwrap();
+                assert_eq!(order, before);
+            }
+            if status != PurchaseChangeOrderStatus::Draft {
+                let error = order.update_submission_reason(Some("新原因"), "submitter").unwrap_err();
+                assert_eq!(error.to_string(), "只有草稿状态的采购变更单可以编辑内容");
+                assert_eq!(order, before);
+            }
+        }
+    }
+
+    #[test]
+    fn submission_reason_normalizes_changes_and_keeps_state_error_before_length_error() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
+        order.update_submission_reason(Some(" 新原因 "), "submitter").unwrap();
+        assert_eq!(order.reason, "新原因");
+        assert_eq!(order.stable.updated_by, "submitter");
+        let too_long = "因".repeat(501);
+        let before = order.clone();
+        assert_eq!(
+            order.update_submission_reason(Some(&too_long), "other").unwrap_err().to_string(),
+            "采购变化原因过长"
+        );
+        assert_eq!(order, before);
+        order.stable.status = PurchaseChangeOrderStatus::InApproval;
+        assert_eq!(
+            order.update_submission_reason(Some(&too_long), "other").unwrap_err().to_string(),
+            "只有草稿状态的采购变更单可以编辑内容"
+        );
     }
 }

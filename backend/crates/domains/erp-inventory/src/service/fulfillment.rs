@@ -13,6 +13,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::entity::inventory::reservation_shipment::ReservationFact;
 use crate::entity::inventory::zero_quantity;
 use crate::repository::prelude::*;
 use crate::{
@@ -206,21 +207,6 @@ pub(crate) trait InventoryWriteStore: Send {
     /// 写入失败时返回对应错误。
     async fn deduct_available(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor)
     -> Result<bool>;
-}
-
-/// 当前实际消费的预占事实，查询顺序由生产过账函数控制。
-#[derive(Clone)]
-pub(crate) struct ReservationFact {
-    /// 预占主键。
-    pub(crate) id: String,
-    /// 归属稳定销售行。
-    pub(crate) sales_order_line_id: SalesOrderLineId,
-    /// 当前有效预占。
-    pub(crate) reserved_quantity: Quantity,
-    /// 预占仓库。
-    pub(crate) warehouse_id: WarehouseId,
-    /// 预占 SKU。
-    pub(crate) sku_id: SkuId,
 }
 
 pub(crate) struct MongoInventoryStore<'a>(pub(crate) &'a Database);

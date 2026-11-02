@@ -1,11 +1,7 @@
 //! 采购变更单拥有的提交、撤回与最终生效状态守卫。
 //!
-//! 本层保留原因：三个入口的调用方在组合层 `erp-processes`（跨组 crate，
-//! 本域不得改动），直接删除会跨组破坏调用；实体方法返回 `erp_core` 错误，
-//! 本层将其映射为本域 [`Error`]，并锁定对外冲突文案，故保留为薄守卫层。
-use crate::entity::purchase_order::{
-    PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
-};
+//! 公开入口供采购编排复用，将实体错误映射为既有 Service 错误分类。
+use crate::entity::purchase_order::PurchaseChangeOrder;
 use crate::{Error, Result};
 
 /// 提交并启动：进入 `IN_APPROVAL`，递增 `approval_subject_version`。
@@ -56,10 +52,7 @@ pub fn cancel_purchase_change_to_draft(order: &mut PurchaseChangeOrder, updated_
 /// # 错误
 /// 状态不是审批中时返回 `ConflictError`。
 pub fn ensure_final_approve_effective(order: &PurchaseChangeOrder) -> Result<()> {
-    if order.stable.status != PurchaseChangeOrderStatus::InApproval {
-        return Err(Error::ConflictError("只有审批中的采购变更单可以由最终通过动作生效".to_string()));
-    }
-    Ok(())
+    order.ensure_can_take_effect().map_err(|error| Error::ConflictError(error.to_string()))
 }
 
 /// 提交时一并更新变更原因；空白表示沿用原因。
@@ -79,17 +72,7 @@ pub fn apply_change_reason(
     reason: Option<&str>,
     updated_by: &str,
 ) -> Result<()> {
-    let Some(reason) = reason.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    if reason == order.reason {
-        return Ok(());
-    }
-    let update = PurchaseChangeOrderUpdate {
-        reason: Some(reason.to_string()),
-        ..PurchaseChangeOrderUpdate::default()
-    };
-    Ok(order.update(update, updated_by)?)
+    Ok(order.update_submission_reason(reason, updated_by)?)
 }
 
 /// 作废草稿变更单。
@@ -105,4 +88,42 @@ pub fn apply_change_reason(
 /// 非草稿时返回冲突。
 pub fn void_purchase_change(order: &mut PurchaseChangeOrder, updated_by: &str) -> Result<()> {
     order.void(updated_by).map_err(|error| Error::ConflictError(error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::{PurchaseChangeOrderId, PurchaseOrderId, PurchaseOrderRevisionId};
+
+    use super::*;
+    use crate::entity::purchase_order::{PurchaseChangeOrderData, PurchaseChangeOrderStatus};
+
+    fn order() -> PurchaseChangeOrder {
+        PurchaseChangeOrder::new(
+            PurchaseChangeOrderId::new("change-1"),
+            PurchaseChangeOrderData {
+                purchase_order_id: PurchaseOrderId::new("purchase-1"),
+                base_revision_id: PurchaseOrderRevisionId::new("revision-1"),
+                reason: "变更原因".into(),
+            },
+            "buyer",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn change_state_adapters_preserve_conflict_and_logic_errors() {
+        let mut change = order();
+        assert!(matches!(
+            ensure_final_approve_effective(&change),
+            Err(Error::ConflictError(message)) if message == "只有审批中的采购变更单可以由最终通过动作生效"
+        ));
+        change.stable.status = PurchaseChangeOrderStatus::InApproval;
+        ensure_final_approve_effective(&change).unwrap();
+        apply_change_reason(&mut change, Some(" 变更原因 "), "other").unwrap();
+        assert_eq!(change.stable.updated_by, "buyer");
+        assert!(matches!(
+            apply_change_reason(&mut change, Some("新原因"), "other"),
+            Err(Error::Logic(error)) if error.to_string() == "只有草稿状态的采购变更单可以编辑内容"
+        ));
+    }
 }

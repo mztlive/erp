@@ -785,7 +785,27 @@ pub struct RevisionView {
 
 #[cfg(test)]
 mod tests {
+    use validator::Validate;
+
     use super::{SortDir, normalize_sort};
+
+    #[test]
+    fn handover_boundary_rejects_blank_targets_and_accepts_padded_identity() {
+        let mut request = super::HandoverSalesOrderRequest {
+            expected_version: 1,
+            target_owner_user_id: " sales-user ".into(),
+            target_business_org_unit_id: None,
+            reason: "交接".into(),
+            idempotency_key: "handover-key".into(),
+        };
+        request.validate().unwrap();
+        assert_eq!(request.target_owner_user_id.trim(), "sales-user");
+        for target in ["", " ", "\t\n", "\u{3000}"] {
+            request.target_owner_user_id = target.into();
+            let error = request.validate().unwrap_err();
+            assert!(error.field_errors().contains_key("target_owner_user_id"));
+        }
+    }
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

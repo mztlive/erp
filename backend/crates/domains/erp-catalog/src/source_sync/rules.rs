@@ -271,40 +271,15 @@ impl ProductSource {
         for (field, sku_id, value) in observation.values {
             let value = value.normalized();
             value.validate(field)?;
-            if !self.fields.iter().any(|s| s.field == field && s.sku_id == sku_id) {
+            let Some(state) = self.fields.iter_mut().find(|s| s.field == field && s.sku_id == sku_id) else {
                 if self.observe_new_field(field, sku_id.clone(), value.clone(), current) {
                     changes.push((field, sku_id, value));
                 }
                 continue;
+            };
+            if let Some(value) = state.observe(value) {
+                changes.push((field, sku_id, value));
             }
-            let state = self
-                .fields
-                .iter_mut()
-                .find(|s| s.field == field && s.sku_id == sku_id)
-                .expect("来源字段已登记");
-            if state.latest.equivalent(&value) {
-                continue;
-            }
-            state.latest = value.clone();
-            if state.company.equivalent(&value) {
-                state.baseline = value;
-                state.baseline_confirmed = true;
-                state.pending = false;
-                continue;
-            }
-            if state.baseline_confirmed && (state.baseline.equivalent(&value) || state.baseline == value) {
-                state.pending = false;
-                continue;
-            }
-            if state.manually_maintained || value.application_blocker(field).is_some() {
-                state.pending = true;
-                continue;
-            }
-            state.company = value.clone();
-            state.baseline = value.clone();
-            state.baseline_confirmed = true;
-            state.pending = false;
-            changes.push((field, sku_id, value));
         }
         self.observed_at = observation.observed_at;
         self.refresh_pending();
@@ -491,19 +466,51 @@ impl ProductSource {
                 .fields
                 .iter()
                 .filter(|s| s.pending)
-                .map(|s| SourceDiffField {
-                    field: s.field,
-                    sku_id: s.sku_id.clone(),
-                    sku_no: None,
-                    label: s.field.label().into(),
-                    company: s.company.clone(),
-                    supplier: s.latest.clone(),
-                    baseline: s.baseline.clone(),
-                    manually_maintained: s.manually_maintained,
-                    verification_required: s.latest.application_blocker(s.field).is_some(),
-                    application_blocker: s.latest.application_blocker(s.field),
+                .map(|s| {
+                    let application_blocker = s.latest.application_blocker(s.field);
+                    SourceDiffField {
+                        field: s.field,
+                        sku_id: s.sku_id.clone(),
+                        sku_no: None,
+                        label: s.field.label().into(),
+                        company: s.company.clone(),
+                        supplier: s.latest.clone(),
+                        baseline: s.baseline.clone(),
+                        manually_maintained: s.manually_maintained,
+                        verification_required: application_blocker.is_some(),
+                        application_blocker,
+                    }
                 })
                 .collect(),
         }
+    }
+}
+
+impl SourceFieldState {
+    /// 应用已规范化并校验的来源值，返回允许写入公司的新内容。
+    fn observe(&mut self, value: SourceValue) -> Option<SourceValue> {
+        if self.latest.equivalent(&value) {
+            return None;
+        }
+        self.latest = value.clone();
+        if self.company.equivalent(&value) {
+            self.baseline = value;
+            self.baseline_confirmed = true;
+            self.pending = false;
+            return None;
+        }
+        if self.baseline_confirmed && (self.baseline.equivalent(&value) || self.baseline == value) {
+            self.pending = false;
+            return None;
+        }
+        if self.manually_maintained || value.application_blocker(self.field).is_some() {
+            self.pending = true;
+            return None;
+        }
+        self.company = value.clone();
+        self.baseline = value.clone();
+        self.baseline_confirmed = true;
+        self.pending = false;
+        Some(value)
     }
 }

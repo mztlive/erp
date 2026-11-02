@@ -5,7 +5,7 @@ use erp_core::money::Amount;
 use serde_json::json;
 
 use super::*;
-use crate::entity::supplier_deposit::{DepositAccountIdentity, DepositCurrency};
+use crate::entity::supplier_deposit::{DepositAccountIdentity, DepositCurrency, DepositReservationBasis};
 
 fn amount(value: &str) -> Amount {
     Amount::from_str(value).unwrap()
@@ -436,4 +436,79 @@ fn deposit_submission_rejects_mixed_bank_and_cross_owner_while_legacy_defaults_t
     let mut frozen = deposit_submission(&request);
     frozen.payee_account = submission(&request).payee_account;
     assert!(request.submit(frozen).is_err());
+}
+
+#[test]
+fn original_deposit_basis_accepts_paid_requests_and_rejects_closed_or_changed_sources() {
+    let mut request = deposit_draft();
+    request.submit(deposit_submission(&request)).unwrap();
+    request.approve().unwrap();
+    let identity = request.deposit_account.as_ref().unwrap().identity.clone();
+    let mut basis = DepositReservationBasis {
+        payment_request_id: request.base.id.clone(),
+        payment_request_version: request.submission_version,
+        payable_account_id: "account-1".into(),
+        purchase_order_id: "purchase-0".into(),
+        purchase_revision_id: "revision-0".into(),
+        execution_group_id: "execution".into(),
+        approved_goods_amount: amount("100"),
+        approved_freight: Amount::zero(),
+        authorization_id: "grant".into(),
+        authorization_version: 1,
+    };
+    for status in [
+        PurchasePaymentRequestStatus::Approved,
+        PurchasePaymentRequestStatus::PartiallyPaid,
+        PurchasePaymentRequestStatus::Paid,
+    ] {
+        request.status = status;
+        assert!(request.ensure_deposit_reservation("deposit-1", &identity, &basis).is_ok());
+    }
+    for status in [
+        PurchasePaymentRequestStatus::Draft,
+        PurchasePaymentRequestStatus::InApproval,
+        PurchasePaymentRequestStatus::Rejected,
+        PurchasePaymentRequestStatus::Withdrawn,
+        PurchasePaymentRequestStatus::Closed,
+    ] {
+        request.status = status;
+        let error = request.ensure_deposit_reservation("deposit-1", &identity, &basis).unwrap_err();
+        assert!(
+            matches!(error, crate::Error::BusinessLogicError(ref text) if text == "原付款申请未批准或授权已关闭")
+        );
+    }
+    request.status = PurchasePaymentRequestStatus::Approved;
+    basis.purchase_revision_id = "changed".into();
+    let error = request.ensure_deposit_reservation("deposit-1", &identity, &basis).unwrap_err();
+    assert!(
+        matches!(error, crate::Error::BusinessLogicError(ref text) if text == "资金执行采购修订与原批准来源不一致")
+    );
+    basis.payment_request_version += 1;
+    let error = request.ensure_deposit_reservation("deposit-1", &identity, &basis).unwrap_err();
+    assert!(
+        matches!(error, crate::Error::BusinessLogicError(ref text) if text == "预存款与原付款申请主体、供应商或审批版本不一致")
+    );
+    request.deposit_account = None;
+    assert!(matches!(
+        request.ensure_deposit_reservation("deposit-1", &identity, &basis),
+        Err(crate::Error::Logic(_))
+    ));
+}
+
+#[test]
+fn deposit_release_updates_original_reservation_and_removes_only_after_full_release() {
+    let mut request = deposit_draft();
+    request.submit(deposit_submission(&request)).unwrap();
+    request.approve().unwrap();
+    request.reserve_deposit("reservation", "account-1", 1, amount("100")).unwrap();
+    let before = request.clone();
+    assert!(request.release_deposit("missing", amount("1")).is_err());
+    assert!(request.release_deposit("reservation", amount("101")).is_err());
+    assert_eq!(request, before);
+    request.release_deposit("reservation", amount("40")).unwrap();
+    assert_eq!(request.deposit_reservations["reservation"].amount, amount("60"));
+    assert_eq!(request.available_to_execute("account-1").unwrap(), amount("40"));
+    request.release_deposit("reservation", amount("60")).unwrap();
+    assert!(!request.deposit_reservations.contains_key("reservation"));
+    assert_eq!(request.available_to_execute("account-1").unwrap(), amount("100"));
 }

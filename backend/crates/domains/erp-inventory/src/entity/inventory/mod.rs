@@ -15,6 +15,7 @@
 //!   → 已过账 → 已冲正（复核/确认可驳回退回草稿），`REVERSED` 为不可逆终态。
 
 pub mod approval_snapshot;
+pub(crate) mod reservation_shipment;
 pub mod stock_adjustment;
 pub mod stock_balance;
 pub mod stock_movement;

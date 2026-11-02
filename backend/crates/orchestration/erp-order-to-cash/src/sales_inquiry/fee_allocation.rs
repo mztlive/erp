@@ -4,8 +4,7 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
-use erp_sales::entity::sales_inquiry::{InquiryReservationState, SalesInquiry};
-use erp_sales::entity::sales_order::{CommercialStatus, SalesOrder};
+use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
@@ -66,7 +65,7 @@ impl SalesInquiryProcess {
                     id,
                     order_no: order.order_no.clone(),
                     status_label: order.commercial_status.label().to_string(),
-                    eligible_for_fee_allocation: eligible(&order),
+                    eligible_for_fee_allocation: order.can_receive_inquiry_fees(),
                 });
             }
         }
@@ -95,10 +94,15 @@ impl SalesInquiryProcess {
                 .find_by_id(&allocation.sales_order_id, executor)
                 .await?
                 .ok_or_else(|| Error::NotFound("关联销售单不存在".into()))?;
-            if !eligible(&order) || order.customer_id.as_ref() != inquiry.customer_id {
+            if !order.can_receive_inquiry_fees() || order.customer_id.as_ref() != inquiry.customer_id {
                 return Err(Error::BusinessLogicError("仅可向本询价关联的生效销售分摊费用".into()));
             }
-            validate_attribution(inquiry, allocation)?;
+            inquiry.ensure_fee_sales_attribution(
+                allocation.feedback_round,
+                &allocation.fee_id,
+                &allocation.sales_order_id,
+                Instant::now(),
+            )?;
             inquiry.allocate_fee(
                 &allocation.allocation_id,
                 &allocation.sales_order_id,
@@ -110,36 +114,4 @@ impl SalesInquiryProcess {
         }
         Ok(())
     }
-}
-
-fn eligible(order: &SalesOrder) -> bool {
-    order.business_type.is_goods_service()
-        && order.commercial_status == CommercialStatus::Effective
-        && order.current_revision_id().is_some()
-}
-
-fn validate_attribution(inquiry: &SalesInquiry, allocation: &InquiryFeeAllocationInput) -> Result<()> {
-    let feedback = inquiry.accepted_feedback(allocation.feedback_round, Instant::now())?;
-    let fee = feedback
-        .data
-        .fees
-        .iter()
-        .find(|fee| fee.fee_id == allocation.fee_id)
-        .ok_or_else(|| Error::NotFound("询价费用不存在".into()))?;
-    let selections = inquiry
-        .quantity_ledger
-        .iter()
-        .filter(|row| {
-            row.sales_order_id == allocation.sales_order_id && row.state == InquiryReservationState::Handled
-        })
-        .flat_map(|row| row.selections.iter())
-        .collect::<Vec<_>>();
-    if selections.is_empty()
-        || !selections
-            .iter()
-            .any(|selection| fee.line_ids.is_empty() || fee.line_ids.contains(&selection.line_id))
-    {
-        return Err(Error::BusinessLogicError("销售单不在本费用关联的商品范围内".into()));
-    }
-    Ok(())
 }

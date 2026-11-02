@@ -8,8 +8,57 @@ use super::{
     PaymentRequestAllocation, PaymentRequestDepositReservation, PaymentRequestExecutionMethod,
     PurchasePaymentRequest, PurchasePaymentRequestStatus,
 };
+use crate::entity::supplier_deposit::{DepositAccountIdentity, DepositReservationBasis};
+use crate::{Error as FinanceError, Result as FinanceResult};
 
 impl PurchasePaymentRequest {
+    /// 核对原预存款占用对应的批准主体、提交版本及采购修订。
+    /// # 参数
+    /// * `account_id` / `identity` - 当前资金账户及真实归属。
+    /// * `basis` - 原执行组冻结的付款与采购依据。
+    /// # 返回
+    /// 冻结依据与当前申请一致时成功；已付申请仍可核验原执行。
+    /// # 错误
+    /// 账户依据缺失、申请关闭或冻结归属变化时保留原分类与首错。
+    pub(crate) fn ensure_deposit_reservation(
+        &self,
+        account_id: &str,
+        identity: &DepositAccountIdentity,
+        basis: &DepositReservationBasis,
+    ) -> FinanceResult<()> {
+        let frozen_account = self.require_deposit_account(account_id)?;
+        if &frozen_account.identity != identity {
+            return Err(FinanceError::BusinessLogicError("预存款真实账号身份与原批准快照不一致".into()));
+        }
+        if !matches!(
+            self.status,
+            PurchasePaymentRequestStatus::Approved
+                | PurchasePaymentRequestStatus::PartiallyPaid
+                | PurchasePaymentRequestStatus::Paid
+        ) {
+            return Err(FinanceError::BusinessLogicError("原付款申请未批准或授权已关闭".into()));
+        }
+        if self.supplier_id != identity.supplier_id
+            || self.payer_party_id != identity.payer_party_id
+            || self.submission_version != basis.payment_request_version
+        {
+            return Err(FinanceError::BusinessLogicError(
+                "预存款与原付款申请主体、供应商或审批版本不一致".into(),
+            ));
+        }
+        let line = self
+            .lines
+            .iter()
+            .find(|line| line.payable_account_id == basis.payable_account_id)
+            .ok_or_else(|| FinanceError::BusinessLogicError("执行采购不在原付款申请内".into()))?;
+        if line.purchase_order_id != basis.purchase_order_id
+            || line.purchase_revision_id != basis.purchase_revision_id
+        {
+            return Err(FinanceError::BusinessLogicError("资金执行采购修订与原批准来源不一致".into()));
+        }
+        Ok(())
+    }
+
     /// 返回未被预存款占用且未支付的批准额度。
     /// # 参数
     /// * `account_id` - 原申请采购应付身份。
@@ -86,7 +135,7 @@ impl PurchasePaymentRequest {
         positive(amount)?;
         let item = self
             .deposit_reservations
-            .get(reservation_id)
+            .get_mut(reservation_id)
             .ok_or_else(|| Error::from("付款申请缺少原预存款占用"))?;
         if amount > item.amount {
             return Err(Error::from("金额超过原申请预存款占用"));
@@ -94,7 +143,7 @@ impl PurchasePaymentRequest {
         let remaining = item.amount.checked_sub(amount);
         if remaining == Amount::zero() {
             self.deposit_reservations.remove(reservation_id);
-        } else if let Some(item) = self.deposit_reservations.get_mut(reservation_id) {
+        } else {
             item.amount = remaining;
         }
         Ok(())
