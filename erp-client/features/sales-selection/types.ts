@@ -61,6 +61,8 @@ export type BookletListItem = {
 }
 
 export type DisplayMemberView = {
+    original_price?: string | null
+    markup_percent?: string | null
     sku_id: string
     name: string
     specification: { name: string; value: string }[]
@@ -75,7 +77,10 @@ export type PublicDisplayItemView = {
     specification: { name: string; value: string }[]
     price: string
     cover_path?: string | null
-    members: Omit<DisplayMemberView, "sku_id">[]
+    members: Omit<
+        DisplayMemberView,
+        "sku_id" | "original_price" | "markup_percent"
+    >[]
 }
 
 export type SelectionRecipient = {
@@ -297,6 +302,9 @@ export type CreateBookInput = {
 export type TierRuleInput = CreateTierInput & { tier_id?: string }
 
 export type DisplayItem = {
+    original_price?: string | null
+    markup_percent?: string | null
+    sku_id?: string | null
     id: string
     item_id: string
     kind: "SINGLE_SKU" | "PACKAGE"

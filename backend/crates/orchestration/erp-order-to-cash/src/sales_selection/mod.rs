@@ -6,6 +6,7 @@ use crate::services::SalesServices;
 mod adapters;
 mod copy;
 mod password_audit;
+mod pricing;
 mod public_access;
 mod public_retry;
 mod scope_checks;
@@ -14,6 +15,7 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_identity::service::business_ownership::required_business_org;
+use erp_read_models::sales_center::selection_pricing::enrich_selection_prices;
 use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
     PublishSalesSelectionRequest, SalesSelectionBookletListParams, SalesSelectionBookletView,
@@ -211,6 +213,7 @@ impl SalesSelectionProcess {
             .await?
             .remove(&view.sales_owner_user_id);
         view.source_skus = adapters::source_skus(self.services.catalog.as_ref(), &view.sku_ids).await?;
+        enrich_selection_prices(&self.db, &mut view, &mut executor).await?;
         Ok(view)
     }
 

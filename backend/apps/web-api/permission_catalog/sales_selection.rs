@@ -35,6 +35,10 @@ pub const BOOKLET_DELETE_ITEM: PermissionDef = PermissionDef {
 /// 维护选品册陈列。
 pub const BOOKLET_DELETE_ITEM_POST: PermissionDef = BOOKLET_DELETE_ITEM;
 
+/// 调整选品册客户售价，复用陈列维护权限。
+pub const BOOKLET_UPDATE_PRICES: PermissionDef =
+    BOOKLET_DELETE_ITEM.described(groups::SALES_SELECTION, "调整选品册客户售价");
+
 /// 发布选品册。
 pub const BOOKLET_PUBLISH: PermissionDef = PermissionDef {
     code: "sales_selection_booklet:publish",
@@ -128,6 +132,7 @@ pub const ENTRIES: &[(&str, PermissionDef)] = &[
     ("BOOKLET_PREPARE", BOOKLET_PREPARE),
     ("BOOKLET_DELETE_ITEM", BOOKLET_DELETE_ITEM),
     ("BOOKLET_DELETE_ITEM_POST", BOOKLET_DELETE_ITEM_POST),
+    ("BOOKLET_UPDATE_PRICES", BOOKLET_UPDATE_PRICES),
     ("BOOKLET_PUBLISH", BOOKLET_PUBLISH),
     ("BOOKLET_COPY_LINK", BOOKLET_COPY_LINK),
     ("BOOKLET_COPY_LINK_URL", BOOKLET_COPY_LINK_URL),

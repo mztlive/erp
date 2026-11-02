@@ -2,6 +2,7 @@
 
 mod access;
 mod copy;
+mod pricing;
 pub mod protection;
 
 use std::net::SocketAddr;
@@ -24,6 +25,7 @@ use erp_sales::dto::sales_selection::{
     SalesSelectionProposalView, SalesSelectionSessionView, SaveSelectionSessionRequest,
     SubmitSelectionSessionRequest,
 };
+pub use pricing::booklet_update_prices;
 use serde::Deserialize;
 
 use crate::app_state::AppState;

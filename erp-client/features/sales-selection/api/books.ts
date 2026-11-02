@@ -184,6 +184,24 @@ export const deleteDisplayItem = async (
         `/admin/sales-selection-books/${bookId}/display-items/${itemId}?expected_version=${expectedVersion}`,
     )
 
+export type SelectionPriceChange =
+    | { kind: "SINGLE"; sku_id: string; price: string }
+    | { kind: "MARKUP"; percent: string }
+
+export type UpdateSelectionPricesInput = {
+    batch_id: string
+    expected_version: number
+    idempotency_key: string
+    change: SelectionPriceChange
+}
+
+/** 调整本册客户售价；同一请求重试沿用原载荷和幂等键。 */
+export const updateBookPrices = (
+    bookId: string,
+    payload: UpdateSelectionPricesInput,
+): Promise<SelectionBookDetail> =>
+    apiPost(`/admin/sales-selection-books/${bookId}/prices`, payload)
+
 /**
  * 发布选品册并生成公开链接。
  */

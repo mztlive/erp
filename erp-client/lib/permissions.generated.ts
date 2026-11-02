@@ -4137,6 +4137,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/prices",
+                description: "调整选品册客户售价",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/prices",
+                description: "调整选品册客户售价",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/sales-selection-books/{id}",
                 description: "查询选品册详情",

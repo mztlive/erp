@@ -2,6 +2,8 @@
 
 mod access;
 mod copy;
+mod display;
+mod pricing;
 
 pub use access::{
     ProposalItem, PublicSelectionAccessView, SalesSelectionPasswordRequest, SelectionDetailView,
@@ -10,8 +12,10 @@ pub use access::{
 use application_core::PageView;
 pub use application_core::PageView as SelectionPageView;
 pub use copy::CopySalesSelectionBookletRequest;
+pub use display::{DisplayItemView, DisplayMemberView};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
+pub use pricing::UpdateSelectionPricesRequest;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -417,60 +421,6 @@ pub struct TierReportView {
     pub stop_label: String,
     /// 图片失败数。
     pub image_failures: u32,
-}
-
-/// 陈列项视图。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DisplayItemView {
-    /// 项身份。
-    pub id: String,
-    /// 与 `id` 相同，兼容预览卡片。
-    pub item_id: String,
-    /// `SINGLE_SKU` 或 `PACKAGE`。
-    pub kind: String,
-    /// 是否已删除。
-    pub removed: bool,
-    /// 档位。
-    pub tier_id: Option<String>,
-    /// 档位名称。
-    pub tier_name: Option<String>,
-    /// 名称。
-    pub name: String,
-    /// 规格。
-    pub specification: Vec<crate::entity::sales_selection::SpecificationAttributeSnapshot>,
-    /// 规格展示文案。
-    pub spec_label: String,
-    /// 售价。
-    pub price: Amount,
-    /// 与 `price` 相同。
-    pub price_gross: Amount,
-    /// 与目标差额。
-    pub target_delta: Option<Amount>,
-    /// 封面资产。
-    pub cover_asset_id: Option<String>,
-    /// 管理端封面引用，由前端转预览。
-    pub cover_image: Option<String>,
-    /// 单位。
-    pub unit: Option<String>,
-    /// 成员。
-    pub members: Vec<DisplayMemberView>,
-    /// 是否缺图。
-    pub missing_image: bool,
-}
-
-/// 套餐成员。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DisplayMemberView {
-    /// SKU 稳定身份；公开页不展示编号，内部预览可用。
-    pub sku_id: String,
-    /// 名称。
-    pub name: String,
-    /// 规格。
-    pub specification: Vec<crate::entity::sales_selection::SpecificationAttributeSnapshot>,
-    /// 单位。
-    pub unit: String,
-    /// 售价。
-    pub price: Amount,
 }
 
 /// 方案列表行，不包含个人收件信息。

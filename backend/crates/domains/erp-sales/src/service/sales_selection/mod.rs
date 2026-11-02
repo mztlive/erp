@@ -7,6 +7,7 @@ mod lifecycle;
 mod mapper;
 mod prepare;
 mod prepare_queue;
+mod pricing;
 mod public_access;
 mod publish;
 mod query;

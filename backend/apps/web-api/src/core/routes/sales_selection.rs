@@ -27,6 +27,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .merge(book_collection_routes(rbac))
         .merge(book_copy_routes(rbac))
+        .merge(book_pricing_routes(rbac))
         .route(
             "/sales-selection-books/{id}/images",
             with_permission(
@@ -126,6 +127,36 @@ fn book_copy_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(sales_selection::booklet_copy),
                 rbac,
                 permissions::sales_selection::BOOKLET_COPY,
+            ),
+        )
+}
+
+/// 客户售价维护路由，使用现有选品册维护权限。
+///
+/// # 参数
+/// `rbac` 为权限服务。
+///
+/// # 返回
+/// 返回两条同义改价路由。
+///
+/// # 错误
+/// 无。
+fn book_pricing_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-selection-books/{id}/prices",
+            with_permission(
+                post(sales_selection::booklet_update_prices),
+                rbac,
+                permissions::sales_selection::BOOKLET_UPDATE_PRICES,
+            ),
+        )
+        .route(
+            "/sales-selection-booklets/{id}/prices",
+            with_permission(
+                post(sales_selection::booklet_update_prices),
+                rbac,
+                permissions::sales_selection::BOOKLET_UPDATE_PRICES,
             ),
         )
 }

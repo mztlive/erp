@@ -35,6 +35,8 @@ pub enum IdempotencyOperation {
     Void,
     /// 设置访问密码。
     SetAccessPassword,
+    /// 调整册内客户售价。
+    UpdatePrices,
 }
 
 impl IdempotencyOperation {
@@ -61,6 +63,7 @@ impl IdempotencyOperation {
             Self::RevokeAccess => "REVOKE_ACCESS",
             Self::Void => "VOID",
             Self::SetAccessPassword => "SET_ACCESS_PASSWORD",
+            Self::UpdatePrices => "UPDATE_PRICES",
         }
     }
 
@@ -88,6 +91,7 @@ impl IdempotencyOperation {
                 | Self::RevokeAccess
                 | Self::Void
                 | Self::SetAccessPassword
+                | Self::UpdatePrices
         )
     }
 }
@@ -253,6 +257,8 @@ mod tests {
         assert!(IdempotencyOperation::RevokeAccess.replays_live_booklet());
         assert!(IdempotencyOperation::Void.replays_live_booklet());
         assert!(IdempotencyOperation::SetAccessPassword.replays_live_booklet());
+        assert_eq!(IdempotencyOperation::UpdatePrices.as_str(), "UPDATE_PRICES");
+        assert!(IdempotencyOperation::UpdatePrices.replays_live_booklet());
         assert!(!IdempotencyOperation::SaveSession.replays_live_booklet());
         assert!(!IdempotencyOperation::Submit.replays_live_booklet());
     }

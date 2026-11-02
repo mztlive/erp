@@ -24,6 +24,8 @@ import {
     fetchActionableBookCount,
     startPrepareTask,
     voidBook,
+    updateBookPrices,
+    type UpdateSelectionPricesInput,
     type PrepareKind,
 } from "@/features/sales-selection/api/books"
 import type {
@@ -120,6 +122,22 @@ export const useBookDetail = (bookId: string) =>
 /** 册级操作集合：创建/准备/重生成/发布/链接/关闭/撤销/作废/删项/复制链接。 */
 export const useBookOperations = () => {
     const queryClient = useQueryClient()
+
+    const updatePrices = useMutation({
+        mutationFn: ({
+            bookId,
+            ...payload
+        }: UpdateSelectionPricesInput & { bookId: string }) =>
+            updateBookPrices(bookId, payload),
+        onSuccess: async (data, variables) => {
+            queryClient.setQueryData(
+                salesSelectionKeys.detail(variables.bookId),
+                data,
+            )
+            await invalidateBookCaches(queryClient, variables.bookId)
+            toast.add({ title: "客户售价已更新", type: "success" })
+        },
+    })
 
     const copy = useMutation({
         mutationFn: (input: {
@@ -415,6 +433,7 @@ export const useBookOperations = () => {
     })
 
     return {
+        updatePrices,
         copy,
         accessPassword,
         create,

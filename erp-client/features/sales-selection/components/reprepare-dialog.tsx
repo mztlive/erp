@@ -140,7 +140,7 @@ export const ReprepareDialog = ({
                 <DialogHeader>
                     <DialogTitle>调整来源与档位并准备</DialogTitle>
                     <DialogDescription>
-                        成功后整体替换当前陈列；失败时保留原商品池、规则和陈列。
+                        成功后整体替换当前陈列，客户售价按最新商品价格重置，需重新确认改价；失败时保留原商品池、规则、售价和陈列。
                     </DialogDescription>
                 </DialogHeader>
                 <form

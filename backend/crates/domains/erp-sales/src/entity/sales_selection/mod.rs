@@ -10,6 +10,8 @@ mod limits;
 mod pool;
 mod pool_member;
 mod prepare_task;
+mod price_comparison;
+mod price_edit;
 mod pricing;
 mod proposal;
 mod public_access;
@@ -32,6 +34,8 @@ pub use limits::*;
 pub use pool::{PoolFilterSnapshot, PoolPriceKind, PoolSource};
 pub use pool_member::SalesSelectionPoolMember;
 pub use prepare_task::{SalesSelectionPrepareTask, SalesSelectionPrepareTaskData};
+pub use price_comparison::SelectionPriceComparison;
+pub use price_edit::SelectionPriceChange;
 pub use pricing::{abs_diff, try_add, try_mul_u32, try_sum};
 pub use proposal::{
     SalesSelectionProposal, SalesSelectionProposalData, SalesSelectionProposalDisplayLine,

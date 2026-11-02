@@ -26,6 +26,8 @@ import { useRouter } from "@/lib/navigation"
 import { BookDetailSidebar } from "@/features/sales-selection/components/book-detail-sidebar"
 import { BookWorkflowBanner } from "@/features/sales-selection/components/book-workflow-banner"
 import { PreviewGrid } from "@/features/sales-selection/components/preview-grid"
+import { PriceEditDialog } from "@/features/sales-selection/components/price-edit-dialog"
+import type { DisplayItem } from "@/features/sales-selection/types"
 import { ReprepareDialog } from "@/features/sales-selection/components/reprepare-dialog"
 import {
     useBookDetail,
@@ -58,8 +60,12 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
     const [editing, setEditing] = React.useState(false)
     const [copying, setCopying] = React.useState(false)
     const [passwordEditing, setPasswordEditing] = React.useState(false)
+    const [priceEditing, setPriceEditing] = React.useState<{
+        item?: DisplayItem
+    } | null>(null)
 
     const pending =
+        operations.updatePrices.isPending ||
         operations.accessPassword.isPending ||
         operations.prepare.isPending ||
         operations.regenerate.isPending ||
@@ -210,6 +216,24 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                     onClose={() => setEditing(false)}
                 />
             ) : null}
+            {priceEditing &&
+            detail.status === "PENDING_PUBLISH" &&
+            canMaintain &&
+            detail.batch_id ? (
+                <PriceEditDialog
+                    item={priceEditing.item}
+                    batchId={detail.batch_id}
+                    version={detail.version}
+                    busy={pending}
+                    onClose={() => setPriceEditing(null)}
+                    onSubmit={(input) =>
+                        operations.updatePrices.mutateAsync({
+                            bookId: activeBookId,
+                            ...input,
+                        })
+                    }
+                />
+            ) : null}
 
             {/* 流程推进向导横幅 */}
             <BookWorkflowBanner
@@ -229,17 +253,30 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                     )}
                 >
                     <div className="mb-4">
-                        <div className="flex items-baseline justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                             <h2 className="text-sm font-semibold text-foreground">
                                 陈列预览
                                 <span className="ml-2 font-normal text-xs text-muted-foreground">
                                     （共 {visibleItems.length} 项）
                                 </span>
                             </h2>
+                            {detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            visibleItems.length > 0 ? (
+                                <Button
+                                    id="selection-prices-markup"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={pending || !detail.batch_id}
+                                    onClick={() => setPriceEditing({})}
+                                >
+                                    统一加价
+                                </Button>
+                            ) : null}
                         </div>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                             {detail.status === "PENDING_PUBLISH"
-                                ? "待发布时可剔除不需要的陈列项；套餐可单档重生成。发布后陈列将正式冻结。"
+                                ? "待发布时可编辑客户售价、统一加价或删除陈列项；套餐可单档重生成。发布后价格与陈列冻结。"
                                 : "陈列内容来自最近一次准备结果。"}
                         </p>
                     </div>
@@ -254,6 +291,13 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                         selectionForm={detail.selection_form}
                         tiers={detail.tiers}
                         pending={pending}
+                        onEditPrice={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            detail.batch_id
+                                ? (item) => setPriceEditing({ item })
+                                : undefined
+                        }
                         deletingItemId={
                             operations.deleteItem.isPending
                                 ? operations.deleteItem.variables?.itemId

@@ -1,5 +1,7 @@
 //! 选品册与方案视图映射。
 
+use erp_core::money::Amount;
+
 use super::SalesSelectionService;
 use crate::dto::sales_selection::{
     DisplayItemView, DisplayMemberView, ProposalDisplayLineView, ProposalSkuLineView, PublicChoiceView,
@@ -10,7 +12,8 @@ use crate::dto::sales_selection::{
 use crate::entity::sales_selection::{
     BookletStatus, DisplayKind, SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPrepareTask,
     SalesSelectionProposal, SalesSelectionProposalDisplayLine, SalesSelectionProposalSkuLine,
-    SalesSelectionSession, SelectionForm, SkuSnapshot, SubmitMode, TierSearchReport, abs_diff,
+    SalesSelectionSession, SelectionForm, SkuSnapshot, SpecificationAttributeSnapshot, SubmitMode,
+    TierSearchReport, abs_diff,
 };
 
 /// 两处选品册视图共用的表头字段组（新旧兼容双字段由本结构一次搬运）。
@@ -383,18 +386,8 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
             Some(tier_id.clone()),
         ),
     };
-    let target_delta = tier_id.as_ref().and_then(|tier_id| {
-        booklet
-            .tiers
-            .iter()
-            .find(|tier| &tier.tier_id == tier_id)
-            .map(|tier| abs_diff(item.price(), tier.target_amount))
-    });
-    let spec_label = specification
-        .iter()
-        .map(|attr| format!("{}：{}", attr.name, attr.value))
-        .collect::<Vec<_>>()
-        .join(" / ");
+    let target_delta = display_target_delta(item, booklet, tier_id.as_deref());
+    let spec_label = specification_label(&specification);
     let kind = match &item.kind {
         DisplayKind::SingleSku { .. } => "SINGLE_SKU",
         DisplayKind::Package { .. } => "PACKAGE",
@@ -408,6 +401,11 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
     });
     let cover = item.cover_asset_id();
     DisplayItemView {
+        price_comparison: Default::default(),
+        sku_id: match &item.kind {
+            DisplayKind::SingleSku { sku } => Some(sku.sku_id.to_string()),
+            DisplayKind::Package { .. } => None,
+        },
         id: item.base.id.clone(),
         item_id: item.base.id.clone(),
         kind: kind.to_string(),
@@ -429,6 +427,20 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
     }
 }
 
+fn display_target_delta(
+    item: &SalesSelectionDisplayItem,
+    booklet: &SalesSelectionBooklet,
+    tier_id: Option<&str>,
+) -> Option<Amount> {
+    tier_id
+        .and_then(|id| booklet.tiers.iter().find(|tier| tier.tier_id == id))
+        .map(|tier| abs_diff(item.price(), tier.target_amount))
+}
+
+fn specification_label(specification: &[SpecificationAttributeSnapshot]) -> String {
+    specification.iter().map(|attr| format!("{}：{}", attr.name, attr.value)).collect::<Vec<_>>().join(" / ")
+}
+
 /// 映射成员。
 ///
 /// # 参数
@@ -441,6 +453,7 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
 /// 无。
 fn member_view(sku: &SkuSnapshot) -> DisplayMemberView {
     DisplayMemberView {
+        price_comparison: Default::default(),
         sku_id: sku.sku_id.to_string(),
         name: sku.name.clone(),
         specification: sku.specification_attributes.clone(),
@@ -586,6 +599,58 @@ mod tests {
         book.status = BookletStatus::Published;
         book.link_expires_at = Some(Instant::from_unix_secs(200));
         book
+    }
+
+    #[test]
+    fn customer_pages_use_adjusted_price_without_exposing_internal_sku_identity() {
+        use erp_core::ids::{
+            ProductId, SalesSelectionDisplayItemId, SalesSelectionPoolMemberId, SkuId, SkuRevisionId,
+        };
+
+        use crate::entity::sales_selection::{SalesSelectionPoolMember, SelectionPriceChange};
+
+        let mut book = published_booklet();
+        book.status = BookletStatus::PendingPublish;
+        let sku = SkuSnapshot {
+            sku_id: SkuId::new("sku"),
+            sku_revision_id: SkuRevisionId::new("revision"),
+            product_id: ProductId::new("product"),
+            product_kind: "PHYSICAL".into(),
+            category_id: None,
+            name: "商品".into(),
+            specification_attributes: vec![],
+            unit: "件".into(),
+            image: None,
+            sales_visible_price_gross: "10.00".parse().unwrap(),
+        };
+        let mut pool = vec![SalesSelectionPoolMember::new(
+            SalesSelectionPoolMemberId::new("pool"),
+            SalesSelectionBookletId::new("book"),
+            "batch".into(),
+            sku.clone(),
+        )];
+        let mut items = vec![
+            SalesSelectionDisplayItem::single_sku(
+                SalesSelectionDisplayItemId::new("display"),
+                SalesSelectionBookletId::new("book"),
+                "batch".into(),
+                sku,
+            )
+            .unwrap(),
+        ];
+        SelectionPriceChange::Markup { percent: "10".parse().unwrap() }
+            .apply(book.status, &mut pool, &mut items)
+            .unwrap();
+        let internal = display_item_view(&items[0], &book);
+        assert_eq!(internal.sku_id.as_deref(), Some("sku"));
+        assert_eq!(internal.price, "11.00".parse().unwrap());
+        let public = public_item(&items[0], &book);
+        assert_eq!(public.price, internal.price);
+        let public_json = serde_json::to_value(public).unwrap();
+        assert!(public_json.get("sku_id").is_none());
+        assert!(public_json.get("sku_revision_id").is_none());
+        assert!(public_json.get("original_price").is_none());
+        assert!(public_json.get("markup_percent").is_none());
     }
 
     #[test]

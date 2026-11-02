@@ -45,7 +45,8 @@ export async function fetchSelectionOrderBasis(
                 .join(" / "),
             unit: line.unit,
             quantity: String(line.quantity),
-            unitPriceGross: "",
+            // 沿用方案中已确认的客户含税售价，按手动定价保存。
+            unitPriceGross: line.unit_price,
             pricingMode: "MANUAL",
             procurementSupplyPrice: "",
             dueDate: "",

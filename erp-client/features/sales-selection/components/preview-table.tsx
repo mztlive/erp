@@ -1,0 +1,252 @@
+"use client"
+
+import * as React from "react"
+import type { ColumnDef } from "@tanstack/react-table"
+import { DataTable, MoneyValue } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { compareDecimal } from "@/lib/fixed-decimal"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import type { DisplayItem } from "../types"
+import { PriceAdjustment } from "./price-comparison"
+import { SnapshotImage } from "./snapshot-image"
+
+export type PreviewTableProps = {
+    items: readonly DisplayItem[]
+    pending: boolean
+    deletingItemId?: string
+    onEditPrice?: (item: DisplayItem) => void
+    onDelete?: (itemId: string) => void
+    onRegenerateTier?: (tierId: string) => void
+    regeneratingTierIds?: readonly string[]
+}
+
+export function PreviewTable({
+    items,
+    pending,
+    deletingItemId,
+    onEditPrice,
+    onDelete,
+    onRegenerateTier,
+    regeneratingTierIds,
+}: PreviewTableProps) {
+    const columns = React.useMemo<ColumnDef<DisplayItem>[]>(
+        () => [
+            {
+                id: "product",
+                accessorKey: "name",
+                header: "商品 / 套餐",
+                meta: { label: "商品 / 套餐", width: "flex" },
+                cell: ({ row }) => (
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="size-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                            <SnapshotImage
+                                path={row.original.cover_image}
+                                alt={row.original.name}
+                            />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                            <p className="line-clamp-2 font-medium">
+                                {row.original.name}
+                            </p>
+                            <p className="line-clamp-2 text-xs text-muted-foreground">
+                                {row.original.spec_label ||
+                                    (row.original.kind === "PACKAGE"
+                                        ? `${row.original.members.length} 件商品`
+                                        : "—")}
+                            </p>
+                            {row.original.missing_image ? (
+                                <Badge variant="warning">缺图</Badge>
+                            ) : null}
+                        </div>
+                    </div>
+                ),
+            },
+            {
+                id: "tier",
+                accessorKey: "tier_name",
+                header: "档位",
+                meta: { label: "档位", width: "reference" },
+                cell: ({ row }) => row.original.tier_name || "—",
+            },
+            {
+                id: "unit",
+                accessorKey: "unit",
+                header: "单位",
+                meta: { label: "单位", width: "quantity" },
+                cell: ({ row }) =>
+                    row.original.kind === "PACKAGE"
+                        ? "套"
+                        : row.original.unit || "—",
+            },
+            {
+                id: "original_price",
+                accessorKey: "original_price",
+                header: "原价（含税）",
+                meta: {
+                    label: "原价（含税）",
+                    width: "amount",
+                    numeric: true,
+                    align: "end",
+                },
+                sortingFn: (a, b) =>
+                    compareDecimal(
+                        a.original.original_price ?? "0",
+                        b.original.original_price ?? "0",
+                        2,
+                    ),
+                cell: ({ row }) =>
+                    row.original.original_price != null ? (
+                        <MoneyValue
+                            value={row.original.original_price}
+                            display="exact"
+                        />
+                    ) : (
+                        <span className="text-muted-foreground">未记录</span>
+                    ),
+            },
+            {
+                id: "price",
+                accessorKey: "price",
+                header: "客户售价（含税）",
+                meta: {
+                    label: "客户售价（含税）",
+                    width: "amount",
+                    numeric: true,
+                    align: "end",
+                },
+                sortingFn: (a, b) =>
+                    compareDecimal(a.original.price, b.original.price, 2),
+                cell: ({ row }) => (
+                    <MoneyValue
+                        value={row.original.price}
+                        display="exact"
+                        className="font-semibold"
+                    />
+                ),
+            },
+            {
+                id: "markup_percent",
+                accessorKey: "markup_percent",
+                header: "加价比例",
+                meta: {
+                    label: "加价比例",
+                    width: "rate",
+                    numeric: true,
+                    align: "end",
+                },
+                sortingFn: (a, b) =>
+                    compareDecimal(
+                        a.original.markup_percent ?? "0",
+                        b.original.markup_percent ?? "0",
+                        2,
+                    ),
+                cell: ({ row }) => (
+                    <PriceAdjustment
+                        markup_percent={row.original.markup_percent}
+                    />
+                ),
+            },
+            ...(onEditPrice || onDelete || onRegenerateTier
+                ? [
+                      {
+                          id: "actions",
+                          header: "操作",
+                          enableHiding: false,
+                          enableSorting: false,
+                          meta: { label: "操作", width: "reference" as const },
+                          cell: ({
+                              row,
+                          }: {
+                              row: { original: DisplayItem }
+                          }) => {
+                              const item = row.original
+                              const key = toAutomationIdSegment(item.item_id)
+                              return (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                      {onEditPrice ? (
+                                          <Button
+                                              id={`selection-table-${key}-price`}
+                                              variant="ghost"
+                                              size="xs"
+                                              disabled={pending}
+                                              onClick={() => onEditPrice(item)}
+                                          >
+                                              编辑售价
+                                          </Button>
+                                      ) : null}
+                                      {onDelete ? (
+                                          <LoadingButton
+                                              id={`selection-table-${key}-delete`}
+                                              variant="ghost"
+                                              size="xs"
+                                              className="text-destructive"
+                                              disabled={pending}
+                                              loading={
+                                                  deletingItemId ===
+                                                  item.item_id
+                                              }
+                                              onClick={() =>
+                                                  onDelete(item.item_id)
+                                              }
+                                          >
+                                              删除
+                                          </LoadingButton>
+                                      ) : null}
+                                      {onRegenerateTier && item.tier_id ? (
+                                          <LoadingButton
+                                              id={`selection-table-${key}-regenerate`}
+                                              variant="ghost"
+                                              size="xs"
+                                              disabled={pending}
+                                              loading={regeneratingTierIds?.includes(
+                                                  item.tier_id,
+                                              )}
+                                              onClick={() =>
+                                                  onRegenerateTier(
+                                                      item.tier_id!,
+                                                  )
+                                              }
+                                          >
+                                              重生成此档
+                                          </LoadingButton>
+                                      ) : null}
+                                  </div>
+                              )
+                          },
+                      },
+                  ]
+                : []),
+        ],
+        [
+            pending,
+            deletingItemId,
+            onEditPrice,
+            onDelete,
+            onRegenerateTier,
+            regeneratingTierIds,
+        ],
+    )
+
+    return (
+        <DataTable
+            id="selection-preview-table"
+            data={[...items]}
+            columns={columns}
+            getRowId={(item) => item.item_id}
+            rowLabel={(item) => item.name}
+            rowCount={items.length}
+            caption="选品册商品与客户售价对比"
+            manualSorting={false}
+            manualPagination={false}
+            manualFiltering={false}
+            showToolbarSummary={false}
+            defaultColumnVisibility={{
+                tier: items.some((item) => item.kind === "PACKAGE"),
+            }}
+            emptyTitle="当前筛选无结果"
+            emptyDescription="调整档位或缺图筛选后再试。"
+        />
+    )
+}

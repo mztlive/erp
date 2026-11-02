@@ -47,7 +47,7 @@ pub struct SkuSnapshot {
     pub unit: String,
     /// 图片资产引用。
     pub image: Option<ImageAssetSnapshot>,
-    /// 销售可见含税价。
+    /// 本册客户含税售价；准备时取商品销售可见价，待发布允许独立改价。
     pub sales_visible_price_gross: Amount,
 }
 

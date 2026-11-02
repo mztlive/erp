@@ -11,10 +11,18 @@ import {
     PackageIcon,
     RefreshCwIcon,
     Trash2Icon,
+    TableIcon,
+    LayoutGridIcon,
 } from "lucide-react"
 
 import { SnapshotImage } from "./snapshot-image"
-import { BusinessEmptyState, MoneyValue } from "@/components/business"
+import { PriceComparison } from "./price-comparison"
+import { PreviewTable } from "./preview-table"
+import {
+    BusinessEmptyState,
+    BusinessTableFrame,
+    MoneyValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -32,12 +40,14 @@ const previewGridClassName =
 const PreviewCard = ({
     item,
     onDelete,
+    onEditPrice,
     canDelete,
     pending,
     deleting,
 }: {
     item: DisplayItem
     onDelete?: (itemId: string) => void
+    onEditPrice?: (item: DisplayItem) => void
     canDelete: boolean
     pending: boolean
     deleting: boolean
@@ -89,6 +99,10 @@ const PreviewCard = ({
                                 含税
                             </span>
                         </div>
+                        <PriceComparison
+                            original_price={item.original_price}
+                            markup_percent={item.markup_percent}
+                        />
                         <CardTitle
                             className="line-clamp-2 text-xs leading-snug font-medium text-foreground"
                             title={item.name}
@@ -129,25 +143,42 @@ const PreviewCard = ({
                     </CardContent>
                 </div>
 
-                {canDelete && onDelete ? (
-                    <div className="border-t border-border/50 p-2 pt-1.5">
-                        <LoadingButton
-                            id={`sales-selection-preview-${cardKey}-delete`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            className="w-full justify-center text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            disabled={pending}
-                            loading={deleting}
-                            onClick={() => onDelete(item.item_id)}
-                        >
-                            <Trash2Icon
-                                className="size-3.5"
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            删除该项
-                        </LoadingButton>
+                {onEditPrice || (canDelete && onDelete) ? (
+                    <div className="flex flex-wrap gap-1 border-t border-border/50 p-2 pt-1.5">
+                        {onEditPrice ? (
+                            <Button
+                                id={`sales-selection-preview-${cardKey}-price`}
+                                type="button"
+                                variant="ghost"
+                                size="xs"
+                                className="flex-1"
+                                disabled={pending}
+                                onClick={() => onEditPrice(item)}
+                            >
+                                {item.kind === "PACKAGE"
+                                    ? "编辑商品售价"
+                                    : "编辑售价"}
+                            </Button>
+                        ) : null}
+                        {canDelete && onDelete ? (
+                            <LoadingButton
+                                id={`sales-selection-preview-${cardKey}-delete`}
+                                type="button"
+                                variant="ghost"
+                                size="xs"
+                                className="flex-1 justify-center text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                disabled={pending}
+                                loading={deleting}
+                                onClick={() => onDelete(item.item_id)}
+                            >
+                                <Trash2Icon
+                                    className="size-3.5"
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                删除该项
+                            </LoadingButton>
+                        ) : null}
                     </div>
                 ) : null}
             </Card>
@@ -177,6 +208,7 @@ export const PreviewGrid = ({
     tiers,
     onRegenerateTier,
     onDelete,
+    onEditPrice,
     pending = false,
     deletingItemId,
     regeneratingTierIds,
@@ -186,6 +218,7 @@ export const PreviewGrid = ({
     tiers?: readonly PreviewTierConfig[]
     onRegenerateTier?: (tierId: string) => void
     onDelete?: (itemId: string) => void
+    onEditPrice?: (item: DisplayItem) => void
     pending?: boolean
     deletingItemId?: string
     regeneratingTierIds?: readonly string[]
@@ -193,6 +226,7 @@ export const PreviewGrid = ({
     const canDelete = typeof onDelete === "function"
     const [tierFilter, setTierFilter] = React.useState<string>("ALL")
     const [onlyMissingImage, setOnlyMissingImage] = React.useState(false)
+    const [layout, setLayout] = React.useState<"gallery" | "table">("gallery")
 
     // 过滤缺图项
     const filteredItems = React.useMemo(() => {
@@ -244,192 +278,292 @@ export const PreviewGrid = ({
             : groups.filter(([tierName]) => tierName === tierFilter)
         : null
 
+    const tableItems = visibleGroups
+        ? visibleGroups.flatMap(([, group]) => group)
+        : filteredItems
+    const viewToggle = (
+        <div
+            role="group"
+            aria-label="陈列视图"
+            className="flex items-center gap-1"
+        >
+            <Button
+                id="selection-preview-layout-table"
+                variant={layout === "table" ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={layout === "table"}
+                onClick={() => setLayout("table")}
+            >
+                <TableIcon data-icon="inline-start" aria-hidden="true" />
+                表格
+            </Button>
+            <Button
+                id="selection-preview-layout-gallery"
+                variant={layout === "gallery" ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={layout === "gallery"}
+                onClick={() => setLayout("gallery")}
+            >
+                <LayoutGridIcon data-icon="inline-start" aria-hidden="true" />
+                卡片
+            </Button>
+        </div>
+    )
     return (
-        <div className="flex flex-col gap-5">
-            {/* 画廊顶部控制栏：档位过滤与快捷质检 */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                    {selectionForm === "PACKAGE" && tierNames.length > 1 ? (
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => setTierFilter("ALL")}
-                                className={cn(
-                                    "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                                    tierFilter === "ALL"
-                                        ? "bg-primary text-primary-foreground shadow-2xs"
-                                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                )}
-                            >
-                                全部档位 ({items.length})
-                            </button>
-                            {tierNames.map((name) => {
-                                const count = items.filter(
-                                    (i) => (i.tier_name ?? i.tier_id) === name,
-                                ).length
-                                return (
+        <BusinessTableFrame
+            title="陈列预览"
+            tableActions={viewToggle}
+            selectionBar={
+                <span className="text-xs text-muted-foreground">
+                    共 {tableItems.length} 项
+                    {tableItems.length !== items.length
+                        ? ` / 全部 ${items.length} 项`
+                        : ""}
+                </span>
+            }
+            toolbar={
+                (selectionForm === "PACKAGE" && tierNames.length > 1) ||
+                missingImageCount > 0 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {selectionForm === "PACKAGE" &&
+                            tierNames.length > 1 ? (
+                                <>
                                     <button
-                                        key={name}
+                                        id="selection-preview-tier-all"
                                         type="button"
-                                        onClick={() => setTierFilter(name)}
+                                        onClick={() => setTierFilter("ALL")}
                                         className={cn(
                                             "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                                            tierFilter === name
+                                            tierFilter === "ALL"
                                                 ? "bg-primary text-primary-foreground shadow-2xs"
                                                 : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
                                         )}
                                     >
-                                        {name} ({count})
+                                        全部档位 ({items.length})
                                     </button>
-                                )
-                            })}
-                        </>
-                    ) : (
-                        <span className="text-xs font-medium text-muted-foreground">
-                            共{" "}
-                            <span className="num text-foreground">
-                                {items.length}
-                            </span>{" "}
-                            项商品
-                        </span>
-                    )}
-                </div>
-
-                {/* 缺图项快捷筛选 */}
-                {missingImageCount > 0 ? (
-                    <Button
-                        type="button"
-                        size="xs"
-                        variant={onlyMissingImage ? "destructive" : "outline"}
-                        onClick={() => setOnlyMissingImage(!onlyMissingImage)}
-                        className="h-7 text-xs"
-                    >
-                        <AlertCircleIcon
-                            className="mr-1 size-3.5"
-                            aria-hidden="true"
-                        />
-                        {onlyMissingImage
-                            ? "显示全部"
-                            : `仅看缺图 (${missingImageCount})`}
-                    </Button>
-                ) : null}
-            </div>
-
-            {/* 单品形态平铺 */}
-            {!visibleGroups ? (
-                filteredItems.length === 0 ? (
-                    <BusinessEmptyState
-                        kind="no-data"
-                        title="当前筛选无结果"
-                        description="没有符合条件的陈列项。"
-                    />
-                ) : (
-                    <div className={previewGridClassName}>
-                        {filteredItems.map((item) => (
-                            <PreviewCard
-                                key={item.item_id}
-                                item={item}
-                                onDelete={onDelete}
-                                canDelete={canDelete}
-                                pending={pending}
-                                deleting={deletingItemId === item.item_id}
-                            />
-                        ))}
-                    </div>
-                )
-            ) : null}
-
-            {/* 套餐形态按档分组 */}
-            {visibleGroups ? (
-                visibleGroups.length === 0 ? (
-                    <BusinessEmptyState
-                        kind="no-data"
-                        title="当前筛选无结果"
-                        description="该档位下暂无可显示的陈列项。"
-                    />
-                ) : (
-                    <div className="flex flex-col gap-8">
-                        {visibleGroups.map(([tierName, tierItems]) => {
-                            const tierConfig = tiers?.find(
-                                (t) =>
-                                    t.name === tierName ||
-                                    t.tier_id === tierName,
-                            )
-                            return (
-                                <section
-                                    key={tierName}
-                                    aria-label={tierName}
-                                    className="flex flex-col gap-3.5"
-                                >
-                                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2">
-                                        <div className="flex flex-wrap items-baseline gap-2">
-                                            <h3 className="text-sm font-semibold text-foreground">
-                                                {tierName}
-                                            </h3>
-                                            <Badge
-                                                variant="secondary"
-                                                className="text-xs"
-                                            >
-                                                {tierItems.length} 套
-                                            </Badge>
-                                            {tierConfig ? (
-                                                <span className="text-xs text-muted-foreground">
-                                                    目标 ¥
-                                                    {tierConfig.target_amount}{" "}
-                                                    (±¥{tierConfig.tolerance}) ·
-                                                    每套 {tierConfig.sku_count}{" "}
-                                                    件
-                                                </span>
-                                            ) : null}
-                                        </div>
-
-                                        {onRegenerateTier && tierConfig ? (
-                                            <LoadingButton
-                                                id={`selection-regenerate-inline-${tierConfig.tier_id}`}
+                                    {tierNames.map((name) => {
+                                        const count = items.filter(
+                                            (i) =>
+                                                (i.tier_name ?? i.tier_id) ===
+                                                name,
+                                        ).length
+                                        return (
+                                            <button
+                                                id={`selection-preview-tier-${toAutomationIdSegment(name)}`}
+                                                key={name}
                                                 type="button"
-                                                size="xs"
-                                                variant="outline"
-                                                disabled={pending}
-                                                loading={regeneratingTierIds?.includes(
-                                                    tierConfig.tier_id,
-                                                )}
                                                 onClick={() =>
-                                                    onRegenerateTier(
-                                                        tierConfig.tier_id,
-                                                    )
+                                                    setTierFilter(name)
                                                 }
-                                                className="h-7 text-xs"
+                                                className={cn(
+                                                    "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                                                    tierFilter === name
+                                                        ? "bg-primary text-primary-foreground shadow-2xs"
+                                                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                )}
                                             >
-                                                <RefreshCwIcon
-                                                    className="mr-1 size-3"
-                                                    aria-hidden="true"
-                                                />
-                                                重生成此档
-                                            </LoadingButton>
-                                        ) : null}
-                                    </div>
+                                                {name} ({count})
+                                            </button>
+                                        )
+                                    })}
+                                </>
+                            ) : null}
+                        </div>
 
-                                    <div className={previewGridClassName}>
-                                        {tierItems.map((item) => (
-                                            <PreviewCard
-                                                key={item.item_id}
-                                                item={item}
-                                                onDelete={onDelete}
-                                                canDelete={canDelete}
-                                                pending={pending}
-                                                deleting={
-                                                    deletingItemId ===
-                                                    item.item_id
-                                                }
-                                            />
-                                        ))}
-                                    </div>
-                                </section>
-                            )
-                        })}
+                        {/* 缺图项快捷筛选 */}
+                        {missingImageCount > 0 ? (
+                            <Button
+                                id="selection-preview-missing-images"
+                                type="button"
+                                size="xs"
+                                variant={
+                                    onlyMissingImage ? "destructive" : "outline"
+                                }
+                                onClick={() =>
+                                    setOnlyMissingImage(!onlyMissingImage)
+                                }
+                                className="h-7 text-xs"
+                            >
+                                <AlertCircleIcon
+                                    className="mr-1 size-3.5"
+                                    aria-hidden="true"
+                                />
+                                {onlyMissingImage
+                                    ? "显示全部"
+                                    : `仅看缺图 (${missingImageCount})`}
+                            </Button>
+                        ) : null}
                     </div>
+                ) : undefined
+            }
+            table={
+                layout === "table" ? (
+                    <PreviewTable
+                        items={tableItems}
+                        pending={pending}
+                        deletingItemId={deletingItemId}
+                        onDelete={onDelete}
+                        onEditPrice={onEditPrice}
+                        onRegenerateTier={onRegenerateTier}
+                        regeneratingTierIds={regeneratingTierIds}
+                    />
+                ) : (
+                    <>
+                        {/* 单品形态平铺 */}
+                        {!visibleGroups ? (
+                            filteredItems.length === 0 ? (
+                                <BusinessEmptyState
+                                    kind="no-data"
+                                    title="当前筛选无结果"
+                                    description="没有符合条件的陈列项。"
+                                />
+                            ) : (
+                                <div className={previewGridClassName}>
+                                    {filteredItems.map((item) => (
+                                        <PreviewCard
+                                            key={item.item_id}
+                                            item={item}
+                                            onDelete={onDelete}
+                                            onEditPrice={onEditPrice}
+                                            canDelete={canDelete}
+                                            pending={pending}
+                                            deleting={
+                                                deletingItemId === item.item_id
+                                            }
+                                        />
+                                    ))}
+                                </div>
+                            )
+                        ) : null}
+
+                        {/* 套餐形态按档分组 */}
+                        {visibleGroups ? (
+                            visibleGroups.length === 0 ? (
+                                <BusinessEmptyState
+                                    kind="no-data"
+                                    title="当前筛选无结果"
+                                    description="该档位下暂无可显示的陈列项。"
+                                />
+                            ) : (
+                                <div className="flex flex-col gap-8">
+                                    {visibleGroups.map(
+                                        ([tierName, tierItems]) => {
+                                            const tierConfig = tiers?.find(
+                                                (t) =>
+                                                    t.name === tierName ||
+                                                    t.tier_id === tierName,
+                                            )
+                                            return (
+                                                <section
+                                                    key={tierName}
+                                                    aria-label={tierName}
+                                                    className="flex flex-col gap-3.5"
+                                                >
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2">
+                                                        <div className="flex flex-wrap items-baseline gap-2">
+                                                            <h3 className="text-sm font-semibold text-foreground">
+                                                                {tierName}
+                                                            </h3>
+                                                            <Badge
+                                                                variant="secondary"
+                                                                className="text-xs"
+                                                            >
+                                                                {
+                                                                    tierItems.length
+                                                                }{" "}
+                                                                套
+                                                            </Badge>
+                                                            {tierConfig ? (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    目标 ¥
+                                                                    {
+                                                                        tierConfig.target_amount
+                                                                    }{" "}
+                                                                    (±¥
+                                                                    {
+                                                                        tierConfig.tolerance
+                                                                    }
+                                                                    ) · 每套{" "}
+                                                                    {
+                                                                        tierConfig.sku_count
+                                                                    }{" "}
+                                                                    件
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+
+                                                        {onRegenerateTier &&
+                                                        tierConfig ? (
+                                                            <LoadingButton
+                                                                id={`selection-regenerate-inline-${tierConfig.tier_id}`}
+                                                                type="button"
+                                                                size="xs"
+                                                                variant="outline"
+                                                                disabled={
+                                                                    pending
+                                                                }
+                                                                loading={regeneratingTierIds?.includes(
+                                                                    tierConfig.tier_id,
+                                                                )}
+                                                                onClick={() =>
+                                                                    onRegenerateTier(
+                                                                        tierConfig.tier_id,
+                                                                    )
+                                                                }
+                                                                className="h-7 text-xs"
+                                                            >
+                                                                <RefreshCwIcon
+                                                                    className="mr-1 size-3"
+                                                                    aria-hidden="true"
+                                                                />
+                                                                重生成此档
+                                                            </LoadingButton>
+                                                        ) : null}
+                                                    </div>
+
+                                                    <div
+                                                        className={
+                                                            previewGridClassName
+                                                        }
+                                                    >
+                                                        {tierItems.map(
+                                                            (item) => (
+                                                                <PreviewCard
+                                                                    key={
+                                                                        item.item_id
+                                                                    }
+                                                                    item={item}
+                                                                    onDelete={
+                                                                        onDelete
+                                                                    }
+                                                                    onEditPrice={
+                                                                        onEditPrice
+                                                                    }
+                                                                    canDelete={
+                                                                        canDelete
+                                                                    }
+                                                                    pending={
+                                                                        pending
+                                                                    }
+                                                                    deleting={
+                                                                        deletingItemId ===
+                                                                        item.item_id
+                                                                    }
+                                                                />
+                                                            ),
+                                                        )}
+                                                    </div>
+                                                </section>
+                                            )
+                                        },
+                                    )}
+                                </div>
+                            )
+                        ) : null}
+                    </>
                 )
-            ) : null}
-        </div>
+            }
+        />
     )
 }

@@ -5123,6 +5123,22 @@
       "reason": "密码维护领域写入、幂等收据与一次安全成功事件共用 run_audited_event 事务；重放不追加成功事件，审计只投影册身份。"
     },
     {
+      "path": "crates/orchestration/erp-order-to-cash/src/sales_selection/pricing.rs",
+      "function": "update_prices",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "BusinessEventContext::new",
+        "run_audited_event"
+      ],
+      "call_counts": {
+        "BusinessEventContext::new": 1,
+        "run_audited_event": 1
+      },
+      "location_count": 1,
+      "reason": "客户售价维护在同一审计事务中重验维护权限与责任范围，保存商品池、陈列、套餐合计、册版本及幂等收据；同键重放不再次加价或追加成功事件，审计仅记录册身份。"
+    },
+    {
       "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/cancel_approval.rs",
       "function": "apply",
       "policy": "Audited",
