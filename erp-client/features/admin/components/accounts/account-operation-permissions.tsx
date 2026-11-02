@@ -109,7 +109,7 @@ export function AccountOperationPermissions({
     return (
         <section
             aria-labelledby="account-operation-permissions-title"
-            className="space-y-4 border-t border-grid pt-5 text-sm"
+            className="space-y-4 text-sm"
         >
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">

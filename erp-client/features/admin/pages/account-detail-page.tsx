@@ -247,6 +247,12 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                             基本资料
                         </TabsTrigger>
                         <TabsTrigger
+                            id="account-detail-permissions-tab"
+                            value="permissions"
+                        >
+                            操作权限
+                        </TabsTrigger>
+                        <TabsTrigger
                             id="account-detail-access-tab"
                             value="access"
                         >
@@ -298,6 +304,12 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                 onRetry={() => void org.refetch()}
                             />
                         )}
+                    </TabsContent>
+                    <TabsContent
+                        value="permissions"
+                        keepMounted
+                        className="p-4 data-[hidden]:hidden"
+                    >
                         <AccountOperationPermissions
                             key={accountId}
                             account={account}
