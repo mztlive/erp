@@ -1,35 +1,22 @@
 import type * as React from "react"
 import Link from "next/link"
-import { ExternalLinkIcon, RefreshCwIcon, ShieldAlertIcon } from "lucide-react"
-
 import {
-    BusinessDiffPanel,
-    BusinessStatusBadge,
-    surfacePanelClassName,
-} from "@/components/business"
+    CheckCircle2Icon,
+    ChevronDownIcon,
+    ExternalLinkIcon,
+    RefreshCwIcon,
+    ShieldAlertIcon,
+} from "lucide-react"
+
+import { BusinessDiffPanel, BusinessStatusBadge } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { formatDateTime } from "@/lib/datetime"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasAuthenticationRecovery } from "../lib/presentation"
 import type { IntegrationResolutionItemView } from "../types"
-import { DIFFERENCE_TYPE_LABEL, FUNDS_LABEL } from "../types"
-
-function severityTone(
-    severity: IntegrationResolutionItemView["classification"]["severity"],
-): "destructive" | "warning" | "info" | "neutral" {
-    if (severity === "critical") return "destructive"
-    if (severity === "high") return "warning"
-    if (severity === "medium") return "info"
-    return "neutral"
-}
+import { DIFFERENCE_TYPE_LABEL } from "../types"
 
 export function IntegrationItemSummary({
     item,
@@ -40,112 +27,198 @@ export function IntegrationItemSummary({
     headingRef: React.RefObject<HTMLHeadingElement | null>
     onRefresh: () => void
 }) {
+    const recovered = hasAuthenticationRecovery(item)
+    const terminal =
+        item.workItem?.status === "COMPLETED" ||
+        item.workItem?.status === "CLOSED"
+    const authentication =
+        item.classification.errorClass === "authentication-or-signature"
+    const failure = item.failureSource
+    const error = failure?.summary?.match(/^([A-Z][A-Z0-9_]+):\s*([\s\S]*)$/)
+    const failureMessage = error?.[2] || failure?.summary
+
     return (
-        <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-grid">
-                <CardTitle
-                    ref={headingRef}
-                    tabIndex={-1}
-                    className="outline-none"
-                >
-                    {[item.identity.number, item.businessObject.title]
-                        .filter(Boolean)
-                        .join(" · ")}
-                </CardTitle>
-                <CardDescription>
-                    {item.identity.itemType === "ERROR_TASK"
-                        ? "错误任务"
-                        : "对账差异"}
-                    {item.workItem
-                        ? " · 关联任务"
-                        : " · 无关联任务（直接对账）"}
-                </CardDescription>
-                <div className="flex flex-wrap gap-2 pt-1">
+        <section aria-labelledby="integration-item-title" className="space-y-5">
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 space-y-2">
+                    <h3
+                        id="integration-item-title"
+                        ref={headingRef}
+                        tabIndex={-1}
+                        className="break-words text-base font-semibold outline-none"
+                    >
+                        {[item.identity.number, item.businessObject.title]
+                            .filter(Boolean)
+                            .join(" · ")}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>处理人：{item.ownerUser ?? item.ownerRole}</span>
+                        <span>已滞留 {item.ageLabel}</span>
+                        <span>{item.fundsImpactLabel}</span>
+                        {item.environment ? (
+                            <span>{item.environmentLabel}环境</span>
+                        ) : null}
+                    </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                    <BusinessStatusBadge
+                        context="detail"
+                        label={item.status.label}
+                        tone={
+                            item.workItem?.status === "CLOSED"
+                                ? "neutral"
+                                : terminal
+                                  ? "success"
+                                  : "info"
+                        }
+                    />
+                    <Button
+                        id="integration-item-summary-refresh"
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={onRefresh}
+                        aria-label="刷新当前任务"
+                        title="刷新当前任务"
+                    >
+                        <RefreshCwIcon aria-hidden />
+                    </Button>
+                </div>
+            </div>
+
+            {authentication ? (
+                <Alert variant={recovered ? "success" : "warning"}>
+                    {recovered ? (
+                        <CheckCircle2Icon aria-hidden />
+                    ) : (
+                        <ShieldAlertIcon aria-hidden />
+                    )}
+                    <AlertTitle>
+                        {recovered
+                            ? terminal
+                                ? "鉴权已恢复"
+                                : "鉴权已恢复，待确认完成"
+                            : "接口授权异常，需要修复配置"}
+                    </AlertTitle>
+                    <AlertDescription>
+                        {recovered
+                            ? "当前配置的最新鉴权检查已通过，请核对恢复结果后完成处理。"
+                            : "核对账号授权、凭据和签名配置，重新执行鉴权检查后返回刷新。"}
+                    </AlertDescription>
+                </Alert>
+            ) : item.classification.errorClass === "result-unknown" ? (
+                <Alert variant="warning">
+                    <ShieldAlertIcon aria-hidden />
+                    <AlertTitle>先查询原请求结果</AlertTitle>
+                    <AlertDescription>
+                        确认原下单、取消或退款的处理结果后，再决定后续操作。
+                    </AlertDescription>
+                </Alert>
+            ) : (
+                <div className="flex flex-wrap items-center gap-2">
                     <BusinessStatusBadge
                         context="detail"
                         label={item.classification.label}
-                        tone={severityTone(item.classification.severity)}
+                        tone={
+                            item.classification.severity === "critical"
+                                ? "destructive"
+                                : "warning"
+                        }
                     />
-                    <Badge variant="outline">
-                        环境：{item.environmentLabel}
-                    </Badge>
-                    <Badge variant="outline">
-                        严重度：{item.classification.severityLabel}
-                    </Badge>
-                    <Badge variant="outline">状态：{item.status.label}</Badge>
-                    <Badge variant="outline">
-                        {FUNDS_LABEL[item.fundsImpact]}
-                    </Badge>
                     {item.compensationOpen ? (
                         <Badge variant="destructive">补偿未闭环</Badge>
                     ) : null}
+                    {item.classification.errorClass ===
+                    "parameter-or-mapping" ? (
+                        <span className="text-sm text-muted-foreground">
+                            请先修复主数据引用，再核验处理结果。
+                        </span>
+                    ) : null}
                 </div>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-4">
-                {item.classification.errorClass === "result-unknown" ? (
-                    <Alert variant="destructive">
-                        <ShieldAlertIcon aria-hidden />
-                        <AlertTitle>结果未知</AlertTitle>
-                        <AlertDescription>
-                            主动作仅为「查询原结果」。禁止直接重新提交下单/取消/退款。
-                            系统按原任务号重发，不手动指定。
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
+            )}
 
-                {item.classification.errorClass ===
-                    "authentication-or-signature" ||
-                item.classification.errorClass === "parameter-or-mapping" ||
-                item.classification.errorClass === "business-rejected" ? (
-                    <Alert variant="warning">
-                        <AlertTitle>
-                            {item.classification.label} · 禁止无意义自动重试
-                        </AlertTitle>
-                        <AlertDescription>
-                            页面不提供自动重试按钮；
-                            {item.classification.errorClass ===
-                            "authentication-or-signature"
-                                ? "不展示密钥或完整签名材料。"
-                                : item.classification.errorClass ===
-                                    "parameter-or-mapping"
-                                  ? "请先到供应商供给或商城同步修复主数据引用。"
-                                  : "请进入供应商订单售后/补偿路径。"}
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
+            {failure ? (
+                <div className="space-y-2 border-l-2 border-border pl-4">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>原始异常 · {failure.operation}</span>
+                        {failure.failedAt ? (
+                            <time dateTime={failure.failedAt}>
+                                {formatDateTime(failure.failedAt, "default")}
+                            </time>
+                        ) : null}
+                    </div>
+                    <p className="break-words text-sm leading-relaxed">
+                        {failureMessage ||
+                            "原始失败摘要暂不可用，请打开接口设置查看检查与同步记录。"}
+                    </p>
+                    {error?.[1] || failure.jobNumber ? (
+                        <details className="group text-xs text-muted-foreground">
+                            <summary
+                                id="integration-failure-technical-details"
+                                className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                                技术详情{" "}
+                                <ChevronDownIcon
+                                    className="size-3 transition-transform group-open:rotate-180"
+                                    aria-hidden
+                                />
+                            </summary>
+                            <div className="mt-1 space-y-1 break-all">
+                                {error?.[1] ? (
+                                    <div>错误代码：{error[1]}</div>
+                                ) : null}
+                                {failure.jobNumber ? (
+                                    <div>检查编号：{failure.jobNumber}</div>
+                                ) : null}
+                            </div>
+                        </details>
+                    ) : null}
+                </div>
+            ) : null}
 
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <Fact label="滞留" value={item.ageLabel} />
-                    <Fact
-                        label="责任"
-                        value={item.ownerUser ?? item.ownerRole}
-                    />
-                    <Fact
-                        label="方向"
-                        value={item.message?.directionLabel ?? "—"}
-                    />
+            {item.repairLinks.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                    {item.repairLinks.map((repairLink) => (
+                        <Button
+                            key={repairLink.href}
+                            id={`integration-item-summary-repair-${toAutomationIdSegment(repairLink.href)}`}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            render={<Link href={repairLink.href} />}
+                        >
+                            <ExternalLinkIcon
+                                data-icon="inline-start"
+                                aria-hidden
+                            />
+                            {repairLink.label}
+                        </Button>
+                    ))}
+                    {failure?.operation === "商品目录同步" ? (
+                        <span className="text-xs text-muted-foreground">
+                            鉴权恢复后，仍需到商品库重新同步。
+                        </span>
+                    ) : null}
+                </div>
+            ) : null}
+
+            {item.originalAction || item.message ? (
+                <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                     {item.originalAction ? (
-                        <>
-                            <Fact
-                                label="原动作"
-                                value={item.originalAction.actionLabel}
-                            />
-                            <Fact
-                                label="原任务号摘要"
-                                value={
-                                    item.originalAction
-                                        .originalActionIdempotencyKeySummary
-                                }
-                                mono
-                            />
-                        </>
+                        <Fact
+                            label="原动作"
+                            value={item.originalAction.actionLabel}
+                        />
                     ) : null}
                     {item.message ? (
                         <>
                             <Fact
+                                label="消息方向"
+                                value={item.message.directionLabel}
+                            />
+                            <Fact
                                 label="事件摘要"
                                 value={item.message.eventIdSummary}
-                                mono
                             />
                             <Fact
                                 label="消息摘要"
@@ -153,101 +226,53 @@ export function IntegrationItemSummary({
                             />
                         </>
                     ) : null}
-                </div>
-
-                {item.difference ? (
-                    <>
-                        <BusinessDiffPanel
-                            title="对账左右证据"
-                            caption="左右侧金额与行数对照"
-                            fieldColumnLabel="对照项"
-                            beforeColumnLabel={item.difference.leftLabel}
-                            afterColumnLabel={item.difference.rightLabel}
-                            noteColumnLabel="差异说明"
-                            count={2}
-                            changes={[
-                                {
-                                    id: "side",
-                                    field: "对照摘要",
-                                    before: item.difference.leftSummary,
-                                    after: item.difference.rightSummary,
-                                    note: "两侧对照，只读证据",
-                                },
-                                {
-                                    id: "summary",
-                                    field: "差异摘要",
-                                    before: "—",
-                                    after: item.difference.differenceSummary,
-                                    note:
-                                        DIFFERENCE_TYPE_LABEL[
-                                            item.difference.differenceType.toUpperCase()
-                                        ] ?? "差异说明未提供",
-                                },
-                            ]}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            数据范围 {item.difference.boundary} · 更新时间{" "}
-                            {formatDateTime(
-                                item.difference.watermark,
-                                "default",
-                            )}
-                        </p>
-                    </>
-                ) : null}
-
-                {item.repairLinks.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                        {item.repairLinks.map((repairLink) => (
-                            <Button
-                                key={repairLink.href}
-                                id={`integration-item-summary-repair-${toAutomationIdSegment(repairLink.href)}`}
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                render={<Link href={repairLink.href} />}
-                            >
-                                <ExternalLinkIcon
-                                    data-icon="inline-start"
-                                    aria-hidden
-                                />
-                                {repairLink.label}
-                            </Button>
-                        ))}
-                        <Button
-                            id="integration-item-summary-refresh"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={onRefresh}
-                        >
-                            <RefreshCwIcon
-                                data-icon="inline-start"
-                                aria-hidden
-                            />
-                            刷新当前任务
-                        </Button>
-                    </div>
-                ) : null}
-            </CardContent>
-        </Card>
+                </dl>
+            ) : null}
+            {item.difference ? (
+                <>
+                    <BusinessDiffPanel
+                        title="对账左右证据"
+                        caption="左右侧金额与行数对照"
+                        fieldColumnLabel="对照项"
+                        beforeColumnLabel={item.difference.leftLabel}
+                        afterColumnLabel={item.difference.rightLabel}
+                        noteColumnLabel="差异说明"
+                        count={2}
+                        changes={[
+                            {
+                                id: "side",
+                                field: "对照摘要",
+                                before: item.difference.leftSummary,
+                                after: item.difference.rightSummary,
+                                note: "两侧对照，只读证据",
+                            },
+                            {
+                                id: "summary",
+                                field: "差异摘要",
+                                before: "—",
+                                after: item.difference.differenceSummary,
+                                note:
+                                    DIFFERENCE_TYPE_LABEL[
+                                        item.difference.differenceType.toUpperCase()
+                                    ] ?? "差异说明未提供",
+                            },
+                        ]}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        数据范围 {item.difference.boundary} · 更新时间{" "}
+                        {formatDateTime(item.difference.watermark, "default")}
+                    </p>
+                </>
+            ) : null}
+        </section>
     )
 }
 
-function Fact({
-    label,
-    value,
-    mono,
-}: {
-    label: string
-    value: React.ReactNode
-    mono?: boolean
-}) {
+function Fact({ label, value }: { label: string; value: React.ReactNode }) {
     return (
-        <div className="space-y-0.5">
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div className={mono ? "num font-mono text-sm" : "text-sm"}>
-                {value}
-            </div>
+        <div className="min-w-0 space-y-1">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="break-words">{value}</dd>
         </div>
     )
 }

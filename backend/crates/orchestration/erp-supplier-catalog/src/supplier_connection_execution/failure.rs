@@ -88,7 +88,7 @@ pub(super) async fn persist_health_failure_task(
     actor: &AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    let task = IntegrationErrorTask::new(
+    let mut task = IntegrationErrorTask::new(
         IntegrationErrorTaskId::new(format!("w20-error-{}", digest(&[&job.base.id]))),
         IntegrationErrorTaskData {
             message_id: None,
@@ -99,6 +99,7 @@ pub(super) async fn persist_health_failure_task(
             owner_org_unit_id: handler_org(db, actor.id(), executor).await?,
         },
     )?;
+    record_initial_failure(&mut task, error)?;
     let work_item = error_work_item(&task)?;
     let work_item_audit = actor.clone().resource_log_with_id(
         format!("w20-work-audit-{}", digest(&[&job.base.id])),
@@ -108,6 +109,13 @@ pub(super) async fn persist_health_failure_task(
         Some(format!("job_id={}", job.base.id)),
     )?;
     persist_failure(&MongoFailureWrite(db), &task, &work_item, &work_item_audit, executor).await
+}
+
+/// 首次失败也属于执行尝试；沿用脱敏摘要字段，不改变原任务身份。
+fn record_initial_failure(task: &mut IntegrationErrorTask, error: &ClassifiedError) -> Result<()> {
+    let summary = format!("{}: {}", error.code, error.summary).chars().take(512).collect();
+    task.record_attempt(Instant::now(), Some(summary))?;
+    Ok(())
 }
 
 /// 三个真实写入步骤共用调用方结果事务；构造与 ID/时钟仍在原调用点。
@@ -186,10 +194,36 @@ fn integration_class(class: SupplierFailureClass) -> erp_integration::entity::in
 mod tests {
     use std::sync::Mutex;
 
+    use erp_integration::entity::integration_ops::ErrorClass;
     use persistence_core::Executor;
 
     use super::*;
     use crate::Error;
+
+    #[test]
+    fn initial_failure_records_reason_and_bounds_summary() {
+        let mut task = IntegrationErrorTask::with_derived_owner_role(
+            IntegrationErrorTaskId::new("error-1"),
+            None,
+            Some("connection-1".into()),
+            ErrorClass::AuthSignature,
+            "admin".into(),
+            "org-1".into(),
+        )
+        .unwrap();
+        let mut error = ClassifiedError {
+            class: SupplierFailureClass::AuthSignature,
+            code: "TOKEN_EXPIRED".into(),
+            summary: "授权已过期".into(),
+        };
+        record_initial_failure(&mut task, &error).unwrap();
+        assert_eq!(task.attempt_count, 1);
+        assert_eq!(task.last_attempt_summary.as_deref(), Some("TOKEN_EXPIRED: 授权已过期"));
+        error.summary = "长".repeat(1024);
+        record_initial_failure(&mut task, &error).unwrap();
+        assert_eq!(task.last_attempt_summary.as_ref().unwrap().chars().count(), 512);
+        assert!(task.last_attempt_at.is_some());
+    }
 
     struct TestExecutor {
         visits: usize,

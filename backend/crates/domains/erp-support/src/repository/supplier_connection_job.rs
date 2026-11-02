@@ -9,6 +9,22 @@ use crate::BackgroundJob;
 /// 后台任务集合仓储的供应商连接治理查询。
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobRepositorySupplierConnectionExt {
+    /// 读取异常登记之前同一连接、同一类型最近五十次失败，供精确来源匹配。
+    /// # 参数
+    /// `connection_id`、`job_type` 限定连接与任务类型；`at` 为异常登记时间。
+    /// `executor` 沿用调用方读取执行器。
+    /// # 返回
+    /// 按创建时间和 ID 倒序返回候选；调用方必须核对原任务身份。
+    /// # 错误
+    /// 时间超出存储范围或数据库读取失败时返回错误。
+    async fn connection_failure_candidates(
+        &self,
+        connection_id: &str,
+        job_type: &str,
+        at: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>>;
+
     /// 读取连接最近的同步任务，最多二十条。
     /// # 参数
     /// `connection_id` 为限定连接，`executor` 为调用方执行器。
@@ -76,6 +92,24 @@ pub trait BackgroundJobRepositorySupplierConnectionExt {
 }
 
 impl BackgroundJobRepositorySupplierConnectionExt for persistence_core::Repository<'_, BackgroundJob> {
+    async fn connection_failure_candidates(
+        &self,
+        connection_id: &str,
+        job_type: &str,
+        at: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BackgroundJob>> {
+        let at =
+            i64::try_from(at).map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("异常时间"))?;
+        mongo_ops::find_many(
+            &self.collection(),
+            failure_candidates_filter(connection_id, job_type, at),
+            FindOptions::builder().sort(doc! { "created_at": -1, "id": -1 }).limit(50).build(),
+            executor,
+        )
+        .await
+    }
+
     async fn recent_catalog_jobs(
         &self,
         connection_id: &str,
@@ -131,6 +165,13 @@ impl BackgroundJobRepositorySupplierConnectionExt for persistence_core::Reposito
 fn connection_job_filter(connection_id: &str, job_id: &str, job_types: &[&str]) -> Document {
     doc! { "id": job_id, "domain_job_id": connection_id, "domain_job_type": { "$in": job_types } }
 }
+fn failure_candidates_filter(connection_id: &str, job_type: &str, at: i64) -> Document {
+    doc! {
+        "domain_job_id": connection_id, "domain_job_type": job_type,
+        "status": "failed", "created_at": { "$lte": at },
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
 fn active_catalog_filter(connection_id: &str) -> Document {
     doc! {
         "domain_job_type": "SUPPLIER_CATALOG_SYNC",
@@ -143,6 +184,15 @@ fn active_catalog_filter(connection_id: &str) -> Document {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failure_candidates_keep_connection_type_time_and_failed_status() {
+        let filter = failure_candidates_filter("conn-1", "SUPPLIER_HEALTH_CHECK", 123);
+        assert_eq!(filter.get_str("domain_job_id").unwrap(), "conn-1");
+        assert_eq!(filter.get_str("domain_job_type").unwrap(), "SUPPLIER_HEALTH_CHECK");
+        assert_eq!(filter.get_str("status").unwrap(), "failed");
+        assert_eq!(filter.get_document("created_at").unwrap().get_i64("$lte").unwrap(), 123);
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+    }
     #[test]
     fn connection_job_filter_keeps_identity_and_type_scope() {
         assert_eq!(

@@ -19,7 +19,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 /// 跨域权威证据适配器；由组合根创建一份并注入命令及详情。
 pub struct MongoIntegrationEvidenceAuthority {
-    db: Database,
+    pub(super) db: Database,
 }
 impl MongoIntegrationEvidenceAuthority {
     /// 保存组合根数据库；方法不自开事务或外发请求。
@@ -190,6 +190,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                     }
                 }
             }
+            self.discover_connection_recovery(subject, executor, &mut evidence).await?;
             discover_compensation(&self.db, subject, executor, &mut evidence).await?;
             Ok(evidence)
         })
@@ -206,6 +207,9 @@ impl MongoIntegrationEvidenceAuthority {
         executor: &mut dyn Executor,
     ) -> Result<CanonicalEvidenceReference> {
         match record.kind() {
+            "supplier_api_health_check_run" => {
+                self.verify_connection_recovery(subject, record.id(), kind, executor).await
+            },
             "inbox_message" => self.verify_inbox_message(subject, record.id(), kind, executor).await,
             "customer_refund" => {
                 self.verify_customer_refund(subject, record.id(), kind, actor_id, executor).await
@@ -459,7 +463,7 @@ fn push_compensation_refs(
 ///
 /// # 约束
 /// 语法由 [`EvidenceRecordRef`] 独占；本函数只做 Service DTO 装配。
-fn controlled_ref(
+pub(super) fn controlled_ref(
     evidence_kind: ControlledEvidenceKind,
     record_kind: &str,
     id: &str,
@@ -500,7 +504,7 @@ fn ensure_association(subject: &EvidenceSubject, ids: &[String]) -> Result<()> {
 ///
 /// # 约束
 /// 编码规则由 [`CanonicalEvidenceReference::verified`] 独占。
-fn canonical_verified(
+pub(super) fn canonical_verified(
     kind: &str,
     id: &str,
     version: Option<u64>,
@@ -519,7 +523,7 @@ fn ensure_compensation_kind(kind: ControlledEvidenceKind) -> Result<()> {
     kind_mismatch()
 }
 
-fn kind_mismatch<T>() -> Result<T> {
+pub(super) fn kind_mismatch<T>() -> Result<T> {
     Err(Error::ValidationError("证据类型与引用对象类型不匹配".to_string()))
 }
 

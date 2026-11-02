@@ -1,7 +1,6 @@
 import * as React from "react"
 import type { InterfaceErrorClass } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
-import { IntegrationEvidencePanel } from "../../components/integration-evidence-panel"
 import { IntegrationItemSummary } from "../../components/integration-item-summary"
 import type { IntegrationResolutionItemView } from "../../types"
 import { IntegrationErrorResolutionPanel } from "./integration-error-resolution-panel"
@@ -54,8 +53,7 @@ export function IntegrationDetailWorkflow({
                 headingRef={headingRef}
                 onRefresh={onRefresh}
             />
-            <IntegrationEvidencePanel item={item} />
-            {panelErrorClass ? (
+            {panelErrorClass && !item.failureSource ? (
                 <IntegrationErrorResolutionPanel
                     item={item}
                     errorClass={panelErrorClass}

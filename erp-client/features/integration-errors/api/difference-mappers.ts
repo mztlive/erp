@@ -71,8 +71,8 @@ export function mapDifference(
             severity: "high",
             severityLabel: "高",
         },
-        environment: "production",
-        environmentLabel: "生产",
+        environment: null,
+        environmentLabel: "环境未提供",
         status: {
             code: diff.status ?? "open",
             label: terminal

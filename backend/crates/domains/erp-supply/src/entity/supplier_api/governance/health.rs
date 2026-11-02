@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 use super::{
     ACTOR_ID_MAX_LEN, ERROR_CODE_MAX_LEN, ERROR_SUMMARY_MAX_LEN, HASH_MAX_LEN, OPERATION_ID_MAX_LEN, required,
 };
-use crate::entity::supplier_api::{SupplierApiCapability, SupplierApiCapabilityCode};
+use crate::entity::supplier_api::{
+    HealthCheckResult, SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection,
+};
 
 /// W20 健康检查固定白名单。
 ///
@@ -96,6 +98,26 @@ pub struct SupplierHealthCheckRun {
 }
 
 impl SupplierHealthCheckRun {
+    /// 验证当前连接在指定失败之后已通过同一技术配置的鉴权检查。
+    /// # 参数
+    /// `connection` 为当前连接；`failed_at` 为待处理失败的登记时间（Unix 秒）。
+    /// # 返回
+    /// 仅同连接、同配置、失败后启动且成功完成的鉴权检查返回 true；当前连接必须健康。
+    /// # 错误
+    /// 无；时间缺失、倒置、检查类型不符或配置变化均返回 false。
+    pub fn verifies_authentication_after(&self, connection: &SupplierApiConnection, failed_at: u64) -> bool {
+        self.connection_id.as_ref() == connection.base.id
+            && self.technical_config_version == connection.technical_config_version
+            && self.check_type == SupplierHealthCheckType::Authentication
+            && self.status == SupplierHealthCheckStatus::Succeeded
+            && connection.last_health_result == Some(HealthCheckResult::Healthy)
+            && self.started_at.zip(self.finished_at).is_some_and(|(started, finished)| {
+                u64::try_from(started.unix_secs()).is_ok_and(|started| started > failed_at)
+                    && finished >= started
+                    && connection.last_health_at.is_some_and(|latest| latest >= finished)
+            })
+    }
+
     /// 创建等待执行的健康检查记录。
     ///
     /// # 参数
@@ -263,5 +285,82 @@ impl SupplierHealthCheckRun {
         self.finished_at = Some(at);
         self.latency_ms = Some(latency_ms);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use erp_core::ids::SupplierAccountId;
+
+    use super::*;
+    use crate::entity::supplier_api::{
+        SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierConnectorType,
+    };
+
+    fn facts() -> (SupplierHealthCheckRun, SupplierApiConnection) {
+        let mut connection = SupplierApiConnection::new(
+            SupplierApiConnectionId::new("conn-1"),
+            SupplierApiConnectionData {
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                connection_code: "JDVOP".into(),
+                connector_type: SupplierConnectorType::JdVop,
+                endpoint_reference: "endpoint".into(),
+                credential_reference: None,
+                rate_limit_policy: None,
+                status: SupplierApiConnectionStatus::Active,
+            },
+            "admin",
+        )
+        .unwrap();
+        let mut run = SupplierHealthCheckRun::new(
+            "run-1",
+            SupplierHealthCheckRunData {
+                connection_id: SupplierApiConnectionId::new("conn-1"),
+                background_job_id: "job-1".into(),
+                check_type: SupplierHealthCheckType::Authentication,
+                technical_config_version: 1,
+                capability_versions: vec![],
+                requested_by: "admin".into(),
+                idempotency_key_hash: "hash".into(),
+                request_fingerprint: "fingerprint".into(),
+            },
+        )
+        .unwrap();
+        run.start(Instant::from_unix_secs(20)).unwrap();
+        run.succeed(Instant::from_unix_secs(21), 1).unwrap();
+        connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(21));
+        (run, connection)
+    }
+
+    #[test]
+    fn authentication_recovery_requires_fresh_success_and_current_configuration() {
+        let (mut run, mut connection) = facts();
+        assert!(run.verifies_authentication_after(&connection, 10));
+        assert!(!run.verifies_authentication_after(&connection, 20));
+        assert!(!run.verifies_authentication_after(&connection, 30));
+        connection.technical_config_version += 1;
+        assert!(!run.verifies_authentication_after(&connection, 10));
+        connection.technical_config_version = run.technical_config_version;
+        run.check_type = SupplierHealthCheckType::Connectivity;
+        assert!(!run.verifies_authentication_after(&connection, 10));
+    }
+
+    #[test]
+    fn authentication_recovery_rejects_other_connection_failure_and_missing_time() {
+        let (mut run, mut connection) = facts();
+        run.connection_id = SupplierApiConnectionId::new("conn-2");
+        assert!(!run.verifies_authentication_after(&connection, 10));
+        run.connection_id = SupplierApiConnectionId::new("conn-1");
+        connection.last_health_result = Some(HealthCheckResult::Failed);
+        assert!(!run.verifies_authentication_after(&connection, 10));
+        connection.last_health_result = Some(HealthCheckResult::Healthy);
+        connection.last_health_at = Some(Instant::from_unix_secs(19));
+        assert!(!run.verifies_authentication_after(&connection, 10));
+        connection.last_health_at = Some(Instant::from_unix_secs(21));
+        run.status = SupplierHealthCheckStatus::Failed;
+        assert!(!run.verifies_authentication_after(&connection, 10));
+        run.status = SupplierHealthCheckStatus::Succeeded;
+        run.finished_at = None;
+        assert!(!run.verifies_authentication_after(&connection, 10));
     }
 }

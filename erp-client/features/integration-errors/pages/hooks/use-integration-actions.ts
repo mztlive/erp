@@ -182,6 +182,7 @@ export function useIntegrationActions({
 
     async function handleResolve() {
         if (
+            formalPending ||
             !item?.workItem ||
             !item.resolutionEvidencePolicy ||
             responsibilityStatus !== "assigned_to_me" ||
@@ -224,7 +225,6 @@ export function useIntegrationActions({
             afterResult(result)
         } catch (e) {
             setActionError(getErrorMessage(e, "解决失败"))
-            throw e
         }
     }
 
@@ -262,6 +262,7 @@ export function useIntegrationActions({
         terminalConfirm,
         setTerminalConfirm,
         formalPending,
+        resolvePending: resolveMutation.isPending,
         pendingTaskAction: actionMutation.isPending
             ? actionMutation.variables?.kind
             : undefined,

@@ -137,6 +137,17 @@
       "removal_condition": "保留人员目录治理独立身份事件；与业务audit_logs目录及成功事件语义分别登记。"
     },
     {
+      "path": "crates/read-models/erp-read-models/src/integration_center/error_detail.rs",
+      "function": "error_audit_history",
+      "operation": "audit_logs.timeline_events",
+      "max_occurrences": 1,
+      "policy": "Display",
+      "contract_items": [
+        "E09"
+      ],
+      "removal_condition": "仅展示已授权集成异常及其唯一关联待办的结构化成功审计；禁止用于业务状态、原任务身份、开放动作或命令恢复判断，移除处理历史入口时同步删除本登记。"
+    },
+    {
       "path": "crates/read-models/erp-read-models/src/sales_timeline/history.rs",
       "function": "audit",
       "operation": "audit_logs.timeline_events",

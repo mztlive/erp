@@ -177,7 +177,7 @@ export type IntegrationResolutionItemView = {
         severity: "critical" | "high" | "medium" | "low"
         severityLabel: string
     }
-    environment: IntegrationEnvironment
+    environment: IntegrationEnvironment | null
     environmentLabel: string
     status: {
         code: string
@@ -186,6 +186,12 @@ export type IntegrationResolutionItemView = {
     fundsImpact: FundsImpact
     fundsImpactLabel: string
     compensationOpen: boolean
+    failureSource?: {
+        operation: string
+        jobNumber?: string
+        failedAt?: string
+        summary?: string
+    }
     ageLabel: string
     ownerRole: string
     ownerUser?: string

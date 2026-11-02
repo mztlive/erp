@@ -136,7 +136,7 @@ export function useIntegrationPageUrl({
 
     const hasQueueFilters = Boolean(
         urlState.mode !== "all" ||
-        urlState.environment !== "production" ||
+        urlState.environment !== "all" ||
         urlState.errorClass ||
         urlState.handlerUserIds ||
         urlState.operatorUserIds ||

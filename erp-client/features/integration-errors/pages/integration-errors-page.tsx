@@ -130,7 +130,7 @@ export function IntegrationErrorsPage({
     // refetch 保持与页面原实现一致：普通函数，每次渲染重建，调用时才读取当前查询引用
     const refetch = () => {
         void queueQuery.refetch()
-        if (focusMode) void detailItemQuery.refetch()
+        if (detailTarget) void detailItemQuery.refetch()
     }
 
     const actions = useIntegrationActions({
@@ -156,7 +156,7 @@ export function IntegrationErrorsPage({
         setSearchDraft("")
         replaceUrl({
             mode: "all",
-            environment: "production",
+            environment: "all",
             errorClass: null,
             handlerUserIds: null,
             operatorUserIds: null,
@@ -257,7 +257,9 @@ export function IntegrationErrorsPage({
                 />
             ) : null}
 
-            {metrics ? <IntegrationErrorMetricStrip metrics={metrics} /> : null}
+            {metrics && !focusMode ? (
+                <IntegrationErrorMetricStrip metrics={metrics} />
+            ) : null}
 
             {!focusMode ? (
                 <IntegrationQueueToolbar

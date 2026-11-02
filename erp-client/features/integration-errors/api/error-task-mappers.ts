@@ -5,6 +5,7 @@
 
 import type { WorkItemProjection } from "@/features/work-items"
 import { displayName } from "@/lib/display-name"
+import { buildSupplierConnectionSettingsHref } from "@/features/supplier-api-connections/lib/url-state"
 import type { IntegrationResolutionItemView } from "../types"
 import { ERROR_CLASS_LABEL, FUNDS_LABEL } from "../types"
 import {
@@ -37,6 +38,7 @@ export function mapErrorTask(
         : undefined
     const linkedEvidence = mapBackendEvidenceRefs(task.linked_evidence)
     const fundsImpact = resolutionEvidencePolicy?.key.fundsImpact ?? "NONE"
+    const source = task.connection_failure
     const allowedActions = workItem
         ? mapAllowedIntegrationActions(task.allowed_actions, {
               hasWorkItem: true,
@@ -75,15 +77,25 @@ export function mapErrorTask(
                         ? "低"
                         : "中",
         },
-        environment: "production",
-        environmentLabel: "生产",
+        environment: null,
+        environmentLabel: "环境未提供",
         status: {
             code: task.status,
             label: statusLabel(task.status),
         },
         fundsImpact,
-        fundsImpactLabel: FUNDS_LABEL[fundsImpact],
+        fundsImpactLabel: resolutionEvidencePolicy
+            ? FUNDS_LABEL[fundsImpact]
+            : "资金影响待核实",
         compensationOpen: false,
+        failureSource: source
+            ? {
+                  operation: source.operation_label,
+                  jobNumber: source.job_number ?? undefined,
+                  failedAt: tsToIso(source.failed_at) || undefined,
+                  summary: source.error_summary ?? undefined,
+              }
+            : undefined,
         ageLabel: ageLabel(task.created_at),
         ownerRole: formalWorkItem?.ownerRoleLabel ?? "责任岗位未提供",
         ownerUser:
@@ -127,12 +139,28 @@ export function mapErrorTask(
                           action: "PROCESS",
                           code: "FORMAL_WORK_ITEM_MISSING",
                           message:
-                              "尚未建立 W29 正式处理责任，当前错误只能查看。",
+                              "尚未关联处理待办，请联系管理员核对任务关联。",
                       },
                   ]),
         ],
-        repairLinks: [],
-        auditTrail: [],
+        repairLinks: source
+            ? [
+                  {
+                      workspaceId: "W20",
+                      label: "打开接口设置",
+                      href: buildSupplierConnectionSettingsHref(
+                          source.connection_id,
+                      ),
+                  },
+              ]
+            : [],
+        auditTrail: (task.audit_history ?? []).map((event) => ({
+            id: event.id,
+            at: tsToIso(event.occurred_at),
+            actor: event.actor,
+            action: event.action,
+            detail: "",
+        })),
         evidenceTimeline: [],
         linkedEvidence,
         freshness: {

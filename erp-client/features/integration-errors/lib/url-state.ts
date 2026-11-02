@@ -37,7 +37,7 @@ const VIEW_VALUES = [
 ] as const
 
 const MODE_VALUES = ["all", "errors"] as const
-const ENV_VALUES = ["all", "production", "verification"] as const
+const ENV_VALUES = ["all"] as const
 
 const codec = createUrlStateCodec<IntegrationUrlState>([
     {
@@ -52,7 +52,7 @@ const codec = createUrlStateCodec<IntegrationUrlState>([
         key: "environment",
         type: "enum",
         values: ENV_VALUES,
-        defaultValue: "production",
+        defaultValue: "all",
     },
     { key: "handlerUserIds", type: "string" },
     { key: "operatorUserIds", type: "string" },

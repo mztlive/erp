@@ -11,19 +11,9 @@ import { Switch } from "@/components/ui/switch"
 
 import type { IntegrationUrlState } from "../../lib/url-state"
 import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
-import {
-    ENV_LABEL,
-    MODE_LABEL,
-    VIEW_LABEL,
-    type IntegrationView,
-} from "../../types"
+import { MODE_LABEL, VIEW_LABEL, type IntegrationView } from "../../types"
 
-type IntegrationFilterKey =
-    | "q"
-    | "mode"
-    | "environment"
-    | "handlerUserIds"
-    | "operatorUserIds"
+type IntegrationFilterKey = "q" | "mode" | "handlerUserIds" | "operatorUserIds"
 
 type IntegrationAppliedChip = Readonly<{
     key: IntegrationFilterKey
@@ -54,9 +44,6 @@ export function IntegrationQueueToolbar({
     failed?: boolean
 }) {
     const [modeDraft, setModeDraft] = React.useState(urlState.mode)
-    const [environmentDraft, setEnvironmentDraft] = React.useState(
-        urlState.environment,
-    )
     const [handlerDraft, setHandlerDraft] = React.useState(
         urlState.handlerUserIds ?? "",
     )
@@ -68,9 +55,6 @@ export function IntegrationQueueToolbar({
         setModeDraft(urlState.mode)
     }, [urlState.mode])
     React.useEffect(() => {
-        setEnvironmentDraft(urlState.environment)
-    }, [urlState.environment])
-    React.useEffect(() => {
         setHandlerDraft(urlState.handlerUserIds ?? "")
     }, [urlState.handlerUserIds])
     React.useEffect(() => {
@@ -80,7 +64,6 @@ export function IntegrationQueueToolbar({
         patchUrl({
             q: searchDraft.trim() || null,
             mode: modeDraft,
-            environment: environmentDraft,
             handlerUserIds: handlerDraft || null,
             operatorUserIds: operatorDraft || null,
             errorClass: null,
@@ -88,14 +71,7 @@ export function IntegrationQueueToolbar({
             differenceId: null,
         })
         setPanelOpen(false)
-    }, [
-        environmentDraft,
-        handlerDraft,
-        modeDraft,
-        operatorDraft,
-        patchUrl,
-        searchDraft,
-    ])
+    }, [handlerDraft, modeDraft, operatorDraft, patchUrl, searchDraft])
 
     const resetMoreFilters = React.useCallback(() => {
         setOperatorDraft("")
@@ -108,7 +84,6 @@ export function IntegrationQueueToolbar({
 
     const clearFilters = React.useCallback(() => {
         setModeDraft("all")
-        setEnvironmentDraft("production")
         setHandlerDraft("")
         setOperatorDraft("")
         setPanelOpen(false)
@@ -119,15 +94,9 @@ export function IntegrationQueueToolbar({
         (key: IntegrationFilterKey) => {
             if (key === "q") onSearchDraftChange("")
             if (key === "mode") setModeDraft("all")
-            if (key === "environment") setEnvironmentDraft("production")
             if (key === "handlerUserIds") setHandlerDraft("")
             if (key === "operatorUserIds") setOperatorDraft("")
-            const cleared =
-                key === "mode"
-                    ? "all"
-                    : key === "environment"
-                      ? "production"
-                      : null
+            const cleared = key === "mode" ? "all" : null
             patchUrl({
                 [key]: cleared,
                 taskId: null,
@@ -160,15 +129,8 @@ export function IntegrationQueueToolbar({
                 label: `模式：${MODE_LABEL[urlState.mode]}`,
             })
         }
-        if (urlState.environment !== "production") {
-            chips.push({
-                key: "environment",
-                label: `环境：${ENV_LABEL[urlState.environment]}`,
-            })
-        }
         return chips
     }, [
-        urlState.environment,
         urlState.handlerUserIds,
         urlState.mode,
         urlState.operatorUserIds,
@@ -178,7 +140,6 @@ export function IntegrationQueueToolbar({
     const hasPendingChanges =
         searchDraft.trim() !== (urlState.q ?? "") ||
         modeDraft !== urlState.mode ||
-        environmentDraft !== urlState.environment ||
         (handlerDraft || undefined) !== urlState.handlerUserIds ||
         (operatorDraft || undefined) !== urlState.operatorUserIds
 
@@ -250,30 +211,6 @@ export function IntegrationQueueToolbar({
                                 onChange={setHandlerDraft}
                             />
                         </div>
-                        <OptionCombobox
-                            id="integration-queue-toolbar-environment"
-                            className="w-48 max-w-full min-w-0"
-                            filterLabel="环境"
-                            value={environmentDraft}
-                            onValueChange={(value) =>
-                                setEnvironmentDraft(
-                                    value === "all" || value === "verification"
-                                        ? value
-                                        : "production",
-                                )
-                            }
-                            options={(
-                                Object.keys(
-                                    ENV_LABEL,
-                                ) as (keyof typeof ENV_LABEL)[]
-                            ).map((environment) => ({
-                                value: environment,
-                                label: ENV_LABEL[environment],
-                            }))}
-                            aria-label="环境"
-                            placeholder="生产"
-                            allowClear={false}
-                        />
                     </>
                 }
                 commonFilters={

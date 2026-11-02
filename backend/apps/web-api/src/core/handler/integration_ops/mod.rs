@@ -11,12 +11,13 @@ use axum::extract::{Path, State};
 use erp_integration::dto::{
     CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams,
     DifferenceListView, DifferenceView, DirectReconciliationCommand, DirectReconciliationResult,
-    ErrorTaskDetailView, ErrorTaskListParams, ErrorTaskListView, ErrorTaskView, InboxMessageListParams,
-    InboxMessageListView, InboxMessageView, IntegrationTaskActionCommand, IntegrationTaskActionResult,
+    ErrorTaskListParams, ErrorTaskListView, ErrorTaskView, InboxMessageListParams, InboxMessageListView,
+    InboxMessageView, IntegrationTaskActionCommand, IntegrationTaskActionResult,
     IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, PageView, RegisterInboxMessageRequest,
     WriteBackInboxResultRequest,
 };
 use erp_integration::service::IntegrationOpsService;
+use erp_read_models::integration_center::IntegrationErrorDetailView;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -131,7 +132,7 @@ pub async fn error_task_detail(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<ErrorTaskDetailView> {
+) -> Result<IntegrationErrorDetailView> {
     let view = state.integration_center().error_task_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))

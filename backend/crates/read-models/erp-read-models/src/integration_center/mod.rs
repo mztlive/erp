@@ -1,7 +1,9 @@
 //! 集成异常与差异详情：组合本域事实、正式责任与权威证据。
 pub(crate) mod display;
+mod error_detail;
 pub(crate) mod error_labels;
 mod error_task;
+pub use error_detail::IntegrationErrorDetailView;
 mod reconciliation_difference;
 mod repository;
 use std::sync::Arc;

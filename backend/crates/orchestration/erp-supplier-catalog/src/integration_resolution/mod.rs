@@ -11,6 +11,7 @@
 //! 单集合查询使用 `NoTransaction`；根写入通过 `transaction::run_audited`
 //! 复用唯一事务，把本域写入、正式 WorkItem 和审计日志原子提交。
 use crate::wiring::CatalogWorkItems;
+mod connection_evidence;
 mod creation_writes;
 mod error_task;
 pub mod evidence_adapter;

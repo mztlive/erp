@@ -94,7 +94,7 @@ async fn connection_task_labels(
         .collect())
 }
 
-fn connection_task_identity(task: &ErrorTaskView) -> Option<&str> {
+pub(super) fn connection_task_identity(task: &ErrorTaskView) -> Option<&str> {
     let digest = task.id.strip_prefix("w20-error-")?;
     (digest.len() == 64 && digest.chars().all(|ch| ch.is_ascii_hexdigit()) && task.message_id.is_none())
         .then_some(task.business_object_id.as_deref())

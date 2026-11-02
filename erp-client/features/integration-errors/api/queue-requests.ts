@@ -9,7 +9,7 @@ import type {
     IntegrationResolutionItemView,
     IntegrationResolutionQuery,
 } from "../types"
-import { ENV_LABEL, ERROR_CLASS_LABEL, MODE_LABEL, VIEW_LABEL } from "../types"
+import { ERROR_CLASS_LABEL, MODE_LABEL, VIEW_LABEL } from "../types"
 import {
     mapDifference,
     mapErrorTask,
@@ -134,7 +134,6 @@ export async function fetchIntegrationQueue(
     const filterParts = [
         `视图=${VIEW_LABEL[query.view] ?? query.view}`,
         `模式=${MODE_LABEL[query.mode] ?? query.mode}`,
-        `环境=${ENV_LABEL[query.environment] ?? query.environment}`,
     ]
     if (query.errorClass)
         filterParts.push(
@@ -169,7 +168,7 @@ export async function fetchIntegrationQueue(
                 (i) => i.classification.errorClass === "result-unknown",
             ).length,
             manualRequired: filtered.filter((i) =>
-                i.status.label.includes("人工"),
+                ["pending", "manual_required"].includes(i.status.code),
             ).length,
             securityFaults: filtered.filter(
                 (i) =>

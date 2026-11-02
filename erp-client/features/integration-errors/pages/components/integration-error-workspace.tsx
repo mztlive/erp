@@ -3,8 +3,10 @@
 import { useRouter } from "@/lib/navigation"
 import type { InterfaceErrorClass } from "@/components/business"
 import { cn } from "@/lib/utils"
+import { useWorkspaceTaskPane } from "@/components/business/workspace-task-pane"
 
 import { IntegrationQueuePanel } from "../../components/integration-queue-panel"
+import { IntegrationEvidencePanel } from "../../components/integration-evidence-panel"
 import type { IntegrationUrlState } from "../../lib/url-state"
 import type { IntegrationResolutionItemView } from "../../types"
 import type { useIntegrationActions } from "../hooks/use-integration-actions"
@@ -47,6 +49,7 @@ export function IntegrationErrorWorkspace({
     emptyReason?: "no_scope" | null
 }) {
     const router = useRouter()
+    const embedded = useWorkspaceTaskPane()
 
     const nextItem = () => {
         const next = neighbor(1)
@@ -79,8 +82,9 @@ export function IntegrationErrorWorkspace({
 
             <div
                 className={cn(
-                    "flex min-w-0 flex-col",
-                    focusMode ? "gap-0" : "gap-3",
+                    "flex min-w-0 flex-col gap-6 p-5 sm:p-6",
+                    !embedded &&
+                        "rounded-xl border border-border/60 bg-card shadow-xs",
                 )}
             >
                 {item ? (
@@ -117,6 +121,7 @@ export function IntegrationErrorWorkspace({
                             item={item}
                             can={actions.can}
                             formalPending={actions.formalPending}
+                            resolvePending={actions.resolvePending}
                             pendingTaskAction={actions.pendingTaskAction}
                             pendingDirectAction={actions.pendingDirectAction}
                             responsibilityStatus={actions.responsibilityStatus}
@@ -136,8 +141,10 @@ export function IntegrationErrorWorkspace({
                                 void actions.handleDirectAction(kind)
                             }
                             onRequestTerminal={actions.setTerminalConfirm}
+                            onResolve={() => void actions.handleResolve()}
                             actionZoneRef={actions.actionZoneRef}
                         />
+                        <IntegrationEvidencePanel item={item} />
 
                         {actions.terminalConfirm ? (
                             <IntegrationTerminalConfirmation
@@ -153,8 +160,6 @@ export function IntegrationErrorWorkspace({
                                         await actions.handleClose(
                                             "CLOSE_MISROUTED",
                                         )
-                                    } else if (kind === "RESOLVE") {
-                                        await actions.handleResolve()
                                     } else {
                                         await actions.handleDirectTerminal(kind)
                                     }

@@ -23,9 +23,11 @@ export function useIntegrationActionFocus({
         })
         window.setTimeout(() => {
             const zone = actionZoneRef.current
-            const btn = zone?.querySelector<HTMLButtonElement>(
-                "button:not([disabled])",
-            )
+            const btn = Array.from(
+                zone?.querySelectorAll<HTMLElement>(
+                    "button:not([disabled]), summary",
+                ) ?? [],
+            ).find((element) => element.checkVisibility())
             if (btn) {
                 btn.focus()
             } else {

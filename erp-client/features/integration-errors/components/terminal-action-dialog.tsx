@@ -1,11 +1,9 @@
 import { FormalActionConfirmDialog } from "@/components/business"
 import type { IntegrationResolutionItemView } from "../types"
-import { EVIDENCE_KIND_LABEL } from "../types"
 
 export type TerminalConfirm =
     | { kind: "CLOSE_DUPLICATE" }
     | { kind: "CLOSE_MISROUTED" }
-    | { kind: "RESOLVE" }
     | { kind: "CONFIRM_NO_ERROR" }
     | { kind: "CONFIRM_VALID_DIFFERENCE" }
 
@@ -22,9 +20,6 @@ export function TerminalActionDialog({
     onConfirm: () => void | Promise<void>
     onCancel: () => void
 }) {
-    const policy = item.resolutionEvidencePolicy
-    const evidenceKinds = policy?.requiredEvidenceKinds ?? []
-
     if (
         confirm.kind === "CLOSE_DUPLICATE" ||
         confirm.kind === "CLOSE_MISROUTED"
@@ -49,34 +44,6 @@ export function TerminalActionDialog({
                 toStatus={{ label: "已关闭", tone: "neutral" }}
                 effects={["任务退出待处理队列", "不改变业务记录"]}
                 irreversibleEffects={["关闭后不再出现在待处理列表"]}
-                pending={pending}
-                onConfirm={onConfirm}
-            />
-        )
-    }
-    if (confirm.kind === "RESOLVE") {
-        return (
-            <FormalActionConfirmDialog
-                actionVariant="default"
-                id="integration-terminal-action-dialog-resolve"
-                open
-                onOpenChange={(open) => {
-                    if (!open) onCancel()
-                }}
-                actionLabel="标记已解决"
-                title="确认标记已解决"
-                description="核对处理凭证后完成当前任务。"
-                fromStatus={{ label: item.status.label, tone: "warning" }}
-                toStatus={{ label: "已完成", tone: "success" }}
-                effects={[
-                    evidenceKinds.length > 0
-                        ? `将校验已关联的 ${evidenceKinds.length} 类处理凭证：${evidenceKinds
-                              .map((kind) => EVIDENCE_KIND_LABEL[kind])
-                              .join("、")}`
-                        : "系统将登记本次处理凭证",
-                    "任务完成并退出待处理队列",
-                ]}
-                irreversibleEffects={["处理结论写入审计，不可自动撤回"]}
                 pending={pending}
                 onConfirm={onConfirm}
             />

@@ -11,6 +11,20 @@ import type {
 } from "./wire"
 
 export type BackendErrorTask = {
+    work_item_id?: string | null
+    connection_failure?: {
+        connection_id: string
+        operation_label: string
+        job_number?: string | null
+        failed_at?: number | null
+        error_summary?: string | null
+    } | null
+    audit_history?: Array<{
+        id: string
+        occurred_at: number
+        actor: string
+        action: string
+    }>
     id: string
     display_number?: string | null
     business_object_label?: string | null

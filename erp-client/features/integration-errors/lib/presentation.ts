@@ -1,6 +1,7 @@
 import type { IntegrationResolutionItemView } from "../types"
 
 export const INTEGRATION_ACTION_LABEL: Readonly<Record<string, string>> = {
+    PROCESS: "处理任务",
     QUERY_ORIGINAL_RESULT: "查询原结果",
     REPLAY_ORIGINAL: "重新提交",
     ADD_EVIDENCE: "补充证据",
@@ -37,4 +38,15 @@ export function integrationStatusTone(
     }
     if (code === "AUTO_RETRYING") return "info"
     return "warning"
+}
+
+/** 仅采用服务端已核验的当前配置鉴权记录。 */
+export function hasAuthenticationRecovery(
+    item: IntegrationResolutionItemView,
+): boolean {
+    return item.linkedEvidence.some(
+        (evidence) =>
+            evidence.kind === "BUSINESS_OBJECT_VERIFICATION" &&
+            evidence.recordId.startsWith("supplier_api_health_check_run:"),
+    )
 }

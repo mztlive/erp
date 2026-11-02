@@ -10,7 +10,7 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 
-use super::IntegrationCenterReadService;
+use super::{IntegrationCenterReadService, IntegrationErrorDetailView};
 use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
@@ -25,7 +25,11 @@ impl IntegrationCenterReadService {
     ///
     /// # 错误
     /// 任务不存在或不在范围内时返回 NotFound。
-    pub async fn error_task_detail(&self, id: &str, actor: &AuditActor) -> Result<ErrorTaskDetailView> {
+    pub async fn error_task_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<IntegrationErrorDetailView> {
         let task = self
             .db
             .integration_error_tasks()
@@ -49,14 +53,18 @@ impl IntegrationCenterReadService {
         let resolution_evidence_policy = (!task.is_terminal() && work_item.is_some()).then_some(policy);
         let mut task = task.into();
         self.error_task_names(std::slice::from_mut(&mut task)).await?;
-        Ok(ErrorTaskDetailView {
+        let work_item_id = work_item.map(|item| item.base.id);
+        let connection_failure = self.connection_failure(&task).await?;
+        let audit_history = self.error_audit_history(&task.id, work_item_id.as_deref()).await?;
+        let detail = ErrorTaskDetailView {
             task,
             resolution,
             allowed_actions,
             action_blockers,
             linked_evidence,
             resolution_evidence_policy,
-        })
+        };
+        Ok(IntegrationErrorDetailView { detail, work_item_id, connection_failure, audit_history })
     }
 
     /// 多个正式责任关联时返回 `ConflictError`，避免任选一条任务。
