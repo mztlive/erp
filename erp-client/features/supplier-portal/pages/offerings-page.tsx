@@ -4,9 +4,11 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { useRouter } from "next/navigation"
 import { DataTable, MoneyValue, QuantityValue } from "@/components/business"
-import { ListWorkSurface } from "@/components/business/list-workspace"
+import {
+    ListSearchField,
+    ListWorkSurface,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePortalOfferings } from "../hooks/queries"
 import {
@@ -122,6 +124,7 @@ export function PortalOfferingsPage() {
     )
     return (
         <PortalSurface
+            variant="list"
             title="我的供给"
             description="分别查看当前生效条款、可供情况与待采购确认的变更。"
             actions={
@@ -152,19 +155,19 @@ export function PortalOfferingsPage() {
                 }
                 toolbar={
                     <form
-                        className="flex w-full max-w-xl gap-2"
+                        className="flex w-full flex-wrap items-center gap-2 [&>[data-slot=input-group]]:w-full [&>[data-slot=input-group]]:sm:w-96"
                         onSubmit={(event) => {
                             event.preventDefault()
                             setQ(search.trim())
                             setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
                     >
-                        <Input
+                        <ListSearchField
                             id="supplier-portal-offerings-search"
                             aria-label="商品名称或订货编码"
                             placeholder="商品名称或订货编码"
                             value={search}
-                            onChange={(event) => setSearch(event.target.value)}
+                            onChange={setSearch}
                         />
                         <Button
                             id="supplier-portal-offerings-search-submit"

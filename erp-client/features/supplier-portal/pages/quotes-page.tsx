@@ -3,8 +3,10 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/business"
-import { ListWorkSurface } from "@/components/business/list-workspace"
-import { Input } from "@/components/ui/input"
+import {
+    ListSearchField,
+    ListWorkSurface,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePortalCatalog } from "../hooks/queries"
@@ -70,6 +72,7 @@ export function PortalQuotesPage() {
     )
     return (
         <PortalSurface
+            variant="list"
             title="已有商品报价"
             description="从采购向您开放的公司 SKU 中明确选择规格。公司销售价与其他供应商报价不对外开放。"
             actions={
@@ -91,18 +94,18 @@ export function PortalQuotesPage() {
                 }
                 toolbar={
                     <form
-                        className="flex w-full max-w-xl gap-2"
+                        className="flex w-full flex-wrap items-center gap-2 [&>[data-slot=input-group]]:w-full [&>[data-slot=input-group]]:sm:w-96"
                         onSubmit={(event) => {
                             event.preventDefault()
                             setQ(search.trim())
                             setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
                     >
-                        <Input
+                        <ListSearchField
                             id="supplier-portal-catalog-search"
                             aria-label="商品或公司SKU编号"
                             value={search}
-                            onChange={(event) => setSearch(event.target.value)}
+                            onChange={setSearch}
                             placeholder="商品或公司 SKU 编号"
                         />
                         <Button

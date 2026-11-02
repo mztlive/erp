@@ -1,5 +1,11 @@
 "use client"
 import type { ReactNode } from "react"
+import { PageScaffold } from "@/components/business/page"
+import { PageHeader } from "@/components/business/page-header"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api/errors"
 export function PortalSurface({
@@ -7,27 +13,45 @@ export function PortalSurface({
     description,
     actions,
     children,
+    variant = "page",
 }: {
+    variant?: "page" | "list"
     title: string
     description?: string
     actions?: ReactNode
     children: ReactNode
 }) {
     return (
-        <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 md:p-8">
-            <header className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-semibold">{title}</h1>
-                    {description && (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            {description}
-                        </p>
-                    )}
-                </div>
-                <div className="flex flex-wrap gap-2">{actions}</div>
-            </header>
+        <PageScaffold
+            className={
+                variant === "list" ? listWorkspaceStyles.page : undefined
+            }
+        >
+            {variant === "list" ? (
+                <ListWorkspaceHeader
+                    eyebrow="供应商门户"
+                    title={title}
+                    description={description}
+                >
+                    {actions ? (
+                        <div className="flex flex-wrap gap-2">{actions}</div>
+                    ) : null}
+                </ListWorkspaceHeader>
+            ) : (
+                <PageHeader
+                    title={title}
+                    description={description}
+                    actions={
+                        actions ? (
+                            <div className="flex flex-wrap gap-2">
+                                {actions}
+                            </div>
+                        ) : undefined
+                    }
+                />
+            )}
             {children}
-        </section>
+        </PageScaffold>
     )
 }
 export function PortalError({

@@ -4,9 +4,11 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { useRouter } from "next/navigation"
 import { DataTable } from "@/components/business"
-import { ListWorkSurface } from "@/components/business/list-workspace"
+import {
+    ListSearchField,
+    ListWorkSurface,
+} from "@/components/business/list-workspace"
 import { OptionCombobox } from "@/components/business/option-combobox"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePortalApplications } from "../hooks/queries"
@@ -75,6 +77,7 @@ export function PortalApplicationsPage() {
     )
     return (
         <PortalSurface
+            variant="list"
             title="我的申请"
             description="草稿可修改；送审后的供应商原稿保留，采购确认前不影响生效条款。"
         >
@@ -87,19 +90,19 @@ export function PortalApplicationsPage() {
                 }
                 toolbar={
                     <form
-                        className="flex w-full max-w-xl gap-2"
+                        className="flex w-full flex-wrap items-center gap-2 [&>[data-slot=input-group]]:w-full [&>[data-slot=input-group]]:sm:w-96"
                         onSubmit={(event) => {
                             event.preventDefault()
                             setQ(search.trim())
                             setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
                     >
-                        <Input
+                        <ListSearchField
                             id="supplier-portal-applications-search"
                             aria-label="搜索申请"
                             placeholder="搜索申请"
                             value={search}
-                            onChange={(event) => setSearch(event.target.value)}
+                            onChange={setSearch}
                         />
                         <OptionCombobox
                             id="supplier-portal-applications-status"
