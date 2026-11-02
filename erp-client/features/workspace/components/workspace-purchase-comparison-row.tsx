@@ -1,3 +1,4 @@
+import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { MoneyValue, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -159,19 +160,10 @@ export function PurchaseComparisonRow({
                 </TableCell>
                 <TableCell>
                     {line.source ? (
-                        line.source.procurement_supply_price_gross != null &&
-                        line.source.procurement_supply_price_gross !== "" ? (
-                            <MoneyValue
-                                value={
-                                    line.source.procurement_supply_price_gross
-                                }
-                                display="exact"
-                            />
-                        ) : (
-                            <span className="text-xs text-muted-foreground">
-                                未填写
-                            </span>
-                        )
+                        <SalesLinePriceComparison
+                            prices={line.source.sales_prices ?? line.source}
+                            showSalesPrice={false}
+                        />
                     ) : (
                         "—"
                     )}

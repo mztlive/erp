@@ -1,3 +1,4 @@
+import type { SalesLinePrices } from "@/lib/sales-line-prices"
 import type { SourceImpactReasonView } from "@/features/purchase-orders/lib/source-impact"
 /** W08 采购单 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
@@ -210,6 +211,7 @@ export type PurchaseSourceSalesOrderView = Readonly<{
     contractNo?: string
     totals: { gross: string; net: string; tax: string }
     lines: readonly Readonly<{
+        salesPrices?: SalesLinePrices
         salesOrderRevisionLineId: string
         salesOrderLineId: string
         lineNo: number
@@ -515,6 +517,7 @@ export type PurchaseCreationBasis = Readonly<{
     priceBasis?: SupplyPriceBasis
     /** 可拆入本单的销售当前版本行 */
     lines: readonly {
+        salesPrices?: SalesLinePrices
         salesOrderLineId: string
         salesOrderRevisionLineId: string
         itemName: string

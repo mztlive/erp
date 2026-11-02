@@ -23,6 +23,7 @@ macro_rules! stored_line_view {
                         pricing_mode: line.pricing_mode,
                         delivery_allocations: line.delivery_allocations,
                         reference_prices: None,
+                        original_procurement_supply_price_gross: None,
                         id: line.base.id,
                         sales_order_line_id: line.sales_order_line_id.to_string(),
                         line_no: line.line_no,

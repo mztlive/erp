@@ -10,7 +10,7 @@ import {
 import { SalesTimeline } from "@/features/document-timeline/components/sales-timeline"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SalesOrderDetailView } from "../api/sales-orders"
-import { ApprovalPanel } from "./sales-order-detail-approval-panel"
+import { SalesOrderProcessPanel } from "./sales-order-process-panel"
 import {
     AcceptancePanel,
     CollaborationPanel,
@@ -135,13 +135,13 @@ export function SalesOrderDetailTabs({
             items={items}
             listLabel="销售单分区"
             listClassName="border-border/70"
-            sidebar={sidebar}
+            sidebar={group === "timeline" ? undefined : sidebar}
             scrollMode="panels"
             scrollResetKey={navSection}
             beforeContent={beforeContent}
         >
             <ObjectSectionTabsPanel value={group}>
-                {subitems.length > 1 ? (
+                {group !== "timeline" && subitems.length > 1 ? (
                     <nav
                         aria-label="当前分区内容"
                         className="flex flex-wrap gap-2"
@@ -210,14 +210,13 @@ export function SalesOrderDetailTabs({
                         ) : null}
                     </>
                 ) : null}
-                {navSection === "timeline" ? (
-                    <SalesTimeline
-                        salesOrderId={order.id}
-                        idPrefix={`sales-detail-timeline-${prefix}`}
+                {group === "timeline" ? (
+                    <SalesOrderProcessPanel
+                        key={order.id}
+                        order={order}
+                        section={navSection}
+                        onSelectSection={onSelectSection}
                     />
-                ) : null}
-                {navSection === "approval" ? (
-                    <ApprovalPanel order={order} />
                 ) : null}
                 {navSection === "fulfillment" ? (
                     isCard ? (

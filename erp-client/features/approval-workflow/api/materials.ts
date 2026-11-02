@@ -1,3 +1,4 @@
+import type { SalesLinePrices } from "@/lib/sales-line-prices"
 import { apiGet, apiGetBlob } from "@/lib/api"
 
 /** 仅提交时冻结的展示与文件白名单；关联对象标识不构成读取入口。 */
@@ -97,6 +98,7 @@ export type ApprovalPurchaseLine = {
         quantity: string
     }[]
     source: {
+        sales_prices?: SalesLinePrices | null
         revision_id: string
         title: string
         specification: string | null
@@ -105,6 +107,8 @@ export type ApprovalPurchaseLine = {
         unit_price_gross: string
         /** 销售填写的采购供给价（含税单价）；未填写为空。 */
         procurement_supply_price_gross?: string | null
+        original_procurement_supply_price_gross?: string | null
+        procurement_price_basis?: "BULK" | "DROPSHIP" | null
         fulfillment_due_at: number
     } | null
 }
@@ -152,6 +156,8 @@ export type ApprovalSalesSubmission = {
         fulfillment_due_at: number | null
         /** 销售填写的采购供给价（含税单价）；未填写时缺省。 */
         procurement_supply_price_gross?: string | null
+        original_procurement_supply_price_gross?: string | null
+        procurement_price_basis?: "BULK" | "DROPSHIP" | null
         face_value: string | null
         card_count: number | null
         card_form: string | null

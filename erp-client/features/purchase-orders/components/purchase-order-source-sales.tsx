@@ -1,5 +1,6 @@
 "use client"
 
+import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 import { useRef, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -84,6 +85,20 @@ const SALES_COLUMNS: ColumnDef<SalesLine>[] = [
         cell: ({ row }) => (
             <MoneyValue display="exact" value={row.original.unitPriceGross} />
         ),
+    },
+    {
+        id: "supply-prices",
+        header: "采购供给价对比（含税）",
+        meta: { label: "采购供给价对比（含税）", width: "reference" },
+        cell: ({ row }) =>
+            row.original.salesPrices ? (
+                <SalesLinePriceComparison
+                    prices={row.original.salesPrices}
+                    showSalesPrice={false}
+                />
+            ) : (
+                "—"
+            ),
     },
     {
         id: "gross",

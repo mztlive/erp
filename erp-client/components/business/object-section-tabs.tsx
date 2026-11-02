@@ -165,6 +165,18 @@ function ObjectSectionTabs({
                         sidebar
                     )}
                 </div>
+            ) : panelScroll ? (
+                <div
+                    ref={contentRef}
+                    id={baseId ? `${baseId}-content-scroll` : undefined}
+                    tabIndex={0}
+                    role="region"
+                    aria-label={`${listLabel}明细`}
+                    className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
+                >
+                    {beforeContent}
+                    {children}
+                </div>
             ) : (
                 <>
                     {beforeContent}

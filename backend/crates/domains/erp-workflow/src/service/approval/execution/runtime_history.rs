@@ -6,6 +6,8 @@ use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
 use serde::{Deserialize, Serialize};
 
+pub use crate::repository::bpm::ExecutionHistoryOrder;
+
 /// 单条执行历史。字段与前端审批 Tab 合同对齐。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeHistoryItem {
@@ -65,7 +67,7 @@ impl RuntimeHistoryItem {
 /// 执行历史分页。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeHistoryPage {
-    /// 当前页，按 `execution_no` 升序。
+    /// 当前页，按请求指定的 `execution_no` 方向排序。
     pub items: Vec<RuntimeHistoryItem>,
     /// 下一页游标，值为本页最后一条 `execution_no`。
     pub next_cursor: Option<String>,
@@ -104,7 +106,7 @@ pub fn history_item_from_execution(execution: &ApprovalNodeExecution) -> Runtime
 /// 用多取一条的结果切出当前页并生成游标。
 ///
 /// # 参数
-/// * `items` - 已按 `execution_no` 升序、长度不超过 `limit + 1` 的映射结果
+/// * `items` - 已按请求方向排序、长度不超过 `limit + 1` 的映射结果
 /// * `limit` - 合同页大小
 ///
 /// # 返回
@@ -248,5 +250,23 @@ mod tests {
         assert!(!page.has_more);
         assert!(page.next_cursor.is_none());
         assert!(latest_rejection_reason(&page.items).is_none());
+    }
+
+    #[test]
+    fn descending_history_keeps_latest_rows_and_uses_oldest_loaded_cursor() {
+        let rows = (1..=51).rev().map(|number| history_item(number, "APPROVED", None)).collect();
+        let page = history_page_from(rows, 50);
+        assert_eq!(page.items.first().unwrap().execution_no, 51);
+        assert_eq!(page.items.last().unwrap().execution_no, 2);
+        assert_eq!(page.next_cursor.as_deref(), Some("2"));
+        assert!(page.has_more);
+        let tail = history_page_from(vec![history_item(1, "REJECTED", Some("资料不全"))], 50);
+        assert_eq!(tail.items[0].execution_no, 1);
+        assert!(!tail.has_more);
+        assert!(tail.next_cursor.is_none());
+        let empty = history_page_from(Vec::new(), 50);
+        assert!(empty.items.is_empty());
+        assert!(!empty.has_more);
+        assert!(empty.next_cursor.is_none());
     }
 }

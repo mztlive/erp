@@ -9,7 +9,10 @@ import { useTimelineQuery } from "../hooks/queries"
 import type { TimelineCategory, TimelineSource } from "../types"
 import { TimelineEvents } from "./timeline-events"
 
-const categories: Array<{ value: TimelineCategory; label: string }> = [
+export const timelineCategories: Array<{
+    value: TimelineCategory
+    label: string
+}> = [
     { value: "sales", label: "销售" },
     { value: "approval", label: "审批" },
     { value: "procurement", label: "采购" },
@@ -25,12 +28,19 @@ export function SalesTimeline({
     compact = false,
     onOpenFull,
     fixedCategory,
+    embedded = false,
+    includeDetails: includedDetails,
+    plainApprovalReasons = false,
 }: {
     salesOrderId: string
     idPrefix: string
     compact?: boolean
     onOpenFull?: () => void
     fixedCategory?: TimelineCategory
+    /** 已由父级提供标题和筛选时，只展示记录正文。 */
+    embedded?: boolean
+    includeDetails?: boolean
+    plainApprovalReasons?: boolean
 }) {
     const [category, setCategory] = useState<TimelineCategory | undefined>()
     const [includeDetails, setIncludeDetails] = useState(false)
@@ -38,7 +48,7 @@ export function SalesTimeline({
         { kind: "sales", id: salesOrderId },
         {
             category: fixedCategory ?? category,
-            includeDetails,
+            includeDetails: includedDetails ?? includeDetails,
             pageSize: compact ? 5 : 30,
         },
     )
@@ -48,25 +58,27 @@ export function SalesTimeline({
             className="space-y-5"
             aria-label={compact ? "最近动态" : "销售单全流程"}
         >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-medium">
-                    {compact
-                        ? "最近动态"
-                        : fixedCategory === "returns"
-                          ? "售后与调整记录"
-                          : "全流程时间线"}
-                </h3>
-                <Button
-                    id={`${idPrefix}-refresh`}
-                    variant="ghost"
-                    size="sm"
-                    disabled={query.isFetching}
-                    onClick={() => void query.refetch()}
-                >
-                    刷新
-                </Button>
-            </div>
-            {!compact && !fixedCategory && (
+            {!embedded ? (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="text-sm font-medium">
+                        {compact
+                            ? "最近动态"
+                            : fixedCategory === "returns"
+                              ? "售后与调整记录"
+                              : "全流程时间线"}
+                    </h3>
+                    <Button
+                        id={`${idPrefix}-refresh`}
+                        variant="ghost"
+                        size="sm"
+                        disabled={query.isFetching}
+                        onClick={() => void query.refetch()}
+                    >
+                        刷新
+                    </Button>
+                </div>
+            ) : null}
+            {!embedded && !compact && !fixedCategory && (
                 <div className="flex flex-wrap items-center gap-3">
                     <label htmlFor={`${idPrefix}-category`} className="text-sm">
                         业务环节
@@ -85,7 +97,7 @@ export function SalesTimeline({
                         <NativeSelectOption value="">
                             全部环节
                         </NativeSelectOption>
-                        {categories.map((item) => (
+                        {timelineCategories.map((item) => (
                             <NativeSelectOption
                                 key={item.value}
                                 value={item.value}
@@ -130,6 +142,7 @@ export function SalesTimeline({
                 <TimelineEvents
                     events={compact ? events.slice(0, 5) : events}
                     idPrefix={idPrefix}
+                    plainApprovalReasons={plainApprovalReasons}
                 />
             )}
             {!compact && query.hasNextPage && (

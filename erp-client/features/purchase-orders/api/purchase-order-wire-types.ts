@@ -1,3 +1,4 @@
+import type { SalesLinePrices } from "@/lib/sales-line-prices"
 import type { SourceImpactReasonWire } from "@/features/purchase-orders/lib/source-impact"
 /**
  * W08 采购单 · 后端 wire 类型（真实 HTTP API 响应形状）。
@@ -191,6 +192,7 @@ export type BackendPurchaseSourceSalesOrder = {
     contract_no?: string | null
     totals: { gross: string; net: string; tax: string }
     lines: {
+        sales_prices?: SalesLinePrices | null
         sales_order_revision_line_id: string
         sales_order_line_id: string
         line_no: number
@@ -225,6 +227,7 @@ export type BackendDeliveryTerm =
     | "NOT_DELIVERABLE"
 
 export type BackendBasisLine = {
+    sales_prices?: SalesLinePrices | null
     delivery_template_name?: string | null
     delivery_terms?: { region_code: string; term: BackendDeliveryTerm }[]
     warehouse_delivery_terms?: {

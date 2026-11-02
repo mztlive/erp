@@ -15,7 +15,9 @@ use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
 use super::super::apply_plan::PlannedWrites;
-use super::super::runtime_history::{RuntimeHistoryPage, history_item_from_execution, history_page_from};
+use super::super::runtime_history::{
+    ExecutionHistoryOrder, RuntimeHistoryPage, history_item_from_execution, history_page_from,
+};
 use super::super::runtime_query::{
     RuntimeInstanceListView, RuntimeInstanceStatusFilter, RuntimeRecoveryAction, recovery_options_for,
 };
@@ -182,9 +184,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// * `instance_id` - 实例 ID
     /// * `after_execution_no` - 上一页最后执行序号；首页为空
     /// * `limit` - 页大小
+    /// * `order` - 分页方向。
     ///
     /// # 返回
-    /// 返回按 `execution_no` 升序的历史页，字段对齐审批 Tab。
+    /// 返回指定方向的历史页，字段对齐审批 Tab。
     ///
     /// # 错误
     /// 读者无效或不存在、无权时不泄露存在性；仓储失败时返回对应错误。
@@ -194,6 +197,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         instance_id: &str,
         after_execution_no: Option<u32>,
         limit: u32,
+        order: ExecutionHistoryOrder,
     ) -> Result<RuntimeHistoryPage> {
         self.ensure_active_instance_reader(actor).await?;
         let subject = self.load_runtime_read_subject(instance_id).await?;
@@ -202,10 +206,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let rows = self
             .db
             .bpm_workflow()
-            .list_execution_history(
-                &bpm::ids::ApprovalProcessInstanceId::new(instance_id),
+            .list_execution_history_ordered(
+                &ApprovalProcessInstanceId::new(instance_id),
                 after_execution_no,
                 fetch_limit,
+                order,
                 &mut NoTransaction,
             )
             .await?;

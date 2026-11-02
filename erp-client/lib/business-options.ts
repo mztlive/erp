@@ -36,14 +36,34 @@ export const PAYMENT_TERM_OPTIONS: readonly ComboboxOption[] = [
 ]
 
 /**
- * 福利场景（对齐后端 `WelfareScenario` / 数据模型 §6.4）。
+ * 当前可选福利场景（对齐后端 `WelfareScenario`）。
  * value 为稳定码；展示用 label。
  */
 export const WELFARE_SCENARIO_OPTIONS: readonly ComboboxOption[] = [
     {
         value: "ANNUAL_GIFT_BAG",
-        label: "年节礼包",
+        label: "礼包",
         keywords: "春节 端午 中秋 国庆 节日 礼品",
+    },
+    {
+        value: "ASSISTANCE_PRODUCT",
+        label: "帮扶产品",
+        keywords: "帮扶 助农 扶贫",
+    },
+    {
+        value: "CAKE_VOUCHER",
+        label: "蛋糕券",
+        keywords: "蛋糕 生日 烘焙",
+    },
+    {
+        value: "MOVIE_TICKET",
+        label: "电影票",
+        keywords: "电影 影院 观影",
+    },
+    {
+        value: "UNION_CONSUMPTION_VOUCHER",
+        label: "工会消费券",
+        keywords: "工会 消费券",
     },
     {
         value: "MEAL_SUBSIDY",
@@ -51,21 +71,21 @@ export const WELFARE_SCENARIO_OPTIONS: readonly ComboboxOption[] = [
         keywords: "餐饮 饭补 用餐",
     },
     {
-        value: "CONDOLENCE_GIFT",
-        label: "慰问品",
-        keywords: "慰问 探访 关怀 困难",
-    },
-    {
-        value: "CONSUMPTION_FUND",
-        label: "消费金",
-        keywords: "积分 额度 商城 卡券额度",
-    },
-    {
-        value: "OTHER",
-        label: "其他",
-        keywords: "自定义 其它",
+        value: "ACTIVITY",
+        label: "活动",
+        keywords: "活动 团建 文体",
     },
 ] as const
+
+/** 历史名称与停用场景只用于读取，不加入新建下拉框。 */
+const WELFARE_SCENARIO_LOOKUP: readonly ComboboxOption[] = [
+    ...WELFARE_SCENARIO_OPTIONS,
+    { value: "ANNUAL_GIFT_BAG", label: "年节礼包" },
+    { value: "CONDOLENCE_GIFT", label: "慰问品" },
+    { value: "CONSUMPTION_FUND", label: "消费金" },
+    { value: "OTHER", label: "其他" },
+    { value: "OTHER", label: "其它" },
+]
 
 /** 入库质量结果。 */
 export const QUALITY_RESULT_OPTIONS: readonly ComboboxOption[] = [
@@ -177,13 +197,22 @@ export function paymentTermLabel(code: string): string {
     )
 }
 
+/** 福利场景码或中文名称转稳定代码，兼容历史名称。 */
+export function welfareScenarioCode(raw: string): string | undefined {
+    const value = raw.trim()
+    if (!value) return undefined
+    return WELFARE_SCENARIO_LOOKUP.find(
+        (option) => option.value === value || option.label === value,
+    )?.value
+}
+
 /** 福利场景码 → 中文；未知值原样返回（兼容历史自由文本）。 */
 export function welfareScenarioLabel(code: string): string {
     const trimmed = code.trim()
     if (!trimmed) return ""
+    const normalized = welfareScenarioCode(trimmed)
     return (
-        WELFARE_SCENARIO_OPTIONS.find(
-            (o) => o.value === trimmed || o.label === trimmed,
-        )?.label ?? trimmed
+        WELFARE_SCENARIO_LOOKUP.find((option) => option.value === normalized)
+            ?.label ?? trimmed
     )
 }

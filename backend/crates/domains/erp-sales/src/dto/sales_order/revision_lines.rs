@@ -70,6 +70,7 @@ impl SalesOrderWorkingCopyLineView {
             pricing_mode: Default::default(),
             delivery_allocations: Vec::new(),
             reference_prices: None,
+            original_procurement_supply_price_gross: None,
             face_value: None,
             card_count: None,
             transaction_amount: None,

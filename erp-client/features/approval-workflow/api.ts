@@ -41,6 +41,7 @@ export type ApprovalHistoryParams = Readonly<{
     instanceId: string
     cursor?: string
     limit?: number
+    order?: "asc" | "desc"
 }>
 
 export {
@@ -140,6 +141,7 @@ export const listApprovalHistory = async (
         {
             cursor: params.cursor,
             limit: params.limit ?? 50,
+            order: params.order,
         },
     )
     return {

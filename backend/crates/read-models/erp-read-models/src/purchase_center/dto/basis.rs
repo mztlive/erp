@@ -4,6 +4,7 @@ use erp_core::delivery_policy::DeliveryTerm;
 use erp_procurement::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseInquiryQuoteSource};
 
 use super::*;
+use crate::sales_center::prices::SalesLinePrices;
 
 /// 某收货地区的配送判定。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -52,6 +53,8 @@ pub struct CreationBasisListParams {
 /// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisLineView {
+    /// 同一授权销售版本行的原供给价、销售填写价和销售价。
+    pub sales_prices: Option<SalesLinePrices>,
     /// 本方案的配送判定。
     #[serde(flatten)]
     pub delivery: CreationBasisDeliveryView,
@@ -153,6 +156,7 @@ impl CreationBasisLineView {
         gross_amount: String,
     ) -> Self {
         Self {
+            sales_prices: None,
             delivery: CreationBasisDeliveryView::default(),
             quantity_scale: None,
             delivery_allocations: Vec::new(),

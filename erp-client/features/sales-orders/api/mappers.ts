@@ -1,4 +1,5 @@
 import type { SalesOrdersListQuery } from "@/features/sales-orders/api/contracts"
+import { welfareScenarioCode } from "@/lib/business-options"
 import { divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 
 export {
@@ -129,28 +130,7 @@ export function mapCardForm(label: string): string {
 
 /** 福利场景：表单码 / 中文 → 后端 SCREAMING_SNAKE_CASE；无法识别则 null。 */
 export function mapWelfareScenarioCode(raw: string): string | null {
-    const value = raw.trim()
-    if (!value) return null
-    switch (value) {
-        case "ANNUAL_GIFT_BAG":
-        case "年节礼包":
-            return "ANNUAL_GIFT_BAG"
-        case "MEAL_SUBSIDY":
-        case "餐补":
-            return "MEAL_SUBSIDY"
-        case "CONDOLENCE_GIFT":
-        case "慰问品":
-            return "CONDOLENCE_GIFT"
-        case "CONSUMPTION_FUND":
-        case "消费金":
-            return "CONSUMPTION_FUND"
-        case "OTHER":
-        case "其他":
-        case "其它":
-            return "OTHER"
-        default:
-            return null
-    }
+    return welfareScenarioCode(raw) ?? null
 }
 
 export function percentToRate(percent: string): string {

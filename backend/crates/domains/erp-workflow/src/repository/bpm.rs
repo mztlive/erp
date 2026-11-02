@@ -34,6 +34,17 @@ const MAX_EXECUTION_HISTORY: i64 = 50;
 const MAX_INSTANCE_PAGE: i64 = 101;
 const MAX_CATALOG_STATUS_ROWS: i64 = 80;
 
+/// 执行历史的稳定分页顺序；默认保留从早到晚的读取合同。
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionHistoryOrder {
+    /// 从早到晚，游标之后读取更大的执行序号。
+    #[default]
+    Asc,
+    /// 从晚到早，游标之后读取更小的执行序号。
+    Desc,
+}
+
 /// CAS 写入结果。未命中必须区分为不存在、版本冲突或状态变化。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CasWriteOutcome<T> {

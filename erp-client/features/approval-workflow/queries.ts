@@ -35,8 +35,13 @@ export const approvalKeys = {
         [...approvalKeys.all, "instance", instanceId] as const,
     document: (documentType: string, documentId: string) =>
         [...approvalKeys.all, "document", documentType, documentId] as const,
-    history: (instanceId: string) =>
-        [...approvalKeys.all, "history", instanceId] as const,
+    history: (instanceId: string, order?: "asc" | "desc") =>
+        [
+            ...approvalKeys.all,
+            "history",
+            instanceId,
+            ...(order === "desc" ? ["desc"] : []),
+        ] as const,
     recoveryOptions: (instanceId: string) =>
         [...approvalKeys.all, "recovery-options", instanceId] as const,
 }
@@ -114,7 +119,7 @@ export const useApprovalHistoryInfiniteQuery = (
     enabled = true,
 ) =>
     useInfiniteQuery({
-        queryKey: approvalKeys.history(params.instanceId),
+        queryKey: approvalKeys.history(params.instanceId, params.order),
         queryFn: ({ pageParam }) =>
             listApprovalHistory({
                 ...params,

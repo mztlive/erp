@@ -1,5 +1,7 @@
 "use client"
 
+import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
+
 import {
     MoneyValue,
     PaperDocument,
@@ -243,17 +245,12 @@ export function ApprovalSalesOrderPaper({
                               align: "end" as const,
                               cell: (
                                   row: ApprovalSalesSubmission["lines"][number],
-                              ) =>
-                                  row.procurement_supply_price_gross ? (
-                                      <MoneyValue
-                                          display="exact"
-                                          value={
-                                              row.procurement_supply_price_gross
-                                          }
-                                      />
-                                  ) : (
-                                      "—"
-                                  ),
+                              ) => (
+                                  <SalesLinePriceComparison
+                                      prices={row}
+                                      showSalesPrice={false}
+                                  />
+                              ),
                           },
                           {
                               id: "due",

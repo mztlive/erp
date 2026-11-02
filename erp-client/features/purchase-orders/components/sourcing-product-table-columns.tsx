@@ -1,5 +1,7 @@
 "use client"
 
+import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
+
 import type { ColumnDef } from "@/components/business/data-table"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -91,6 +93,19 @@ export function sourcingProductColumns({
                 </div>
             ),
             meta: { label: "商品 / 规格", width: "reference" },
+        },
+        {
+            id: "sales-prices",
+            header: "销售与供给价对比（含税）",
+            cell: ({ row: { original: row } }) =>
+                row.product.salesPrices ? (
+                    <SalesLinePriceComparison
+                        prices={row.product.salesPrices}
+                    />
+                ) : (
+                    "—"
+                ),
+            meta: { label: "销售与供给价对比（含税）", width: "reference" },
         },
         {
             id: "demand",

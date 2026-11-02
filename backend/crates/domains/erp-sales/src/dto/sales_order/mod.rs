@@ -645,6 +645,9 @@ pub struct SalesOrderWorkingCopyLineView {
     /// 精确 SKU 修订的只读参考价；单域映射不补齐此字段。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reference_prices: Option<SalesReferencePricesView>,
+    /// 按下单锁定 SKU 修订及取价档位解析的原采购供给价；缺少依据时为空。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_procurement_supply_price_gross: Option<UnitPrice>,
     /// 单卡面额。
     pub face_value: Option<Amount>,
     /// 卡张数。

@@ -5,7 +5,10 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Result, mongo_ops};
 
-use super::{ASSIGNEES, BpmWorkflowRepository, EXECUTIONS, MAX_EXECUTION_HISTORY, clamp_limit, find_limited};
+use super::{
+    ASSIGNEES, BpmWorkflowRepository, EXECUTIONS, ExecutionHistoryOrder, MAX_EXECUTION_HISTORY, clamp_limit,
+    find_limited,
+};
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 按主键读取审批节点执行。
@@ -171,11 +174,43 @@ impl<'a> BpmWorkflowRepository<'a> {
         limit: u32,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ApprovalNodeExecution>> {
+        self.list_execution_history_ordered(
+            instance_id,
+            after_execution_no,
+            u32::try_from(execution_history_limit(limit)).expect("历史上限为 50，必定落入 u32"),
+            ExecutionHistoryOrder::Asc,
+            executor,
+        )
+        .await
+    }
+
+    /// 按指定方向读取历史；为最多 100 条的 HTTP 分页保留一条额外记录。
+    ///
+    /// # 参数
+    /// * `instance_id` - 审批流程实例 ID。
+    /// * `cursor` - 上一页最后执行序号；首页为空。
+    /// * `limit` - 本次读取条数，夹紧至 `[1, 101]`。
+    /// * `order` - 执行序号排序方向，同时决定游标比较方向。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回含当前未完成执行的有界历史列表，使用已有实例与执行序号索引。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_execution_history_ordered(
+        &self,
+        instance_id: &ApprovalProcessInstanceId,
+        cursor: Option<u32>,
+        limit: u32,
+        order: ExecutionHistoryOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalNodeExecution>> {
         find_limited(
             &self.db.collection(EXECUTIONS),
-            execution_history_filter(instance_id, after_execution_no),
-            doc! { "execution_no": 1 },
-            execution_history_limit(limit),
+            execution_history_filter(instance_id, cursor, order),
+            execution_history_sort(order),
+            execution_history_page_limit(limit),
             executor,
         )
         .await
@@ -187,24 +222,62 @@ impl<'a> BpmWorkflowRepository<'a> {
 /// # 参数
 /// * `instance_id` - 所属流程实例
 /// * `after_execution_no` - 上一页最后一条执行序号；首页为空
+/// * `order` - 排序方向，升序使用 `$gt`，降序使用 `$lt`。
 ///
 /// # 返回
-/// 返回含软删除约束、实例主键与可选 `execution_no $gt` 的查询文档。
+/// 返回含软删除约束、实例主键与指定方向游标的查询文档。
 ///
 /// # 错误
 /// 不返回错误。
 pub(super) fn execution_history_filter(
     instance_id: &ApprovalProcessInstanceId,
     after_execution_no: Option<u32>,
+    order: ExecutionHistoryOrder,
 ) -> Document {
     let mut filter = doc! {
         "process_instance_id": instance_id.as_ref(),
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
     };
     if let Some(after_execution_no) = after_execution_no {
-        filter.insert("execution_no", doc! { "$gt": i64::from(after_execution_no) });
+        let operator = match order {
+            ExecutionHistoryOrder::Asc => "$gt",
+            ExecutionHistoryOrder::Desc => "$lt",
+        };
+        filter.insert("execution_no", doc! { operator: i64::from(after_execution_no) });
     }
     filter
+}
+
+/// 构造与历史游标方向一致的排序。
+///
+/// # 参数
+/// * `order` - 执行序号读取方向。
+///
+/// # 返回
+/// 返回现有唯一执行序号索引支持的稳定排序。
+///
+/// # 错误
+/// 不返回错误。
+pub(super) fn execution_history_sort(order: ExecutionHistoryOrder) -> Document {
+    let direction = match order {
+        ExecutionHistoryOrder::Asc => 1,
+        ExecutionHistoryOrder::Desc => -1,
+    };
+    doc! { "execution_no": direction }
+}
+
+/// 限制分页读取上限，并为最多 100 条记录保留一条后续页判断记录。
+///
+/// # 参数
+/// * `limit` - 包含后续页判断记录的请求条数。
+///
+/// # 返回
+/// 返回 `[1, 101]` 内的 MongoDB 读取上限。
+///
+/// # 错误
+/// 不返回错误。
+pub(super) fn execution_history_page_limit(limit: u32) -> i64 {
+    clamp_limit(limit, 101)
 }
 
 /// 将执行历史请求页大小夹紧到 `[1, MAX_EXECUTION_HISTORY]`。

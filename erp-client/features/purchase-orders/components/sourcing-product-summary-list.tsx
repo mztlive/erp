@@ -1,5 +1,7 @@
 "use client"
 
+import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
+
 import { useState, type ReactNode } from "react"
 import { ChevronRightIcon } from "lucide-react"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
@@ -116,6 +118,13 @@ export function SourcingProductSummaryList({
                                         ) : null}
                                     </span>
                                 </div>
+                                {row.product.salesPrices ? (
+                                    <div className="px-4 pt-2">
+                                        <SalesLinePriceComparison
+                                            prices={row.product.salesPrices}
+                                        />
+                                    </div>
+                                ) : null}
                                 <button
                                     id={`${id}-adjust`}
                                     type="button"

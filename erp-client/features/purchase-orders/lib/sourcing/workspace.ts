@@ -131,6 +131,7 @@ function productFromBasisLine(
         salesOrderLineId: line.salesOrderLineId,
         itemName: line.itemName,
         itemSku: line.itemSku,
+        salesPrices: line.salesPrices,
         unit: line.unit,
         quantityScale: line.quantityScale,
         salesQuantity: line.salesQuantity,

@@ -9,7 +9,6 @@ import { multiplyFixed, subtractFixed } from "@/lib/fixed-decimal"
 import {
     PAYMENT_TERM_OPTIONS,
     paymentTermLabel,
-    WELFARE_SCENARIO_OPTIONS,
     welfareScenarioLabel,
 } from "@/lib/business-options"
 import type {
@@ -435,9 +434,7 @@ export async function fetchSalesOrderDraftForResume(
     const remark = wc?.business_remark ?? latestSubmission?.business_remark
     const lines = source.lines ?? []
 
-    const welfareScene =
-        WELFARE_SCENARIO_OPTIONS.find((o) => o.label === projectName)?.value ??
-        ""
+    const welfareScene = mapWelfareScenarioCode(projectName ?? "") ?? ""
     const paymentTerms =
         PAYMENT_TERM_OPTIONS.find((o) => o.label === paymentTermName)?.value ??
         "CONTRACT"

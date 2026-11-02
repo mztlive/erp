@@ -14,7 +14,10 @@ use super::definition_query::{
     latest_definition_version_from_rows, latest_definition_version_options, published_kind_docs_filter,
     unique_process_kinds, unique_published_definition,
 };
-use super::execution_query::{current_execution_filter, execution_history_filter, execution_history_limit};
+use super::execution_query::{
+    current_execution_filter, execution_history_filter, execution_history_limit,
+    execution_history_page_limit, execution_history_sort,
+};
 use super::instance_query::{
     cancellation_subject_filter, instance_text_query_or, latest_subject_filter, non_terminal_subject_filter,
 };
@@ -25,11 +28,11 @@ use super::runtime_write::{
 use super::{
     ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
     ApprovalInstanceListView, ApprovalInstanceTextQuery, AssignDocumentNoOutcome, CasWriteOutcome,
-    DefinitionCatalogRow, DefinitionCatalogStatusFact, LatestDefinitionVersionProjection,
-    MAX_CATALOG_STATUS_ROWS, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
-    approval_task_cas_filter, assign_document_no_filter, clamp_limit, classify_assign_document_no_miss,
-    classify_cas_miss, instance_list_filter_doc, instance_list_scope_empty, instance_list_sort,
-    instance_summary_projection, merge_documents,
+    DefinitionCatalogRow, DefinitionCatalogStatusFact, ExecutionHistoryOrder,
+    LatestDefinitionVersionProjection, MAX_CATALOG_STATUS_ROWS, MAX_DEFINITION_GRAPH_DOCS,
+    MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE, approval_task_cas_filter, assign_document_no_filter,
+    clamp_limit, classify_assign_document_no_miss, classify_cas_miss, instance_list_filter_doc,
+    instance_list_scope_empty, instance_list_sort, instance_summary_projection, merge_documents,
 };
 
 #[derive(Clone)]
@@ -662,12 +665,12 @@ fn instance_list_text_query_is_literal_and_composes_with_cursor() {
 #[test]
 fn execution_history_filter_and_limit_are_bounded() {
     let instance_id = ApprovalProcessInstanceId::new("inst-1");
-    let first_page = execution_history_filter(&instance_id, None);
+    let first_page = execution_history_filter(&instance_id, None, ExecutionHistoryOrder::Asc);
     assert_eq!(first_page.get_str("process_instance_id").unwrap(), "inst-1");
     assert_eq!(first_page.get_i64("deleted_at").unwrap(), 0);
     assert!(!first_page.contains_key("execution_no"));
 
-    let next_page = execution_history_filter(&instance_id, Some(7));
+    let next_page = execution_history_filter(&instance_id, Some(7), ExecutionHistoryOrder::Asc);
     assert_eq!(next_page.get_document("execution_no").unwrap(), &doc! { "$gt": 7_i64 });
     assert_eq!(next_page.get_str("process_instance_id").unwrap(), "inst-1");
     assert_eq!(execution_history_limit(0), 1);
@@ -675,6 +678,25 @@ fn execution_history_filter_and_limit_are_bounded() {
     assert_eq!(execution_history_limit(51), MAX_EXECUTION_HISTORY);
     assert_eq!(execution_history_limit(u32::MAX), MAX_EXECUTION_HISTORY);
     assert_eq!(MAX_EXECUTION_HISTORY, 50);
+}
+
+#[test]
+fn execution_history_descending_cursor_reads_strictly_earlier_rows() {
+    let instance_id = ApprovalProcessInstanceId::new("inst-1");
+    let first_page = execution_history_filter(&instance_id, None, ExecutionHistoryOrder::Desc);
+    assert_eq!(first_page.get_str("process_instance_id").unwrap(), "inst-1");
+    assert_eq!(first_page.get_i64("deleted_at").unwrap(), 0);
+    assert!(!first_page.contains_key("execution_no"));
+    let next_page = execution_history_filter(&instance_id, Some(7), ExecutionHistoryOrder::Desc);
+    assert_eq!(next_page.get_document("execution_no").unwrap(), &doc! { "$lt": 7_i64 });
+    assert_eq!(execution_history_sort(ExecutionHistoryOrder::Desc), doc! { "execution_no": -1 });
+    assert_eq!(execution_history_sort(ExecutionHistoryOrder::Asc), doc! { "execution_no": 1 });
+    let boundary = execution_history_filter(&instance_id, Some(0), ExecutionHistoryOrder::Desc);
+    assert_eq!(boundary.get_document("execution_no").unwrap(), &doc! { "$lt": 0_i64 });
+    assert_eq!(execution_history_page_limit(0), 1);
+    assert_eq!(execution_history_page_limit(51), 51);
+    assert_eq!(execution_history_page_limit(101), 101);
+    assert_eq!(execution_history_page_limit(u32::MAX), 101);
 }
 
 #[test]

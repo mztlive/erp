@@ -28,6 +28,7 @@ export function mapPurchaseSourceSalesOrder(
         totals: source.totals,
         lines: source.lines.map((line) => ({
             salesOrderRevisionLineId: line.sales_order_revision_line_id,
+            salesPrices: line.sales_prices ?? undefined,
             salesOrderLineId: line.sales_order_line_id,
             lineNo: line.line_no,
             itemName: line.item_name,

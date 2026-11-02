@@ -40,11 +40,13 @@ export function TimelineEvents({
     idPrefix,
     groupByDate = false,
     currentDocument,
+    plainApprovalReasons = false,
 }: {
     events: TimelineEvent[]
     idPrefix: string
     groupByDate?: boolean
     currentDocument?: { type: string; id: string }
+    plainApprovalReasons?: boolean
 }) {
     if (events.length === 0)
         return (
@@ -74,6 +76,7 @@ export function TimelineEvents({
                             idPrefix={idPrefix}
                             timeOnly
                             currentDocument={currentDocument}
+                            plainApprovalReasons={plainApprovalReasons}
                         />
                     </section>
                 ))}
@@ -85,6 +88,7 @@ export function TimelineEvents({
             events={events}
             idPrefix={idPrefix}
             currentDocument={currentDocument}
+            plainApprovalReasons={plainApprovalReasons}
         />
     )
 }
@@ -94,11 +98,13 @@ function TimelineEventList({
     idPrefix,
     timeOnly = false,
     currentDocument,
+    plainApprovalReasons = false,
 }: {
     events: TimelineEvent[]
     idPrefix: string
     timeOnly?: boolean
     currentDocument?: { type: string; id: string }
+    plainApprovalReasons?: boolean
 }) {
     return (
         <Timeline aria-label="业务时间线">
@@ -190,7 +196,7 @@ function TimelineEventList({
                             <div
                                 className={cn(
                                     "mt-2 text-xs leading-5",
-                                    rejected
+                                    rejected && !plainApprovalReasons
                                         ? "rounded-lg border border-destructive-border bg-destructive-soft px-3 py-2 text-destructive-soft-foreground"
                                         : "text-muted-foreground",
                                 )}

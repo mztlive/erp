@@ -8,6 +8,7 @@ use erp_sales::entity::sales_order::SalesDeliveryAllocation;
 
 use super::*;
 use crate::purchase_center::direct_return::DirectReturnPlan;
+use crate::sales_center::prices::SalesLinePrices;
 
 /// 采购单对象中心视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -192,6 +193,8 @@ pub struct PurchaseSourceSalesMaterialView {
 /// 采购上下文中的销售成交明细。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseSourceSalesLineView {
+    /// 同一销售版本的含税供给价对比。
+    pub sales_prices: Option<SalesLinePrices>,
     /// 不可变销售版本行身份，用于采购行精确关联。
     pub sales_order_revision_line_id: String,
     /// 稳定销售行身份。

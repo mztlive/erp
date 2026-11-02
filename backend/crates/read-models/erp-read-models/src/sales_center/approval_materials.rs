@@ -1,5 +1,7 @@
 //! 审批实例授权后读取冻结提交，另列开票当前销售依据和采购最新供应商评估。
 
+use std::slice;
+
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
 use erp_sales::dto::sales_order::SubmissionView;
@@ -16,6 +18,7 @@ use persistence_core::NoTransaction;
 use serde::Serialize;
 
 use super::approval_source_sales::{ApprovalSourceSalesOrder, source_sales_orders};
+use super::prices::{enrich_inquiry_prices, enrich_line_prices};
 use crate::purchase_center::approval_materials::{
     ApprovalExtraCostSummary, ApprovalPurchaseLine, extra_cost_summary, purchase_lines,
 };
@@ -153,7 +156,11 @@ async fn sales_submission(db: &Database, materials: &ApprovalMaterialsView) -> R
         lines.len(),
     )?;
     lines.sort_by_key(|line| line.line_no);
-    Ok(submission_view(submission, lines))
+    let mut view = submission_view(submission, lines);
+    enrich_line_prices(db, &mut view.lines, &mut NoTransaction).await?;
+    enrich_inquiry_prices(db, &mut view.lines, slice::from_ref(&materials.document_id), &mut NoTransaction)
+        .await?;
+    Ok(view)
 }
 
 /// 完整预览必须与已授权资料的单据、提交版本、业务类型及冻结总行数一致。

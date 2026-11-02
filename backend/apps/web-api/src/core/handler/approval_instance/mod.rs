@@ -120,7 +120,7 @@ pub async fn instance_detail(
     ok_json(view)
 }
 
-/// 按 `round_no asc, execution_no asc, id asc` 读取完整历史。
+/// 按执行序号稳定分页读取完整历史；未指定方向时保持升序。
 ///
 /// # 错误
 /// 页大小非法时返回 422。
@@ -136,7 +136,7 @@ pub async fn instance_history(
     let after_execution_no =
         query.normalized_cursor().map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
     let page = runtime_service(&state)
-        .instance_history(&actor, &id, after_execution_no, limit)
+        .instance_history(&actor, &id, after_execution_no, limit, query.order)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     ok_json(page)

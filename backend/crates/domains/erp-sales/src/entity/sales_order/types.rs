@@ -241,19 +241,29 @@ impl LineType {
     }
 }
 
-/// 福利场景（数据模型 §6.4：年节礼包、餐补、慰问品、消费金、其他）。
+/// 福利场景；停用场景保留反序列化兼容，不再作为新建选项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WelfareScenario {
-    /// 年节礼包。
+    /// 礼包，保留既有稳定代码。
     AnnualGiftBag,
+    /// 帮扶产品。
+    AssistanceProduct,
+    /// 蛋糕券。
+    CakeVoucher,
+    /// 电影票。
+    MovieTicket,
+    /// 工会消费券。
+    UnionConsumptionVoucher,
     /// 餐补。
     MealSubsidy,
-    /// 慰问品。
+    /// 活动。
+    Activity,
+    /// 历史场景：慰问品。
     CondolenceGift,
-    /// 消费金。
+    /// 历史场景：消费金。
     ConsumptionFund,
-    /// 其他。
+    /// 历史场景：其他。
     Other,
 }
 
@@ -270,8 +280,13 @@ impl WelfareScenario {
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
-            Self::AnnualGiftBag => "年节礼包",
+            Self::AnnualGiftBag => "礼包",
+            Self::AssistanceProduct => "帮扶产品",
+            Self::CakeVoucher => "蛋糕券",
+            Self::MovieTicket => "电影票",
+            Self::UnionConsumptionVoucher => "工会消费券",
             Self::MealSubsidy => "餐补",
+            Self::Activity => "活动",
             Self::CondolenceGift => "慰问品",
             Self::ConsumptionFund => "消费金",
             Self::Other => "其他",
@@ -291,7 +306,12 @@ impl WelfareScenario {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::AnnualGiftBag => "ANNUAL_GIFT_BAG",
+            Self::AssistanceProduct => "ASSISTANCE_PRODUCT",
+            Self::CakeVoucher => "CAKE_VOUCHER",
+            Self::MovieTicket => "MOVIE_TICKET",
+            Self::UnionConsumptionVoucher => "UNION_CONSUMPTION_VOUCHER",
             Self::MealSubsidy => "MEAL_SUBSIDY",
+            Self::Activity => "ACTIVITY",
             Self::CondolenceGift => "CONDOLENCE_GIFT",
             Self::ConsumptionFund => "CONSUMPTION_FUND",
             Self::Other => "OTHER",
@@ -772,6 +792,40 @@ mod tests {
         assert_eq!(WelfareScenario::MealSubsidy.label(), "餐补");
         assert_eq!(CardForm::Physical.label(), "实体卡");
         assert_eq!(serde_json::to_string(&CardForm::Electronic).unwrap(), "\"ELECTRONIC\"");
+    }
+
+    #[test]
+    fn welfare_scenarios_round_trip_current_codes_and_labels() {
+        let scenarios = [
+            (WelfareScenario::AnnualGiftBag, "ANNUAL_GIFT_BAG", "礼包"),
+            (WelfareScenario::AssistanceProduct, "ASSISTANCE_PRODUCT", "帮扶产品"),
+            (WelfareScenario::CakeVoucher, "CAKE_VOUCHER", "蛋糕券"),
+            (WelfareScenario::MovieTicket, "MOVIE_TICKET", "电影票"),
+            (WelfareScenario::UnionConsumptionVoucher, "UNION_CONSUMPTION_VOUCHER", "工会消费券"),
+            (WelfareScenario::MealSubsidy, "MEAL_SUBSIDY", "餐补"),
+            (WelfareScenario::Activity, "ACTIVITY", "活动"),
+        ];
+        for (scenario, code, label) in scenarios {
+            assert_eq!(scenario.label(), label);
+            assert_eq!(scenario.as_str(), code);
+            assert_eq!(serde_json::to_value(scenario).unwrap(), code);
+            assert_eq!(serde_json::from_value::<WelfareScenario>(serde_json::json!(code)).unwrap(), scenario);
+        }
+    }
+
+    #[test]
+    fn welfare_scenarios_preserve_legacy_values_and_reject_unknown_codes() {
+        for (code, label) in
+            [("CONDOLENCE_GIFT", "慰问品"), ("CONSUMPTION_FUND", "消费金"), ("OTHER", "其他")]
+        {
+            let scenario = serde_json::from_value::<WelfareScenario>(serde_json::json!(code)).unwrap();
+            assert_eq!(scenario.label(), label);
+            assert_eq!(scenario.as_str(), code);
+            assert_eq!(serde_json::to_value(scenario).unwrap(), code);
+        }
+        for code in ["", "UNKNOWN"] {
+            assert!(serde_json::from_value::<WelfareScenario>(serde_json::json!(code)).is_err());
+        }
     }
 
     #[test]

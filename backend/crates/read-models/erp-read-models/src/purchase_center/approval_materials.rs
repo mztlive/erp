@@ -18,6 +18,7 @@ use serde::Serialize;
 
 use crate::finance::extra_cost::{order_costs, purchase_expense_facts, purchase_expense_views};
 use crate::sales_center::materials::repository::revision_lines;
+use crate::sales_center::prices::{SalesLinePrices, revision_line_prices};
 use crate::{Error, Result};
 
 /// 本次采购提交行，以及通过精确行关系证明的客户销售需求。
@@ -84,6 +85,7 @@ pub(crate) async fn extra_cost_summary(
 /// 已冻结允许版本中的销售行；金额与数量保持十进制字符串。
 #[derive(Debug, Serialize)]
 pub struct ApprovalPurchaseSourceLine {
+    pub sales_prices: Option<SalesLinePrices>,
     pub revision_id: String,
     pub title: String,
     pub specification: Option<String>,
@@ -141,11 +143,18 @@ pub(crate) async fn purchase_lines(
             &mut NoTransaction,
         )
         .await?;
-    lines
+    let mut views = lines
         .iter()
         .map(|line| comparison_line(line, &materials.display.source_sales, &sources, &goods))
-        .collect::<Result<Vec<_>>>()
-        .map(Some)
+        .collect::<Result<Vec<_>>>()?;
+    let prices = revision_line_prices(db, &ids, &mut NoTransaction).await?;
+    for (view, line) in views.iter_mut().zip(&lines) {
+        if let Some(source) = &mut view.source {
+            source.sales_prices =
+                line.sales_order_revision_line_id.as_ref().and_then(|id| prices.get(id.as_ref())).cloned();
+        }
+    }
+    Ok(Some(views))
 }
 
 fn validate_submission(
@@ -237,6 +246,7 @@ fn source_line(
         .find(|goods| goods.revision_line_id.as_ref() == source.base.id)
         .ok_or_else(|| Error::ConflictError("来源销售版本明细缺少成交价".into()))?;
     Ok(Some(ApprovalPurchaseSourceLine {
+        sales_prices: None,
         revision_id: source.sales_order_revision_id.to_string(),
         title: source.item_name_snapshot.clone(),
         specification: source.spec_snapshot.clone(),

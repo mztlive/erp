@@ -43,8 +43,8 @@ pub use idempotency::{
 pub use notification_worker::ApprovalNotificationOutboxPort;
 pub use resume::{ResumeExecutionInput, prepare_resume};
 pub use runtime_history::{
-    RuntimeHistoryItem, RuntimeHistoryPage, history_item_from_execution, history_page_from,
-    latest_rejection_reason,
+    ExecutionHistoryOrder, RuntimeHistoryItem, RuntimeHistoryPage, history_item_from_execution,
+    history_page_from, latest_rejection_reason,
 };
 pub use runtime_query::{
     RuntimeInstanceListView, RuntimeInstanceStatusFilter, RuntimeRecoveryAction, recovery_options_for,

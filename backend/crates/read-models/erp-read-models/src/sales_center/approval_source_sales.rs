@@ -12,6 +12,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
+use super::prices::{enrich_inquiry_prices, enrich_line_prices};
 use crate::{Error, Result};
 
 /// 来源销售单的业务编号及冻结版本完整正文。
@@ -59,7 +60,10 @@ pub(crate) async fn sources(
         .sales_order_revision_lines()
         .list_lines_by_revisions(&ids.iter().map(SalesOrderRevisionId::new).collect::<Vec<_>>(), executor)
         .await?;
-    let commercial = commercial_lines(db, &lines, executor).await?;
+    let mut commercial = commercial_lines(db, &lines, executor).await?;
+    enrich_line_prices(db, &mut commercial, executor).await?;
+    let order_ids = revisions.iter().map(|revision| revision.sales_order_id.to_string()).collect::<Vec<_>>();
+    enrich_inquiry_prices(db, &mut commercial, &order_ids, executor).await?;
     allowed
         .iter()
         .map(|source| {

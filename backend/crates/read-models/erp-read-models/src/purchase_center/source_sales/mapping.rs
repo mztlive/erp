@@ -72,6 +72,7 @@ pub(super) fn sales_line_views(
         .map(|line| {
             let goods = goods.get(line.base.id.as_str()).ok_or_else(missing_relation)?;
             Ok(PurchaseSourceSalesLineView {
+                sales_prices: None,
                 sales_order_revision_line_id: line.base.id.clone(),
                 sales_order_line_id: line.sales_order_line_id.to_string(),
                 line_no: line.line_no,

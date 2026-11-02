@@ -22,6 +22,7 @@ use super::dto::{
 };
 use crate::sales_center::materials::repository::revision_lines;
 use crate::sales_center::materials::revision_materials;
+use crate::sales_center::prices::revision_line_prices;
 use crate::{Error, Result};
 
 /// 沿采购行精确销售版本引用加载销售正文、价格和允许材料，不读取当前销售内容。
@@ -134,5 +135,11 @@ async fn sales_lines(
     let ids = lines.iter().map(|line| SalesOrderRevisionLineId::new(&line.base.id)).collect::<Vec<_>>();
     let goods =
         db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
-    mapping::sales_line_views(&lines, &goods)
+    let mut views = mapping::sales_line_views(&lines, &goods)?;
+    let prices =
+        revision_line_prices(db, &ids.iter().map(ToString::to_string).collect::<Vec<_>>(), executor).await?;
+    for view in &mut views {
+        view.sales_prices = prices.get(&view.sales_order_revision_line_id).cloned();
+    }
+    Ok(views)
 }

@@ -6,7 +6,8 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use erp_read_models::workbench::WorkspaceFilters;
 use erp_workflow::service::approval::execution::{
-    RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
+    ExecutionHistoryOrder, RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView,
+    RuntimeInstanceStatusFilter,
 };
 use serde::Deserialize;
 
@@ -204,6 +205,9 @@ pub struct InstanceHistoryQuery {
     pub cursor: Option<String>,
     /// 页大小，默认 50，最大 100。
     pub limit: Option<u32>,
+    /// 执行序号方向；不传时保留从早到晚的分页。
+    #[serde(default)]
+    pub order: ExecutionHistoryOrder,
 }
 
 impl InstanceHistoryQuery {
@@ -546,13 +550,31 @@ mod tests {
     /// 历史游标只接受执行序号。
     #[test]
     fn history_cursor_parses_execution_no() {
-        let empty = InstanceHistoryQuery { cursor: None, limit: None };
+        let empty = InstanceHistoryQuery { cursor: None, limit: None, ..Default::default() };
         assert_eq!(empty.normalized_cursor().expect("首页"), None);
-        let blank = InstanceHistoryQuery { cursor: Some("  ".into()), limit: None };
+        let blank = InstanceHistoryQuery { cursor: Some("  ".into()), limit: None, ..Default::default() };
         assert_eq!(blank.normalized_cursor().expect("空白等同首页"), None);
-        let ok = InstanceHistoryQuery { cursor: Some("8".into()), limit: Some(50) };
+        let ok = InstanceHistoryQuery { cursor: Some("8".into()), limit: Some(50), ..Default::default() };
         assert_eq!(ok.normalized_cursor().expect("合法序号"), Some(8));
-        let bad = InstanceHistoryQuery { cursor: Some("round-1".into()), limit: None };
+        let bad = InstanceHistoryQuery { cursor: Some("round-1".into()), limit: None, ..Default::default() };
         assert!(bad.normalized_cursor().is_err());
+    }
+
+    #[test]
+    fn history_order_defaults_to_ascending_and_rejects_unknown_values() {
+        use erp_workflow::service::approval::execution::ExecutionHistoryOrder;
+
+        let default: InstanceHistoryQuery = serde_json::from_str("{}").unwrap();
+        assert_eq!(default.order, ExecutionHistoryOrder::Asc);
+        let latest: InstanceHistoryQuery = serde_json::from_str(r#"{"order":"desc","cursor":"8"}"#).unwrap();
+        assert_eq!(latest.order, ExecutionHistoryOrder::Desc);
+        assert_eq!(latest.normalized_cursor().unwrap(), Some(8));
+        assert!(serde_json::from_str::<InstanceHistoryQuery>(r#"{"order":"newest"}"#).is_err());
+        assert!(
+            serde_json::from_str::<InstanceHistoryQuery>(r#"{"order":"desc","limit":0}"#)
+                .unwrap()
+                .normalized_limit()
+                .is_err()
+        );
     }
 }

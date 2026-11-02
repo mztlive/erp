@@ -20,6 +20,7 @@ use super::super::repository::{
     load_sales_procurement_coverage, sales_order_basis_fact, stock_basis_groups_for_order,
 };
 use super::mapping::{build_basis_view, build_stock_basis_view};
+use crate::sales_center::prices::revision_line_prices;
 use crate::{Error, Result};
 impl PurchaseOrderReadService {
     /// 查询当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。
@@ -59,7 +60,16 @@ impl PurchaseOrderReadService {
             return Ok(Vec::new());
         }
         let list = BasisList::load(self, tasks, actor).await?;
-        list.views(&self.db).await
+        let mut views = list.views(&self.db).await?;
+        let ids = views
+            .iter()
+            .flat_map(|view| view.lines.iter().map(|line| line.sales_order_revision_line_id.clone()))
+            .collect::<Vec<_>>();
+        let prices = revision_line_prices(&self.db, &ids, &mut NoTransaction).await?;
+        for line in views.iter_mut().flat_map(|view| &mut view.lines) {
+            line.sales_prices = prices.get(&line.sales_order_revision_line_id).cloned();
+        }
+        Ok(views)
     }
 }
 

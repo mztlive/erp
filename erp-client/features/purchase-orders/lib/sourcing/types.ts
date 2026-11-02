@@ -1,3 +1,4 @@
+import type { SalesLinePrices } from "@/lib/sales-line-prices"
 import type {
     BasisLineDelivery,
     FulfillmentResponsibility,
@@ -39,6 +40,7 @@ export type SourcingSupplierOption = Readonly<{
 
 /** 选源工作区中的一条销售明细。 */
 export type SourcingProductLine = Readonly<{
+    salesPrices?: SalesLinePrices
     salesOrderLineId: string
     itemName: string
     itemSku?: string

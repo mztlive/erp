@@ -1,3 +1,4 @@
+import { salesLinePriceComparison } from "@/lib/sales-line-prices"
 import type {
     ApprovalMaterials,
     ApprovalPurchaseLine,
@@ -61,6 +62,10 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
     if (!fee) {
         if (!source) warnings.push("来源销售缺失")
         else {
+            warnings.push(
+                ...salesLinePriceComparison(source.sales_prices ?? source)
+                    .warnings,
+            )
             if (
                 line.title.trim() !== source.title.trim() ||
                 purchaseSpecification(line.specification) !==
