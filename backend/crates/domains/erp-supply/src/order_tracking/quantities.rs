@@ -58,7 +58,7 @@ impl OrderTracking {
             if !seen.insert((value.source_order_no.clone(), value.shipment_id.clone())) {
                 return Err(Error::ConflictError("来源包裹身份重复，请核对物流资料".into()));
             }
-            if self.already_applied(&value)? {
+            if self.applied_shipment(&value)?.is_some() {
                 continue;
             }
             add_order_lines(&mut per_order, &value.source_order_no, &value.lines)?;
@@ -81,15 +81,7 @@ impl OrderTracking {
         if delivery_ids.is_empty() || delivery_ids.iter().any(|id| id.trim().is_empty()) {
             return Err(Error::ValidationError("包裹缺少真实发货记录".into()));
         }
-        if self.already_applied(shipment)? {
-            let original = self
-                .applied_shipments
-                .iter()
-                .find(|value| {
-                    value.source_order_no == shipment.source_order_no
-                        && value.shipment_id == shipment.shipment_id
-                })
-                .expect("already_applied 已证明包裹存在");
+        if let Some(original) = self.applied_shipment(shipment)? {
             if original.delivery_ids != delivery_ids {
                 return Err(Error::ConflictError("包裹对应的原发货记录不一致".into()));
             }
@@ -163,16 +155,16 @@ impl OrderTracking {
         Ok(())
     }
 
-    fn already_applied(&self, pending: &PendingShipment) -> Result<bool> {
+    fn applied_shipment(&self, pending: &PendingShipment) -> Result<Option<&AppliedShipment>> {
         let Some(previous) = self.applied_shipments.iter().find(|value| {
             value.source_order_no == pending.source_order_no && value.shipment_id == pending.shipment_id
         }) else {
-            return Ok(false);
+            return Ok(None);
         };
         if previous.lines != pending.lines {
             return Err(Error::ConflictError("同一来源包裹数量发生变化，请核对原发货记录".into()));
         }
-        Ok(true)
+        Ok(Some(previous))
     }
 
     fn ensure_shipment_totals(&self, quantities: &BTreeMap<String, Decimal>) -> Result<()> {
@@ -445,6 +437,62 @@ mod tests {
         assert!(tracking.record_shipment(&pending("SF2", "foreign", "1"), vec!["d2".into()]).is_err());
         assert!(tracking.record_shipment(&pending("SF2", "second", "1"), vec![]).is_err());
     }
+
+    #[test]
+    fn package_replay_preserves_original_record_and_conflict_priority() {
+        let mut tracking = tracking();
+        let shipment = pending("SF1", "first", "1");
+        tracking.record_shipment(&shipment, vec!["d1".into()]).unwrap();
+        let original = tracking.applied_shipments.clone();
+
+        tracking.record_shipment(&shipment, vec!["d1".into()]).unwrap();
+        assert_eq!(tracking.applied_shipments, original);
+        assert!(matches!(
+            tracking.record_shipment(&shipment, vec!["d2".into()]),
+            Err(Error::ConflictError(message)) if message == "包裹对应的原发货记录不一致"
+        ));
+        assert_eq!(tracking.applied_shipments, original);
+
+        let changed = pending("SF1", "first", "2");
+        assert!(matches!(
+            tracking.record_shipment(&changed, vec!["d2".into()]),
+            Err(Error::ConflictError(message)) if message == "同一来源包裹数量发生变化，请核对原发货记录"
+        ));
+        assert_eq!(tracking.applied_shipments, original);
+        assert!(matches!(
+            tracking.record_shipment(&changed, vec![]),
+            Err(Error::ValidationError(message)) if message == "包裹缺少真实发货记录"
+        ));
+        assert_eq!(tracking.applied_shipments, original);
+    }
+
+    #[test]
+    fn observed_package_replay_is_skipped_but_changed_quantities_are_rejected() {
+        let mut tracking = tracking();
+        let mut shipment = pending("SF1", "first", "1");
+        shipment.source_order_no = "root".into();
+        tracking.record_shipment(&shipment, vec!["d1".into()]).unwrap();
+        let mut observation = observation(&tracking);
+        observation.shipments = Some(vec![OrderShipment {
+            external_shipment_id: Some(shipment.shipment_id.clone()),
+            line_ids: vec!["first".into()],
+            source_order_no: Some(shipment.source_order_no.clone()),
+            quantity_lines: Some(shipment.lines.clone()),
+            complete_line_coverage: false,
+            carrier: None,
+            tracking_no: shipment.tracking_no,
+            has_courier_contact: false,
+            events: Vec::new(),
+        }]);
+        assert!(tracking.pending_shipments(&observation).unwrap().is_empty());
+        observation.shipments.as_mut().unwrap()[0].quantity_lines.as_mut().unwrap()[0].quantity =
+            "2".parse().unwrap();
+        assert!(matches!(
+            tracking.pending_shipments(&observation),
+            Err(Error::ConflictError(message)) if message == "同一来源包裹数量发生变化，请核对原发货记录"
+        ));
+    }
+
     #[test]
     fn missing_quantities_only_prove_trajectory_and_legacy_records_read_empty() {
         let shipment = OrderShipment {

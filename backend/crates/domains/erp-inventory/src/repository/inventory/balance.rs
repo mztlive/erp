@@ -365,7 +365,7 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             "available_quantity": { "$gte": quantity_bson },
         };
-        let update = cross_inc(quantity, "reserved_quantity", "available_quantity")?;
+        let update = cross_inc(quantity_bson, "reserved_quantity", "available_quantity");
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
         Ok(result.matched_count > 0)
     }
@@ -393,7 +393,7 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             "available_quantity": { "$gte": quantity_bson },
         };
-        let update = both_dec(quantity, "on_hand_quantity", "available_quantity")?;
+        let update = both_dec(quantity_bson, "on_hand_quantity", "available_quantity");
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
         Ok(result.matched_count > 0)
     }
@@ -421,7 +421,7 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             "reserved_quantity": { "$gte": quantity_bson },
         };
-        let update = cross_inc(quantity, "available_quantity", "reserved_quantity")?;
+        let update = cross_inc(quantity_bson, "available_quantity", "reserved_quantity");
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
         Ok(result.matched_count > 0)
     }

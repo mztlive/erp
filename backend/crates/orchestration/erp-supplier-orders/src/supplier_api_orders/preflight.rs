@@ -84,8 +84,7 @@ impl SupplierApiOrderProcess {
             return Err(Error::BusinessLogicError("供应商当前未返回原订货规格，尚未发单".into()));
         };
         if let Some(terms) = &offer.value.details.source_purchase_terms {
-            terms.ensure_quantity(line.quantity)?;
-            terms.ensure_automatic_order()?;
+            terms.ensure_orderable_quantity(line.quantity)?;
         }
         let quote = offer
             .value

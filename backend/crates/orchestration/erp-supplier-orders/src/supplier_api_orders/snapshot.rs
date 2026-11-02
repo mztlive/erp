@@ -123,8 +123,7 @@ impl SupplierApiOrderProcess {
             })
             .ok_or_else(|| Error::BusinessLogicError("已批准供给修订不存在或版本不一致".into()))?;
         if let Some(terms) = &revision.source_purchase_terms {
-            terms.ensure_quantity(source.quantity)?;
-            terms.ensure_automatic_order()?;
+            terms.ensure_orderable_quantity(source.quantity)?;
         }
         Ok(FrozenLinePurchaseTerms {
             line_id: source.fulfillment_item_id.clone(),

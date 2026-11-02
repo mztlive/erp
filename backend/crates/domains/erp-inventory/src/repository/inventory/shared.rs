@@ -207,7 +207,7 @@ pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Resu
 /// 构建两个字段同向减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
 ///
 /// # 参数
-/// * `quantity` - 减少数量（正数）
+/// * `quantity` - 已转换的减少数量，与原子条件复用同一 Decimal128
 /// * `field_a` - 减少字段一
 /// * `field_b` - 减少字段二
 ///
@@ -215,16 +215,16 @@ pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Resu
 /// 返回更新条件文档。
 ///
 /// # 错误
-/// 数量无法表示为 Decimal128 时返回错误。
-pub(super) fn both_dec(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
-    let quantity = negate_decimal128(to_decimal128(quantity)?);
-    Ok(quantity_update(&[(field_a, quantity), (field_b, quantity)]))
+/// 不返回错误。
+pub(super) fn both_dec(quantity: Decimal128, field_a: &str, field_b: &str) -> Document {
+    let quantity = negate_decimal128(quantity);
+    quantity_update(&[(field_a, quantity), (field_b, quantity)])
 }
 
 /// 构建一个字段增加、另一个字段减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
 ///
 /// # 参数
-/// * `quantity` - 增减数量（正数）
+/// * `quantity` - 已转换的增减数量，与原子条件复用同一 Decimal128
 /// * `increase_field` - 增加字段
 /// * `decrease_field` - 减少字段
 ///
@@ -232,10 +232,9 @@ pub(super) fn both_dec(quantity: Quantity, field_a: &str, field_b: &str) -> Resu
 /// 返回更新条件文档。
 ///
 /// # 错误
-/// 数量无法表示为 Decimal128 时返回错误。
-pub(super) fn cross_inc(quantity: Quantity, increase_field: &str, decrease_field: &str) -> Result<Document> {
-    let quantity = to_decimal128(quantity)?;
-    Ok(quantity_update(&[(increase_field, quantity), (decrease_field, negate_decimal128(quantity))]))
+/// 不返回错误。
+pub(super) fn cross_inc(quantity: Decimal128, increase_field: &str, decrease_field: &str) -> Document {
+    quantity_update(&[(increase_field, quantity), (decrease_field, negate_decimal128(quantity))])
 }
 
 /// 构建排序文档（字段名白名单映射）。
@@ -264,7 +263,7 @@ mod tests {
     use erp_core::money::Quantity;
     use mongodb::bson::{Decimal128, doc};
 
-    use super::{both_dec, both_inc, cross_inc, ids_to_strings, negate_decimal128, sort_doc};
+    use super::{both_dec, both_inc, cross_inc, ids_to_strings, negate_decimal128, sort_doc, to_decimal128};
 
     #[test]
     fn sort_doc_maps_whitelisted_fields_and_defaults_otherwise() {
@@ -297,19 +296,21 @@ mod tests {
             ("79228162514264337593543950335", "-79228162514264337593543950335"),
         ] {
             let quantity = Quantity::from_str(value).unwrap();
+            let quantity_bson = to_decimal128(quantity).unwrap();
             let original = Decimal128::from_str(value).unwrap();
             let negated = Decimal128::from_str(opposite).unwrap();
+            assert_eq!(quantity_bson, original);
             for (update, expected) in [
                 (
                     both_inc(quantity, "on_hand_quantity", "available_quantity").unwrap(),
                     doc! { "on_hand_quantity": original, "available_quantity": original, "version": 1 },
                 ),
                 (
-                    both_dec(quantity, "on_hand_quantity", "available_quantity").unwrap(),
+                    both_dec(quantity_bson, "on_hand_quantity", "available_quantity"),
                     doc! { "on_hand_quantity": negated, "available_quantity": negated, "version": 1 },
                 ),
                 (
-                    cross_inc(quantity, "reserved_quantity", "available_quantity").unwrap(),
+                    cross_inc(quantity_bson, "reserved_quantity", "available_quantity"),
                     doc! { "reserved_quantity": original, "available_quantity": negated, "version": 1 },
                 ),
             ] {

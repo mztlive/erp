@@ -137,6 +137,35 @@ impl SourcePurchaseTerms {
     /// 来源条款无效、数量不满足或计算超限时拒绝。
     pub fn ensure_quantity(&self, quantity: Quantity) -> Result<()> {
         self.validate()?;
+        self.ensure_quantity_limits(quantity)
+    }
+
+    /// 核验本次数量是否满足普通商品自动下单条件。
+    /// # 参数
+    /// `quantity` 为本执行组实际订购的基础单位数量。
+    /// # 返回
+    /// 来源条款合法、实际数量满足限制且无需附加履约流程时成功。
+    /// # 错误
+    /// 依次返回来源条款、实际数量或不支持的附加履约流程错误。
+    pub fn ensure_orderable_quantity(&self, quantity: Quantity) -> Result<()> {
+        self.validate()?;
+        self.ensure_quantity_limits(quantity)?;
+        self.ensure_supported_processes()
+    }
+
+    /// 核验当前系统可执行普通实物商品自动履约。
+    /// # 参数
+    /// 无；读取供应商要求的附加流程。
+    /// # 返回
+    /// 无附加履约要求时成功。
+    /// # 错误
+    /// 尚未支持的附加服务或个性资格价格存在时阻断自动发单。
+    pub fn ensure_automatic_order(&self) -> Result<()> {
+        self.validate()?;
+        self.ensure_supported_processes()
+    }
+
+    fn ensure_quantity_limits(&self, quantity: Quantity) -> Result<()> {
         let value = quantity.to_decimal();
         let invalid_multiple = self.quantity_multiple.is_some_and(|multiple| {
             value.checked_rem(multiple.to_decimal()).is_none_or(|remainder| !remainder.is_zero())
@@ -151,15 +180,7 @@ impl SourcePurchaseTerms {
         Ok(())
     }
 
-    /// 核验当前系统可执行普通实物商品自动履约。
-    /// # 参数
-    /// 无；读取供应商要求的附加流程。
-    /// # 返回
-    /// 无附加履约要求时成功。
-    /// # 错误
-    /// 尚未支持的附加服务或个性资格价格存在时阻断自动发单。
-    pub fn ensure_automatic_order(&self) -> Result<()> {
-        self.validate()?;
+    fn ensure_supported_processes(&self) -> Result<()> {
         if !self.restrictions.is_empty() {
             return Err(Error::BusinessLogicError(
                 "该商品需要尚未支持的附加履约或价格资格，请人工处理".into(),
@@ -183,9 +204,15 @@ mod tests {
         };
         for quantity in ["2.5", "3.75", "10"] {
             terms.ensure_quantity(quantity.parse().unwrap()).unwrap();
+            terms.ensure_orderable_quantity(quantity.parse().unwrap()).unwrap();
         }
         for quantity in ["0", "-1", "1.25", "3", "11.25"] {
             assert!(terms.ensure_quantity(quantity.parse().unwrap()).is_err());
+            assert!(matches!(
+                terms.ensure_orderable_quantity(quantity.parse().unwrap()),
+                Err(Error::BusinessLogicError(message))
+                    if message == "采购数量不满足供应商起购、限购或整倍数要求"
+            ));
         }
         let invalid = SourcePurchaseTerms { quantity_multiple: Some("0".parse().unwrap()), ..terms };
         assert!(invalid.validate().is_err());
@@ -220,5 +247,80 @@ mod tests {
         terms.validate().unwrap();
         assert!(terms.ensure_automatic_order().is_err());
         SourcePurchaseTerms::default().ensure_automatic_order().unwrap();
+    }
+
+    #[test]
+    fn automatic_quantity_checks_preserve_quantity_before_process_error() {
+        SourcePurchaseTerms::default().ensure_orderable_quantity("1".parse().unwrap()).unwrap();
+        let terms = SourcePurchaseTerms {
+            minimum_quantity: Some("2".parse().unwrap()),
+            restrictions: vec![PurchaseRestriction::Installation],
+            ..Default::default()
+        };
+        assert!(matches!(
+            terms.ensure_orderable_quantity("1".parse().unwrap()),
+            Err(Error::BusinessLogicError(message))
+                if message == "采购数量不满足供应商起购、限购或整倍数要求"
+        ));
+        assert!(matches!(
+            terms.ensure_orderable_quantity("2".parse().unwrap()),
+            Err(Error::BusinessLogicError(message))
+                if message == "该商品需要尚未支持的附加履约或价格资格，请人工处理"
+        ));
+        terms.ensure_quantity("2".parse().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn automatic_quantity_revalidates_deserialized_terms_before_actual_quantity() {
+        let installation = vec![PurchaseRestriction::Installation];
+        let invalid_terms = [
+            (
+                SourcePurchaseTerms {
+                    quantity_multiple: Some("0".parse().unwrap()),
+                    restrictions: installation.clone(),
+                    ..Default::default()
+                },
+                "供应商起购、限购数量或购买倍数无效",
+            ),
+            (
+                SourcePurchaseTerms {
+                    minimum_quantity: Some("3".parse().unwrap()),
+                    maximum_quantity: Some("2".parse().unwrap()),
+                    restrictions: installation.clone(),
+                    ..Default::default()
+                },
+                "供应商起购、限购数量或购买倍数无效",
+            ),
+            (
+                SourcePurchaseTerms {
+                    restrictions: vec![PurchaseRestriction::Installation, PurchaseRestriction::Installation],
+                    ..Default::default()
+                },
+                "供应商附加履约限制无效",
+            ),
+            (
+                SourcePurchaseTerms {
+                    restrictions: installation,
+                    quote_context: Some(SourceQuoteContext {
+                        quantity: "0".parse().unwrap(),
+                        observed_at: Instant::from_unix_secs(1),
+                        tax_rate: None,
+                        tax_rate_raw: None,
+                        address_fingerprint: None,
+                    }),
+                    ..Default::default()
+                },
+                "供应商报价数量、税率或适用地址证据无效",
+            ),
+        ];
+        for (terms, expected) in invalid_terms {
+            let restored: SourcePurchaseTerms =
+                serde_json::from_value(serde_json::to_value(terms).unwrap()).unwrap();
+            assert!(matches!(
+                restored.ensure_orderable_quantity("0".parse().unwrap()),
+                Err(Error::ValidationError(message)) if message == expected
+            ));
+            assert!(matches!(restored.ensure_automatic_order(), Err(Error::ValidationError(_))));
+        }
     }
 }

@@ -38,6 +38,80 @@ pub struct InquiryQuoteInput {
     pub internal_note: String,
 }
 
+/// 绑定当前冻结需求行和已转换商业条件的报价输入，不参与持久化或请求序列化。
+pub(super) struct ResolvedInquiryQuote<'a> {
+    input: &'a InquiryQuoteInput,
+    line: &'a InquiryRequirementLine,
+    terms: QuoteTerms,
+}
+
+impl<'a> ResolvedInquiryQuote<'a> {
+    /// 将报价输入绑定到已由当前责任范围定位的冻结需求行。
+    ///
+    /// # 参数
+    /// `input` 为原始报价；`line` 为已定位的需求行。
+    /// # 返回
+    /// 返回复用同一份配送范围与商业条件的内部输入。
+    /// # 错误
+    /// 可供数量、单位精度、配送范围或商业条件非法时返回原错误。
+    pub(super) fn new(input: &'a InquiryQuoteInput, line: &'a InquiryRequirementLine) -> Result<Self> {
+        Ok(Self { input, line, terms: input.terms.for_requirement(line)? })
+    }
+
+    fn scope(&self, inquiry: &SalesInquiry) -> InquiryQuoteScope {
+        InquiryQuoteScope {
+            inquiry_id: inquiry.base.id.clone(),
+            requirement_version: inquiry.requirement_version,
+            line_id: self.line.line_id.clone(),
+        }
+    }
+
+    /// 核对是否已经保存相同作用域、供应身份与商业条件的回复。
+    ///
+    /// # 参数
+    /// `prior` 为既有报价；`inquiry` 与 `round` 指定当前需求版本和反馈轮次。
+    /// # 返回
+    /// 存在完全相同且未删除的回复时为真。
+    /// # 错误
+    /// 不返回错误。
+    pub(super) fn matches_prior_reply(
+        &self,
+        prior: &[InquiryQuote],
+        inquiry: &SalesInquiry,
+        round: u32,
+    ) -> bool {
+        let scope = self.scope(inquiry);
+        prior.iter().any(|old| {
+            old.matches_reply(
+                &scope,
+                round,
+                &self.input.supplier_id,
+                &self.input.supplier_offering_id,
+                &self.terms,
+                &self.input.internal_note,
+            )
+        })
+    }
+
+    fn into_quote(self, inquiry: &SalesInquiry, recorded_by: &str) -> Result<InquiryQuote> {
+        Ok(InquiryQuote::new(
+            next_id(),
+            InquiryQuoteData {
+                quote_id: self.input.quote_id.clone().unwrap_or_else(next_id),
+                revision_no: self.input.revision_no,
+                feedback_round: next_round(inquiry)?,
+                scope: self.scope(inquiry),
+                supplier_id: self.input.supplier_id.clone(),
+                supplier_offering_id: self.input.supplier_offering_id.clone(),
+                sku_id: SkuId::new(self.line.sku_id.clone()),
+                terms: self.terms,
+                internal_note: self.input.internal_note.clone(),
+                recorded_by: recorded_by.to_string(),
+            },
+        )?)
+    }
+}
+
 /// 采购可录入的报价条件；配送范围由需求生成，客户端不得指定。
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -175,26 +249,27 @@ impl SalesInquiryProcess {
         inquiry.ensure_processing(expected_version)?;
         let line = inquiry.responsibility_line(task.responsibility_scope_ids(), &input.line_id)?;
         self.services.suppliers.require_with(actor, "detail", input.supplier_id.as_ref(), executor).await?;
-        let terms = input.terms.for_requirement(line)?;
-        let quote = InquiryQuote::new(
-            next_id(),
-            InquiryQuoteData {
-                quote_id: input.quote_id.clone().unwrap_or_else(next_id),
-                revision_no: input.revision_no,
-                feedback_round: next_round(inquiry)?,
-                scope: InquiryQuoteScope {
-                    inquiry_id: inquiry.base.id.clone(),
-                    requirement_version: inquiry.requirement_version,
-                    line_id: line.line_id.clone(),
-                },
-                supplier_id: input.supplier_id.clone(),
-                supplier_offering_id: input.supplier_offering_id.clone(),
-                sku_id: SkuId::new(line.sku_id.clone()),
-                terms,
-                internal_note: input.internal_note.clone(),
-                recorded_by: actor.id().to_string(),
-            },
-        )?;
+        let quote = ResolvedInquiryQuote::new(input, line)?;
+        self.append_resolved_quote(actor, inquiry, quote, executor).await
+    }
+
+    /// 对已完成供应商授权和条款转换的报价执行最终构造与资格写入。
+    ///
+    /// # 参数
+    /// `actor` 为已授权采购；`inquiry` 为当前询价；`input` 为已绑定需求的报价；
+    /// `executor` 沿用调用方事务。
+    /// # 返回
+    /// 报价通过最终领域与供应资格校验并追加保存。
+    /// # 错误
+    /// 轮次溢出、最终报价不合法、供应资格失效或写入失败时返回原错误。
+    pub(super) async fn append_resolved_quote(
+        &self,
+        actor: &AuditActor,
+        inquiry: &SalesInquiry,
+        input: ResolvedInquiryQuote<'_>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let quote = input.into_quote(inquiry, actor.id())?;
         InquirySupplyService::new(self.db.clone())
             .append_quote(&quote, &MongoOfferingQualification::new(self.db.clone()), executor)
             .await
@@ -291,9 +366,12 @@ fn next_round(inquiry: &SalesInquiry) -> Result<u32> {
 
 #[cfg(test)]
 mod tests {
-    use erp_core::common::time::BusinessDate;
+    use std::slice::from_ref;
+
     use erp_core::region::RegionCode;
-    use erp_sales::entity::sales_inquiry::{InquiryDeliveryAllocation, InquiryFulfillmentKind};
+    use erp_sales::entity::sales_inquiry::{
+        InquiryCreateData, InquiryDeliveryAllocation, InquiryFulfillmentKind, InquiryRequirementData,
+    };
 
     use super::*;
 
@@ -331,9 +409,106 @@ mod tests {
             unit_cost_gross: "1.2".parse().unwrap(),
             input_tax_rate: "0.13".parse().unwrap(),
             available_quantity: "10".parse().unwrap(),
-            expected_delivery_date: BusinessDate::today(),
+            expected_delivery_date: "2026-10-25".parse().unwrap(),
             valid_to: None,
         }
+    }
+
+    fn input() -> InquiryQuoteInput {
+        InquiryQuoteInput {
+            quote_id: Some("quote".into()),
+            revision_no: 1,
+            line_id: "line".into(),
+            supplier_id: SupplierAccountId::new("supplier"),
+            supplier_offering_id: SupplierOfferingId::new("offering"),
+            terms: terms(),
+            internal_note: String::new(),
+        }
+    }
+
+    fn inquiry() -> SalesInquiry {
+        let mut inquiry = SalesInquiry::create(
+            "inquiry".into(),
+            "IQ1".into(),
+            InquiryCreateData {
+                customer_id: "customer".into(),
+                customer_name: "客户".into(),
+                sales_owner_user_id: "sales".into(),
+                business_org_unit_id: "org".into(),
+                deadline_at: Instant::from_unix_secs(5000),
+                copied_from_inquiry_id: None,
+                draft: InquiryRequirementData { lines: vec![line()], note: String::new() },
+            },
+        )
+        .unwrap();
+        inquiry.requirement_version = 2;
+        inquiry.feedback_round = 3;
+        inquiry
+    }
+
+    #[test]
+    fn resolved_quote_keeps_frozen_identity_and_terms_for_matching_and_persistence() {
+        let inquiry = inquiry();
+        let line = line();
+        let mut input = input();
+        input.terms.available_quantity = "5".parse().unwrap();
+        let quote = ResolvedInquiryQuote::new(&input, &line).unwrap().into_quote(&inquiry, "buyer").unwrap();
+        assert_eq!(quote.data.scope.inquiry_id, "inquiry");
+        assert_eq!(quote.data.scope.requirement_version, 2);
+        assert_eq!(quote.data.scope.line_id, "line");
+        assert_eq!(quote.data.sku_id.as_ref(), "sku");
+        assert_eq!(quote.data.feedback_round, 4);
+        assert_eq!(quote.data.recorded_by, "buyer");
+        assert_eq!(quote.data.terms.available_quantity.to_string(), "5");
+        assert_eq!(quote.data.terms.address_limits[0].quantity.to_string(), "10");
+        assert_eq!(
+            quote.data.terms.address_limits[0].address_fingerprint,
+            PurchaseInquiryAddress::fingerprint("收件人", "00138", "310115", "测试路")
+        );
+
+        input.quote_id = Some("another-client-id".into());
+        input.revision_no = 8;
+        let resolved = ResolvedInquiryQuote::new(&input, &line).unwrap();
+        assert!(resolved.matches_prior_reply(from_ref(&quote), &inquiry, 4));
+        assert!(!resolved.matches_prior_reply(from_ref(&quote), &inquiry, 5));
+        let mut changed = quote.clone();
+        changed.data.scope.requirement_version += 1;
+        assert!(!resolved.matches_prior_reply(from_ref(&changed), &inquiry, 4));
+        changed = quote.clone();
+        changed.data.internal_note = "变更说明".into();
+        assert!(!resolved.matches_prior_reply(from_ref(&changed), &inquiry, 4));
+        changed = quote.clone();
+        changed.data.terms.freight_gross = Some("0".parse().unwrap());
+        assert!(!resolved.matches_prior_reply(from_ref(&changed), &inquiry, 4));
+        changed = quote;
+        changed.data.supplier_id = SupplierAccountId::new("another-supplier");
+        assert!(!resolved.matches_prior_reply(from_ref(&changed), &inquiry, 4));
+    }
+
+    #[test]
+    fn resolved_quote_rejects_invalid_terms_and_retains_final_domain_validation() {
+        let inquiry = inquiry();
+        let mut line = line();
+        let mut input = input();
+        input.terms.available_quantity = "11".parse().unwrap();
+        assert!(matches!(
+            ResolvedInquiryQuote::new(&input, &line),
+            Err(Error::ValidationError(message)) if message == "专项报价可供量不得超过本行询价需求"
+        ));
+        input.terms.available_quantity = "10".parse().unwrap();
+        line.allocations.clear();
+        assert!(matches!(
+            ResolvedInquiryQuote::new(&input, &line),
+            Err(Error::ValidationError(message)) if message == "实物专项报价必须明确配送地址范围"
+        ));
+        input.terms.unavailable = true;
+        input.terms.unit_cost_gross = "0".parse().unwrap();
+        input.terms.available_quantity = "0".parse().unwrap();
+        let resolved = ResolvedInquiryQuote::new(&input, &line).unwrap();
+        assert!(matches!(
+            resolved.into_quote(&inquiry, "buyer"),
+            Err(Error::ValidationError(message)) if message == "无法供货须填写原因"
+        ));
     }
 
     #[test]

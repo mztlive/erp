@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use application_core::AuditActor;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
-use erp_supply::inquiry::{InquiryQuoteScope, InquirySupplyService};
+use erp_supply::inquiry::InquirySupplyService;
 use erp_workflow::entity::work_item::WorkItem;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::SalesInquiryProcess;
 use super::dto::InquiryMutationView;
 use super::execution::InquiryCommand;
-use super::internal_quote::InquiryQuoteInput;
+use super::internal_quote::{InquiryQuoteInput, ResolvedInquiryQuote};
 use crate::{Error, Result};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -98,26 +98,17 @@ impl SalesInquiryProcess {
             if line.sku_id != row.sku_id {
                 return Err(Error::ValidationError(format!("{}：商品与原询价行不一致", row.source)));
             }
-            let terms =
-                row.quote.terms.for_requirement(line).map_err(|error| row_error(&row.source, error))?;
-            let scope = InquiryQuoteScope {
-                inquiry_id: inquiry.base.id.clone(),
-                requirement_version: inquiry.requirement_version,
-                line_id: line.line_id.clone(),
-            };
-            if prior.iter().any(|old| {
-                old.matches_reply(
-                    &scope,
-                    request.feedback_round,
-                    &row.quote.supplier_id,
-                    &row.quote.supplier_offering_id,
-                    &terms,
-                    &row.quote.internal_note,
-                )
-            }) {
+            let quote =
+                ResolvedInquiryQuote::new(&row.quote, line).map_err(|error| row_error(&row.source, error))?;
+            if quote.matches_prior_reply(&prior, inquiry, request.feedback_round) {
                 continue;
             }
-            self.append_internal_quote(actor, inquiry, task, request.expected_version, &row.quote, executor)
+            self.services
+                .suppliers
+                .require_with(actor, "detail", row.quote.supplier_id.as_ref(), executor)
+                .await
+                .map_err(|error| row_error(&row.source, error.into()))?;
+            self.append_resolved_quote(actor, inquiry, quote, executor)
                 .await
                 .map_err(|error| row_error(&row.source, error))?;
         }
@@ -136,6 +127,8 @@ fn row_error(source: &str, error: Error) -> Error {
 
 #[cfg(test)]
 mod tests {
+    use std::mem::discriminant;
+
     use serde_json::json;
 
     use super::*;
@@ -165,5 +158,33 @@ mod tests {
         assert!(input.validate().is_err());
         input.rows.clear();
         assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn row_context_preserves_error_classes_and_only_prefixes_existing_business_errors() {
+        for error in [
+            Error::ValidationError("原错误".into()),
+            Error::BusinessLogicError("原错误".into()),
+            Error::ConflictError("原错误".into()),
+        ] {
+            let expected = discriminant(&error);
+            let error = row_error("报价表第5行", error);
+            assert_eq!(discriminant(&error), expected);
+            assert!(matches!(
+                error,
+                Error::ValidationError(message)
+                    | Error::BusinessLogicError(message)
+                    | Error::ConflictError(message)
+                    if message == "报价表第5行：原错误"
+            ));
+        }
+        assert!(matches!(
+            row_error("报价表第5行", Error::Forbidden("不可见".into())),
+            Error::Forbidden(message) if message == "不可见"
+        ));
+        assert!(matches!(
+            row_error("报价表第5行", Error::Internal("存储失败".into())),
+            Error::Internal(message) if message == "存储失败"
+        ));
     }
 }

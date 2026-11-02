@@ -112,24 +112,8 @@ impl ProcurementResponsibilityRuleData {
     ///
     /// # 错误
     /// 规则类型与选择器字段形状不一致时返回错误。
-    ///
-    /// # Panics
-    /// 形状校验已通过后对应选择器字段仍缺失时 panic。
     pub fn selector_reference(&self) -> Result<ProcurementResponsibilitySelectorReference<'_>> {
-        ensure_selector_shape(self)?;
-        Ok(match self.rule_type {
-            ProcurementResponsibilityRuleType::Sku => ProcurementResponsibilitySelectorReference::Sku(
-                self.sku_id.as_ref().expect("选择器形状已校验"),
-            ),
-            ProcurementResponsibilityRuleType::Category => {
-                ProcurementResponsibilitySelectorReference::Category(
-                    self.category_id.as_ref().expect("选择器形状已校验"),
-                )
-            },
-            ProcurementResponsibilityRuleType::ProductKind
-            | ProcurementResponsibilityRuleType::DefaultDispatcher
-            | ProcurementResponsibilityRuleType::Inquiry => ProcurementResponsibilitySelectorReference::None,
-        })
+        Ok(RuleSelector::try_from(self)?.reference())
     }
 }
 
@@ -266,8 +250,7 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
     /// # 错误
     /// 选择器字段组合与规则类型不一致时返回错误。
     fn try_from(data: ProcurementResponsibilityRuleData) -> Result<Self> {
-        ensure_selector_shape(&data)?;
-        let selector_key = selector_key(&data);
+        let selector_key = RuleSelector::try_from(&data)?.key();
         let owner_user_ids = normalize_pool(data.owner_user_ids)?;
         Ok(Self {
             rule_type: data.rule_type,
@@ -282,63 +265,53 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
     }
 }
 
-/// 校验规则类型与选择器字段严格一一对应。
-///
-/// # 参数
-/// * `data` - 原始规则数据
-///
-/// # 返回
-/// 字段组合与规则类型一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一多余或缺失选择器字段都会返回领域错误。
-fn ensure_selector_shape(data: &ProcurementResponsibilityRuleData) -> Result<()> {
-    let valid = match data.rule_type {
-        ProcurementResponsibilityRuleType::Sku => {
-            data.sku_id.is_some() && data.category_id.is_none() && data.product_kind.is_none()
-        },
-        ProcurementResponsibilityRuleType::Category => {
-            data.sku_id.is_none() && data.category_id.is_some() && data.product_kind.is_none()
-        },
-        ProcurementResponsibilityRuleType::ProductKind => {
-            data.sku_id.is_none() && data.category_id.is_none() && data.product_kind.is_some()
-        },
-        ProcurementResponsibilityRuleType::DefaultDispatcher | ProcurementResponsibilityRuleType::Inquiry => {
-            data.sku_id.is_none() && data.category_id.is_none() && data.product_kind.is_none()
-        },
-    };
-    if !valid {
-        return Err(Error::from("采购责任规则类型与选择器字段不一致"));
-    }
-    Ok(())
+/// 已解析的选择器：每种规则只携带其必需字段。
+enum RuleSelector<'a> {
+    Sku(&'a SkuId),
+    Category(&'a ProductCategoryId),
+    ProductKind(ProductKind),
+    DefaultDispatcher,
+    Inquiry,
 }
 
-/// 构造启用规则唯一索引使用的稳定选择器键。
-///
-/// # 参数
-/// * `data` - 已通过形状校验的规则数据
-///
-/// # 返回
-/// 每个匹配条件唯一对应一个负责人池，人员不参与选择器键。
-///
-/// # 错误
-/// 不返回错误。仅允许在选择器形状校验通过后调用。
-///
-/// # Panics
-/// 形状未校验却缺少对应选择器字段时 panic。
-fn selector_key(data: &ProcurementResponsibilityRuleData) -> String {
-    match data.rule_type {
-        ProcurementResponsibilityRuleType::Sku => {
-            format!("sku:{}", data.sku_id.as_ref().expect("形状已校验"))
-        },
-        ProcurementResponsibilityRuleType::Category => {
-            format!("category:{}", data.category_id.as_ref().expect("形状已校验"))
-        },
-        ProcurementResponsibilityRuleType::ProductKind => {
-            format!("product_kind:{}", data.product_kind.expect("形状已校验").as_str())
-        },
-        ProcurementResponsibilityRuleType::DefaultDispatcher => "default_dispatcher".into(),
-        ProcurementResponsibilityRuleType::Inquiry => "inquiry".into(),
+impl<'a> TryFrom<&'a ProcurementResponsibilityRuleData> for RuleSelector<'a> {
+    type Error = Error;
+
+    fn try_from(data: &'a ProcurementResponsibilityRuleData) -> Result<Self> {
+        match (data.rule_type, data.sku_id.as_ref(), data.category_id.as_ref(), data.product_kind) {
+            (ProcurementResponsibilityRuleType::Sku, Some(id), None, None) => Ok(Self::Sku(id)),
+            (ProcurementResponsibilityRuleType::Category, None, Some(id), None) => Ok(Self::Category(id)),
+            (ProcurementResponsibilityRuleType::ProductKind, None, None, Some(kind)) => {
+                Ok(Self::ProductKind(kind))
+            },
+            (ProcurementResponsibilityRuleType::DefaultDispatcher, None, None, None) => {
+                Ok(Self::DefaultDispatcher)
+            },
+            (ProcurementResponsibilityRuleType::Inquiry, None, None, None) => Ok(Self::Inquiry),
+            _ => Err(Error::from("采购责任规则类型与选择器字段不一致")),
+        }
+    }
+}
+
+impl<'a> RuleSelector<'a> {
+    fn reference(self) -> ProcurementResponsibilitySelectorReference<'a> {
+        match self {
+            Self::Sku(id) => ProcurementResponsibilitySelectorReference::Sku(id),
+            Self::Category(id) => ProcurementResponsibilitySelectorReference::Category(id),
+            Self::ProductKind(_) | Self::DefaultDispatcher | Self::Inquiry => {
+                ProcurementResponsibilitySelectorReference::None
+            },
+        }
+    }
+
+    fn key(self) -> String {
+        match self {
+            Self::Sku(id) => format!("sku:{id}"),
+            Self::Category(id) => format!("category:{id}"),
+            Self::ProductKind(kind) => format!("product_kind:{}", kind.as_str()),
+            Self::DefaultDispatcher => "default_dispatcher".into(),
+            Self::Inquiry => "inquiry".into(),
+        }
     }
 }
 
@@ -358,8 +331,144 @@ fn normalize_actor(value: String) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
     use crate::entity::procurement_responsibility::EnableStatus;
+
+    fn data(rule_type: ProcurementResponsibilityRuleType, fields: u8) -> ProcurementResponsibilityRuleData {
+        ProcurementResponsibilityRuleData {
+            rule_type,
+            sku_id: (fields & 1 != 0).then(|| SkuId::new("sku-1")),
+            category_id: (fields & 2 != 0).then(|| ProductCategoryId::new("cat-1")),
+            product_kind: (fields & 4 != 0).then_some(ProductKind::Physical),
+            owner_user_ids: vec!["buyer-1".into()],
+            strategy: AssignmentStrategy::RoundRobin,
+            status: EnableStatus::Active,
+        }
+    }
+
+    #[test]
+    fn selector_shapes_preserve_catalog_references_and_unique_keys() {
+        for (rule_type, valid_fields, key) in [
+            (ProcurementResponsibilityRuleType::Inquiry, 0, "inquiry"),
+            (ProcurementResponsibilityRuleType::Sku, 1, "sku:sku-1"),
+            (ProcurementResponsibilityRuleType::Category, 2, "category:cat-1"),
+            (ProcurementResponsibilityRuleType::ProductKind, 4, "product_kind:PHYSICAL"),
+            (ProcurementResponsibilityRuleType::DefaultDispatcher, 0, "default_dispatcher"),
+        ] {
+            for fields in 0..8 {
+                let input = data(rule_type, fields);
+                let reference = input.selector_reference();
+                let rule = ProcurementResponsibilityRule::new(
+                    ProcurementResponsibilityRuleId::new("rule"),
+                    input.clone(),
+                    "admin",
+                );
+                if fields == valid_fields {
+                    assert_eq!(rule.unwrap().selector_key, key);
+                    match reference.unwrap() {
+                        ProcurementResponsibilitySelectorReference::Sku(id) => {
+                            assert_eq!(rule_type, ProcurementResponsibilityRuleType::Sku);
+                            assert_eq!(id.as_ref(), "sku-1");
+                        },
+                        ProcurementResponsibilitySelectorReference::Category(id) => {
+                            assert_eq!(rule_type, ProcurementResponsibilityRuleType::Category);
+                            assert_eq!(id.as_ref(), "cat-1");
+                        },
+                        ProcurementResponsibilitySelectorReference::None => {
+                            assert_ne!(rule_type, ProcurementResponsibilityRuleType::Sku);
+                            assert_ne!(rule_type, ProcurementResponsibilityRuleType::Category);
+                        },
+                    }
+                } else {
+                    for error in [reference.unwrap_err(), rule.unwrap_err()] {
+                        assert!(matches!(error, Error::LogicError(message)
+                            if message == "采购责任规则类型与选择器字段不一致"));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn update_preserves_rule_when_selector_or_owner_pool_is_invalid() {
+        let mut rule = ProcurementResponsibilityRule::new(
+            ProcurementResponsibilityRuleId::new("rule"),
+            data(ProcurementResponsibilityRuleType::Sku, 1),
+            "admin",
+        )
+        .unwrap();
+        let original = rule.clone();
+        for (input, message) in [
+            (data(ProcurementResponsibilityRuleType::Category, 3), "采购责任规则类型与选择器字段不一致"),
+            (
+                ProcurementResponsibilityRuleData {
+                    owner_user_ids: vec![],
+                    ..data(ProcurementResponsibilityRuleType::Category, 2)
+                },
+                "负责人池人数必须在 1 至 100 之间",
+            ),
+        ] {
+            assert!(matches!(rule.update(input, "other-admin"), Err(Error::LogicError(error))
+                if error == message));
+            assert_eq!(rule, original);
+        }
+        rule.update(data(ProcurementResponsibilityRuleType::Category, 2), " other-admin ").unwrap();
+        assert_eq!(rule.selector_key, "category:cat-1");
+        assert_eq!(rule.sku_id, None);
+        assert_eq!(rule.category_id, Some(ProductCategoryId::new("cat-1")));
+        assert_eq!(rule.created_by, "admin");
+        assert_eq!(rule.updated_by, "other-admin");
+    }
+
+    #[test]
+    fn validation_keeps_actor_then_selector_then_owner_pool_error_order() {
+        let invalid = ProcurementResponsibilityRuleData {
+            owner_user_ids: vec![],
+            ..data(ProcurementResponsibilityRuleType::Sku, 0)
+        };
+        let mut rule = ProcurementResponsibilityRule::new(
+            ProcurementResponsibilityRuleId::new("rule"),
+            data(ProcurementResponsibilityRuleType::Sku, 1),
+            "admin",
+        )
+        .unwrap();
+        let original = rule.clone();
+        for (actor, message) in [(" ", "操作人不能为空"), ("admin", "采购责任规则类型与选择器字段不一致")]
+        {
+            let error = ProcurementResponsibilityRule::new(
+                ProcurementResponsibilityRuleId::new("rule"),
+                invalid.clone(),
+                actor,
+            )
+            .unwrap_err();
+            assert!(matches!(error, Error::LogicError(error) if error == message));
+            assert!(matches!(rule.update(invalid.clone(), actor), Err(Error::LogicError(error))
+                if error == message));
+            assert_eq!(rule, original);
+        }
+    }
+
+    #[test]
+    fn deserialized_mixed_selector_is_rejected_at_domain_conversion() {
+        let raw = json!({
+            "rule_type": "SKU",
+            "sku_id": "sku-1",
+            "category_id": "cat-1",
+            "product_kind": null,
+            "owner_user_ids": ["buyer-1"],
+            "strategy": "ROUND_ROBIN",
+            "status": "active"
+        });
+        let input: ProcurementResponsibilityRuleData = serde_json::from_value(raw.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&input).unwrap(), raw);
+        let error =
+            ProcurementResponsibilityRule::new(ProcurementResponsibilityRuleId::new("rule"), input, "admin")
+                .unwrap_err();
+        assert!(matches!(error, Error::LogicError(message)
+            if message == "采购责任规则类型与选择器字段不一致"));
+    }
 
     #[test]
     fn entity_normalizes_selector_and_rejects_mixed_shapes() {
