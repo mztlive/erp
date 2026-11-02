@@ -39,11 +39,17 @@ export function SupplierSectionTabs({
     value,
     isCreate,
     canReadDeliveryTemplates,
+    canReadPortalAccounts,
+    canReadPortalCatalog,
+    canReadPortalApplications,
     onValueChange,
 }: {
     value: string
     isCreate: boolean
     canReadDeliveryTemplates: boolean
+    canReadPortalAccounts: boolean
+    canReadPortalCatalog: boolean
+    canReadPortalApplications: boolean
     onValueChange: (value: string) => void
 }) {
     return (
@@ -62,8 +68,21 @@ export function SupplierSectionTabs({
                 {SUPPLIER_SECTIONS.filter(
                     (section) =>
                         (!isCreate ||
-                            !["history", "delivery"].includes(section.id)) &&
-                        (section.id !== "delivery" || canReadDeliveryTemplates),
+                            ![
+                                "history",
+                                "delivery",
+                                "portal-accounts",
+                                "portal-catalog",
+                                "portal-applications",
+                            ].includes(section.id)) &&
+                        (section.id !== "delivery" ||
+                            canReadDeliveryTemplates) &&
+                        (section.id !== "portal-accounts" ||
+                            canReadPortalAccounts) &&
+                        (section.id !== "portal-catalog" ||
+                            canReadPortalCatalog) &&
+                        (section.id !== "portal-applications" ||
+                            canReadPortalApplications),
                 ).map((section) => (
                     <TabsTrigger
                         key={section.id}

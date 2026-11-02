@@ -93,10 +93,33 @@ export function useSupplierEditor(stableId: string) {
         accountQuery.data?.permissions,
         "supplier_offering:update",
     )
+    const canReadPortalAccounts = hasPermission(
+        accountQuery.data?.permissions,
+        "supplier_portal_account:list",
+    )
+    const canReadPortalCatalog = hasPermission(
+        accountQuery.data?.permissions,
+        "supplier_portal_catalog:list",
+    )
+    const canReadPortalApplications = hasPermission(
+        accountQuery.data?.permissions,
+        "supplier_portal_request:list",
+    )
     const activeSection =
         SUPPLIER_SECTIONS.some((section) => section.id === requestedSection) &&
-        (!isCreate || !["history", "delivery"].includes(requestedSection)) &&
-        (requestedSection !== "delivery" || canReadDeliveryTemplates)
+        (!isCreate ||
+            ![
+                "history",
+                "delivery",
+                "portal-accounts",
+                "portal-catalog",
+                "portal-applications",
+            ].includes(requestedSection)) &&
+        (requestedSection !== "delivery" || canReadDeliveryTemplates) &&
+        (requestedSection !== "portal-accounts" || canReadPortalAccounts) &&
+        (requestedSection !== "portal-catalog" || canReadPortalCatalog) &&
+        (requestedSection !== "portal-applications" ||
+            canReadPortalApplications)
             ? requestedSection
             : "basic"
     const setActiveSection = (section: string) => {
@@ -426,6 +449,9 @@ export function useSupplierEditor(stableId: string) {
         canRevealSensitive,
         canReadDeliveryTemplates,
         canEditDeliveryTemplates,
+        canReadPortalAccounts,
+        canReadPortalCatalog,
+        canReadPortalApplications,
         reviseBlocker,
         disableBlocker,
     }

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card"
 import { FieldGroup } from "@/components/ui/field"
 import { useLoginSubmit } from "@/features/auth/hooks/use-login-submit"
+import { LoginModeSwitch } from "./login-mode-switch"
 
 const loginSchema = z.object({
     account: z.string().min(3, "请输入账号").max(32, "账号过长"),
@@ -42,6 +43,7 @@ export function LoginForm() {
     return (
         <Card className="w-full max-w-md border-0 bg-transparent shadow-none">
             <CardHeader className="gap-4">
+                <LoginModeSwitch mode="admin" />
                 <div className="flex flex-col gap-1.5">
                     <CardTitle className="text-login-title">登录</CardTitle>
                     <CardDescription>使用后台账号进入工作台</CardDescription>

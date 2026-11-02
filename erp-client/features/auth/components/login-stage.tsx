@@ -2,13 +2,27 @@
 
 import { LoginMark, LoginStageArt } from "./login-stage-art"
 
-const TRACKS = ["单据流转", "库存履约", "往来结算"] as const
+const copy = {
+    admin: {
+        title: "把单据、库存和往来，放进同一本账",
+        description:
+            "后台账号进入工作台后，待办、审批与履约进度都在同一工作面完成，不必在菜单之间来回跳。",
+        tracks: ["单据流转", "库存履约", "往来结算"],
+    },
+    supplier: {
+        title: "让供给资料与采购协作，及时衔接",
+        description:
+            "使用已开通的供应商账号，维护供给资料、提交商品报价与新品申请，查看采购处理进度。",
+        tracks: ["供给维护", "商品报价", "新品提报"],
+    },
+} as const
 
 /**
  * 登录品牌舞台：深色画布 + SVG 动效。
  * 桌面为整列侧栏，窄屏为顶部短栏。
  */
-export function LoginStage() {
+export function LoginStage({ mode }: { mode: "admin" | "supplier" }) {
+    const content = copy[mode]
     return (
         <aside className="relative isolate flex min-h-40 flex-col overflow-hidden bg-foreground text-background lg:min-h-svh">
             <LoginStageArt className="pointer-events-none absolute inset-0 size-full" />
@@ -30,13 +44,13 @@ export function LoginStage() {
 
                 <div className="hidden max-w-lg flex-col gap-5 lg:flex">
                     <h1 className="font-heading text-3xl font-medium tracking-tight text-balance">
-                        把单据、库存和往来，放进同一本账
+                        {content.title}
                     </h1>
                     <p className="text-sm leading-6 text-background/70">
-                        后台账号进入工作台后，待办、审批与履约进度都在同一工作面完成，不必在菜单之间来回跳。
+                        {content.description}
                     </p>
                     <ul className="flex flex-wrap gap-2">
-                        {TRACKS.map((track) => (
+                        {content.tracks.map((track) => (
                             <li
                                 key={track}
                                 className="rounded-full border border-background/15 bg-background/8 px-3 py-1 text-xs text-background/80"

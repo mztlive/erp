@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { PageHeader, PageScaffold } from "@/components/business"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -45,8 +46,7 @@ import { PortalOfferingImpacts } from "../components/offering-impacts"
 import { PortalDictionaryCreateDialog } from "../components/dictionary-create-dialog"
 import { PortalUnitMappingBulk } from "../components/unit-mapping-bulk"
 import { PortalCategoryMappingEvidence } from "../components/category-suggestion"
-import { PortalAdminFrame } from "../components/admin-frame"
-import { PortalCommandConflict } from "../components/command-conflict"
+import { PortalAdminCommandConflict } from "@/features/supplier-portal/components/admin-command-conflict"
 import { PortalCategoryHierarchyConfirmation } from "../components/category-hierarchy-confirmation"
 import { PortalReassignForm } from "../components/reassign-form"
 import { PortalReviewMappingBatch } from "../components/review-mapping-batch"
@@ -181,7 +181,22 @@ export function PortalAdminReviewPage({
     return embedded ? (
         <section className="p-5">{surface}</section>
     ) : (
-        <PortalAdminFrame title="供应商申请审核">{surface}</PortalAdminFrame>
+        <PageScaffold density="compact">
+            <PageHeader
+                title="供应商申请审核"
+                description={query.data?.supplier_name}
+            />
+            {query.data?.supplier_id && access.can("supplier:detail") && (
+                <Link
+                    id="supplier-portal-review-open-supplier"
+                    href={`/master-data/suppliers/${encodeURIComponent(query.data.supplier_id)}?section=portal-applications`}
+                    className="text-sm text-primary"
+                >
+                    返回供应商资料
+                </Link>
+            )}
+            {surface}
+        </PageScaffold>
     )
 }
 
@@ -537,7 +552,7 @@ function PortalReviewForm({
             )}
             <PortalError error={error} />
             {conflict && (
-                <PortalCommandConflict
+                <PortalAdminCommandConflict
                     idPrefix="supplier-portal-review-conflict"
                     onReload={async () => {
                         await onReload()

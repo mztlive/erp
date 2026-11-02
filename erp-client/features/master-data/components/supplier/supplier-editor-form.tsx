@@ -1,6 +1,9 @@
 "use client"
 
 import { SupplierDeliveryTemplatesSection } from "@/features/supplier-offerings/components/delivery-templates/supplier-delivery-templates-section"
+import { SupplierAccountsSection } from "@/features/master-data/components/supplier/supplier-accounts-section"
+import { SupplierCatalogSection } from "@/features/supplier-portal/components/admin-catalog-section"
+import { SupplierApplicationsSection } from "@/features/supplier-portal/components/admin-applications-section"
 import { PageScaffold, surfacePanelClassName } from "@/components/business"
 import { SupplierEditorBasicSection } from "@/features/master-data/components/supplier/supplier-editor-basic-section"
 import { SupplierEditorCommercialSection } from "@/features/master-data/components/supplier/supplier-editor-commercial-section"
@@ -62,6 +65,9 @@ export function SupplierEditorForm({
         canRevealSensitive,
         canReadDeliveryTemplates,
         canEditDeliveryTemplates,
+        canReadPortalAccounts,
+        canReadPortalCatalog,
+        canReadPortalApplications,
         reviseBlocker,
         disableBlocker,
     } = editor
@@ -90,7 +96,14 @@ export function SupplierEditorForm({
             <div className="space-y-4">
                 <SupplierEditorDocumentHeader
                     formId={formId}
-                    showSave={activeSection !== "delivery"}
+                    showSave={
+                        ![
+                            "delivery",
+                            "portal-accounts",
+                            "portal-catalog",
+                            "portal-applications",
+                        ].includes(activeSection)
+                    }
                     back={{
                         id: `${prefix}-back-list`,
                         label: "供应商列表",
@@ -126,6 +139,11 @@ export function SupplierEditorForm({
                         <SupplierSectionTabs
                             value={activeSection}
                             canReadDeliveryTemplates={canReadDeliveryTemplates}
+                            canReadPortalAccounts={canReadPortalAccounts}
+                            canReadPortalCatalog={canReadPortalCatalog}
+                            canReadPortalApplications={
+                                canReadPortalApplications
+                            }
                             isCreate={isCreate}
                             onValueChange={setActiveSection}
                         />
@@ -196,6 +214,36 @@ export function SupplierEditorForm({
                                     key={data.stableId}
                                     supplierId={data.stableId}
                                     canEdit={canEditDeliveryTemplates}
+                                />
+                            ) : null}
+                            {activeSection === "portal-catalog" &&
+                            !isCreate &&
+                            data &&
+                            canReadPortalCatalog ? (
+                                <SupplierCatalogSection
+                                    key={data.stableId}
+                                    supplierId={data.stableId}
+                                />
+                            ) : null}
+                            {activeSection === "portal-applications" &&
+                            !isCreate &&
+                            data &&
+                            canReadPortalApplications ? (
+                                <SupplierApplicationsSection
+                                    key={data.stableId}
+                                    supplierId={data.stableId}
+                                />
+                            ) : null}
+                            {activeSection === "portal-accounts" &&
+                            !isCreate &&
+                            data &&
+                            canReadPortalAccounts ? (
+                                <SupplierAccountsSection
+                                    key={data.stableId}
+                                    supplierId={data.stableId}
+                                    supplierEnabled={
+                                        data.lifecycleStatus === "ENABLED"
+                                    }
                                 />
                             ) : null}
                         </div>

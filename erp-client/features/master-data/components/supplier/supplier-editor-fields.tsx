@@ -24,6 +24,9 @@ export const SUPPLIER_SECTIONS: ReadonlyArray<{
     { id: "contract", label: "合同资质" },
     { id: "invoice", label: "开票信息" },
     { id: "delivery", label: "配送模板" },
+    { id: "portal-accounts", label: "门户账号" },
+    { id: "portal-catalog", label: "SKU 开放" },
+    { id: "portal-applications", label: "供应商申请" },
     { id: "history", label: "历史引用" },
 ]
 

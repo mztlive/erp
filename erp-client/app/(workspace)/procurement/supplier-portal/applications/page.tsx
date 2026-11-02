@@ -1,4 +1,4 @@
-import { PortalAdminApplicationsPage } from "@/features/supplier-portal-admin/pages/applications-page"
+import { SupplierPortalRedirectPage } from "@/features/master-data/pages/supplier-portal-redirect-page"
 export default function Page() {
-    return <PortalAdminApplicationsPage />
+    return <SupplierPortalRedirectPage section="portal-applications" />
 }

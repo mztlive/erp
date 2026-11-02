@@ -14,7 +14,7 @@ import type {
 import { PortalError } from "@/features/supplier-portal/components/surface"
 import { commandKey } from "@/features/supplier-portal/lib/presentation"
 import { commandFailureDisposition } from "@/lib/api/command-recovery"
-import { PortalCommandConflict } from "./command-conflict"
+import { PortalAdminCommandConflict } from "@/features/supplier-portal/components/admin-command-conflict"
 
 type ReassignCommand = Extract<
     WorkItemResponsibilityCommand,
@@ -85,7 +85,7 @@ export function PortalReassignForm({
         >
             <PortalError error={error ?? query.error} />
             {conflict && (
-                <PortalCommandConflict
+                <PortalAdminCommandConflict
                     idPrefix="supplier-portal-reassign-conflict"
                     onReload={async () => {
                         const [, candidates] = await Promise.all([

@@ -3,9 +3,9 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { PortalError } from "@/features/supplier-portal/components/surface"
+import { PortalError } from "./surface"
 
-export function PortalCommandConflict({
+export function PortalAdminCommandConflict({
     idPrefix,
     onReload,
     onConfirmed,
