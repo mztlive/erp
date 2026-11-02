@@ -69,8 +69,9 @@ export const parseDetailSearchParams = detailCodec.parse
  */
 export const buildDetailSearchParams = detailCodec.build
 
+// 工作区页签自动附加的内部参数不属于业务筛选或查看条件。
 const isAllowedKey = (key: string, allowed: readonly string[]): boolean =>
-    allowed.includes(key)
+    key === "_workspace_frame" || allowed.includes(key)
 
 /**
  * 判断目录页是否出现未知查询参数。
