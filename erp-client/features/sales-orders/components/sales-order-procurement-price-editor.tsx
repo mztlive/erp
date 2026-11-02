@@ -93,8 +93,8 @@ export function SalesProcurementPriceEditor({
                             label="采购供给单价"
                             required
                             hideLabel
-                            type="number"
-                            step="any"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="请填写单价"
                             className="gap-0"
                             inputClassName="num text-right"

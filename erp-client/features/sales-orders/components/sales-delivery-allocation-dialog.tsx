@@ -278,8 +278,8 @@ function DeliveryAllocationForm({
                                                 <field.TextField
                                                     id={`${prefix}-${row.editKey}-quantity`}
                                                     label={`分配数量（${line.unit || "基础单位"}）`}
-                                                    type="number"
-                                                    step="any"
+                                                    type="text"
+                                                    inputMode="decimal"
                                                     inputClassName="num"
                                                     className="sm:max-w-48"
                                                     required

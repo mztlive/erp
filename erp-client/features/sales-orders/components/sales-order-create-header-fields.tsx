@@ -167,7 +167,8 @@ export function SalesOrderCreateHeaderFields({
                                 id="sales-orders-create-header-tax-rate"
                                 label="税率（%）"
                                 required
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 disabled={hasContract}
                                 description={
                                     hasContract ? "沿用合同约定" : undefined

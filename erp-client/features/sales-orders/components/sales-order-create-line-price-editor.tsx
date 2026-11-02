@@ -41,8 +41,8 @@ export function SalesOrderCreateLinePriceEditor({
                                     <Input
                                         id={id}
                                         name={field.name}
-                                        type="number"
-                                        step="any"
+                                        type="text"
+                                        inputMode="decimal"
                                         value={field.state.value}
                                         disabled={
                                             modeField.state.value === "GIFT"

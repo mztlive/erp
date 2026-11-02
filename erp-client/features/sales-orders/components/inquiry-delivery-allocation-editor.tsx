@@ -132,8 +132,8 @@ export function InquiryDeliveryAllocationEditor({
                                                             <field.TextField
                                                                 id={`${prefix}-quantity`}
                                                                 label="本次分配数量"
-                                                                type="number"
-                                                                step="any"
+                                                                type="text"
+                                                                inputMode="decimal"
                                                                 inputClassName="num"
                                                             />
                                                         )}

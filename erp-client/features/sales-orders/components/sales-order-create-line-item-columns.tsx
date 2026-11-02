@@ -151,8 +151,8 @@ export function buildSalesOrderCreateLineItemColumns(
                                         label="数量"
                                         required
                                         hideLabel
-                                        type="number"
-                                        step="any"
+                                        type="text"
+                                        inputMode="decimal"
                                         inputClassName="num"
                                     />
                                 )}
@@ -272,7 +272,8 @@ export function buildSalesOrderCreateLineItemColumns(
                                               label="面值"
                                               required
                                               hideLabel
-                                              type="number"
+                                              type="text"
+                                              inputMode="decimal"
                                               placeholder="0.00"
                                               className="gap-0"
                                               inputClassName="num min-w-20 text-right"
