@@ -9,6 +9,7 @@ use super::RbacService;
 use super::policy::{permission_pairs, permissions_for_actor, role_key};
 use crate::dto::{BuiltinRoleCatalog, BuiltinRoleOption, GenerateBuiltinRolesRequest, GeneratedBuiltinRole};
 use crate::entity::role_template::{BuiltinRoleState, BuiltinRoleTemplate};
+use crate::entity::role_workbench::RoleWorkbench;
 use crate::entity::{Permission, Role, RoleData};
 use crate::service::iam::builtin_role_templates;
 use crate::{AccessControlExt, Error, Result};
@@ -93,8 +94,9 @@ impl RbacService {
         if let Some(role) = existing {
             return Ok(GeneratedBuiltinRole { id: role.base.id, name: role.name, created: false, state });
         }
-        let role =
-            Role::new(template.id, RoleData::new(template.name).with_description(template.description))?;
+        let mut data = RoleData::new(template.name).with_description(template.description);
+        data.workbenches = RoleWorkbench::recommended(&template.id);
+        let role = Role::new(template.id, data)?;
         let audit = self.audit.resource_log(actor.clone(), "role.create", "role", role.base.id.clone())?;
         self.db.roles().create(&role, executor).await?;
         self.policy_store

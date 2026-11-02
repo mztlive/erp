@@ -11,6 +11,7 @@ use validator::Validate;
 
 use super::access::{ActorAccess, ViewAccess};
 use super::action_projection::ActionProjection;
+use super::dto::WorkItemTypeTiming;
 use super::owner_qualification::QualificationCache;
 use super::query::AUTHORIZED_SCAN_BATCH_SIZE;
 use super::{
@@ -42,6 +43,7 @@ struct StatsCounts {
     selected: SelectedCounts,
     family_counts: WorkItemFamilyCountsView,
     work_item_type_counts: HashMap<WorkItemType, u64>,
+    work_item_type_timing: HashMap<WorkItemType, WorkItemTypeTiming>,
 }
 
 /// 选中范围的可处理总数、到期及异常指标。
@@ -80,14 +82,23 @@ impl StatsCounts {
         increment_family_count(&mut self.family_counts, item.work_item_type);
         let count = self.work_item_type_counts.entry(item.work_item_type).or_default();
         *count = count.saturating_add(1);
+        let timing = self.work_item_type_timing.entry(item.work_item_type).or_default();
+        let today = item.due_at.is_some_and(|due| due >= context.today_start && due < context.tomorrow_start);
+        let overdue = item.due_at.is_some_and(|due| due < context.as_of);
+        if today {
+            timing.due_today = timing.due_today.saturating_add(1);
+        }
+        if overdue {
+            timing.overdue = timing.overdue.saturating_add(1);
+        }
         if !context.selected_types.contains(&item.work_item_type) {
             return;
         }
         self.selected.assigned = self.selected.assigned.saturating_add(1);
-        if item.due_at.is_some_and(|due| due >= context.today_start && due < context.tomorrow_start) {
+        if today {
             self.selected.due_today = self.selected.due_today.saturating_add(1);
         }
-        if item.due_at.is_some_and(|due| due < context.as_of) {
+        if overdue {
             self.selected.overdue = self.selected.overdue.saturating_add(1);
         }
         if matches!(
@@ -167,6 +178,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
             exception: selected.exception,
             family_counts: personal.family_counts,
             work_item_type_counts: personal.work_item_type_counts,
+            work_item_type_timing: personal.work_item_type_timing,
             as_of,
         })
     }
@@ -423,6 +435,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn type_timing_keeps_missing_dates_and_day_boundaries_distinct() {
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let access = ActorAccess::new("actor".into());
+        let types = [WorkItemType::DocumentApproval];
+        let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_787_600));
+        let mut counts = StatsCounts::default();
+        for due in [
+            None,
+            Some(context.today_start),
+            Some(context.tomorrow_start),
+            Some(Instant::from_unix_secs(context.today_start.unix_secs() - 1)),
+        ] {
+            let (item, access) = ready(WorkItemType::SupplierPaymentExecution, due);
+            counts.observe(item, WorkItemScope::Mine, &access, &context);
+        }
+        assert_eq!(counts.selected.assigned, 0);
+        assert_eq!(counts.work_item_type_counts[&WorkItemType::SupplierPaymentExecution], 4);
+        assert_eq!(
+            counts.work_item_type_timing[&WorkItemType::SupplierPaymentExecution],
+            WorkItemTypeTiming { due_today: 1, overdue: 2 }
+        );
+    }
+
     /// 审批可决定即计入；失效、受阻、仅查看和非个人范围沿正式动作语义排除。
     #[test]
     fn eligibility_and_scope_exclude_unprocessable_statistics() {
@@ -452,6 +488,10 @@ mod tests {
         }
         assert_eq!(counts.selected.assigned, 1);
         assert_eq!(counts.selected.due_today, 1);
+        assert_eq!(
+            counts.work_item_type_timing.get(&WorkItemType::DocumentApproval),
+            Some(&WorkItemTypeTiming { due_today: 1, overdue: 0 })
+        );
         assert_eq!(counts.family_counts.approval, 1);
         assert_eq!(counts.work_item_type_counts, HashMap::from([(WorkItemType::DocumentApproval, 1)]));
     }
@@ -504,6 +544,10 @@ mod tests {
         );
         assert_eq!(counts.selected.assigned, 4);
         assert_eq!(counts.selected.due_today, 1);
+        assert_eq!(
+            counts.work_item_type_timing.get(&WorkItemType::BusinessException),
+            Some(&WorkItemTypeTiming { due_today: 1, overdue: 1 })
+        );
         assert_eq!(counts.selected.overdue, 1);
         assert_eq!(counts.selected.exception, 4);
         let mut filter = WorkItemFilter::default();

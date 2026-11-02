@@ -110,8 +110,11 @@ export function availableOverviewViews(
     })
 }
 
-export function overviewPeriod(preset: PeriodPreset) {
-    const period = resolvePeriod(preset)
+export function overviewPeriod(
+    preset: PeriodPreset,
+    custom?: { from: string; to: string },
+) {
+    const period = custom ?? resolvePeriod(preset)
     return {
         ...period,
         createdFrom: Date.parse(`${period.from}T00:00:00+08:00`) / 1000,
@@ -123,8 +126,9 @@ export function overviewMetrics(
     view: OverviewView,
     preset: PeriodPreset,
     profile: AccountProfile,
+    custom?: { from: string; to: string },
 ): OverviewMetric[] {
-    const period = overviewPeriod(preset)
+    const period = overviewPeriod(preset, custom)
     const sales: OverviewMetric[] = [
         {
             key: "sales-created",
@@ -266,5 +270,32 @@ export function overviewMetrics(
         .filter((metric) =>
             hasPermission(profile.permissions, metric.permission),
         )
-        .slice(0, 4)
+        .map((metric) => {
+            if (view === "sales" && metric.source.kind === "sales")
+                return {
+                    ...metric,
+                    detail: `本人负责 · ${metric.detail}`,
+                    source: {
+                        ...metric.source,
+                        query: {
+                            ...metric.source.query,
+                            ownerUserIds: profile.userid,
+                        },
+                    },
+                }
+            if (view === "procurement" && metric.source.kind === "purchase")
+                return {
+                    ...metric,
+                    detail: `本人负责 · ${metric.detail}`,
+                    source: {
+                        ...metric.source,
+                        query: {
+                            ...metric.source.query,
+                            ownerUserIds: profile.userid,
+                        },
+                    },
+                }
+            return metric
+        })
+        .slice(0, 6)
 }

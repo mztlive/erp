@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ROLE_WORKBENCHES } from "@/lib/role-workbenches"
 import { useRouter } from "@/lib/navigation"
-import { ArrowLeftIcon, PencilIcon, ShieldAlertIcon } from "lucide-react"
+import { PencilIcon, ShieldAlertIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
@@ -14,7 +16,6 @@ import { toFieldErrors, useAppForm } from "@/components/form"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Field, FieldError } from "@/components/ui/field"
 import {
     Dialog,
@@ -46,6 +47,7 @@ import type { AdminRole } from "@/features/admin/types"
 type RoleFormValues = {
     name: string
     permissions: string[]
+    workbenches: string[]
 }
 
 const roleFormSchema = z.object({
@@ -55,6 +57,7 @@ const roleFormSchema = z.object({
         .min(2, "角色名称长度必须在2-32个字符之间")
         .max(32, "角色名称长度必须在2-32个字符之间"),
     permissions: z.array(z.string()),
+    workbenches: z.array(z.string()),
 })
 
 /** 角色返回列表地址（权限与审计 · 角色视图）。 */
@@ -209,6 +212,7 @@ function RoleForm({
         defaultValues: {
             name: role?.name ?? "",
             permissions: [...new Set(role?.permissions ?? [])],
+            workbenches: role?.workbenches ?? [],
         } satisfies RoleFormValues,
         validators: { onChange: roleFormSchema },
         onSubmit: async ({ value }) => {
@@ -218,11 +222,16 @@ function RoleForm({
                 if (role)
                     await updateRole({
                         id: role.id,
-                        payload: { name: value.name.trim(), permissions },
+                        payload: {
+                            name: value.name.trim(),
+                            permissions,
+                            workbenches: value.workbenches,
+                        },
                     })
                 else {
                     const createdId = await createRole({
                         name: value.name.trim(),
+                        workbenches: value.workbenches,
                         permissions,
                     })
                     router.replace(
@@ -233,6 +242,7 @@ function RoleForm({
                 form.reset({
                     name: value.name.trim(),
                     permissions: value.permissions,
+                    workbenches: value.workbenches,
                 })
                 setSavedMessage(
                     "角色操作权限已保存，对使用此角色的人员生效。每个人的数据范围请到人员资料中设置。",
@@ -249,6 +259,8 @@ function RoleForm({
         )
         if (
             form.state.values.name.trim() !== (role?.name ?? "") ||
+            JSON.stringify(form.state.values.workbenches) !==
+                JSON.stringify(role?.workbenches ?? []) ||
             added.length > 0 ||
             removed.length > 0
         )
@@ -267,28 +279,6 @@ function RoleForm({
             >
                 <PageHeader
                     className="pb-4"
-                    leading={
-                        <>
-                            <SidebarTrigger
-                                id="role-workbench-navigation"
-                                className="md:hidden"
-                                aria-label="打开导航"
-                            />
-                            <Button
-                                id="governance-admin-role-form-back"
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={
-                                    returnTo ? "返回人员资料" : "返回角色列表"
-                                }
-                                disabled={pending}
-                                onClick={leave}
-                            >
-                                <ArrowLeftIcon className="size-4" />
-                            </Button>
-                        </>
-                    }
                     title={
                         <form.Subscribe selector={(state) => state.values.name}>
                             {(name) =>
@@ -352,6 +342,49 @@ function RoleForm({
                         </form.Subscribe>
                     }
                 />
+                <fieldset className="space-y-2 border-b pb-4 mb-4">
+                    <legend className="text-sm font-medium">岗位工作台</legend>
+                    <p className="text-xs text-muted-foreground">
+                        显式关联岗位；不会授予业务权限。满足核心模块权限后提供入口。
+                    </p>
+                    <form.Field name="workbenches">
+                        {(field) => (
+                            <div className="flex flex-wrap gap-4">
+                                {ROLE_WORKBENCHES.map((item) => (
+                                    <label
+                                        key={item.id}
+                                        className="flex items-center gap-2 text-sm"
+                                        htmlFor={`role-workbench-${item.id.toLowerCase()}`}
+                                    >
+                                        <Checkbox
+                                            id={`role-workbench-${item.id.toLowerCase()}`}
+                                            disabled={pending}
+                                            checked={field.state.value.includes(
+                                                item.id,
+                                            )}
+                                            onCheckedChange={(checked) =>
+                                                field.handleChange(
+                                                    checked
+                                                        ? [
+                                                              ...field.state
+                                                                  .value,
+                                                              item.id,
+                                                          ]
+                                                        : field.state.value.filter(
+                                                              (id) =>
+                                                                  id !==
+                                                                  item.id,
+                                                          ),
+                                                )
+                                            }
+                                        />
+                                        {item.name}
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                    </form.Field>
+                </fieldset>
                 {editingName && (
                     <div className="flex shrink-0 items-start gap-2 pb-4">
                         <form.AppField name="name">
@@ -469,6 +502,8 @@ function RoleForm({
                             role?.permissions ?? [],
                         )
                         const dirty =
+                            JSON.stringify(form.state.values.workbenches) !==
+                                JSON.stringify(role?.workbenches ?? []) ||
                             added.length > 0 ||
                             removed.length > 0 ||
                             values.name.trim() !== (role?.name ?? "")

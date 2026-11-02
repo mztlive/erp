@@ -55,6 +55,7 @@ pub(crate) use upgrades::{
 };
 
 use crate::entity::policy_permission::FINANCE_LEDGER_READ;
+use crate::entity::role_workbench::RoleWorkbench;
 use crate::entity::{Permission, RoleData};
 use crate::error::{Error, Result};
 
@@ -94,7 +95,11 @@ pub async fn create_missing_predefined_role(
     }
     rbac.ensure_seeded_role(
         role_id,
-        CreateRoleParams { name: role.name.into(), permissions: parse_permissions(role.permissions)? },
+        CreateRoleParams {
+            name: role.name.into(),
+            permissions: parse_permissions(role.permissions)?,
+            workbenches: RoleWorkbench::recommended(role_id),
+        },
         actor.clone(),
     )
     .await?;

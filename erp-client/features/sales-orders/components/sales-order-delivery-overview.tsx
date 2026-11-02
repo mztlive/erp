@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table"
 import type { SalesOrderDetailView } from "../api/sales-orders"
 import type { useSalesOrderDeliveryProgressQuery } from "../hooks/queries"
+import type { AcceptanceLineProgress } from "../lib/acceptance-model"
 import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
 
 export type DeliveryProgressQuery = ReturnType<
@@ -53,26 +54,11 @@ export function SalesOrderDeliveryOverview({
             <p className="text-xs leading-5 text-muted-foreground">
                 已交付数量只统计已登记的发货或服务执行。供应商预占、订单确认及父单完成不计入交付，物流妥投后仍按原流程办理客户验收。
             </p>
-            {query.isError ? (
-                <BusinessFailureState
-                    id="sales-order-delivery-overview-failure"
-                    title="交付进度读取失败"
-                    error={query.error}
-                    onRetry={() => void query.refetch()}
-                />
-            ) : order.currentRevisionNo == null ? (
-                <p className="text-sm text-muted-foreground">
-                    销售单生效后显示交付与验收进度。
-                </p>
-            ) : !canRead ? (
-                <p className="text-sm text-muted-foreground">
-                    当前无法读取交付进度；商品约定仍可查阅。
-                </p>
-            ) : query.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                    正在读取交付进度…
-                </p>
-            ) : null}
+            <DeliveryProgressNotice
+                order={order}
+                query={query}
+                canRead={canRead}
+            />
             <div className="min-w-0 overflow-x-auto">
                 <Table className="min-w-[44rem]">
                     <TableHeader>
@@ -91,18 +77,6 @@ export function SalesOrderDeliveryOverview({
                             const progress = canRead
                                 ? lines.get(line.id)
                                 : undefined
-                            const partiallyDelivered =
-                                progress &&
-                                compareDecimal(
-                                    progress.deliveredQuantity,
-                                    "0",
-                                    6,
-                                ) > 0 &&
-                                compareDecimal(
-                                    progress.deliveredQuantity,
-                                    progress.requiredQuantity,
-                                    6,
-                                ) < 0
                             return (
                                 <TableRow key={line.id}>
                                     <TableCell className="min-w-44 whitespace-normal">
@@ -171,40 +145,9 @@ export function SalesOrderDeliveryOverview({
                                         {line.dueDate || "—"}
                                     </TableCell>
                                     <TableCell>
-                                        {progress ? (
-                                            <StatusBadge
-                                                tone={
-                                                    progress.stuckKind ===
-                                                    "done"
-                                                        ? "success"
-                                                        : progress.stuckKind ===
-                                                            "exception"
-                                                          ? "warning"
-                                                          : "info"
-                                                }
-                                                label={
-                                                    partiallyDelivered
-                                                        ? progress.stuckKind ===
-                                                          "accept"
-                                                            ? "部分交付 · 待验收"
-                                                            : "部分交付"
-                                                        : progress.stuckKind ===
-                                                            "done"
-                                                          ? "已验收"
-                                                          : progress.stuckKind ===
-                                                              "accept"
-                                                            ? "待验收"
-                                                            : progress.stuckKind ===
-                                                                "exception"
-                                                              ? "待处理"
-                                                              : "待交付"
-                                                }
-                                            />
-                                        ) : (
-                                            <span className="text-xs text-muted-foreground">
-                                                待确认
-                                            </span>
-                                        )}
+                                        <DeliveryLineStatus
+                                            progress={progress}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             )
@@ -213,5 +156,87 @@ export function SalesOrderDeliveryOverview({
                 </Table>
             </div>
         </section>
+    )
+}
+
+/** 概览与履约分区共用同一交付状态口径。 */
+export function DeliveryLineStatus({
+    progress,
+}: {
+    progress?: AcceptanceLineProgress
+}) {
+    const partiallyDelivered =
+        progress &&
+        compareDecimal(progress.deliveredQuantity, "0", 6) > 0 &&
+        compareDecimal(
+            progress.deliveredQuantity,
+            progress.requiredQuantity,
+            6,
+        ) < 0
+    return (
+        <>
+            {progress ? (
+                <StatusBadge
+                    tone={
+                        progress.stuckKind === "done"
+                            ? "success"
+                            : progress.stuckKind === "exception"
+                              ? "warning"
+                              : "info"
+                    }
+                    label={
+                        partiallyDelivered
+                            ? progress.stuckKind === "accept"
+                                ? "部分交付 · 待验收"
+                                : "部分交付"
+                            : progress.stuckKind === "done"
+                              ? "已验收"
+                              : progress.stuckKind === "accept"
+                                ? "待验收"
+                                : progress.stuckKind === "exception"
+                                  ? "待处理"
+                                  : "待交付"
+                    }
+                />
+            ) : (
+                <span className="text-xs text-muted-foreground">待确认</span>
+            )}
+        </>
+    )
+}
+
+/** 交付数据不可用时说明原因，不以零数量或完成状态替代。 */
+export function DeliveryProgressNotice({
+    order,
+    query,
+    canRead,
+}: {
+    order: SalesOrderDetailView
+    query: DeliveryProgressQuery
+    canRead: boolean
+}) {
+    return (
+        <>
+            {query.isError ? (
+                <BusinessFailureState
+                    id="sales-order-delivery-overview-failure"
+                    title="交付进度读取失败"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
+            ) : order.currentRevisionNo == null ? (
+                <p className="text-sm text-muted-foreground">
+                    销售单生效后显示交付与验收进度。
+                </p>
+            ) : !canRead ? (
+                <p className="text-sm text-muted-foreground">
+                    当前无法读取交付进度；商品约定仍可查阅。
+                </p>
+            ) : query.isPending ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    正在读取交付进度…
+                </p>
+            ) : null}
+        </>
     )
 }

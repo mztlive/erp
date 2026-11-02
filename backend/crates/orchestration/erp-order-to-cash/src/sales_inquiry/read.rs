@@ -100,6 +100,8 @@ pub struct InquiryListView<T> {
     pub page: u64,
     pub page_size: u32,
     pub scope_version: String,
+    pub no_scope: bool,
+    pub as_of: i64,
 }
 
 /// 采购详情只开放当前责任行及必要客户和配送信息。
@@ -203,7 +205,7 @@ impl InquiryReadService {
         {
             return Err(scope_changed());
         }
-        Ok(list_view(items, page.total, params, access.scope_version))
+        Ok(list_view(items, page.total, params, access.scope_version, !access.scope.has_role_scope()))
     }
 
     /// 读取销售安全详情，工作报价不会进入响应。
@@ -257,7 +259,7 @@ impl InquiryReadService {
         {
             return Err(scope_changed());
         }
-        Ok(list_view(items, page.total, params, version))
+        Ok(list_view(items, page.total, params, version, false))
     }
 
     /// 按精确责任任务读取当前资料或本人完成的历史结果。
@@ -483,8 +485,17 @@ fn list_view<T>(
     total: i64,
     params: &InquiryListParams,
     scope_version: String,
+    no_scope: bool,
 ) -> InquiryListView<T> {
-    InquiryListView { items, total, page: params.page.unwrap_or(1), page_size: 20, scope_version }
+    InquiryListView {
+        items,
+        total,
+        page: params.page.unwrap_or(1),
+        page_size: 20,
+        scope_version,
+        no_scope,
+        as_of: Instant::now().unix_secs(),
+    }
 }
 
 fn scope_changed() -> Error {
@@ -512,6 +523,17 @@ fn read_clause(clause: &ScopeClause, user: &str) -> InquiryScopeClause {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn list_view_distinguishes_missing_scope_from_empty_business_records() {
+        let params = InquiryListParams::default();
+        let unavailable = list_view(Vec::<String>::new(), 0, &params, "v1".into(), true);
+        let empty = list_view(Vec::<String>::new(), 0, &params, "v1".into(), false);
+        assert!(unavailable.no_scope);
+        assert!(!empty.no_scope);
+        assert_eq!(empty.total, 0);
+        assert!(empty.as_of > 0);
+    }
+
     #[test]
     fn procurement_history_and_pending_count_use_distinct_task_scopes() {
         assert_eq!(InquiryTaskFilter::statuses(None), &[WorkItemStatus::Open, WorkItemStatus::Completed]);

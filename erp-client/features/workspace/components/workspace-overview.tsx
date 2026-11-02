@@ -162,6 +162,12 @@ export function WorkspaceOverviewMetrics({
                             </div>
                             <p className="mt-2 text-xs leading-5 text-muted-foreground">
                                 {metric.detail}
+                                {data?.scopeSummary
+                                    ? ` · ${data.scopeSummary}`
+                                    : ""}
+                                {data?.asOf
+                                    ? ` · 更新于 ${new Date(data.asOf).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+                                    : ""}
                                 {data?.limited ? " · 部分覆盖或权限受限" : ""}
                                 {query.isFetching && !query.isPending
                                     ? " · 更新中"

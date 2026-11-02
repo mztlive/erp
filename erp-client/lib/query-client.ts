@@ -16,7 +16,9 @@ export const makeQueryClient = (
                 // 全局成功回调先于业务回调；必须在业务跳转或关闭页签前交付通知。
                 onMutationSuccess?.()
                 void client.invalidateQueries({
-                    predicate: (query) => query.meta?.businessTimeline === true,
+                    predicate: (query) =>
+                        query.meta?.businessTimeline === true ||
+                        query.meta?.roleWorkbench === true,
                 })
             },
             onError: (error, _variables, _context, mutation) => {

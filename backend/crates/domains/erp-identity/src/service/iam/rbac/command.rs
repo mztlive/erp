@@ -31,7 +31,7 @@ impl RbacService {
         let audit = self.audit.resource_log(actor, "role.create", "role", id.clone())?;
         self.create_role_with_id(
             id,
-            RoleData::new(params.name),
+            RoleData { workbenches: params.workbenches, ..RoleData::new(params.name) },
             authorized.permissions.into_vec(),
             Some(audit),
             Some(authorized.policy_revision),
@@ -64,9 +64,26 @@ impl RbacService {
         let audit = self.audit.resource_log(actor, "role.update", "role", role.base.id.clone())?;
         let AuthorizedRoleUpdate { permissions, policy_revision } = authorized;
 
-        match (params.name, permissions) {
+        let update = RoleUpdate { name: params.name, workbenches: params.workbenches, ..Default::default() };
+        if update.workbenches.is_some() {
+            return match permissions {
+                Some(permissions) => {
+                    self.update_role_with_permissions(role, update, permissions, policy_revision, audit).await
+                },
+                None => self.update_role_name(role, update, audit, policy_revision).await,
+            };
+        }
+        match (update.name, permissions) {
             (None, None) => self.audit_role_update(role, audit, policy_revision).await,
-            (Some(name), None) => self.update_role_name(role, name, audit, policy_revision).await,
+            (Some(name), None) => {
+                self.update_role_name(
+                    role,
+                    RoleUpdate { name: Some(name), ..Default::default() },
+                    audit,
+                    policy_revision,
+                )
+                .await
+            },
             (None, Some(permissions)) => {
                 self.replace_role_permissions(
                     role.base.id.as_str(),
@@ -77,7 +94,14 @@ impl RbacService {
                 .await
             },
             (Some(name), Some(permissions)) => {
-                self.update_role_with_permissions(role, name, permissions, policy_revision, audit).await
+                self.update_role_with_permissions(
+                    role,
+                    RoleUpdate { name: Some(name), ..Default::default() },
+                    permissions,
+                    policy_revision,
+                    audit,
+                )
+                .await
             },
         }
     }
@@ -119,11 +143,11 @@ impl RbacService {
     async fn update_role_name(
         self: &Arc<Self>,
         mut role: Role,
-        name: String,
+        update: RoleUpdate,
         audit: PreparedResourceAudit,
         policy_revision: u64,
     ) -> Result<Role> {
-        role.update(RoleUpdate { name: Some(name), ..Default::default() })?;
+        role.update(update)?;
         let db = self.db.clone();
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
             Box::pin(async move {
@@ -239,12 +263,12 @@ impl RbacService {
     async fn update_role_with_permissions(
         self: &Arc<Self>,
         mut role: Role,
-        name: String,
+        update: RoleUpdate,
         permissions: PermissionSet,
         policy_revision: u64,
         audit: PreparedResourceAudit,
     ) -> Result<Role> {
-        role.update(RoleUpdate { name: Some(name), ..Default::default() })?;
+        role.update(update)?;
         let db = self.db.clone();
         let policy_store = self.policy_store.clone();
         let role_key = role_key(role.base.id.as_str());

@@ -1,8 +1,11 @@
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::entity::rbac::Permission;
 use crate::entity::role::Role;
+use crate::entity::role_workbench::RoleWorkbench;
 
 /// 创建角色请求。
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -10,6 +13,8 @@ pub struct CreateRoleParams {
     #[validate(length(min = 2, max = 32, message = "角色名称长度必须在2-32个字符之间"))]
     pub name: String,
     pub permissions: Vec<Permission>,
+    #[serde(default)]
+    pub workbenches: BTreeSet<RoleWorkbench>,
 }
 
 /// 更新角色请求。
@@ -18,6 +23,7 @@ pub struct UpdateRoleParams {
     #[validate(length(min = 2, max = 32, message = "角色名称长度必须在2-32个字符之间"))]
     pub name: Option<String>,
     pub permissions: Option<Vec<Permission>>,
+    pub workbenches: Option<BTreeSet<RoleWorkbench>>,
 }
 
 /// 角色响应项。
@@ -28,6 +34,8 @@ pub struct RoleItem {
     pub id: String,
     pub name: String,
     pub permissions: Vec<Permission>,
+    #[serde(default)]
+    pub workbenches: BTreeSet<RoleWorkbench>,
     pub created_at: u64,
 }
 
@@ -44,7 +52,14 @@ impl RoleItem {
     /// # 错误
     /// 无。
     pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
-        Self { system: false, id: id.into(), name: name.into(), permissions: Vec::new(), created_at: 0 }
+        Self {
+            system: false,
+            id: id.into(),
+            name: name.into(),
+            permissions: Vec::new(),
+            created_at: 0,
+            workbenches: BTreeSet::new(),
+        }
     }
 
     /// 设置系统角色标记。
@@ -112,6 +127,7 @@ impl RoleItem {
             name: role.name,
             permissions,
             created_at: role.base.created_at,
+            workbenches: role.workbenches,
         }
     }
 }
@@ -177,6 +193,7 @@ mod tests {
             name: "管理员".to_string(),
             permissions: vec![Permission::parse("admin:list").unwrap()],
             created_at: 42,
+            workbenches: Default::default(),
         };
 
         assert_eq!(
@@ -187,6 +204,7 @@ mod tests {
                 "name": "管理员",
                 "permissions": ["admin:list"],
                 "created_at": 42,
+                "workbenches": [],
             })
         );
     }

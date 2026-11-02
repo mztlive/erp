@@ -161,6 +161,12 @@ export function WorkspaceSidebarAccount() {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
+                            id="workspace-sidebar-home-settings"
+                            onClick={() => router.push("/account/workbench")}
+                        >
+                            个人首页设置
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                             id="workspace-sidebar-my-transfers"
                             onClick={() =>
                                 router.push("/account/data-transfers")

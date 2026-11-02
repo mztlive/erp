@@ -21,6 +21,7 @@ export function overviewIdentity(profile?: AccountProfile) {
         profile?.organization_version,
         profile ? [...profile.permissions].sort() : [],
         profile ? [...profile.role_ids].sort() : [],
+        profile?.workbenches ?? [],
     ]
 }
 
@@ -28,6 +29,8 @@ export function useWorkspaceOverview(
     profile: AccountProfile | undefined,
     requestedView?: OverviewView,
     preset: PeriodPreset = "month-to-date",
+    loadTrend = true,
+    custom?: { from: string; to: string },
 ) {
     const views = availableOverviewViews(profile)
     const view =
@@ -35,7 +38,7 @@ export function useWorkspaceOverview(
             ? requestedView
             : views[0]
     const metrics =
-        profile && view ? overviewMetrics(view, preset, profile) : []
+        profile && view ? overviewMetrics(view, preset, profile, custom) : []
     const identity = overviewIdentity(profile)
     const sources = [
         ...new Map(
@@ -57,6 +60,7 @@ export function useWorkspaceOverview(
             staleTime: 60_000,
             refetchInterval: 300_000,
             retry: false,
+            meta: { roleWorkbench: true },
         })),
     })
     const queries = metrics.map(
@@ -69,7 +73,7 @@ export function useWorkspaceOverview(
                 )
             ]!,
     )
-    const period = overviewPeriod(preset)
+    const period = overviewPeriod(preset, custom)
     const trend = useQuery({
         queryKey: [
             ...queryKeyRoots.workspaceHome,
@@ -79,6 +83,7 @@ export function useWorkspaceOverview(
         ],
         queryFn: () => fetchSalesCountTrend(period.to),
         enabled:
+            loadTrend &&
             view === "sales" &&
             Boolean(
                 profile &&
@@ -86,6 +91,7 @@ export function useWorkspaceOverview(
             ),
         staleTime: 300_000,
         retry: false,
+        meta: { roleWorkbench: true },
     })
     return { views, view, metrics, queries, trend, period, preset }
 }

@@ -1,9 +1,12 @@
+use std::collections::BTreeSet;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::role_workbench::RoleWorkbench;
 use crate::entity::rbac::{PermissionSet, RoleId};
 
 const NAME_MAX_LEN: usize = 32;
@@ -18,6 +21,8 @@ pub struct RoleData {
     pub name: String,
     pub description: Option<String>,
     pub system: bool,
+    #[serde(default)]
+    pub workbenches: BTreeSet<RoleWorkbench>,
 }
 
 impl RoleData {
@@ -32,7 +37,7 @@ impl RoleData {
     /// # 错误
     /// 不返回错误。
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), description: None, system: false }
+        Self { name: name.into(), description: None, system: false, workbenches: BTreeSet::new() }
     }
 
     /// 设置角色描述。
@@ -72,6 +77,7 @@ pub struct RoleUpdate {
     pub name: Option<String>,
     pub description: Option<String>,
     pub disabled: Option<bool>,
+    pub workbenches: Option<BTreeSet<RoleWorkbench>>,
 }
 
 /// RBAC 角色实体。
@@ -84,6 +90,8 @@ pub struct Role {
     pub description: Option<String>,
     #[serde(default)]
     pub system: bool,
+    #[serde(default)]
+    pub workbenches: BTreeSet<RoleWorkbench>,
     #[serde(default)]
     pub disabled: bool,
 }
@@ -107,6 +115,7 @@ impl Role {
             name: normalize_required_text(data.name, "角色名称不能为空", NAME_MAX_LEN, "角色名称过长")?,
             description: normalize_optional_text(data.description, "角色描述", DESCRIPTION_MAX_LEN)?,
             system: data.system,
+            workbenches: data.workbenches,
             disabled: false,
         })
     }
@@ -127,6 +136,9 @@ impl Role {
         }
         if let Some(description) = update.description {
             self.description = normalize_optional_text(Some(description), "角色描述", DESCRIPTION_MAX_LEN)?;
+        }
+        if let Some(workbenches) = update.workbenches {
+            self.workbenches = workbenches;
         }
         if let Some(disabled) = update.disabled {
             self.disabled = disabled;

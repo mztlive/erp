@@ -37,7 +37,11 @@ impl RbacService {
             };
             self.update_role(
                 id,
-                UpdateRoleParams { name: None, permissions: Some(permissions.into_vec()) },
+                UpdateRoleParams {
+                    name: None,
+                    permissions: Some(permissions.into_vec()),
+                    ..Default::default()
+                },
                 actor,
             )
             .await?;
@@ -45,7 +49,7 @@ impl RbacService {
             let audit = self.audit.resource_log(actor, "role.create", "role", id.to_owned())?;
             self.create_role_with_id(
                 id.to_owned(),
-                RoleData::new(params.name),
+                RoleData { workbenches: params.workbenches, ..RoleData::new(params.name) },
                 authorized.permissions.into_vec(),
                 Some(audit),
                 Some(authorized.policy_revision),

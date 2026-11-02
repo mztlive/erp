@@ -56,6 +56,7 @@ impl DemoRole {
         Ok(Self {
             id: format!("role-demo-{}", account.account),
             request: CreateRoleParams {
+                workbenches: Default::default(),
                 name: format!("演示岗位-{}", account.account),
                 permissions: PermissionSet::new(permissions).into_vec(),
             },

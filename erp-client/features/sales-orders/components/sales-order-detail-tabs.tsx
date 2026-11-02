@@ -22,10 +22,7 @@ import { AcceptanceWorkspace } from "./acceptance-workspace"
 import { SalesOrderCustomerFinancePanel } from "./sales-order-detail-receivable-panel"
 import { SalesOrderDocumentsPanel } from "./sales-order-documents-panel"
 import { ExtraCostPanel } from "./sales-order-extra-cost-panel"
-import {
-    SalesOrderDeliveryOverview,
-    type DeliveryProgressQuery,
-} from "./sales-order-delivery-overview"
+import type { DeliveryProgressQuery } from "./sales-order-delivery-overview"
 import { getProcurementAttention } from "../lib/procurement-attention"
 import {
     SALES_ORDER_SECTION_GROUPS,
@@ -170,21 +167,19 @@ export function SalesOrderDetailTabs({
                     </nav>
                 ) : null}
                 {navSection === "overview" ? (
-                    <>
-                        <div className="min-w-0 space-y-6 rounded-lg border border-border/70 p-4 md:p-5">
-                            {isCard ? (
-                                <OverviewPanel order={order} />
-                            ) : (
-                                <SalesOrderDeliveryOverview
-                                    order={order}
-                                    query={deliveryQuery}
-                                    canRead={
-                                        canReadDelivery &&
-                                        order.currentRevisionNo != null
-                                    }
-                                />
-                            )}
-                            <div className="border-t border-border/70 pt-5">
+                    <OverviewPanel
+                        order={order}
+                        deliveryQuery={deliveryQuery}
+                        canReadDelivery={
+                            canReadDelivery && order.currentRevisionNo != null
+                        }
+                        onOpenFulfillment={
+                            visibleNav.some((item) => item.id === "fulfillment")
+                                ? () => onSelectSection("fulfillment")
+                                : undefined
+                        }
+                        related={
+                            <section className="min-w-0 rounded-lg border border-border/70 p-4 md:p-5">
                                 <SalesTimeline
                                     salesOrderId={order.id}
                                     idPrefix={`sales-overview-timeline-${prefix}`}
@@ -193,22 +188,9 @@ export function SalesOrderDetailTabs({
                                         onSelectSection("timeline")
                                     }
                                 />
-                            </div>
-                        </div>
-                        {!isCard ? (
-                            <details className="group rounded-lg border border-border/70 p-4 md:p-5">
-                                <summary
-                                    id="sales-order-commercial-details-toggle"
-                                    className="cursor-pointer text-sm font-medium"
-                                >
-                                    销售明细与交易约定
-                                </summary>
-                                <div className="mt-5">
-                                    <OverviewPanel order={order} />
-                                </div>
-                            </details>
-                        ) : null}
-                    </>
+                            </section>
+                        }
+                    />
                 ) : null}
                 {group === "timeline" ? (
                     <SalesOrderProcessPanel

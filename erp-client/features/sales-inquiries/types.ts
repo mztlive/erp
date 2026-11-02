@@ -222,6 +222,8 @@ export type InquiryList = {
     page: number
     page_size: number
     scope_version: string
+    no_scope?: boolean
+    as_of?: number
 }
 
 export const INQUIRY_STATUS_LABEL: Record<InquiryStatus, string> = {

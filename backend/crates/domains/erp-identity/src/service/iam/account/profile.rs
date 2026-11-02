@@ -1,14 +1,17 @@
+use std::collections::BTreeSet;
+
 use erp_core::AccountKind;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::Serialize;
 
-use crate::AccessControlExt;
 use crate::entity::account_core::AccountCore;
 use crate::entity::rbac::Permission;
+use crate::entity::role_workbench::RoleWorkbench;
 use crate::error::Result;
 use crate::service::account_support::account_of_kind;
 use crate::service::iam::SharedRbacService;
+use crate::{AccessControlExt, RoleRepositoryExt};
 
 /// 当前账号信息响应结构。
 #[derive(Debug, Serialize)]
@@ -24,6 +27,7 @@ pub struct AccountProfile {
     pub avatar: Option<String>,
     pub subject: String,
     pub role_ids: Vec<String>,
+    pub workbenches: BTreeSet<RoleWorkbench>,
     pub permissions: Vec<Permission>,
     pub account_kind: AccountKind,
     pub store_id: Option<String>,
@@ -73,6 +77,8 @@ impl AccountProfileService {
         )?;
         let role_ids = self.rbac.role_ids(account.kind, account.base.id.as_str()).await?;
         let permissions = self.rbac.permissions(account.kind, account.base.id.as_str()).await?;
+        let roles = self.db.roles().enabled_roles(&role_ids, &mut NoTransaction).await?;
+        let workbenches = RoleWorkbench::available(&roles, &permissions);
         let avatar = Self::normalized_avatar(account.avatar.as_deref());
         if !account.is_active_backoffice() {
             return Err(crate::Error::Forbidden("账号已失效".into()));
@@ -85,6 +91,7 @@ impl AccountProfileService {
             return Err(crate::Error::ConflictError("DATA_SCOPE_CHANGED：权限已变化，请刷新".into()));
         }
         let mut profile = Self::build_profile(account, role_ids, permissions, avatar);
+        profile.workbenches = workbenches;
         profile.policy_version = policy_version;
         profile.organization_version = organization_version;
         Ok(profile)
@@ -121,6 +128,7 @@ impl AccountProfileService {
             avatar,
             subject,
             role_ids,
+            workbenches: BTreeSet::new(),
             permissions,
             account_kind: kind,
             store_id: None,

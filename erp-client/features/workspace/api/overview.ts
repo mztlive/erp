@@ -79,6 +79,13 @@ export async function fetchOverviewData(
         return {
             count: result.total,
             scopeVersion: result.scope_version,
+            noScope: result.no_scope,
+            asOf: result.as_of
+                ? new Date(result.as_of * 1000).toISOString()
+                : undefined,
+            scopeSummary: source.procurement
+                ? "本人询价处理责任"
+                : "销售询价授权范围",
             rows: result.items.map((row) => ({
                 id: row.id,
                 title: row.inquiry_no,

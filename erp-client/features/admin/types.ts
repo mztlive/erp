@@ -5,6 +5,7 @@
 
 /** 角色项（GET /admin/roles、GET /admin/roles/assignable）。 */
 export type AdminRole = {
+    workbenches?: string[]
     system?: boolean
     id: string
     name: string
@@ -49,12 +50,14 @@ export type UpdateAdminRolePayload = {
 
 /** 创建角色请求（POST /admin/roles）。 */
 export type CreateRolePayload = {
+    workbenches?: string[]
     name: string
     permissions: string[]
 }
 
 /** 更新角色请求（PUT /admin/roles/{id}）；未提供字段不修改。 */
 export type UpdateRolePayload = {
+    workbenches?: string[]
     name?: string
     permissions?: string[]
 }

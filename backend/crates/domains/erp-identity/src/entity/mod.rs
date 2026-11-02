@@ -13,6 +13,7 @@ pub mod portal;
 pub mod rbac;
 pub mod role;
 pub mod role_template;
+pub mod role_workbench;
 
 pub use account_core::*;
 pub use auth::*;

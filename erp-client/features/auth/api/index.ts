@@ -35,6 +35,7 @@ export type AccountProfile = {
     avatar?: string | null
     subject: string
     role_ids: string[]
+    workbenches?: string[]
     /** `resource:action` 权限列表（可能含 `*` 通配）。 */
     permissions: string[]
     account_kind: AccountKind

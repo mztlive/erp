@@ -215,6 +215,13 @@ pub struct WorkItemFamilyCountsView {
     pub exception: u64,
 }
 
+/// 本人任务按类型汇总的到期指标；两个时限集合允许重叠。
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct WorkItemTypeTiming {
+    pub due_today: u64,
+    pub overdue: u64,
+}
+
 /// 服务端权限过滤后的待办统计。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkItemStatsView {
@@ -230,6 +237,8 @@ pub struct WorkItemStatsView {
     pub family_counts: WorkItemFamilyCountsView,
     /// 本人可处理任务按固定任务类型汇总；不受列表分页及当前类型选择影响。
     pub work_item_type_counts: HashMap<WorkItemType, u64>,
+    /// 与类型计数共用授权扫描和统计时点，不受当前分页影响。
+    pub work_item_type_timing: HashMap<WorkItemType, WorkItemTypeTiming>,
     /// 服务端统计时点。
     pub as_of: erp_core::common::time::Instant,
 }
