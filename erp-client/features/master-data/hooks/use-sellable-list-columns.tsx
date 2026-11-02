@@ -6,6 +6,7 @@ import type { ColumnDef, SortingFn } from "@tanstack/react-table"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
@@ -37,35 +38,42 @@ export function useSellableListColumns() {
                 cell: ({ row }) => {
                     const sellable = row.original.sellableItem
                     return (
-                        <div className="min-w-0 space-y-1.5">
-                            <div
-                                className="truncate text-sm font-medium text-foreground"
-                                title={row.original.name}
-                            >
-                                {row.original.name}
-                            </div>
-                            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                                <span className="num shrink-0">
-                                    {row.original.stableNo}
-                                </span>
-                                {sellable &&
-                                sellable.specificationLabel !== "无规格" ? (
-                                    <span
-                                        className="truncate border-l border-border pl-2"
-                                        title={sellable.specificationLabel}
-                                    >
-                                        {sellable.specificationLabel}
+                        <div className="flex min-w-0 items-center gap-3">
+                            <SellableItemThumbnail
+                                assetId={sellable?.mainImageAssetId}
+                                label={row.original.name}
+                                className="size-12 shrink-0 rounded-lg"
+                            />
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <div
+                                    className="truncate text-sm font-medium text-foreground"
+                                    title={row.original.name}
+                                >
+                                    {row.original.name}
+                                </div>
+                                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="num shrink-0">
+                                        {row.original.stableNo}
                                     </span>
-                                ) : null}
-                                {sellable?.deliveryFreightExtra ? (
-                                    <Badge
-                                        variant="warning"
-                                        className="shrink-0"
-                                        title="所选地区内有地方只能集采并另付运费"
-                                    >
-                                        需另付运费
-                                    </Badge>
-                                ) : null}
+                                    {sellable &&
+                                    sellable.specificationLabel !== "无规格" ? (
+                                        <span
+                                            className="truncate border-l border-border pl-2"
+                                            title={sellable.specificationLabel}
+                                        >
+                                            {sellable.specificationLabel}
+                                        </span>
+                                    ) : null}
+                                    {sellable?.deliveryFreightExtra ? (
+                                        <Badge
+                                            variant="warning"
+                                            className="shrink-0"
+                                            title="所选地区内有地方只能集采并另付运费"
+                                        >
+                                            需另付运费
+                                        </Badge>
+                                    ) : null}
+                                </div>
                             </div>
                         </div>
                     )
