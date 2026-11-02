@@ -32,6 +32,7 @@ export function BooksListTable({
     pageSize,
     onPaginationChange,
     onRowNavigate,
+    onCopy,
 }: {
     rows: readonly SelectionBook[]
     total: number
@@ -47,8 +48,9 @@ export function BooksListTable({
     pageSize: number
     onPaginationChange: (next: PaginationState) => void
     onRowNavigate: (bookId: string) => void
+    onCopy?: (book: SelectionBook) => void
 }) {
-    const columns = React.useMemo(() => buildBooksListColumns(), [])
+    const columns = React.useMemo(() => buildBooksListColumns(onCopy), [onCopy])
     const pagination = React.useMemo<PaginationState>(
         () => ({
             pageIndex: Math.max(0, page - 1),

@@ -559,7 +559,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     ///
     /// # 错误
     /// 写入失败时返回仓储错误。
-    async fn insert_members_and_items(
+    pub(crate) async fn insert_members_and_items(
         &self,
         members: &[SalesSelectionPoolMember],
         items: &[SalesSelectionDisplayItem],

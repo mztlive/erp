@@ -20,9 +20,18 @@ import {
 } from "@/components/business/list-workspace"
 import { BooksListFilterBar } from "@/features/sales-selection/components/books-list-filter-bar"
 import { BooksListTable } from "@/features/sales-selection/components/books-list-table"
+import { BookCopyDialog } from "@/features/sales-selection/components/book-copy-dialog"
+import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useBooks } from "@/features/sales-selection/hooks/queries"
-import { BOOK_STATUS_VIEWS } from "@/features/sales-selection/lib/presentation"
-import type { BookListQuery } from "@/features/sales-selection/types"
+import {
+    BOOK_STATUS_VIEWS,
+    bookIdentity,
+} from "@/features/sales-selection/lib/presentation"
+import type {
+    BookListQuery,
+    SelectionBook,
+} from "@/features/sales-selection/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { booksListStyles as listStyles } from "./books-list-styles"
@@ -81,6 +90,16 @@ function isScopeConflict(error: unknown): boolean {
  */
 export const BooksListPage = () => {
     const router = useRouter()
+    const profile = useAccountProfileQuery()
+    const canCopy =
+        hasPermission(
+            profile.data?.permissions,
+            "sales_selection_booklet:create",
+        ) &&
+        hasPermission(profile.data?.permissions, "sales_selection_booklet:get")
+    const [copySource, setCopySource] = React.useState<SelectionBook | null>(
+        null,
+    )
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const query = React.useMemo(
@@ -272,9 +291,20 @@ export const BooksListPage = () => {
                         pageSize={query.page_size ?? DEFAULT_PAGE_SIZE}
                         onPaginationChange={handlePaginationChange}
                         onRowNavigate={handleRowNavigate}
+                        onCopy={canCopy ? setCopySource : undefined}
                     />
                 }
             />
+            {copySource ? (
+                <BookCopyDialog
+                    source={copySource}
+                    onClose={() => setCopySource(null)}
+                    onCopied={(detail) => {
+                        setCopySource(null)
+                        router.push(`/sales/selection/${bookIdentity(detail)}`)
+                    }}
+                />
+            ) : null}
         </PageScaffold>
     )
 }

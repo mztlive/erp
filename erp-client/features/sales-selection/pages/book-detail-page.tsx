@@ -21,6 +21,8 @@ import { hasPermission } from "@/lib/permissions"
 import { AccessPasswordDialog } from "@/features/sales-selection/components/access-password-dialog"
 import { BookDetailVoucherPanel } from "@/features/sales-selection/components/book-detail-voucher-panel"
 import { BookDetailHeader } from "@/features/sales-selection/components/book-detail-header"
+import { BookCopyDialog } from "@/features/sales-selection/components/book-copy-dialog"
+import { useRouter } from "@/lib/navigation"
 import { BookDetailSidebar } from "@/features/sales-selection/components/book-detail-sidebar"
 import { BookWorkflowBanner } from "@/features/sales-selection/components/book-workflow-banner"
 import { PreviewGrid } from "@/features/sales-selection/components/preview-grid"
@@ -38,7 +40,14 @@ import { cn } from "@/lib/utils"
  * @param bookId 选品册身份
  */
 export const BookDetailPage = ({ bookId }: { bookId: string }) => {
+    const router = useRouter()
     const profile = useAccountProfileQuery()
+    const canCopy =
+        hasPermission(
+            profile.data?.permissions,
+            "sales_selection_booklet:create",
+        ) &&
+        hasPermission(profile.data?.permissions, "sales_selection_booklet:get")
     const canMaintain = hasPermission(
         profile.data?.permissions,
         "sales_selection_booklet:maintain",
@@ -47,6 +56,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
     const operations = useBookOperations()
     const detail = detailQuery.data
     const [editing, setEditing] = React.useState(false)
+    const [copying, setCopying] = React.useState(false)
     const [passwordEditing, setPasswordEditing] = React.useState(false)
 
     const pending =
@@ -118,7 +128,18 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 pending={pending}
                 operations={operations}
                 onEdit={() => setEditing(true)}
+                onCopy={canCopy ? () => setCopying(true) : undefined}
             />
+            {copying ? (
+                <BookCopyDialog
+                    source={detail}
+                    onClose={() => setCopying(false)}
+                    onCopied={(copied) => {
+                        setCopying(false)
+                        router.push(`/sales/selection/${bookIdentity(copied)}`)
+                    }}
+                />
+            ) : null}
 
             <section
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4"

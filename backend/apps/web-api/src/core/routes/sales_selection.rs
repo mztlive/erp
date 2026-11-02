@@ -26,6 +26,7 @@ use crate::permissions;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .merge(book_collection_routes(rbac))
+        .merge(book_copy_routes(rbac))
         .route(
             "/sales-selection-books/{id}/images",
             with_permission(
@@ -95,6 +96,36 @@ fn book_collection_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(sales_selection::booklet_create),
                 rbac,
                 permissions::sales_selection::BOOKLET_CREATE,
+            ),
+        )
+}
+
+/// 选品册复制路由，复用创建权限；原册读取范围由用例再次校验。
+///
+/// # 参数
+/// * `rbac` - RBAC
+///
+/// # 返回
+/// 返回两条同义复制路径。
+///
+/// # 错误
+/// 无。
+fn book_copy_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-selection-books/{id}/copy",
+            with_permission(
+                post(sales_selection::booklet_copy),
+                rbac,
+                permissions::sales_selection::BOOKLET_COPY,
+            ),
+        )
+        .route(
+            "/sales-selection-booklets/{id}/copy",
+            with_permission(
+                post(sales_selection::booklet_copy),
+                rbac,
+                permissions::sales_selection::BOOKLET_COPY,
             ),
         )
 }

@@ -116,8 +116,12 @@ pub const PROTECTION_BOOKLET_VOUCHERS: PermissionDef =
 pub const PROTECTION_BOOKLET_SELECTION_DETAILS: PermissionDef =
     ADMIN_IMAGE.described(groups::SALES_SELECTION, "查询选品册个人选品明细");
 
+/// 复制选品册复用创建权限，原册读取范围由用例重验。
+pub const BOOKLET_COPY: PermissionDef = BOOKLET_CREATE.described(groups::SALES_SELECTION, "复制选品册");
+
 /// 本模块可供路由引用的显式权限定义。
 pub const ENTRIES: &[(&str, PermissionDef)] = &[
+    ("BOOKLET_COPY", BOOKLET_COPY),
     ("BOOKLET_LIST", BOOKLET_LIST),
     ("BOOKLET_DETAIL", BOOKLET_DETAIL),
     ("BOOKLET_CREATE", BOOKLET_CREATE),

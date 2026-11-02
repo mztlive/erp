@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::services::SalesServices;
 mod adapters;
+mod copy;
 mod password_audit;
 mod public_access;
 mod public_retry;

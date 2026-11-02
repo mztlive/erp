@@ -46,11 +46,13 @@ export function BookDetailHeader({
     pending,
     operations,
     onEdit,
+    onCopy,
 }: {
     detail: SelectionBookDetail
     pending: boolean
     operations: Operations
     onEdit: () => void
+    onCopy?: () => void
 }) {
     const bookId = bookIdentity(detail)
     const key = withKey(detail.version)
@@ -137,6 +139,24 @@ export function BookDetailHeader({
 
     const secondaryActions = (
         <div className="flex flex-wrap items-center justify-end gap-2">
+            {onCopy ? (
+                <Button
+                    id="sales-selection-detail-copy"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={pending || detail.status === "PREPARING"}
+                    title={
+                        detail.status === "PREPARING"
+                            ? "请准备完成后再复制"
+                            : undefined
+                    }
+                    onClick={onCopy}
+                >
+                    <CopyIcon data-icon="inline-start" aria-hidden="true" />
+                    复制选品册
+                </Button>
+            ) : null}
             {detail.status === "DRAFT" ? (
                 <>
                     <Button

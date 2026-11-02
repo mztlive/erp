@@ -119,6 +119,17 @@ export const createBook = async (
         idempotency_key: input.idempotency_key,
     })
 
+/** 复制配置和当前陈列，仅重新绑定客户。 */
+export const copyBook = (
+    bookId: string,
+    payload: {
+        customer_id: string
+        expected_version: number
+        idempotency_key: string
+    },
+): Promise<SelectionBookDetail> =>
+    apiPost(`/admin/sales-selection-books/${bookId}/copy`, payload)
+
 /** 准备任务种类。 */
 export type PrepareKind =
     | "FIRST_PREPARE"

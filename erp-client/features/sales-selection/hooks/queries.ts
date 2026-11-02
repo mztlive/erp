@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/toast"
 import {
     closeBook,
     copyBookLink,
+    copyBook,
     createBook,
     deleteDisplayItem,
     fetchBookDetail,
@@ -119,6 +120,26 @@ export const useBookDetail = (bookId: string) =>
 /** 册级操作集合：创建/准备/重生成/发布/链接/关闭/撤销/作废/删项/复制链接。 */
 export const useBookOperations = () => {
     const queryClient = useQueryClient()
+
+    const copy = useMutation({
+        mutationFn: (input: {
+            bookId: string
+            customer_id: string
+            expected_version: number
+            idempotency_key: string
+        }) => {
+            const { bookId, ...payload } = input
+            return copyBook(bookId, payload)
+        },
+        onSuccess: async (data) => {
+            await invalidateBookCaches(queryClient)
+            toast.add({
+                title: "选品册已复制",
+                description: `已为${data.customer_name}创建选品册。`,
+                type: "success",
+            })
+        },
+    })
 
     /** 创建选品册。 */
     const create = useMutation({
@@ -394,6 +415,7 @@ export const useBookOperations = () => {
     })
 
     return {
+        copy,
         accessPassword,
         create,
         prepare,

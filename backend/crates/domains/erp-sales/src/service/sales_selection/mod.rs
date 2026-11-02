@@ -1,6 +1,7 @@
 //! 销售选品用例编排。
 
 pub mod access;
+mod copy;
 mod create;
 mod lifecycle;
 mod mapper;

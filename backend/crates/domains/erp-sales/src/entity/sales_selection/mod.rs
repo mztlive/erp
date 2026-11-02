@@ -2,6 +2,7 @@
 
 mod booklet;
 mod combination;
+mod copy;
 mod display_item;
 mod idempotency;
 mod image;

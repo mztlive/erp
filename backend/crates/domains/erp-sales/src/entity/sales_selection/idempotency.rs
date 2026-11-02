@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 pub enum IdempotencyOperation {
     /// 创建选品册。
     Create,
+    /// 复制选品册。
+    Copy,
     /// 准备（含重生成与重新准备）。
     Prepare,
     /// 发布。
@@ -49,6 +51,7 @@ impl IdempotencyOperation {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Create => "CREATE",
+            Self::Copy => "COPY",
             Self::Prepare => "PREPARE",
             Self::Publish => "PUBLISH",
             Self::SaveSession => "SAVE_SESSION",
@@ -77,6 +80,7 @@ impl IdempotencyOperation {
         matches!(
             self,
             Self::Create
+                | Self::Copy
                 | Self::Prepare
                 | Self::Publish
                 | Self::RotateLink
@@ -239,6 +243,8 @@ mod tests {
 
     #[test]
     fn booklet_writes_replay_live_state() {
+        assert_eq!(IdempotencyOperation::Copy.as_str(), "COPY");
+        assert!(IdempotencyOperation::Copy.replays_live_booklet());
         assert!(IdempotencyOperation::Create.replays_live_booklet());
         assert!(IdempotencyOperation::Prepare.replays_live_booklet());
         assert!(IdempotencyOperation::Publish.replays_live_booklet());

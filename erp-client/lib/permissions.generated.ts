@@ -4117,6 +4117,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/copy",
+                description: "复制选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/copy",
+                description: "复制选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/sales-selection-books/{id}",
                 description: "查询选品册详情",

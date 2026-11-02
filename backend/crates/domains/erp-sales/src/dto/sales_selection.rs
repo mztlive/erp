@@ -1,6 +1,7 @@
 //! 销售选品 HTTP/Service DTO。Handler 直接复用本模块类型。
 
 mod access;
+mod copy;
 
 pub use access::{
     ProposalItem, PublicSelectionAccessView, SalesSelectionPasswordRequest, SelectionDetailView,
@@ -8,6 +9,7 @@ pub use access::{
 };
 use application_core::PageView;
 pub use application_core::PageView as SelectionPageView;
+pub use copy::CopySalesSelectionBookletRequest;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};

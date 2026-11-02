@@ -19,7 +19,9 @@ import {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 选品册列表列：客户身份列可打开详情，已提交行链方案。 */
-export function buildBooksListColumns(): ColumnDef<SelectionBook>[] {
+export function buildBooksListColumns(
+    onCopy?: (book: SelectionBook) => void,
+): ColumnDef<SelectionBook>[] {
     return [
         {
             id: "customer",
@@ -156,5 +158,36 @@ export function buildBooksListColumns(): ColumnDef<SelectionBook>[] {
                 </span>
             ),
         },
+        ...(onCopy
+            ? [
+                  {
+                      id: "actions",
+                      header: "操作",
+                      enableSorting: false,
+                      enableHiding: false,
+                      meta: { label: "操作", width: "status" as const },
+                      cell: ({ row }: { row: { original: SelectionBook } }) => (
+                          <Button
+                              id={`sales-selection-row-${toAutomationIdSegment(bookIdentity(row.original))}-copy`}
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={row.original.status === "PREPARING"}
+                              title={
+                                  row.original.status === "PREPARING"
+                                      ? "请准备完成后再复制"
+                                      : undefined
+                              }
+                              onClick={(event) => {
+                                  event.stopPropagation()
+                                  onCopy(row.original)
+                              }}
+                          >
+                              复制
+                          </Button>
+                      ),
+                  },
+              ]
+            : []),
     ]
 }

@@ -1,6 +1,7 @@
 //! 销售选品 HTTP handler。
 
 mod access;
+mod copy;
 pub mod protection;
 
 use std::net::SocketAddr;
@@ -12,6 +13,7 @@ use axum::extract::{ConnectInfo, Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
+pub use copy::booklet_copy;
 use erp_order_to_cash::sales_selection::{
     SalesSelectionProcess, SelectionBookletListView, SelectionProposalListView,
 };
