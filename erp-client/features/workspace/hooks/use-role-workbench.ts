@@ -2,11 +2,12 @@
 
 import { useQueries, useQuery } from "@tanstack/react-query"
 import type { AccountProfile } from "@/features/auth/api"
-import { getWorkItemStats, listWorkItems } from "@/features/work-items/api"
+import { getWorkItemStats } from "@/features/work-items/api"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { roleWorkbench } from "@/lib/role-workbenches"
 import { fetchOverviewData } from "../api/overview"
 import { overviewIdentity } from "./use-workspace-overview"
+import { useWorkbenchUrgent } from "./use-workbench-urgent"
 import type { OverviewMetric } from "../lib/overview"
 
 export function stageMetrics(id: string): OverviewMetric[] {
@@ -116,38 +117,14 @@ export function useRoleWorkbench(profile: AccountProfile, id: string) {
         retry: false,
         meta: { roleWorkbench: true },
     })
-    const pages = useQueries({
-        queries: template.tasks.map((type) => ({
-            queryKey: [
-                ...queryKeyRoots.workspaceHome,
-                "role-task-list",
-                identity,
-                type,
-            ],
-            queryFn: () =>
-                listWorkItems({
-                    scope: "mine",
-                    workItemType: type,
-                    timezone: "Asia/Shanghai",
-                    page: 1,
-                    pageSize: 5,
-                    sort: "priority_due",
-                }),
-            staleTime: 30_000,
-            refetchInterval: 60_000,
-            retry: false,
-            meta: { roleWorkbench: true },
-        })),
-    })
-    const tasks = pages.map((query, index) => {
-        const type = template.tasks[index]!
+    const urgent = useWorkbenchUrgent(profile)
+    const tasks = template.tasks.map((type) => {
         const timing = stats.data?.work_item_type_timing
         return {
-            ...query,
             statsError: stats.isError,
             statsPending: stats.isPending,
-            refetch: () => Promise.all([query.refetch(), stats.refetch()]),
-            data: query.data ? { page: query.data } : undefined,
+            statsFetching: stats.isFetching,
+            refetch: () => stats.refetch(),
             stats: stats.data
                 ? {
                       assigned: stats.data.work_item_type_counts
@@ -164,5 +141,5 @@ export function useRoleWorkbench(profile: AccountProfile, id: string) {
                 : undefined,
         }
     })
-    return { template, metrics, stages, tasks }
+    return { template, metrics, stages, tasks, urgent }
 }

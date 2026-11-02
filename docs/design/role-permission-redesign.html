@@ -1,0 +1,1807 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>角色权限 · 交互重构原型</title>
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --ink:#111113;
+  --ink-2:#3f3f46;
+  --muted:#6b6b74;
+  --faint:#9a9aa3;
+  --line:#e7e7ea;
+  --line-2:#d6d6dc;
+  --bg:#f6f6f7;
+  --panel:#ffffff;
+  --hover:#f6f6f7;
+  --danger:#b42318;
+  --danger-soft:#fff6f5;
+  --green:#087443;
+  --green-soft:#f3fbf6;
+  --amber:#b54708;
+  --amber-soft:#fffbeb;
+  --radius:8px;
+  --shadow:0 18px 50px rgba(17,17,19,.16);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+  font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+button,input{font:inherit}
+button{color:inherit}
+a{color:inherit;text-decoration:none}
+[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.num{font-variant-numeric:tabular-nums}
+.icon{width:14px;height:14px;flex:0 0 auto;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.icon-xs{width:11px;height:11px}
+.icon-sm{width:12px;height:12px}
+.icon-fill{fill:currentColor;stroke:none}
+*:focus-visible{outline:2px solid #111;outline-offset:2px}
+::selection{background:#111;color:#fff}
+
+/* ---------- app shell ---------- */
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:232px;flex:0 0 232px;height:100vh;overflow-y:auto;background:#f7f7f8;border-right:1px solid var(--line);display:flex;flex-direction:column;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+.brand{display:flex;align-items:center;gap:9px;padding:18px 14px 12px}
+.brand-mark{width:30px;height:30px;border-radius:9px;background:#111;color:#fff;display:grid;place-items:center;font-size:15px;font-weight:700;letter-spacing:-.04em}
+.brand-copy{min-width:0}
+.brand-name{font-size:12.5px;font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+.brand-sub{font-size:9.5px;color:var(--faint);margin-top:1px;white-space:nowrap}
+.side-group{padding:0 10px;margin-top:10px}
+.side-label{font-size:10px;color:#a3a3ab;letter-spacing:.06em;padding:8px 8px 4px;font-weight:500}
+.side-item{display:flex;align-items:center;gap:8px;width:100%;height:29px;padding:0 8px;border:0;background:transparent;border-radius:5px;font-size:12px;color:#4b4b53;text-align:left;cursor:pointer}
+.side-item .icon{width:13px;height:13px;color:#8d8d96}
+.side-item:hover{background:#efeff1;color:var(--ink)}
+.side-item.active{background:#ececee;color:var(--ink);font-weight:600}
+.side-item.active .icon{color:var(--ink)}
+.side-foot{margin-top:auto;padding:10px 12px 14px;display:flex;align-items:center;gap:9px;border-top:1px solid #ededf0}
+.avatar-ring{width:30px;height:30px;border-radius:50%;padding:2px;background:conic-gradient(from 210deg,#b8f36b,#f4d35e,#f28c6b,#8b7cf6,#b8f36b);flex:0 0 auto}
+.avatar-ring .avatar{width:26px;height:26px;font-size:11px;border:2px solid #f7f7f8}
+.avatar{width:28px;height:28px;border-radius:50%;background:#111;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex:0 0 auto}
+.side-user{min-width:0;flex:1}
+.side-user-name{font-size:11.5px;font-weight:600;white-space:nowrap}
+.side-user-role{font-size:9.5px;color:var(--faint);margin-top:1px}
+.side-caret{color:#b0b0b8;display:flex}
+
+.main{flex:1;min-width:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--panel)}
+.topbar{flex:0 0 44px;height:44px;display:flex;align-items:center;gap:2px;padding:0 16px;background:#fafafa;border-bottom:1px solid var(--line)}
+.tab{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 9px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--muted);font-size:11.5px;cursor:pointer;white-space:nowrap}
+.tab .icon{width:13px;height:13px;color:#9a9aa3}
+.tab:hover{background:#f2f2f4;color:var(--ink)}
+.tab.active{background:#fff;border-color:var(--line-2);color:var(--ink);box-shadow:0 1px 1px rgba(0,0,0,.03)}
+.tab.active .icon{color:var(--ink)}
+.tab-x{display:inline-grid;place-items:center;width:15px;height:15px;margin-left:2px;border-radius:3px;color:#9a9aa3}
+.tab-x:hover{background:#eeeef1;color:#111}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--faint);font-size:11px}
+.count-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border:1px solid var(--line-2);border-radius:4px;background:#fff;color:#52525b;font-size:10px;font-variant-numeric:tabular-nums}
+
+.page{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:18px 32px 0}
+
+/* ---------- page header ---------- */
+.page-head{flex:0 0 auto;padding-bottom:12px}
+.title-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:36px}
+.title-wrap{display:flex;align-items:center;gap:10px;min-width:0}
+.title-wrap h1{margin:0;max-width:520px;overflow:hidden;text-overflow:ellipsis;font-size:26px;line-height:1.15;font-weight:650;letter-spacing:-.025em;white-space:nowrap}
+.rename{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 6px;border:0;background:transparent;border-radius:4px;color:var(--faint);font-size:11.5px;cursor:pointer}
+.rename:hover{background:#f2f2f4;color:var(--ink)}
+.rename .icon{width:12px;height:12px}
+.name-editor{display:none;align-items:center;gap:6px}
+.name-editor input{width:220px;height:32px;padding:0 9px;border:1px solid var(--line-2);border-radius:5px;background:#fff;font-size:16px;font-weight:600;letter-spacing:-.01em;outline:none}
+.name-editor input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,19,.08)}
+.name-editor input.invalid{border-color:var(--danger);box-shadow:0 0 0 3px rgba(180,35,24,.09)}
+.title-wrap.editing h1,.title-wrap.editing .rename{display:none}
+.title-wrap.editing .name-editor{display:flex}
+.head-actions{position:relative;display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.meta-row{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11.5px;color:var(--muted)}
+.meta-dot{color:#c4c4cc}
+
+/* ---------- settings strip ---------- */
+.settings-strip{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:40px;padding:0 11px;border:1px solid var(--line);border-radius:7px;background:#fafafa;margin-bottom:14px}
+.setting-group{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.setting-label{font-size:10.5px;color:var(--faint);white-space:nowrap}
+.chip-check{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 6px;border-radius:4px;color:var(--muted);font-size:11.5px;cursor:pointer;white-space:nowrap}
+.chip-check:hover{background:#f0f0f2;color:var(--ink)}
+.chip-check:has(input:checked){color:var(--ink)}
+.setting-hint{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a3a3ab;white-space:nowrap}
+.setting-right{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted);white-space:nowrap}
+.text-link{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:0;color:var(--ink);font-size:11px;cursor:pointer;text-decoration:none}
+.text-link:hover{text-decoration:underline;text-underline-offset:3px}
+.text-link .icon{width:11px;height:11px}
+.muted{color:var(--muted)}
+
+/* ---------- toolbar ---------- */
+.perm-toolbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px;border-bottom:1px solid var(--line)}
+.perm-tabs{display:flex;gap:22px;align-self:stretch}
+.ptab{position:relative;border:0;background:none;padding:0 1px;color:var(--muted);font-size:12.5px;cursor:pointer}
+.ptab:hover{color:var(--ink)}
+.ptab.active{color:var(--ink);font-weight:600}
+.ptab.active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px 2px 0 0;background:#111}
+.toolbar-right{display:flex;align-items:center;gap:7px}
+.search{display:flex;align-items:center;gap:6px;width:270px;height:32px;padding:0 9px;border:1px solid var(--line-2);border-radius:6px;background:#fff;color:var(--faint)}
+.search:focus-within{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,19,.07)}
+.search .icon{width:13px;height:13px}
+.search input{width:100%;min-width:0;border:0;outline:none;background:transparent;font-size:11.5px;color:var(--ink)}
+.search input::placeholder{color:#a3a3ab}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 11px;border:1px solid transparent;border-radius:6px;background:transparent;font-size:11.5px;font-weight:500;white-space:nowrap;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+.btn .icon{width:13px;height:13px}
+.btn.ghost{color:var(--muted)}
+.btn.ghost:hover{background:#f2f2f4;color:var(--ink)}
+.btn.outline{border-color:var(--line-2);background:#fff;color:var(--ink)}
+.btn.outline:hover{background:#f7f7f8;border-color:#c4c4cc}
+.btn.primary{background:#111;border-color:#111;color:#fff}
+.btn.primary:hover{background:#27272a}
+.btn.primary:disabled{background:#e9e9ec;border-color:#e9e9ec;color:#a1a1aa;cursor:not-allowed}
+.btn.ghost:disabled{color:#c4c4cc;cursor:not-allowed;background:transparent}
+.btn.xs{height:26px;padding:0 8px;font-size:10.5px;border-radius:4px}
+.icon-btn{display:inline-grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+.icon-btn:hover{background:#f2f2f4;color:var(--ink)}
+.icon-btn.bordered{border-color:var(--line-2);background:#fff}
+.icon-btn.bordered:hover{background:#f7f7f8}
+.filter-btn{min-width:142px;justify-content:space-between;color:var(--ink);font-weight:400}
+.filter-btn .filter-label{white-space:nowrap}
+.filter-btn .icon{color:var(--faint)}
+.summary-badge{margin-left:1px;font-size:9.5px;font-weight:400;color:var(--faint);font-variant-numeric:tabular-nums}
+
+/* ---------- menus ---------- */
+.menu-wrap{position:relative}
+.menu{position:absolute;top:36px;right:0;z-index:50;width:218px;padding:4px;border:1px solid var(--line-2);border-radius:8px;background:#fff;box-shadow:var(--shadow)}
+.menu-item{display:flex;align-items:center;gap:7px;width:100%;height:30px;padding:0 7px;border:0;background:transparent;border-radius:4px;font-size:11.5px;color:var(--ink-2);text-align:left;cursor:pointer}
+.menu-item:hover{background:#f4f4f5;color:var(--ink)}
+.menu-item:disabled{color:#c4c4cc;cursor:not-allowed;background:transparent}
+.menu-check{width:12px;color:var(--ink);opacity:0;display:inline-flex}
+.menu-item[aria-checked="true"] .menu-check{opacity:1}
+.menu-hint{margin-left:auto;font-size:10px;color:var(--faint);font-variant-numeric:tabular-nums}
+.menu-sep{height:1px;margin:4px 2px;background:var(--line)}
+.menu-head{padding:5px 7px 4px;font-size:10px;color:var(--faint)}
+
+/* ---------- search / view note ---------- */
+.search-bar{flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-top:9px;padding:5px 9px;border:1px solid #efd9a9;border-radius:6px;background:var(--amber-soft);font-size:11px;color:#785a16}
+.search-bar b{color:#4b3707;font-variant-numeric:tabular-nums}
+.search-bar .spacer{flex:1}
+.search-bar .btn{height:25px;font-size:10.5px;color:#6b4f0e}
+.search-bar .btn:hover{background:rgba(180,130,20,.09);color:#3f2d04}
+.view-note{flex:0 0 auto;display:flex;align-items:center;gap:5px;margin-top:8px;font-size:10.5px;color:var(--faint)}
+.view-note .icon{width:11px;height:11px}
+.view-note .text-link{font-size:10.5px;color:var(--muted);margin-left:2px}
+
+/* ---------- workspace ---------- */
+.workspace{flex:1;min-height:0;display:grid;grid-template-columns:216px minmax(0,1fr);gap:24px;padding-top:14px;overflow:hidden}
+.module-nav{min-height:0;overflow-y:auto;overflow-x:hidden;border-right:1px solid var(--line);padding:2px 12px 24px 0;scrollbar-width:thin;scrollbar-color:#d4d4d8 transparent}
+.module-nav::-webkit-scrollbar{width:5px}
+.module-nav::-webkit-scrollbar-thumb{background:#dcdce1;border-radius:3px}
+.nav-area{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:13px 8px 4px;font-size:10px;font-weight:600;letter-spacing:.05em;color:#a3a3ab}
+.nav-area:first-child{padding-top:2px}
+.nav-area-total{font-weight:500;color:#b8b8c0;font-variant-numeric:tabular-nums;letter-spacing:0}
+.nav-item{position:relative;display:flex;align-items:center;gap:8px;width:100%;height:31px;padding:0 8px;border:0;background:transparent;border-radius:5px;color:#52525b;font-size:12.5px;text-align:left;cursor:pointer}
+.nav-item:hover{background:#f4f4f5;color:var(--ink)}
+.nav-item.active{background:#efeff1;color:var(--ink);font-weight:600}
+.nav-item.active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;border-radius:2px;background:#111}
+.nav-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-count{font-size:10px;color:#9a9aa3;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nav-item.active .nav-count{color:#52525b}
+.nav-item.zero .nav-count{color:#c4c4cc}
+.nav-item.has-change .nav-count::after{content:"";display:inline-block;width:5px;height:5px;margin-left:5px;border-radius:50%;background:#f59e0b;vertical-align:1px}
+
+.module-panel{min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 4px 20px 0;scrollbar-width:thin;scrollbar-color:#d4d4d8 transparent}
+.module-panel::-webkit-scrollbar{width:6px}
+.module-panel::-webkit-scrollbar-thumb{background:#dcdce1;border-radius:3px}
+
+/* ---------- module head ---------- */
+.module-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}
+.module-title-line{display:flex;align-items:center;gap:8px;min-height:26px}
+.module-title-line h2{margin:0;font-size:20px;line-height:1.2;font-weight:650;letter-spacing:-.015em}
+.badge-change{display:inline-flex;align-items:center;height:19px;padding:0 6px;border-radius:4px;background:#fff6e6;color:#b54708;font-size:10px;font-weight:500;white-space:nowrap}
+.module-desc{margin:2px 0 0;font-size:11px;color:var(--muted)}
+.module-stats{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:10.5px;color:var(--muted);flex-wrap:wrap}
+.module-stats b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.mini-progress{width:62px;height:3px;border-radius:2px;background:#ececef;overflow:hidden}
+.mini-progress i{display:block;height:100%;width:0;border-radius:2px;background:#111;transition:width .2s ease}
+.lock-note{display:inline-flex;align-items:center;gap:3px;color:#8a6a1f}
+.lock-note .icon{width:10px;height:10px}
+.module-actions{display:flex;align-items:center;gap:6px;padding-top:1px}
+.master{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 9px;border:1px solid var(--line-2);border-radius:6px;background:#fff;font-size:11.5px;color:var(--ink);cursor:pointer;white-space:nowrap}
+.master:hover{background:#f7f7f8;border-color:#c4c4cc}
+.master:has(input:checked){background:#f7f7f8}
+.master-num{color:var(--faint);font-variant-numeric:tabular-nums;font-size:10.5px}
+
+/* ---------- checkboxes ---------- */
+.cb{appearance:none;-webkit-appearance:none;width:18px;height:18px;margin:0;border:1.5px solid #cfcfd6;border-radius:4px;background:#fff;display:inline-grid;place-content:center;cursor:pointer;transition:background .12s,border-color .12s;flex:0 0 auto;vertical-align:middle}
+.cb:hover{border-color:#8d8d96}
+.cb:checked{background:#111;border-color:#111}
+.cb:checked::after{content:"";width:9px;height:5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-1px) rotate(-45deg)}
+.cb:indeterminate{background:#111;border-color:#111}
+.cb:indeterminate::after{content:"";width:8px;height:2px;border-radius:1px;background:#fff}
+.cb:disabled{cursor:not-allowed;background:#e4e4e7;border-color:#d4d4d8}
+.cb-sm{width:13px;height:13px;border-width:1.4px;border-radius:3px}
+.cb-sm:checked::after{width:7px;height:4px;border-width:0 0 1.6px 1.6px}
+.cb-sm:indeterminate::after{width:6px;height:1.5px}
+
+/* ---------- matrix ---------- */
+.matrix-wrap{border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#fff}
+.matrix{width:100%;border-collapse:collapse;table-layout:fixed}
+.matrix caption{caption-side:top}
+.matrix th,.matrix td{padding:0;border-bottom:1px solid var(--line)}
+.matrix thead th{height:38px;background:#fafafa;color:#52525b;font-size:10.5px;font-weight:500;text-align:center;vertical-align:middle}
+.matrix thead th.corner{width:196px;padding-left:13px;text-align:left;color:var(--faint);font-weight:500;letter-spacing:.02em}
+.matrix thead th .th-inner{display:flex;align-items:center;justify-content:center;gap:5px;min-height:38px;padding:0 6px}
+.matrix thead th .th-label{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:30px;padding:0 3px;cursor:pointer;white-space:nowrap}
+.matrix thead th .th-label:hover{color:#111}
+.matrix thead th .th-lock{display:inline-flex;align-items:center;gap:5px;color:#8b8b94;white-space:nowrap}
+.matrix thead th .th-lock .icon{width:11px;height:11px}
+.risk-mark{display:inline-flex;color:#d92d20;flex:0 0 auto}
+.risk-mark .icon{width:10px;height:10px}
+.matrix tbody th{height:50px;padding:0 8px 0 13px;background:#fff;text-align:left;font-weight:400;vertical-align:middle;border-bottom:1px solid var(--line)}
+.matrix tbody tr:last-child th,.matrix tbody tr:last-child td{border-bottom:0}
+.matrix tbody td{height:50px;background:#fff;text-align:center;vertical-align:middle;position:relative}
+.matrix tbody tr:hover th,.matrix tbody tr:hover td{background:#fafafa}
+.matrix tbody tr:hover td.cell.locked{background:#fafafa}
+.row-head-inner{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.row-label{font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-select{display:inline-grid;place-items:center;width:21px;height:21px;padding:0;border:1px solid transparent;border-radius:4px;background:transparent;color:#a3a3ab;opacity:0;cursor:pointer}
+.row-select .icon{width:12px;height:12px}
+.matrix tr:hover .row-select,.row-select:focus-visible{opacity:1}
+.row-select:hover{background:#ececef;border-color:#e0e0e4;color:#111}
+.cell-label{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:50px;cursor:pointer}
+.cell-label:hover .cb:not(:disabled){border-color:#6b6b74}
+td.cell:hover{background:#f4f4f5}
+td.cell.locked{background:#fafafa}
+td.cell.locked .cell-label{cursor:not-allowed}
+td.cell.locked:hover{background:#fafafa}
+.lock-badge{position:absolute;top:5px;right:6px;display:inline-flex;color:#a1a1aa}
+.lock-badge .icon{width:10px;height:10px}
+.na-cell{background:#fff}
+.na{color:#d4d4d8;font-size:13px;user-select:none}
+td.cell.added{background:var(--green-soft);box-shadow:inset 2px 0 0 #12b76a}
+td.cell.added:hover{background:#eaf8f0}
+td.cell.removed{background:var(--danger-soft);box-shadow:inset 2px 0 0 #f04438}
+td.cell.removed:hover{background:#feeceb}
+td.cell.removed .cb{border-color:#f04438;border-style:dashed;background:#fff}
+.diff-badge{position:absolute;top:4px;right:5px;display:inline-grid;place-items:center;width:12px;height:12px;border-radius:3px;font-size:9px;font-weight:700;line-height:1}
+.diff-badge.plus{background:#d1fadf;color:#067647}
+.diff-badge.minus{background:#fee4e2;color:#b42318}
+
+/* search + view states */
+.search-dim{opacity:.25}
+.search-hit{background:#fffbeb!important;box-shadow:inset 0 0 0 1px #f4d58a}
+th.search-hit{background:#fff7e0!important;color:#111!important;box-shadow:inset 0 -2px 0 #f2c94c}
+th.search-hit .icon{color:#b54708}
+.view-dim{opacity:.28}
+.view-hit{background:#f8fbff!important}
+td.cell.view-hit.added{background:var(--green-soft)!important}
+td.cell.view-hit.removed{background:var(--danger-soft)!important}
+.search-dim.view-dim{opacity:.18}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:13px;padding:9px 2px 0;font-size:10px;color:#8b8b94}
+.legend-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.lg-box{position:relative;display:inline-block;width:13px;height:13px;border:1.4px solid #cfcfd6;border-radius:3px;background:#fff;flex:0 0 auto}
+.lg-box.on{background:#111;border-color:#111}
+.lg-box.on::after{content:"";position:absolute;left:3px;top:2px;width:6px;height:3px;border-left:1.6px solid #fff;border-bottom:1.6px solid #fff;transform:rotate(-45deg)}
+.lg-box.mixed{background:#111;border-color:#111}
+.lg-box.mixed::after{content:"";position:absolute;left:2px;right:2px;top:5px;height:1.5px;background:#fff}
+.lg-box.lock{background:#e4e4e7;border-color:#d4d4d8}
+.lg-box.added{background:var(--green-soft);border-color:#12b76a}
+.lg-box.removed{background:var(--danger-soft);border-color:#f04438;border-style:dashed}
+
+/* ---------- extra grants ---------- */
+.extra-grants{margin-top:10px;border:1px solid var(--line);border-radius:6px;background:#fafafa;font-size:11px}
+.extra-grants summary{display:flex;align-items:center;gap:7px;height:38px;padding:0 10px;list-style:none;cursor:pointer;color:#52525b}
+.extra-grants summary::-webkit-details-marker{display:none}
+.extra-grants summary b{color:var(--ink);font-weight:600}
+.extra-grants summary .sub{color:#9a9aa3;font-size:10px}
+.extra-grants summary .chev{margin-left:auto;color:#a3a3ab;transition:transform .15s}
+.extra-grants[open] summary .chev{transform:rotate(180deg)}
+.extra-grants summary .icon{color:#a3a3ab}
+.grant-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px 18px;padding:0 12px 11px 31px}
+.grant-item{display:flex;align-items:center;gap:5px;min-width:0;font-size:10.5px;color:#52525b}
+.grant-item .icon{width:9px;height:9px;color:#b0b0b8;flex:0 0 auto}
+.grant-item .icon.lock-ico{color:#8a6a1f}
+.grant-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grant-note{grid-column:1/-1;margin-top:5px;padding-top:7px;border-top:1px dashed var(--line-2);font-size:10px;color:#8b8b94}
+
+/* ---------- impact ---------- */
+.impact-card{display:flex;align-items:center;gap:9px;margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.impact-copy{min-width:0}
+.impact-title{font-size:11.5px;font-weight:600;color:var(--ink)}
+.impact-sub{font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.impact-card .text-link{margin-left:auto;font-size:10.5px;white-space:nowrap}
+.impact-avatar{width:26px;height:26px;font-size:10px}
+
+/* ---------- footer ---------- */
+.savebar{flex:0 0 62px;min-height:62px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 32px;border-top:1px solid var(--line);background:#fff;position:relative;z-index:20}
+.save-status{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#12b76a;flex:0 0 auto}
+.status-dot.dirty{background:#f59e0b}
+.save-text{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap}
+.risk-chip{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 6px;border:1px solid #fecdc9;border-radius:4px;background:var(--danger-soft);color:var(--danger);font-size:10px;font-weight:500;white-space:nowrap;cursor:pointer}
+.risk-chip:hover{background:#fee4e2}
+.risk-chip .icon{width:10px;height:10px}
+.impact-note{font-size:10.5px;color:var(--faint);white-space:nowrap}
+.impact-note b{color:var(--muted);font-weight:600}
+.save-actions{display:flex;align-items:center;gap:4px;margin-left:auto}
+.save-actions .btn.primary{min-width:132px;height:34px;font-size:12px}
+
+/* ---------- sheet ---------- */
+.sheet-dialog{position:fixed;inset:0 0 0 auto;margin:0;width:432px;max-width:92vw;height:100%;max-height:100%;padding:0;border:0;background:transparent;color:var(--ink)}
+.sheet-dialog::backdrop{background:rgba(17,17,19,.32)}
+.sheet{height:100%;display:flex;flex-direction:column;background:#fff;box-shadow:-16px 0 48px rgba(17,17,19,.14);animation:sheetIn .18s ease-out}
+@keyframes sheetIn{from{transform:translateX(18px);opacity:.5}to{transform:none;opacity:1}}
+.sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 20px 12px}
+.sheet-head h3{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em}
+.sheet-sub{margin:4px 0 0;font-size:11px;color:var(--muted)}
+.sheet-body{flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px}
+.sheet-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 20px;border-top:1px solid var(--line)}
+.change-group{margin-top:16px}
+.change-group-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:10px;font-weight:600;letter-spacing:.04em;color:#9a9aa3}
+.change-list{margin:0;padding:0;list-style:none;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.change-item{display:flex;align-items:center;gap:8px;min-height:38px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--ink-2)}
+.change-item:last-child{border-bottom:0}
+.change-item .name{min-width:0;flex:1}
+.change-item .sub{display:block;margin-top:1px;font-size:10px;color:var(--faint)}
+.diff-chip{display:inline-flex;align-items:center;justify-content:center;height:18px;min-width:32px;padding:0 5px;border-radius:3px;font-size:9.5px;font-weight:600;flex:0 0 auto}
+.diff-chip.add{background:#d1fadf;color:#067647}
+.diff-chip.remove{background:#fee4e2;color:#b42318}
+.diff-chip.edit{background:#eef2ff;color:#3538cd}
+.diff-chip.risk{background:#fff1f0;color:#b42318}
+.change-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:220px;color:var(--faint);font-size:11px}
+.change-empty .icon{width:22px;height:22px;color:#d4d4d8}
+.sheet-impact{margin-top:14px;padding:9px 10px;border-radius:5px;background:#fafafa;border:1px solid var(--line);font-size:10.5px;color:var(--muted)}
+.sheet-impact b{color:var(--ink)}
+
+/* ---------- confirm dialog ---------- */
+.confirm-dialog{width:468px;max-width:92vw;padding:0;border:0;border-radius:9px;overflow:hidden;color:var(--ink);box-shadow:0 24px 70px rgba(17,17,19,.24)}
+.confirm-dialog::backdrop{background:rgba(17,17,19,.36)}
+.confirm-body{padding:20px 20px 14px}
+.confirm-body h3{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em}
+.confirm-body>p{margin:5px 0 0;font-size:11px;color:var(--muted)}
+.confirm-list{margin:12px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:6px;max-height:220px;overflow-y:auto}
+.confirm-list li{display:flex;align-items:center;gap:7px;min-height:36px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:11px;color:var(--ink-2)}
+.confirm-list li:last-child{border-bottom:0}
+.confirm-list .name{flex:1;min-width:0}
+.confirm-more{padding:7px 10px;font-size:10px;color:var(--faint);border-top:1px solid var(--line)}
+.confirm-risk{margin-top:10px;padding:8px 10px;border-radius:5px;background:var(--danger-soft);border:1px solid #fecdca;color:#912018;font-size:10.5px;line-height:1.5}
+.confirm-risk .icon{width:11px;height:11px;vertical-align:-1px;margin-right:3px}
+.confirm-foot{display:flex;justify-content:flex-end;gap:7px;padding:12px 20px;border-top:1px solid var(--line);background:#fafafa;border-radius:0 0 9px 9px}
+
+/* ---------- summary popover ---------- */
+.popover{position:absolute;top:39px;right:0;z-index:60;width:318px;padding:13px;border:1px solid var(--line-2);border-radius:9px;background:#fff;box-shadow:var(--shadow)}
+.popover-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.popover-head h3{margin:0;font-size:13px;font-weight:650}
+.popover-close{width:22px;height:22px;border:0;background:transparent;border-radius:4px;color:#a3a3ab;cursor:pointer;display:grid;place-items:center}
+.popover-close:hover{background:#f2f2f4;color:#111}
+.dirty-pill{display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 5px;border-radius:4px;background:#fff7e6;color:#b54708;font-size:9.5px;font-weight:500}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px}
+.summary-cell{padding:8px 9px;border:1px solid var(--line);border-radius:5px}
+.summary-cell .k{font-size:9.5px;color:var(--faint)}
+.summary-cell .v{margin-top:1px;font-size:16px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.summary-cell .v small{font-size:9px;font-weight:400;color:var(--faint);margin-left:2px;letter-spacing:0}
+.summary-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted)}
+.summary-row b{color:var(--ink);font-weight:500;text-align:right}
+.summary-note{margin-top:10px;padding:7px 8px;border-radius:4px;background:#fafafa;font-size:9.5px;color:var(--faint);line-height:1.5}
+
+/* ---------- toast ---------- */
+.toast{position:fixed;left:50%;bottom:78px;z-index:100;transform:translateX(-50%) translateY(6px);display:flex;align-items:center;gap:11px;max-width:min(600px,90vw);padding:9px 11px;border-radius:7px;background:#111113;color:#fff;font-size:11.5px;box-shadow:0 12px 34px rgba(0,0,0,.26);opacity:0;pointer-events:none;transition:opacity .16s,transform .16s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.toast-text{min-width:0}
+.toast-undo{height:23px;padding:0 7px;border:1px solid rgba(255,255,255,.3);border-radius:4px;background:transparent;color:#fff;font-size:10.5px;cursor:pointer;white-space:nowrap}
+.toast-undo:hover{background:rgba(255,255,255,.1)}
+.toast-close{width:20px;height:20px;padding:0;border:0;background:transparent;color:#a1a1aa;font-size:15px;line-height:1;cursor:pointer}
+.toast-close:hover{color:#fff}
+
+@media (max-width:1400px){
+  .page{padding-left:22px;padding-right:22px}
+  .savebar{padding-left:22px;padding-right:22px}
+  .workspace{grid-template-columns:200px minmax(0,1fr);gap:18px}
+  .matrix thead th.corner{width:176px}
+  .search{width:230px}
+}
+@media (max-width:1180px){
+  .matrix-wrap{overflow-x:auto}
+  .matrix{min-width:720px}
+  .sidebar{width:206px;flex-basis:206px}
+  .page-head .head-actions .btn.outline{display:none}
+  .workspace{grid-template-columns:186px minmax(0,1fr);gap:16px}
+  .grant-grid{grid-template-columns:1fr 1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></symbol>
+  <symbol id="i-square-check" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar" aria-label="主导航">
+    <div class="brand">
+      <div class="brand-mark">福</div>
+      <div class="brand-copy">
+        <div class="brand-name">福尚云 ERP</div>
+        <div class="brand-sub">经营协同工作台</div>
+      </div>
+    </div>
+
+    <div class="side-group">
+      <div class="side-label">基础资料</div>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-package"/></svg>计量单位</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-receipt"/></svg>卡券类目</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-building"/></svg>公司主体</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-shield"/></svg>供应商与资质</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-clipboard"/></svg>采购责任规则</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-package"/></svg>仓库</button>
+    </div>
+
+    <div class="side-group">
+      <div class="side-label">分析</div>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-chart"/></svg>客户经营质量</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-chart"/></svg>实际经营盈亏</button>
+    </div>
+
+    <div class="side-group">
+      <div class="side-label">供应商 API</div>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-plug"/></svg>API 连接</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-receipt"/></svg>供应商订单</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-receipt"/></svg>API 结算</button>
+    </div>
+
+    <div class="side-group">
+      <div class="side-label">治理</div>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-upload"/></svg>导入与期初</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-clipboard"/></svg>后台任务</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-alert"/></svg>接口错误与对账</button>
+    </div>
+
+    <div class="side-group">
+      <div class="side-label">系统</div>
+      <button class="side-item active" type="button" aria-current="page"><svg class="icon"><use href="#i-users"/></svg>角色与权限</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-receipt"/></svg>审计查询</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-users"/></svg>组织与人员</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-package"/></svg>演示主数据</button>
+      <button class="side-item" type="button"><svg class="icon"><use href="#i-sliders"/></svg>审批流程配置</button>
+    </div>
+
+    <div class="side-foot">
+      <div class="avatar-ring"><div class="avatar">N</div></div>
+      <div class="side-user">
+        <div class="side-user-name">系统管理员</div>
+        <div class="side-user-role">admin</div>
+      </div>
+      <span class="side-caret"><svg class="icon icon-sm"><use href="#i-chevron"/></svg></span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="tab" type="button"><svg class="icon"><use href="#i-grid"/></svg>我的全部待办</button>
+      <button class="tab" type="button"><svg class="icon"><use href="#i-shield"/></svg>角色与权限</button>
+      <button class="tab active" type="button"><svg class="icon"><use href="#i-file"/></svg><span id="tabRoleName">销售</span><span class="tab-x" aria-hidden="true">×</span></button>
+      <div class="topbar-right"><span class="count-badge">3</span><span>待办</span></div>
+    </header>
+
+    <div class="page">
+      <header class="page-head">
+        <div class="title-row">
+          <div class="title-wrap" id="titleWrap">
+            <h1 id="roleTitle">销售</h1>
+            <button class="rename" type="button" id="renameBtn"><svg class="icon"><use href="#i-pencil"/></svg>修改名称</button>
+            <div class="name-editor" id="nameEditor">
+              <input id="nameInput" type="text" maxlength="32" aria-label="角色名称" value="销售" />
+              <button class="btn primary xs" type="button" id="nameDone">完成</button>
+              <button class="btn ghost xs" type="button" id="nameCancel">取消</button>
+            </div>
+          </div>
+          <div class="head-actions">
+            <button class="btn ghost" type="button" id="summaryBtn" aria-haspopup="dialog" aria-expanded="false">
+              <svg class="icon"><use href="#i-info"/></svg>角色摘要<span class="summary-badge" id="summaryBadge">85</span>
+            </button>
+            <button class="btn outline" type="button" id="copyBtn"><svg class="icon"><use href="#i-copy"/></svg>以其他角色为模板</button>
+
+            <div class="popover" id="summaryPopover" role="dialog" aria-label="角色摘要" hidden>
+              <div class="popover-head">
+                <h3>角色摘要</h3>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span class="dirty-pill" id="summaryDirty" hidden></span>
+                  <button class="popover-close" type="button" id="summaryClose" aria-label="关闭角色摘要"><svg class="icon icon-sm"><use href="#i-x"/></svg></button>
+                </div>
+              </div>
+              <div class="summary-grid">
+                <div class="summary-cell"><div class="k">标准权限</div><div class="v"><span id="summaryStandard">85</span><small>项</small></div></div>
+                <div class="summary-cell"><div class="k">额外授权</div><div class="v"><span id="summaryExtra">9</span><small>项</small></div></div>
+                <div class="summary-cell"><div class="k">高风险权限</div><div class="v"><span id="summaryRisk">4</span><small>项</small></div></div>
+                <div class="summary-cell"><div class="k">关联账号</div><div class="v"><span id="summaryAccounts">1</span><small>个</small></div></div>
+              </div>
+              <div class="summary-row"><span>工作台入口</span><b id="summaryWorkbench">销售工作台</b></div>
+              <div class="summary-row"><span>最后保存</span><b id="summarySaved">11-02 18:06</b></div>
+              <div class="summary-note">权限调整保存后立即对关联账号生效；数据范围按人员单独设置。</div>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <span>角色权限</span><span class="meta-dot">·</span><span>1 个关联账号</span><span class="meta-dot">·</span><span>保存后立即生效</span>
+        </div>
+      </header>
+
+      <div class="settings-strip">
+        <div class="setting-group">
+          <span class="setting-label">工作台入口</span>
+          <label class="chip-check"><input class="cb cb-sm" type="checkbox" data-workbench="sales" checked /><span>销售工作台</span></label>
+          <label class="chip-check"><input class="cb cb-sm" type="checkbox" data-workbench="purchase" /><span>采购工作台</span></label>
+          <label class="chip-check"><input class="cb cb-sm" type="checkbox" data-workbench="cashier" /><span>出纳工作台</span></label>
+          <span class="setting-hint" title="只决定工作台入口是否出现，不授予任何业务权限"><svg class="icon icon-xs"><use href="#i-info"/></svg>不影响权限</span>
+        </div>
+        <div class="setting-right">
+          <span>数据范围按人员设置</span>
+          <button class="text-link" type="button" id="goPeople">去人员资料 <svg class="icon"><use href="#i-arrow"/></svg></button>
+        </div>
+      </div>
+
+      <div class="perm-toolbar">
+        <div class="perm-tabs" role="tablist" aria-label="权限类型">
+          <button class="ptab active" type="button" role="tab" aria-selected="true" data-tab="business">业务权限</button>
+          <button class="ptab" type="button" role="tab" aria-selected="false" data-tab="system">系统权限</button>
+        </div>
+        <div class="toolbar-right">
+          <label class="search" aria-label="搜索模块或权限">
+            <svg class="icon"><use href="#i-search"/></svg>
+            <input id="searchInput" type="search" placeholder="搜索模块或权限" aria-label="搜索模块或权限" autocomplete="off" />
+          </label>
+          <div class="menu-wrap">
+            <button class="btn outline filter-btn" type="button" id="filterBtn" aria-haspopup="menu" aria-expanded="false">
+              <svg class="icon"><use href="#i-sliders"/></svg>
+              <span class="filter-label" id="filterLabel">显示：全部权限</span>
+              <svg class="icon"><use href="#i-chevron"/></svg>
+            </button>
+            <div class="menu" id="filterMenu" role="menu" hidden>
+              <div class="menu-head">显示范围</div>
+              <button class="menu-item" type="button" role="menuitemradio" aria-checked="true" data-view="all"><span class="menu-check"><svg class="icon icon-xs"><use href="#i-check"/></svg></span>全部权限<span class="menu-hint" id="viewCountAll">230</span></button>
+              <button class="menu-item" type="button" role="menuitemradio" aria-checked="false" data-view="selected"><span class="menu-check"><svg class="icon icon-xs"><use href="#i-check"/></svg></span>已选权限<span class="menu-hint" id="viewCountSelected">85</span></button>
+              <button class="menu-item" type="button" role="menuitemradio" aria-checked="false" data-view="changed"><span class="menu-check"><svg class="icon icon-xs"><use href="#i-check"/></svg></span>本次变更<span class="menu-hint" id="viewCountChanged">0</span></button>
+              <button class="menu-item" type="button" role="menuitemradio" aria-checked="false" data-view="dangerous"><span class="menu-check"><svg class="icon icon-xs"><use href="#i-check"/></svg></span>高风险权限<span class="menu-hint" id="viewCountDanger">4</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="search-bar" id="searchBar" hidden>
+        <span>「<b id="searchTerm"></b>」匹配 <b id="searchMatches">0</b> 项</span>
+        <span class="spacer"></span>
+        <button class="btn ghost xs" type="button" id="selectMatches">全选匹配项</button>
+        <button class="btn ghost xs" type="button" id="clearMatches">清除匹配项</button>
+        <button class="btn ghost xs" type="button" id="clearSearch">清除搜索</button>
+      </div>
+
+      <div class="view-note" id="viewNote" hidden>
+        <svg class="icon"><use href="#i-info"/></svg>
+        <span id="viewNoteText"></span>
+        <button class="text-link" type="button" id="viewReset">恢复全部</button>
+      </div>
+
+      <div class="workspace">
+        <nav class="module-nav" id="moduleNav" aria-label="权限模块"></nav>
+
+        <section class="module-panel" aria-labelledby="moduleTitle">
+          <div class="module-head">
+            <div>
+              <div class="module-title-line">
+                <h2 id="moduleTitle">客户</h2>
+                <span class="badge-change" id="moduleChangeBadge" hidden></span>
+              </div>
+              <p class="module-desc" id="moduleDesc">客户角色与归属管理</p>
+              <div class="module-stats">
+                <span>已选 <b id="moduleSelected">7</b>/<span id="moduleTotal">9</span></span>
+                <span class="mini-progress"><i id="moduleProgress"></i></span>
+                <span class="lock-note" id="lockNote"><svg class="icon"><use href="#i-lock"/></svg>1 项额外授权锁定</span>
+              </div>
+            </div>
+            <div class="module-actions">
+              <label class="master" title="全选本模块的 9 项权限；其中 1 项由额外授权锁定">
+                <input class="cb cb-sm" type="checkbox" id="moduleMaster" />
+                <span>全选本模块</span>
+                <span class="master-num" id="moduleMasterCount">9</span>
+              </label>
+              <div class="menu-wrap">
+                <button class="icon-btn bordered" type="button" id="moduleMore" aria-label="更多批量操作" aria-haspopup="menu" aria-expanded="false"><svg class="icon"><use href="#i-dots"/></svg></button>
+                <div class="menu" id="moduleMenu" role="menu" hidden>
+                  <div class="menu-head">本模块 9 项</div>
+                  <button class="menu-item" type="button" role="menuitem" data-bulk="select">全选可编辑项<span class="menu-hint" id="bulkSelectCount">8</span></button>
+                  <button class="menu-item" type="button" role="menuitem" data-bulk="clear">取消全选<span class="menu-hint" id="bulkClearCount">7</span></button>
+                  <div class="menu-sep"></div>
+                  <button class="menu-item" type="button" role="menuitem" data-bulk="reset">撤销本模块更改</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="matrix-wrap">
+            <table class="matrix" id="matrix"></table>
+          </div>
+
+          <div class="legend" aria-label="状态图例">
+            <span class="legend-item"><i class="lg-box on"></i>已选</span>
+            <span class="legend-item"><i class="lg-box"></i>未选</span>
+            <span class="legend-item"><i class="lg-box mixed"></i>部分</span>
+            <span class="legend-item"><i class="lg-box lock"></i>额外授权锁定</span>
+            <span class="legend-item"><i class="lg-box added"></i>本次新增</span>
+            <span class="legend-item"><i class="lg-box removed"></i>本次移除</span>
+          </div>
+
+          <details class="extra-grants" open>
+            <summary>
+              <svg class="icon"><use href="#i-key"/></svg>
+              <b>额外授权 9 项</b>
+              <span class="sub">其中 1 项锁定「客户敏感信息」</span>
+              <svg class="icon chev"><use href="#i-chevron"/></svg>
+            </summary>
+            <div class="grant-grid">
+              <div class="grant-item"><svg class="icon lock-ico"><use href="#i-lock"/></svg><span>客户敏感信息 · 查看敏感信息（锁定）</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>销售订单 · 导出订单</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>价格政策 · 查看成本价</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>供应商结算 · 查看银行账户</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>客户经营质量 · 导出经营报表</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>合同 · 查看原合同附件</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>库存 · 查看库存成本</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>审批实例 · 查看审批意见</span></div>
+              <div class="grant-item"><svg class="icon"><use href="#i-key"/></svg><span>API 结算 · 查看结算明细</span></div>
+              <div class="grant-note">这些授权不在标准权限目录中，通常来自历史数据或跨模块授权。锁定项不能在本模块取消，需从角色的额外授权中调整。</div>
+            </div>
+          </details>
+
+          <div class="impact-card">
+            <div class="avatar impact-avatar">林</div>
+            <div class="impact-copy">
+              <div class="impact-title">此角色影响 1 个账号</div>
+              <div class="impact-sub">林晓 · 销售一组 · 保存后立即生效；数据范围请到人员资料设置</div>
+            </div>
+            <button class="text-link" type="button" id="impactPeople">查看人员资料 <svg class="icon"><use href="#i-arrow"/></svg></button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="savebar">
+      <div class="save-status">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="save-text" id="saveStatus" role="status" aria-live="polite">已保存 · 无未保存修改</span>
+        <button class="risk-chip" type="button" id="riskChip" hidden><svg class="icon"><use href="#i-shield"/></svg><span id="riskChipText"></span></button>
+        <span class="impact-note" id="impactNote">该角色关联 <b>1</b> 个账号</span>
+        <button class="text-link" type="button" id="viewChanges" hidden>查看变更 <svg class="icon"><use href="#i-arrow"/></svg></button>
+      </div>
+      <div class="save-actions">
+        <button class="btn ghost" type="button" id="undoAll" disabled><svg class="icon"><use href="#i-undo"/></svg>撤销全部</button>
+        <button class="btn ghost" type="button" id="cancelBtn">取消</button>
+        <button class="btn primary" type="button" id="saveBtn" disabled>保存调整</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<dialog class="sheet-dialog" id="changesDialog" aria-labelledby="changesTitle">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div>
+        <h3 id="changesTitle">本次变更 <span class="num" id="changesCount"></span></h3>
+        <p class="sheet-sub" id="changesSub">保存后立即对 1 个账号生效</p>
+      </div>
+      <button class="popover-close" type="button" id="changesClose" aria-label="关闭变更面板"><svg class="icon icon-sm"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sheet-body" id="changesList"></div>
+    <div class="sheet-foot">
+      <button class="btn ghost" type="button" id="changesUndo"><svg class="icon"><use href="#i-undo"/></svg>撤销全部</button>
+      <button class="btn primary" type="button" id="changesSave">保存调整</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle">
+  <div class="confirm-body">
+    <h3 id="confirmTitle">保存调整？</h3>
+    <p>保存后立即对 <b>1</b> 个账号（林晓）生效。</p>
+    <ul class="confirm-list" id="confirmList"></ul>
+    <div class="confirm-risk" id="confirmRisk" hidden></div>
+  </div>
+  <div class="confirm-foot">
+    <button class="btn outline" type="button" id="confirmBack">返回检查</button>
+    <button class="btn primary" type="button" id="confirmSave">确认保存</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <span class="toast-text" id="toastText"></span>
+  <button class="toast-undo" type="button" id="toastUndo" hidden>撤销</button>
+  <button class="toast-close" type="button" id="toastClose" aria-label="关闭提示">×</button>
+</div>
+<script>
+(() => {
+  "use strict"
+
+  const $ = (selector, root = document) => root.querySelector(selector)
+  const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector))
+  const icon = (name, className = "") =>
+    `<svg class="icon ${className}" aria-hidden="true"><use href="#i-${name}"></use></svg>`
+  const esc = (value) =>
+    String(value).replace(/[&<>"']/g, (ch) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch],
+    )
+  const cssEsc = (value) =>
+    window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&")
+
+  const WORKBENCH_NAMES = {
+    sales: "销售工作台",
+    purchase: "采购工作台",
+    cashier: "出纳工作台",
+  }
+  const VIEWS = {
+    all: "全部权限",
+    selected: "已选权限",
+    changed: "本次变更",
+    dangerous: "高风险权限",
+  }
+
+  const ACTIONS = [
+    { key: "list", label: "查看列表" },
+    { key: "detail", label: "查看详情" },
+    { key: "create", label: "新建" },
+    { key: "update", label: "修改" },
+    { key: "delete", label: "删除", danger: true },
+    { key: "reveal", label: "查看敏感信息", danger: true },
+  ]
+
+  const ROWS = [
+    {
+      key: "customer",
+      label: "客户资料",
+      cells: { list: true, detail: true, create: true, update: true, delete: false },
+    },
+    {
+      key: "customer_sensitive",
+      label: "客户敏感信息",
+      cells: { reveal: { value: true, locked: true } },
+    },
+    { key: "customer_scope", label: "客户范围", cells: { detail: false } },
+    {
+      key: "customer_assignment",
+      label: "客户归属",
+      cells: { list: true, create: true },
+    },
+  ]
+
+  const MODULES = [
+    {
+      area: "销售",
+      items: [
+        { key: "customer", name: "客户", selected: 7, total: 9, current: true },
+        { name: "合同", selected: 4, total: 12 },
+        { name: "销售单", selected: 7, total: 14 },
+        { name: "销售复核", selected: 5, total: 8 },
+        { name: "销售选品", selected: 13, total: 20 },
+        { name: "开票申请", selected: 4, total: 6 },
+      ],
+    },
+    {
+      area: "采购与供应商",
+      items: [
+        { name: "采购单", selected: 2, total: 16 },
+        { name: "供应商", selected: 0, total: 12 },
+        { name: "供应商供给", selected: 0, total: 8 },
+        { name: "采购责任管理", selected: 1, total: 5 },
+        { name: "API 供应商连接", selected: 0, total: 4 },
+        { name: "供应商订单", selected: 0, total: 7 },
+        { name: "供应商结算", selected: 0, total: 6 },
+      ],
+    },
+    {
+      area: "仓储与履约",
+      items: [
+        { name: "库存", selected: 0, total: 10 },
+        { name: "履约", selected: 0, total: 9 },
+        { name: "退货退款", selected: 0, total: 7 },
+      ],
+    },
+    {
+      area: "财务与分析",
+      items: [
+        { name: "客户往来", selected: 5, total: 8 },
+        { name: "供应商往来", selected: 4, total: 6 },
+        { name: "财务责任管理", selected: 3, total: 4 },
+        { name: "客户经营质量", selected: 8, total: 10 },
+        { name: "实际经营盈亏", selected: 4, total: 6 },
+      ],
+    },
+    {
+      area: "基础资料",
+      items: [
+        { name: "公司主体", selected: 2, total: 4 },
+        { name: "主体", selected: 3, total: 6 },
+        { name: "商品与仓库", selected: 7, total: 18 },
+      ],
+    },
+    {
+      area: "审批与治理",
+      items: [
+        { name: "审批实例", selected: 3, total: 5 },
+        { name: "审批流程", selected: 1, total: 4 },
+        { name: "导入与期初", selected: 2, total: 6 },
+      ],
+    },
+  ]
+
+  const CELLS = []
+  for (const row of ROWS) {
+    for (const action of ACTIONS) {
+      const raw = row.cells[action.key]
+      if (raw === undefined) continue
+      const value = typeof raw === "object" ? raw.value : raw
+      const locked = typeof raw === "object" && raw.locked === true
+      CELLS.push({
+        code: `${row.key}:${action.key}`,
+        row,
+        action,
+        value: Boolean(value),
+        locked,
+      })
+    }
+  }
+  const CELL_MAP = new Map(CELLS.map((cell) => [cell.code, cell]))
+  const TOTAL_PERMISSIONS = MODULES.reduce(
+    (sum, area) => sum + area.items.reduce((areaSum, item) => areaSum + item.total, 0),
+    0,
+  )
+  const OTHER_SELECTED = 85 - 7
+  const OTHER_DANGER = 3
+  const EXTRA_COUNT = 9
+
+  let state = new Map(CELLS.map((cell) => [cell.code, cell.value]))
+  let baseline = new Map(state)
+  let originalName = "销售"
+  let currentName = "销售"
+  let originalWorkbenches = new Set(["sales"])
+  let currentWorkbenches = new Set(["sales"])
+  let view = "all"
+  let query = ""
+  let pendingUndo = null
+  let toastTimer = null
+  let lastSaved = "11-02 18:06"
+
+  const selectedCount = () => CELLS.filter((cell) => state.get(cell.code)).length
+  const dangerSelected = () =>
+    CELLS.filter((cell) => cell.action.danger && state.get(cell.code)).length
+  const editable = (cells) => cells.filter((cell) => !cell.locked)
+  const checkedCount = (cells) => cells.filter((cell) => state.get(cell.code)).length
+  const masterOf = (cells) => {
+    const total = cells.length
+    const selected = checkedCount(cells)
+    return {
+      total,
+      selected,
+      checked: selected === total,
+      indeterminate: selected > 0 && selected < total,
+    }
+  }
+
+  function sameSet(a, b) {
+    if (a.size !== b.size) return false
+    for (const value of a) if (!b.has(value)) return false
+    return true
+  }
+
+  function getChanges() {
+    const perm = CELLS.filter(
+      (cell) => state.get(cell.code) !== baseline.get(cell.code),
+    ).map((cell) => ({ ...cell, now: state.get(cell.code) }))
+    const nameDirty = currentName !== originalName
+    const wbDirty = !sameSet(currentWorkbenches, originalWorkbenches)
+    return {
+      perm,
+      nameDirty,
+      wbDirty,
+      highRisk: perm.filter((cell) => cell.action.danger).length,
+      removed: perm.filter((cell) => !state.get(cell.code)).length,
+      total: perm.length + (nameDirty ? 1 : 0) + (wbDirty ? 1 : 0),
+    }
+  }
+
+  function getMatches() {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return CELLS.filter((cell) =>
+      `${cell.row.label} ${cell.action.label}`.toLowerCase().includes(q),
+    )
+  }
+
+  function nowLabel() {
+    const date = new Date()
+    const pad = (value) => String(value).padStart(2, "0")
+    return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  }
+
+  function moduleSelected(item) {
+    return item.current ? selectedCount() : item.selected
+  }
+
+  function renderNav() {
+    const nav = $("#moduleNav")
+    const scrollTop = nav.scrollTop
+    const changes = getChanges()
+    nav.innerHTML = MODULES.map((area) => {
+      const areaTotal = area.items.reduce(
+        (sum, item) => sum + moduleSelected(item),
+        0,
+      )
+      const items = area.items
+        .map((item) => {
+          const active = Boolean(item.current)
+          const selected = moduleSelected(item)
+          const classes = ["nav-item"]
+          if (active) classes.push("active")
+          if (!active && selected === 0) classes.push("zero")
+          if (active && changes.perm.length > 0) classes.push("has-change")
+          return `<button type="button" class="${classes.join(" ")}" data-module="${active ? "customer" : ""}" ${active ? 'aria-current="page"' : ""}>
+            <span class="nav-name">${esc(item.name)}</span>
+            <span class="nav-count">${selected}/${item.total}</span>
+          </button>`
+        })
+        .join("")
+      return `<div class="nav-area"><span>${esc(area.area)}</span><span class="nav-area-total" title="本分类已选 ${areaTotal} 项">${areaTotal}</span></div>${items}`
+    }).join("")
+    nav.scrollTop = scrollTop
+  }
+
+  function renderCell(cell) {
+    const checked = Boolean(state.get(cell.code))
+    const before = Boolean(baseline.get(cell.code))
+    const changed = checked !== before
+    const added = changed && checked
+    const removed = changed && !checked
+    const classes = ["cell"]
+    if (cell.locked) classes.push("locked")
+    if (added) classes.push("added")
+    if (removed) classes.push("removed")
+
+    const title = [`${cell.row.label} · ${cell.action.label}`]
+    if (cell.locked) title.push("由额外授权覆盖，不能在本模块调整")
+    if (cell.action.danger) title.push("高风险动作")
+    if (added) title.push("本次新增")
+    if (removed) title.push("本次移除")
+
+    const aria = `${cell.row.label} · ${cell.action.label}${cell.locked ? "，额外授权锁定" : ""}${added ? "，本次新增" : ""}${removed ? "，本次移除" : ""}`
+
+    return `<td class="${classes.join(" ")}" data-code="${cell.code}" data-action="${cell.action.key}" data-row="${cell.row.key}" data-danger="${cell.action.danger ? "1" : "0"}">
+      <label class="cell-label" title="${esc(title.join("；"))}">
+        <input class="cb" type="checkbox" data-code="${cell.code}" aria-label="${esc(aria)}" ${checked ? "checked" : ""} ${cell.locked ? "disabled" : ""} />
+        ${added ? `<span class="diff-badge plus" aria-hidden="true">+</span>` : ""}
+        ${removed ? `<span class="diff-badge minus" aria-hidden="true">−</span>` : ""}
+        ${cell.locked ? `<span class="lock-badge" aria-hidden="true">${icon("lock")}</span>` : ""}
+      </label>
+    </td>`
+  }
+
+  function renderMatrix() {
+    const matrix = $("#matrix")
+    const head = ACTIONS.map((action) => {
+      const cells = CELLS.filter((cell) => cell.action.key === action.key)
+      const editableCells = editable(cells)
+      const master = masterOf(cells)
+      const control =
+        editableCells.length === 0
+          ? `<span class="th-lock">${icon("lock", "icon-xs")}<span>${esc(action.label)}</span></span>`
+          : `<label class="th-label"><input class="cb cb-sm" type="checkbox" data-master="col:${action.key}" aria-label="全选「${esc(action.label)}」列" ${master.checked ? "checked" : ""} /><span>${esc(action.label)}</span></label>`
+      const risk = action.danger
+        ? `<span class="risk-mark" title="高风险动作">${icon("shield", "icon-xs")}</span>`
+        : ""
+      return `<th scope="col" data-action="${action.key}"><div class="th-inner">${control}${risk}</div></th>`
+    }).join("")
+
+    const body = ROWS.map((row) => {
+      const cells = CELLS.filter((cell) => cell.row.key === row.key)
+      const editableCells = editable(cells)
+      const allEditableSelected =
+        editableCells.length > 0 &&
+        editableCells.every((cell) => state.get(cell.code))
+      const rowControl =
+        editableCells.length === 0
+          ? ""
+          : `<button type="button" class="row-select" data-row-select="${row.key}" aria-label="${allEditableSelected ? "取消" : "全选"}「${esc(row.label)}」的所有可编辑操作" title="${allEditableSelected ? "取消此行" : "全选此行"}">${icon("square-check")}</button>`
+      const tds = ACTIONS.map((action) => {
+        const cell = cells.find((item) => item.action.key === action.key)
+        return cell
+          ? renderCell(cell)
+          : `<td class="na-cell" data-action="${action.key}"><span class="na">—</span></td>`
+      }).join("")
+      return `<tr data-row="${row.key}"><th scope="row" class="row-head"><div class="row-head-inner"><span class="row-label">${esc(row.label)}</span>${rowControl}</div></th>${tds}</tr>`
+    }).join("")
+
+    matrix.innerHTML = `<caption class="sr-only">客户模块权限矩阵：行是资源，列是动作</caption><thead><tr><th scope="col" class="corner">资源</th>${head}</tr></thead><tbody>${body}</tbody>`
+
+    const moduleMaster = $("#moduleMaster")
+    const moduleState = masterOf(CELLS)
+    moduleMaster.checked = moduleState.checked
+    moduleMaster.indeterminate = moduleState.indeterminate
+    moduleMaster.title = `全选本模块的 ${CELLS.length} 项权限；其中 ${CELLS.filter((cell) => cell.locked).length} 项由额外授权锁定`
+
+    $$("[data-master^='col:']", matrix).forEach((input) => {
+      const key = input.dataset.master.slice(4)
+      const cells = CELLS.filter((cell) => cell.action.key === key)
+      const master = masterOf(cells)
+      input.checked = master.checked
+      input.indeterminate = master.indeterminate
+      const locked = cells.filter((cell) => cell.locked).length
+      input.title = `全选「${ACTIONS.find((action) => action.key === key).label}」列${locked ? `；${locked} 项锁定` : ""}`
+    })
+
+    $("#moduleSelected").textContent = String(selectedCount())
+    $("#moduleTotal").textContent = String(CELLS.length)
+    $("#moduleMasterCount").textContent = String(CELLS.length)
+    $("#moduleProgress").style.width = `${(selectedCount() / CELLS.length) * 100}%`
+    $("#lockNote").innerHTML = `${icon("lock", "icon-xs")} ${CELLS.filter((cell) => cell.locked).length} 项额外授权锁定`
+
+    const changes = getChanges()
+    const badge = $("#moduleChangeBadge")
+    badge.hidden = changes.perm.length === 0
+    badge.textContent = `本次变更 ${changes.perm.length}`
+  }
+
+  function applySearch() {
+    const matrix = $("#matrix")
+    matrix.querySelectorAll(".search-hit,.search-dim").forEach((element) => {
+      element.classList.remove("search-hit", "search-dim")
+    })
+    const q = query.trim().toLowerCase()
+    const bar = $("#searchBar")
+    if (!q) {
+      bar.hidden = true
+      return
+    }
+
+    const matches = getMatches()
+    bar.hidden = false
+    $("#searchTerm").textContent = query.trim()
+    $("#searchMatches").textContent = String(matches.length)
+
+    const moduleHit = "客户 客户角色与归属管理".toLowerCase().includes(q)
+    const rowHits = new Set(
+      ROWS.filter((row) => row.label.toLowerCase().includes(q)).map((row) => row.key),
+    )
+    const actionHits = new Set(
+      ACTIONS.filter((action) => action.label.toLowerCase().includes(q)).map(
+        (action) => action.key,
+      ),
+    )
+
+    if (!moduleHit) {
+      matrix.querySelectorAll("th[data-action]").forEach((th) => {
+        const hit = actionHits.has(th.dataset.action)
+        th.classList.toggle("search-hit", hit)
+        th.classList.toggle("search-dim", !hit)
+      })
+      matrix.querySelectorAll("tbody tr").forEach((tr) => {
+        const rowHit = rowHits.has(tr.dataset.row)
+        const th = tr.querySelector("th")
+        if (th) {
+          th.classList.toggle("search-hit", rowHit)
+          th.classList.toggle("search-dim", !rowHit)
+        }
+        tr.querySelectorAll("td[data-code]").forEach((td) => {
+          const hit = rowHit || actionHits.has(td.dataset.action)
+          td.classList.toggle("search-hit", hit)
+          td.classList.toggle("search-dim", !hit)
+        })
+      })
+    }
+
+    const editableMatches = matches.filter((cell) => !cell.locked)
+    $("#selectMatches").disabled = editableMatches.length === 0
+    $("#clearMatches").disabled =
+      editableMatches.filter((cell) => state.get(cell.code)).length === 0
+  }
+
+  function applyView() {
+    const matrix = $("#matrix")
+    matrix.querySelectorAll(".view-dim,.view-hit").forEach((element) => {
+      element.classList.remove("view-dim", "view-hit")
+    })
+    const note = $("#viewNote")
+    note.hidden = view === "all"
+    if (view === "all") return
+
+    const changes = getChanges()
+    let text = `正在突出显示「${VIEWS[view]}」；批量操作仍作用于整个模块。`
+    if (view === "changed" && changes.perm.length === 0) {
+      text = "当前没有未保存的权限变更。"
+    }
+    $("#viewNoteText").textContent = text
+
+    matrix.querySelectorAll("td[data-code]").forEach((td) => {
+      const cell = CELL_MAP.get(td.dataset.code)
+      let hit = false
+      if (view === "selected") hit = Boolean(state.get(cell.code))
+      else if (view === "changed") hit = state.get(cell.code) !== baseline.get(cell.code)
+      else hit = cell.action.danger
+      td.classList.toggle("view-hit", hit)
+      td.classList.toggle("view-dim", !hit)
+    })
+
+    matrix.querySelectorAll("th[data-action]").forEach((th) => {
+      const key = th.dataset.action
+      let hit = false
+      if (view === "selected") {
+        hit = CELLS.some((cell) => cell.action.key === key && state.get(cell.code))
+      } else if (view === "changed") {
+        hit = CELLS.some(
+          (cell) =>
+            cell.action.key === key && state.get(cell.code) !== baseline.get(cell.code),
+        )
+      } else {
+        hit = Boolean(ACTIONS.find((action) => action.key === key)?.danger)
+      }
+      th.classList.toggle("view-dim", !hit)
+    })
+
+    matrix.querySelectorAll("tbody tr").forEach((tr) => {
+      const key = tr.dataset.row
+      let hit = false
+      if (view === "selected") {
+        hit = CELLS.some((cell) => cell.row.key === key && state.get(cell.code))
+      } else if (view === "changed") {
+        hit = CELLS.some(
+          (cell) =>
+            cell.row.key === key && state.get(cell.code) !== baseline.get(cell.code),
+        )
+      } else {
+        hit = CELLS.some((cell) => cell.row.key === key && cell.action.danger)
+      }
+      const th = tr.querySelector("th")
+      if (th) th.classList.toggle("view-dim", !hit)
+    })
+  }
+
+  function renderFilterMenu() {
+    const changes = getChanges()
+    $("#filterLabel").textContent = `显示：${VIEWS[view]}`
+    $("#viewCountAll").textContent = String(TOTAL_PERMISSIONS)
+    $("#viewCountSelected").textContent = String(OTHER_SELECTED + selectedCount())
+    $("#viewCountChanged").textContent = String(changes.perm.length)
+    $("#viewCountDanger").textContent = String(OTHER_DANGER + dangerSelected())
+    $$("#filterMenu [data-view]").forEach((button) => {
+      button.setAttribute(
+        "aria-checked",
+        button.dataset.view === view ? "true" : "false",
+      )
+    })
+  }
+
+  function renderFooter() {
+    const changes = getChanges()
+    const dirty = changes.total > 0
+    $("#statusDot").classList.toggle("dirty", dirty)
+    $("#saveStatus").textContent = dirty
+      ? `${changes.total} 项未保存`
+      : "已保存 · 无未保存修改"
+    $("#riskChip").hidden = changes.highRisk === 0
+    $("#riskChipText").textContent = `${changes.highRisk} 项高风险变更`
+    $("#impactNote").innerHTML = dirty
+      ? "保存后立即对 <b>1</b> 个账号生效"
+      : "该角色关联 <b>1</b> 个账号"
+    $("#viewChanges").hidden = !dirty
+    $("#undoAll").disabled = !dirty
+    $("#saveBtn").disabled = !dirty
+    $("#saveBtn").textContent = dirty ? `保存 ${changes.total} 项调整` : "保存调整"
+    $("#summaryBadge").textContent = String(OTHER_SELECTED + selectedCount())
+    renderFilterMenu()
+  }
+
+  function renderSummary() {
+    const changes = getChanges()
+    const standard = OTHER_SELECTED + selectedCount()
+    $("#summaryStandard").textContent = String(standard)
+    $("#summaryExtra").textContent = String(EXTRA_COUNT)
+    $("#summaryRisk").textContent = String(OTHER_DANGER + dangerSelected())
+    $("#summaryAccounts").textContent = "1"
+    $("#summaryWorkbench").textContent =
+      [...currentWorkbenches].map((key) => WORKBENCH_NAMES[key]).join("、") || "未设置"
+    $("#summarySaved").textContent = lastSaved
+    const dirty = $("#summaryDirty")
+    dirty.hidden = changes.total === 0
+    dirty.textContent = `${changes.total} 项未保存`
+    $("#summaryBadge").textContent = String(standard)
+  }
+
+  function syncWorkbenches() {
+    $$("[data-workbench]").forEach((input) => {
+      input.checked = currentWorkbenches.has(input.dataset.workbench)
+    })
+  }
+
+  function renderAll() {
+    const active = document.activeElement
+    const focusCode = active?.dataset?.code
+    const focusMaster = active?.dataset?.master
+    const focusRow = active?.dataset?.rowSelect
+
+    renderNav()
+    renderMatrix()
+    applySearch()
+    applyView()
+    renderFooter()
+    renderSummary()
+    syncWorkbenches()
+
+    if (focusCode) {
+      const next = $(`#matrix input[data-code="${cssEsc(focusCode)}"]`)
+      if (next) next.focus()
+    } else if (focusMaster) {
+      const next = $(`#matrix [data-master="${cssEsc(focusMaster)}"]`)
+      if (next) next.focus()
+    } else if (focusRow) {
+      const next = $(`#matrix [data-row-select="${cssEsc(focusRow)}"]`)
+      if (next) next.focus()
+    }
+  }
+
+  function closeMenus() {
+    $("#filterMenu").hidden = true
+    $("#moduleMenu").hidden = true
+    $("#filterBtn").setAttribute("aria-expanded", "false")
+    $("#moduleMore").setAttribute("aria-expanded", "false")
+  }
+
+  function toggleSummary(force) {
+    const popover = $("#summaryPopover")
+    const open = force === undefined ? popover.hidden : Boolean(force)
+    popover.hidden = !open
+    $("#summaryBtn").setAttribute("aria-expanded", String(open))
+    if (open) renderSummary()
+  }
+
+  function showToast(message, snapshot) {
+    clearTimeout(toastTimer)
+    pendingUndo = snapshot || null
+    $("#toastText").textContent = message
+    $("#toastUndo").hidden = !snapshot
+    $("#toast").classList.add("show")
+    toastTimer = setTimeout(hideToast, snapshot ? 9000 : 4200)
+  }
+
+  function hideToast() {
+    $("#toast").classList.remove("show")
+    pendingUndo = null
+    clearTimeout(toastTimer)
+  }
+
+  function openDialog(dialog) {
+    hideToast()
+    if (!dialog.open) dialog.showModal()
+  }
+
+  function closeDialog(dialog) {
+    if (dialog.open) dialog.close()
+  }
+
+  function updateBulkMenu() {
+    const editableCells = editable(CELLS)
+    const selectedEditable = editableCells.filter((cell) => state.get(cell.code)).length
+    $("#bulkSelectCount").textContent = String(editableCells.length)
+    $("#bulkClearCount").textContent = String(selectedEditable)
+    $('#moduleMenu [data-bulk="select"]').disabled =
+      selectedEditable === editableCells.length
+    $('#moduleMenu [data-bulk="clear"]').disabled = selectedEditable === 0
+    $('#moduleMenu [data-bulk="reset"]').disabled =
+      getChanges().perm.length === 0
+  }
+
+  function bulkModule(mode) {
+    if (mode === "reset") {
+      CELLS.forEach((cell) => state.set(cell.code, baseline.get(cell.code)))
+      renderAll()
+      showToast("已撤销本模块的未保存更改", null)
+      return
+    }
+
+    const editableCells = editable(CELLS)
+    const selectedEditable = editableCells.filter((cell) => state.get(cell.code))
+    if (mode === "select") {
+      if (selectedEditable.length === editableCells.length) {
+        showToast("本模块可编辑项已全部选中", null)
+        return
+      }
+      const snapshot = new Map(state)
+      editableCells.forEach((cell) => state.set(cell.code, true))
+      renderAll()
+      showToast(`已全选本模块的 ${editableCells.length} 项可编辑权限`, snapshot)
+      return
+    }
+
+    if (selectedEditable.length === 0) {
+      showToast("本模块没有可取消的权限", null)
+      return
+    }
+    const snapshot = new Map(state)
+    editableCells.forEach((cell) => state.set(cell.code, false))
+    renderAll()
+    showToast(
+      `已取消 ${selectedEditable.length} 项可编辑权限，1 项额外授权保持不变`,
+      snapshot,
+    )
+  }
+
+  function undoAll() {
+    if (getChanges().total === 0) return
+    state = new Map(baseline)
+    currentName = originalName
+    currentWorkbenches = new Set(originalWorkbenches)
+    $("#roleTitle").textContent = currentName
+    $("#tabRoleName").textContent = currentName
+    renderAll()
+    showToast("已撤销全部未保存调整", null)
+  }
+
+  function openNameEditor() {
+    $("#titleWrap").classList.add("editing")
+    const input = $("#nameInput")
+    input.value = currentName
+    input.classList.remove("invalid")
+    input.focus()
+    input.select()
+  }
+
+  function closeNameEditor() {
+    $("#titleWrap").classList.remove("editing")
+  }
+
+  function commitName() {
+    const input = $("#nameInput")
+    const next = input.value.trim()
+    if (!next) {
+      input.classList.add("invalid")
+      input.focus()
+      return
+    }
+    if (next === currentName) {
+      closeNameEditor()
+      return
+    }
+    currentName = next
+    $("#roleTitle").textContent = currentName
+    $("#tabRoleName").textContent = currentName
+    closeNameEditor()
+    renderAll()
+  }
+
+  function openChanges() {
+    const changes = getChanges()
+    $("#changesCount").textContent = changes.total ? `${changes.total} 项` : ""
+    $("#changesSub").textContent = changes.total
+      ? "保存后立即对 1 个账号生效"
+      : "当前没有未保存的变更"
+
+    const parts = []
+    if (changes.total === 0) {
+      parts.push(
+        `<div class="change-empty">${icon("check", "icon")}<span>没有未保存的变更</span></div>`,
+      )
+    } else {
+      if (changes.nameDirty || changes.wbDirty) {
+        const count = (changes.nameDirty ? 1 : 0) + (changes.wbDirty ? 1 : 0)
+        parts.push(
+          `<div class="change-group"><div class="change-group-title"><span>角色设置</span><span>${count} 项</span></div><ul class="change-list">`,
+        )
+        if (changes.nameDirty) {
+          parts.push(
+            `<li class="change-item"><span class="diff-chip edit">名称</span><span class="name">${esc(originalName)} → ${esc(currentName)}</span></li>`,
+          )
+        }
+        if (changes.wbDirty) {
+          const before =
+            [...originalWorkbenches].map((key) => WORKBENCH_NAMES[key]).join("、") || "无"
+          const after =
+            [...currentWorkbenches].map((key) => WORKBENCH_NAMES[key]).join("、") || "无"
+          parts.push(
+            `<li class="change-item"><span class="diff-chip edit">入口</span><span class="name">工作台入口<span class="sub">${esc(before)} → ${esc(after)}</span></span></li>`,
+          )
+        }
+        parts.push("</ul></div>")
+      }
+
+      if (changes.perm.length > 0) {
+        parts.push(
+          `<div class="change-group"><div class="change-group-title"><span>权限</span><span>${changes.perm.length} 项</span></div><ul class="change-list">`,
+        )
+        changes.perm.forEach((cell) => {
+          parts.push(
+            `<li class="change-item"><span class="diff-chip ${cell.now ? "add" : "remove"}">${cell.now ? "新增" : "移除"}</span><span class="name">${esc(cell.row.label)} · ${esc(cell.action.label)}${cell.action.danger ? `<span class="sub">高风险动作</span>` : ""}</span>${cell.action.danger ? `<span class="risk-mark">${icon("shield", "icon-xs")}</span>` : ""}</li>`,
+          )
+        })
+        parts.push("</ul></div>")
+      }
+
+      parts.push(
+        `<div class="sheet-impact">保存后立即对 <b>1</b> 个账号生效；如需先核对，可继续在此面板检查。</div>`,
+      )
+    }
+
+    $("#changesList").innerHTML = parts.join("")
+    $("#changesUndo").disabled = changes.total === 0
+    $("#changesSave").disabled = changes.total === 0
+    openDialog($("#changesDialog"))
+  }
+
+  function openConfirm(changes) {
+    $("#confirmTitle").textContent = `保存 ${changes.total} 项调整？`
+    const items = []
+    if (changes.nameDirty) {
+      items.push(
+        `<li><span class="diff-chip edit">名称</span><span class="name">${esc(originalName)} → ${esc(currentName)}</span></li>`,
+      )
+    }
+    if (changes.wbDirty) {
+      items.push(
+        `<li><span class="diff-chip edit">入口</span><span class="name">工作台入口已调整</span></li>`,
+      )
+    }
+    changes.perm.slice(0, 8).forEach((cell) => {
+      items.push(
+        `<li><span class="diff-chip ${cell.now ? "add" : "remove"}">${cell.now ? "新增" : "移除"}</span><span class="name">${esc(cell.row.label)} · ${esc(cell.action.label)}</span>${cell.action.danger ? `<span class="risk-mark">${icon("shield", "icon-xs")}</span>` : ""}</li>`,
+      )
+    })
+    if (changes.perm.length > 8) {
+      items.push(
+        `<li class="confirm-more">还有 ${changes.perm.length - 8} 项权限调整…</li>`,
+      )
+    }
+    $("#confirmList").innerHTML = items.join("")
+
+    const risk = $("#confirmRisk")
+    risk.hidden = changes.highRisk === 0 && changes.removed === 0
+    let text = ""
+    if (changes.highRisk > 0) {
+      text += `${icon("shield", "icon-xs")}其中 ${changes.highRisk} 项为高风险权限变更，保存后立即生效。`
+    }
+    if (changes.removed > 0) {
+      text += `${text ? "<br>" : ""}本次将移除 ${changes.removed} 项权限，相关账号可能立即失去对应入口。`
+    }
+    risk.innerHTML = text
+    openDialog($("#confirmDialog"))
+  }
+
+  function requestSave() {
+    const changes = getChanges()
+    if (changes.total === 0) return
+    if (changes.highRisk > 0 || changes.removed > 0) {
+      openConfirm(changes)
+      return
+    }
+    commitSave()
+  }
+
+  function commitSave() {
+    const count = getChanges().total
+    if (count === 0) return
+    baseline = new Map(state)
+    originalName = currentName
+    originalWorkbenches = new Set(currentWorkbenches)
+    lastSaved = nowLabel()
+    renderAll()
+    showToast(`已保存 ${count} 项调整，1 个账号已生效`, null)
+  }
+
+  // ---------- events ----------
+  $("#moduleMaster").addEventListener("change", (event) => {
+    const input = event.target
+    const editableCells = editable(CELLS)
+    const selected = editableCells.filter((cell) => state.get(cell.code))
+    const snapshot = new Map(state)
+    if (input.checked) {
+      editableCells.forEach((cell) => state.set(cell.code, true))
+      renderAll()
+      showToast(`已全选本模块的 ${editableCells.length} 项可编辑权限`, snapshot)
+    } else {
+      editableCells.forEach((cell) => state.set(cell.code, false))
+      renderAll()
+      showToast(
+        `已取消 ${selected.length} 项可编辑权限，1 项额外授权保持不变`,
+        snapshot,
+      )
+    }
+  })
+
+  $("#matrix").addEventListener("change", (event) => {
+    const input = event.target.closest("input[type='checkbox']")
+    if (!input) return
+
+    if (input.dataset.code) {
+      state.set(input.dataset.code, input.checked)
+      renderAll()
+      return
+    }
+
+    if (input.dataset.master && input.dataset.master.startsWith("col:")) {
+      const key = input.dataset.master.slice(4)
+      const cells = CELLS.filter(
+        (cell) => cell.action.key === key && !cell.locked,
+      )
+      const snapshot = new Map(state)
+      cells.forEach((cell) => state.set(cell.code, input.checked))
+      const action = ACTIONS.find((item) => item.key === key)
+      renderAll()
+      showToast(
+        `已${input.checked ? "选择" : "取消"}「${action.label}」列的 ${cells.length} 项权限`,
+        snapshot,
+      )
+    }
+  })
+
+  $("#matrix").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-row-select]")
+    if (!button) return
+    const key = button.dataset.rowSelect
+    const cells = CELLS.filter(
+      (cell) => cell.row.key === key && !cell.locked,
+    )
+    if (cells.length === 0) return
+    const all = cells.every((cell) => state.get(cell.code))
+    const snapshot = new Map(state)
+    cells.forEach((cell) => state.set(cell.code, !all))
+    const row = ROWS.find((item) => item.key === key)
+    renderAll()
+    showToast(
+      `已${all ? "取消" : "选择"}「${row.label}」的 ${cells.length} 项操作`,
+      snapshot,
+    )
+  })
+
+  $("#moduleNav").addEventListener("click", (event) => {
+    const button = event.target.closest(".nav-item")
+    if (!button) return
+    if (button.dataset.module === "customer") return
+    showToast("原型仅展开「客户」模块；其他模块沿用同一矩阵结构", null)
+  })
+
+  $("#moduleMore").addEventListener("click", (event) => {
+    event.stopPropagation()
+    const menu = $("#moduleMenu")
+    const open = menu.hidden
+    closeMenus()
+    if (open) {
+      updateBulkMenu()
+      menu.hidden = false
+      $("#moduleMore").setAttribute("aria-expanded", "true")
+    }
+  })
+
+  $("#moduleMenu").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-bulk]")
+    if (!button) return
+    closeMenus()
+    bulkModule(button.dataset.bulk)
+  })
+
+  $("#filterBtn").addEventListener("click", (event) => {
+    event.stopPropagation()
+    const menu = $("#filterMenu")
+    const open = menu.hidden
+    closeMenus()
+    if (open) {
+      renderFilterMenu()
+      menu.hidden = false
+      $("#filterBtn").setAttribute("aria-expanded", "true")
+    }
+  })
+
+  $("#filterMenu").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view]")
+    if (!button) return
+    view = button.dataset.view
+    closeMenus()
+    renderFilterMenu()
+    applyView()
+  })
+
+  $("#viewReset").addEventListener("click", () => {
+    view = "all"
+    renderFilterMenu()
+    applyView()
+  })
+
+  $("#searchInput").addEventListener("input", (event) => {
+    query = event.target.value
+    applySearch()
+  })
+
+  $("#searchInput").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      query = ""
+      event.target.value = ""
+      applySearch()
+    }
+  })
+
+  $("#selectMatches").addEventListener("click", () => {
+    const targets = getMatches().filter((cell) => !cell.locked)
+    const added = targets.filter((cell) => !state.get(cell.code)).length
+    if (added === 0) {
+      showToast("匹配项已全部选中", null)
+      return
+    }
+    const snapshot = new Map(state)
+    targets.forEach((cell) => state.set(cell.code, true))
+    renderAll()
+    showToast(`已选择匹配的 ${added} 项权限`, snapshot)
+  })
+
+  $("#clearMatches").addEventListener("click", () => {
+    const targets = getMatches().filter(
+      (cell) => !cell.locked && state.get(cell.code),
+    )
+    if (targets.length === 0) {
+      showToast("匹配项中没有已选权限", null)
+      return
+    }
+    const snapshot = new Map(state)
+    targets.forEach((cell) => state.set(cell.code, false))
+    renderAll()
+    showToast(`已清除匹配的 ${targets.length} 项权限`, snapshot)
+  })
+
+  $("#clearSearch").addEventListener("click", () => {
+    query = ""
+    $("#searchInput").value = ""
+    applySearch()
+    $("#searchInput").focus()
+  })
+
+  $("#renameBtn").addEventListener("click", openNameEditor)
+  $("#nameCancel").addEventListener("click", closeNameEditor)
+  $("#nameDone").addEventListener("click", commitName)
+  $("#nameInput").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      commitName()
+    }
+    if (event.key === "Escape") {
+      event.preventDefault()
+      closeNameEditor()
+    }
+  })
+
+  $$("[data-workbench]").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) currentWorkbenches.add(input.dataset.workbench)
+      else currentWorkbenches.delete(input.dataset.workbench)
+      renderAll()
+    })
+  })
+
+  $("#summaryBtn").addEventListener("click", () => toggleSummary())
+  $("#summaryClose").addEventListener("click", () => toggleSummary(false))
+
+  $("#copyBtn").addEventListener("click", () => {
+    showToast("正式流程应先选择角色、预览差异，再覆盖当前选择", null)
+  })
+
+  $("#goPeople").addEventListener("click", () => {
+    showToast("原型未接入人员资料；正式页面会打开关联账号", null)
+  })
+
+  $("#impactPeople").addEventListener("click", () => {
+    showToast("原型未接入人员资料；正式页面会打开关联账号", null)
+  })
+
+  $$(".ptab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      if (tab.dataset.tab === "system") {
+        showToast("原型仅展开业务权限；系统权限沿用同一矩阵结构", null)
+      }
+    })
+  })
+
+  $("#viewChanges").addEventListener("click", openChanges)
+  $("#riskChip").addEventListener("click", openChanges)
+  $("#undoAll").addEventListener("click", undoAll)
+  $("#saveBtn").addEventListener("click", requestSave)
+
+  $("#cancelBtn").addEventListener("click", () => {
+    if (getChanges().total === 0) {
+      showToast("没有未保存的修改", null)
+      return
+    }
+    if (!window.confirm("放弃未保存的修改？")) return
+    state = new Map(baseline)
+    currentName = originalName
+    currentWorkbenches = new Set(originalWorkbenches)
+    $("#roleTitle").textContent = currentName
+    $("#tabRoleName").textContent = currentName
+    renderAll()
+    showToast("已放弃未保存的修改", null)
+  })
+
+  $("#changesClose").addEventListener("click", () => closeDialog($("#changesDialog")))
+  $("#changesUndo").addEventListener("click", () => {
+    closeDialog($("#changesDialog"))
+    undoAll()
+  })
+  $("#changesSave").addEventListener("click", () => {
+    closeDialog($("#changesDialog"))
+    requestSave()
+  })
+
+  $("#confirmBack").addEventListener("click", () => {
+    closeDialog($("#confirmDialog"))
+    openChanges()
+  })
+  $("#confirmSave").addEventListener("click", () => {
+    closeDialog($("#confirmDialog"))
+    commitSave()
+  })
+
+  $("#toastUndo").addEventListener("click", () => {
+    if (!pendingUndo) return
+    const snapshot = pendingUndo
+    state = new Map(snapshot)
+    pendingUndo = null
+    renderAll()
+    showToast("已撤销上一步", null)
+  })
+  $("#toastClose").addEventListener("click", hideToast)
+
+  $$("dialog").forEach((dialog) => {
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) closeDialog(dialog)
+    })
+  })
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".menu-wrap")) closeMenus()
+    if (
+      !event.target.closest("#summaryPopover") &&
+      !event.target.closest("#summaryBtn")
+    ) {
+      toggleSummary(false)
+    }
+  })
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return
+    closeMenus()
+    toggleSummary(false)
+  })
+
+  renderAll()
+})()
+</script>
+</body>
+</html>

@@ -387,6 +387,8 @@ interface MoneyValueProps extends Omit<
     size?: MoneyValueSize
     /** full：精确金额附量级；compact：简写附精确金额；exact：仅精确金额。 */
     display?: MoneyValueDisplay
+    /** 隐藏辅助金额行；compact 模式仍向辅助技术提供完整金额。 */
+    showHint?: boolean
 }
 
 /** 精确展示 CNY 十进制字符串；仅格式化，不执行金额计算。 */
@@ -396,6 +398,7 @@ function MoneyValue({
     unavailableReason,
     size = "inherit",
     display = "full",
+    showHint = true,
     className,
     onCopy,
     ...props
@@ -455,7 +458,7 @@ function MoneyValue({
                             : amount.exact
                         : "—"}
                 </span>
-                {hint && amount ? (
+                {hint && amount && showHint ? (
                     <span
                         data-slot="money-value-hint"
                         aria-hidden={!compactPrimary || undefined}
@@ -467,6 +470,11 @@ function MoneyValue({
                         )}
                     >
                         {compactPrimary ? amount.exact : hint}
+                    </span>
+                ) : null}
+                {!showHint && compactPrimary && amount ? (
+                    <span className="sr-only print:not-sr-only">
+                        {amount.exact}
                     </span>
                 ) : null}
             </span>

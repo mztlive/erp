@@ -7,8 +7,16 @@ export const ROLE_WORKBENCHES = [
         description: "询价跟进、订单推进与客户验收",
         tasks: ["SALES_INQUIRY_PROCESSING", "CUSTOMER_ACCEPTANCE_REGISTRATION"],
         operations: [
-            { label: "销售询价", href: "/sales/inquiries" },
-            { label: "销售订单", href: "/sales/orders" },
+            {
+                label: "销售询价",
+                href: "/sales/inquiries",
+                permission: "sales_inquiry:list",
+            },
+            {
+                label: "销售订单",
+                href: "/sales/orders",
+                permission: "sales_order:list",
+            },
         ],
     },
     {
@@ -22,8 +30,16 @@ export const ROLE_WORKBENCHES = [
             "PURCHASE_SOURCE_UPDATE",
         ],
         operations: [
-            { label: "采购询价", href: "/procurement/inquiries" },
-            { label: "采购订单", href: "/procurement/orders" },
+            {
+                label: "采购询价",
+                href: "/procurement/inquiries",
+                permission: "procurement_inquiry:list",
+            },
+            {
+                label: "采购订单",
+                href: "/procurement/orders",
+                permission: "purchase_order:list",
+            },
         ],
     },
     {
@@ -36,10 +52,12 @@ export const ROLE_WORKBENCHES = [
             {
                 label: "客户资金往来",
                 href: "/finance/customer-accounts?view=receipt",
+                permission: "customer_receipt:list",
             },
             {
                 label: "供应商资金往来",
                 href: "/finance/supplier-accounts?view=payment",
+                permission: "supplier_payment:list",
             },
         ],
     },
