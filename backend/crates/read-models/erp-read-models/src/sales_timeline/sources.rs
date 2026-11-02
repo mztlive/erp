@@ -89,6 +89,7 @@ impl TimelineDocument {
             occurred_at: time,
             category: self.category(),
             title,
+            approval: None,
             actor_name: actor,
             actor_id: None,
             document_type: self.kind.as_str().into(),

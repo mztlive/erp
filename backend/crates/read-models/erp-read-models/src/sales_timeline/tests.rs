@@ -175,6 +175,20 @@ fn actual_node_decision_uses_frozen_actor_round_and_decision_time() {
     sources.add(DocumentType::SalesOrder, "sale".into(), Some("sale"), None);
     let document = &sources.documents["sale"];
     assert!(approval::decision_event(&execution, document).is_none());
+    let mut approved = execution.clone();
+    approved
+        .record_approve(
+            ParticipantId::new("reviewer").unwrap(),
+            Some("已核实上轮驳回原因".into()),
+            Timestamp::from_unix_secs(20).unwrap(),
+        )
+        .unwrap();
+    let approved = approval::decision_event(&approved, document).unwrap();
+    assert_eq!(approved.approval.as_ref().unwrap().result, TimelineApprovalResult::Approved);
+    assert_eq!(
+        serde_json::to_value(&approved).unwrap()["approval"],
+        serde_json::json!({"result": "APPROVED", "node_name": "财务复核", "round_no": 2})
+    );
     execution
         .record_reject(
             ParticipantId::new("reviewer").unwrap(),
@@ -187,6 +201,11 @@ fn actual_node_decision_uses_frozen_actor_round_and_decision_time() {
     assert_eq!(decision.occurred_at, 20);
     assert_eq!(decision.actor_name, "财务复核人");
     assert_eq!(decision.details, ["请补交凭证"]);
+    assert_eq!(decision.approval.as_ref().unwrap().result, TimelineApprovalResult::Rejected);
+    assert_eq!(
+        serde_json::to_value(&decision).unwrap()["approval"],
+        serde_json::json!({"result": "REJECTED", "node_name": "财务复核", "round_no": 2})
+    );
 }
 
 #[test]

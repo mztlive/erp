@@ -15,7 +15,8 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 pub use dto::{
-    TaskTimeline, TimelineCategory, TimelineEvent, TimelinePage, TimelineQuery, TimelineSalesSource,
+    TaskTimeline, TimelineApproval, TimelineApprovalResult, TimelineCategory, TimelineEvent, TimelinePage,
+    TimelineQuery, TimelineSalesSource,
 };
 use erp_identity::SharedRbacService;
 use mongodb::Database;

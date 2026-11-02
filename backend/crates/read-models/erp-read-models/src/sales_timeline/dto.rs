@@ -15,6 +15,23 @@ pub enum TimelineCategory {
     Returns,
 }
 
+/// 审批实际终态；前端不得从标题或审批意见推断结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TimelineApprovalResult {
+    Approved,
+    Rejected,
+    Cancelled,
+}
+
+/// 审批结果及原执行节点、轮次；流程终态没有节点名。
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineApproval {
+    pub result: TimelineApprovalResult,
+    pub node_name: Option<String>,
+    pub round_no: Option<u32>,
+}
+
 /// 同一接口用于完整时间线和最近动态。
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct TimelineQuery {
@@ -32,6 +49,8 @@ pub struct TimelineEvent {
     pub occurred_at: u64,
     pub category: TimelineCategory,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval: Option<TimelineApproval>,
     pub actor_name: String,
     #[serde(skip)]
     pub(super) actor_id: Option<String>,

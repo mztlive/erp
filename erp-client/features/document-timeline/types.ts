@@ -11,6 +11,11 @@ export type TimelineEvent = {
     occurred_at: number
     category: TimelineCategory
     title: string
+    approval?: {
+        result: "APPROVED" | "REJECTED" | "CANCELLED"
+        node_name: string | null
+        round_no: number | null
+    } | null
     actor_name: string
     document_type: string
     document_id: string

@@ -1,7 +1,6 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
-import { getApiFormError, subscribeApiFormError } from "./api-errors"
+import { FormError } from "./form-error"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useFormContext } from "@/components/form/form-context"
 
@@ -11,6 +10,8 @@ type SubmitButtonProps = Omit<
 > & {
     label?: string
     pendingLabel?: string
+    /** 页面集中展示错误时关闭，避免多个操作按钮重复渲染摘要。 */
+    showError?: boolean
 }
 
 /**
@@ -23,15 +24,11 @@ export function SubmitButton({
     children,
     disabled,
     loading = false,
+    showError = true,
     id,
     ...props
 }: SubmitButtonProps & { id?: string }) {
     const form = useFormContext()
-    const serverError = useSyncExternalStore(
-        (listener) => subscribeApiFormError(form, listener),
-        () => getApiFormError(form),
-        () => undefined,
-    )
 
     return (
         <form.Subscribe
@@ -39,14 +36,7 @@ export function SubmitButton({
         >
             {([canSubmit, isSubmitting]) => (
                 <>
-                    {typeof serverError === "string" ? (
-                        <p
-                            role="alert"
-                            className="whitespace-pre-line text-sm text-destructive"
-                        >
-                            {serverError}
-                        </p>
-                    ) : null}
+                    {showError ? <FormError /> : null}
                     <LoadingButton
                         {...props}
                         id={id ?? "form-submit"}

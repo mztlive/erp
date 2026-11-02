@@ -1,8 +1,39 @@
 "use client"
+import { BanIcon, CheckIcon, XIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
+import {
+    Timeline,
+    TimelineItem,
+    TimelineMarker,
+    TimelineTitle,
+} from "@/components/ui/timeline"
 import { MoneyValue } from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { approvalResultText } from "@/lib/ui-text"
+import { cn } from "@/lib/utils"
 import type { TimelineEvent } from "../types"
+
+const approvalPresentation = {
+    APPROVED: {
+        label: approvalResultText.approved,
+        tone: "success",
+        icon: CheckIcon,
+        marker: "border-success-border bg-success-soft text-success-soft-foreground",
+    },
+    REJECTED: {
+        label: approvalResultText.rejected,
+        tone: "destructive",
+        icon: XIcon,
+        marker: "border-destructive-border bg-destructive-soft text-destructive-soft-foreground",
+    },
+    CANCELLED: {
+        label: approvalResultText.cancelled,
+        tone: "neutral",
+        icon: BanIcon,
+        marker: "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
+    },
+} as const
 
 export function TimelineEvents({
     events,
@@ -70,22 +101,46 @@ function TimelineEventList({
     currentDocument?: { type: string; id: string }
 }) {
     return (
-        <ol aria-label="业务时间线" className="space-y-0">
+        <Timeline aria-label="业务时间线">
             {events.map((event) => {
                 const isCurrentDocument =
                     currentDocument?.type === event.document_type &&
                     currentDocument.id === event.document_id
+                const approval = event.approval
+                const presentation = approval
+                    ? approvalPresentation[approval.result]
+                    : undefined
+                const Icon = presentation?.icon
+                const rejected = approval?.result === "REJECTED"
                 return (
-                    <li
-                        key={event.id}
-                        className="relative ml-1 border-l border-border pb-6 pl-5 last:border-transparent last:pb-0"
-                    >
-                        <span
+                    <TimelineItem key={event.id} className="min-w-0 pb-6">
+                        <TimelineMarker
                             aria-hidden="true"
-                            className="absolute -left-1 top-1.5 size-2 rounded-full bg-primary/70"
-                        />
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            className={presentation?.marker}
+                        >
+                            {Icon ? (
+                                <Icon className="size-3.5" />
+                            ) : (
+                                <span className="size-1.5 rounded-full bg-muted-foreground" />
+                            )}
+                        </TimelineMarker>
+                        <TimelineTitle className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="min-w-0 break-words">
+                                {approval
+                                    ? (approval.node_name ?? "审批流程")
+                                    : event.title}
+                            </span>
+                            {presentation && (
+                                <StatusBadge
+                                    tone={presentation.tone}
+                                    icon={presentation.icon}
+                                    label={presentation.label}
+                                />
+                            )}
+                        </TimelineTitle>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                             <time
+                                className="num"
                                 dateTime={new Date(
                                     event.occurred_at * 1000,
                                 ).toISOString()}
@@ -102,17 +157,16 @@ function TimelineEventList({
                                           hour12: false,
                                       })}
                             </time>
-                            {!timeOnly && <span>{event.actor_name}</span>}
+                            {event.actor_name && (
+                                <span>{event.actor_name}</span>
+                            )}
+                            {approval?.round_no != null && (
+                                <span>第 {approval.round_no} 轮</span>
+                            )}
                             {event.after_submission && (
                                 <Badge variant="warning">提交后发生</Badge>
                             )}
                         </div>
-                        <p className="mt-1.5 text-sm font-medium">
-                            {timeOnly && event.actor_name && (
-                                <span className="mr-2">{event.actor_name}</span>
-                            )}
-                            {event.title}
-                        </p>
                         {!isCurrentDocument && (
                             <p className="mt-1 text-xs text-muted-foreground">
                                 {event.document_label}
@@ -133,16 +187,30 @@ function TimelineEventList({
                             </p>
                         )}
                         {event.details.length > 0 && (
-                            <ul className="mt-2 space-y-1 text-xs leading-5 text-muted-foreground">
-                                {event.details.map((detail, index) => (
-                                    <li
-                                        key={`${event.id}-${index}`}
-                                        className="whitespace-pre-wrap break-words"
-                                    >
-                                        {detail}
-                                    </li>
-                                ))}
-                            </ul>
+                            <div
+                                className={cn(
+                                    "mt-2 text-xs leading-5",
+                                    rejected
+                                        ? "rounded-lg border border-destructive-border bg-destructive-soft px-3 py-2 text-destructive-soft-foreground"
+                                        : "text-muted-foreground",
+                                )}
+                            >
+                                {rejected && (
+                                    <p className="mb-1 font-medium">
+                                        {approvalResultText.rejectionReason}
+                                    </p>
+                                )}
+                                <ul className="space-y-1">
+                                    {event.details.map((detail, index) => (
+                                        <li
+                                            key={`${event.id}-${index}`}
+                                            className="whitespace-pre-wrap break-words"
+                                        >
+                                            {detail}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                         )}
                         {event.href && !isCurrentDocument && (
                             <a
@@ -155,9 +223,9 @@ function TimelineEventList({
                                 打开{event.document_label}
                             </a>
                         )}
-                    </li>
+                    </TimelineItem>
                 )
             })}
-        </ol>
+        </Timeline>
     )
 }

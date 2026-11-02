@@ -57,6 +57,7 @@ export { useFieldContext, useFormContext }
 export { TextField } from "@/components/form/text-field"
 export { TextareaField } from "@/components/form/textarea-field"
 export { SubmitButton } from "@/components/form/submit-button"
+export { FormError } from "@/components/form/form-error"
 export {
     SelectField,
     type SelectFieldOption,

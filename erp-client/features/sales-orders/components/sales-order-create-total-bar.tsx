@@ -7,7 +7,7 @@ import {
     StickyTotalBar,
     ValidationSummary,
 } from "@/components/business"
-import { toFieldErrors } from "@/components/form"
+import { FormError, toFieldErrors } from "@/components/form"
 import {
     calculateGrossProfit,
     calculateTotals,
@@ -111,6 +111,14 @@ export function SalesOrderCreateTotalBar({
                 />
             ) : null}
 
+            <form.AppForm>
+                <FormError
+                    id="sales-orders-create-submit-error"
+                    tabIndex={0}
+                    className="max-h-32 min-w-0 shrink-0 overflow-y-auto border-t border-grid px-4 py-3 wrap-anywhere sm:px-5"
+                />
+            </form.AppForm>
+
             <form.Subscribe selector={(state) => state.values}>
                 {(values) => {
                     const totals = calculateTotals(
@@ -206,6 +214,7 @@ export function SalesOrderCreateTotalBar({
                                 <form.AppForm>
                                     <form.SubmitButton
                                         id="sales-orders-create-save-draft"
+                                        showError={false}
                                         variant="outline"
                                         label={
                                             isSubmitting
@@ -219,6 +228,7 @@ export function SalesOrderCreateTotalBar({
                                     />
                                     <form.SubmitButton
                                         id="sales-orders-create-submit"
+                                        showError={false}
                                         data-testid="sales-order-submit"
                                         label="提交审批"
                                         pendingLabel="正在提交…"

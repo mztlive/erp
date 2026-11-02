@@ -9,7 +9,10 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::dto::Cursor;
-use super::{TimelineCategory, TimelineDocument, TimelineEvent, TimelineQuery};
+use super::{
+    TimelineApproval, TimelineApprovalResult, TimelineCategory, TimelineDocument, TimelineEvent,
+    TimelineQuery,
+};
 use crate::Result;
 
 pub(super) async fn history(
@@ -141,6 +144,23 @@ fn workflow_event(
         "未记录姓名".into(),
     );
     event.category = workflow_category(action.action_type, document.category());
+    event.approval = match action.action_type {
+        WorkflowActionType::Approve | WorkflowActionType::ApprovalNodeApproved => {
+            Some(TimelineApprovalResult::Approved)
+        },
+        WorkflowActionType::Reject | WorkflowActionType::ApprovalNodeRejected => {
+            Some(TimelineApprovalResult::Rejected)
+        },
+        WorkflowActionType::ApprovalCancelled | WorkflowActionType::ApprovalBlockedCancelled => {
+            Some(TimelineApprovalResult::Cancelled)
+        },
+        _ => None,
+    }
+    .map(|result| TimelineApproval {
+        result,
+        node_name: None,
+        round_no: action.approval_context.as_ref().map(|context| context.current_round_no),
+    });
     if let Some(comment) = action.comment {
         event.details.push(comment);
     }
@@ -193,4 +213,43 @@ pub(super) fn bound(cursor: Option<&Cursor>, prefix: &str) -> Option<(u64, Strin
             });
         (cursor.time, id)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::{BusinessDocumentId, WorkflowActionId};
+    use erp_workflow::entity::document_registry::WorkflowActionData;
+
+    use super::*;
+
+    #[test]
+    fn historical_decisions_keep_results_without_inventing_missing_rounds() {
+        let document = TimelineDocument::new(DocumentType::SalesOrder, "sale".into());
+        let documents = BTreeMap::from([("sale".into(), document)]);
+        for (action_type, to_status, expected) in [
+            (WorkflowActionType::Approve, "EFFECTIVE", Some(TimelineApprovalResult::Approved)),
+            (WorkflowActionType::Reject, "DRAFT", Some(TimelineApprovalResult::Rejected)),
+            (WorkflowActionType::Submit, "PENDING_REVIEW", None),
+        ] {
+            let action = WorkflowAction::new(
+                WorkflowActionId::new("action"),
+                WorkflowActionData {
+                    document_id: BusinessDocumentId::new("sale"),
+                    action_type,
+                    from_status: "PENDING_REVIEW".into(),
+                    to_status: to_status.into(),
+                    actor_id: "reviewer".into(),
+                    actor_role: "manager".into(),
+                    comment: Some("审批意见含通过和驳回字样".into()),
+                },
+            )
+            .unwrap();
+            let event = workflow_event(action, &documents).unwrap();
+            assert_eq!(event.approval.as_ref().map(|approval| approval.result), expected);
+            if let Some(approval) = &event.approval {
+                assert!(approval.round_no.is_none());
+                assert!(approval.node_name.is_none());
+            }
+        }
+    }
 }

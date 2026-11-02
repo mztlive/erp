@@ -91,6 +91,13 @@ export const resultText = {
     operationProcessing: "操作正在处理",
 } as const
 
+export const approvalResultText = {
+    approved: "通过",
+    rejected: "驳回",
+    cancelled: "已取消",
+    rejectionReason: "驳回原因",
+} as const
+
 // ─── 数据版本 / 新鲜度（禁止「指纹 / 水位 / 对象版本」） ─────────────────────
 
 export const versionText = {
