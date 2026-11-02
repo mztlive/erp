@@ -416,15 +416,19 @@ impl FundsAccess {
 fn payable_summary(rows: &[AccountSummaryRow], version: &str) -> Result<FundsSummaryView> {
     let mut triples = Vec::with_capacity(rows.len());
     let mut whole_sum = zero_amount();
+    let mut balance_sum = zero_amount();
     let mut owner_of = HashMap::new();
     for row in rows {
         triples.push((row.id.clone(), row.settled_total, Some(row.order_id.clone())));
         whole_sum = whole_sum.checked_add(row.gross_total);
+        balance_sum = balance_sum.checked_add(row.open_total);
         if let Some(owner) = &row.owner_user_id {
             owner_of.insert(row.order_id.clone(), owner.clone());
         }
     }
-    build_summary(&triples, &owner_of, Some(whole_sum), version, false)
+    let mut summary = build_summary(&triples, &owner_of, Some(whole_sum), version, false)?;
+    summary.balance_total = Some(balance_sum);
+    Ok(summary)
 }
 
 /// 应付子账单行裁剪；整单金额仅整单资格返回，否则为 null。
@@ -544,6 +548,7 @@ mod tests {
                 owner_user_id: Some("buyer".into()),
                 gross_total: amount("100.01"),
                 settled_total: amount("60.01"),
+                open_total: amount("40.00"),
             },
             AccountSummaryRow {
                 id: "b".into(),
@@ -551,15 +556,19 @@ mod tests {
                 owner_user_id: None,
                 gross_total: amount("40.02"),
                 settled_total: amount("20.02"),
+                open_total: amount("20.00"),
             },
         ];
         let summary = payable_summary(&rows, "v").unwrap();
         assert_eq!(summary.whole_total, Some(amount("140.03")));
+        assert_eq!(summary.balance_total, Some(amount("60.00")));
         assert_eq!(summary.grouped.len(), 1);
         assert_eq!(summary.grouped[0].visible_share, amount("60.01"));
         assert_eq!(summary.unassigned, amount("20.02"));
         assert_eq!(summary.scope_version, "v");
         assert!(!summary.permission_limited);
         assert_eq!(payable_summary(&[], "empty").unwrap().whole_total, Some(Amount::zero()));
+        assert_eq!(payable_summary(&[], "empty").unwrap().balance_total, Some(Amount::zero()));
+        assert_eq!(summary.with_balance_access(false).balance_total, None);
     }
 }

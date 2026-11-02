@@ -10,6 +10,9 @@ import {
     type WorkspaceFilters,
 } from "@/lib/workspace-search"
 import { queryKeyRoots } from "@/lib/query-key-roots"
+import type { OverviewView } from "../lib/overview"
+import type { PeriodPreset } from "@/features/actual-profit-loss/types"
+import { hasPermission } from "@/lib/permissions"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
@@ -54,6 +57,13 @@ export function useWorkspaceHome() {
     const dashboardQuery = useWorkspaceDashboardQuery(
         queryInput,
         accountProfileQuery.data,
+        Boolean(
+            accountProfileQuery.data &&
+            hasPermission(
+                accountProfileQuery.data.permissions,
+                "work_item:list",
+            ),
+        ),
     )
     const view = dashboardQuery.data
     const refreshing =
@@ -99,9 +109,19 @@ export function useWorkspaceHome() {
                 page: 1,
                 scopeVersion: undefined,
                 queue: true,
+                overviewView: urlState.overviewView,
+                overviewPeriod: urlState.overviewPeriod,
             }
             if (key === "overdue" || key === "blocked")
-                Object.assign(next, target)
+                Object.assign(next, target, {
+                    overviewView: urlState.overviewView,
+                    overviewPeriod: urlState.overviewPeriod,
+                    query: undefined,
+                    filters:
+                        key === "overdue"
+                            ? { due: "overdue" }
+                            : { blocked: true },
+                })
             router.push(`${pathname}${buildWorkspaceSearchParams(next)}`, {
                 scroll: false,
             })
@@ -118,9 +138,17 @@ export function useWorkspaceHome() {
                 filters,
                 page: 1,
                 queue: true,
+                overviewView: urlState.overviewView,
+                overviewPeriod: urlState.overviewPeriod,
             })
         },
-        [replaceUrl, urlState.view, urlState.sort],
+        [
+            replaceUrl,
+            urlState.view,
+            urlState.sort,
+            urlState.overviewView,
+            urlState.overviewPeriod,
+        ],
     )
 
     const clearFilters = React.useCallback(() => {
@@ -128,8 +156,22 @@ export function useWorkspaceHome() {
             view: urlState.view,
             sort: "priority_due",
             queue: true,
+            overviewView: urlState.overviewView,
+            overviewPeriod: urlState.overviewPeriod,
         })
-    }, [replaceUrl, urlState.view])
+    }, [
+        replaceUrl,
+        urlState.view,
+        urlState.overviewView,
+        urlState.overviewPeriod,
+    ])
+
+    const onOverviewChange = React.useCallback(
+        (overviewView: OverviewView, overviewPeriod: PeriodPreset) => {
+            replaceUrl({ ...urlState, overviewView, overviewPeriod })
+        },
+        [replaceUrl, urlState],
+    )
 
     const onPageChange = React.useCallback(
         (page: number) => {
@@ -143,14 +185,15 @@ export function useWorkspaceHome() {
     )
 
     const onSelectTask = React.useCallback(
-        (item: WorkspaceWorkItem) => {
+        (item: WorkspaceWorkItem | string) => {
             const returnTo = `${pathname}${buildWorkspaceSearchParams(urlState)}`
             router.push(
                 buildWorkspaceDetailHref(
-                    item.workItemType === "APPROVAL_INSTANCE"
+                    typeof item !== "string" &&
+                        item.workItemType === "APPROVAL_INSTANCE"
                         ? "approvals"
                         : "tasks",
-                    item.workItemId,
+                    typeof item === "string" ? item : item.workItemId,
                     { returnTo },
                 ),
             )
@@ -196,6 +239,7 @@ export function useWorkspaceHome() {
         activeMetric,
         hasActiveFilter,
         onMetricClick,
+        onOverviewChange,
         clearFilters,
         onPageChange,
         onSelectTask,

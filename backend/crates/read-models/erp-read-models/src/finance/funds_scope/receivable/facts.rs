@@ -319,6 +319,7 @@ mod tests {
                 owner_user_id: Some(orders[&row.sales_order_id].sales_owner_user_id.clone()),
                 gross_total: row.gross_total,
                 settled_total: row.settled_total,
+                open_total: row.open_total,
             })
             .collect::<Vec<_>>();
         let page = receivable_page_rows(&page_rows[..1], &mut facts);
@@ -563,6 +564,7 @@ mod tests {
                 owner_user_id: None,
                 gross_total: "100.01".parse().unwrap(),
                 settled_total: "20".parse().unwrap(),
+                open_total: "80.01".parse().unwrap(),
             },
             AccountSummaryRow {
                 id: "other-page".into(),
@@ -570,6 +572,7 @@ mod tests {
                 owner_user_id: None,
                 gross_total: "65".parse().unwrap(),
                 settled_total: "5".parse().unwrap(),
+                open_total: "60".parse().unwrap(),
             },
         ];
         let facts = ReceivableFacts { overdue_total: "60".parse().unwrap(), ..ReceivableFacts::default() };

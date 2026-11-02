@@ -10,12 +10,16 @@ import type {
     WorkspaceViewFilter,
 } from "@/features/workspace/types"
 import { createUrlStateCodec } from "@/lib/url-state"
+import { OVERVIEW_VIEWS, type OverviewView } from "./overview"
+import type { PeriodPreset } from "@/features/actual-profit-loss/types"
 
 const DUE_VALUES = ["today", "overdue"] as const
 const VIEW_VALUES = ["inbox", "started", "managed", "history"] as const
 const SORT_VALUES = ["priority_due", "due_asc", "created_desc"] as const
 
 export type WorkspaceUrlState = {
+    overviewView?: OverviewView
+    overviewPeriod?: PeriodPreset
     filters?: WorkspaceFilters
     scopeVersion?: string
     view: WorkspaceViewFilter
@@ -32,6 +36,18 @@ export type WorkspaceUrlState = {
 }
 
 const codec = createUrlStateCodec<WorkspaceUrlState>([
+    {
+        key: "overview",
+        name: "overviewView",
+        type: "enum",
+        values: OVERVIEW_VIEWS,
+    },
+    {
+        key: "period",
+        name: "overviewPeriod",
+        type: "enum",
+        values: ["month-to-date", "last-month", "quarter-to-date"],
+    },
     {
         key: "filters",
         type: "custom",
@@ -176,13 +192,14 @@ export const pickLegalWorkspaceQuery = (
  * 由 URL 推导当前选中的指标。
  */
 export function metricKeyFromUrlState(
-    state: Pick<WorkspaceUrlState, "view" | "due" | "blocked">,
+    state: Pick<WorkspaceUrlState, "view" | "due" | "blocked" | "filters">,
 ): WorkspaceMetricKey {
     if (state.view === "history") return "history"
     if (state.view === "started") return "started"
     if (state.view === "managed") return "managed"
-    if (state.blocked) return "blocked"
-    if (state.due === "overdue") return "overdue"
+    if (state.blocked || state.filters?.blocked) return "blocked"
+    if (state.due === "overdue" || state.filters?.due === "overdue")
+        return "overdue"
     return "inbox"
 }
 

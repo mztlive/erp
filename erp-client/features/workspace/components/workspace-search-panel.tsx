@@ -22,8 +22,7 @@ import {
 } from "@/lib/workspace-search"
 import { useWorkspaceFilterOptions } from "../hooks/use-workspace-filter-options"
 import type { WorkspaceUrlState } from "../lib/url-state"
-import { WorkspaceSortMenu } from "./workspace-sort-menu"
-import type { WorkspaceSort, WorkspaceViewFilter } from "../types"
+import type { WorkspaceViewFilter } from "../types"
 
 const MORE_KEYS: WorkspaceChoiceKey[] = [
     "handlers",
@@ -100,21 +99,17 @@ function SearchChoice({
 export function WorkspaceSearchPanel({
     state,
     options,
-    total,
     loading,
     failed,
     onApply,
     onReset,
-    onSortChange,
 }: {
     state: WorkspaceUrlState
     options: WorkspaceSearchOptions
-    total: number
     loading: boolean
     failed: boolean
     onApply: (query: string, filters: WorkspaceFilters) => void
     onReset: () => void
-    onSortChange: (sort: WorkspaceSort) => void
 }) {
     const [moreOpen, setMoreOpen] = useState(false)
     const applied = useMemo(
@@ -213,6 +208,7 @@ export function WorkspaceSearchPanel({
                     idPrefix="workspace-query"
                     formAriaLabel="工作台查询条件"
                     density="compact"
+                    className="[&_[data-slot=list-toolbar-query-tools]]:sm:flex-col [&_[data-slot=list-toolbar-query-tools]]:sm:items-stretch [&_[data-slot=list-toolbar-search]]:sm:w-full [&_[data-slot=list-toolbar-search]]:lg:w-full"
                     onSubmit={() => void form.handleSubmit()}
                     hasPendingChanges={isDirty}
                     search={
@@ -525,19 +521,7 @@ export function WorkspaceSearchPanel({
                     chips={chips}
                     onClearAll={onReset}
                     resultStatus={
-                        loading
-                            ? "查询中…"
-                            : failed
-                              ? "查询未完成"
-                              : `共 ${total} 条事项`
-                    }
-                    statusActions={
-                        state.view !== "started" && (
-                            <WorkspaceSortMenu
-                                value={state.sort}
-                                onValueChange={onSortChange}
-                            />
-                        )
+                        loading ? "查询中…" : failed ? "查询未完成" : null
                     }
                 />
             )}

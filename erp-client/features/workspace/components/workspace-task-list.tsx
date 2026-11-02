@@ -31,7 +31,7 @@ export function WorkspaceTaskList({
                 aria-hidden="true"
                 className={
                     workspaceTaskColumns +
-                    " shrink-0 border-b border-grid bg-muted/35 px-4 py-3 text-xs font-medium sm:px-5"
+                    " shrink-0 border-b border-grid bg-muted/35 px-4 py-3 text-xs font-medium"
                 }
             >
                 <span>事项</span>

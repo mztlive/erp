@@ -62,6 +62,7 @@ pub(in crate::finance::funds_scope) struct AccountSummaryRow {
     pub(in crate::finance::funds_scope) owner_user_id: Option<String>,
     pub(in crate::finance::funds_scope) gross_total: Amount,
     pub(in crate::finance::funds_scope) settled_total: Amount,
+    pub(in crate::finance::funds_scope) open_total: Amount,
 }
 
 /// 同一事务和同一最终条件生成的页面、计数、版本和金额输入。
@@ -259,7 +260,7 @@ impl FundsAccess {
             doc! { "$sort": sort.clone() },
             doc! { "$limit": 10001 },
             doc! { "$project": { "_id": 0, "id": 1, "order_id": format!("${source_field}"),
-            "owner_user_id": "$_source.owner_user_id", "gross_total": 1, "settled_total": 1 } },
+            "owner_user_id": "$_source.owner_user_id", "gross_total": 1, "settled_total": 1, "open_total": 1 } },
         ];
         let facet = if include_page {
             page_facet(page, size, sort, account_projection(), versions, summary)?

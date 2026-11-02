@@ -90,7 +90,7 @@ export function WorkspaceTaskCard({
             onClick={() => onSelect(item)}
             className={cn(
                 workspaceTaskColumns,
-                "relative min-h-24 w-full px-4 py-4 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5",
+                "relative min-h-24 w-full px-4 py-4 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 selected
                     ? "bg-muted/60 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
                     : "hover:bg-muted/30",
