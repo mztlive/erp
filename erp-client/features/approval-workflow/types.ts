@@ -222,7 +222,44 @@ export type ApprovalHistoryPageDto = Readonly<{
     items: readonly ApprovalHistoryItemDto[]
     next_cursor?: string | null
     has_more: boolean
+    route?: ApprovalRouteDto | null
 }>
+
+/** 本次审批的完整冻结路线，由服务端确定各节点状态。 */
+export type ApprovalRouteDto = Readonly<{
+    round_no: number
+    nodes: readonly Readonly<{
+        node_key: string
+        node_name: string
+        assignee_name: string
+        result: string
+        execution?: ApprovalHistoryItemDto | null
+    }>[]
+}>
+
+export type ApprovalRoute = Readonly<{
+    roundNo: number
+    nodes: readonly Readonly<{
+        key: string
+        name: string
+        assigneeName: string
+        result: string
+        execution?: ApprovalHistoryItem
+    }>[]
+}>
+
+export const mapApprovalRouteDto = (dto: ApprovalRouteDto): ApprovalRoute => ({
+    roundNo: dto.round_no,
+    nodes: dto.nodes.map((node) => ({
+        key: node.node_key,
+        name: node.node_name,
+        assigneeName: node.assignee_name,
+        result: node.result,
+        execution: node.execution
+            ? mapHistoryItemDto(node.execution)
+            : undefined,
+    })),
+})
 
 /** 单据详情返回的统一只读审批结构。 */
 export type DocumentApprovalViewDto = Readonly<{

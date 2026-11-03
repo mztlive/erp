@@ -1,5 +1,5 @@
 /**
- * 选品册详情页：对象页头 + 流程向导 + 双栏作业工作台（左侧陈列预览画廊 + 右侧档案指标侧边栏）。
+ * 选品册详情页：对象页头 + 流程向导 + 全宽陈列工作面与按需查看的资料抽屉。
  * 发布固定已确认批次，不回传浏览器明细替代后端快照。
  */
 
@@ -23,7 +23,7 @@ import { BookDetailVoucherPanel } from "@/features/sales-selection/components/bo
 import { BookDetailHeader } from "@/features/sales-selection/components/book-detail-header"
 import { BookCopyDialog } from "@/features/sales-selection/components/book-copy-dialog"
 import { useRouter } from "@/lib/navigation"
-import { BookDetailSidebar } from "@/features/sales-selection/components/book-detail-sidebar"
+import { BookDetailInfoSheet } from "@/features/sales-selection/components/book-detail-info-sheet"
 import { BookWorkflowBanner } from "@/features/sales-selection/components/book-workflow-banner"
 import { PreviewGrid } from "@/features/sales-selection/components/preview-grid"
 import { PriceEditDialog } from "@/features/sales-selection/components/price-edit-dialog"
@@ -57,6 +57,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
     const detailQuery = useBookDetail(bookId)
     const operations = useBookOperations()
     const detail = detailQuery.data
+    const [infoOpen, setInfoOpen] = React.useState(false)
     const [editing, setEditing] = React.useState(false)
     const [copying, setCopying] = React.useState(false)
     const [passwordEditing, setPasswordEditing] = React.useState(false)
@@ -84,10 +85,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 <div className="space-y-3" aria-busy="true" aria-label="加载中">
                     <Skeleton className="h-16 w-full rounded-lg" />
                     <Skeleton className="h-20 w-full rounded-xl" />
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-                        <Skeleton className="h-96 w-full rounded-xl" />
-                        <Skeleton className="h-96 w-full rounded-xl" />
-                    </div>
+                    <Skeleton className="h-96 w-full rounded-xl" />
                 </div>
             </PageScaffold>
         )
@@ -133,6 +131,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 detail={detail}
                 pending={pending}
                 operations={operations}
+                onOpenInfo={() => setInfoOpen(true)}
                 onEdit={() => setEditing(true)}
                 onCopy={canCopy ? () => setCopying(true) : undefined}
             />
@@ -243,120 +242,147 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 onEdit={() => setEditing(true)}
             />
 
-            {/* 双栏工作台：左侧陈列预览与核对 + 右侧档案与控制侧边栏 */}
-            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
-                {/* 左侧主要工作面：商品与套餐陈列预览 */}
-                <div
-                    className={cn(
-                        surfacePanelClassName,
-                        "min-w-0 overflow-hidden rounded-xl border border-border p-5",
-                    )}
-                >
-                    <div className="mb-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <h2 className="text-sm font-semibold text-foreground">
-                                陈列预览
-                                <span className="ml-2 font-normal text-xs text-muted-foreground">
-                                    （共 {visibleItems.length} 项）
-                                </span>
-                            </h2>
-                            {detail.status === "PENDING_PUBLISH" &&
-                            canMaintain &&
-                            visibleItems.length > 0 ? (
-                                <Button
-                                    id="selection-prices-markup"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={pending || !detail.batch_id}
-                                    onClick={() => setPriceEditing({})}
-                                >
-                                    统一加价
-                                </Button>
-                            ) : null}
-                        </div>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                            {detail.status === "PENDING_PUBLISH"
-                                ? "待发布时可编辑客户售价、统一加价或删除陈列项；套餐可单档重生成。发布后价格与陈列冻结。"
-                                : "陈列内容来自最近一次准备结果。"}
-                        </p>
+            {/* 全宽商品与套餐陈列工作面 */}
+            <div
+                className={cn(
+                    surfacePanelClassName,
+                    "min-w-0 overflow-hidden rounded-xl border border-border p-5",
+                )}
+            >
+                <div className="mb-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-sm font-semibold text-foreground">
+                            陈列预览
+                        </h2>
+                        {detail.status === "PENDING_PUBLISH" &&
+                        canMaintain &&
+                        visibleItems.length > 0 ? (
+                            <Button
+                                id="selection-prices-markup"
+                                variant="outline"
+                                size="sm"
+                                disabled={pending || !detail.batch_id}
+                                onClick={() => setPriceEditing({})}
+                            >
+                                统一加价
+                            </Button>
+                        ) : null}
                     </div>
-
-                    <PreviewGrid
-                        items={visibleItems.map((item) => ({
-                            ...item,
-                            item_id: item.item_id || item.id || "",
-                            kind: item.kind ?? "SINGLE_SKU",
-                            price_gross: item.price_gross || item.price || "0",
-                        }))}
-                        priceEditor={
-                            detail.status === "PENDING_PUBLISH" &&
-                            canMaintain &&
-                            detail.batch_id
-                                ? {
-                                      batchId: detail.batch_id,
-                                      version: detail.version,
-                                      onSubmit: (input) =>
-                                          operations.updatePrices.mutateAsync({
-                                              bookId: activeBookId,
-                                              ...input,
-                                          }),
-                                  }
-                                : undefined
-                        }
-                        selectionForm={detail.selection_form}
-                        tiers={detail.tiers}
-                        pending={pending}
-                        onEditPrice={
-                            detail.status === "PENDING_PUBLISH" &&
-                            canMaintain &&
-                            detail.batch_id
-                                ? (item) => setPriceEditing({ item })
-                                : undefined
-                        }
-                        deletingItemId={
-                            operations.deleteItem.isPending
-                                ? operations.deleteItem.variables?.itemId
-                                : undefined
-                        }
-                        regeneratingTierIds={
-                            operations.regenerate.isPending
-                                ? operations.regenerate.variables?.tier_ids
-                                : undefined
-                        }
-                        onRegenerateTier={
-                            detail.status === "PENDING_PUBLISH"
-                                ? (tierId) =>
-                                      void operations.regenerate.mutateAsync({
-                                          bookId: activeBookId,
-                                          tier_ids: [tierId],
-                                          expected_version: detail.version,
-                                          idempotency_key:
-                                              createIdempotencyKey(),
-                                      })
-                                : undefined
-                        }
-                        onDelete={
-                            detail.status === "PENDING_PUBLISH"
-                                ? (itemId) =>
-                                      void operations.deleteItem.mutateAsync({
-                                          bookId: activeBookId,
-                                          itemId,
-                                          expected_version: detail.version,
-                                      })
-                                : undefined
-                        }
-                    />
+                    <dl
+                        aria-label="陈列指标"
+                        className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+                    >
+                        <div className="flex gap-1">
+                            <dt>有效陈列</dt>
+                            <dd className="num font-medium text-foreground">
+                                {detail.display_count}
+                            </dd>
+                        </div>
+                        <div className="flex gap-1">
+                            <dt>已剔除</dt>
+                            <dd className="num">{detail.removed_count}</dd>
+                        </div>
+                        <div
+                            className={cn(
+                                "flex gap-1",
+                                detail.missing_image_count > 0 &&
+                                    "font-medium text-warning-soft-foreground",
+                            )}
+                        >
+                            <dt>缺少图片</dt>
+                            <dd className="num">
+                                {detail.missing_image_count}
+                            </dd>
+                        </div>
+                        {detail.selection_form === "PACKAGE" ? (
+                            <div className="flex gap-1">
+                                <dt>选品档位</dt>
+                                <dd className="num">
+                                    {detail.tiers.length} 档
+                                </dd>
+                            </div>
+                        ) : null}
+                    </dl>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        {detail.status === "PENDING_PUBLISH"
+                            ? "待发布时可编辑客户售价、统一加价或删除陈列项；套餐可单档重生成。发布后价格与陈列冻结。"
+                            : "陈列内容来自最近一次准备结果。"}
+                    </p>
                 </div>
 
-                {/* 右侧吸顶控制台与档案侧边栏 */}
-                <div className="min-w-0 xl:sticky xl:top-4">
-                    <BookDetailSidebar
-                        detail={detail}
-                        pending={pending}
-                        operations={operations}
-                    />
-                </div>
+                <PreviewGrid
+                    items={visibleItems.map((item) => ({
+                        ...item,
+                        item_id: item.item_id || item.id || "",
+                        kind: item.kind ?? "SINGLE_SKU",
+                        price_gross: item.price_gross || item.price || "0",
+                    }))}
+                    priceEditor={
+                        detail.status === "PENDING_PUBLISH" &&
+                        canMaintain &&
+                        detail.batch_id
+                            ? {
+                                  batchId: detail.batch_id,
+                                  version: detail.version,
+                                  onSubmit: (input) =>
+                                      operations.updatePrices.mutateAsync({
+                                          bookId: activeBookId,
+                                          ...input,
+                                      }),
+                              }
+                            : undefined
+                    }
+                    selectionForm={detail.selection_form}
+                    tiers={detail.tiers}
+                    pending={pending}
+                    onEditPrice={
+                        detail.status === "PENDING_PUBLISH" &&
+                        canMaintain &&
+                        detail.batch_id
+                            ? (item) => setPriceEditing({ item })
+                            : undefined
+                    }
+                    deletingItemId={
+                        operations.deleteItem.isPending
+                            ? operations.deleteItem.variables?.itemId
+                            : undefined
+                    }
+                    regeneratingTierIds={
+                        operations.regenerate.isPending
+                            ? operations.regenerate.variables?.tier_ids
+                            : undefined
+                    }
+                    onRegenerateTier={
+                        detail.status === "PENDING_PUBLISH"
+                            ? (tierId) =>
+                                  void operations.regenerate.mutateAsync({
+                                      bookId: activeBookId,
+                                      tier_ids: [tierId],
+                                      expected_version: detail.version,
+                                      idempotency_key: createIdempotencyKey(),
+                                  })
+                            : undefined
+                    }
+                    onDelete={
+                        detail.status === "PENDING_PUBLISH"
+                            ? (itemId) =>
+                                  void operations.deleteItem.mutateAsync({
+                                      bookId: activeBookId,
+                                      itemId,
+                                      expected_version: detail.version,
+                                  })
+                            : undefined
+                    }
+                />
             </div>
+
+            <BookDetailInfoSheet
+                open={infoOpen}
+                onOpenChange={setInfoOpen}
+                detail={detail}
+                pending={pending}
+                operations={operations}
+            />
         </PageScaffold>
     )
 }

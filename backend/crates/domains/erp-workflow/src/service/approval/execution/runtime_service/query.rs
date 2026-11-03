@@ -215,7 +215,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             )
             .await?;
         let items = rows.iter().map(history_item_from_execution).collect();
-        Ok(history_page_from(items, limit))
+        let mut page = history_page_from(items, limit);
+        if after_execution_no.is_none() {
+            page.route = self.sales_approval_route(&subject).await?;
+        }
+        Ok(page)
     }
 
     /// 返回当前 blocker 的唯一合法恢复动作。

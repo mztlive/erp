@@ -4,6 +4,7 @@ import Link from "next/link"
 import {
     BanIcon,
     CopyIcon,
+    FileTextIcon,
     Link2Icon,
     Link2OffIcon,
     PencilIcon,
@@ -47,12 +48,14 @@ export function BookDetailHeader({
     operations,
     onEdit,
     onCopy,
+    onOpenInfo,
 }: {
     detail: SelectionBookDetail
     pending: boolean
     operations: Operations
     onEdit: () => void
     onCopy?: () => void
+    onOpenInfo: () => void
 }) {
     const bookId = bookIdentity(detail)
     const key = withKey(detail.version)
@@ -139,6 +142,17 @@ export function BookDetailHeader({
 
     const secondaryActions = (
         <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+                id="sales-selection-detail-info"
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-haspopup="dialog"
+                onClick={onOpenInfo}
+            >
+                <FileTextIcon data-icon="inline-start" aria-hidden="true" />
+                选品册资料
+            </Button>
             {onCopy ? (
                 <Button
                     id="sales-selection-detail-copy"
@@ -323,13 +337,6 @@ export function BookDetailHeader({
         </div>
     )
 
-    const hasSecondary =
-        detail.status === "DRAFT" ||
-        detail.status === "PENDING_PUBLISH" ||
-        detail.status === "PUBLISHED" ||
-        detail.status === "SUBMITTED" ||
-        Boolean(detail.proposal_id)
-
     return (
         <DetailPageHeader
             back={{
@@ -352,7 +359,7 @@ export function BookDetailHeader({
                 </span>
             }
             primaryAction={primaryAction}
-            secondaryActions={hasSecondary ? secondaryActions : undefined}
+            secondaryActions={secondaryActions}
         />
     )
 }

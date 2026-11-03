@@ -6,6 +6,7 @@ use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
 use serde::{Deserialize, Serialize};
 
+use super::runtime_route::RuntimeApprovalRoute;
 pub use crate::repository::bpm::ExecutionHistoryOrder;
 
 /// 单条执行历史。字段与前端审批 Tab 合同对齐。
@@ -73,6 +74,9 @@ pub struct RuntimeHistoryPage {
     pub next_cursor: Option<String>,
     /// 是否还有后续执行。
     pub has_more: bool,
+    /// 销售审批首页携带当前轮次完整链条；其它类型及后续分页省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<RuntimeApprovalRoute>,
 }
 
 /// 将节点执行映射为历史项。不得按 `node_key` 去重。
@@ -120,7 +124,7 @@ pub fn history_page_from(mut items: Vec<RuntimeHistoryItem>, limit: u32) -> Runt
         items.truncate(limit as usize);
     }
     let next_cursor = has_more.then(|| items.last().map(|item| item.execution_no.to_string())).flatten();
-    RuntimeHistoryPage { items, next_cursor, has_more }
+    RuntimeHistoryPage { items, next_cursor, has_more, route: None }
 }
 
 /// 从已排序历史中取最近一次驳回原因。

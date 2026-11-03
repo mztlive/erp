@@ -4,6 +4,7 @@ import { isApiError } from "@/lib/api/errors"
 
 import {
     mapCommandViewDto,
+    mapApprovalRouteDto,
     mapHistoryItemDto,
     mapInstanceListItemDto,
     mapRecoveryOptionsDto,
@@ -12,6 +13,7 @@ import {
     type ApprovalCommandViewDto,
     type ApprovalHistoryItem,
     type ApprovalHistoryPageDto,
+    type ApprovalRoute,
     type ApprovalInstanceListPage,
     type ApprovalInstanceListPageDto,
     type ApprovalInstanceListItemDto,
@@ -135,6 +137,7 @@ export const listApprovalHistory = async (
     items: readonly ApprovalHistoryItem[]
     nextCursor?: string
     hasMore: boolean
+    route?: ApprovalRoute
 }> => {
     const page = await apiGet<ApprovalHistoryPageDto>(
         `/admin/approval-instances/${encodeURIComponent(params.instanceId)}/history`,
@@ -148,6 +151,7 @@ export const listApprovalHistory = async (
         items: page.items.map(mapHistoryItemDto),
         nextCursor: page.next_cursor ?? undefined,
         hasMore: page.has_more,
+        route: page.route ? mapApprovalRouteDto(page.route) : undefined,
     }
 }
 

@@ -3,6 +3,7 @@
 import { BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { ApprovalCopyHistory } from "@/features/approval-workflow/components/copy-history"
+import { ApprovalRoute } from "@/features/approval-workflow/components/approval-route"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { useApprovalHistoryInfiniteQuery } from "@/features/approval-workflow/queries"
 import type { SalesOrderDetailView } from "../api/sales-orders"
@@ -33,6 +34,12 @@ export function ApprovalPanel({ order }: { order: SalesOrderDetailView }) {
     return (
         <div className="space-y-6">
             <SalesOrderApprovalSummary instance={instance} />
+            {history.data?.pages[0]?.route ? (
+                <section className="space-y-4" aria-label="本次审批路线">
+                    <h3 className="text-sm font-medium">审批人链条</h3>
+                    <ApprovalRoute route={history.data.pages[0].route} />
+                </section>
+            ) : null}
             {history.isError ? (
                 <BusinessFailureState
                     id="sales-order-approval-history-retry"

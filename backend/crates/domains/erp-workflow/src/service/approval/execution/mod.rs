@@ -16,6 +16,7 @@ pub mod runtime_history;
 #[cfg(test)]
 mod runtime_persistence_contract;
 pub mod runtime_query;
+pub mod runtime_route;
 pub mod runtime_service;
 pub mod start;
 pub mod start_input;

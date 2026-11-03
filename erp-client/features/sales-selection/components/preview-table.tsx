@@ -108,7 +108,7 @@ export function PreviewTable({
                                 alt={row.original.name}
                             />
                         </div>
-                        <div className="min-w-0 space-y-1">
+                        <div className="min-w-0 space-y-1 whitespace-normal">
                             <p className="line-clamp-2 font-medium">
                                 {row.original.name}
                             </p>
@@ -144,9 +144,9 @@ export function PreviewTable({
             },
             ...(
                 [
-                    ["bulk_price_gross", "集采价（含税）"],
-                    ["dropship_price_gross", "一件代发价（含税）"],
-                    ["market_price", "市场价（含税）"],
+                    ["bulk_price_gross", "集采价"],
+                    ["dropship_price_gross", "一件代发价"],
+                    ["market_price", "市场价"],
                 ] as const
             ).map(([field, label]): ColumnDef<DisplayItem> => ({
                 id: field,
@@ -173,9 +173,9 @@ export function PreviewTable({
             {
                 id: "price",
                 accessorKey: "price",
-                header: "客户售价（含税）",
+                header: "客户售价",
                 meta: {
-                    label: "客户售价（含税）",
+                    label: "客户售价",
                     width: "amount",
                     numeric: true,
                     align: "end",
@@ -290,24 +290,28 @@ export function PreviewTable({
 
     return (
         <PriceCellContext.Provider value={{ pending, priceEditor }}>
-            <DataTable
-                id="selection-preview-table"
-                data={[...items]}
-                columns={columns}
-                getRowId={(item) => item.item_id}
-                rowLabel={(item) => item.name}
-                rowCount={items.length}
-                caption="选品册商品与客户售价对比"
-                manualSorting={false}
-                manualPagination={false}
-                manualFiltering={false}
-                showToolbarSummary={false}
-                defaultColumnVisibility={{
-                    tier: items.some((item) => item.kind === "PACKAGE"),
-                }}
-                emptyTitle="当前筛选无结果"
-                emptyDescription="调整档位或缺图筛选后再试。"
-            />
+            <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">价格均含税</p>
+                <DataTable
+                    id="selection-preview-table"
+                    data={[...items]}
+                    columns={columns}
+                    getRowId={(item) => item.item_id}
+                    rowLabel={(item) => item.name}
+                    rowCount={items.length}
+                    caption="选品册商品与客户售价对比（价格均含税）"
+                    defaultColumnPinning={{ left: ["product"] }}
+                    manualSorting={false}
+                    manualPagination={false}
+                    manualFiltering={false}
+                    showToolbarSummary={false}
+                    defaultColumnVisibility={{
+                        tier: items.some((item) => item.kind === "PACKAGE"),
+                    }}
+                    emptyTitle="当前筛选无结果"
+                    emptyDescription="调整档位或缺图筛选后再试。"
+                />
+            </div>
         </PriceCellContext.Provider>
     )
 }
