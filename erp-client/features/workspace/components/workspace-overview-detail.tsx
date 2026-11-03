@@ -46,7 +46,7 @@ export function WorkspaceOverviewDetail({
             }}
         >
             <SheetContent
-                size="detail"
+                size="preview"
                 closeButtonId="workspace-business-detail-close"
                 finalFocus={false}
                 className="min-h-0"

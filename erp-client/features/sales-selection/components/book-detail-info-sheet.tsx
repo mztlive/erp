@@ -1,25 +1,17 @@
 "use client"
 
 import Link from "next/link"
-import {
-    FileTextIcon,
-    LayersIcon,
-    Link2Icon,
-    RefreshCwIcon,
-} from "lucide-react"
+import { RefreshCwIcon } from "lucide-react"
 
-import { MoneyValue, QuickPreviewSheet } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    QuickPreviewSheet,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import {
     InputGroup,
     InputGroupAddon,
@@ -29,12 +21,14 @@ import {
 import { useBookOperations } from "@/features/sales-selection/hooks/queries"
 import {
     bookIdentity,
+    bookletStatusTone,
     formatBookInstant,
     publicSelectionHref,
 } from "@/features/sales-selection/lib/presentation"
 import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 import type { SelectionBookDetail } from "@/features/sales-selection/types"
 import {
+    BOOKLET_STATUS_LABEL,
     POOL_SOURCE_LABEL,
     SELECTION_FORM_LABEL,
     SUBMIT_MODE_LABEL,
@@ -61,15 +55,33 @@ export function BookDetailInfoSheet({
         operations.copyLink.data?.public_url ?? detail.public_url,
     )
     const isPackage = detail.selection_form === "PACKAGE"
+    const archiveFields = [
+        ["商品来源", POOL_SOURCE_LABEL[detail.source_kind]],
+        ["资格核对日", formatBookInstant(detail.eligibility_as_of)],
+        ["商品快照时间", formatBookInstant(detail.prepared_at)],
+        ["更新时间", formatBookInstant(detail.updated_at)],
+    ]
 
     return (
         <QuickPreviewSheet
             idPrefix="sales-selection-detail-info-sheet"
             open={open}
             onOpenChange={onOpenChange}
-            size="detail"
+            size="preview"
             title={detail.customer_name}
-            description="选品册资料、客户链接与套餐档位达成情况。"
+            description={`选品册资料 · ${SELECTION_FORM_LABEL[detail.selection_form]} · ${SUBMIT_MODE_LABEL[detail.submit_mode]}`}
+            summary={
+                <div className="flex flex-wrap items-center gap-2">
+                    <BusinessStatusBadge
+                        context="preview"
+                        label={BOOKLET_STATUS_LABEL[detail.status]}
+                        tone={bookletStatusTone(detail.status)}
+                    />
+                    <span className="num text-xs text-muted-foreground">
+                        版本 v{detail.version}
+                    </span>
+                </div>
+            }
             finalFocus={() =>
                 document.getElementById("sales-selection-detail-info")
             }
@@ -84,279 +96,178 @@ export function BookDetailInfoSheet({
                 </Button>
             }
         >
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-7 py-6">
-                {/* 客户选品链接与交付 */}
-                {publicHref &&
-                (detail.status === "PUBLISHED" ||
-                    detail.status === "SUBMITTED" ||
-                    operations.copyLink.data?.public_url) ? (
-                    <Card
-                        size="sm"
-                        className="border-primary/30 bg-card shadow-xs"
-                    >
-                        <CardHeader className="pb-2">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
-                                    <Link2Icon
-                                        className="size-4 text-primary"
-                                        aria-hidden="true"
-                                    />
-                                    客户选品链接
-                                </CardTitle>
-                                <Badge
-                                    variant={
-                                        detail.link_revoked
-                                            ? "outline"
-                                            : "default"
-                                    }
-                                    className="text-2xs"
-                                >
-                                    {detail.link_revoked
-                                        ? "已撤销"
-                                        : "有效（30天）"}
-                                </Badge>
-                            </div>
-                            <CardDescription className="text-xs">
-                                客户移动端专属选品地址，提交后生成正式方案
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3 pt-0">
-                            <InputGroup>
-                                <InputGroupInput
-                                    id="selection-copy-link-value"
-                                    readOnly
-                                    value={publicHref}
-                                    onFocus={(event) => event.target.select()}
-                                    className="text-xs"
+            <section className="space-y-4">
+                <h3 className="text-sm font-medium">选品册档案</h3>
+                <dl className="space-y-3 text-sm">
+                    {archiveFields.map(([label, value]) => (
+                        <div
+                            key={label}
+                            className="flex min-w-0 items-baseline justify-between gap-5"
+                        >
+                            <dt className="shrink-0 text-xs text-muted-foreground">
+                                {label}
+                            </dt>
+                            <dd className="num min-w-0 break-words text-right">
+                                {value}
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            </section>
+
+            {publicHref &&
+            (detail.status === "PUBLISHED" ||
+                detail.status === "SUBMITTED" ||
+                operations.copyLink.data?.public_url) ? (
+                <section className="space-y-3 border-t border-border pt-6">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-medium">客户选品链接</h3>
+                        <Badge
+                            variant={
+                                detail.link_revoked ? "outline" : "default"
+                            }
+                        >
+                            {detail.link_revoked ? "已撤销" : "有效（30天）"}
+                        </Badge>
+                    </div>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                        客户在手机端选品，提交后生成销售方案。
+                    </p>
+                    <InputGroup>
+                        <InputGroupInput
+                            id="selection-copy-link-value"
+                            aria-label="客户选品链接"
+                            readOnly
+                            value={publicHref}
+                            onFocus={(event) => event.target.select()}
+                            className="min-w-0 text-xs"
+                        />
+                        <InputGroupAddon align="inline-end">
+                            <InputGroupButton
+                                id="sales-selection-detail-copy-link-inline"
+                                loading={operations.copyLink.isPending}
+                                disabled={
+                                    operations.copyLink.isPending || pending
+                                }
+                                onClick={() =>
+                                    void operations.copyLink.mutateAsync(bookId)
+                                }
+                            >
+                                复制
+                            </InputGroupButton>
+                        </InputGroupAddon>
+                    </InputGroup>
+
+                    {detail.proposal_id ? (
+                        <Button
+                            id="sales-selection-sidebar-open-proposal"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-auto max-w-full whitespace-normal break-words text-left"
+                            render={
+                                <Link
+                                    href={`/sales/selection/proposals/${detail.proposal_id}`}
                                 />
-                                <InputGroupAddon align="inline-end">
-                                    <InputGroupButton
-                                        id="sales-selection-detail-copy-link-inline"
-                                        loading={operations.copyLink.isPending}
-                                        disabled={
-                                            operations.copyLink.isPending ||
-                                            pending
-                                        }
-                                        onClick={() =>
-                                            void operations.copyLink.mutateAsync(
-                                                bookId,
-                                            )
-                                        }
-                                    >
-                                        复制
-                                    </InputGroupButton>
-                                </InputGroupAddon>
-                            </InputGroup>
+                            }
+                        >
+                            查看销售方案
+                            {detail.proposal_no
+                                ? ` (${detail.proposal_no})`
+                                : ""}
+                        </Button>
+                    ) : null}
+                </section>
+            ) : null}
 
-                            {detail.proposal_id ? (
-                                <Button
-                                    id="sales-selection-sidebar-open-proposal"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="w-full text-xs"
-                                    render={
-                                        <Link
-                                            href={`/sales/selection/proposals/${detail.proposal_id}`}
-                                        />
-                                    }
+            {isPackage && detail.tiers.length > 0 ? (
+                <section className="space-y-4 border-t border-border pt-6">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h3 className="text-sm font-medium">档位目标与达成</h3>
+                        <span className="text-xs text-muted-foreground">
+                            共 {detail.tiers.length} 档
+                        </span>
+                    </div>
+                    <div className="divide-y divide-border/60">
+                        {detail.tiers.map((tier) => {
+                            const report = detail.tier_reports.find(
+                                (value) => value.tier_id === tier.tier_id,
+                            )
+                            return (
+                                <div
+                                    key={tier.tier_id}
+                                    className="space-y-2 py-4 first:pt-0 last:pb-0"
                                 >
-                                    查看销售方案
-                                    {detail.proposal_no
-                                        ? ` (${detail.proposal_no})`
-                                        : ""}
-                                </Button>
-                            ) : null}
-                        </CardContent>
-                    </Card>
-                ) : null}
-
-                {/* 选品册档案 */}
-                <Card size="sm" className="shadow-xs">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
-                            <FileTextIcon
-                                className="size-4 text-muted-foreground"
-                                aria-hidden="true"
-                            />
-                            选品册档案
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                        <dl className="divide-y divide-border/60 text-xs">
-                            <div className="flex justify-between gap-4 py-2">
-                                <dt className="text-muted-foreground">
-                                    选品形态
-                                </dt>
-                                <dd className="font-medium text-foreground">
-                                    {
-                                        SELECTION_FORM_LABEL[
-                                            detail.selection_form
-                                        ]
-                                    }
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-4 py-2">
-                                <dt className="text-muted-foreground">
-                                    提交方式
-                                </dt>
-                                <dd className="font-medium text-foreground">
-                                    {SUBMIT_MODE_LABEL[detail.submit_mode]}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-4 py-2">
-                                <dt className="text-muted-foreground">
-                                    商品来源
-                                </dt>
-                                <dd className="font-medium text-foreground">
-                                    {POOL_SOURCE_LABEL[detail.source_kind]}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-4 py-2">
-                                <dt className="text-muted-foreground">
-                                    资格核对日
-                                </dt>
-                                <dd className="num font-medium text-foreground">
-                                    {formatBookInstant(
-                                        detail.eligibility_as_of,
-                                    )}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-4 py-2">
-                                <dt className="text-muted-foreground">
-                                    商品快照时间
-                                </dt>
-                                <dd className="num font-medium text-foreground text-right">
-                                    {formatBookInstant(detail.prepared_at)}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-4 py-2 last:pb-0">
-                                <dt className="text-muted-foreground">
-                                    更新时间
-                                </dt>
-                                <dd className="num font-medium text-foreground text-right">
-                                    {formatBookInstant(detail.updated_at)}
-                                </dd>
-                            </div>
-                        </dl>
-                    </CardContent>
-                </Card>
-
-                {/* 套餐档位规则与达成 */}
-                {isPackage && detail.tiers.length > 0 ? (
-                    <Card size="sm" className="shadow-xs">
-                        <CardHeader className="pb-2">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
-                                    <LayersIcon
-                                        className="size-4 text-muted-foreground"
-                                        aria-hidden="true"
-                                    />
-                                    档位目标与达成
-                                </CardTitle>
-                                <Badge variant="secondary" className="text-2xs">
-                                    共 {detail.tiers.length} 档
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3 pt-0">
-                            <div className="divide-y divide-border/60">
-                                {detail.tiers.map((tier) => {
-                                    const report = detail.tier_reports.find(
-                                        (value) =>
-                                            value.tier_id === tier.tier_id,
-                                    )
-                                    return (
-                                        <div
-                                            key={tier.tier_id}
-                                            className="py-2.5 first:pt-0 last:pb-0"
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <h4 className="min-w-0 break-words text-sm font-medium">
+                                            {tier.name}
+                                        </h4>
+                                        {report?.stop_label ? (
+                                            <Badge
+                                                variant="outline"
+                                                className="max-w-full shrink-0 whitespace-normal"
+                                            >
+                                                {report.stop_label}
+                                            </Badge>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+                                        <span className="text-muted-foreground">
+                                            目标金额
+                                        </span>
+                                        <MoneyValue
+                                            value={tier.target_amount}
+                                        />
+                                        <span className="num text-muted-foreground">
+                                            ±¥{tier.tolerance}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs leading-5 text-muted-foreground">
+                                        每套 {tier.sku_count} 件 ·{" "}
+                                        {report
+                                            ? `达成 ${report.actual_count}/${report.expected_count} 套`
+                                            : `计划 ${tier.expected_count} 套`}
+                                    </p>
+                                    {report && report.image_failures > 0 ? (
+                                        <p className="text-xs text-warning-soft-foreground">
+                                            图片失败 {report.image_failures} 项
+                                        </p>
+                                    ) : null}
+                                    {detail.status === "PENDING_PUBLISH" ? (
+                                        <LoadingButton
+                                            id={`selection-regenerate-${toAutomationIdSegment(tier.tier_id)}`}
+                                            loading={
+                                                operations.regenerate
+                                                    .isPending &&
+                                                operations.regenerate.variables?.tier_ids?.includes(
+                                                    tier.tier_id,
+                                                ) === true
+                                            }
+                                            type="button"
+                                            size="xs"
+                                            variant="ghost"
+                                            disabled={pending}
+                                            onClick={() =>
+                                                operations.regenerate.mutate({
+                                                    bookId,
+                                                    tier_ids: [tier.tier_id],
+                                                    expected_version:
+                                                        detail.version,
+                                                    idempotency_key:
+                                                        createIdempotencyKey(),
+                                                })
+                                            }
                                         >
-                                            <div className="flex items-center justify-between">
-                                                <span className="font-medium text-foreground text-xs">
-                                                    {tier.name}
-                                                </span>
-                                                <span className="flex items-center gap-1 text-2xs text-muted-foreground">
-                                                    <span>目标</span>
-                                                    <MoneyValue
-                                                        value={
-                                                            tier.target_amount
-                                                        }
-                                                        className="font-medium"
-                                                    />
-                                                    <span>
-                                                        (±¥{tier.tolerance})
-                                                    </span>
-                                                </span>
-                                            </div>
-                                            <div className="mt-1 flex items-center justify-between text-2xs text-muted-foreground">
-                                                <span>
-                                                    每套 {tier.sku_count} 件 ·{" "}
-                                                    {report
-                                                        ? `达成 ${report.actual_count}/${report.expected_count} 套`
-                                                        : `计划 ${tier.expected_count} 套`}
-                                                </span>
-                                                {report?.stop_label ? (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="h-4 px-1 text-2xs"
-                                                    >
-                                                        {report.stop_label}
-                                                    </Badge>
-                                                ) : null}
-                                            </div>
-                                            {report &&
-                                            report.image_failures > 0 ? (
-                                                <p className="mt-0.5 text-2xs text-warning-soft-foreground">
-                                                    图片失败{" "}
-                                                    {report.image_failures} 项
-                                                </p>
-                                            ) : null}
-                                            {detail.status ===
-                                            "PENDING_PUBLISH" ? (
-                                                <LoadingButton
-                                                    id={`selection-regenerate-${toAutomationIdSegment(tier.tier_id)}`}
-                                                    loading={
-                                                        operations.regenerate
-                                                            .isPending &&
-                                                        operations.regenerate.variables?.tier_ids?.includes(
-                                                            tier.tier_id,
-                                                        ) === true
-                                                    }
-                                                    type="button"
-                                                    size="xs"
-                                                    variant="ghost"
-                                                    disabled={pending}
-                                                    className="mt-1.5"
-                                                    onClick={() =>
-                                                        operations.regenerate.mutate(
-                                                            {
-                                                                bookId,
-                                                                tier_ids: [
-                                                                    tier.tier_id,
-                                                                ],
-                                                                expected_version:
-                                                                    detail.version,
-                                                                idempotency_key:
-                                                                    createIdempotencyKey(),
-                                                            },
-                                                        )
-                                                    }
-                                                >
-                                                    <RefreshCwIcon
-                                                        className="mr-1 size-3"
-                                                        aria-hidden="true"
-                                                    />
-                                                    重生成此档
-                                                </LoadingButton>
-                                            ) : null}
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </CardContent>
-                    </Card>
-                ) : null}
-            </div>
+                                            <RefreshCwIcon aria-hidden="true" />
+                                            重生成此档
+                                        </LoadingButton>
+                                    ) : null}
+                                </div>
+                            )
+                        })}
+                    </div>
+                </section>
+            ) : null}
         </QuickPreviewSheet>
     )
 }

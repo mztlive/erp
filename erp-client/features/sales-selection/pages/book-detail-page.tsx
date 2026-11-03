@@ -33,7 +33,10 @@ import {
     useBookDetail,
     useBookOperations,
 } from "@/features/sales-selection/hooks/queries"
-import { bookIdentity } from "@/features/sales-selection/lib/presentation"
+import {
+    bookIdentity,
+    prepareFailure,
+} from "@/features/sales-selection/lib/presentation"
 import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 import { cn } from "@/lib/utils"
 
@@ -119,6 +122,22 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
     }
 
     const visibleItems = detail.items.filter((item) => !item.removed)
+    const failure = prepareFailure(detail)
+    const emptyState =
+        detail.status === "PREPARING"
+            ? {
+                  title: "正在准备陈列",
+                  description:
+                      "准备完成后将在这里显示商品，系统会自动更新进度，无需重复操作。",
+              }
+            : failure && !failure.preservesDisplay
+              ? {
+                    title: "本次准备未完成",
+                    description: failure.needsSourceChange
+                        ? "请在上方调整商品来源，重新准备成功后将在这里显示商品。"
+                        : "请在上方点击「重新准备」，成功后将在这里显示商品。",
+                }
+              : undefined
     const activeBookId = bookIdentity(detail) || bookId
     const passwordDisabledReason =
         detail.status === "PREPARING"
@@ -306,11 +325,16 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                     <p className="mt-2 text-xs text-muted-foreground">
                         {detail.status === "PENDING_PUBLISH"
                             ? "待发布时可编辑客户售价、统一加价或删除陈列项；套餐可单档重生成。发布后价格与陈列冻结。"
-                            : "陈列内容来自最近一次准备结果。"}
+                            : detail.status === "DRAFT"
+                              ? "准备成功后可核对商品、调整售价并发布给客户。"
+                              : detail.status === "PREPARING"
+                                ? "系统正在准备新的陈列；已有陈列会在准备成功后更新。"
+                                : "陈列内容来自最近一次准备结果。"}
                     </p>
                 </div>
 
                 <PreviewGrid
+                    emptyState={emptyState}
                     items={visibleItems.map((item) => ({
                         ...item,
                         item_id: item.item_id || item.id || "",

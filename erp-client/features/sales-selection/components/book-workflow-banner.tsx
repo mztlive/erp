@@ -7,6 +7,7 @@ import {
     FileCheck2Icon,
     Link2Icon,
     LoaderCircleIcon,
+    RefreshCwIcon,
     SendIcon,
     SparklesIcon,
 } from "lucide-react"
@@ -22,6 +23,7 @@ import {
 import { useBookOperations } from "@/features/sales-selection/hooks/queries"
 import {
     bookIdentity,
+    prepareFailure,
     publicSelectionHref,
 } from "@/features/sales-selection/lib/presentation"
 import type {
@@ -33,6 +35,7 @@ import {
     SELECTION_FORM_LABEL,
 } from "@/features/sales-selection/types"
 import { cn } from "@/lib/utils"
+import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 
 const STAGE_LABELS: Record<string, string> = {
     QUEUED: "排队中",
@@ -86,7 +89,8 @@ export function BookWorkflowBanner({
     operations: Operations
     onEdit?: () => void
 }) {
-    const activeStep = resolveActiveStepIndex(detail.status)
+    const failure = prepareFailure(detail)
+    const activeStep = failure ? 2 : resolveActiveStepIndex(detail.status)
     const isTerminal = detail.status === "CLOSED" || detail.status === "VOIDED"
     const bookId = bookIdentity(detail)
     const publicHref = publicSelectionHref(
@@ -103,12 +107,102 @@ export function BookWorkflowBanner({
     return (
         <div className="flex flex-col gap-3">
             {/* 失败告警 */}
-            {detail.last_prepare_failure ? (
-                <Alert variant="destructive">
+            {failure ? (
+                <Alert
+                    variant="destructive"
+                    aria-labelledby="sales-selection-prepare-failure-title"
+                >
                     <CircleAlertIcon aria-hidden="true" />
-                    <AlertTitle>最近一次准备未完成</AlertTitle>
-                    <AlertDescription>
-                        {detail.last_prepare_failure}
+                    <AlertTitle id="sales-selection-prepare-failure-title">
+                        {failure.title}
+                        {failure.preservesDisplay
+                            ? "，原陈列已保留"
+                            : "，尚未生成可预览内容"}
+                    </AlertTitle>
+                    <AlertDescription className="space-y-3">
+                        <div className="space-y-1">
+                            <div>
+                                {failure.preservesDisplay
+                                    ? "原商品来源、档位、售价和陈列已保留，可继续核对并发布。再次准备前，请先确认配置。"
+                                    : "本次准备已结束，选品册配置已保留，无需重新创建。"}
+                            </div>
+                            <div>
+                                {failure.needsSourceChange
+                                    ? "当前商品来源没有符合条件的商品，请调整来源后重新准备。"
+                                    : failure.preservesDisplay
+                                      ? "重新准备成功后会替换当前陈列并重置客户售价，需要重新核对。"
+                                      : "请按当前配置重新准备；如果仍未完成，可调整来源与档位后再试。"}
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {failure.preservesDisplay ||
+                            failure.needsSourceChange ? (
+                                onEdit ? (
+                                    <Button
+                                        id="sales-selection-failure-edit"
+                                        type="button"
+                                        size="sm"
+                                        disabled={pending}
+                                        onClick={onEdit}
+                                    >
+                                        {failure.needsSourceChange
+                                            ? "调整商品来源"
+                                            : "检查配置并重新准备"}
+                                    </Button>
+                                ) : null
+                            ) : (
+                                <>
+                                    <LoadingButton
+                                        id="sales-selection-failure-retry"
+                                        type="button"
+                                        size="sm"
+                                        loading={operations.prepare.isPending}
+                                        disabled={pending}
+                                        onClick={() =>
+                                            operations.prepare.mutate({
+                                                bookId,
+                                                kind: "FIRST_PREPARE",
+                                                expected_version:
+                                                    detail.version,
+                                                idempotency_key:
+                                                    createIdempotencyKey(),
+                                            })
+                                        }
+                                    >
+                                        <RefreshCwIcon
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                        />
+                                        {operations.prepare.isPending
+                                            ? "正在启动准备"
+                                            : "重新准备"}
+                                    </LoadingButton>
+                                    {onEdit ? (
+                                        <Button
+                                            id="sales-selection-failure-adjust"
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={pending}
+                                            onClick={onEdit}
+                                        >
+                                            调整来源与档位
+                                        </Button>
+                                    ) : null}
+                                </>
+                            )}
+                        </div>
+                        <details className="text-xs">
+                            <summary
+                                id="sales-selection-failure-details"
+                                className="w-fit cursor-pointer underline underline-offset-4"
+                            >
+                                查看失败原因
+                            </summary>
+                            <div className="mt-1 break-words">
+                                {failure.reason}
+                            </div>
+                        </details>
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -123,11 +217,15 @@ export function BookWorkflowBanner({
                                 detail.status === "SUBMITTED"
                             const isCurrent =
                                 activeStep === step.stepIndex && !isTerminal
+                            const isFailed = isCurrent && Boolean(failure)
                             const isUpcoming = activeStep < step.stepIndex
 
                             return (
                                 <li
                                     key={step.status}
+                                    aria-current={
+                                        isCurrent ? "step" : undefined
+                                    }
                                     className="flex flex-1 items-center last:flex-none"
                                 >
                                     <div className="flex items-center gap-2.5">
@@ -137,7 +235,10 @@ export function BookWorkflowBanner({
                                                 isDone &&
                                                     "bg-primary text-primary-foreground",
                                                 isCurrent &&
+                                                    !isFailed &&
                                                     "bg-primary text-primary-foreground ring-4 ring-primary/20",
+                                                isFailed &&
+                                                    "bg-destructive-soft text-destructive-soft-foreground ring-4 ring-destructive/20",
                                                 isUpcoming &&
                                                     "border border-border bg-muted text-muted-foreground",
                                             )}
@@ -145,6 +246,11 @@ export function BookWorkflowBanner({
                                             {isDone ? (
                                                 <CheckIcon
                                                     className="size-3.5 stroke-[2.5]"
+                                                    aria-hidden="true"
+                                                />
+                                            ) : isFailed ? (
+                                                <CircleAlertIcon
+                                                    className="size-3.5"
                                                     aria-hidden="true"
                                                 />
                                             ) : isCurrent &&
@@ -162,13 +268,15 @@ export function BookWorkflowBanner({
                                                 "text-xs transition-colors",
                                                 isCurrent &&
                                                     "font-semibold text-foreground",
+                                                isFailed &&
+                                                    "text-destructive-soft-foreground",
                                                 isDone &&
                                                     "font-medium text-foreground",
                                                 isUpcoming &&
                                                     "text-muted-foreground",
                                             )}
                                         >
-                                            {step.label}
+                                            {isFailed ? "准备失败" : step.label}
                                         </span>
                                     </div>
                                     {idx < WORKFLOW_STEPS.length - 1 ? (
@@ -190,7 +298,7 @@ export function BookWorkflowBanner({
             </div>
 
             {/* 阶段引导横幅 */}
-            {detail.status === "DRAFT" ? (
+            {detail.status === "DRAFT" && !failure ? (
                 <Alert
                     variant="info"
                     className="flex flex-wrap items-center justify-between gap-4"
@@ -212,6 +320,7 @@ export function BookWorkflowBanner({
                     </div>
                     {onEdit ? (
                         <Button
+                            id="sales-selection-draft-banner-edit"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -257,7 +366,7 @@ export function BookWorkflowBanner({
                 </Alert>
             ) : null}
 
-            {detail.status === "PENDING_PUBLISH" ? (
+            {detail.status === "PENDING_PUBLISH" && !failure ? (
                 <Alert
                     variant="warning"
                     className="flex flex-wrap items-center justify-between gap-4"
@@ -280,6 +389,7 @@ export function BookWorkflowBanner({
                     </div>
                     {detail.selection_form === "PACKAGE" && onEdit ? (
                         <Button
+                            id="sales-selection-pending-banner-edit"
                             type="button"
                             size="sm"
                             variant="outline"

@@ -215,6 +215,7 @@ export const PreviewGrid = ({
     pending = false,
     deletingItemId,
     regeneratingTierIds,
+    emptyState,
 }: {
     items: readonly DisplayItem[]
     selectionForm: "SINGLE_SKU" | "PACKAGE"
@@ -230,6 +231,7 @@ export const PreviewGrid = ({
     pending?: boolean
     deletingItemId?: string
     regeneratingTierIds?: readonly string[]
+    emptyState?: { title: string; description: string }
 }) => {
     const canDelete = typeof onDelete === "function"
     const [tierFilter, setTierFilter] = React.useState<string>("ALL")
@@ -273,8 +275,11 @@ export const PreviewGrid = ({
         return (
             <BusinessEmptyState
                 kind="no-data"
-                title="暂无可预览陈列"
-                description="开始准备后，系统生成的商品陈列将显示在这里。"
+                title={emptyState?.title ?? "暂无可预览陈列"}
+                description={
+                    emptyState?.description ??
+                    "开始准备后，系统生成的商品陈列将显示在这里。"
+                }
             />
         )
     }

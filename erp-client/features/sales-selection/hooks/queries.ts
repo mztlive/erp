@@ -117,6 +117,8 @@ export const useBookDetail = (bookId: string) =>
         queryKey: salesSelectionKeys.detail(bookId),
         queryFn: () => fetchBookDetail(bookId),
         enabled: Boolean(bookId),
+        refetchInterval: (query) =>
+            query.state.data?.status === "PREPARING" ? 2_000 : false,
     })
 
 /** 册级操作集合：创建/准备/重生成/发布/链接/关闭/撤销/作废/删项/复制链接。 */
@@ -207,7 +209,11 @@ export const useBookOperations = () => {
                 idempotency_key: payload.idempotency_key,
             })
         },
-        onSuccess: async (_data, variables) => {
+        onSuccess: async (data, variables) => {
+            queryClient.setQueryData(
+                salesSelectionKeys.detail(variables.bookId),
+                data,
+            )
             await invalidateBookCaches(queryClient, variables.bookId)
             if (variables.silent) return
             toast.add({
@@ -237,7 +243,11 @@ export const useBookOperations = () => {
                 expected_version: input.expected_version,
                 idempotency_key: input.idempotency_key,
             }),
-        onSuccess: async (_data, variables) => {
+        onSuccess: async (data, variables) => {
+            queryClient.setQueryData(
+                salesSelectionKeys.detail(variables.bookId),
+                data,
+            )
             await invalidateBookCaches(queryClient, variables.bookId)
             toast.add({
                 title: "已发起重新准备",
@@ -264,7 +274,11 @@ export const useBookOperations = () => {
                 expected_version: input.expected_version,
                 idempotency_key: input.idempotency_key,
             }),
-        onSuccess: async (_data, variables) => {
+        onSuccess: async (data, variables) => {
+            queryClient.setQueryData(
+                salesSelectionKeys.detail(variables.bookId),
+                data,
+            )
             await invalidateBookCaches(queryClient, variables.bookId)
             toast.add({
                 title: "重生成任务已启动",

@@ -4,7 +4,29 @@
 
 import { formatDateTime } from "@/lib/datetime"
 import type { StatusTone } from "@/components/ui/status-badge"
-import type { BookletStatus } from "@/features/sales-selection/types"
+import type {
+    BookletStatus,
+    SelectionBookDetail,
+} from "@/features/sales-selection/types"
+
+/** 仅为仍可准备的选品册提供失败恢复提示，历史失败不覆盖发布或终态。 */
+export function prepareFailure(detail: SelectionBookDetail) {
+    const reason = detail.last_prepare_failure?.trim()
+    if (
+        !reason ||
+        (detail.status !== "DRAFT" && detail.status !== "PENDING_PUBLISH")
+    ) {
+        return null
+    }
+    return {
+        reason,
+        title: reason.includes("准备任务已超过时限")
+            ? "陈列准备超时"
+            : "陈列准备未完成",
+        needsSourceChange: reason.includes("筛选结果为空，不能准备选品册"),
+        preservesDisplay: detail.status === "PENDING_PUBLISH",
+    }
+}
 
 /** 列表工作视图：状态即时生效，不进「查询」草稿。 */
 export const BOOK_STATUS_VIEWS = [

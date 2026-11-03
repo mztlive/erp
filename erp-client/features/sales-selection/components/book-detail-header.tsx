@@ -21,6 +21,7 @@ import { useBookOperations } from "@/features/sales-selection/hooks/queries"
 import {
     bookIdentity,
     bookletStatusTone,
+    prepareFailure,
 } from "@/features/sales-selection/lib/presentation"
 import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 import type { SelectionBookDetail } from "@/features/sales-selection/types"
@@ -61,6 +62,7 @@ export function BookDetailHeader({
     const key = withKey(detail.version)
     const formLabel = SELECTION_FORM_LABEL[detail.selection_form]
     const modeLabel = SUBMIT_MODE_LABEL[detail.submit_mode]
+    const failure = prepareFailure(detail)
 
     const primaryAction = (() => {
         if (detail.status === "DRAFT") {
@@ -71,16 +73,26 @@ export function BookDetailHeader({
                     type="button"
                     size="sm"
                     disabled={pending}
-                    onClick={() =>
-                        void operations.prepare.mutateAsync({
+                    onClick={() => {
+                        if (failure?.needsSourceChange) {
+                            onEdit()
+                            return
+                        }
+                        operations.prepare.mutate({
                             bookId,
                             kind: "FIRST_PREPARE",
                             ...key,
                         })
-                    }
+                    }}
                 >
                     <SparklesIcon data-icon="inline-start" aria-hidden="true" />
-                    开始准备
+                    {operations.prepare.isPending
+                        ? "正在启动准备"
+                        : failure?.needsSourceChange
+                          ? "调整商品来源"
+                          : failure
+                            ? "重新准备"
+                            : "开始准备"}
                 </LoadingButton>
             )
         }
