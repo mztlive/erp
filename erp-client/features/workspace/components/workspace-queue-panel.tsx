@@ -66,7 +66,7 @@ export function WorkspaceQueuePanel({
     return (
         <section
             aria-label="我的事项"
-            className="flex h-[max(32rem,calc(100dvh-20rem))] min-w-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card"
+            className="flex min-h-128 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-card"
         >
             <header className="flex shrink-0 flex-wrap items-start justify-between gap-2 px-4 pt-4 pb-2">
                 <div className="flex min-w-0 items-center gap-2">

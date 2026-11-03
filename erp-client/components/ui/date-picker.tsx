@@ -331,6 +331,7 @@ function DateRangePicker({
                 <Calendar
                     idPrefix={id ? `${id}-calendar` : undefined}
                     mode="range"
+                    defaultMonth={selected?.from}
                     selected={selected}
                     disabled={disabledDates}
                     onSelect={(next) =>
@@ -444,6 +445,7 @@ function DateTimePicker({
                     idPrefix={id ? `${id}-calendar` : undefined}
                     mode="single"
                     selected={selected}
+                    defaultMonth={selected}
                     disabled={disabledDates}
                     onSelect={(next) => {
                         if (!next) return
@@ -687,6 +689,7 @@ function DateTimeRangePicker({
                 <Calendar
                     idPrefix={id ? `${id}-calendar` : undefined}
                     mode="range"
+                    defaultMonth={selected?.from}
                     selected={selected}
                     disabled={disabledDates}
                     onSelect={(next) => {

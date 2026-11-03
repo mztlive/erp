@@ -6,7 +6,10 @@ import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { WorkspaceWorkItem } from "../types"
-import { isPurchaseApprovalTask } from "../lib/navigation-eligibility"
+import {
+    isApprovalWorkbenchTask,
+    isPurchaseApprovalTask,
+} from "../lib/navigation-eligibility"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
 import { WorkspaceMoney } from "./workspace-money"
@@ -30,6 +33,17 @@ export function WorkspaceProcessingLayout({
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
     const approval = item.approval
     const purchaseApproval = isPurchaseApprovalTask(item)
+    const salesApproval =
+        ["sales_order", "voucher_sales_order"].includes(
+            item.businessObjectType,
+        ) &&
+        (isApprovalWorkbenchTask(
+            item.allowedActions,
+            item.approvalProcessInstanceId,
+            item.approvalNodeExecutionId,
+        ) ||
+            item.workItemType === "APPROVAL_INSTANCE" ||
+            item.workItemType === "DOCUMENT_APPROVAL")
     const payment = item.businessObjectType === "purchase_payment_request"
     const paymentArrangement =
         item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
@@ -38,7 +52,7 @@ export function WorkspaceProcessingLayout({
     )
     return (
         <WorkspaceTaskPageProvider
-            singleColumn={purchaseApproval}
+            singleColumn={purchaseApproval || salesApproval}
             compact={paymentArrangement}
             fullWidth={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION" &&

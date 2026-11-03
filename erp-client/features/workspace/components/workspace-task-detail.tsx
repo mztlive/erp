@@ -18,6 +18,7 @@ import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
 import { WorkspaceMoney } from "./workspace-money"
 import { WorkspacePurchaseApprovalStatus } from "./workspace-purchase-approval-status"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
+import { WorkspaceSalesApproval } from "./workspace-sales-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
@@ -30,6 +31,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     DescriptionDetails,
@@ -680,6 +682,17 @@ function WorkspaceDocumentTaskDetail({
                                     label={item.statusLabel}
                                     tone={item.statusTone}
                                 />
+                                {salesApproval &&
+                                instance?.currentNodeName &&
+                                (instance.status === "RUNNING" ||
+                                    instance.status === "BLOCKED") ? (
+                                    <Badge
+                                        variant="warning"
+                                        aria-label={`当前审批：${instance.currentNodeName}`}
+                                    >
+                                        {instance.currentNodeName}
+                                    </Badge>
+                                ) : null}
                             </div>
                         )}
                         <h2 className="break-words text-xl font-medium tracking-tight">
@@ -692,6 +705,21 @@ function WorkspaceDocumentTaskDetail({
                         <p className="break-all text-sm text-muted-foreground">
                             {stripDocumentNumberPrefix(item.stableNumber)}
                         </p>
+                        {salesApproval && fullPage ? (
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                                <p>
+                                    当前审批人：
+                                    <span className="text-foreground">
+                                        {instance?.currentAssigneeName ||
+                                            item.ownerUserLabel ||
+                                            "—"}
+                                    </span>
+                                </p>
+                                {item.dueAt ? (
+                                    <p>截止时间：{item.dueAtLabel}</p>
+                                ) : null}
+                            </div>
+                        ) : null}
                     </div>
                     <WorkspaceTaskHeaderActions item={item}>
                         {item.workItemType === "FULFILLMENT_OPERATION" ? (
@@ -942,7 +970,16 @@ function WorkspaceDocumentTaskDetail({
                     />
                 ) : null}
 
-                {!deliveryBrief &&
+                {salesApproval && instanceId && canReadSensitive ? (
+                    <WorkspaceSalesApproval
+                        key={instanceId}
+                        instanceId={instanceId}
+                        onPreview={setPaper}
+                    />
+                ) : null}
+
+                {!(salesApproval && instanceId && canReadSensitive) &&
+                !deliveryBrief &&
                 !receiptApproval &&
                 !purchaseApproval &&
                 briefLines &&
