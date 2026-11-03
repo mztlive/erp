@@ -1,10 +1,16 @@
 "use client"
 
+import { useState } from "react"
+import { FileTextIcon } from "lucide-react"
+
 import { WorkspaceTaskPane } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { PurchaseOrderCreatePage } from "@/features/purchase-orders/pages/purchase-order-create-page"
 import { useCreationBasesQuery } from "@/features/purchase-orders/hooks/queries"
+import { SalesOrderPaperPreviewDialog } from "@/features/sales-orders/components/sales-order-paper-preview-dialog"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
@@ -18,6 +24,7 @@ export function WorkspaceProcurementTask({
     item: WorkspaceWorkItem
     onTaskCompleted?: (workItemId: string) => void
 }) {
+    const [previewTaskId, setPreviewTaskId] = useState<string | null>(null)
     const basesQuery = useCreationBasesQuery({
         salesOrderId: item.businessObjectId,
         workItemId: item.workItemId,
@@ -89,7 +96,18 @@ export function WorkspaceProcurementTask({
                     <WorkspaceTaskHeaderActions
                         item={item}
                         contextLabel="任务详情"
-                    />
+                    >
+                        <Button
+                            id={`workspace-procurement-sales-preview-${toAutomationIdSegment(item.workItemId)}`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPreviewTaskId(item.workItemId)}
+                        >
+                            <FileTextIcon aria-hidden="true" />
+                            预览销售单
+                        </Button>
+                    </WorkspaceTaskHeaderActions>
                 </>
             }
             aria-label="当前供给分配任务"
@@ -109,6 +127,14 @@ export function WorkspaceProcurementTask({
                 initialWorkItemId={item.workItemId}
                 embedded
                 onTaskCompleted={onTaskCompleted}
+            />
+            <SalesOrderPaperPreviewDialog
+                salesOrderId={item.businessObjectId}
+                title={stripDocumentNumberPrefix(item.stableNumber)}
+                open={previewTaskId === item.workItemId}
+                onOpenChange={(open) =>
+                    setPreviewTaskId(open ? item.workItemId : null)
+                }
             />
         </WorkspaceTaskPane>
     )
