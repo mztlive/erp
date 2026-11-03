@@ -11,6 +11,7 @@ import {
     type DayButton,
     type Locale,
 } from "react-day-picker"
+import { zhCN } from "react-day-picker/locale"
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -31,9 +32,9 @@ function Calendar({
     className,
     classNames,
     showOutsideDays = true,
-    captionLayout = "label",
+    captionLayout = "dropdown",
     buttonVariant = "ghost",
-    locale,
+    locale = zhCN,
     formatters,
     components,
     idPrefix,
@@ -55,9 +56,15 @@ function Calendar({
             )}
             captionLayout={captionLayout}
             locale={locale}
+            // 年份下拉默认只到今年；业务日期也需要支持未来年份。
+            endMonth={
+                new Date((props.today ?? new Date()).getFullYear() + 100, 11)
+            }
             formatters={{
                 formatMonthDropdown: (date) =>
                     date.toLocaleString(locale?.code, { month: "short" }),
+                formatYearDropdown: (date) =>
+                    date.toLocaleString(locale?.code, { year: "numeric" }),
                 ...formatters,
             }}
             classNames={{
@@ -93,11 +100,11 @@ function Calendar({
                     defaultClassNames.dropdowns,
                 ),
                 dropdown_root: cn(
-                    "relative rounded-(--cell-radius)",
+                    "relative rounded-(--cell-radius) focus-within:ring-[3px] focus-within:ring-ring/50",
                     defaultClassNames.dropdown_root,
                 ),
                 dropdown: cn(
-                    "absolute inset-0 bg-popover opacity-0",
+                    "absolute inset-0 w-full cursor-pointer bg-popover opacity-0",
                     defaultClassNames.dropdown,
                 ),
                 caption_label: cn(

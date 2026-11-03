@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
-import { LinesTable } from "@/features/purchase-orders/components/purchase-order-surfaces"
+import { PurchaseOrderDetailLines } from "./purchase-order-detail-lines"
 import { PurchaseOrderExpenseSection } from "@/features/purchase-orders/components/purchase-order-expense-section"
 import { PurchaseOrderSourceSales } from "@/features/purchase-orders/components/purchase-order-source-sales"
 import {
@@ -56,7 +56,10 @@ export function PurchaseOrderDetailOverviewSection({
                     title="采购明细"
                     count={order.currentContent.lines.length}
                 >
-                    <LinesTable order={order} costMasked={costMasked} summary />
+                    <PurchaseOrderDetailLines
+                        order={order}
+                        costMasked={costMasked}
+                    />
                     <div className="flex items-baseline justify-end gap-5 border-t border-border/60 pt-4 text-sm">
                         <span className="text-muted-foreground">
                             合计（含税）
