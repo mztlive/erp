@@ -392,20 +392,18 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
         DisplayKind::SingleSku { .. } => "SINGLE_SKU",
         DisplayKind::Package { .. } => "PACKAGE",
     };
-    let unit = match &item.kind {
-        DisplayKind::SingleSku { sku } => Some(sku.unit.clone()),
-        DisplayKind::Package { .. } => None,
+    let (unit, sku_id) = match &item.kind {
+        DisplayKind::SingleSku { sku } => (Some(sku.unit.clone()), Some(sku.sku_id.to_string())),
+        DisplayKind::Package { .. } => (None, None),
     };
     let tier_name = tier_id.as_ref().and_then(|tier_id| {
         booklet.tiers.iter().find(|tier| &tier.tier_id == tier_id).map(|tier| tier.name.clone())
     });
     let cover = item.cover_asset_id();
     DisplayItemView {
+        reference_prices: None,
         price_comparison: Default::default(),
-        sku_id: match &item.kind {
-            DisplayKind::SingleSku { sku } => Some(sku.sku_id.to_string()),
-            DisplayKind::Package { .. } => None,
-        },
+        sku_id,
         id: item.base.id.clone(),
         item_id: item.base.id.clone(),
         kind: kind.to_string(),
@@ -453,6 +451,7 @@ fn specification_label(specification: &[SpecificationAttributeSnapshot]) -> Stri
 /// 无。
 fn member_view(sku: &SkuSnapshot) -> DisplayMemberView {
     DisplayMemberView {
+        reference_prices: sku.reference_prices.clone(),
         price_comparison: Default::default(),
         sku_id: sku.sku_id.to_string(),
         name: sku.name.clone(),
@@ -621,6 +620,7 @@ mod tests {
             specification_attributes: vec![],
             unit: "件".into(),
             image: None,
+            reference_prices: None,
             sales_visible_price_gross: "10.00".parse().unwrap(),
         };
         let mut pool = vec![SalesSelectionPoolMember::new(
@@ -649,6 +649,7 @@ mod tests {
         let public_json = serde_json::to_value(public).unwrap();
         assert!(public_json.get("sku_id").is_none());
         assert!(public_json.get("sku_revision_id").is_none());
+        assert!(public_json.get("reference_prices").is_none());
         assert!(public_json.get("original_price").is_none());
         assert!(public_json.get("markup_percent").is_none());
     }

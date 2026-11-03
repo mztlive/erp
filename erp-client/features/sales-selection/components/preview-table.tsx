@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { CellContext, ColumnDef } from "@tanstack/react-table"
 import { DataTable, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,10 +10,15 @@ import { compareDecimal } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DisplayItem } from "../types"
 import { PriceAdjustment } from "./price-comparison"
+import {
+    InlinePriceEditor,
+    type InlinePriceEditorContext,
+} from "./inline-price-editor"
 import { SnapshotImage } from "./snapshot-image"
 
 export type PreviewTableProps = {
     items: readonly DisplayItem[]
+    priceEditor?: InlinePriceEditorContext
     pending: boolean
     deletingItemId?: string
     onEditPrice?: (item: DisplayItem) => void
@@ -22,8 +27,65 @@ export type PreviewTableProps = {
     regeneratingTierIds?: readonly string[]
 }
 
+const PriceCellContext = React.createContext<{
+    pending: boolean
+    priceEditor?: InlinePriceEditorContext
+}>({ pending: false })
+
+function CustomerPriceCell({ row }: CellContext<DisplayItem, unknown>) {
+    const { pending, priceEditor } = React.useContext(PriceCellContext)
+    const item = row.original
+    const products =
+        item.kind === "PACKAGE"
+            ? item.members
+            : item.sku_id
+              ? [
+                    {
+                        sku_id: item.sku_id,
+                        name: item.name,
+                        price: item.price,
+                    },
+                ]
+              : []
+    return priceEditor && products.length ? (
+        <div className="grid gap-2">
+            {item.kind === "PACKAGE" ? (
+                <MoneyValue
+                    value={item.price}
+                    display="exact"
+                    className="font-semibold"
+                />
+            ) : null}
+            {products.map((product) => (
+                <div key={product.sku_id}>
+                    {item.kind === "PACKAGE" ? (
+                        <p className="mb-1 text-xs text-muted-foreground">
+                            {product.name}
+                        </p>
+                    ) : null}
+                    <InlinePriceEditor
+                        id={`selection-table-${toAutomationIdSegment(item.item_id)}-${toAutomationIdSegment(product.sku_id)}-price-input`}
+                        skuId={product.sku_id}
+                        name={product.name}
+                        price={product.price}
+                        pending={pending}
+                        context={priceEditor}
+                    />
+                </div>
+            ))}
+        </div>
+    ) : (
+        <MoneyValue
+            value={item.price}
+            display="exact"
+            className="font-semibold"
+        />
+    )
+}
+
 export function PreviewTable({
     items,
+    priceEditor,
     pending,
     deletingItemId,
     onEditPrice,
@@ -80,32 +142,34 @@ export function PreviewTable({
                         ? "套"
                         : row.original.unit || "—",
             },
-            {
-                id: "original_price",
-                accessorKey: "original_price",
-                header: "原价（含税）",
-                meta: {
-                    label: "原价（含税）",
-                    width: "amount",
-                    numeric: true,
-                    align: "end",
-                },
+            ...(
+                [
+                    ["bulk_price_gross", "集采价（含税）"],
+                    ["dropship_price_gross", "一件代发价（含税）"],
+                    ["market_price", "市场价（含税）"],
+                ] as const
+            ).map(([field, label]): ColumnDef<DisplayItem> => ({
+                id: field,
+                accessorFn: (item) =>
+                    item.reference_prices?.[field] ??
+                    (field === "bulk_price_gross" ? item.original_price : null),
+                header: label,
+                meta: { label, width: "amount", numeric: true, align: "end" },
                 sortingFn: (a, b) =>
                     compareDecimal(
-                        a.original.original_price ?? "0",
-                        b.original.original_price ?? "0",
+                        a.getValue<string | null>(field) ?? "0",
+                        b.getValue<string | null>(field) ?? "0",
                         2,
                     ),
-                cell: ({ row }) =>
-                    row.original.original_price != null ? (
-                        <MoneyValue
-                            value={row.original.original_price}
-                            display="exact"
-                        />
+                cell: ({ getValue }) => {
+                    const price = getValue<string | null>()
+                    return price != null ? (
+                        <MoneyValue value={price} display="exact" />
                     ) : (
                         <span className="text-muted-foreground">未记录</span>
-                    ),
-            },
+                    )
+                },
+            })),
             {
                 id: "price",
                 accessorKey: "price",
@@ -118,13 +182,7 @@ export function PreviewTable({
                 },
                 sortingFn: (a, b) =>
                     compareDecimal(a.original.price, b.original.price, 2),
-                cell: ({ row }) => (
-                    <MoneyValue
-                        value={row.original.price}
-                        display="exact"
-                        className="font-semibold"
-                    />
-                ),
+                cell: CustomerPriceCell,
             },
             {
                 id: "markup_percent",
@@ -165,7 +223,7 @@ export function PreviewTable({
                               const key = toAutomationIdSegment(item.item_id)
                               return (
                                   <div className="flex flex-wrap items-center gap-1">
-                                      {onEditPrice ? (
+                                      {onEditPrice && !priceEditor ? (
                                           <Button
                                               id={`selection-table-${key}-price`}
                                               variant="ghost"
@@ -220,6 +278,7 @@ export function PreviewTable({
                 : []),
         ],
         [
+            priceEditor,
             pending,
             deletingItemId,
             onEditPrice,
@@ -230,23 +289,25 @@ export function PreviewTable({
     )
 
     return (
-        <DataTable
-            id="selection-preview-table"
-            data={[...items]}
-            columns={columns}
-            getRowId={(item) => item.item_id}
-            rowLabel={(item) => item.name}
-            rowCount={items.length}
-            caption="选品册商品与客户售价对比"
-            manualSorting={false}
-            manualPagination={false}
-            manualFiltering={false}
-            showToolbarSummary={false}
-            defaultColumnVisibility={{
-                tier: items.some((item) => item.kind === "PACKAGE"),
-            }}
-            emptyTitle="当前筛选无结果"
-            emptyDescription="调整档位或缺图筛选后再试。"
-        />
+        <PriceCellContext.Provider value={{ pending, priceEditor }}>
+            <DataTable
+                id="selection-preview-table"
+                data={[...items]}
+                columns={columns}
+                getRowId={(item) => item.item_id}
+                rowLabel={(item) => item.name}
+                rowCount={items.length}
+                caption="选品册商品与客户售价对比"
+                manualSorting={false}
+                manualPagination={false}
+                manualFiltering={false}
+                showToolbarSummary={false}
+                defaultColumnVisibility={{
+                    tier: items.some((item) => item.kind === "PACKAGE"),
+                }}
+                emptyTitle="当前筛选无结果"
+                emptyDescription="调整档位或缺图筛选后再试。"
+            />
+        </PriceCellContext.Provider>
     )
 }

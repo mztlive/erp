@@ -3,12 +3,17 @@
 use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::sales_selection::{SelectionPriceComparison, SpecificationAttributeSnapshot};
+use crate::entity::sales_selection::{
+    SelectionPriceComparison, SelectionReferencePrices, SpecificationAttributeSnapshot,
+};
 
 /// 陈列项视图。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DisplayItemView {
-    /// 仅管理端展示的原价和累计加价比例。
+    /// 准备时冻结的含税参考价。
+    #[serde(default)]
+    pub reference_prices: Option<SelectionReferencePrices>,
+    /// 仅管理端展示的集采价和累计加价比例。
     #[serde(flatten)]
     pub price_comparison: SelectionPriceComparison,
     /// 单品的册内 SKU 身份，仅管理端改价使用；套餐为空。
@@ -53,7 +58,10 @@ pub struct DisplayItemView {
 /// 套餐成员。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DisplayMemberView {
-    /// 成员商品原价与累计加价比例。
+    /// 成员准备时冻结的含税参考价。
+    #[serde(default)]
+    pub reference_prices: Option<SelectionReferencePrices>,
+    /// 成员商品集采价与累计加价比例。
     #[serde(flatten)]
     pub price_comparison: SelectionPriceComparison,
     /// SKU 稳定身份；公开页不展示编号，内部预览可用。

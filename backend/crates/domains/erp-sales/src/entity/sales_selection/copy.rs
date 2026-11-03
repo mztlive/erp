@@ -102,7 +102,7 @@ mod tests {
     use super::*;
     use crate::entity::sales_selection::{
         DisplayKind, ImageAssetSnapshot, PackageCoverRef, PoolFilterSnapshot, PoolSource, PoolSourceKind,
-        SelectionForm, SkuSnapshot, SubmitMode, TierRule,
+        SelectionForm, SelectionReferencePrices, SkuSnapshot, SubmitMode, TierRule,
     };
 
     fn source() -> SalesSelectionBooklet {
@@ -288,6 +288,11 @@ mod tests {
                 file_asset_id: "asset".into(),
                 content_checksum: "checksum".into(),
                 storage_object_key: "frozen/image.jpg".into(),
+            }),
+            reference_prices: Some(SelectionReferencePrices {
+                dropship_price_gross: Some("49.99".parse().unwrap()),
+                bulk_price_gross: Some("40".parse().unwrap()),
+                market_price: None,
             }),
             sales_visible_price_gross: "49.99".parse().unwrap(),
         }

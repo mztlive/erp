@@ -60,7 +60,14 @@ export type BookletListItem = {
     created_at: number
 }
 
+export type SelectionReferencePrices = {
+    dropship_price_gross?: string | null
+    bulk_price_gross?: string | null
+    market_price?: string | null
+}
+
 export type DisplayMemberView = {
+    reference_prices?: SelectionReferencePrices | null
     original_price?: string | null
     markup_percent?: string | null
     sku_id: string
@@ -79,7 +86,7 @@ export type PublicDisplayItemView = {
     cover_path?: string | null
     members: Omit<
         DisplayMemberView,
-        "sku_id" | "original_price" | "markup_percent"
+        "sku_id" | "original_price" | "markup_percent" | "reference_prices"
     >[]
 }
 
@@ -302,6 +309,7 @@ export type CreateBookInput = {
 export type TierRuleInput = CreateTierInput & { tier_id?: string }
 
 export type DisplayItem = {
+    reference_prices?: SelectionReferencePrices | null
     original_price?: string | null
     markup_percent?: string | null
     sku_id?: string | null

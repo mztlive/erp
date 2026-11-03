@@ -288,6 +288,21 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                             kind: item.kind ?? "SINGLE_SKU",
                             price_gross: item.price_gross || item.price || "0",
                         }))}
+                        priceEditor={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            detail.batch_id
+                                ? {
+                                      batchId: detail.batch_id,
+                                      version: detail.version,
+                                      onSubmit: (input) =>
+                                          operations.updatePrices.mutateAsync({
+                                              bookId: activeBookId,
+                                              ...input,
+                                          }),
+                                  }
+                                : undefined
+                        }
                         selectionForm={detail.selection_form}
                         tiers={detail.tiers}
                         pending={pending}

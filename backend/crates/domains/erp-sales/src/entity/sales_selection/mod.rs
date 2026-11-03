@@ -44,7 +44,9 @@ pub use proposal::{
 pub use public_access::{SelectionGrant, hash_selection_password, verify_selection_password};
 pub use recipient::SelectionRecipient;
 pub use session::{SalesSelectionSession, SessionChoice};
-pub use sku_snapshot::{ImageAssetSnapshot, SkuSnapshot, SpecificationAttributeSnapshot, sort_by_sku_id};
+pub use sku_snapshot::{
+    ImageAssetSnapshot, SelectionReferencePrices, SkuSnapshot, SpecificationAttributeSnapshot, sort_by_sku_id,
+};
 pub use status::BookletStatus;
 pub use tier::TierRule;
 pub use token::{LinkTokenCrypto, SelectionRequestFingerprint, token_hash};

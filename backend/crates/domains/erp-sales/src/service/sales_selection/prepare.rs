@@ -367,6 +367,7 @@ async fn snapshot_one_fact(
         specification_attributes: fact.specification_attributes,
         unit: fact.unit,
         image,
+        reference_prices: Some(fact.reference_prices),
         sales_visible_price_gross: fact.sales_visible_price_gross,
     }
     .normalize()
@@ -635,6 +636,7 @@ mod tests {
             specification_attributes: Vec::new(),
             unit: "件".into(),
             main_image_asset_id: None,
+            reference_prices: Default::default(),
             sales_visible_price_gross: Amount::from_str("10.00").unwrap(),
         }
     }
@@ -650,6 +652,7 @@ mod tests {
             specification_attributes: Vec::new(),
             unit: "件".into(),
             image: None,
+            reference_prices: None,
             sales_visible_price_gross: Amount::from_str("10.00").unwrap(),
         }
     }

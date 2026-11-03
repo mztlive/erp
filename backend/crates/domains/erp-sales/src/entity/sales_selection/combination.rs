@@ -669,6 +669,7 @@ mod tests {
                 content_checksum: "abc".into(),
                 storage_object_key: format!("key-{id}"),
             }),
+            reference_prices: None,
             sales_visible_price_gross: amount(price),
         }
     }

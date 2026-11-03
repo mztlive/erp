@@ -17,6 +17,7 @@ import {
 
 import { SnapshotImage } from "./snapshot-image"
 import { PriceComparison } from "./price-comparison"
+import type { UpdateSelectionPricesInput } from "../api/books"
 import { PreviewTable } from "./preview-table"
 import {
     BusinessEmptyState,
@@ -100,6 +101,7 @@ const PreviewCard = ({
                             </span>
                         </div>
                         <PriceComparison
+                            reference_prices={item.reference_prices}
                             original_price={item.original_price}
                             markup_percent={item.markup_percent}
                         />
@@ -209,6 +211,7 @@ export const PreviewGrid = ({
     onRegenerateTier,
     onDelete,
     onEditPrice,
+    priceEditor,
     pending = false,
     deletingItemId,
     regeneratingTierIds,
@@ -218,6 +221,11 @@ export const PreviewGrid = ({
     tiers?: readonly PreviewTierConfig[]
     onRegenerateTier?: (tierId: string) => void
     onDelete?: (itemId: string) => void
+    priceEditor?: {
+        batchId: string
+        version: number
+        onSubmit: (input: UpdateSelectionPricesInput) => Promise<unknown>
+    }
     onEditPrice?: (item: DisplayItem) => void
     pending?: boolean
     deletingItemId?: string
@@ -400,6 +408,7 @@ export const PreviewGrid = ({
             table={
                 layout === "table" ? (
                     <PreviewTable
+                        priceEditor={priceEditor}
                         items={tableItems}
                         pending={pending}
                         deletingItemId={deletingItemId}

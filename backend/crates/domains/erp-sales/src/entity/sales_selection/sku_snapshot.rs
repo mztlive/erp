@@ -26,6 +26,17 @@ pub struct ImageAssetSnapshot {
     pub storage_object_key: String,
 }
 
+/// 准备时冻结的公司含税参考价；缺失价格不推算。
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectionReferencePrices {
+    /// 一件代发价。
+    pub dropship_price_gross: Option<Amount>,
+    /// 集采价。
+    pub bulk_price_gross: Option<Amount>,
+    /// 市场价。
+    pub market_price: Option<Amount>,
+}
+
 /// 准备批次内一份 SKU 事实。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkuSnapshot {
@@ -47,6 +58,9 @@ pub struct SkuSnapshot {
     pub unit: String,
     /// 图片资产引用。
     pub image: Option<ImageAssetSnapshot>,
+    /// 准备时参考价；旧快照缺失时仅允许按精确修订读取。
+    #[serde(default)]
+    pub reference_prices: Option<SelectionReferencePrices>,
     /// 本册客户含税售价；准备时取商品销售可见价，待发布允许独立改价。
     pub sales_visible_price_gross: Amount,
 }
@@ -82,6 +96,7 @@ impl SkuSnapshot {
             specification_attributes: self.specification_attributes,
             unit,
             image: self.image,
+            reference_prices: self.reference_prices,
             sales_visible_price_gross: self.sales_visible_price_gross,
         })
     }

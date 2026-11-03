@@ -126,7 +126,8 @@ mod tests {
 
     use super::*;
     use crate::entity::sales_selection::{
-        PackageCoverRef, SessionChoice, SkuSnapshot, SubmitMode, build_proposal_lines,
+        PackageCoverRef, SelectionReferencePrices, SessionChoice, SkuSnapshot, SubmitMode,
+        build_proposal_lines,
     };
 
     fn amount(value: &str) -> Amount {
@@ -146,6 +147,11 @@ mod tests {
                 specification_attributes: vec![],
                 unit: "件".into(),
                 image: None,
+                reference_prices: Some(SelectionReferencePrices {
+                    dropship_price_gross: Some(amount(price)),
+                    bulk_price_gross: Some(amount("8")),
+                    market_price: None,
+                }),
                 sales_visible_price_gross: amount(price),
             })
             .collect();
@@ -195,6 +201,11 @@ mod tests {
             .unwrap();
         assert_eq!(source.sales_visible_price_gross, amount("10.05"));
         assert_eq!(pool[0].sku.sales_visible_price_gross, amount("9.99"));
+        assert_eq!(pool[0].sku.reference_prices, source.reference_prices);
+        let DisplayKind::SingleSku { sku } = &items[0].kind else { panic!("expected single") };
+        assert_eq!(sku.reference_prices, source.reference_prices);
+        let DisplayKind::Package { members, .. } = &items[1].kind else { panic!("expected package") };
+        assert_eq!(members[0].reference_prices, source.reference_prices);
         assert_eq!(pool[1].sku.sales_visible_price_gross, amount("20.15"));
         assert_eq!(items[0].price(), amount("9.99"));
         assert_eq!(items[1].price(), amount("30.14"));

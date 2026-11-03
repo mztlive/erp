@@ -12,7 +12,8 @@ use erp_customer::CustomerAccountStatus;
 use erp_sales::Result as SalesResult;
 use erp_sales::dto::sales_selection::SelectionSourceSkuView;
 use erp_sales::entity::sales_selection::{
-    ImageAssetSnapshot, PoolFilterSnapshot, PoolPriceKind, SpecificationAttributeSnapshot,
+    ImageAssetSnapshot, PoolFilterSnapshot, PoolPriceKind, SelectionReferencePrices,
+    SpecificationAttributeSnapshot,
 };
 use erp_sales::ports::sales_selection::{
     SelectionCatalogPort, SelectionCustomerFact, SelectionCustomerPort, SelectionImagePort, SelectionSkuFact,
@@ -271,6 +272,11 @@ fn to_fact(row: erp_catalog::repository::SellableSkuRow) -> SelectionSkuFact {
         specification_attributes,
         unit: row.base_unit_name.or(row.base_unit_code).unwrap_or_else(|| "件".into()),
         main_image_asset_id: row.main_image_asset_id,
+        reference_prices: SelectionReferencePrices {
+            dropship_price_gross: Some(row.sales_visible_price_gross),
+            bulk_price_gross: row.bulk_price_gross,
+            market_price: row.market_price,
+        },
         sales_visible_price_gross: row.sales_visible_price_gross,
     }
 }

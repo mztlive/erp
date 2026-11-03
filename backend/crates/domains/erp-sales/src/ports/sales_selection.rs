@@ -6,7 +6,7 @@ use erp_core::money::Amount;
 
 use crate::Result;
 use crate::entity::sales_selection::{
-    ImageAssetSnapshot, PoolFilterSnapshot, SpecificationAttributeSnapshot,
+    ImageAssetSnapshot, PoolFilterSnapshot, SelectionReferencePrices, SpecificationAttributeSnapshot,
 };
 
 /// 客户身份与展示名称。
@@ -43,6 +43,8 @@ pub struct SelectionSkuFact {
     pub unit: String,
     /// 主图资产。
     pub main_image_asset_id: Option<String>,
+    /// 商品列表中的含税参考价。
+    pub reference_prices: SelectionReferencePrices,
     /// 销售可见含税价。
     pub sales_visible_price_gross: Amount,
 }

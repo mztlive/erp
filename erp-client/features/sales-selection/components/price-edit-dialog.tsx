@@ -14,27 +14,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import { sumFixed } from "@/lib/fixed-decimal"
 import { isApiError } from "@/lib/api/errors"
 import { createIdempotencyKey } from "../lib/validation"
 import type { DisplayItem } from "../types"
 import type { UpdateSelectionPricesInput } from "../api/books"
+import { positiveDecimal } from "../lib/price-validation"
 import { PriceComparison } from "./price-comparison"
-
-const positiveDecimal = z
-    .string()
-    .trim()
-    .regex(
-        /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/,
-        "请填写大于 0 的数值，最多两位小数",
-    )
-    .refine((value) => {
-        try {
-            return compareDecimal(value, "0", 2) > 0
-        } catch {
-            return false
-        }
-    }, "数值必须大于 0")
 
 const priceSchema = z.object({ skuId: z.string(), value: positiveDecimal })
 
@@ -63,6 +49,7 @@ export function PriceEditDialog({
                         sku_id: item.sku_id,
                         name: item.name,
                         price: item.price_gross || item.price,
+                        reference_prices: item.reference_prices,
                         original_price: item.original_price,
                         markup_percent: item.markup_percent,
                     },

@@ -533,6 +533,7 @@ mod tests {
                 specification_attributes: Vec::new(),
                 unit: "件".into(),
                 image: None,
+                reference_prices: None,
                 sales_visible_price_gross: erp_core::money::Amount::from_str("10.00").unwrap(),
             },
         )
