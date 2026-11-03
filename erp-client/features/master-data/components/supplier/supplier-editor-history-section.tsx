@@ -49,40 +49,6 @@ export function SupplierEditorHistorySection({
             </DocumentSection>
 
             <DocumentSection
-                title={masterDataCopy.centerRelations}
-                description={masterDataCopy.centerRelationsDesc}
-            >
-                <p className="text-sm">
-                    {masterDataCopy.centerUsageCount(
-                        data.usageSummary.historicalReferenceCount,
-                    )}
-                    {data.usageSummary.note}
-                </p>
-                <ul className="mt-3 space-y-2">
-                    {data.selectorEligibility.map((s) => (
-                        <li
-                            key={s.context}
-                            className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm"
-                        >
-                            <span>{s.contextLabel}</span>
-                            <Badge
-                                variant={s.eligible ? "success" : "destructive"}
-                            >
-                                {s.eligible
-                                    ? masterDataCopy.eligible
-                                    : masterDataCopy.ineligible}
-                            </Badge>
-                            {s.reason ? (
-                                <span className="text-xs text-muted-foreground">
-                                    {s.reason}
-                                </span>
-                            ) : null}
-                        </li>
-                    ))}
-                </ul>
-            </DocumentSection>
-
-            <DocumentSection
                 title={masterDataCopy.centerAudit}
                 description={masterDataCopy.centerAuditDesc}
             >

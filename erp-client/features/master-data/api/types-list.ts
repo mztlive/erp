@@ -13,7 +13,6 @@ import type {
     ProductListingFilter,
     ProductListingStatus,
     ProductSkuCoverageFilter,
-    SelectorEligibility,
     SupplierQualificationHealth,
 } from "@/features/master-data/api/types-core"
 
@@ -52,7 +51,6 @@ export type MasterDataListItem = Readonly<{
     }>
     /** Primary blocker summary for list (not mixed into lifecycle). */
     primaryBlocker?: string
-    selectorEligibility: readonly SelectorEligibility[]
     allowedActions: readonly string[]
     actionBlockers: readonly ActionBlocker[]
     lockVersion: number

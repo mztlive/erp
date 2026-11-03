@@ -122,41 +122,6 @@ export function MasterDataPreviewPanel({
                 </dl>
             </section>
 
-            <Separator />
-
-            <section className="space-y-2">
-                <h3 className="text-xs font-medium text-muted-foreground">
-                    {masterDataCopy.previewUsability}
-                </h3>
-                <ul className="space-y-1.5">
-                    {row.selectorEligibility.length === 0 ? (
-                        <li className="text-xs text-muted-foreground">
-                            暂无适用业务信息
-                        </li>
-                    ) : null}
-                    {row.selectorEligibility.map((s) => (
-                        <li
-                            key={s.context}
-                            className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5"
-                        >
-                            <span>{s.contextLabel}</span>
-                            <Badge
-                                variant={s.eligible ? "success" : "destructive"}
-                            >
-                                {s.eligible
-                                    ? masterDataCopy.eligible
-                                    : masterDataCopy.ineligible}
-                            </Badge>
-                            {s.reason ? (
-                                <span className="text-xs text-muted-foreground">
-                                    {s.reason}
-                                </span>
-                            ) : null}
-                        </li>
-                    ))}
-                </ul>
-            </section>
-
             {detailLoading ? (
                 <p className="text-xs text-muted-foreground">
                     {masterDataCopy.centerLoading}

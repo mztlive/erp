@@ -7,7 +7,6 @@ import type {
     MasterDataResource,
     MasterDataSectionId,
     ProductKind,
-    SelectorEligibility,
     SensitiveFieldView,
 } from "@/features/master-data/api/types-core"
 import type { ProductDetailView } from "@/features/master-data/api/types-product"
@@ -63,11 +62,6 @@ export type MasterDataCenterView = Readonly<{
         fields: ReadonlyArray<{ label: string; value: string }>
     }
     revisionTimeline: readonly RevisionTimelineEntry[]
-    selectorEligibility: readonly SelectorEligibility[]
-    usageSummary: {
-        historicalReferenceCount: number
-        note: string
-    }
     sensitiveFields: readonly SensitiveFieldView[]
     /** Resource-specific overview facts. */
     resourceFacts: ReadonlyArray<{ label: string; value: string }>

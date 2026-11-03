@@ -44,21 +44,9 @@ export type SupplierQualificationHealth =
     | "expired"
     | "not_registered"
 
-export type MasterDataSectionId =
-    | "overview"
-    | "versions"
-    | "relations"
-    | "audit"
+export type MasterDataSectionId = "overview" | "versions" | "audit"
 
 type FieldVisibility = "full" | "masked" | "hidden"
-
-export type SelectorEligibility = Readonly<{
-    context: string
-    contextLabel: string
-    eligible: boolean
-    blockerCodes: readonly string[]
-    reason?: string
-}>
 
 export type ActionBlocker = Readonly<{
     action: string

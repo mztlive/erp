@@ -16,7 +16,6 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     ObjectCenterAuditSection,
     ObjectCenterOverviewSection,
-    ObjectCenterRelationsSection,
     ObjectCenterVersionsSection,
 } from "@/features/master-data/components/shared/object-center-sections"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
@@ -31,7 +30,6 @@ import { cn } from "@/lib/utils"
 const SECTION_NAV: readonly { id: MasterDataSectionId; label: string }[] = [
     { id: "overview", label: masterDataCopy.centerOverview },
     { id: "versions", label: masterDataCopy.centerVersions },
-    { id: "relations", label: masterDataCopy.centerRelations },
     { id: "audit", label: masterDataCopy.centerAudit },
 ]
 
@@ -220,7 +218,6 @@ export function ObjectCenterView({
                     canRevealSensitive={canRevealSensitive}
                 />
                 <ObjectCenterVersionsSection data={data} />
-                <ObjectCenterRelationsSection data={data} />
                 <ObjectCenterAuditSection data={data} />
             </div>
             {dialogs}

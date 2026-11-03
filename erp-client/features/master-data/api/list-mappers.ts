@@ -73,7 +73,6 @@ export function mapCategoryRow(dto: ProductCategoryDto): MasterDataListItem {
                 value: productKindLabel(dto.product_kind),
             },
         ],
-        selectorEligibility: [],
         ...commonActions("categories", lifecycle),
         lockVersion: dto.version,
         metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
@@ -99,7 +98,6 @@ export function mapBrandRow(dto: ProductBrandDto): MasterDataListItem {
         revisionNo: dto.version,
         effectiveFrom: tsToIso(dto.created_at).slice(0, 10),
         keyFacts: [{ label: "品牌代码", value: dto.brand_code }],
-        selectorEligibility: [],
         ...commonActions("brands", lifecycle),
         lockVersion: dto.version,
         metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
@@ -128,7 +126,6 @@ export function mapUnitOfMeasureRow(dto: UnitOfMeasureDto): MasterDataListItem {
             { label: "单位符号", value: dto.symbol },
             { label: "数量小数位", value: String(dto.quantity_scale) },
         ],
-        selectorEligibility: [],
         ...commonActions("unit-of-measures", lifecycle),
         lockVersion: dto.version,
         metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
@@ -182,7 +179,6 @@ export function mapProductRow(
         ],
         primaryBlocker:
             lifecycle === "DISABLED" ? "已停用：历史引用保留" : undefined,
-        selectorEligibility: [],
         ...commonActions("products", lifecycle),
         lockVersion: dto.version,
         ownerUserId: dto.maintainer_user_id || undefined,
@@ -260,7 +256,6 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
             ...(kindLabel ? [{ label: "商品类型", value: kindLabel }] : []),
             { label: "有效供应商", value: `${dto.supplier_count} 家` },
         ],
-        selectorEligibility: [],
         ...commonActions("sellable-items", lifecycle),
         lockVersion: dto.sku_version,
         metricTags: ["enabled"],
@@ -314,7 +309,6 @@ export function mapVoucherRow(
             { label: "说明", value: profile.description },
         ],
         primaryBlocker: lifecycle === "DISABLED" ? "已停用" : undefined,
-        selectorEligibility: [],
         ...commonActions("voucher-categories", lifecycle),
         lockVersion: profile.product_version ?? profile.version,
         metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
@@ -360,7 +354,6 @@ export function mapWarehouseRow(
             wh.inbound_handler_user_id && wh.outbound_handler_user_id
                 ? undefined
                 : "缺少收发责任配置",
-        selectorEligibility: [],
         ...commonActions("warehouses", lifecycle),
         lockVersion: wh.version,
         warehouseFulfillmentHandlers: {
@@ -402,7 +395,6 @@ export function mapSupplierRow(
         keyFacts: supplierListKeyFacts(supplierList),
         supplierList,
         primaryBlocker: lifecycle === "DISABLED" ? "已停用" : undefined,
-        selectorEligibility: [],
         ...commonActions("suppliers", lifecycle),
         lockVersion: supplier.version,
         metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],

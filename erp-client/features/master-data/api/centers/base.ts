@@ -53,17 +53,12 @@ export function baseCenter(
                 lifecycleAtRevision: row.lifecycleStatus,
             },
         ],
-        selectorEligibility: row.selectorEligibility,
-        usageSummary: {
-            historicalReferenceCount: 0,
-            note: "引用摘要由后端投影提供；当前接口未返回业务引用数。",
-        },
         sensitiveFields: [],
         resourceFacts: [...row.keyFacts],
         allowedActions: row.allowedActions,
         actionBlockers: row.actionBlockers,
         auditEvents: [],
-        sections: ["overview", "versions", "relations", "audit"],
+        sections: ["overview", "versions", "audit"],
         ...extras,
     }
 }

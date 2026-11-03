@@ -202,50 +202,6 @@ export function ObjectCenterVersionsSection({
     )
 }
 
-/** 引用与选用：业务引用次数与各业务页可选性。 */
-export function ObjectCenterRelationsSection({
-    data,
-}: {
-    data: MasterDataCenterView
-}) {
-    return (
-        <DocumentSection
-            id="md-section-relations"
-            title={masterDataCopy.centerRelations}
-            description={masterDataCopy.centerRelationsDesc}
-        >
-            <p className="text-sm">
-                {masterDataCopy.centerUsageCount(
-                    data.usageSummary.historicalReferenceCount,
-                )}
-                {data.usageSummary.note}
-            </p>
-            <ul className="mt-3 space-y-2">
-                {data.selectorEligibility.map((item) => (
-                    <li
-                        key={item.context}
-                        className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm"
-                    >
-                        <span>{item.contextLabel}</span>
-                        <Badge
-                            variant={item.eligible ? "success" : "destructive"}
-                        >
-                            {item.eligible
-                                ? masterDataCopy.eligible
-                                : masterDataCopy.ineligible}
-                        </Badge>
-                        {item.reason ? (
-                            <span className="text-xs text-muted-foreground">
-                                {item.reason}
-                            </span>
-                        ) : null}
-                    </li>
-                ))}
-            </ul>
-        </DocumentSection>
-    )
-}
-
 /** 操作记录：新建、更新、停用等审计事件。 */
 export function ObjectCenterAuditSection({
     data,
