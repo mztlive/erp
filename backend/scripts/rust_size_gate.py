@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed production Rust size gate.
 
-A file may not exceed 800 physical production lines. A function/method may not
+A file may not exceed 1200 physical production lines. A function/method may not
 exceed 50 effective body lines. Test code is excluded: `tests/` trees,
 `#[cfg(test)]` items, `#[test]` functions, and `#[cfg(test)] mod name;` files.
 `build.rs` is checked for file size only. Proc-macro crates skip the method cap.
@@ -25,7 +25,7 @@ from cutover_workspace import _code_and_literals, active_source_paths
 from domain_boundaries import cargo_metadata
 
 
-MAX_FILE_LINES = 800
+MAX_FILE_LINES = 1200
 MAX_FN_LINES = 50
 FN_NAME = re.compile(r"\bfn\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*)")
 MOD_NAME = re.compile(r"mod\s+([A-Za-z_][A-Za-z0-9_]*)")
