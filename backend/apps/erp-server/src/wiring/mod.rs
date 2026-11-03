@@ -1,0 +1,335 @@
+//! 把消费方端口接到提供方领域的组合 adapter。
+
+pub mod errors;
+
+#[cfg(test)]
+mod dangaoshushu_composition_tests;
+
+mod audit_conversion;
+mod catalog;
+mod catalog_data_scope;
+mod contract;
+mod contract_data_scope;
+mod contract_template;
+mod customer;
+mod customer_data_scope;
+mod fulfillment_order_data_scope;
+mod funds_data_scope;
+mod identity_error;
+mod import;
+mod integration_data_scope;
+mod inventory;
+mod offering_data_scope;
+mod organization;
+mod party;
+mod purchase_data_scope;
+mod scope_support;
+mod selection_data_scope;
+mod settlement_data_scope;
+mod supplier;
+mod supplier_data_scope;
+mod supplier_fulfillment_identity;
+mod warehouse;
+use std::sync::Arc;
+
+pub use catalog::{MongoCatalogAudit, MongoCatalogFileAssets, catalog_service};
+pub use contract::{contract_access, contract_service, scoped_contract_service};
+pub use contract_data_scope::MongoContractDataScope;
+pub use contract_template::contract_template_service;
+pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
+pub use customer_data_scope::{MongoCustomerDataScope, customer_access};
+use erp_customer::{CustomerAssignmentService, CustomerService, FailClosedCustomerDataScopePort};
+use erp_identity::SharedRbacService;
+use erp_party::{
+    PartyAddressService, PartyBankAccountService, PartyContactService, PartyService, PartyTaxProfileService,
+    SensitiveDataCodec,
+};
+use erp_supplier::SupplierService;
+pub use funds_data_scope::{MongoFundsDataScope, funds_access_with_rbac};
+pub use import::{MongoImportBulkJobs, legacy_import_service};
+pub use integration_data_scope::{MongoIntegrationDataScope, scoped_integration_ops_service};
+pub use inventory::{authorize_inventory, inventory_adjustment_process, inventory_service};
+use mongodb::Database;
+pub use organization::organization_service;
+pub use party::{MongoPartyAudit, MongoSupplierRole};
+pub use purchase_data_scope::{MongoPurchaseDataScope, purchase_access};
+pub use selection_data_scope::{MongoSelectionDataScope, selection_access};
+pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
+pub use supplier_data_scope::{
+    MongoSupplierDataScope, scoped_supplier_service, scoped_supplier_service_with_sensitive, supplier_access,
+};
+pub use warehouse::{MongoWarehouseIdentity, warehouse_service};
+
+/// 装配带审计与供应商角色 adapter 的主体服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+///
+/// # 返回
+/// 返回已注入审计与供应商角色 Port 的主体服务。
+///
+/// # 错误
+/// 不返回错误。
+pub fn party_service(db: Database) -> PartyService {
+    PartyService::new(db.clone(), MongoPartyAudit::shared(db.clone()), MongoSupplierRole::shared(db))
+}
+
+/// 装配带审计、供应商角色与敏感数据编解码的主体联系人服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+/// * `sensitive_data` - 联系人敏感字段编解码器。
+///
+/// # 返回
+/// 返回主体联系人服务。
+///
+/// # 错误
+/// 不返回错误。
+pub fn party_contact_service(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> PartyContactService {
+    PartyContactService::new(
+        db.clone(),
+        sensitive_data,
+        MongoPartyAudit::shared(db.clone()),
+        MongoSupplierRole::shared(db),
+    )
+}
+
+/// 装配带审计、供应商角色与敏感数据编解码的主体地址服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+/// * `sensitive_data` - 地址敏感字段编解码器。
+///
+/// # 返回
+/// 返回主体地址服务。
+///
+/// # 错误
+/// 不返回错误。
+pub fn party_address_service(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> PartyAddressService {
+    PartyAddressService::new(
+        db.clone(),
+        sensitive_data,
+        MongoPartyAudit::shared(db.clone()),
+        MongoSupplierRole::shared(db),
+    )
+}
+
+/// 装配带审计、供应商角色与敏感数据编解码的主体银行账户服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+/// * `sensitive_data` - 银行账户敏感字段编解码器。
+///
+/// # 返回
+/// 返回主体银行账户服务。
+///
+/// # 错误
+/// 不返回错误。
+pub fn party_bank_account_service(
+    db: Database,
+    sensitive_data: Arc<SensitiveDataCodec>,
+) -> PartyBankAccountService {
+    PartyBankAccountService::new(
+        db.clone(),
+        sensitive_data,
+        MongoPartyAudit::shared(db.clone()),
+        MongoSupplierRole::shared(db),
+    )
+}
+
+/// 装配带审计与供应商角色 adapter 的主体税务档案服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+///
+/// # 返回
+/// 返回主体税务档案服务。
+///
+/// # 错误
+/// 不返回错误。
+pub fn party_tax_profile_service(db: Database) -> PartyTaxProfileService {
+    PartyTaxProfileService::new(
+        db.clone(),
+        MongoPartyAudit::shared(db.clone()),
+        MongoSupplierRole::shared(db),
+    )
+}
+
+/// 构造只装载客户事实的服务；范围 Port 失败关闭。
+///
+/// # 参数
+/// * `db` - 客户集合所在数据库
+///
+/// # 返回
+/// 返回未接线范围解析的客户服务。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 不得用于列表、详情或写命令；解析范围必须调用 [`scoped_customer_service`]。
+pub fn customer_service(db: Database) -> CustomerService {
+    CustomerService::new(
+        db.clone(),
+        MongoCustomerAudit::shared(db.clone()),
+        MongoCustomerPartyFacts::shared(db.clone()),
+        MongoCustomerAccountFacts::shared(db),
+        FailClosedCustomerDataScopePort::shared(),
+    )
+}
+
+/// 构造已接入身份域公共解析器的客户服务。
+///
+/// # 参数
+/// * `db` - 客户与身份集合所在数据库
+/// * `rbac` - 当前 RBAC 快照
+///
+/// # 返回
+/// 返回可解析客户范围的服务。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// adapter 必须调用 DataScopeService；客户域不得直接依赖身份域。
+pub fn scoped_customer_service(db: Database, rbac: SharedRbacService) -> CustomerService {
+    CustomerService::new(
+        db.clone(),
+        MongoCustomerAudit::shared(db.clone()),
+        MongoCustomerPartyFacts::shared(db.clone()),
+        MongoCustomerAccountFacts::shared(db.clone()),
+        MongoCustomerDataScope::shared(db, rbac),
+    )
+}
+
+/// 构造只装载归属事实的服务；范围 Port 失败关闭。
+///
+/// # 参数
+/// * `db` - 客户集合所在数据库
+///
+/// # 返回
+/// 返回未接线范围解析的归属服务。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 归属变更必须调用 [`scoped_customer_assignment_service`]。
+pub fn customer_assignment_service(db: Database) -> CustomerAssignmentService {
+    CustomerAssignmentService::new(
+        db.clone(),
+        MongoCustomerAudit::shared(db.clone()),
+        MongoCustomerAccountFacts::shared(db),
+        FailClosedCustomerDataScopePort::shared(),
+    )
+}
+
+/// 构造已接入身份域公共解析器的客户归属服务。
+///
+/// # 参数
+/// * `db` - 客户与身份集合所在数据库
+/// * `rbac` - 当前 RBAC 快照
+///
+/// # 返回
+/// 返回可在事务内重验客户范围的归属服务。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 归属变更必须证明 customer:update，不得只依赖入口事前检查。
+pub fn scoped_customer_assignment_service(
+    db: Database,
+    rbac: SharedRbacService,
+) -> CustomerAssignmentService {
+    CustomerAssignmentService::new(
+        db.clone(),
+        MongoCustomerAudit::shared(db.clone()),
+        MongoCustomerAccountFacts::shared(db.clone()),
+        MongoCustomerDataScope::shared(db, rbac),
+    )
+}
+
+/// 装配带主体事实 Port 的供应商列表与详情服务。
+///
+/// # 参数
+/// * `db` - 供应商与主体集合所在数据库。
+///
+/// # 返回
+/// 返回供应商服务。
+///
+/// # 错误
+/// 不返回错误。
+pub fn supplier_service(db: Database) -> SupplierService {
+    SupplierService::new(db.clone(), MongoSupplierPartyFacts::shared(db))
+}
+
+pub mod catalog_supply_query;
+pub mod supplier_api;
+pub mod supplier_failure;
+pub mod supplier_fulfillment_gateway;
+pub mod workflow;
+
+pub mod identity;
+pub mod identity_audit;
+pub mod support_audit;
+pub mod support_documents;
+
+pub use catalog_data_scope::{MongoCatalogDataScope, catalog_access, scoped_catalog_service};
+pub use fulfillment_order_data_scope::{
+    MongoFulfillmentExceptionHandlers, MongoFulfillmentOrderDataScope, fulfillment_order_access,
+    scoped_fulfillment_service,
+};
+pub use offering_data_scope::{
+    MongoOfferingDataScope, offering_access, scoped_offering_process, scoped_offering_service,
+};
+pub use supplier_fulfillment_identity::supplier_fulfillment_identity_factory;
+
+#[cfg(test)]
+mod scope_equivalence;
+
+#[cfg(test)]
+mod supplier_composition_tests;
+
+mod scope_target_validation;
+pub use scope_target_validation::scope_configuration;
+pub use settlement_data_scope::{
+    MongoSettlementDataScope, scoped_settlement_process, scoped_settlement_service, settlement_access,
+};
+
+mod warehouse_directory;
+pub use warehouse_directory::warehouse_directory;
+
+mod directory_scope;
+
+mod sales_timeline;
+pub use sales_timeline::sales_timeline_service;
+
+mod supplier_catalog;
+pub use supplier_catalog::catalog_services;
+
+mod approval_runtime;
+pub use approval_runtime::approval_runtime;
+
+mod fulfillment_identity;
+pub use fulfillment_identity::fulfillment_identity_factory;
+
+pub mod sales;
+
+mod purchase;
+pub use purchase::{purchase_formalization_process, purchase_ports};
+
+mod finance_posting;
+pub use finance_posting::{finance_posting_ports, receivable_posting_ports};
+
+mod reverse_flow;
+pub use reverse_flow::{local_reverse_flow_ports, reverse_flow_ports};
+
+mod finance_responsibility;
+pub use finance_responsibility::{finance_responsibility, finance_tasks};
+
+pub mod application;
+pub(crate) use application::JdVopCredentialMaintenance;
+pub use application::{Application, ExternalConnectorPorts, ExternalConnectorReadiness};
+pub mod approval_dispatch;
+pub(crate) mod data_transfer;

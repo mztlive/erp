@@ -318,7 +318,7 @@ def capture_errors(tokens, origin, records):
             for fn in declarations(tokens, "fn"):
                 if fn["name"] in {"as_str", "class", "http_status", "error_code", "retryable"}:
                     identity = f"{item['name']}::{fn['name']}"
-                    if "/apps/web-api/" in f"/{path}":
+                    if "/apps/erp-server/" in f"/{path}":
                         identity = "http::" + identity
                     body = canonical(fn["body"], leaf_paths=True)
                     add(records, identity, {"body": body, "match_arms": match_arms(fn["body"])}, {**origin, "line": fn["line"]})

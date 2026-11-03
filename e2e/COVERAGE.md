@@ -82,7 +82,7 @@ E2E_SKIP_BACKEND=1 bash scripts/ensure-services.sh
 python3 scripts/run-e2e-parallel.py all
 ```
 
-后端源代码变更后，必须先在 `backend/` 执行 `cargo build -p web-api --locked`。单流程使用同一隔离入口：
+后端源代码变更后，必须先在 `backend/` 执行 `cargo build -p erp-server --locked`。单流程使用同一隔离入口：
 
 ```bash
 python3 scripts/run-e2e-parallel.py e2e/tests/flow-22-master-data-import.spec.ts

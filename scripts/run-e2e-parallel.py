@@ -727,7 +727,7 @@ print('Dropped E2E database: ' + name);
                     raise RunnerError("cargo metadata 没有返回 target_directory")
                 self.binary = Path(metadata["target_directory"]) / "debug/web-api"
                 if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
-                    raise RunnerError("未找到 debug/web-api；请先运行 cd backend && cargo build -p web-api --locked")
+                    raise RunnerError("未找到 debug/web-api；请先运行 cd backend && cargo build -p erp-server --locked")
                 self.archive = self.temp / "source.archive"
                 mongo_config = self.temp / "mongo-source.yaml"
                 private_write(mongo_config, json.dumps({"uri": uri_for_database(self.source_uri, self.source_db)}))

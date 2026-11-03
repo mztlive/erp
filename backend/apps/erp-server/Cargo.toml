@@ -1,0 +1,107 @@
+[package]
+name = "erp-server"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+# 历史真实环境验收例程保持原始字节，不纳入活动构建目标。
+autoexamples = false
+default-run = "web-api"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "web-api"
+path = "src/main.rs"
+
+[dependencies]
+entity-core = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+erp-supply-settlement = { workspace = true }
+erp-supplier-orders = { workspace = true }
+erp-reverse-flow = { workspace = true }
+erp-finance-posting = { workspace = true }
+erp-fulfillment-execution = { workspace = true }
+erp-procure-to-pay = { workspace = true }
+erp-order-to-cash = { workspace = true }
+erp-demo-data = { workspace = true }
+erp-supplier-catalog = { workspace = true }
+erp-data-import = { workspace = true }
+erp-master-data = { workspace = true }
+erp-connector-dangaoshushu = { workspace = true }
+erp-connector-jd-vop = { workspace = true }
+erp-file-assets = { workspace = true }
+erp-approval-runtime = { workspace = true }
+background-runtime = { workspace = true }
+subtle = { workspace = true }
+serde_path_to_error = "0.1"
+erp-sales = { workspace = true }
+erp-procurement = { workspace = true }
+erp-fulfillment = { workspace = true }
+erp-returns = { workspace = true }
+erp-integration = { workspace = true }
+erp-supply = { workspace = true }
+erp-finance = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["macros"] }
+chrono = { workspace = true }
+jwt-hmac = { workspace = true }
+jwt = { workspace = true }
+
+mongodb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+  "macros",
+  "sync",
+  "time",
+  "rt-multi-thread",
+  "net",
+  "signal",
+] }
+tower = { workspace = true }
+tower-http = { workspace = true }
+validator = { workspace = true }
+jwt-sha2 = { workspace = true }
+image = { workspace = true }
+lopdf = { workspace = true }
+zune-core = { workspace = true }
+zune-jpeg = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+
+storage = { workspace = true }
+id-generator = { workspace = true }
+persistence-core = { workspace = true }
+erp-core = { workspace = true }
+application-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-audit = { workspace = true }
+erp-workflow = { workspace = true }
+erp-read-models = { workspace = true }
+erp-support = { workspace = true }
+erp-party = { workspace = true }
+erp-customer = { workspace = true }
+erp-supplier = { workspace = true }
+erp-catalog = { workspace = true }
+erp-warehouse = { workspace = true }
+erp-contract = { workspace = true }
+erp-contract-recognition = { workspace = true }
+erp-import = { workspace = true }
+erp-inventory = { workspace = true }
+config = { workspace = true }
+
+[build-dependencies]
+syn = { workspace = true, features = ["full", "visit"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+syn = { workspace = true, features = ["full", "visit"] }
+test-support = { workspace = true }

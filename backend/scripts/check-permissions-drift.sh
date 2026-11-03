@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P0-6.2 权限生成物漂移校验脚本。
 #
-# apps/web-api/build.rs 会把权限定义写入生成物：
+# apps/erp-server/build.rs 会把权限定义写入生成物：
 #   - erp-client/lib/permissions.generated.ts
 # 本脚本先重新构建 web-api 触发重新生成，再逐个校验生成物与提交版本一致，
 # 存在漂移（缺失/未纳入版本控制/内容不一致）时以非零状态退出。
@@ -16,7 +16,7 @@ GENERATED_FILES=(
 )
 
 echo "重新构建 web-api 以生成权限定义…"
-cargo build -p web-api --manifest-path "${BACKEND_DIR}/Cargo.toml"
+cargo build -p erp-server --manifest-path "${BACKEND_DIR}/Cargo.toml"
 
 failed=0
 for file in "${GENERATED_FILES[@]}"; do

@@ -11,7 +11,7 @@
 
 ## 协作示例
 
-上传合同 PDF 时，本 crate 保存文件字节；[erp-support](../../domains/erp-support/README.md) 记录文件资产及附件关系，[erp-contract](../../domains/erp-contract/README.md) 维护合同归档。[web-api](../../../apps/web-api/README.md) 负责 HTTP 上传协议和文件校验。
+上传合同 PDF 时，本 crate 保存文件字节；[erp-support](../../domains/erp-support/README.md) 记录文件资产及附件关系，[erp-contract](../../domains/erp-contract/README.md) 维护合同归档。[web-api](../../../apps/erp-server/README.md) 负责 HTTP 上传协议和文件校验。
 
 ## 能力
 
@@ -21,7 +21,7 @@
 - 拒绝绝对路径、父目录、根目录、Windows Prefix 和空文件路径。
 
 Multipart 解析、文件大小、扩展名、声明 MIME 与文件头真实类型校验位于
-`apps/web-api/src/core/upload.rs`。
+`apps/erp-server/src/http/upload.rs`。
 
 S3 调用方必须从运行配置构造并复用单个客户端；不得在每次请求中重建客户端：
 

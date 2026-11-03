@@ -2,7 +2,7 @@
 
 ## 权威来源
 
-- `apps/web-api/permission_catalog/` 使用普通 Rust 常量定义权限代码、展示说明和分组。
+- `apps/erp-server/permission_catalog/` 使用普通 Rust 常量定义权限代码、展示说明和分组。
 - 路由通过 `with_permission(route, rbac, permissions::<module>::<ACTION>)` 指定入口权限。
 - 构建生成器与运行时共同编译目录；处理函数不承担权限元数据声明。
 - 非 HTTP 政策权限由 `erp-identity/src/entity/policy_permission.rs` 定义，构建目录引用该来源。
@@ -46,7 +46,7 @@ permissions::supplier_api::CONNECTION_DETAIL
 
 ## 生成物
 
-编译 `web-api` 时必须生成：
+编译 `erp-server` 时必须生成：
 
 - `erp-client/lib/permissions.generated.ts`：前端展示及权限选择目录，包含 HTTP 方法、路径、分组、说明和权限代码。
 - `OUT_DIR/policy_permissions.rs`：授权文件可配置权限白名单。
@@ -59,8 +59,8 @@ permissions::supplier_api::CONNECTION_DETAIL
 在 `backend/` 执行：
 
 ```bash
-env -u ERP_TEST_MONGO_URI cargo test -p web-api --lib --locked
+env -u ERP_TEST_MONGO_URI cargo test -p erp-server --lib --locked
 ./scripts/check-permissions-drift.sh
 ```
 
-`apps/web-api/testdata/permission-routes.json` 是迁移前冻结的 678 条 HTTP 权限合同。行为保持型重构必须逐项一致；产品明确修改接口或权限时，应同步更新合同数据并说明变更依据。该合同不替代真实权限中间件行为测试。
+`apps/erp-server/testdata/permission-routes.json` 是迁移前冻结的 678 条 HTTP 权限合同。行为保持型重构必须逐项一致；产品明确修改接口或权限时，应同步更新合同数据并说明变更依据。该合同不替代真实权限中间件行为测试。

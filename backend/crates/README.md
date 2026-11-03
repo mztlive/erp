@@ -2,7 +2,7 @@
 
 本目录的 crate 按业务职责和技术能力组织。开发时先确定“修改哪类业务事实”或“组合哪些业务步骤”，再选择对应入口。每个 crate 的 README 说明用途、使用场景、协作示例、代码入口及修改要求。
 
-活动 crate 以 [workspace](../Cargo.toml) 成员及[层次登记](../scripts/crate-layers.json)为准；19 个现有领域保留各自包名与事实归属。HTTP 应用见 [web-api](../apps/web-api/README.md)，运维命令见 [cli](../apps/cli/README.md)，全局开发要求见 [backend/AGENTS.md](../AGENTS.md)。
+活动 crate 以 [workspace](../Cargo.toml) 成员及[层次登记](../scripts/crate-layers.json)为准；19 个现有领域保留各自包名与事实归属。服务端应用见 [erp-server](../apps/erp-server/README.md)，运维命令见 [cli](../apps/cli/README.md)，全局开发要求见 [backend/AGENTS.md](../AGENTS.md)。
 
 ## 目录与登记要求
 
@@ -28,7 +28,7 @@
 | 多个领域需要相同的金额、数量、时间类型 | [erp-core](foundation/erp-core/README.md) | 使用 Amount 计算金额，使用 BusinessDate 表达到期日 |
 | 多个用例需要相同的请求处理约定 | [application-core](foundation/application-core/README.md) | 分页结构、调用人上下文、命令重试匹配 |
 | 多个仓储需要相同的数据库操作机制 | [persistence-core](foundation/persistence-core/README.md) | 通用 CRUD、分页、共享事务执行器 |
-| 接收 HTTP 请求、返回响应、装配后台 worker | [web-api](../apps/web-api/README.md) | 路由、JWT 中间件、请求参数提取、任务启停 |
+| 接收 HTTP 请求、返回响应、装配后台 worker | [web-api](../apps/erp-server/README.md) | 路由、JWT 中间件、请求参数提取、任务启停 |
 
 普通的单领域查询仍放在该领域的 Service/Repository。新增列表接口时，先判断它是否真的需要跨领域组合，再决定是否使用 ReadModel。
 
@@ -131,7 +131,7 @@
 
 1. 业务领域的 normal、build、dev 依赖均不得指向其他业务领域或组合层；需要外域事实时，声明窄 Port 或输入事实，由组合层接入实际提供方。
 2. 编排库只依赖实际消费的领域、读模型和明确下层能力；编排之间仅允许 [crate-layers.json](../scripts/crate-layers.json) 登记的单向依赖。erp-read-models 允许读取多个领域，不得依赖编排库。共享基础 crate 不得持有业务实体或依赖业务领域。
-3. HTTP、CLI 等应用负责装配具体服务和适配器；CLI 不得依赖 web-api。test-support 仅作为 dev-dependency 使用。
+3. HTTP、CLI 等应用负责装配具体服务和适配器；CLI 不得依赖 erp-server。test-support 仅作为 dev-dependency 使用。
 4. bpm 只接收调用方提供的模型、人员资格、ID 和时间；ERP 政策与持久化由 erp-workflow 接入。
 5. 不得恢复 entities、database、services 旧三层 crate 或兼容转发层，历史归档不得接入活动 Cargo target。
 6. 新增 crate 时同步更新 workspace 成员、依赖、层次及编排直接依赖登记、边界检查配置、本索引及该 crate 的 README。

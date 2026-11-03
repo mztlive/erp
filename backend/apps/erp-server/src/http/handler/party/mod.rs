@@ -1,0 +1,373 @@
+//! 域 D07 `party` 的 HTTP handler。
+//!
+//! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
+//! 直接复用 `erp_party` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+
+pub mod company;
+
+use application_core::AuditActor;
+use axum::Extension;
+use axum::extract::{Path, State};
+use erp_master_data::delete_party;
+use erp_party::{
+    CreatePartyAddressRequest, CreatePartyBankAccountRequest, CreatePartyContactRequest, CreatePartyRequest,
+    CreatePartyTaxProfileRequest, PageView, PartyAddressListParams, PartyAddressView,
+    PartyBankAccountListParams, PartyBankAccountView, PartyContactListParams, PartyContactView,
+    PartyDetailView, PartyListParams, PartyRevisionListParams, PartyRevisionView, PartyTaxProfileListParams,
+    PartyTaxProfileView, PartyView, UpdatePartyAddressRequest, UpdatePartyBankAccountRequest,
+    UpdatePartyContactRequest, UpdatePartyRequest, UpdatePartyTaxProfileRequest,
+};
+
+use crate::http::errors::Result;
+use crate::http::extractor::{Json, Query};
+use crate::http::response::ApiResponse;
+use crate::http::state::HttpState;
+use crate::wiring::MongoSupplierRole;
+
+/// 查询主体列表。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `query` - 分页与筛选参数（`keyword`/`party_kind`/`status` 扁平传递）
+///
+/// # 返回
+/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+pub async fn party_list(
+    State(state): State<HttpState>,
+    Query(params): Query<PartyListParams>,
+) -> Result<PageView<PartyView>> {
+    let page = state.application().party_service().party_list(&params).await?;
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 创建主体（同事务建立主体 + 首版修订）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 创建请求
+///
+/// # 返回
+/// 返回新建主体的响应视图。
+pub async fn party_create(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CreatePartyRequest>,
+) -> Result<PartyView> {
+    let view = state.application().party_service().create_party(req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 查询主体详情（主体 + 当前生效修订快照）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 主体 ID
+///
+/// # 返回
+/// 返回主体详情视图。
+pub async fn party_detail(State(state): State<HttpState>, Path(id): Path<String>) -> Result<PartyDetailView> {
+    let view = state.application().party_service().party_detail(&id).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 更新主体（乐观锁 + 追加修订）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 主体 ID
+/// * `req` - 更新请求（含期望版本与新修订快照）
+///
+/// # 返回
+/// 返回更新后主体的响应视图。
+pub async fn party_update(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePartyRequest>,
+) -> Result<PartyView> {
+    let view = state.application().party_service().update_party(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 软删除主体。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 主体 ID
+///
+/// # 返回
+/// 返回统一成功信封。
+pub async fn party_delete(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<()> {
+    delete_party(
+        state.application().db(),
+        state.application().party_service(),
+        MongoSupplierRole::shared(state.application().db()),
+        id,
+        actor,
+    )
+    .await?;
+    Ok(ApiResponse::ok())
+}
+
+/// 查询主体修订列表（版本链历史）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 主体 ID
+/// * `query` - 分页与筛选参数
+///
+/// # 返回
+/// 返回契约形状的分页视图。
+pub async fn party_revision_list(
+    State(state): State<HttpState>,
+    Path(id): Path<String>,
+    Query(params): Query<PartyRevisionListParams>,
+) -> Result<PageView<PartyRevisionView>> {
+    let page = state.application().party_service().party_revision_list(&id, &params).await?;
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 查询联系人列表（敏感字段不进投影）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 主体 ID
+/// * `query` - 分页与筛选参数
+///
+/// # 返回
+/// 返回契约形状的分页视图。
+pub async fn party_contact_list(
+    State(state): State<HttpState>,
+    Path(id): Path<String>,
+    Query(params): Query<PartyContactListParams>,
+) -> Result<PageView<PartyContactView>> {
+    let page = state.application().party_contact_service().party_contact_list(&id, &params).await?;
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 创建联系人（手机号为明文入参，实体只保留指纹与密文）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 主体 ID
+/// * `req` - 创建请求
+///
+/// # 返回
+/// 返回新建联系人的响应视图。
+pub async fn party_contact_create(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CreatePartyContactRequest>,
+) -> Result<PartyContactView> {
+    let view = state.application().party_contact_service().create_party_contact(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 更新联系人（仅生命周期字段）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 联系人 ID
+/// * `req` - 更新请求（含期望版本）
+///
+/// # 返回
+/// 返回更新后联系人的响应视图。
+pub async fn party_contact_update(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePartyContactRequest>,
+) -> Result<PartyContactView> {
+    let view = state.application().party_contact_service().update_party_contact(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 查询地址列表（敏感字段不进投影）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 主体 ID
+/// * `query` - 分页与筛选参数
+///
+/// # 返回
+/// 返回契约形状的分页视图。
+pub async fn party_address_list(
+    State(state): State<HttpState>,
+    Path(id): Path<String>,
+    Query(params): Query<PartyAddressListParams>,
+) -> Result<PageView<PartyAddressView>> {
+    let page = state.application().party_address_service().party_address_list(&id, &params).await?;
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 创建地址（地址内容为明文入参，实体只保留指纹与密文）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 主体 ID
+/// * `req` - 创建请求
+///
+/// # 返回
+/// 返回新建地址的响应视图。
+pub async fn party_address_create(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CreatePartyAddressRequest>,
+) -> Result<PartyAddressView> {
+    let view = state.application().party_address_service().create_party_address(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 更新地址（仅生命周期字段）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 地址 ID
+/// * `req` - 更新请求（含期望版本）
+///
+/// # 返回
+/// 返回更新后地址的响应视图。
+pub async fn party_address_update(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePartyAddressRequest>,
+) -> Result<PartyAddressView> {
+    let view = state.application().party_address_service().update_party_address(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 查询税务资料列表。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 主体 ID
+/// * `query` - 分页与筛选参数
+///
+/// # 返回
+/// 返回契约形状的分页视图。
+pub async fn party_tax_profile_list(
+    State(state): State<HttpState>,
+    Path(id): Path<String>,
+    Query(params): Query<PartyTaxProfileListParams>,
+) -> Result<PageView<PartyTaxProfileView>> {
+    let page = state.application().party_tax_profile_service().party_tax_profile_list(&id, &params).await?;
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 创建税务资料。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 主体 ID
+/// * `req` - 创建请求
+///
+/// # 返回
+/// 返回新建税务资料的响应视图。
+pub async fn party_tax_profile_create(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CreatePartyTaxProfileRequest>,
+) -> Result<PartyTaxProfileView> {
+    let view =
+        state.application().party_tax_profile_service().create_party_tax_profile(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 更新税务资料（仅生命周期字段）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 税务资料 ID
+/// * `req` - 更新请求（含期望版本）
+///
+/// # 返回
+/// 返回更新后税务资料的响应视图。
+pub async fn party_tax_profile_update(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePartyTaxProfileRequest>,
+) -> Result<PartyTaxProfileView> {
+    let view =
+        state.application().party_tax_profile_service().update_party_tax_profile(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 查询银行账户列表（敏感字段不进投影）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 主体 ID
+/// * `query` - 分页与筛选参数
+///
+/// # 返回
+/// 返回契约形状的分页视图。
+pub async fn party_bank_account_list(
+    State(state): State<HttpState>,
+    Path(id): Path<String>,
+    Query(params): Query<PartyBankAccountListParams>,
+) -> Result<PageView<PartyBankAccountView>> {
+    let page = state.application().party_bank_account_service().party_bank_account_list(&id, &params).await?;
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 创建银行账户（账号为明文入参，实体只保留指纹与密文）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 主体 ID
+/// * `req` - 创建请求
+///
+/// # 返回
+/// 返回新建银行账户的响应视图。
+pub async fn party_bank_account_create(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CreatePartyBankAccountRequest>,
+) -> Result<PartyBankAccountView> {
+    let view =
+        state.application().party_bank_account_service().create_party_bank_account(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 更新银行账户（仅生命周期字段）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 银行账户 ID
+/// * `req` - 更新请求（含期望版本）
+///
+/// # 返回
+/// 返回更新后银行账户的响应视图。
+pub async fn party_bank_account_update(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePartyBankAccountRequest>,
+) -> Result<PartyBankAccountView> {
+    let view =
+        state.application().party_bank_account_service().update_party_bank_account(&id, req, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+pub mod directory;

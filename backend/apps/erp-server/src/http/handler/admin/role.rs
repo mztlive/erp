@@ -1,0 +1,69 @@
+use application_core::AuditActor;
+use axum::extract::{Extension, Path, State};
+use erp_identity::{CreateRoleParams, RoleItem, UpdateRoleParams};
+use validator::Validate;
+
+use crate::http::errors::Result;
+use crate::http::extractor::Json;
+use crate::http::response::ApiResponse;
+use crate::http::state::HttpState;
+
+/// 创建角色并写入 Casbin 权限策略，返回角色身份用于继续配置范围。
+///
+/// # 参数
+/// * `state` - 应用状态。
+/// * `actor` - 已认证操作人。
+/// * `req` - 名称和操作权限。
+/// # 返回
+/// 新角色 ID；客户端继续打开该角色编辑页。
+/// # 错误
+/// 参数、授权或持久化校验失败时返回统一错误。
+pub async fn create_role(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CreateRoleParams>,
+) -> Result<String> {
+    req.validate()?;
+    let role = state.application().rbac().create_role(req, actor).await?;
+
+    Ok(ApiResponse::ok_with_data(role.base.id.to_string()))
+}
+
+/// 查询全部角色及其 Casbin 权限策略。
+pub async fn list_roles(State(state): State<HttpState>) -> Result<Vec<RoleItem>> {
+    let items = state.application().rbac().role_list().await?;
+    Ok(ApiResponse::ok_with_data(items))
+}
+
+/// 查询当前可分配的启用角色。
+pub async fn list_assignable_roles(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<Vec<RoleItem>> {
+    let items = state.application().rbac().assignable_role_list(&actor).await?;
+    Ok(ApiResponse::ok_with_data(items))
+}
+
+/// 更新角色与 Casbin 权限策略。
+pub async fn update_role(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateRoleParams>,
+) -> Result<()> {
+    req.validate()?;
+    state.application().rbac().update_role(&id, req, actor).await?;
+
+    Ok(ApiResponse::<()>::ok())
+}
+
+/// 删除非系统角色及其 Casbin policy/绑定。
+pub async fn delete_role(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<()> {
+    state.application().rbac().delete_role(&id, actor).await?;
+
+    Ok(ApiResponse::<()>::ok())
+}

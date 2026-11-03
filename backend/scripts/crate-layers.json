@@ -704,10 +704,10 @@
         "crates/testing/test-support"
       ]
     },
-    "web-api": {
+    "erp-server": {
       "layer": "apps",
       "paths": [
-        "apps/web-api"
+        "apps/erp-server"
       ]
     }
   }

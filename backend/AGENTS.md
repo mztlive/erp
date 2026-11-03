@@ -11,22 +11,16 @@
 ```text
 backend/
 ├── apps/
-│   ├── web-api/                      # Axum 协议层、AppState 装配、后台 worker 生命周期
-│   │   ├── build.rs                  # 由显式权限目录和路由生成前后端权限
-│   │   ├── examples/                 # 真实 Mongo 验收例程（禁新增/修改/执行）
+│   ├── erp-server/                   # 服务端组合根；web-api 与 erp-worker 二进制
+│   │   ├── build.rs                  # 显式权限目录和 HTTP 路由生成权限
+│   │   ├── examples/                 # 历史验收材料（禁新增/修改/执行；不自动构建）
 │   │   └── src/
-│   │       ├── app_state.rs
-│   │       ├── indexes.rs            # 全域索引登记
-│   │       └── core/
-│   │           ├── auth/             # JWT
-│   │           ├── middleware/       # authenticate、with_permission（RBAC）
-│   │           ├── handler/<domain>/ # 协议适配
-│   │           ├── routes/           # public.rs、account.rs、admin.rs、<domain>.rs
-│   │           ├── tracing/          # 日志与请求 tracing
-│   │           ├── errors.rs
-│   │           ├── response.rs       # ApiResponse
-│   │           ├── rate_limit.rs
-│   │           └── upload.rs
+│   │       ├── bootstrap.rs          # 配置、资源与启动初始化
+│   │       ├── http/                 # HttpState、handler、routes、JWT、请求任务
+│   │       ├── worker/               # 常驻消费、XXL、监督与停止
+│   │       ├── wiring/               # Application、跨域 Port 接线与业务能力工厂
+│   │       ├── runtime/              # 信号、服务排空与进程观测
+│   │       └── indexes.rs            # 全域索引登记
 │   └── cli/                          # init-admin、reset-password
 ├── crates/
 │   ├── domains/                     # 19 个业务领域，包名保持 erp-<domain>
@@ -68,28 +62,30 @@ backend/
 - 单域查询留在本域 Service/Repository，禁放 ReadModel。
 - `erp-core`、`application-core`、`persistence-core` 禁放业务实体（AccountCore、Role、AuditLog、WorkItem、SalesOrder 等），禁依赖业务领域。
 - `bpm` 禁依赖 ERP crate、MongoDB、HTTP、配置、ID 生成器、通知客户端；ERP 审批政策、工作项、BPM 持久化归 `erp-workflow`。
-- `apps/cli` 复用 `erp-identity` 用例与组合层 adapter，禁依赖 `web-api`。
+- `apps/cli` 复用 `erp-identity` 用例与组合层 adapter，禁依赖 `erp-server`。
 - 禁恢复 `entities/`、`database/`、`services/` 旧三层 crate 或转发 façade；`docs/archive/legacy-crates/` 保持原始字节，禁接入 Cargo target。
 - 父目录表示架构层次，包名表示职责；只使用 `backend/Cargo.toml` 这一个 workspace，不为分组目录建立 crate 或嵌套 workspace。
 - 新增或迁移 crate 同步更新 workspace 成员、`scripts/crate-layers.json` 层次与依赖登记、边界检查配置、`crates/README.md` 与该 crate README；依赖方使用 `workspace = true`。所有活动成员必须有登记，缺失 manifest、源码或层次归属必须使门禁失败。
 - 不得恢复旧 `erp-processes`、旧路径别名或兼容 façade；编排间只允许显式登记的单向依赖。具体协议适配不得反向依赖编排或应用。
+
+- `http/` 与 `worker/` 不得相互依赖；`wiring/` 不得依赖 HTTP 类型或启动后台循环。HTTP 专属状态归 `HttpState`，共享资源和业务工厂归 `Application`。
 
 ## 新功能落点
 
 1. **实体**：拥有领域 `entity/` 建/扩实体与值对象，封装不变式。
 2. **仓储**：拥有领域 `repository/` 新增仓储，经本域 `*Ext` trait 暴露（如 `AccessControlExt::accounts()/roles()`）。
 3. **服务**：本域 DTO 与单域用例放拥有领域；跨域写入放 Process，混合读取放 ReadModel。
-4. **Handler**：`apps/web-api/src/core/handler/<domain>/`，返回 `ApiResponse`；请求/响应复用领域或组合层 DTO，禁重复定义同语义结构。仅路径拆分、上下文注入、协议重命名允许薄包装，须实现 `From` 并注释原因。
+4. **Handler**：`apps/erp-server/src/http/handler/<domain>/`，返回 `ApiResponse`；请求/响应复用领域或组合层 DTO，禁重复定义同语义结构。仅路径拆分、上下文注入、协议重命名允许薄包装，须实现 `From` 并注释原因。
 5. **路由**：新增 `routes/<domain>.rs`，在 `routes/admin.rs` 合并，经 `with_permission` 走 JWT + RBAC；组织机构路由挂在 `routes/access_control.rs`。
-6. **索引**：新查询评估索引；在本域 `indexes` 登记，组合根（`apps/web-api/src/indexes.rs`、`apps/cli/src/indexes.rs`）只调用领域公开入口，保持现有逐集合顺序，禁复制索引定义。
+6. **索引**：新查询评估索引；在本域 `indexes` 登记，组合根（`apps/erp-server/src/indexes.rs`、`apps/cli/src/indexes.rs`）只调用领域公开入口，保持现有逐集合顺序，禁复制索引定义。
 7. **测试与门禁**：按 §测试 补单元测试，跑 §质量门禁。
 
 ## HTTP 与权限
 
-- 管理端接口必须通过 `with_permission` 引用 `apps/web-api/permission_catalog/` 中的显式权限常量；处理函数不声明权限属性。公开选品、结算主体登录目录等既有例外保持原认证链路。
+- 管理端接口必须通过 `with_permission` 引用 `apps/erp-server/permission_catalog/` 中的显式权限常量；处理函数不声明权限属性。公开选品、结算主体登录目录等既有例外保持原认证链路。
 - 新权限在所属目录模块定义并加入 `ENTRIES`；新模块登记 `MODULES`。新增受保护路由模块同步登记 `build_permissions.rs` 的扫描清单。权限代码只定义一次，复用时保留接口各自的展示说明。
-- 前端权限由 `apps/web-api/build.rs` 生成，禁手改生成物；改动后跑 `./scripts/check-permissions-drift.sh`。
-- 配置只经 `config::SafeConfig` 读取；上传只经 `AppState` 的 `storage::S3Storage` 写入。
+- 前端权限由 `apps/erp-server/build.rs` 生成，禁手改生成物；改动后跑 `./scripts/check-permissions-drift.sh`。
+- 配置只经 `config::SafeConfig` 读取；上传只经共享 `Application` 的 `storage::S3Storage` 写入。
 
 ## 编码约定
 
@@ -199,7 +195,7 @@ git diff --check
 
 ```bash
 cp config.toml.example config.toml   # 填 app、database、s3
-cargo run -p web-api -- --config-path ./config.toml          # RUST_LOG=info|debug，LOG_FORMAT=json
+cargo run -p erp-server -- --config-path ./config.toml          # RUST_LOG=info|debug，LOG_FORMAT=json
 # 可选：[bootstrap].initial_admin_password 仅在库中还没有 admin 时创建超级管理员，已有账号不改密码
 cargo run -p cli -- init-admin --account admin --name "System Admin"
 cargo run -p cli -- reset-password --account admin             # 密码：--password > ERP_ADMIN_PASSWORD > 交互输入

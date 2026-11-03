@@ -38,7 +38,7 @@ OTEL_EXPORTER_OTLP_PROTOCOL=grpc \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 \
 OTEL_SERVICE_NAME=erp-web-api \
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=local \
-cargo run -p web-api -- --config-path ./config.toml
+cargo run -p erp-server -- --config-path ./config.toml
 ```
 
 ## 4. HTTP span 合同

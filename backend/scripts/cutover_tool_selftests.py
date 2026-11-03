@@ -118,7 +118,7 @@ class CutoverTests(unittest.TestCase):
         self.assertTrue(workspace.workspace_errors(self.root, metadata, set()))
 
     def test_legacy_edges_in_every_entry_composition_and_fixture_kind_fail(self):
-        for name in ("cli", "web-api", "erp-order-to-cash", "erp-read-models", "test-support"):
+        for name in ("cli", "erp-server", "erp-order-to-cash", "erp-read-models", "test-support"):
             for kind in (None, "build", "dev"):
                 for old in sorted(workspace.LEGACY):
                     with self.subTest(package=name, kind=kind, old=old):
@@ -173,7 +173,7 @@ class CutoverTests(unittest.TestCase):
         for source in cases:
             with self.subTest(source=source):
                 self.assertTrue(workspace.legacy_source_errors(Path("source.rs"), source))
-        for name in ("web-api", "cli", "erp-order-to-cash", "erp-read-models", "test-support"):
+        for name in ("erp-server", "cli", "erp-order-to-cash", "erp-read-models", "test-support"):
             with self.subTest(name=name):
                 path = self.fixture.source(name)
                 path.write_text("pub type Failure = services::Error;\n")
@@ -206,7 +206,7 @@ class CutoverTests(unittest.TestCase):
 
     def test_bpm_direct_and_transitive_all_kind_rules_without_old_manifests(self):
         for kind in (None, "build", "dev"):
-            for parent, target in (("bpm", "mongodb"), ("bpm", "erp-sales"), ("cli", "web-api"), ("cli", "bpm"), ("web-api", "bpm")):
+            for parent, target in (("bpm", "mongodb"), ("bpm", "erp-sales"), ("cli", "erp-server"), ("cli", "bpm"), ("erp-server", "bpm")):
                 with self.subTest(kind=kind, parent=parent, target=target):
                     metadata = copy.deepcopy(self.fixture.metadata)
                     package = next(p for p in metadata["packages"] if p["name"] == parent)
@@ -273,19 +273,19 @@ class CutoverTests(unittest.TestCase):
         forbidden = [("erp-sales", "erp-read-models"), ("erp-sales", "erp-order-to-cash"),
                      ("erp-read-models", "erp-order-to-cash"), ("background-runtime", "erp-sales"),
                      ("erp-core", "erp-connector-jd-vop"), ("erp-connector-jd-vop", "erp-order-to-cash"),
-                     ("erp-order-to-cash", "web-api"), ("erp-order-to-cash", "erp-connector-jd-vop"),
+                     ("erp-order-to-cash", "erp-server"), ("erp-order-to-cash", "erp-connector-jd-vop"),
                      ("erp-order-to-cash", "erp-processes"), ("erp-order-to-cash", "erp-master-data"),
                      ("erp-master-data", "erp-demo-data"),
-                     ("cli", "web-api")]
+                     ("cli", "erp-server")]
         for kind in ("normal", "build", "dev"):
             for src, dst in forbidden:
                 with self.subTest(kind=kind, source=src, target=dst):
                     graph = domain.Graph(packages={src, dst}, edges=[domain.DepEdge(src, dst, kind, "alias")])
                     self.assertTrue(domain.forbidden_graph_errors(graph))
         for kind in ("normal", "build"):
-            graph = domain.Graph(edges=[domain.DepEdge("web-api", "test-support", kind)])
+            graph = domain.Graph(edges=[domain.DepEdge("erp-server", "test-support", kind)])
             self.assertTrue(domain.forbidden_graph_errors(graph))
-        graph = domain.Graph(edges=[domain.DepEdge("web-api", "test-support", "dev")])
+        graph = domain.Graph(edges=[domain.DepEdge("erp-server", "test-support", "dev")])
         self.assertEqual(domain.forbidden_graph_errors(graph), [])
 
     def test_negative_workspace_check_has_real_nonzero_process_exit(self):

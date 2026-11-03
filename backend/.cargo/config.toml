@@ -16,7 +16,7 @@ git-fetch-with-cli = true
 # codegen-backend = true
 # feature-unification = true
 
-# # 按 workspace 统一依赖特性：`-p <crate>` 与 `-p web-api` 共用同一份依赖产物，
+# # 按 workspace 统一依赖特性：`-p <crate>` 与 `-p erp-server` 共用同一份依赖产物，
 # # 同一改动只编译一次。dev-dependency 特性不在统一范围内，`cargo test` 仍是独立产物。
 # [resolver]
 # feature-unification = "workspace"

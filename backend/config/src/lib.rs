@@ -89,8 +89,8 @@ const BOOTSTRAP_PASSWORD_PLACEHOLDER: &str = "replace-with-6-to-32-characters";
 /// 可以从 TOML 格式反序列化。
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    /// 必填的启动期调度配置，两个定时入口统一由 XXL-JOB 驱动。
-    pub xxl_job: XxlJobConfig,
+    /// Worker 必填的启动期调度配置；API 可省略，提供时必须合法。
+    pub xxl_job: Option<XxlJobConfig>,
     /// 应用程序特定配置
     pub app: AppConfig,
     /// 数据库特定配置
@@ -373,7 +373,9 @@ impl Config {
         if let Some(mail) = &self.purchase_mail {
             mail.validate()?;
         }
-        self.xxl_job.validate()?;
+        if let Some(xxl_job) = &self.xxl_job {
+            xxl_job.validate()?;
+        }
         validate_s3_config(&self.s3)?;
         validate_bootstrap_password(self.bootstrap.initial_admin_password())?;
         Ok(())
@@ -633,6 +635,15 @@ key_prefix = "erp/uploads"
 public_base_url = "https://cdn.example.com/assets"
 force_path_style = true
 "#;
+
+    #[test]
+    fn api_configuration_can_omit_scheduler_but_provided_scheduler_is_validated() {
+        let api = &MINIMAL_CONFIG[MINIMAL_CONFIG.find("[app]").unwrap()..];
+        assert!(Config::from_toml_str(api).unwrap().xxl_job.is_none());
+        assert!(Config::from_toml_str(MINIMAL_CONFIG).unwrap().xxl_job.is_some());
+        let invalid = MINIMAL_CONFIG.replace("test-token-123456", "short");
+        assert!(Config::from_toml_str(&invalid).is_err());
+    }
 
     #[test]
     fn reload_validates_before_replacing_snapshot() {

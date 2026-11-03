@@ -1,0 +1,124 @@
+//! 财务责任规则 HTTP 适配层。
+
+use application_core::AuditActor;
+use axum::extract::{Extension, Path, State};
+use erp_workflow::service::work_item::{
+    CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
+    FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest,
+};
+use validator::Validate;
+
+use crate::http::errors::Result;
+use crate::http::extractor::Json;
+use crate::http::response::ApiResponse;
+use crate::http::state::HttpState;
+use crate::wiring::workflow::work_item_service;
+
+/// 查询财务责任规则。
+pub async fn finance_responsibility_rule_list(
+    State(state): State<HttpState>,
+) -> Result<Vec<FinanceResponsibilityRuleView>> {
+    let views = work_item_service(state.application().db(), state.application().rbac())
+        .finance_responsibility_rule_list()
+        .await?;
+    Ok(ApiResponse::ok_with_data(views))
+}
+
+/// 创建财务责任规则。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前操作人
+/// * `request` - 规则匹配范围与负责人
+///
+/// # 返回
+/// 返回新规则视图。
+///
+/// # 错误
+/// 请求非法、资格校验或规则创建失败时返回错误。
+pub async fn finance_responsibility_rule_create(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(request): Json<CreateFinanceResponsibilityRuleRequest>,
+) -> Result<FinanceResponsibilityRuleView> {
+    request.validate()?;
+    let view = work_item_service(state.application().db(), state.application().rbac())
+        .create_finance_responsibility_rule(request, actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 整项更新财务责任规则。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前操作人
+/// * `id` - 规则 ID
+/// * `request` - 预期版本与完整规则配置
+///
+/// # 返回
+/// 返回更新后的规则视图。
+///
+/// # 错误
+/// 请求非法、版本冲突、资格校验或规则更新失败时返回错误。
+pub async fn finance_responsibility_rule_update(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdateFinanceResponsibilityRuleRequest>,
+) -> Result<FinanceResponsibilityRuleView> {
+    request.validate()?;
+    let view = work_item_service(state.application().db(), state.application().rbac())
+        .update_finance_responsibility_rule(id, request, actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 查询付款与销项开票的负责人候选。
+pub async fn finance_responsibility_owner_options(
+    State(state): State<HttpState>,
+) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
+    let views = work_item_service(state.application().db(), state.application().rbac())
+        .finance_responsibility_owner_options()
+        .await?;
+    Ok(ApiResponse::ok_with_data(views))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn finance_pool_request_requires_members_and_implemented_strategy() {
+        let request = json!({
+            "operation": "SUPPLIER_PAYMENT", "scope": "DEFAULT",
+            "owner_user_ids": ["payer-a", "payer-b"], "strategy": "ROUND_ROBIN", "status": "active"
+        });
+        let parsed: CreateFinanceResponsibilityRuleRequest = serde_json::from_value(request.clone()).unwrap();
+        parsed.validate().unwrap();
+        assert_eq!(parsed.owner_user_ids, ["payer-a", "payer-b"]);
+        let mut update = request.clone();
+        update["version"] = json!(1);
+        serde_json::from_value::<UpdateFinanceResponsibilityRuleRequest>(update).unwrap().validate().unwrap();
+        let mut empty = request.clone();
+        empty["owner_user_ids"] = json!([]);
+        assert!(
+            serde_json::from_value::<CreateFinanceResponsibilityRuleRequest>(empty)
+                .unwrap()
+                .validate()
+                .is_err()
+        );
+        for field in ["owner_user_id", "strategy"] {
+            let mut invalid = request.clone();
+            invalid[field] = json!("unsupported");
+            assert!(serde_json::from_value::<CreateFinanceResponsibilityRuleRequest>(invalid).is_err());
+        }
+        for field in ["owner_user_ids", "strategy"] {
+            let mut missing = request.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<CreateFinanceResponsibilityRuleRequest>(missing).is_err());
+        }
+    }
+}

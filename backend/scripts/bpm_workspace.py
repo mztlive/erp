@@ -13,7 +13,7 @@ import sys
 from cutover_workspace import active_source_paths, workspace_errors
 from domain_boundaries import BUSINESS_DOMAINS, BPM_FORBIDDEN_PACKAGES, COMPOSITION, cargo_metadata
 
-REQUIRED = {"bpm", "erp-workflow", "erp-core", "entity-macros", "cli", "web-api"}
+REQUIRED = {"bpm", "erp-workflow", "erp-core", "entity-macros", "cli", "erp-server"}
 
 
 def dependency_errors(metadata) -> list[str]:
@@ -28,10 +28,10 @@ def dependency_errors(metadata) -> list[str]:
                      for dep in package.get("dependencies", [])]
     if not any(dep.get("name") == "bpm" and (dep.get("kind") or "normal") == "normal" for dep in workflow_deps):
         errors.append("erp-workflow 必须直接 normal 依赖 bpm")
-    for entry in ("web-api", "cli"):
+    for entry in ("erp-server", "cli"):
         if "bpm" in graph.get(entry, set()):
             errors.append(f"{entry} 不得直接依赖 bpm（含 normal/build/dev）")
-    for start, targets in (("bpm", forbidden), ("cli", {"web-api"})):
+    for start, targets in (("bpm", forbidden), ("cli", {"erp-server"})):
         stack = [(start, [start])]
         seen = set()
         while stack:

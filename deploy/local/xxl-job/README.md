@@ -16,15 +16,15 @@ bash scripts/start-xxl-job.sh
 
 ## 2. 配置 ERP
 
-启动脚本生成 `.local/xxl-job/erp-config.toml`。将其完整合入本地 API 和 Worker 配置，替换已有 `[xxl_job]` 节；只配置 admin_url、executor_url、app_name、access_token，不配置 enabled 或任务 ID。
+启动脚本生成 `.local/xxl-job/erp-config.toml`。将其完整合入本地 Worker 配置，替换已有 `[xxl_job]` 节；API 可省略该节，提供时必须完整且合法；只配置 admin_url、executor_url、app_name、access_token，不配置 enabled 或任务 ID。
 
 API 的 `app.port` 使用 `10001`；Worker 使用 `10002`，并保存为 `backend/config.worker.local.toml`。两个文件必须保持相同业务数据库、业务密钥及供应商配置。Worker 的 `executor_url` 使用 `http://host.docker.internal:10002`，供容器内调度中心连接宿主机。
 
 在 `backend/` 分别启动两个进程：
 
 ```bash
-cargo run -p web-api --bin web-api -- --config-path ./config.toml
-cargo run -p web-api --bin erp-worker -- --config-path ./config.worker.local.toml
+cargo run -p erp-server --bin web-api -- --config-path ./config.toml
+cargo run -p erp-server --bin erp-worker -- --config-path ./config.worker.local.toml
 ```
 
 API 固定不运行后台任务。Worker 必须装配供应商跟踪能力，并加载完整 XXL-JOB 配置；不支持内嵌模式或本地周期调度。

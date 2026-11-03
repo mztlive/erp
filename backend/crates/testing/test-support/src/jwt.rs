@@ -32,7 +32,7 @@ const ACCOUNT_KIND_ADMIN: &str = "admin";
 
 /// 为种子账号签发后台 JWT。
 ///
-/// 复制 `apps/web-api/src/core/auth/jwt.rs` 的 token 结构与 HMAC-SHA256
+/// 复制 `apps/erp-server/src/http/auth/jwt.rs` 的 token 结构与 HMAC-SHA256
 /// 签名算法（标准声明 `sub`/`exp` + 私有声明 `id`/`account`/
 /// `subject_kind`/`account_kind`/`account_version`）。本 crate 不依赖
 /// web-api，只能复制格式；密钥必须与构造 AppState 时使用的 `app.secret`

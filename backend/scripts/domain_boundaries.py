@@ -62,7 +62,7 @@ BPM_FORBIDDEN_PACKAGES = {
     "entities",
     "database",
     "services",
-    "web-api",
+    "erp-server",
     "config",
     "mongodb",
     "axum",
@@ -72,7 +72,7 @@ PLANNED_DOMAIN_PACKAGES = FOUNDATION | COMPOSITION | BUSINESS_DOMAINS
 KINDS = ("normal", "build", "dev")
 CUTOVER_REQUIRED_PACKAGES = (
     FOUNDATION | {"erp-read-models"} | (BUSINESS_DOMAINS - {"erp-commerce"})
-    | {"bpm", "cli", "web-api", "config", "entity-core", "entity-macros",
+    | {"bpm", "cli", "erp-server", "config", "entity-core", "entity-macros",
        "storage", "aliyun-ocr", CONTRACT_RECOGNITION, "id-generator", "test-support",
        "background-runtime", "erp-connector-jd-vop", "erp-connector-dangaoshushu",
        "erp-master-data", "erp-data-import", "erp-supplier-catalog", "erp-supplier-orders",
@@ -341,10 +341,10 @@ def forbidden_graph_errors(graph: Graph) -> list[str]:
             errors.append(f"合同识别适配器必须由应用装配，领域和流程仅持有 Port: {label}")
         if src == CONTRACT_RECOGNITION and dst in (
             FOUNDATION | (BUSINESS_DOMAINS - {"erp-contract"}) | COMPOSITION
-            | {"config", "web-api", "cli", "mongodb", "storage", "test-support"}
+            | {"config", "erp-server", "cli", "mongodb", "storage", "test-support"}
         ):
             errors.append(f"合同识别适配器只可依赖合同 Port 和技术客户端: {label}")
-        if src == "aliyun-ocr" and dst in FOUNDATION | BUSINESS_DOMAINS | COMPOSITION | {CONTRACT_RECOGNITION, "config", "web-api", "cli"}:
+        if src == "aliyun-ocr" and dst in FOUNDATION | BUSINESS_DOMAINS | COMPOSITION | {CONTRACT_RECOGNITION, "config", "erp-server", "cli"}:
             errors.append(f"OCR 技术客户端不得依赖业务或应用组合层: {label}")
         if src in FOUNDATION | BUSINESS_DOMAINS and dst in OLD_BUSINESS:
             errors.append(f"新领域/基础 crate 不得依赖旧三层: {label}")

@@ -1,0 +1,43 @@
+use axum::extract::DefaultBodyLimit;
+use axum::routing::{get, post};
+use axum::{Router, middleware};
+
+use crate::http::handler::approval_instance::copies;
+use crate::http::handler::{auth, data_transfer as transfers, region};
+use crate::http::middleware::authenticate;
+use crate::http::state::HttpState;
+
+/// 当前账号相关路由入口。
+///
+/// # 参数
+/// * `state` - 应用状态
+///
+/// # 返回值
+/// 返回账号相关路由
+pub fn routes(state: HttpState) -> Router<HttpState> {
+    Router::new()
+        .route("/profile", get(auth::profile::account_profile))
+        .route("/approval-leader", get(auth::profile::own_approval_leader))
+        .route("/regions", get(region::list_regions))
+        .merge(copy_routes())
+        .route(
+            "/data-transfers",
+            get(transfers::list).post(transfers::submit).layer(DefaultBodyLimit::max(76 * 1024 * 1024)),
+        )
+        .route("/data-transfers/{id}", get(transfers::status))
+        .route("/data-transfers/{id}/context", get(transfers::context))
+        .route("/data-transfers/{id}/recover", post(transfers::recover))
+        .route("/data-transfers/{id}/result", get(transfers::result))
+        .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
+        .with_state(state)
+}
+
+// 个人收件接口仅要求后台登录；领域服务逐条验证本人收件和冻结资料边界。
+fn copy_routes() -> Router<HttpState> {
+    Router::new()
+        .route("/approval-copies", get(copies::list))
+        .route("/approval-copies/read", post(copies::mark_read))
+        .route("/approval-copies/{id}", get(copies::detail))
+        .route("/approval-copies/{id}/materials/{file}/preview", get(copies::preview))
+        .route("/approval-copies/{id}/materials/{file}/download", get(copies::download))
+}

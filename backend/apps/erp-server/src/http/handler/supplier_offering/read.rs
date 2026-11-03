@@ -1,0 +1,82 @@
+//! 供给资料与历史条款的只读 HTTP 适配。
+
+use application_core::AuditActor;
+use axum::Extension;
+use axum::extract::{Path, State};
+use erp_read_models::supplier_center::offering::SupplierOfferingView;
+use erp_read_models::supplier_center::{MongoOfferingProcurementOwners, SupplierOfferingReadService};
+use erp_supply::SupplierOfferingService;
+use erp_supply::dto::offering_history::{OfferingHistoryPage, OfferingHistoryParams};
+
+use super::can_view_costs;
+use crate::http::errors::Result;
+use crate::http::extractor::Query;
+use crate::http::middleware::RbacSubject;
+use crate::http::response::ApiResponse;
+use crate::http::state::HttpState;
+use crate::wiring::MongoOfferingDataScope;
+
+/// 查询供给资料，复用列表动作和供给自身的数据范围。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `subject` - 成本权限主体
+/// * `actor` - 范围授权操作人
+/// * `id` - 供给稳定 ID
+///
+/// # 返回
+/// 返回已按权限脱敏的当前供给资料。
+///
+/// # 错误
+/// 无动作权限返回 Forbidden；越权对象与缺失对象返回 NotFound。
+pub async fn detail(
+    State(state): State<HttpState>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<SupplierOfferingView> {
+    let mut view = SupplierOfferingReadService::new(
+        state.application().db(),
+        MongoOfferingDataScope::shared(state.application().db(), state.application().rbac()),
+        MongoOfferingProcurementOwners::shared(state.application().db()),
+    )
+    .detail(&id, &actor)
+    .await?;
+    if !can_view_costs(&state, &subject).await? {
+        view.redact_costs();
+    }
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 查询供给历史条款，每次重新校验对象范围与成本权限。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `subject` - 成本权限主体
+/// * `actor` - 范围授权操作人
+/// * `id` - 供给稳定 ID
+/// * `params` - 历史版本游标
+///
+/// # 返回
+/// 返回脱敏后的条款历史页，不包含实时可供数量。
+///
+/// # 错误
+/// 游标非法、权限不足、对象不可见或存储失败时返回统一错误。
+pub async fn history(
+    State(state): State<HttpState>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Query(params): Query<OfferingHistoryParams>,
+) -> Result<OfferingHistoryPage> {
+    let mut page = SupplierOfferingService::new(state.application().db())
+        .with_data_scope(MongoOfferingDataScope::shared(state.application().db(), state.application().rbac()))
+        .history(&id, params, &actor)
+        .await?;
+    if !can_view_costs(&state, &subject).await? {
+        for item in &mut page.items {
+            item.redact_costs();
+        }
+    }
+    Ok(ApiResponse::ok_with_data(page))
+}

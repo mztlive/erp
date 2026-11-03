@@ -1,0 +1,244 @@
+//! 域 D14 `sales_review` 的 HTTP handler。
+//!
+//! 仅保留销售变更单生命周期。卡券专用审批、采购确认与低毛利入口已删除。
+
+use application_core::AuditActor;
+use axum::Extension;
+use axum::extract::{Path, State};
+use erp_order_to_cash::sales_change::SalesChangeProcess;
+use erp_read_models::sales_center::review::{
+    SalesChangeListView, SalesChangeOrderDetailView, SalesChangeReadService,
+};
+use erp_sales::dto::sales_review::{
+    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, SalesChangeDraftView,
+    SalesChangeOrderListParams, SaveSalesChangeDraftRequest, SubmitSalesChangeRequest,
+    VoidSalesChangeOrderRequest,
+};
+
+use crate::http::errors::Result;
+use crate::http::extractor::{Json, Query};
+use crate::http::response::ApiResponse;
+use crate::http::state::HttpState;
+
+/// 读取原变更可修改内容。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 认证账号
+/// * `id` - 原变更单身份
+///
+/// # 返回
+/// 返回完整目标草稿与版本。
+///
+/// # 错误
+/// 无权限、状态非法或缺单时拒绝。
+pub async fn sales_change_draft(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<SalesChangeDraftView> {
+    Ok(ApiResponse::ok_with_data(
+        SalesChangeProcess::new(
+            state.application().db(),
+            state.application().rbac(),
+            crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        )
+        .draft(&id, &actor)
+        .await?,
+    ))
+}
+
+/// 保存原变更可修改内容。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 认证账号
+/// * `id` - 原变更单身份
+/// * `request` - 两项版本与完整目标内容
+///
+/// # 返回
+/// 返回保存后的目标草稿。
+///
+/// # 错误
+/// 无权限、版本变化、状态非法或输入不成立时拒绝。
+pub async fn sales_change_save_draft(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<SaveSalesChangeDraftRequest>,
+) -> Result<SalesChangeDraftView> {
+    Ok(ApiResponse::ok_with_data(
+        SalesChangeProcess::new(
+            state.application().db(),
+            state.application().rbac(),
+            crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        )
+        .save_draft(&id, request, &actor)
+        .await?,
+    ))
+}
+
+/// 查询销售变更单列表（W05 变更轨）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `query` - 分页与筛选参数（`sales_order_id`/`status` 扁平传递，含跨页 `scope_version`）
+///
+/// # 返回
+/// 返回带范围版本的分页视图。
+///
+/// # 错误
+/// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
+///
+/// # 关键业务约束
+/// 沿来源销售单责任接入；缺范围返回空集并标记 `no_scope`。
+pub async fn sales_change_order_list(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<SalesChangeOrderListParams>,
+) -> Result<SalesChangeListView> {
+    let page = SalesChangeReadService::with_rbac(state.application().db(), state.application().rbac())
+        .sales_change_order_list(&params, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 查询销售变更单详情。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `id` - 变更单 ID
+///
+/// # 返回
+/// 返回详情视图。
+///
+/// # 错误
+/// 无动作权限、不可见或不存在时拒绝。
+///
+/// # 关键业务约束
+/// 列表已授权不能作为详情凭证；沿来源销售单 detail 动作重验。
+pub async fn sales_change_order_detail(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<SalesChangeOrderDetailView> {
+    let view = SalesChangeReadService::with_rbac(state.application().db(), state.application().rbac())
+        .sales_change_order_detail(&id, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 创建销售变更单（草稿 + 变更工作副本原子形成）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 创建请求（含变更类型、原因与目标草稿）
+///
+/// # 返回
+/// 返回变更单详情视图。
+pub async fn sales_change_order_create(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CreateSalesChangeOrderRequest>,
+) -> Result<SalesChangeOrderDetailView> {
+    let rbac = state.application().rbac();
+    let view = SalesChangeProcess::new(
+        state.application().db(),
+        state.application().rbac(),
+        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+    )
+    .with_object_read(state.application().approval_object_read())
+    .create_sales_change_order(req, &actor, &rbac)
+    .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 提交销售变更并启动统一审批。客户端不得选择定义或审批人。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 变更单 ID
+/// * `req` - 提交请求（含期望版本与幂等键）
+///
+/// # 返回
+/// 返回变更单详情视图。
+pub async fn sales_change_order_submit_impact(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<SubmitSalesChangeRequest>,
+) -> Result<SalesChangeOrderDetailView> {
+    let view = SalesChangeProcess::new(
+        state.application().db(),
+        state.application().rbac(),
+        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+    )
+    .with_object_read(state.application().approval_object_read())
+    .submit_sales_change(&id, req, &actor)
+    .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 作废销售变更单（仅草稿态，乐观锁）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 变更单 ID
+/// * `req` - 作废请求（含期望版本）
+///
+/// # 返回
+/// 返回变更单详情视图。
+pub async fn sales_change_order_void(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<VoidSalesChangeOrderRequest>,
+) -> Result<SalesChangeOrderDetailView> {
+    let view = SalesChangeProcess::new(
+        state.application().db(),
+        state.application().rbac(),
+        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+    )
+    .with_object_read(state.application().approval_object_read())
+    .void_sales_change(&id, req, &actor)
+    .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 撤回尚未最终通过的销售变更审批，回到可修正草稿。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 变更单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 返回变更单详情视图。
+pub async fn sales_change_order_cancel_approval(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CancelSalesChangeApprovalRequest>,
+) -> Result<SalesChangeOrderDetailView> {
+    let view = SalesChangeProcess::new(
+        state.application().db(),
+        state.application().rbac(),
+        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+    )
+    .with_object_read(state.application().approval_object_read())
+    .cancel_approval(&id, req, &actor)
+    .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}

@@ -1,7 +1,7 @@
 /**
  * fetch 封装基座：base URL、JWT 头、超时、ApiResponse 信封统一解包。
  *
- * 后端信封（backend/apps/web-api/src/core/response.rs）真实字段：
+ * 后端信封（backend/apps/erp-server/src/http/response.rs）真实字段：
  * { status, errorMessage, code?, requiredPermission?, fieldErrors?, retryable?, data, success }
  * 成功判定：HTTP 2xx 且信封 success === true，业务数据取信封 data。
  *

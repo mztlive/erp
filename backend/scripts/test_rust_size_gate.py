@@ -157,9 +157,9 @@ where
 
     def test_build_rs_skips_function_limit(self):
         source = fn_body(8, "generate")
-        self.assertFalse(self.rules("apps/web-api/build.rs", source, max_file=800, max_fn=3))
+        self.assertFalse(self.rules("apps/erp-server/build.rs", source, max_file=800, max_fn=3))
         long_file = "\n".join(f"const C{i}: u8 = 0;" for i in range(5)) + "\n"
-        self.assertIn("SIZE-FILE", self.rules("apps/web-api/build.rs", long_file, max_file=3, max_fn=50))
+        self.assertIn("SIZE-FILE", self.rules("apps/erp-server/build.rs", long_file, max_file=3, max_fn=50))
 
     def test_cfg_test_mod_semi_is_collected(self):
         source = "fn prod() {}\n#[cfg(test)]\nmod serialization_contract;\n"
@@ -181,7 +181,7 @@ where
             "crates/erp-x/src/serialization_contract.rs": helper,
             "crates/erp-x/src/foo_tests.rs": helper,
             "crates/erp-x/tests/smoke.rs": helper,
-            "apps/web-api/examples/s2_verify.rs": helper + fn_body(20, "verify"),
+            "apps/erp-server/examples/s2_verify.rs": helper + fn_body(20, "verify"),
             "crates/erp-x/src/wide.rs": "\n".join(f"const C{i}: u8 = 0;" for i in range(10)) + "\n",
         }
         findings = gate.scan_workspace(sources, max_file=8, max_fn=50)
@@ -201,7 +201,7 @@ where
         self.assertTrue(gate.is_excluded_path("crates/platform/id-generator/tests/smoke.rs"))
         self.assertTrue(gate.is_excluded_path("crates/erp-x/src/foo/tests.rs"))
         self.assertTrue(gate.is_excluded_path("crates/erp-x/src/foo_tests.rs"))
-        self.assertTrue(gate.is_excluded_path("apps/web-api/examples/s2_verify.rs"))
+        self.assertTrue(gate.is_excluded_path("apps/erp-server/examples/s2_verify.rs"))
         self.assertFalse(gate.is_excluded_path("crates/erp-x/src/lib.rs"))
         self.assertFalse(gate.is_excluded_path("crates/erp-x/src/serialization_contract.rs"))
 

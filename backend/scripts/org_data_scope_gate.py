@@ -23,7 +23,7 @@ from domain_boundaries import BUSINESS_DOMAINS, COMPOSITION, FOUNDATION, cargo_m
 
 RESOLVER = "crates/domains/erp-identity/src/service/access_control/resolve.rs"
 CUSTOMER_PORT = "crates/domains/erp-customer/src/ports/data_scope.rs"
-CUSTOMER_ADAPTER = "apps/web-api/src/wiring/customer_data_scope.rs"
+CUSTOMER_ADAPTER = "apps/erp-server/src/wiring/customer_data_scope.rs"
 CUSTOMER_ACCESS = "crates/domains/erp-customer/src/service/customer/access.rs"
 REQUIRED = (RESOLVER, CUSTOMER_PORT, CUSTOMER_ADAPTER, CUSTOMER_ACCESS)
 # These labels describe existing migration gaps, never exemptions from failure.
@@ -32,7 +32,7 @@ LEGACY = {
     "crates/domains/erp-workflow/src/service/work_item/access.rs",
     "crates/domains/erp-workflow/src/service/approval/business_adapter.rs",
     "crates/domains/erp-workflow/src/service/approval/scope.rs",
-    "apps/web-api/src/wiring/workflow/authorization.rs",
+    "apps/erp-server/src/wiring/workflow/authorization.rs",
 }
 RAW = r"\b(?:scope_type|scope_targets)\b"
 INTERNAL = r"\b(?:AuthorizedDataScope|SharedRbacService|OrganizationState|OrgTree|ScopeResolution|DataScopeService)\b"
@@ -95,7 +95,7 @@ def scan_source(path: str, source: str) -> list[Finding]:
     parts = path.split("/")
     package = parts[parts.index("src") - 1] if "src" in parts and parts[0] == "crates" else ""
     consumer = package in BUSINESS_DOMAINS - {"erp-identity"}
-    composition = package in COMPOSITION or path.startswith(("apps/web-api/src/wiring/", "apps/cli/src/adapters/"))
+    composition = package in COMPOSITION or path.startswith(("apps/erp-server/src/wiring/", "apps/cli/src/adapters/"))
     findings: list[Finding] = []
 
     def reject(rule: str, pattern: str, message: str, category: str = "整改项") -> None:

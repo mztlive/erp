@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 启动（或重启）web-api 并等待健康。
 # 用法: bash scripts/restart-backend.sh [--build]
-#   --build  先执行 cargo build -p web-api（后端代码变更后使用）
+#   --build  先执行 cargo build -p erp-server（后端代码变更后使用）
 #   ERP_WEB_API_OWNED_PID_FILE 由调用方提供私有 PID 文件，并负责退出时关闭服务。
 set -euo pipefail
 
@@ -25,13 +25,13 @@ if pgrep -f "${WEB_API_BIN}" >/dev/null 2>&1; then
 fi
 
 if [[ "${1:-}" == "--build" ]]; then
-    echo "构建 web-api（cargo build -p web-api）..."
-    (cd "${BACKEND_DIR}" && cargo build -p web-api)
+    echo "构建 web-api（cargo build -p erp-server）..."
+    (cd "${BACKEND_DIR}" && cargo build -p erp-server)
 fi
 
 if [[ ! -x "${WEB_API_BIN}" ]]; then
     echo "未找到 ${WEB_API_BIN}，先构建..."
-    (cd "${BACKEND_DIR}" && cargo build -p web-api)
+    (cd "${BACKEND_DIR}" && cargo build -p erp-server)
 fi
 
 if [[ ! -x "${WEB_API_BIN}" ]]; then

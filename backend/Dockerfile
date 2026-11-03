@@ -49,7 +49,7 @@ COPY crates ./crates
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --locked --release -p web-api --bin web-api \
+    cargo build --locked --release -p erp-server --bin web-api \
     && install -D /app/target/release/web-api /tmp/bin/web-api
 
 FROM ${DEBIAN_IMAGE} AS runtime

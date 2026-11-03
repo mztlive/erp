@@ -6,7 +6,7 @@
 //! 本 crate 禁止依赖 `database` / `services` / `web-api`：P2/P3 消费方以
 //! dev-dependency 引入本 crate，若本 crate 反向依赖它们会形成环。因此：
 //! - 数据库连接直接使用 `mongodb` crate；
-//! - JWT 只复制 `apps/web-api/src/core/auth/jwt.rs` 的 token 结构与
+//! - JWT 只复制 `apps/erp-server/src/http/auth/jwt.rs` 的 token 结构与
 //!   HMAC-SHA256 签名算法（`mint_jwt`），不引用 web-api 代码；
 //! - HTTP 测试客户端以 `axum::Router` 为参数（`TestApi::new`），由调用方
 //!   提供已经组装好的路由，本 crate 不负责启动服务。

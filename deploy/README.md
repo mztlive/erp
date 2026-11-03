@@ -59,7 +59,7 @@ API 和前端默认 1 副本，PDB `minAvailable: 0`；滚动更新须预留容�
 
 API 的 `/health` 表示进程已经监听；副本集校验和索引创建发生在监听前，startupProbe 允许约 10 分钟。`/ready` 在外部连接器未配置时可能返回 503，不能替换当前探针。
 
-独立任务切换必须执行 [后台执行器合同](../docs/background-worker-contract.md)：先以 `WORKER_ENABLED=false` 发布固定只处理 HTTP 的新 API，等待所有旧 API Pod 退出，再以 `WORKER_ENABLED=true` 发布独立 Worker。两次发布之间后台任务暂时等待。API 与 Worker 使用同一后端镜像 digest 和 Nacos 配置；Worker 提供 `/health`、`/ready` 和必备的受 token 保护的执行器协议，不加载 API 业务路由。首次切换必须使用已经移除内嵌任务的新镜像。
+独立任务切换必须执行 [后台执行器合同](../backend/apps/erp-server/README.md)：先以 `WORKER_ENABLED=false` 发布固定只处理 HTTP 的新 API，等待所有旧 API Pod 退出，再以 `WORKER_ENABLED=true` 发布独立 Worker。两次发布之间后台任务暂时等待。API 与 Worker 使用同一后端镜像 digest 和 Nacos 配置；Worker 提供 `/health`、`/ready` 和必备的受 token 保护的执行器协议，不加载 API 业务路由。首次切换必须使用已经移除内嵌任务的新镜像。
 
 ## 4. 现有资源首次接管
 
@@ -79,4 +79,4 @@ Helm 就绪、镜像核对及 HTTPS 探测通过后，仍须执行实际登录�
 
 本地调试先运行 `kubectl -n infra port-forward --address 127.0.0.1 svc/nacos 8848:8848 9848:9848`，再按 [Config 接入说明](../backend/config/README.md)启动。调试完成停止转发；本机通过不能替代 Pod 验收。仓库离线检查不得连接真实 Nacos、MongoDB 或 S3。
 
-XXL-JOB 配置、任务绑定和切换按 [执行器接入合同](../docs/xxl-job-executor-contract.md) 与 [接入执行步骤](../docs/xxl-job-setup.md) 执行。`WORKER_ENABLED` 只控制 Pod 部署，XXL 驱动由 Nacos 的 `[xxl_job]` 配置决定。
+XXL-JOB 配置、任务绑定和切换按 [执行器接入合同](../backend/apps/erp-server/README.md) 与 [接入执行步骤](local/xxl-job/README.md) 执行。`WORKER_ENABLED` 只控制 Pod 部署，XXL 驱动由 Nacos 的 `[xxl_job]` 配置决定。

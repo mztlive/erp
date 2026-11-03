@@ -11,7 +11,7 @@
 
 ```bash
 # 凭据由 Secret 或受控终端环境注入；本机调试先建立 8848、9848 端口转发。
-cargo run -p web-api -- --enable-nacos \
+cargo run -p erp-server -- --enable-nacos \
   --nacos-addr 127.0.0.1:8848 \
   --nacos-namespace ccf7ec38-1d60-407e-bf2c-7c4654c481d0 \
   --nacos-group DEFAULT_GROUP --nacos-data-id erp
@@ -107,4 +107,4 @@ println!("listen port: {}", snapshot.app.port);
 
 蛋糕叔叔配置不得包含 `connection_id`、`supplier_id`、`environment`。连接 ID 与供应商由后台“供应商 API”连接记录持有，环境由独立部署隔离；新建连接后在页面选择地址和渠道凭据，无需回填内部 ID。配置 `enabled` 只登记技术参数，业务启停由后台连接控制。
 
-`[xxl_job]` 必填，仅包含 admin_url、executor_url、app_name、access_token。任务按 JobHandler 分发，不绑定控制台任务 ID，不提供 enabled 开关或本地调度模式。执行器只由独立 Worker 启动。所有字段启动期固定，配置变更需重启，禁止因远端故障自动降级。详见 [XXL 接入执行步骤](../../docs/xxl-job-setup.md)。
+独立 Worker 必须配置 `[xxl_job]`；API 可省略，提供时必须通过完整校验，仅包含 admin_url、executor_url、app_name、access_token。任务按 JobHandler 分发，不绑定控制台任务 ID，不提供 enabled 开关或本地调度模式。执行器只由独立 Worker 启动。所有字段启动期固定，配置变更需重启，禁止因远端故障自动降级。进程职责与停止规则执行 [服务端应用合同](../apps/erp-server/README.md)。

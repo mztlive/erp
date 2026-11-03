@@ -4,18 +4,18 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 
 ## What’s Included
 
-- **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
-- **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password without depending on `web-api`.
+- **Server application (`apps/erp-server`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
+- **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password without depending on `erp-server`.
 - **Persistence (`crates/foundation/persistence-core`)**: Generic repositories, executors, transaction support, and Mongo helpers. Domain crates own concrete repositories, collection accessors, and index definitions.
-- **Business domains (`crates/domains/erp-*`)**: 19 domains own entities, DTOs, rules, repositories and services. Cross-domain writes belong to `erp-processes`; mixed queries belong to `erp-read-models`. Ordinary domains must not depend on other business domains.
+- **Business domains (`crates/domains/erp-*`)**: 19 domains own entities, DTOs, rules, repositories and services. Cross-domain writes belong to their owning orchestration crate; mixed queries belong to `erp-read-models`. Ordinary domains must not depend on other business domains.
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), S3-compatible object storage (`storage`), and proc macros for entities and permissions.
 
 ## Project Layout
 
-- `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
+- `apps/erp-server/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`http/handler/`), independent Worker (`worker/`), shared composition (`wiring/`) and process lifecycle (`runtime/`).
 - `apps/cli/` – Operator CLI for `init-admin` and `reset-password`.
 - `crates/foundation/` – Shared values (`erp-core`), application contracts (`application-core`) and persistence mechanisms (`persistence-core`).
-- `crates/erp-processes` – Named cross-domain processes and concrete consumer adapters.
+- `apps/erp-server/README.md` – Required ownership, process startup and shutdown contracts.
 - `crates/read-models/erp-read-models` – Mixed queries, display projections and the shared work-item fact reader.
 - Other `crates/domains/erp-*` – Business domains with independent normal/build/dev dependency boundaries.
 - Legacy `database/tests` and `services/tests` – Historical archives only; preserve bytes and exclude them from Cargo targets.
@@ -23,7 +23,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 - `crates/platform/` – Shared technical libraries (`bpm`, `aliyun-ocr`, `id-generator`, `storage`, `entity-*`).
 - `crates/adapters/` – Concrete external protocol and contract recognition adapters.
 - `crates/testing/` – Shared test support, restricted to permitted dev-dependencies.
-- `crates/orchestration/` – Business-specific cross-domain coordination; new crates must not depend on the transitional `erp-processes`.
+- `crates/orchestration/` – Business-specific cross-domain coordination; retired `erp-processes` must not be restored.
 - `config.toml.example` – Minimal local configuration template.
 
 ## API Surface (current)
@@ -55,7 +55,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
    - Required `[s3]` `bucket`, `region`, `endpoint`, `access_key_id`, `secret_access_key`, `session_token`, `key_prefix`, `force_path_style`, `public_base_url`. `public_base_url` is the public bucket or CDN root; the API appends `key_prefix` and the generated object key.
 3. TKE uses Nacos; local development may retain the file above. Inject non-empty `NACOS_CLIENT_USERNAME` and `NACOS_CLIENT_PASSWORD` through a controlled environment. For local Nacos debugging, forward ports 8848 and 9848 first. Database and S3 changes require a restart:
    ```bash
-   cargo run -p web-api -- \
+   cargo run -p erp-server -- \
      --enable-nacos \
      --nacos-addr "127.0.0.1:8848" \
      --nacos-namespace "ccf7ec38-1d60-407e-bf2c-7c4654c481d0" \
@@ -68,7 +68,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 1. Prerequisites: Rust toolchain (edition 2021, rustfmt/clippy), MongoDB instance.
 2. Start the API:
    ```bash
-   RUST_LOG=info cargo run -p web-api -- --config-path ./config.toml
+   RUST_LOG=info cargo run -p erp-server -- --config-path ./config.toml
    # LOG_FORMAT=json to emit JSON tracing
    ```
    OTLP trace export is opt-in. Set a non-empty `OTEL_EXPORTER_OTLP_ENDPOINT` and

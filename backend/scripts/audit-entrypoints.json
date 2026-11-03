@@ -69,7 +69,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。 CLI 仅装配身份治理审计，继续沿用原身份及安全投影合同。"
     },
     {
-      "path": "apps/web-api/src/core/handler/admin/audit_log.rs",
+      "path": "apps/erp-server/src/http/handler/admin/audit_log.rs",
       "function": "list_audit_logs",
       "policy": "Exempt",
       "stage": "SpecialLifecycle",
@@ -83,7 +83,7 @@
       "reason": "仅创建审计查询 Service 并执行授权展示查询；该函数不执行业务写入或生成审计成功事件，查询权限沿管理端既有链路执行。"
     },
     {
-      "path": "apps/web-api/src/core/handler/auth/login.rs",
+      "path": "apps/erp-server/src/http/handler/auth/login.rs",
       "function": "handle_login_failure",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
@@ -97,7 +97,7 @@
       "reason": "登录身份成功或失败通过 record_login_audit 留痕；record_login_audit 采用独立 best effort 写入，记录失败只输出固定警告，不改变原认证/JWT结果。密码和凭据正文不进入事件。"
     },
     {
-      "path": "apps/web-api/src/core/handler/auth/login.rs",
+      "path": "apps/erp-server/src/http/handler/auth/login.rs",
       "function": "handle_login_success",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
@@ -111,7 +111,7 @@
       "reason": "登录身份成功或失败通过 record_login_audit 留痕；record_login_audit 采用独立 best effort 写入，记录失败只输出固定警告，不改变原认证/JWT结果。密码和凭据正文不进入事件。"
     },
     {
-      "path": "apps/web-api/src/core/handler/auth/login.rs",
+      "path": "apps/erp-server/src/http/handler/auth/login.rs",
       "function": "login",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
@@ -125,7 +125,7 @@
       "reason": "登录身份成功或失败通过 record_login_audit 留痕；record_login_audit 采用独立 best effort 写入，记录失败只输出固定警告，不改变原认证/JWT结果。密码和凭据正文不进入事件。"
     },
     {
-      "path": "apps/web-api/src/core/handler/auth/login.rs",
+      "path": "apps/erp-server/src/http/handler/auth/login.rs",
       "function": "record_login_audit",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
@@ -139,7 +139,7 @@
       "reason": "登录身份成功或失败通过 AuditLogService::new 留痕；record_login_audit 采用独立 best effort 写入，记录失败只输出固定警告，不改变原认证/JWT结果。密码和凭据正文不进入事件。"
     },
     {
-      "path": "apps/web-api/src/core/handler/supplier_portal/auth.rs",
+      "path": "apps/erp-server/src/http/handler/supplier_portal/auth.rs",
       "function": "login",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
@@ -153,7 +153,7 @@
       "reason": "门户登录按真实 Supplier 身份独立留痕；仅记录账号、结果和固定渠道说明，不记录密码。审计失败只输出固定警告，不改变认证结果。"
     },
     {
-      "path": "apps/web-api/src/core/handler/supplier_portal/auth.rs",
+      "path": "apps/erp-server/src/http/handler/supplier_portal/auth.rs",
       "function": "record_login_audit",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
@@ -167,7 +167,7 @@
       "reason": "门户登录按真实 Supplier 身份独立留痕；仅记录账号、结果和固定渠道说明，不记录密码。审计失败只输出固定警告，不改变认证结果。"
     },
     {
-      "path": "apps/web-api/src/wiring/audit_conversion.rs",
+      "path": "apps/erp-server/src/wiring/audit_conversion.rs",
       "function": "to_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -183,7 +183,7 @@
       "reason": "领域审计快照由统一转换宏实现 PreparedAudit::to_log，经 AuditLog::new、prepare_business_log 校验安全事件，并保留原 ID、版本、时间、操作人姓名、请求编号与事件序号；本步骤只构造审计实体，不读取当前人员资料、不持久化或开启事务。正式事件由所属用例的同 Executor 审计适配器记录。"
     },
     {
-      "path": "apps/web-api/src/wiring/catalog.rs",
+      "path": "apps/erp-server/src/wiring/catalog.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -197,7 +197,7 @@
       "reason": "目录审计 adapter 的唯一 persist 实现以 persist_log 接入审计，接收并复用调用方 Executor，不开启事务或恢复业务命令。原同名附件批次 persist 已迁 erp-file-assets，仅委派 PendingAttachmentBatch；文件资产与审计的实际批次持久化仍由已登记 PendingFileAssets::persist 执行。"
     },
     {
-      "path": "apps/web-api/src/wiring/catalog.rs",
+      "path": "apps/erp-server/src/wiring/catalog.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -211,7 +211,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/catalog.rs",
+      "path": "apps/erp-server/src/wiring/catalog.rs",
       "function": "resource_log_with_message",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -225,7 +225,7 @@
       "reason": "元数据工厂/准备步骤 resource_log_with_message 通过 .resource_log_with_message 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/contract.rs",
+      "path": "apps/erp-server/src/wiring/contract.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -239,7 +239,7 @@
       "reason": "组合层适配器以 persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/contract.rs",
+      "path": "apps/erp-server/src/wiring/contract.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -253,7 +253,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/customer.rs",
+      "path": "apps/erp-server/src/wiring/customer.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -267,7 +267,7 @@
       "reason": "组合层适配器以 persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/customer.rs",
+      "path": "apps/erp-server/src/wiring/customer.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -281,7 +281,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/identity_audit.rs",
+      "path": "apps/erp-server/src/wiring/identity_audit.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -295,7 +295,7 @@
       "reason": "组合层适配器以 persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/identity_audit.rs",
+      "path": "apps/erp-server/src/wiring/identity_audit.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -309,7 +309,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/inventory.rs",
+      "path": "apps/erp-server/src/wiring/inventory.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -323,7 +323,7 @@
       "reason": "组合层适配器以 persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/inventory.rs",
+      "path": "apps/erp-server/src/wiring/inventory.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -337,7 +337,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/party.rs",
+      "path": "apps/erp-server/src/wiring/party.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -351,7 +351,7 @@
       "reason": "组合层适配器以 persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/party.rs",
+      "path": "apps/erp-server/src/wiring/party.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -365,7 +365,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/support_audit.rs",
+      "path": "apps/erp-server/src/wiring/support_audit.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -379,7 +379,7 @@
       "reason": "组合层适配器以 persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/support_audit.rs",
+      "path": "apps/erp-server/src/wiring/support_audit.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -393,7 +393,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/warehouse.rs",
+      "path": "apps/erp-server/src/wiring/warehouse.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -407,7 +407,7 @@
       "reason": "组合层适配器以 persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/warehouse.rs",
+      "path": "apps/erp-server/src/wiring/warehouse.rs",
       "function": "resource_log",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -421,7 +421,7 @@
       "reason": "元数据工厂/准备步骤 resource_log 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/warehouse.rs",
+      "path": "apps/erp-server/src/wiring/warehouse.rs",
       "function": "resource_log_with_message",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -435,7 +435,7 @@
       "reason": "元数据工厂/准备步骤 resource_log_with_message 通过 .resource_log_with_message 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/workflow/audit.rs",
+      "path": "apps/erp-server/src/wiring/workflow/audit.rs",
       "function": "event_context",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -449,7 +449,7 @@
       "reason": "元数据工厂/准备步骤 event_context 通过 BusinessEventContext::new 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/workflow/audit.rs",
+      "path": "apps/erp-server/src/wiring/workflow/audit.rs",
       "function": "persist",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -465,7 +465,7 @@
       "reason": "组合层适配器以 execute_audited、persist_log 接入审计；接收并复用调用方 Executor，不开启事务，不自行恢复命令或生成第二次业务成功结果。同名 impl 的调用次数按本登记合计。"
     },
     {
-      "path": "apps/web-api/src/wiring/workflow/audit.rs",
+      "path": "apps/erp-server/src/wiring/workflow/audit.rs",
       "function": "persist_attempt",
       "policy": "Audited",
       "stage": "PersistenceAdapter",
@@ -479,7 +479,7 @@
       "reason": "工作流独立尝试复用 MongoAuditAttemptSink 唯一持久化边界；通过安全类型化上下文构造尝试，原事务返回后使用 NoTransaction，保留请求、操作人名称、命令及原错误分类，不重放正式业务。"
     },
     {
-      "path": "apps/web-api/src/wiring/workflow/audit.rs",
+      "path": "apps/erp-server/src/wiring/workflow/audit.rs",
       "function": "resource_log_from_prepared",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -493,7 +493,7 @@
       "reason": "元数据工厂/准备步骤 resource_log_from_prepared 通过 .resource_log_with_id 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "apps/web-api/src/wiring/workflow/authorization.rs",
+      "path": "apps/erp-server/src/wiring/workflow/authorization.rs",
       "function": "run_authorized_policy_transaction",
       "policy": "Audited",
       "stage": "MetadataFactory",
