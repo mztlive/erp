@@ -1,21 +1,18 @@
 "use client"
 
-import { ArrowRightIcon, TriangleAlertIcon } from "lucide-react"
+import { TriangleAlertIcon } from "lucide-react"
 
 import { QuantityValue } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { getProcurementAttention } from "@/features/sales-orders/lib/procurement-attention"
 import type { SalesOrderProcurementProgress } from "@/features/sales-orders/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
-/** 页级提示只说明采购异常，逐项处理信息留在采购页签。 */
+/** 销售单页级提示采购异常，供销售联系采购人员跟进。 */
 export function SalesOrderProcurementAlert({
     progress,
-    onOpenPurchase,
 }: {
     progress: SalesOrderProcurementProgress
-    onOpenPurchase: () => void
 }) {
     const { hasGap, hasExcess, needsAttention } =
         getProcurementAttention(progress)
@@ -69,16 +66,6 @@ export function SalesOrderProcurementAlert({
                         </span>
                     ) : null}
                 </div>
-                <Button
-                    id="sales-order-procurement-alert-view-purchases"
-                    variant="link"
-                    size="sm"
-                    className="h-auto p-0"
-                    onClick={onOpenPurchase}
-                >
-                    查看采购进度
-                    <ArrowRightIcon aria-hidden="true" data-icon="inline-end" />
-                </Button>
             </AlertDescription>
         </Alert>
     )
