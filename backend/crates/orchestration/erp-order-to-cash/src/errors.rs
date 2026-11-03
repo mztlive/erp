@@ -50,6 +50,10 @@ pub enum Error {
     #[error("操作结果暂无法确认，请查询当前状态后再决定是否重试")]
     OutcomeUnknown(#[source] persistence_core::Error),
 
+    /// 业务提交已确定完成，仅返回结果暂不可读取。
+    #[error("操作已提交，但当前无法读取结果，请稍后查询处理状态")]
+    CommittedResultUnavailable(String),
+
     #[error("数据库错误：{0}")]
     RepositoryError(persistence_core::Error),
 
@@ -96,7 +100,7 @@ macro_rules! from_domain {
 
 from_domain!(erp_identity, Rbac);
 from_domain!(erp_procure_to_pay, Rbac, Coded);
-from_domain!(erp_finance_posting, Rbac, Coded);
+from_domain!(erp_finance_posting, Rbac, Coded, CommittedResultUnavailable);
 from_domain!(erp_supplier_catalog, Rbac, Coded);
 from_domain!(erp_approval_runtime, Rbac, Coded);
 from_domain!(erp_workflow, Rbac, Coded);
@@ -212,12 +216,18 @@ impl Error {
     /// 无。
     ///
     /// # 返回
-    /// `OutcomeUnknown`、`ReceiptDuplicate` 或 `TransientTransaction` 时返回 `true`，其余返回 `false`。
+    /// 已提交但结果不可读、提交结果未知、重复回执或瞬态事务冲突时返回 `true`。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn command_may_have_committed(&self) -> bool {
-        matches!(self, Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_))
+        matches!(
+            self,
+            Self::CommittedResultUnavailable(_)
+                | Self::OutcomeUnknown(_)
+                | Self::ReceiptDuplicate(_)
+                | Self::TransientTransaction(_)
+        )
     }
     /// 把合同冻结的审批稳定码原样包成 `Error::Coded`，不在此处改写类别。
     ///
@@ -503,7 +513,7 @@ mod tests {
     }
 
     #[test]
-    fn only_three_variants_allow_command_receipt_recovery() {
+    fn only_commit_related_variants_allow_command_receipt_recovery() {
         let cases = [
             (Error::Internal("x".to_string()), false),
             (Error::NotFound("x".to_string()), false),
@@ -562,6 +572,20 @@ mod tests {
         );
         assert!(
             matches!(Error::from(erp_procure_to_pay::Error::Rbac("policy".into())), Error::Rbac(value) if value == "policy")
+        );
+    }
+    #[test]
+    fn committed_result_bridge_preserves_recovery_and_does_not_claim_unknown_commit() {
+        use erp_audit::execution::AuditFailure;
+
+        let error = Error::from(erp_finance_posting::Error::CommittedResultUnavailable(
+            "private read failure".into(),
+        ));
+        assert!(error.command_may_have_committed());
+        assert!(!error.outcome_unknown());
+        assert!(!error.to_string().contains("private read failure"));
+        assert!(
+            matches!(error, Error::CommittedResultUnavailable(message) if message == "private read failure")
         );
     }
 }

@@ -1,6 +1,6 @@
 //! 决定编排核心：通过、驳回与当前责任人失效阻塞。
 
-use bpm::engine::{CommitRequired, DecideCommand, TransitionPlan, block_current, decide, reject_terminal};
+use bpm::engine::{CommitRequired, DecideCommand, TransitionPlan, block_current, decide};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
 use bpm::model::types::{ApprovalBlockerCode, ApprovalDecision};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
@@ -10,8 +10,6 @@ use super::authorization::ensure_triple_responsibility;
 use super::idempotency::{ReceiptBranch, decision_identity};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
-use crate::entity::approval_integration::document_type_of;
-use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 
 /// 决定编排输入。
@@ -86,9 +84,7 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
     if input.open_task_count > 1 + input.current.additional_assignees.len() {
         return prepare_open_task_conflict(input);
     }
-    let terminal_reject = input.decision == ApprovalDecision::Reject
-        && document_type_of(input.instance.process_kind) == DocumentType::PurchasePaymentRequest;
-    let decide = if terminal_reject { reject_terminal } else { decide };
+    let terminal_reject = input.decision == ApprovalDecision::Reject;
     let plan = decide(
         input.instance,
         input.current,

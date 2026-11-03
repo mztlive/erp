@@ -257,6 +257,10 @@ pub struct SaveWorkingCopyRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitSalesOrderRequest {
+    /// 驳回后的重新提交说明；首次提交可省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[validate(length(max = 1000, message = "重新提交说明不得超过1000字"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的乐观锁版本；与当前版本不一致时拒绝提交（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,

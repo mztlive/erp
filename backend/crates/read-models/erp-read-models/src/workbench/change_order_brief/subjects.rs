@@ -1,4 +1,6 @@
 //! 变更摘要按不可变提交编号保存，历史审批不得读取当前草稿原因。
+use erp_procurement::entity::purchase_order::{PurchaseChangeOrderStatus, SubmissionStatus};
+
 use super::super::brief::{BRIEF_LINE_LIMIT, BriefLine, ObjectBriefSource, join_list_summary};
 use super::mapping::{purchase_change_brief_source, sales_change_brief_source};
 use super::*;
@@ -74,7 +76,7 @@ fn sales_source(
 /// * `context` - 批量读取的基准修订、提交与行状态。
 ///
 /// # 返回
-/// 无返回值。当前提交写入审批版本；序列对齐时历史提交写入 CS 序号；始终再按提交 ID 写一份。不修改权限。
+/// 无返回值。当前正式提交写入审批版本；排除编辑副本后序列对齐时历史提交写入 CS 序号；全部目标另按 ID 写一份，编辑副本不得取得审批版本键。不修改权限。
 ///
 /// # 错误
 /// 不返回错误。
@@ -101,7 +103,9 @@ pub(super) fn purchase(
         };
         let current =
             change.current_submission_id.as_ref().map(|id| id.as_ref()) == Some(submission.base.id.as_str());
-        let version = if current {
+        let version = if submission.status == SubmissionStatus::Draft {
+            None
+        } else if current {
             Some(change.approval_subject_version).filter(|version| *version > 0)
         } else if aligned {
             purchase_sequence(submission)
@@ -120,21 +124,26 @@ fn purchase_sequence(submission: &PurchaseChangeSubmission) -> Option<u32> {
     submission.submission_no.strip_prefix("CS-")?.parse().ok().filter(|version| *version > 0)
 }
 
-/// 验证完整提交序列与当前审批计数及提交指针一致；迁移或缺号时仅显示明确绑定的当前提交。
+/// 排除编辑副本后验证完整正式序列；当前草稿指针不改变旧审批计数及历史绑定。
 fn purchase_versions_aligned(change: &PurchaseChangeOrder, context: &PurchaseChangeBriefContext) -> bool {
     let rows = context
         .submissions
         .values()
-        .filter(|row| row.purchase_change_order_id.as_ref() == change.base.id)
+        .filter(|row| {
+            row.purchase_change_order_id.as_ref() == change.base.id && row.status != SubmissionStatus::Draft
+        })
         .collect::<Vec<_>>();
-    let Some(current) = rows.iter().find(|row| {
-        change.current_submission_id.as_ref().map(|id| id.as_ref()) == Some(row.base.id.as_str())
-    }) else {
+    let current =
+        change.current_submission_id.as_ref().and_then(|id| context.submissions.get::<str>(id.as_ref()));
+    let Some(current) = current.filter(|row| row.purchase_change_order_id.as_ref() == change.base.id) else {
         return false;
     };
-    if purchase_sequence(current) != Some(change.approval_subject_version)
-        || rows.len() != change.approval_subject_version as usize
-    {
+    let pointer_matches = if current.status == SubmissionStatus::Draft {
+        matches!(change.stable.status, PurchaseChangeOrderStatus::Draft | PurchaseChangeOrderStatus::Rejected)
+    } else {
+        purchase_sequence(current) == Some(change.approval_subject_version)
+    };
+    if !pointer_matches || rows.len() != change.approval_subject_version as usize {
         return false;
     }
     let mut versions = rows.iter().filter_map(|row| purchase_sequence(row)).collect::<Vec<_>>();
@@ -151,8 +160,10 @@ fn purchase_source(
     lines: Vec<BriefLine>,
     more: u32,
 ) -> ObjectBriefSource {
-    let current = change.stable.status
-        != erp_procurement::entity::purchase_order::PurchaseChangeOrderStatus::Draft
+    let current = matches!(
+        change.stable.status,
+        PurchaseChangeOrderStatus::InApproval | PurchaseChangeOrderStatus::Effective
+    ) && submission.status != SubmissionStatus::Draft
         && change.current_submission_id.as_ref().map(|id| id.as_ref()) == Some(submission.base.id.as_str());
     let mut source = purchase_change_brief_source(change, number, base, Some(submission), lines, more);
     if !current {

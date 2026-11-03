@@ -21,7 +21,7 @@ struct PaymentTasks(Database);
 struct CatalogMessages(CatalogMessageWriter);
 
 macro_rules! map_error {
-    ($error:expr, $provider:ident) => {
+    ($error:expr, $provider:ident $(, $committed:ident)?) => {
         match $error {
             $provider::Error::Internal(value) => Error::Internal(value),
             $provider::Error::NotFound(value) => Error::NotFound(value),
@@ -36,6 +36,8 @@ macro_rules! map_error {
             $provider::Error::Logic(value) => Error::Logic(value),
             $provider::Error::Rbac(value) => Error::Rbac(value),
             $provider::Error::OutcomeUnknown(value) => Error::OutcomeUnknown(value),
+            // sync_task 只使用调用方执行器更新付款任务，不存在提交后开票回读。
+            $( $provider::Error::$committed(_) => Error::Internal("PAYMENT_TASK_PORT_UNEXPECTED_COMMITTED_RESPONSE".into()), )?
             $provider::Error::RepositoryError(value) => Error::RepositoryError(value),
             $provider::Error::Coded(value) => Error::Coded(value),
         }
@@ -45,7 +47,9 @@ macro_rules! map_error {
 #[async_trait]
 impl OrdersPaymentTasks for PaymentTasks {
     async fn sync(&self, request_id: &str, executor: &mut dyn Executor) -> Result<()> {
-        sync_task(&self.0, request_id, executor).await.map_err(|error| map_error!(error, erp_finance_posting))
+        sync_task(&self.0, request_id, executor)
+            .await
+            .map_err(|error| map_error!(error, erp_finance_posting, CommittedResultUnavailable))
     }
 }
 
@@ -104,7 +108,8 @@ mod tests {
             FinanceError::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(
                 "original commit",
             ))),
-            erp_finance_posting
+            erp_finance_posting,
+            CommittedResultUnavailable
         );
         let Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source)) = error else {
             panic!("付款任务桥接必须保留未知提交类型");
@@ -121,5 +126,18 @@ mod tests {
             erp_supplier_catalog
         );
         assert!(matches!(error, Error::ReceiptDuplicate(PersistenceError::DuplicateKey(_))));
+    }
+
+    #[test]
+    fn payment_task_port_rejects_impossible_committed_response() {
+        let error = map_error!(
+            FinanceError::CommittedResultUnavailable("unreadable invoice contents".into()),
+            erp_finance_posting,
+            CommittedResultUnavailable
+        );
+        assert!(matches!(
+            error,
+            Error::Internal(message) if message == "PAYMENT_TASK_PORT_UNEXPECTED_COMMITTED_RESPONSE"
+        ));
     }
 }

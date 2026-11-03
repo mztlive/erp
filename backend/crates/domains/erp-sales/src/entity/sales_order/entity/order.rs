@@ -499,7 +499,27 @@ impl SalesOrder {
         self.return_to_draft(updated_by)
     }
 
-    /// 驳回后回到可处理草稿（主状态 `PENDING_REVIEW → DRAFT`，§7.1）。
+    /// 终态驳回本次提交，保留单据内容并开放修改。
+    ///
+    /// # 参数
+    /// * `updated_by` - 本次审批决定人。
+    /// # 返回
+    /// 主状态回到草稿，审核轨记为已驳回；保存草稿不得清除此结果。
+    /// # 错误
+    /// 非审批中或商业状态不允许退回时拒绝。
+    pub fn reject_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.commercial_status != CommercialStatus::PendingReview
+            || self.review_status != ReviewStatus::InApproval
+        {
+            return Err(Error::from("只有审批中的销售单可以驳回审批提交"));
+        }
+        self.transition_commercial_status(CommercialStatus::Draft)?;
+        self.review_status = ReviewStatus::Rejected;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 撤回后回到可处理草稿（主状态 `PENDING_REVIEW → DRAFT`）。
     ///
     /// # 参数
     /// * `updated_by` - 操作人

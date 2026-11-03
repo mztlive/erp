@@ -129,6 +129,10 @@ pub struct CreateSalesChangeOrderRequest {
 /// 发起销售变更影响确认请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SubmitSalesChangeRequest {
+    /// 驳回后的重新提交说明；首次提交可省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[validate(length(max = 1000, message = "重新提交说明不得超过1000字"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的乐观锁版本；与当前版本不一致时拒绝提交（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,
@@ -185,6 +189,19 @@ pub struct CancelSalesChangeApprovalRequest {
 mod tests {
     use super::normalize_sort;
     use crate::entity::sales_review::SalesChangeType;
+
+    #[test]
+    fn resubmission_reason_allows_one_thousand_characters() {
+        use validator::Validate;
+        let mut request = super::SubmitSalesChangeRequest {
+            resubmission_reason: Some("字".repeat(1000)),
+            version: 1,
+            idempotency_key: "retry-1".into(),
+        };
+        assert!(request.validate().is_ok());
+        request.resubmission_reason = Some("字".repeat(1001));
+        assert!(request.validate().unwrap_err().field_errors().contains_key("resubmission_reason"));
+    }
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

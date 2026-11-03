@@ -20,7 +20,7 @@ pub enum BpmEventKind {
     NodeApproved,
     /// 当前节点已驳回。
     NodeRejected,
-    /// 驳回后进入下一轮。
+    /// 历史事件：旧规则下驳回后进入下一轮。新命令不再产生。
     RoundRestarted,
     /// 实例最终通过。
     InstanceApproved,

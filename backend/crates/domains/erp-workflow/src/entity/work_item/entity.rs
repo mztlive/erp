@@ -5,6 +5,7 @@ mod import_confirmation;
 mod payment_arrangement;
 mod permissions;
 mod procurement_access;
+mod rework;
 mod status;
 mod supplier_portal;
 mod types;

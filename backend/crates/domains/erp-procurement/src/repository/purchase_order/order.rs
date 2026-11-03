@@ -453,6 +453,7 @@ fn active_purchase_order_filter(sales_order_id: &SalesOrderId) -> Document {
         "sales_order_id": sales_order_id.to_string(),
         "status": { "$in": [
             PurchaseOrderStatus::Draft.as_str(),
+            PurchaseOrderStatus::Rejected.as_str(),
             PurchaseOrderStatus::PendingFinanceReview.as_str(),
             PurchaseOrderStatus::InApproval.as_str(),
             PurchaseOrderStatus::Effective.as_str(),
@@ -588,6 +589,7 @@ mod tests {
             statuses,
             vec![
                 "DRAFT",
+                "REJECTED",
                 "PENDING_FINANCE_REVIEW",
                 "IN_APPROVAL",
                 "EFFECTIVE",

@@ -50,6 +50,11 @@ pub enum Error {
     #[error("操作结果暂无法确认，请查询当前状态后再决定是否重试")]
     OutcomeUnknown(#[source] persistence_core::Error),
 
+    /// 事务或精确收据已证明提交成功，但当前授权或读取不允许返回结果。
+    /// 载荷仅供内部诊断；客户端必须保留原操作号，不能将其解释为未执行。
+    #[error("操作已提交，但当前结果暂不可读取，请保留原操作号重试")]
+    CommittedResultUnavailable(String),
+
     #[error("数据库错误：{0}")]
     RepositoryError(persistence_core::Error),
 
@@ -207,12 +212,18 @@ impl Error {
     /// 无。
     ///
     /// # 返回
-    /// `OutcomeUnknown`、`ReceiptDuplicate` 或 `TransientTransaction` 时返回 `true`，其余返回 `false`。
+    /// 已确定提交但结果不可读，或 `OutcomeUnknown`、`ReceiptDuplicate`、`TransientTransaction` 时返回 `true`。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn command_may_have_committed(&self) -> bool {
-        matches!(self, Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_))
+        matches!(
+            self,
+            Self::CommittedResultUnavailable(_)
+                | Self::OutcomeUnknown(_)
+                | Self::ReceiptDuplicate(_)
+                | Self::TransientTransaction(_)
+        )
     }
     /// 把合同冻结的审批稳定码原样包成 `Error::Coded`，不在此处改写类别。
     ///
@@ -489,9 +500,10 @@ mod tests {
     }
 
     #[test]
-    fn only_three_variants_allow_command_receipt_recovery() {
+    fn committed_or_uncertain_commands_allow_receipt_recovery() {
         let cases = [
             (Error::Internal("x".to_string()), false),
+            (Error::CommittedResultUnavailable("scope changed".into()), true),
             (Error::NotFound("x".to_string()), false),
             (Error::ValidationError("x".to_string()), false),
             (Error::BusinessLogicError("x".to_string()), false),

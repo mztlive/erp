@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::command::SavePurchaseOrderLine;
+use crate::Result;
+use crate::entity::purchase_order::{
+    PurchaseCommandReceipt, PurchaseCommandReceiptIdentity, payload_fingerprint,
+};
+
+/// 采购变更提交命令动作。
+pub const PURCHASE_CHANGE_SUBMIT_ACTION: &str = "purchase_change_order.submit";
 
 /// 撤回采购变更审批请求。原因必填。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -51,6 +58,10 @@ pub struct StartPurchaseChangeResult {
 /// 提交采购变更目标内容请求（完整头、行及销售分配）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SubmitPurchaseChangeRequest {
+    /// 驳回后重新提交的必填说明。
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "重新提交说明最多1000个字符"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的变更单乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_lock_version: u64,
@@ -67,6 +78,50 @@ pub struct SubmitPurchaseChangeRequest {
     pub idempotency_key: String,
 }
 
+impl SubmitPurchaseChangeRequest {
+    /// 构造与当前状态无关的精确提交命令身份。
+    /// # 参数
+    /// * `change_id` / `actor_id` - 已授权变更单及当前提交人。
+    /// # 返回
+    /// 返回稳定幂等身份。
+    /// # 错误
+    /// 身份为空时拒绝。
+    pub fn command_identity(
+        &self,
+        change_id: &str,
+        actor_id: &str,
+    ) -> Result<PurchaseCommandReceiptIdentity> {
+        Ok(PurchaseCommandReceipt::<PurchaseChangeSubmitResult>::identity(
+            "purchase-change-submit-",
+            actor_id,
+            PURCHASE_CHANGE_SUBMIT_ACTION,
+            Some(change_id),
+            self.idempotency_key.trim(),
+        )?)
+    }
+
+    /// 冻结原请求版本、完整目标及说明，避免相同键回放不同内容。
+    /// # 参数
+    /// * `change_id` - 已授权变更单。
+    /// # 返回
+    /// 返回不包含幂等键的完整请求摘要。
+    /// # 错误
+    /// 请求序列化失败时拒绝。
+    pub fn request_fingerprint(&self, change_id: &str) -> Result<String> {
+        Ok(payload_fingerprint(
+            PURCHASE_CHANGE_SUBMIT_ACTION,
+            change_id,
+            &(
+                self.expected_lock_version,
+                &self.payment_term_code,
+                &self.reason,
+                &self.lines,
+                self.resubmission_reason.as_deref().map(str::trim),
+            ),
+        )?)
+    }
+}
+
 /// 作废采购变更草稿请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
@@ -77,7 +132,7 @@ pub struct VoidPurchaseChangeRequest {
 }
 
 /// 采购变更提交结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PurchaseChangeSubmitResult {
     /// 变更单主键。
     pub change_id: String,
@@ -144,4 +199,112 @@ pub struct PurchaseChangeOrderListParams {
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
+}
+
+#[cfg(test)]
+mod submit_tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::entity::purchase_order::PurchaseCommandReceiptError;
+
+    fn request() -> SubmitPurchaseChangeRequest {
+        SubmitPurchaseChangeRequest {
+            expected_lock_version: 4,
+            payment_term_code: Some("NET-30".into()),
+            reason: Some("调整采购".into()),
+            resubmission_reason: Some("补充依据".into()),
+            lines: vec![
+                serde_json::from_value(json!({
+                    "line_type": "ITEM_SERVICE", "quantity": "2", "unit_cost_gross": "3"
+                }))
+                .unwrap(),
+            ],
+            idempotency_key: "retry-key".into(),
+        }
+    }
+
+    /// 首次结果经真实回执解码可重放，改原锁版本、完整行或任一说明均冲突。
+    #[test]
+    fn exact_change_submission_replays_and_changed_payload_conflicts() {
+        let request = request();
+        let identity = request.command_identity("change-1", "actor").unwrap();
+        let fingerprint = request.request_fingerprint("change-1").unwrap();
+        let result = PurchaseChangeSubmitResult {
+            change_id: "change-1".into(),
+            submission_id: "submission-2".into(),
+            submission_no: "CS-000002".into(),
+            status: "IN_APPROVAL".into(),
+            lock_version: 5,
+            reference: "CS-CS-000002".into(),
+        };
+        let receipt =
+            PurchaseCommandReceipt::new(&identity, &fingerprint, result.clone(), "audit".into()).unwrap();
+        let stored = serde_json::to_value(&receipt).unwrap();
+        let decoded = PurchaseCommandReceipt::<PurchaseChangeSubmitResult>::decode(
+            serde_json::from_value(stored).unwrap(),
+            &identity,
+            &fingerprint,
+        )
+        .unwrap();
+        assert_eq!(decoded.into_payload(), result);
+        for changed in [
+            {
+                let mut value = request.clone();
+                value.expected_lock_version += 1;
+                value
+            },
+            {
+                let mut value = request.clone();
+                value.payment_term_code = None;
+                value
+            },
+            {
+                let mut value = request.clone();
+                value.reason = Some("其他原因".into());
+                value
+            },
+            {
+                let mut value = request.clone();
+                value.resubmission_reason = Some("其他说明".into());
+                value
+            },
+            {
+                let mut value = request.clone();
+                value.lines[0].quantity = Some("3".into());
+                value
+            },
+            {
+                let mut value = request.clone();
+                value.lines[0].unit_cost_gross = Some("4".into());
+                value
+            },
+            {
+                let mut value = request.clone();
+                value.lines[0].expected_delivery_date = Some("2026-12-01".into());
+                value
+            },
+        ] {
+            assert_eq!(changed.command_identity("change-1", "actor").unwrap(), identity);
+            assert_eq!(
+                PurchaseCommandReceipt::decode(
+                    receipt.clone(),
+                    &identity,
+                    &changed.request_fingerprint("change-1").unwrap()
+                )
+                .unwrap_err(),
+                PurchaseCommandReceiptError::PayloadConflict
+            );
+        }
+    }
+
+    /// 重提说明在统一的一千字符边界内接受，超限拒绝。
+    #[test]
+    fn resubmission_reason_uses_shared_thousand_character_limit() {
+        let mut request = request();
+        request.resubmission_reason = Some("说".repeat(1000));
+        request.validate().unwrap();
+        request.resubmission_reason = Some("说".repeat(1001));
+        assert!(request.validate().is_err());
+    }
 }

@@ -92,12 +92,14 @@ export async function submitPaymentReversal(input: {
     reversalId: string
     expectedVersion: number
     idempotencyKey: string
+    resubmissionReason?: string
 }): Promise<PaymentReversalMutationResult> {
     try {
         const submitted = await apiPost<BackendPaymentReversal>(
             `/admin/payment-reversals/${encodeURIComponent(input.reversalId)}/submit`,
             buildPaymentReversalSubmitRequest({
                 expectedVersion: input.expectedVersion,
+                resubmissionReason: input.resubmissionReason,
                 idempotencyKey: input.idempotencyKey,
             }),
         )

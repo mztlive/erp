@@ -319,7 +319,9 @@ impl WorkItemType {
         self,
         business_object_type: &str,
     ) -> Option<&'static [&'static str]> {
-        if self.is_fulfillment_operation() {
+        if self == Self::ApprovalRework {
+            self.brief_relation(business_object_type).map(|_| &["work_item:detail"] as &[&str])
+        } else if self.is_fulfillment_operation() {
             self.fulfillment_execution_permissions(business_object_type)
         } else if self.is_customer_acceptance_registration() {
             self.customer_acceptance_execution_permissions(business_object_type)
@@ -381,6 +383,7 @@ impl WorkItemType {
         matches!(
             self,
             Self::DocumentApproval
+                | Self::ApprovalRework
                 | Self::SalesInquiryProcessing
                 | Self::SupplierPortalReview
                 | Self::ImportBusinessConfirmation

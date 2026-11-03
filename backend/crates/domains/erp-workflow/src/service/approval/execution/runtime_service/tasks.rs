@@ -18,6 +18,7 @@ use crate::repository::WorkItemExt;
 use crate::repository::prelude::*;
 
 pub(in crate::service::approval::execution) mod due;
+pub(super) mod rejected;
 
 /// 完成或关闭审批任务所需的同一决定上下文。
 pub(super) struct CompleteOrCloseTasksInput<'a> {

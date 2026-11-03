@@ -29,6 +29,7 @@ use erp_workflow::service::approval::execution::{
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::read;
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -108,6 +109,7 @@ pub(super) async fn load_start_receipt(
 
 /// 销售单启动收据回放入参。
 pub(super) struct ReplaySalesOrderStartInput<'a> {
+    pub(super) resubmission_reason: Option<&'a str>,
     /// 销售单据类型。
     pub(super) document_type: DocumentType,
     /// 审批主题引用。
@@ -145,6 +147,7 @@ pub(super) async fn replay_sales_order_start_with_executor(
     replay_start(
         db,
         ApprovalStartIdentity {
+            resubmission_reason: input.resubmission_reason,
             process_kind: process_kind_of(input.document_type),
             subject: input.subject,
             subject_version: input.subject_version,
@@ -179,6 +182,7 @@ pub(super) async fn replay_sales_order_start_with_executor(
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择；`document_type` 必须按业务性质分派。
 pub(super) struct SalesOrderStartInput<'a> {
+    pub resubmission_reason: Option<String>,
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 冻结绑定。
@@ -221,6 +225,7 @@ pub(super) struct SalesOrderStartInput<'a> {
 /// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(super) fn build_sales_order_start_input(input: SalesOrderStartInput<'_>) -> Result<StartExecutionInput> {
     let SalesOrderStartInput {
+        resubmission_reason,
         graph,
         binding,
         document_type,
@@ -244,6 +249,7 @@ pub(super) fn build_sales_order_start_input(input: SalesOrderStartInput<'_>) -> 
         graph,
         bindings,
         StartInputContext {
+            resubmission_reason,
             binding,
             document_type,
             subject,
@@ -298,6 +304,7 @@ fn start_bindings_from_graph(
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与提交快照同事务。
 pub(super) struct SalesOrderStartPersistInput {
+    pub resubmission_reason: Option<String>,
     /// 已进入审批中的销售单。
     pub order: SalesOrder,
     /// 已锁定的工作副本。
@@ -463,6 +470,7 @@ impl SalesOrderStartPersistInput {
             db,
             &writes,
             SalesOrderRuntimeWriteInput {
+                resubmission_reason: self.resubmission_reason.as_deref(),
                 approvals: access.services.approvals.as_ref(),
                 document_type: self.document_type,
                 snapshot_payload: &self.snapshot_payload,
@@ -557,6 +565,7 @@ async fn guard_sales_approval_start(
 /// # 关键业务约束
 /// `document_type` 必须与提交分派一致，不得在此改写。
 pub(super) struct SalesOrderRuntimeWriteInput<'a> {
+    pub resubmission_reason: Option<&'a str>,
     pub approvals: &'a dyn ApprovalRuntimePort,
     /// 按业务性质分派的单据类型。
     pub document_type: DocumentType,
@@ -596,6 +605,7 @@ pub(super) async fn persist_runtime_writes(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let SalesOrderRuntimeWriteInput {
+        resubmission_reason,
         approvals,
         document_type,
         snapshot_payload,
@@ -603,13 +613,22 @@ pub(super) async fn persist_runtime_writes(
         organization_id,
         now,
     } = input;
-    let snapshot = persist_start_runtime(
+    let mut snapshot = persist_start_runtime(
         db,
         writes,
         document_type,
         snapshot_payload,
         now,
         "启动计划缺少入口执行，不得提交销售单",
+        executor,
+    )
+    .await?;
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        resubmission_reason,
+        writes.instance.started_by.as_str(),
+        now,
         executor,
     )
     .await?;

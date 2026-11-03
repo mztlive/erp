@@ -42,9 +42,10 @@ export const customerReceiptStatusLabel = (status?: string): string => {
     switch (status) {
         case "DRAFT":
         case "draft":
+            return "草稿"
         case "REJECTED":
         case "rejected":
-            return "草稿"
+            return "已驳回"
         case "IN_APPROVAL":
         case "PENDING_REVIEW":
         case "pending_review":
@@ -74,6 +75,7 @@ export const customerReceiptStatusTone = (
             return "success"
         case "审批中":
             return "warning"
+        case "已驳回":
         case "已冲正":
             return "destructive"
         default:

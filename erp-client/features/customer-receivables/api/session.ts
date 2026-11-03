@@ -355,7 +355,11 @@ export async function createAllocationSession(
             customerId,
             MISSING_CUSTOMER_NAME,
         ),
-        status: serverStatus && serverStatus !== "draft" ? "posted" : "draft",
+        status:
+            serverStatus &&
+            !["draft", "REJECTED", "rejected"].includes(serverStatus)
+                ? "posted"
+                : "draft",
         serverStatus,
         existingFactId: input.existingFactId,
         existingFactNo,

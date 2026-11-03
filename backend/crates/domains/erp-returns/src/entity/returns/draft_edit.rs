@@ -43,7 +43,7 @@ impl FinancialDraftEditPolicy {
             return Err(Error::Forbidden("仅原财务经办人可以修改本单据草稿".into()));
         }
         if !is_draft {
-            return Err(Error::ConflictError("请先将驳回单据撤回草稿后再修改".into()));
+            return Err(Error::ConflictError("只有草稿或已驳回单据可以修改".into()));
         }
         Ok(())
     }

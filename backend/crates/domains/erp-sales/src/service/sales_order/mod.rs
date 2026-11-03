@@ -12,6 +12,8 @@ pub mod mapper;
 pub mod procurement;
 pub mod progress;
 mod query;
+mod rejection;
+pub use rejection::reject_order;
 mod sellable;
 mod working_copy_persistence;
 

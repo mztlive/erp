@@ -52,11 +52,12 @@ fn sales_change_order_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_change_orders_id", doc! { "id": 1 }),
         unique_partial_index(
-            "uk_sales_change_orders_active_per_order_base",
+            "uk_sales_change_orders_active_per_order_base_v2",
             doc! { "sales_order_id": 1, "base_revision_id": 1 },
             doc! {
                 "$or": [
                     { "status": "DRAFT" },
+                    { "status": "IN_APPROVAL" },
                     { "status": "PENDING_IMPACT_CONFIRMATION" },
                     { "status": "PENDING_FINANCE_REVIEW" },
                     { "status": "REJECTED" },
@@ -122,13 +123,32 @@ mod tests {
             .iter()
             .find(|index| {
                 index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("uk_sales_change_orders_active_per_order_base")
+                    == Some("uk_sales_change_orders_active_per_order_base_v2")
             })
             .unwrap();
         assert_eq!(active.keys, doc! { "sales_order_id": 1, "base_revision_id": 1 });
         let options = active.options.as_ref().unwrap();
         assert_eq!(options.unique, Some(true));
         let filter = options.partial_filter_expression.as_ref().unwrap();
-        assert!(filter.get_array("$or").is_ok(), "进行中状态参与唯一");
+        assert_eq!(
+            filter,
+            &doc! {
+                "$or": [
+                    { "status": "DRAFT" },
+                    { "status": "IN_APPROVAL" },
+                    { "status": "PENDING_IMPACT_CONFIRMATION" },
+                    { "status": "PENDING_FINANCE_REVIEW" },
+                    { "status": "REJECTED" },
+                ]
+            },
+            "草稿、审批中及已驳回共同占用原单基准版本；生效和作废不参与唯一"
+        );
+        assert!(
+            !indexes.iter().any(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_sales_change_orders_active_per_order_base")
+            }),
+            "启动只声明新索引，旧索引由受控迁移移除"
+        );
     }
 }

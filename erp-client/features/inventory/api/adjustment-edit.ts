@@ -1,10 +1,14 @@
-import { apiGet } from "@/lib/api"
+import { apiGet, apiPut } from "@/lib/api"
 import type {
     BackendPage,
     BackendStockAdjustmentDetail,
     BackendStockBalance,
 } from "./dto"
-import { directionFrontend, reasonTypeFrontend } from "./display"
+import {
+    directionFrontend,
+    reasonTypeBackend,
+    reasonTypeFrontend,
+} from "./display"
 import { mapAdjustmentApproval, mapBalance } from "./mappers"
 import type {
     AdjustmentReasonType,
@@ -14,6 +18,7 @@ import type {
 export type EditableAdjustment = {
     id: string
     adjustmentNo: string
+    rejected: boolean
     warehouseName: string
     reasonType: AdjustmentReasonType
     note: string
@@ -47,7 +52,7 @@ export async function fetchEditableAdjustment(
     )
     const approval = mapAdjustmentApproval(detail.approval)
     if (
-        detail.adjustment.status !== "DRAFT" ||
+        !["DRAFT", "REJECTED"].includes(detail.adjustment.status) ||
         !approval.submitCommand ||
         !approval.allowedActions.includes("SUBMIT")
     ) {
@@ -82,6 +87,7 @@ export async function fetchEditableAdjustment(
     return {
         id: detail.adjustment.id,
         adjustmentNo: detail.adjustment.adjustment_no,
+        rejected: detail.adjustment.status === "REJECTED",
         warehouseName: balances[0].warehouseName,
         reasonType: reasonTypeFrontend(
             detail.adjustment.reason_type,
@@ -106,4 +112,30 @@ export async function fetchEditableAdjustment(
             }
         }),
     }
+}
+
+/** 保存原单内容，审批状态由服务端保留；保存不发起新一轮审批。 */
+export async function saveAdjustment(input: {
+    id: string
+    version: string
+    reasonType: AdjustmentReasonType
+    note: string
+    occurredAt: string
+    lines: {
+        lineId: string
+        quantity: string
+        direction: "increase" | "decrease"
+    }[]
+}): Promise<void> {
+    await apiPut(`/admin/stock-adjustments/${encodeURIComponent(input.id)}`, {
+        version: input.version,
+        reason_type: reasonTypeBackend(input.reasonType),
+        note: input.note.trim(),
+        occurred_at: Math.floor(new Date(input.occurredAt).getTime() / 1000),
+        lines: input.lines.map((line) => ({
+            line_id: line.lineId,
+            quantity: line.quantity.trim(),
+            direction: line.direction === "increase" ? "INCREASE" : "DECREASE",
+        })),
+    })
 }

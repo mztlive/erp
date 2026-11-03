@@ -91,7 +91,7 @@ pub(in crate::purchase_center) fn definition_view_from_binding(
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。
 fn allowed_document_actions(status: PurchaseOrderStatus) -> Vec<String> {
     match status {
-        PurchaseOrderStatus::Draft => vec!["SUBMIT".to_string()],
+        PurchaseOrderStatus::Draft | PurchaseOrderStatus::Rejected => vec!["SUBMIT".to_string()],
         PurchaseOrderStatus::InApproval => vec!["CANCEL".to_string()],
         PurchaseOrderStatus::PendingFinanceReview
         | PurchaseOrderStatus::Effective
@@ -123,6 +123,8 @@ mod tests {
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
         assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
+        let rejected = document_approval_view(Some(&binding), None, PurchaseOrderStatus::Rejected);
+        assert_eq!(rejected.allowed_actions, vec!["SUBMIT".to_string()]);
         let running = document_approval_view(Some(&binding), None, PurchaseOrderStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }

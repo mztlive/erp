@@ -122,6 +122,7 @@ export function InvoiceRequestPanel({
     const requestForm =
         (creating || editing) && permissions.canSubmit ? (
             <InvoiceRequestForm
+                key={editing?.id ?? "new"}
                 salesOrderId={salesOrderId}
                 accountId={accountId}
                 existing={editing}

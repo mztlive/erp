@@ -168,7 +168,7 @@ export type PaymentReversalSummary = Readonly<{
     reasonText: string
     amount: string
     occurredAt: string
-    status: "draft" | "in_approval" | "posted" | "reversed"
+    status: "draft" | "rejected" | "in_approval" | "posted" | "reversed"
     statusLabel: string
     statusTone: StatusTone
 }>
@@ -218,7 +218,7 @@ export type SupplierRefundRow = Readonly<{
     reasonText: string
     amount: string
     occurredAt: string
-    status: "draft" | "in_approval" | "posted" | "reversed"
+    status: "draft" | "rejected" | "in_approval" | "posted" | "reversed"
     statusLabel: string
     statusTone: StatusTone
     baselineVersion: number
@@ -248,7 +248,7 @@ export type PaymentReversalRow = Readonly<{
     reasonText: string
     amount: string
     occurredAt: string
-    status: "draft" | "in_approval" | "posted" | "reversed"
+    status: "draft" | "rejected" | "in_approval" | "posted" | "reversed"
     statusLabel: string
     statusTone: StatusTone
     baselineVersion: number

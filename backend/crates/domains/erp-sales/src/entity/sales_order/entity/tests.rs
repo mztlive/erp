@@ -444,3 +444,50 @@ fn inquiry_fee_sales_require_effective_goods_and_a_revision_pointer() {
     order.closed_at = Some(Instant::from_unix_secs(1_800_000_000));
     assert!(order.can_receive_inquiry_fees());
 }
+
+#[test]
+fn rejected_orders_keep_content_and_can_edit_resubmit_or_void() {
+    for business_type in [BusinessType::GoodsService, BusinessType::Voucher] {
+        let mut order = SalesOrder::new(
+            SalesOrderId::new("rejected"),
+            SalesOrderData { business_type, source_identity_id: Some("inquiry-source".into()), ..data() },
+            "creator",
+        )
+        .unwrap();
+        order.start_approval_submission("submitter").unwrap();
+        order.reject_approval_submission("approver").unwrap();
+        assert_eq!(order.commercial_status, CommercialStatus::Draft);
+        assert_eq!(order.stable.status, CommercialStatus::Draft);
+        assert_eq!(order.review_status, ReviewStatus::Rejected);
+        assert!(!order.review_status.has_active_review_task());
+        assert_eq!(order.source_identity_id.as_deref(), Some("inquiry-source"));
+        assert!(order.effective_at.is_none());
+        order.update(SalesOrderUpdate::default(), "editor").unwrap();
+        assert_eq!(order.review_status, ReviewStatus::Rejected);
+        let mut abandoned = order.clone();
+        abandoned.void("creator").unwrap();
+        assert_eq!(abandoned.commercial_status, CommercialStatus::Voided);
+        order.start_approval_submission("submitter").unwrap();
+        assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
+        assert_eq!(order.review_status, ReviewStatus::InApproval);
+    }
+}
+
+#[test]
+fn rejection_requires_current_pending_approval_and_does_not_mutate_other_states() {
+    let mut order = SalesOrder::new(SalesOrderId::new("reject-guard"), data(), "creator").unwrap();
+    order.base = BaseModel::fake();
+    for commercial in [CommercialStatus::Draft, CommercialStatus::Effective, CommercialStatus::Voided] {
+        order.commercial_status = commercial;
+        order.review_status = ReviewStatus::NotSubmitted;
+        let before = order.clone();
+        assert!(order.reject_approval_submission("approver").is_err());
+        assert_eq!(order, before);
+    }
+    order.commercial_status = CommercialStatus::PendingReview;
+    order.review_status = ReviewStatus::InApproval;
+    order.reject_approval_submission("approver").unwrap();
+    let before = order.clone();
+    assert!(order.reject_approval_submission("approver").is_err());
+    assert_eq!(order, before);
+}

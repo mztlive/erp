@@ -38,9 +38,10 @@ export const salesChangeOrderStatusLabel = (status?: string): string => {
     switch (status) {
         case "DRAFT":
         case "draft":
+            return "草稿"
         case "REJECTED":
         case "rejected":
-            return "草稿"
+            return "已驳回"
         case "IN_APPROVAL":
         case "PENDING_IMPACT_CONFIRMATION":
         case "PENDING_FINANCE_REVIEW":
@@ -57,7 +58,7 @@ export const salesChangeOrderStatusLabel = (status?: string): string => {
 /**
  * 按单据生命周期选择销售变更审批区相位。提交确认由调用方显式传入。
  *
- * 未提交单据没有实例或仅有已取消实例时进入 draft；已取消实例继续作为审批历史展示。
+ * 未提交及已驳回单据进入 draft；已取消或已驳回实例继续作为审批历史展示。
  * 其它实例或已离开未提交阶段时进入 runtime，不得按角色、影响路径或 BusinessType 推导。
  *
  * @param approval 服务端只读审批投影。
@@ -68,7 +69,9 @@ export const salesChangeOrderApprovalPhase = (
     status?: string,
 ): Exclude<SalesChangeOrderApprovalPhase, "confirm"> =>
     !isUnsubmittedSalesChangeOrderStatus(status) ||
-    (approval?.instance && approval.instance.status !== "CANCELLED")
+    (approval?.instance &&
+        approval.instance.status !== "CANCELLED" &&
+        approval.instance.status !== "REJECTED")
         ? "runtime"
         : "draft"
 

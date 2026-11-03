@@ -121,23 +121,27 @@ pub(super) fn stock_adjustment_start_identity(
         req.expected_subject_version,
         STOCK_ADJUSTMENT_START_VARIANT,
         payload.fields(req, actor_id, binding_id, definition_version),
-    )?
-    .with_legacy(legacy_start_receipt_identity(
-        process_kind.as_str(),
-        DocumentType::StockAdjustment.as_str(),
-        adjustment_id,
-        req.expected_subject_version,
-        stock_adjustment_start_digest(req, actor_id)?,
-    ))
-    .with_legacy(legacy_standard_start_receipt_identity(
-        process_kind.as_str(),
-        DocumentType::StockAdjustment.as_str(),
-        adjustment_id,
-        req.expected_subject_version,
-        binding_id,
-        definition_version,
-        actor_id,
-    ));
+    )?;
+    if req.resubmission_reason.is_some() {
+        return Ok(identity);
+    }
+    let identity = identity
+        .with_legacy(legacy_start_receipt_identity(
+            process_kind.as_str(),
+            DocumentType::StockAdjustment.as_str(),
+            adjustment_id,
+            req.expected_subject_version,
+            stock_adjustment_start_digest(req, actor_id)?,
+        ))
+        .with_legacy(legacy_standard_start_receipt_identity(
+            process_kind.as_str(),
+            DocumentType::StockAdjustment.as_str(),
+            adjustment_id,
+            req.expected_subject_version,
+            binding_id,
+            definition_version,
+            actor_id,
+        ));
     Ok(identity)
 }
 
@@ -199,7 +203,7 @@ impl StartPayload {
                 ])
             })
             .collect::<Vec<_>>();
-        vec![
+        let mut fields = vec![
             CommandPayloadField::Text(binding_id),
             CommandPayloadField::U32(definition_version),
             CommandPayloadField::U64(req.expected_version),
@@ -210,7 +214,12 @@ impl StartPayload {
             CommandPayloadField::Text(req.note.trim()),
             CommandPayloadField::Text(&self.occurred_at),
             CommandPayloadField::Text(actor_id),
-        ]
+        ];
+        if let Some(reason) = req.resubmission_reason.as_deref() {
+            fields.push(CommandPayloadField::Text("resubmission_reason"));
+            fields.push(CommandPayloadField::Text(reason.trim()));
+        }
+        fields
     }
 }
 

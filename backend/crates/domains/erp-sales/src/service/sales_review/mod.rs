@@ -13,6 +13,8 @@ mod draft;
 mod effective;
 mod formalization;
 mod query;
+mod rejection;
+pub use rejection::reject_change;
 mod state;
 mod submission;
 mod void;

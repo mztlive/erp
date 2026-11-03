@@ -85,10 +85,10 @@ impl SalesChangeType {
     }
 }
 
-/// 销售变更单状态（合同 §4.4.2：目标邻接仅草稿、审批中、已生效、已作废）。
+/// 销售变更单状态：草稿、审批中、已驳回、已生效、已作废。
 ///
-/// 新写入只使用 `Draft` / `InApproval` / `Effective` / `Voided`。
-/// `PendingImpactConfirmation`、`PendingFinanceReview` 与 `Rejected` 仅保留稳定
+/// 新写入使用 `Draft` / `InApproval` / `Rejected` / `Effective` / `Voided`。
+/// `PendingImpactConfirmation`、`PendingFinanceReview` 仅保留稳定
 /// 字面量，供未改仓储查询编译；不得再作为目标状态机后继。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -105,7 +105,7 @@ pub enum SalesChangeOrderStatus {
     PendingImpactConfirmation,
     /// 残留字面量：原待财务复核，已合并入 `InApproval`。
     PendingFinanceReview,
-    /// 残留字面量：原驳回态，审批驳回不再改业务状态。
+    /// 审批已驳回，可直接修改、重新提交或作废。
     Rejected,
 }
 
@@ -157,26 +157,25 @@ impl SalesChangeOrderStatus {
 
 impl DocumentState for SalesChangeOrderStatus {
     /// 合同 §4.4.1 / §4.4.2：草稿可提交进入审批或作废；审批中可最终生效或
-    /// 撤回回草稿；残留确认/驳回态无新后继。
+    /// 撤回回草稿或驳回；已驳回可重新提交或作废。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
     /// `Draft` 的后继为 `InApproval`、`Voided`；`InApproval` 的后继为 `Effective`、`Draft`。
-    /// `Effective`、`Voided`、`PendingImpactConfirmation`、`PendingFinanceReview`、`Rejected` 返回空切片。
+    /// `Rejected` 的后继为 `InApproval`、`Voided`；已生效、已作废及残留确认态无后继。
     ///
     /// # 错误
     /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval, Self::Voided],
-            Self::InApproval => &[Self::Effective, Self::Draft],
-            Self::Effective
-            | Self::Voided
-            | Self::PendingImpactConfirmation
-            | Self::PendingFinanceReview
-            | Self::Rejected => &[],
+            Self::InApproval => &[Self::Effective, Self::Draft, Self::Rejected],
+            Self::Rejected => &[Self::InApproval, Self::Voided],
+            Self::Effective | Self::Voided | Self::PendingImpactConfirmation | Self::PendingFinanceReview => {
+                &[]
+            },
         }
     }
 }
@@ -313,6 +312,33 @@ impl SalesChangeOrder {
         self.stable.status == SalesChangeOrderStatus::Draft
     }
 
+    /// 判断原变更内容是否允许编辑、重提或放弃。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 草稿或已驳回返回 true。
+    /// # 错误
+    /// 无。
+    pub fn is_editable(&self) -> bool {
+        matches!(self.stable.status, SalesChangeOrderStatus::Draft | SalesChangeOrderStatus::Rejected)
+    }
+
+    /// 终态驳回本次变更，保留原提交与生效销售版本。
+    /// # 参数
+    /// * `updated_by` - 审批决定人。
+    /// # 返回
+    /// 变更单标记已驳回。
+    /// # 错误
+    /// 非审批中状态拒绝。
+    pub fn reject_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.stable.status != SalesChangeOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的销售变更单可以驳回"));
+        }
+        self.stable.status = SalesChangeOrderStatus::Rejected;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 返回当前冻结的变更提交身份。
     ///
     /// # 参数
@@ -353,7 +379,7 @@ impl SalesChangeOrder {
     /// # 错误
     /// 状态非 `Draft`，或变更原因为空、超长时返回错误。
     pub fn update(&mut self, update: SalesChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
-        if self.stable.status != SalesChangeOrderStatus::Draft {
+        if !self.is_editable() {
             return Err(erp_core::Error::InvalidStateTransition {
                 from: format!("{:?}", self.stable.status),
                 to: format!("{:?}", SalesChangeOrderStatus::Draft),
@@ -391,7 +417,7 @@ impl SalesChangeOrder {
         target_content_hash: impl Into<String>,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        if self.stable.status != SalesChangeOrderStatus::Draft {
+        if !self.is_editable() {
             return Err(erp_core::Error::InvalidStateTransition {
                 from: format!("{:?}", self.stable.status),
                 to: format!("{:?}", SalesChangeOrderStatus::InApproval),
@@ -453,7 +479,7 @@ impl SalesChangeOrder {
         Ok(())
     }
 
-    /// 作废变更（`Draft → Voided`）。
+    /// 作废变更（`Draft | Rejected → Voided`）。
     ///
     /// # 参数
     /// * `updated_by` - 操作人
@@ -555,7 +581,10 @@ mod tests {
         assert!(SalesChangeOrderStatus::Voided.allowed_next().is_empty());
         assert!(SalesChangeOrderStatus::PendingImpactConfirmation.allowed_next().is_empty());
         assert!(SalesChangeOrderStatus::PendingFinanceReview.allowed_next().is_empty());
-        assert!(SalesChangeOrderStatus::Rejected.allowed_next().is_empty());
+        assert!(
+            ensure_transition(SalesChangeOrderStatus::Rejected, SalesChangeOrderStatus::InApproval).is_ok()
+        );
+        assert!(ensure_transition(SalesChangeOrderStatus::Rejected, SalesChangeOrderStatus::Voided).is_ok());
         assert!(
             ensure_transition(
                 SalesChangeOrderStatus::Draft,
@@ -564,7 +593,7 @@ mod tests {
             .is_err()
         );
         assert!(
-            ensure_transition(SalesChangeOrderStatus::InApproval, SalesChangeOrderStatus::Rejected).is_err()
+            ensure_transition(SalesChangeOrderStatus::InApproval, SalesChangeOrderStatus::Rejected).is_ok()
         );
     }
 
@@ -600,5 +629,45 @@ mod tests {
 
         order.start_approval(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-2").unwrap();
         assert!(order.update(SalesChangeOrderUpdate::default(), "admin-3").is_err());
+    }
+
+    #[test]
+    fn rejection_preserves_submission_and_base_while_editing_and_resubmitting() {
+        let mut change =
+            SalesChangeOrder::new(SalesChangeOrderId::new("co-rejected"), data(), "creator").unwrap();
+        change.start_approval(SalesChangeSubmissionId::new("sub-1"), "hash-1", "submitter").unwrap();
+        change.reject_approval("approver").unwrap();
+        assert_eq!(change.stable.status, SalesChangeOrderStatus::Rejected);
+        assert!(change.is_editable());
+        assert!(!change.is_draft());
+        assert_eq!(change.current_submission_id, Some(SalesChangeSubmissionId::new("sub-1")));
+        assert_eq!(change.base_revision_id, SalesOrderRevisionId::new("rev-1"));
+        assert!(change.effective_revision_id.is_none());
+        change.update(SalesChangeOrderUpdate::default(), "editor").unwrap();
+        assert_eq!(change.stable.status, SalesChangeOrderStatus::Rejected);
+        let mut abandoned = change.clone();
+        abandoned.void("creator").unwrap();
+        assert_eq!(abandoned.stable.status, SalesChangeOrderStatus::Voided);
+        change.start_approval(SalesChangeSubmissionId::new("sub-2"), "hash-1", "submitter").unwrap();
+        assert_eq!(change.current_submission_id, Some(SalesChangeSubmissionId::new("sub-2")));
+        assert_eq!(change.stable.status, SalesChangeOrderStatus::InApproval);
+    }
+
+    #[test]
+    fn rejection_does_not_change_non_pending_changes() {
+        let mut change =
+            SalesChangeOrder::new(SalesChangeOrderId::new("co-guard"), data(), "creator").unwrap();
+        change.base = BaseModel::fake();
+        for status in [
+            SalesChangeOrderStatus::Draft,
+            SalesChangeOrderStatus::Rejected,
+            SalesChangeOrderStatus::Effective,
+            SalesChangeOrderStatus::Voided,
+        ] {
+            change.stable.status = status;
+            let before = change.clone();
+            assert!(change.reject_approval("approver").is_err());
+            assert_eq!(change, before);
+        }
     }
 }

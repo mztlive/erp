@@ -1,10 +1,10 @@
-use application_core::AuditActor;
+use application_core::{AuditActor, CommandReceipt};
 use bpm::model::SubjectRef;
 use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
 use erp_audit::AuditActorLogs;
-use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_returns::entity::returns::SupplierRefund;
+use erp_returns::service::ReturnsService;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::repository::prelude::*;
@@ -12,6 +12,7 @@ use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -19,6 +20,7 @@ use persistence_core::{Executor, Transactional};
 use super::super::adapter::supplier_refund_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::prepare::load_start_receipt_for_document_type;
+use super::reversal_submit::{committed_reversal_submit, persist_submit_receipt};
 use crate::{Error, Result, ReverseFlowPorts};
 
 /// 读取供应商退款同载荷启动收据；不存在时返回 `None`。
@@ -97,6 +99,10 @@ pub fn build_supplier_refund_start_input(input: ReverseStartInput<'_>) -> Result
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
 pub struct SupplierRefundStartPersistInput {
+    /// 绑定原请求版本和重提说明的不可变提交收据。
+    pub command_receipt: CommandReceipt,
+    /// 本次重新提交说明。
+    pub resubmission_reason: Option<String>,
     /// 已进入 `IN_APPROVAL` 的退款单。
     pub refund: SupplierRefund,
     /// 审计操作人。
@@ -155,6 +161,8 @@ async fn persist_start(
     executor: &mut dyn Executor,
 ) -> Result<SupplierRefund> {
     let SupplierRefundStartPersistInput {
+        command_receipt,
+        resubmission_reason,
         refund,
         actor,
         id,
@@ -174,15 +182,19 @@ async fn persist_start(
         executor,
     )
     .await?;
+    if committed_reversal_submit(&db, &id, &command_receipt, executor).await?.is_some() {
+        return ReturnsService::new(db.clone()).load_supplier_refund(&id, executor).await.map_err(Into::into);
+    }
     let PreparedExecution::Apply(writes) = prepared else {
-        return Ok(refund);
+        return Err(Error::ConflictError("提交收据未包含原请求版本，请刷新后重试".into()));
     };
     super::super::return_settlement::validate_settlement(&db, &refund, executor).await?;
-    let audit = actor.resource_log("supplier_refund.submit", "supplier_refund", id)?;
+    let audit = actor.resource_log("supplier_refund.submit", "supplier_refund", id.clone())?;
     persist_start_guard(&db, &writes, now, executor).await?;
     let mut refund = refund;
-    erp_returns::service::ReturnsService::persist_supplier_refund(&db, &mut refund, executor).await?;
+    ReturnsService::persist_supplier_refund(&db, &mut refund, executor).await?;
     persist_supplier_refund_runtime(
+        resubmission_reason.as_deref(),
         &db,
         &rbac,
         &writes,
@@ -196,7 +208,7 @@ async fn persist_start(
         executor,
     )
     .await?;
-    persist_log(&db, &audit, executor).await?;
+    persist_submit_receipt(&db, &command_receipt, id, &audit, executor).await?;
     Ok::<SupplierRefund, crate::Error>(refund)
 }
 
@@ -244,6 +256,7 @@ async fn persist_start_guard(
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
 pub async fn persist_supplier_refund_runtime(
+    resubmission_reason: Option<&str>,
     db: &Database,
     rbac: &ReverseFlowPorts,
     writes: &PlannedWrites,
@@ -271,6 +284,15 @@ pub async fn persist_supplier_refund_runtime(
         )
         .await?,
     );
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        resubmission_reason,
+        writes.instance.started_by.as_str(),
+        context.now,
+        executor,
+    )
+    .await?;
     rbac.runtime.persist_start_snapshot(db, snapshot, executor).await?;
     persist_start_tasks(db, writes, context, executor).await.map(|_| ()).map_err(Into::into)
 }

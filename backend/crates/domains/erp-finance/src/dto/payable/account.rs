@@ -31,6 +31,9 @@ pub enum PaymentReversalStatus {
     /// 审批中。
     #[serde(rename = "IN_APPROVAL")]
     InApproval,
+    /// 已驳回，可编辑并重新提交。
+    #[serde(rename = "REJECTED")]
+    Rejected,
     /// 已过账。
     Posted,
     /// 已冲正。

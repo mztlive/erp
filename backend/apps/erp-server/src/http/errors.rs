@@ -74,6 +74,10 @@ pub enum Error {
     #[error("操作结果暂无法确认，请查询当前状态后再决定是否重试")]
     OutcomeUnknown(#[source] persistence_core::Error),
 
+    /// 操作确定已提交；内部读取诊断不得进入公开响应。
+    #[error("操作已提交，但当前无法读取结果，请稍后查询处理状态")]
+    CommittedResultUnavailable(String),
+
     #[error(transparent)]
     RateLimited(#[from] crate::http::rate_limit::Error),
 
@@ -451,6 +455,7 @@ impl Error {
     pub(crate) fn http_status(&self) -> StatusCode {
         match self {
             Error::Internal(_) | Error::OutcomeUnknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::CommittedResultUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Error::BadRequest(_) | Error::Validation(_) | Error::InvalidInput(_) => StatusCode::BAD_REQUEST,
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             Error::Conflict(_) => StatusCode::CONFLICT,
@@ -482,6 +487,7 @@ impl Error {
             Error::Forbidden(_) => "PERMISSION_DENIED",
             Error::Unauthorized(_) => "UNAUTHENTICATED",
             Error::OutcomeUnknown(_) => "OUTCOME_UNKNOWN",
+            Error::CommittedResultUnavailable(_) => "COMMITTED_RESULT_UNAVAILABLE",
             Error::RateLimited(_) => "RATE_LIMITED",
             Error::Coded(code) => code.as_str(),
         }
@@ -499,6 +505,9 @@ impl Error {
             Error::Internal(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
             Error::OutcomeUnknown(_) => {
                 "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试".to_string()
+            },
+            Error::CommittedResultUnavailable(_) => {
+                "操作已提交，但当前无法读取结果，请稍后查询处理状态".to_string()
             },
             Error::BadRequest(message) => {
                 user_message_or(message, "提交内容不符合要求，请检查后重试", "请修改后重试")
@@ -565,8 +574,8 @@ impl Error {
     /// 返回前端能否安全提供原操作重试入口。
     ///
     /// # 返回
-    /// 仅网络外的临时系统失败和限流允许直接重试；业务冲突与结果未知
-    /// 必须先核对当前状态。
+    /// 仅网络外的临时系统失败和限流允许直接重试；业务冲突、结果未知
+    /// 与已提交但结果不可读必须先核对当前状态。
     pub(crate) fn retryable(&self) -> bool {
         matches!(self, Error::Internal(_) | Error::RateLimited(_))
             || matches!(self, Error::Coded(code) if code.retryable())
@@ -808,6 +817,44 @@ mod tests {
         assert_eq!(body["errorMessage"], "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试");
         assert_eq!(body["retryable"], false);
         assert!(!body.to_string().contains("driver details"));
+    }
+
+    #[tokio::test]
+    async fn committed_result_unavailable_preserves_commit_and_hides_unreadable_content() {
+        let sources = [
+            Error::from(erp_finance_posting::Error::CommittedResultUnavailable(
+                "private invoice customer total=123 account scope revoked".into(),
+            )),
+            Error::from(wiring_errors::Error::from(erp_finance_posting::Error::CommittedResultUnavailable(
+                "private invoice customer total=123 account scope revoked".into(),
+            ))),
+            Error::from(erp_order_to_cash::Error::from(
+                erp_finance_posting::Error::CommittedResultUnavailable("private invoice".into()),
+            )),
+            Error::from(erp_data_import::Error::from(erp_order_to_cash::Error::from(
+                erp_finance_posting::Error::CommittedResultUnavailable("private invoice".into()),
+            ))),
+            Error::from(wiring_errors::Error::from(erp_data_import::Error::from(
+                erp_order_to_cash::Error::from(erp_finance_posting::Error::CommittedResultUnavailable(
+                    "private invoice".into(),
+                )),
+            ))),
+        ];
+        for error in sources {
+            let response = error.into_response();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["status"], 503);
+            assert_eq!(body["code"], "COMMITTED_RESULT_UNAVAILABLE");
+            assert_eq!(body["errorMessage"], "操作已提交，但当前无法读取结果，请稍后查询处理状态");
+            assert_eq!(body["retryable"], false);
+            assert_eq!(body["success"], false);
+            assert!(body["data"].is_null());
+            assert!(body["requiredPermission"].is_null());
+            assert!(!body.to_string().contains("private invoice"));
+            assert!(!body.to_string().contains("OUTCOME_UNKNOWN"));
+        }
     }
 
     #[tokio::test]

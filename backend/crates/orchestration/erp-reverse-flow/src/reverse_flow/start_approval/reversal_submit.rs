@@ -1,6 +1,8 @@
 //! 冲正提交先恢复精确命令收据，未知结果仅 fresh 回读，不重复写入。
 
 use application_core::{AuditActor, CommandReceipt};
+use erp_audit::AuditLog;
+use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_read_models::Error as ReadModelError;
 use erp_returns::ReturnsCommandReceiptService;
@@ -14,10 +16,12 @@ use mongodb::error::Error as MongoError;
 use persistence_core::{Error as PersistenceError, Executor, Transactional};
 
 use super::super::ReturnsProcess;
+use super::super::customer_refund::authorized_customer_refund;
+use super::super::supplier_refund::authorized_supplier_refund;
 use super::prepare::ensure_return_start_replay_authorized;
 use crate::{Error, Result, ReverseFlowPorts};
 
-/// 两类冲正提交回读使用的完整命令身份和授权上下文。
+/// 退款及冲正提交回读使用的完整命令身份和授权上下文。
 #[derive(Clone)]
 pub(in crate::reverse_flow) struct ReversalSubmitReplayInput {
     pub id: String,
@@ -100,16 +104,26 @@ async fn replay_submit_apply(
     input: &ReversalSubmitReplayInput,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    ensure_return_start_replay_authorized(
-        db,
-        rbac,
-        &input.actor,
-        input.document_type,
-        input.submit_permission,
-        &input.id,
-        executor,
-    )
-    .await?;
+    match input.document_type {
+        DocumentType::CustomerRefund => {
+            authorized_customer_refund(db, rbac, &input.actor, &input.id, executor).await?;
+        },
+        DocumentType::SupplierRefund => {
+            authorized_supplier_refund(db, rbac, &input.actor, &input.id, executor).await?;
+        },
+        _ => {
+            ensure_return_start_replay_authorized(
+                db,
+                rbac,
+                &input.actor,
+                input.document_type,
+                input.submit_permission,
+                &input.id,
+                executor,
+            )
+            .await?
+        },
+    }
     committed_reversal_submit(db, &input.id, &input.command_receipt, executor).await
 }
 
@@ -136,7 +150,7 @@ pub(super) async fn committed_reversal_submit(
         .committed_resource_id(command_receipt, executor)
         .await?;
     if replayed.as_deref().is_some_and(|resource_id| resource_id != id) {
-        return Err(Error::ConflictError("冲正提交收据与原单不一致".into()));
+        return Err(Error::ConflictError("退款或冲正提交收据与原单不一致".into()));
     }
     Ok(replayed)
 }
@@ -191,6 +205,28 @@ pub(super) async fn mark_reversal_started(
 /// 不返回错误。
 pub(in crate::reverse_flow) fn reversal_result_read_error(error: ReadModelError) -> Error {
     Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(format!(
-        "冲正已提交但结果读取失败: {error}"
+        "退款或冲正已提交但结果读取失败: {error}"
     ))))
+}
+
+/// 在原事务内保存业务审计和精确请求提交收据。
+/// # 参数
+/// * `db` / `command_receipt` / `id` - 数据库、原请求身份及单据主键。
+/// * `audit` / `executor` - 业务审计及同一事务执行器。
+/// # 返回
+/// 保存成功后无返回值。
+/// # 错误
+/// 收据目录无效、唯一冲突或持久化失败时返回错误。
+pub(super) async fn persist_submit_receipt(
+    db: &Database,
+    command_receipt: &CommandReceipt,
+    id: String,
+    audit: &AuditLog,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    persist_log(db, audit, executor).await?;
+    ReturnsCommandReceiptService::new(db.clone())
+        .save_resource(command_receipt, id, audit.base.id.clone(), executor)
+        .await?;
+    Ok(())
 }

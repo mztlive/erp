@@ -37,6 +37,8 @@ pub struct ApprovalAdapterSpec {
     pub on_approval_start: ApprovalDomainAction,
     /// 最终通过动作。
     pub on_final_approve: ApprovalDomainAction,
+    /// 终态驳回动作。
+    pub on_reject: ApprovalDomainAction,
     /// 撤回与受阻取消动作。
     pub cancel_action: ApprovalDomainAction,
     /// WorkItem 责任角色。
@@ -211,6 +213,7 @@ pub fn spec_from_policy(policy: &ProcessRequiredApprovalPolicy) -> Result<Approv
         subject_snapshot_fields: policy.subject_snapshot_fields,
         on_approval_start: policy.start_action,
         on_final_approve: policy.final_approve_action,
+        on_reject: policy.on_reject,
         cancel_action: policy.cancel_action,
         owner_role: policy.work_item_owner_role,
         owner_organization_source: policy.owner_organization_source,
@@ -236,6 +239,8 @@ pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
             spec.on_final_approve,
             spec.cancel_action,
         )
+        || [spec.on_approval_start, spec.on_final_approve, spec.cancel_action].contains(&spec.on_reject)
+        || spec.on_reject.document_type() != spec.document_type
         || spec.process_kind != process_kind_of(spec.document_type)
     {
         return Err(Error::Internal("审批适配器规格不完整".to_string()));

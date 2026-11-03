@@ -155,8 +155,57 @@ mod tests {
         let PreparedExecution::Apply(reject_writes) = rejected else {
             panic!("驳回必须产生写入");
         };
-        assert_eq!(reject_writes.instance.current_round_no, 2);
+        assert_eq!(reject_writes.instance.current_round_no, 1);
+        assert_eq!(reject_writes.instance.status, ApprovalProcessInstanceStatus::Rejected);
+        assert_eq!(reject_writes.domain_action, Some(super::DomainActionKind::Reject));
+        assert!(reject_writes.create_tasks.is_empty());
         assert_eq!(reject_writes.instance.subject_version, 1);
+    }
+
+    #[test]
+    fn every_registered_approval_type_rejects_terminally_without_new_tasks() {
+        use crate::entity::document_registry::DocumentType;
+        use crate::service::approval::policy::require_process_required;
+        use crate::service::approval::process_kind::process_kind_of;
+        let mut tested = 0;
+        for document_type in DocumentType::ALL {
+            if require_process_required(document_type).is_err() {
+                continue;
+            }
+            let mut input = start_input(eligible("u1", "张三"), None);
+            input.process_kind = process_kind_of(document_type);
+            input.subject = SubjectRef::new(document_type.as_str(), "doc-1").unwrap();
+            input.command.graph.definition.process_kind = input.process_kind;
+            let PreparedExecution::Apply(started) = prepare_start(input).unwrap() else {
+                panic!("start");
+            };
+            let mut decision = decision_input(
+                started.instance,
+                started.created_executions[0].clone(),
+                ApprovalDecision::Reject,
+                Some("退回修改".into()),
+                eligible("u1", "张三"),
+                blocked("u2", "李四", ApprovalBlockerCode::ApproverAccountInactive),
+                None,
+            );
+            decision.command.graph.definition.process_kind = process_kind_of(document_type);
+            let PreparedExecution::Apply(rejected) = prepare_decision(decision).unwrap() else {
+                panic!("reject");
+            };
+            assert_eq!(
+                rejected.instance.status,
+                ApprovalProcessInstanceStatus::Rejected,
+                "{document_type:?}"
+            );
+            assert_eq!(rejected.domain_action, Some(super::DomainActionKind::Reject));
+            assert_eq!(rejected.instance.subject_version, 1);
+            assert_eq!(rejected.instance.current_round_no, 1);
+            assert_eq!(rejected.complete_tasks.len(), 1);
+            assert!(rejected.create_tasks.is_empty());
+            assert!(rejected.created_executions.is_empty());
+            tested += 1;
+        }
+        assert_eq!(tested, 13);
     }
 
     #[test]
@@ -556,6 +605,7 @@ mod tests {
 
     fn start_input(entry: Eligibility, receipt: Option<ApprovalCommandReceipt>) -> StartExecutionInput {
         StartExecutionInput {
+            resubmission_reason: None,
             command: ExecutionCommandInput {
                 graph: two_node_graph(),
                 current_eligibility: entry.clone(),

@@ -15,6 +15,8 @@
 
 mod change_draft;
 mod change_order;
+mod change_save;
+pub use change_save::{PURCHASE_CHANGE_SAVE_ACTION, SavePurchaseChangeDraftRequest};
 mod command;
 mod inquiry_source;
 mod line_input;
@@ -27,9 +29,10 @@ pub use application_core::{PageView, SortDir};
 pub use change_draft::PurchaseChangeDraftView;
 
 pub use self::change_order::{
-    CancelPurchaseChangeApprovalRequest, EffectPurchaseChangeRequest, PurchaseChangeEffectResult,
-    PurchaseChangeOrderListParams, PurchaseChangeSubmitResult, StartPurchaseChangeRequest,
-    StartPurchaseChangeResult, SubmitPurchaseChangeRequest, VoidPurchaseChangeRequest,
+    CancelPurchaseChangeApprovalRequest, EffectPurchaseChangeRequest, PURCHASE_CHANGE_SUBMIT_ACTION,
+    PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseChangeSubmitResult,
+    StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+    VoidPurchaseChangeRequest,
 };
 pub use self::command::{
     CONFIRM_EXPENSE_ACTION, CREATE_ACTION, CREATE_EXPENSE_ACTION, CREATE_SOURCING_ACTION,
@@ -256,6 +259,7 @@ mod tests {
     #[test]
     fn submit_fingerprint_golden() {
         let request = SubmitPurchaseOrderRequest {
+            resubmission_reason: None,
             expected_lock_version: 3,
             payment_term_code: Some("NET-30".to_string()),
             line_patches: vec![SavePurchaseOrderLinePatch {

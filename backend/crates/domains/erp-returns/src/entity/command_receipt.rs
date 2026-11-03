@@ -85,8 +85,13 @@ impl ReturnsCommandReceipt {
             || self.base.is_deleted()
             || self.audit_event_id.trim().is_empty()
             || self.command.scope_id.as_deref().is_some_and(|id| id != self.result.id())
-            || (matches!(self.command.action.as_str(), "receipt_reversal.submit" | "payment_reversal.submit")
-                && self.command.scope_id.as_deref() != Some(self.result.id()))
+            || (matches!(
+                self.command.action.as_str(),
+                "customer_refund.submit"
+                    | "supplier_refund.submit"
+                    | "receipt_reversal.submit"
+                    | "payment_reversal.submit"
+            ) && self.command.scope_id.as_deref() != Some(self.result.id()))
             || result_for_command(
                 &self.command.action,
                 &self.command.resource_type,
@@ -123,10 +128,10 @@ fn result_for_command(action: &str, resource_type: &str, id: String) -> Result<R
         return Err(corrupted());
     }
     match (action, resource_type) {
-        ("customer_refund.commit", "customer_refund") => {
+        ("customer_refund.commit" | "customer_refund.submit", "customer_refund") => {
             Ok(ReturnsCommandResult::CustomerRefund(CustomerRefundId::new(id)))
         },
-        ("supplier_refund.commit", "supplier_refund") => {
+        ("supplier_refund.commit" | "supplier_refund.submit", "supplier_refund") => {
             Ok(ReturnsCommandResult::SupplierRefund(SupplierRefundId::new(id)))
         },
         ("receipt_reversal.commit", "receipt_reversal") => {
@@ -159,6 +164,8 @@ mod tests {
             ("supplier_refund.commit", "supplier_refund"),
             ("receipt_reversal.commit", "receipt_reversal"),
             ("payment_reversal.commit", "payment_reversal"),
+            ("customer_refund.submit", "customer_refund"),
+            ("supplier_refund.submit", "supplier_refund"),
             ("receipt_reversal.submit", "receipt_reversal"),
             ("payment_reversal.submit", "payment_reversal"),
         ] {

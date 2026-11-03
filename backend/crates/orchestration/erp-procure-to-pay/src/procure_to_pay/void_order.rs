@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_log, recover_command};
+use erp_core::common::time::Instant;
 use erp_procurement::dto::purchase_order::{VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult};
 use erp_procurement::entity::purchase_order::{
     PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseOrder,
@@ -15,6 +16,7 @@ use erp_procurement::service::purchase_order::void_order::{
 };
 use erp_sales::repository::SalesOrderExt;
 use erp_supply::inquiry::InquirySupplyService;
+use erp_workflow::service::work_item::approval_rework::complete_document_rework;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
@@ -291,6 +293,15 @@ impl VoidSteps for VoidPosting<'_, '_> {
                     .await?;
             },
             VoidStep::Tasks => {
+                complete_document_rework(
+                    self.db,
+                    "purchase_order",
+                    &self.order.base.id,
+                    self.command.actor.id(),
+                    Instant::now(),
+                    executor,
+                )
+                .await?;
                 sync_procurement_tasks_for_sales_order(
                     self.db,
                     self.ports.finance_responsibility.as_ref(),

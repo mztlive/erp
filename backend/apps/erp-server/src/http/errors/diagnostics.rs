@@ -31,6 +31,7 @@ impl Diagnostic {
             Error::Forbidden(_) => "forbidden",
             Error::Unauthorized(_) => "unauthorized",
             Error::OutcomeUnknown(_) => "outcome_unknown",
+            Error::CommittedResultUnavailable(_) => "committed_result_unavailable",
             Error::RateLimited(_) => "rate_limit",
             Error::Logic(_) => "domain_rule",
             Error::Validation(_) => "validation",
@@ -40,6 +41,7 @@ impl Diagnostic {
         let (category, fingerprint) = match error {
             Error::Internal(message) => (internal_category(message), digest(message)),
             Error::OutcomeUnknown(source) => ("commit_outcome_unknown", digest(&source.to_string())),
+            Error::CommittedResultUnavailable(message) => ("committed_result_unavailable", digest(message)),
             // 校验和业务错误不计算输入摘要，避免为账号、密码等低熵值留下可枚举标识。
             _ => (kind, String::new()),
         };
@@ -101,5 +103,16 @@ mod tests {
         }
         let diagnostic = Diagnostic::from_error(&Error::Internal("private detail".into()));
         assert_eq!(diagnostic.category, "unclassified");
+    }
+
+    #[test]
+    fn committed_result_diagnostic_does_not_expose_read_failure() {
+        let error = Error::CommittedResultUnavailable("invoice contents and revoked scope".into());
+        let diagnostic = Diagnostic::from_error(&error);
+        assert_eq!(diagnostic.kind, "committed_result_unavailable");
+        assert_eq!(diagnostic.category, "committed_result_unavailable");
+        assert_eq!(diagnostic.fingerprint.len(), 64);
+        assert!(diagnostic.fingerprint.chars().all(|character| character.is_ascii_hexdigit()));
+        assert!(!error.to_string().contains("invoice contents"));
     }
 }

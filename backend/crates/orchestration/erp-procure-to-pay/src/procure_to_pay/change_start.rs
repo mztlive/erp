@@ -8,16 +8,16 @@ use bpm::ids::{
 };
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_approval_runtime::ApprovalRuntimePort;
-use erp_approval_runtime::approval_start::{
-    StartReplayErrors, StartTaskContext, persist_start_runtime, persist_start_tasks, replay_start,
-};
+use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+use erp_procurement::dto::purchase_order::PurchaseChangeSubmitResult;
 use erp_procurement::entity::purchase_order::{
-    PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
+    PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseCommandReceipt,
+    PurchaseCommandReceiptIdentity,
 };
-use erp_procurement::repository::PurchaseOrderExt;
-use erp_workflow::entity::approval_integration::{ApprovalStartIdentity, ApprovalSubjectSnapshotPayload};
+use erp_procurement::repository::{PurchaseCommandExt, PurchaseOrderExt};
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::repository::prelude::*;
@@ -32,11 +32,13 @@ use erp_workflow::service::approval::execution::{
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::read;
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
+use super::change::replay_change_command;
 use super::change_adapter::purchase_change_order_object_readable;
 use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::{Error, Result};
@@ -92,51 +94,6 @@ pub(super) async fn load_start_receipt(
     .map_err(Error::from)
 }
 
-/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购变更启动结果。
-///
-/// # 参数
-/// * `db` - 审批运行时数据库。
-/// * `subject` - 采购变更单主体引用。
-/// * `subject_version` - 冻结提交版本。
-/// * `idempotency_key` - 尚未规范化的幂等键。
-/// * `binding` - 创建时冻结的定义绑定。
-/// * `actor_id` - 启动人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 没有匹配收据时返回 `None`；同键同载荷且运行事实一致时返回审批实例 ID。
-///
-/// # 错误
-/// 幂等键非法、同键异载荷、收据引用的实例不存在、收据与冻结运行事实不一致，或仓储读取失败时返回错误。
-pub(super) async fn replay_purchase_change_start_with_executor(
-    db: &Database,
-    subject: &SubjectRef,
-    subject_version: u32,
-    idempotency_key: &str,
-    binding: &ApprovalDefinitionBinding,
-    actor_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    replay_start(
-        db,
-        ApprovalStartIdentity {
-            process_kind: process_kind_of(DocumentType::PurchaseChangeOrder),
-            subject,
-            subject_version,
-            binding,
-            actor_id,
-        },
-        idempotency_key,
-        StartReplayErrors {
-            missing_instance: "采购变更启动收据引用的审批实例不存在",
-            identity_mismatch: "采购变更启动收据与冻结运行事实不一致",
-        },
-        executor,
-    )
-    .await
-    .map_err(Error::from)
-}
-
 /// 采购变更启动输入。
 ///
 /// # 用途
@@ -154,6 +111,8 @@ pub(super) async fn replay_purchase_change_start_with_executor(
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择。
 pub(super) struct PurchaseChangeStartInput<'a> {
+    /// 重提说明，与冻结提交一同保存。
+    pub resubmission_reason: Option<String>,
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 冻结绑定。
@@ -199,6 +158,7 @@ pub(super) fn build_purchase_change_start_input(
     input: PurchaseChangeStartInput<'_>,
 ) -> Result<StartExecutionInput> {
     let PurchaseChangeStartInput {
+        resubmission_reason,
         graph,
         binding,
         subject,
@@ -221,6 +181,7 @@ pub(super) fn build_purchase_change_start_input(
     })
     .map_err(map_start_plan_error)?;
     Ok(StartExecutionInput {
+        resubmission_reason,
         command: ExecutionCommandInput {
             graph,
             current_eligibility: plan.entry_eligibility.clone(),
@@ -292,6 +253,11 @@ fn map_start_plan_error(error: bpm::engine::EngineError) -> Error {
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与提交快照同事务。
 pub(super) struct PurchaseChangeStartPersistInput {
+    /// 原请求稳定身份与完整载荷摘要。
+    pub command_identity: PurchaseCommandReceiptIdentity,
+    pub request_fingerprint: String,
+    /// 驳回后的重新提交说明。
+    pub resubmission_reason: Option<String>,
     pub ports: Arc<PurchaseOrderPorts>,
     /// 已进入审批中的变更单。
     pub change_order: PurchaseChangeOrder,
@@ -335,7 +301,7 @@ pub(super) struct PurchaseChangeStartPersistInput {
 pub(super) async fn persist_purchase_change_start(
     db: &Database,
     input: PurchaseChangeStartPersistInput,
-) -> Result<()> {
+) -> Result<PurchaseChangeSubmitResult> {
     let db = db.clone();
     let client = db.client().clone();
     client
@@ -348,36 +314,31 @@ async fn apply_change_start(
     db: &Database,
     mut input: PurchaseChangeStartPersistInput,
     executor: &mut dyn Executor,
-) -> Result<()> {
-    let PreparedExecution::Apply(writes) = input.prepared else { return Ok(()) };
+) -> Result<PurchaseChangeSubmitResult> {
     input
         .ports
         .access(db.clone())
         .require_object(&input.actor, "submit", input.change_order.purchase_order_id.as_ref(), &[], executor)
         .await?;
+    if let Some(result) =
+        replay_change_command(db, &input.command_identity, &input.request_fingerprint, executor).await?
+    {
+        return Ok(result);
+    }
+    let PreparedExecution::Apply(ref writes) = input.prepared else {
+        return Err(Error::ConflictError("缺少完整采购变更提交回执，无法安全回放".into()));
+    };
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
-    guard_change_start(db, &writes, input.now, executor).await?;
-    let order = db
-        .purchase_orders()
-        .find_by_id(&input.change_order.purchase_order_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("原采购单不存在".into()))?;
-    super::inquiry_supply::resize_change_quotes(db, &order, &input.submission_lines, executor).await?;
-    db.purchase_order()
-        .create_change_submission(
-            &mut input.change_order,
-            &input.submission,
-            &input.submission_lines,
-            executor,
-        )
+    guard_change_start(db, writes, input.now, executor).await?;
+    persist_change_target(db, &mut input.change_order, &input.submission, &input.submission_lines, executor)
         .await?;
     persist_runtime_writes(
         db,
         input.ports.approval.as_ref(),
-        &writes,
+        writes,
         &input.snapshot_payload,
         StartTaskContext {
             document_type: DocumentType::PurchaseChangeOrder,
@@ -385,11 +346,57 @@ async fn apply_change_start(
             organization_id: &input.organization_id,
             now: input.now,
         },
+        input.resubmission_reason.as_deref(),
         executor,
     )
     .await?;
     persist_log(db, &input.audit, executor).await?;
+    persist_change_result(db, &input, executor).await
+}
+
+/// 在同一事务检查来源采购并写入目标提交、明细及变更版本。
+async fn persist_change_target(
+    db: &Database,
+    change: &mut PurchaseChangeOrder,
+    submission: &PurchaseChangeSubmission,
+    lines: &[PurchaseChangeSubmissionLine],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let order = db
+        .purchase_orders()
+        .find_by_id(&change.purchase_order_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("原采购单不存在".into()))?;
+    super::inquiry_supply::resize_change_quotes(db, &order, lines, executor).await?;
+    db.purchase_order().create_change_submission(change, submission, lines, executor).await?;
     Ok(())
+}
+
+/// 保存随领域事实原子提交的首次响应；后续回放不读取当前业务状态重建结果。
+async fn persist_change_result(
+    db: &Database,
+    input: &PurchaseChangeStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseChangeSubmitResult> {
+    let result = PurchaseChangeSubmitResult {
+        change_id: input.change_order.base.id.clone(),
+        submission_id: input.submission.base.id.clone(),
+        submission_no: input.submission.submission_no.clone(),
+        status: input.change_order.stable.status.as_str().to_string(),
+        lock_version: input.change_order.base.version,
+        reference: format!("CS-{}", input.submission.submission_no),
+    };
+    let receipt = PurchaseCommandReceipt::new(
+        &input.command_identity,
+        &input.request_fingerprint,
+        result.clone(),
+        input.audit.base.id.clone(),
+    )?;
+    db.purchase_command_receipts::<PurchaseChangeSubmitResult>()
+        .create(&receipt, executor)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    Ok(result)
 }
 
 /// 在启动收据写入后以原版本执行单据守卫，冲突时不继续创建采购变更提交。
@@ -426,15 +433,25 @@ async fn persist_runtime_writes(
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartTaskContext<'_>,
+    resubmission_reason: Option<&str>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let snapshot = persist_start_runtime(
+    let mut snapshot = persist_start_runtime(
         db,
         writes,
         context.document_type,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交采购变更单",
+        executor,
+    )
+    .await?;
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        resubmission_reason,
+        writes.instance.started_by.as_str(),
+        context.now,
         executor,
     )
     .await?;
@@ -563,6 +580,7 @@ mod tests {
         organization_id: &'a str,
     ) -> PurchaseChangeStartInput<'a> {
         PurchaseChangeStartInput {
+            resubmission_reason: None,
             graph,
             binding,
             subject: bpm::model::SubjectRef::new("purchase_change_order", "co-1").unwrap(),
@@ -633,6 +651,7 @@ mod tests {
     #[test]
     fn purchase_change_start_replays_matching_receipt() {
         let identity = start_identity(StartIdentityParams {
+            resubmission_reason: None,
             idempotency_key: bpm::model::IdempotencyKey::parse("key-1").unwrap(),
             process_kind: process_kind_of(DocumentType::PurchaseChangeOrder).as_str(),
             subject_kind: "purchase_change_order",

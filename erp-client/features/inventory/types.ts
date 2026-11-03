@@ -116,7 +116,11 @@ export type StockReservationRow = Readonly<{
 }>
 
 /** 合同 §4.4 库存调整生命周期。页面不得再展示旧复核旁路状态。 */
-export type StockAdjustmentStatus = "DRAFT" | "IN_APPROVAL" | "POSTED"
+export type StockAdjustmentStatus =
+    | "DRAFT"
+    | "IN_APPROVAL"
+    | "REJECTED"
+    | "POSTED"
 
 export type StockAdjustmentRow = Readonly<{
     adjustmentId: string

@@ -98,12 +98,14 @@ export async function submitSupplierRefund(input: {
     refundId: string
     expectedVersion: number
     idempotencyKey: string
+    resubmissionReason?: string
 }): Promise<SupplierRefundMutationResult> {
     try {
         const submitted = await apiPost<BackendSupplierRefund>(
             `/admin/supplier-refunds/${encodeURIComponent(input.refundId)}/submit`,
             buildSupplierRefundSubmitRequest({
                 expectedVersion: input.expectedVersion,
+                resubmissionReason: input.resubmissionReason,
                 idempotencyKey: input.idempotencyKey,
             }),
         )

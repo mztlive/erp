@@ -101,6 +101,7 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         },
         WorkItemType::IntegrationResultUnknown => "进入接口错误中心后，确认本次集成结果。",
         WorkItemType::BusinessException => "进入对应页面后，处理本次业务异常。",
+        WorkItemType::ApprovalRework => "查看驳回原因，修改或补充说明后重新提交；不再办理时可放弃。",
         WorkItemType::DocumentApproval => "核对本页事实后，确认通过或驳回。",
     }
     .to_string()
@@ -222,6 +223,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::ImportBusinessConfirmation => "导入试算待业务确认",
         WorkItemType::IntegrationResultUnknown => "集成结果待确认",
         WorkItemType::BusinessException => "业务异常待处理",
+        WorkItemType::ApprovalRework => "审批已驳回，需要原提交人处理",
         WorkItemType::DocumentApproval => "单据待审批",
     }
 }
@@ -242,6 +244,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
         WorkItemType::SalesChangeFinanceReview => "不复核则销售变更金额不能入账",
         WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview => "该历史复核功能已停用",
+        WorkItemType::ApprovalRework => "重新提交前单据不会继续审批或生效",
         WorkItemType::DocumentApproval => "不审批则单据不能生效",
         WorkItemType::OwnershipMigrationSalesConfirmation
         | WorkItemType::OwnershipMigrationFinanceConfirmation => "不确认则客户归属不能完成迁移",

@@ -2,151 +2,126 @@
 
 use crate::entity::document_registry::DocumentType;
 
-/// ERP 审批政策登记的强类型领域动作。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ApprovalDomainAction {
-    SalesOrderStartApprovalSubmission,
-    SalesOrderFormalizeApprovedSubmission,
-    SalesOrderCancelApprovalSubmission,
-    VoucherSalesOrderStartApprovalSubmission,
-    VoucherSalesOrderFormalizeApprovedSubmission,
-    VoucherSalesOrderCancelApprovalSubmission,
-    SalesChangeOrderSubmitSalesChange,
-    SalesChangeOrderApplyEffectiveChange,
-    SalesChangeOrderCancelApproval,
-    PurchaseOrderSubmit,
-    PurchaseOrderFormalizeApprovedOrder,
-    PurchaseOrderCancelApproval,
-    PurchaseChangeOrderSubmitChange,
-    PurchaseChangeOrderApplyEffectiveChange,
-    PurchaseChangeOrderCancelApproval,
-    StockAdjustmentSubmit,
-    StockAdjustmentPost,
-    StockAdjustmentCancelApproval,
-    SalesInvoiceRequestSubmit,
-    SalesInvoiceRequestApprove,
-    SalesInvoiceRequestCancelApproval,
-    PurchasePaymentRequestSubmit,
-    PurchasePaymentRequestApprove,
-    PurchasePaymentRequestReject,
-    PurchasePaymentRequestCancelApproval,
-    CustomerReceiptSubmit,
-    CustomerReceiptPost,
-    CustomerReceiptCancelApproval,
-    CustomerRefundSubmit,
-    CustomerRefundPost,
-    CustomerRefundCancelApproval,
-    SupplierRefundSubmit,
-    SupplierRefundPost,
-    SupplierRefundCancelApproval,
-    ReceiptReversalSubmit,
-    ReceiptReversalPost,
-    ReceiptReversalCancelApproval,
-    PaymentReversalSubmit,
-    PaymentReversalPost,
-    PaymentReversalCancelApproval,
+// 每个动作只登记一次；枚举、穷尽集合、所属单据与审计代码由同一声明生成。
+macro_rules! approval_actions {
+    ($($document:ident { $($action:ident => $code:literal),+ $(,)? }),+ $(,)?) => {
+        /// ERP 审批政策登记的强类型领域动作。
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum ApprovalDomainAction {
+            $($($action,)+)+
+        }
+
+        impl ApprovalDomainAction {
+            /// 全部已登记审批领域动作的稳定穷尽集合。
+            pub const ALL: [Self; 52] = [$($(Self::$action,)+)+];
+
+            /// 返回动作所属的唯一 ERP 单据类型。
+            /// # 参数
+            /// 无。
+            /// # 返回
+            /// 返回该动作唯一对应的 `DocumentType`。
+            /// # 错误
+            /// 不返回错误。
+            pub fn document_type(self) -> DocumentType {
+                match self { $($(Self::$action => DocumentType::$document,)+)+ }
+            }
+
+            /// 返回稳定动作代码。
+            /// # 参数
+            /// 无。
+            /// # 返回
+            /// 返回形如 `Service::method` 的稳定动作代码。
+            /// # 错误
+            /// 不返回错误。
+            pub fn as_str(self) -> &'static str {
+                match self { $($(Self::$action => $code,)+)+ }
+            }
+        }
+    };
+}
+
+approval_actions! {
+    SalesOrder {
+        SalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",
+        SalesOrderFormalizeApprovedSubmission => "SalesOrderService::formalize_approved_submission",
+        SalesOrderCancelApprovalSubmission => "SalesOrderService::cancel_approval_submission",
+        SalesOrderReject => "SalesOrderProcess::reject",
+    },
+    VoucherSalesOrder {
+        VoucherSalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",
+        VoucherSalesOrderFormalizeApprovedSubmission => "SalesOrderService::formalize_approved_submission",
+        VoucherSalesOrderCancelApprovalSubmission => "SalesOrderService::cancel_approval_submission",
+        VoucherSalesOrderReject => "VoucherSalesOrderProcess::reject",
+    },
+    SalesChangeOrder {
+        SalesChangeOrderSubmitSalesChange => "SalesChangeOrderService::submit_sales_change",
+        SalesChangeOrderApplyEffectiveChange => "SalesChangeOrderService::apply_effective_change",
+        SalesChangeOrderCancelApproval => "SalesChangeOrderService::cancel_approval",
+        SalesChangeOrderReject => "SalesChangeOrderProcess::reject",
+    },
+    PurchaseOrder {
+        PurchaseOrderSubmit => "PurchaseOrderService::submit",
+        PurchaseOrderFormalizeApprovedOrder => "PurchaseOrderService::formalize_approved_order",
+        PurchaseOrderCancelApproval => "PurchaseOrderService::cancel_approval",
+        PurchaseOrderReject => "PurchaseOrderProcess::reject",
+    },
+    PurchaseChangeOrder {
+        PurchaseChangeOrderSubmitChange => "PurchaseChangeService::submit_change",
+        PurchaseChangeOrderApplyEffectiveChange => "PurchaseChangeService::apply_effective_change",
+        PurchaseChangeOrderCancelApproval => "PurchaseChangeService::cancel_approval",
+        PurchaseChangeOrderReject => "PurchaseChangeOrderProcess::reject",
+    },
+    StockAdjustment {
+        StockAdjustmentSubmit => "InventoryService::submit_stock_adjustment",
+        StockAdjustmentPost => "InventoryService::post_stock_adjustment",
+        StockAdjustmentCancelApproval => "InventoryService::cancel_stock_adjustment_approval",
+        StockAdjustmentReject => "StockAdjustmentProcess::reject",
+    },
+    SalesInvoiceRequest {
+        SalesInvoiceRequestSubmit => "InvoiceRequestProcess::submit",
+        SalesInvoiceRequestApprove => "InvoiceRequestProcess::approve",
+        SalesInvoiceRequestCancelApproval => "InvoiceRequestProcess::cancel",
+        SalesInvoiceRequestReject => "SalesInvoiceRequestProcess::reject",
+    },
+    PurchasePaymentRequest {
+        PurchasePaymentRequestSubmit => "PurchasePaymentRequestProcess::submit",
+        PurchasePaymentRequestApprove => "PurchasePaymentRequestProcess::approve",
+        PurchasePaymentRequestReject => "PurchasePaymentRequestProcess::reject",
+        PurchasePaymentRequestCancelApproval => "PurchasePaymentRequestProcess::cancel",
+    },
+    CustomerReceipt {
+        CustomerReceiptSubmit => "ReceivableService::submit_customer_receipt",
+        CustomerReceiptPost => "ReceivableService::post_customer_receipt",
+        CustomerReceiptCancelApproval => "ReceivableService::cancel_customer_receipt_approval",
+        CustomerReceiptReject => "CustomerReceiptProcess::reject",
+    },
+    CustomerRefund {
+        CustomerRefundSubmit => "ReturnsService::submit_customer_refund",
+        CustomerRefundPost => "ReturnsService::post_customer_refund",
+        CustomerRefundCancelApproval => "ReturnsService::cancel_customer_refund_approval",
+        CustomerRefundReject => "CustomerRefundProcess::reject",
+    },
+    SupplierRefund {
+        SupplierRefundSubmit => "ReturnsService::submit_supplier_refund",
+        SupplierRefundPost => "ReturnsService::post_supplier_refund",
+        SupplierRefundCancelApproval => "ReturnsService::cancel_supplier_refund_approval",
+        SupplierRefundReject => "SupplierRefundProcess::reject",
+    },
+    ReceiptReversal {
+        ReceiptReversalSubmit => "ReturnsService::submit_receipt_reversal",
+        ReceiptReversalPost => "ReturnsService::post_receipt_reversal",
+        ReceiptReversalCancelApproval => "ReturnsService::cancel_receipt_reversal_approval",
+        ReceiptReversalReject => "ReceiptReversalProcess::reject",
+    },
+    PaymentReversal {
+        PaymentReversalSubmit => "ReturnsService::submit_payment_reversal",
+        PaymentReversalPost => "ReturnsService::post_payment_reversal",
+        PaymentReversalCancelApproval => "ReturnsService::cancel_payment_reversal_approval",
+        PaymentReversalReject => "PaymentReversalProcess::reject",
+    },
 }
 
 impl ApprovalDomainAction {
-    /// 全部已登记审批领域动作的稳定穷尽集合。
-    pub const ALL: [Self; 40] = [
-        Self::SalesOrderStartApprovalSubmission,
-        Self::SalesOrderFormalizeApprovedSubmission,
-        Self::SalesOrderCancelApprovalSubmission,
-        Self::VoucherSalesOrderStartApprovalSubmission,
-        Self::VoucherSalesOrderFormalizeApprovedSubmission,
-        Self::VoucherSalesOrderCancelApprovalSubmission,
-        Self::SalesChangeOrderSubmitSalesChange,
-        Self::SalesChangeOrderApplyEffectiveChange,
-        Self::SalesChangeOrderCancelApproval,
-        Self::PurchaseOrderSubmit,
-        Self::PurchaseOrderFormalizeApprovedOrder,
-        Self::PurchaseOrderCancelApproval,
-        Self::PurchaseChangeOrderSubmitChange,
-        Self::PurchaseChangeOrderApplyEffectiveChange,
-        Self::PurchaseChangeOrderCancelApproval,
-        Self::StockAdjustmentSubmit,
-        Self::StockAdjustmentPost,
-        Self::StockAdjustmentCancelApproval,
-        Self::SalesInvoiceRequestSubmit,
-        Self::SalesInvoiceRequestApprove,
-        Self::SalesInvoiceRequestCancelApproval,
-        Self::PurchasePaymentRequestSubmit,
-        Self::PurchasePaymentRequestApprove,
-        Self::PurchasePaymentRequestReject,
-        Self::PurchasePaymentRequestCancelApproval,
-        Self::CustomerReceiptSubmit,
-        Self::CustomerReceiptPost,
-        Self::CustomerReceiptCancelApproval,
-        Self::CustomerRefundSubmit,
-        Self::CustomerRefundPost,
-        Self::CustomerRefundCancelApproval,
-        Self::SupplierRefundSubmit,
-        Self::SupplierRefundPost,
-        Self::SupplierRefundCancelApproval,
-        Self::ReceiptReversalSubmit,
-        Self::ReceiptReversalPost,
-        Self::ReceiptReversalCancelApproval,
-        Self::PaymentReversalSubmit,
-        Self::PaymentReversalPost,
-        Self::PaymentReversalCancelApproval,
-    ];
-
-    /// 返回动作所属的唯一 ERP 单据类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回该动作唯一对应的 `DocumentType`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn document_type(self) -> DocumentType {
-        match self {
-            Self::SalesOrderStartApprovalSubmission
-            | Self::SalesOrderFormalizeApprovedSubmission
-            | Self::SalesOrderCancelApprovalSubmission => DocumentType::SalesOrder,
-            Self::VoucherSalesOrderStartApprovalSubmission
-            | Self::VoucherSalesOrderFormalizeApprovedSubmission
-            | Self::VoucherSalesOrderCancelApprovalSubmission => DocumentType::VoucherSalesOrder,
-            Self::SalesChangeOrderSubmitSalesChange
-            | Self::SalesChangeOrderApplyEffectiveChange
-            | Self::SalesChangeOrderCancelApproval => DocumentType::SalesChangeOrder,
-            Self::PurchaseOrderSubmit
-            | Self::PurchaseOrderFormalizeApprovedOrder
-            | Self::PurchaseOrderCancelApproval => DocumentType::PurchaseOrder,
-            Self::PurchaseChangeOrderSubmitChange
-            | Self::PurchaseChangeOrderApplyEffectiveChange
-            | Self::PurchaseChangeOrderCancelApproval => DocumentType::PurchaseChangeOrder,
-            Self::StockAdjustmentSubmit | Self::StockAdjustmentPost | Self::StockAdjustmentCancelApproval => {
-                DocumentType::StockAdjustment
-            },
-            Self::SalesInvoiceRequestSubmit
-            | Self::SalesInvoiceRequestApprove
-            | Self::SalesInvoiceRequestCancelApproval => DocumentType::SalesInvoiceRequest,
-            Self::PurchasePaymentRequestSubmit
-            | Self::PurchasePaymentRequestApprove
-            | Self::PurchasePaymentRequestReject
-            | Self::PurchasePaymentRequestCancelApproval => DocumentType::PurchasePaymentRequest,
-            Self::CustomerReceiptSubmit | Self::CustomerReceiptPost | Self::CustomerReceiptCancelApproval => {
-                DocumentType::CustomerReceipt
-            },
-            Self::CustomerRefundSubmit | Self::CustomerRefundPost | Self::CustomerRefundCancelApproval => {
-                DocumentType::CustomerRefund
-            },
-            Self::SupplierRefundSubmit | Self::SupplierRefundPost | Self::SupplierRefundCancelApproval => {
-                DocumentType::SupplierRefund
-            },
-            Self::ReceiptReversalSubmit | Self::ReceiptReversalPost | Self::ReceiptReversalCancelApproval => {
-                DocumentType::ReceiptReversal
-            },
-            Self::PaymentReversalSubmit | Self::PaymentReversalPost | Self::PaymentReversalCancelApproval => {
-                DocumentType::PaymentReversal
-            },
-        }
-    }
-
     /// 三类审批动作两两互异时返回 `true`。
     ///
     /// # 参数
@@ -162,65 +137,6 @@ impl ApprovalDomainAction {
     pub fn are_distinct(first: Self, second: Self, third: Self) -> bool {
         first != second && first != third && second != third
     }
-
-    /// 返回稳定动作代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回形如 `Service::method` 的稳定动作代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::SalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",
-            Self::SalesOrderFormalizeApprovedSubmission => "SalesOrderService::formalize_approved_submission",
-            Self::SalesOrderCancelApprovalSubmission => "SalesOrderService::cancel_approval_submission",
-            Self::VoucherSalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",
-            Self::VoucherSalesOrderFormalizeApprovedSubmission => {
-                "SalesOrderService::formalize_approved_submission"
-            },
-            Self::VoucherSalesOrderCancelApprovalSubmission => {
-                "SalesOrderService::cancel_approval_submission"
-            },
-            Self::SalesChangeOrderSubmitSalesChange => "SalesChangeOrderService::submit_sales_change",
-            Self::SalesChangeOrderApplyEffectiveChange => "SalesChangeOrderService::apply_effective_change",
-            Self::SalesChangeOrderCancelApproval => "SalesChangeOrderService::cancel_approval",
-            Self::PurchaseOrderSubmit => "PurchaseOrderService::submit",
-            Self::PurchaseOrderFormalizeApprovedOrder => "PurchaseOrderService::formalize_approved_order",
-            Self::PurchaseOrderCancelApproval => "PurchaseOrderService::cancel_approval",
-            Self::PurchaseChangeOrderSubmitChange => "PurchaseChangeService::submit_change",
-            Self::PurchaseChangeOrderApplyEffectiveChange => "PurchaseChangeService::apply_effective_change",
-            Self::PurchaseChangeOrderCancelApproval => "PurchaseChangeService::cancel_approval",
-            Self::StockAdjustmentSubmit => "InventoryService::submit_stock_adjustment",
-            Self::StockAdjustmentPost => "InventoryService::post_stock_adjustment",
-            Self::StockAdjustmentCancelApproval => "InventoryService::cancel_stock_adjustment_approval",
-            Self::SalesInvoiceRequestSubmit => "InvoiceRequestProcess::submit",
-            Self::SalesInvoiceRequestApprove => "InvoiceRequestProcess::approve",
-            Self::SalesInvoiceRequestCancelApproval => "InvoiceRequestProcess::cancel",
-            Self::PurchasePaymentRequestSubmit => "PurchasePaymentRequestProcess::submit",
-            Self::PurchasePaymentRequestApprove => "PurchasePaymentRequestProcess::approve",
-            Self::PurchasePaymentRequestReject => "PurchasePaymentRequestProcess::reject",
-            Self::PurchasePaymentRequestCancelApproval => "PurchasePaymentRequestProcess::cancel",
-            Self::CustomerReceiptSubmit => "ReceivableService::submit_customer_receipt",
-            Self::CustomerReceiptPost => "ReceivableService::post_customer_receipt",
-            Self::CustomerReceiptCancelApproval => "ReceivableService::cancel_customer_receipt_approval",
-            Self::CustomerRefundSubmit => "ReturnsService::submit_customer_refund",
-            Self::CustomerRefundPost => "ReturnsService::post_customer_refund",
-            Self::CustomerRefundCancelApproval => "ReturnsService::cancel_customer_refund_approval",
-            Self::SupplierRefundSubmit => "ReturnsService::submit_supplier_refund",
-            Self::SupplierRefundPost => "ReturnsService::post_supplier_refund",
-            Self::SupplierRefundCancelApproval => "ReturnsService::cancel_supplier_refund_approval",
-            Self::ReceiptReversalSubmit => "ReturnsService::submit_receipt_reversal",
-            Self::ReceiptReversalPost => "ReturnsService::post_receipt_reversal",
-            Self::ReceiptReversalCancelApproval => "ReturnsService::cancel_receipt_reversal_approval",
-            Self::PaymentReversalSubmit => "ReturnsService::submit_payment_reversal",
-            Self::PaymentReversalPost => "ReturnsService::post_payment_reversal",
-            Self::PaymentReversalCancelApproval => "ReturnsService::cancel_payment_reversal_approval",
-        }
-    }
 }
 
 #[cfg(test)]
@@ -231,9 +147,9 @@ mod tests {
 
     #[test]
     fn all_actions_have_document_type_and_stable_code() {
-        assert_eq!(ApprovalDomainAction::ALL.len(), 40);
+        assert_eq!(ApprovalDomainAction::ALL.len(), 52);
         let actions = ApprovalDomainAction::ALL.into_iter().collect::<HashSet<_>>();
-        assert_eq!(actions.len(), 40);
+        assert_eq!(actions.len(), 52);
         for action in actions {
             assert!(!action.document_type().as_str().is_empty());
             assert!(!action.as_str().is_empty());

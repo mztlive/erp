@@ -51,6 +51,8 @@ pub struct PurchaseChangeOrderAdapter {
     pub on_approval_start: ApprovalDomainAction,
     /// 最终通过动作。
     pub on_final_approve: ApprovalDomainAction,
+    /// 终态驳回动作。
+    pub on_reject: ApprovalDomainAction,
     /// 撤回与受阻取消动作。
     pub cancel_action: ApprovalDomainAction,
     /// WorkItem 责任角色。
@@ -87,6 +89,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseChangeOrderAda
         || spec.subject_version_source != ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         || spec.on_approval_start != ApprovalDomainAction::PurchaseChangeOrderSubmitChange
         || spec.on_final_approve != ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange
+        || spec.on_reject != ApprovalDomainAction::PurchaseChangeOrderReject
         || spec.cancel_action != ApprovalDomainAction::PurchaseChangeOrderCancelApproval
         || spec.owner_role.as_str() != "purchase_change_order_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
@@ -104,6 +107,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseChangeOrderAda
         subject_snapshot_builder: "build_purchase_change_snapshot",
         on_approval_start: spec.on_approval_start,
         on_final_approve: spec.on_final_approve,
+        on_reject: spec.on_reject,
         cancel_action: spec.cancel_action,
         owner_role: spec.owner_role.as_str(),
         owner_organization_snapshot: spec.owner_organization_source,
@@ -165,6 +169,9 @@ pub fn execute_purchase_change_domain_action(
     match action {
         ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
             Ok(ensure_final_approve_effective(order)?)
+        },
+        ApprovalDomainAction::PurchaseChangeOrderReject => {
+            Ok(order.reject_approval(order.approval_subject_version, updated_by)?)
         },
         ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
             Ok(cancel_purchase_change_to_draft(order, updated_by)?)

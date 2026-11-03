@@ -111,6 +111,8 @@ pub struct ExpectedStockBalanceVersionHttpRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitStockAdjustmentHttpRequest {
+    /// 已驳回单据重新提交时必须填写，冻结到新审批资料。
+    pub resubmission_reason: Option<String>,
     pub expected_version: String,
     pub expected_subject_version: String,
     pub reason_type: AdjustmentReasonType,
@@ -140,6 +142,7 @@ impl SubmitStockAdjustmentHttpRequest {
             })
             .collect::<std::result::Result<Vec<_>, ApprovalHttpError>>()?;
         Ok(SubmitStockAdjustmentRequest {
+            resubmission_reason: self.resubmission_reason,
             expected_version: parse_version(&self.expected_version, "库存调整单", headers)?,
             expected_subject_version,
             reason_type: self.reason_type,
@@ -697,6 +700,13 @@ mod tests {
         assert_eq!(submit.expected_version, 7);
         assert_eq!(submit.expected_subject_version, 2);
         assert_eq!(submit.balances[0].expected_version, 11);
+        assert!(submit.resubmission_reason.is_none());
+        let mut resubmit = submit_http_request();
+        resubmit.resubmission_reason = Some("已核对盘点数量，沿用原内容".into());
+        assert_eq!(
+            resubmit.into_service(&headers).unwrap().resubmission_reason.as_deref(),
+            Some("已核对盘点数量，沿用原内容")
+        );
 
         assert!(
             serde_json::from_value::<CreateStockAdjustmentHttpRequest>(serde_json::json!({

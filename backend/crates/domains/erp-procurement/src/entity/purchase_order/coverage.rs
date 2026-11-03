@@ -417,6 +417,7 @@ fn current_submission_ids(orders: &[PurchaseOrder]) -> Result<Vec<PurchaseOrderS
             matches!(
                 order.stable.status,
                 PurchaseOrderStatus::Draft
+                    | PurchaseOrderStatus::Rejected
                     | PurchaseOrderStatus::PendingFinanceReview
                     | PurchaseOrderStatus::InApproval
             )
@@ -911,6 +912,7 @@ mod tests {
     fn coverage_pointer_selection_uses_current_status_pointer_only() {
         let orders = vec![
             purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-current"), None),
+            purchase_order("po-rejected", PurchaseOrderStatus::Rejected, Some("sub-rejected"), None),
             purchase_order(
                 "po-finance",
                 PurchaseOrderStatus::PendingFinanceReview,
@@ -934,7 +936,7 @@ mod tests {
         let revision_ids =
             current_revision_ids(&orders).unwrap().into_iter().map(|id| id.to_string()).collect::<Vec<_>>();
 
-        assert_eq!(submission_ids, vec!["sub-current", "sub-finance", "sub-approval"]);
+        assert_eq!(submission_ids, vec!["sub-current", "sub-rejected", "sub-finance", "sub-approval"]);
         assert_eq!(revision_ids, vec!["rev-current", "rev-partial", "rev-completed"]);
     }
 
@@ -1000,6 +1002,24 @@ mod tests {
         let zero = build_procurement_coverage(zero).unwrap();
         assert_eq!(zero.lines[0].summary.covered_quantity, Quantity::from_str("0").unwrap());
         assert_eq!(zero.lines[0].summary.progress, Rate::from_str("0").unwrap());
+    }
+
+    /// 已驳回采购仍按独立编辑副本持有来源数量。
+    #[test]
+    fn rejected_order_preserves_draft_source_coverage() {
+        let mut facts = facts_with_two_coverage_sources();
+        facts.purchase_orders =
+            vec![purchase_order("po-rejected", PurchaseOrderStatus::Rejected, Some("sub-current"), None)];
+        facts.submission_lines =
+            vec![submission_line("subl-current", "sub-current", Some("sol-1"), Some("2"))];
+        facts.purchase_revision_lines.clear();
+        facts.allocations.clear();
+        facts.reservations.clear();
+
+        let coverage = build_procurement_coverage(facts).unwrap();
+
+        assert_eq!(coverage.summary.covered_quantity, Quantity::from_str("2").unwrap());
+        assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("8").unwrap());
     }
 
     /// 销售减量后覆盖超过目标：保留全部覆盖、剩余为零并计量超出。

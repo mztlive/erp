@@ -245,7 +245,9 @@ fn sync_action(affected: bool, has_open: bool, status: PurchaseOrderStatus) -> S
     match (affected, has_open) {
         (true, true) => SyncAction::Refresh,
         (true, false) => SyncAction::Open,
-        (false, true) if status == PurchaseOrderStatus::Draft => SyncAction::AwaitSubmission,
+        (false, true) if matches!(status, PurchaseOrderStatus::Draft | PurchaseOrderStatus::Rejected) => {
+            SyncAction::AwaitSubmission
+        },
         (false, true) => SyncAction::Close,
         (false, false) => SyncAction::Skip,
     }

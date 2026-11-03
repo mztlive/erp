@@ -1,7 +1,7 @@
 //! 审批定义图的节点顺序、入口、连线形状与完整线性模型校验。
 
 use super::{LinearTransitionDraft, generate_linear_transitions};
-use crate::model::types::{ModelError, ModelResult, NODE_KEY_MAX_LEN};
+use crate::model::types::{ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN};
 use crate::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition};
 
 /// 校验单条连线实体形状。
@@ -82,7 +82,8 @@ pub fn ordered_nodes(nodes: &[ApprovalNodeDefinition]) -> ModelResult<Vec<&Appro
 /// 节点数量、顺序、入口、连线数量、形状或目标不一致时返回模型错误。
 ///
 /// # 关键业务约束
-/// 入口必须是顺序第一节点，全部驳回回入口，末节点通过进入已批准终态。
+/// 入口必须是顺序第一节点，驳回进入终态，末节点通过进入已批准终态。
+/// 历史冻结的驳回到入口连线仍可读取，运行时一律解释为终止。
 pub fn validate_linear_graph(
     definition: &ApprovalProcessDefinition,
     nodes: &[ApprovalNodeDefinition],
@@ -99,7 +100,7 @@ pub fn validate_linear_graph(
         return Err(ModelError::InvalidField("入口必须是顺序第一节点"));
     }
     let expected = generate_linear_transitions(&keys)?;
-    ensure_transitions_match(transitions, &expected)?;
+    ensure_transitions_match(transitions, &expected, &definition.entry_node_key)?;
     for transition in transitions {
         validate_transition(transition)?;
     }
@@ -120,11 +121,13 @@ pub fn validate_linear_graph(
 fn ensure_transitions_match(
     actual: &[ApprovalTransitionDefinition],
     expected: &[LinearTransitionDraft],
+    entry: &str,
 ) -> ModelResult<()> {
     if actual.len() != expected.len() {
         return Err(ModelError::InvalidTransition("连线与线性生成器结果不一致"));
     }
-    let mut actual_keys = actual.iter().map(transition_key).collect::<Vec<_>>();
+    let mut actual_keys =
+        actual.iter().map(|transition| transition_key(transition, entry)).collect::<Vec<_>>();
     let mut expected_keys = expected
         .iter()
         .map(|draft| {
@@ -154,9 +157,16 @@ fn ensure_transitions_match(
 ///
 /// # 错误
 /// 无。
-fn transition_key(
-    transition: &ApprovalTransitionDefinition,
-) -> (&str, &'static str, Option<&str>, Option<&'static str>) {
+fn transition_key<'a>(
+    transition: &'a ApprovalTransitionDefinition,
+    entry: &str,
+) -> (&'a str, &'static str, Option<&'a str>, Option<&'static str>) {
+    if transition.event == ApprovalTransitionEvent::Reject
+        && transition.to_node_key.as_deref() == Some(entry)
+        && transition.terminal_result.is_none()
+    {
+        return (transition.from_node_key.as_str(), "REJECT", None, Some("REJECTED"));
+    }
     (
         transition.from_node_key.as_str(),
         transition.event.as_str(),
@@ -265,6 +275,27 @@ mod tests {
         )
         .unwrap();
         validate_linear_graph(&definition, &nodes, &transitions).unwrap();
+        let mut legacy = transitions.clone();
+        for transition in legacy.iter_mut().filter(|edge| edge.event == ApprovalTransitionEvent::Reject) {
+            transition.to_node_key = Some("n1".into());
+            transition.terminal_result = None;
+        }
+        validate_linear_graph(&definition, &nodes, &legacy).unwrap();
+        let frozen = legacy.clone();
+        let legacy_graph = DefinitionGraph {
+            definition: definition.clone(),
+            nodes: nodes.clone(),
+            transitions: legacy.clone(),
+        };
+        assert_eq!(
+            legacy_graph
+                .decision_target_node_key("n2", crate::model::types::ApprovalDecision::Reject)
+                .unwrap(),
+            None
+        );
+        assert_eq!(legacy_graph.transitions, frozen);
+        legacy[1].to_node_key = Some("n2".into());
+        assert!(validate_linear_graph(&definition, &nodes, &legacy).is_err());
 
         let mut wrong_entry = definition.clone();
         wrong_entry.entry_node_key = "n2".to_string();

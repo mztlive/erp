@@ -93,6 +93,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             "purchase_order_id": purchase_order_id.to_string(),
             "status": { "$in": [
                 PurchaseChangeOrderStatus::Draft.as_str(),
+                PurchaseChangeOrderStatus::Rejected.as_str(),
                 PurchaseChangeOrderStatus::InApproval.as_str(),
             ] },
         };

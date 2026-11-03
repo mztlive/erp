@@ -520,6 +520,10 @@ pub struct ExpectedStockBalanceVersion {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitStockAdjustmentRequest {
+    /// 驳回后重新提交的说明。
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,

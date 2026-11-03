@@ -171,6 +171,23 @@ export function getWorkItemStats(
 export const getWorkItem = (workItemId: string): Promise<WorkItemDto> =>
     apiGet<WorkItemDto>(`/admin/work-items/${encodeURIComponent(workItemId)}`)
 
+/** 关闭本人驳回处理待办；原单据和审批历史保留。 */
+export function abandonApprovalRework(input: {
+    workItemId: string
+    expectedTaskVersion: string
+    idempotencyKey: string
+    reason: string
+}): Promise<WorkItemDto> {
+    return apiPost(
+        `/admin/work-items/${encodeURIComponent(input.workItemId)}/abandon-rework`,
+        {
+            expected_task_version: input.expectedTaskVersion,
+            idempotency_key: input.idempotencyKey,
+            reason: input.reason,
+        },
+    )
+}
+
 /** 查询当前管理范围内、可接收该任务及其采购级联任务的具体账号。 */
 export const getWorkItemReassignCandidates = (
     workItemId: string,

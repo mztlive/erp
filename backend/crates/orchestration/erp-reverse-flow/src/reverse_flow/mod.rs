@@ -1,9 +1,12 @@
 //! 退货、退款和资金冲正的跨域事务、审批与审计组合入口。
-use erp_audit::execution::persist_log;
+use application_core::AuditActor;
+use erp_workflow::service::approval::policy::ApprovalDomainAction;
 
 use crate::ReverseFlowPorts;
 
 mod adapter;
+mod approval_outcome;
+use approval_outcome::{ApprovalOutcome, persist_approval_outcome};
 mod cancel_approval;
 mod cancel_write;
 pub(crate) mod command_recovery;
@@ -23,9 +26,7 @@ pub use adapter::{
     customer_refund_object_readable, payment_reversal_object_readable, receipt_reversal_object_readable,
     supplier_refund_object_readable,
 };
-use erp_audit::AuditActorLogs;
 use erp_read_models::returns_center::ReturnsReadService;
-use erp_returns::repository::ReturnsExt;
 use erp_returns::service::ReturnsService;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
@@ -140,7 +141,7 @@ pub async fn finalize_approved_return(
     rbac: &ReverseFlowPorts,
     document_type: DocumentType,
     business_object_id: &str,
-    actor: &application_core::AuditActor,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let actor_id = actor.id();
@@ -189,57 +190,70 @@ pub async fn cancel_approval(
     db: &Database,
     document_type: DocumentType,
     id: &str,
-    action: erp_workflow::service::approval::policy::ApprovalDomainAction,
-    actor: &application_core::AuditActor,
+    action: ApprovalDomainAction,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    match document_type {
-        DocumentType::CustomerRefund => {
-            let mut refund = db
-                .customer_refunds()
-                .find_by_id(id, executor)
-                .await?
-                .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
-            adapter::execute_customer_refund_domain_action(&mut refund, action)?;
-            erp_returns::service::ReturnsService::new(db.clone())
-                .persist_customer_refund(&mut refund, executor)
-                .await?;
+    persist_approval_outcome(
+        db,
+        ApprovalOutcome {
+            document_type,
+            id,
+            action,
+            expected_subject_version: None,
+            audit_action: "returns.cancel_approval",
         },
-        DocumentType::SupplierRefund => {
-            let mut refund = db
-                .supplier_refunds()
-                .find_by_id(id, executor)
-                .await?
-                .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
-            adapter::execute_supplier_refund_domain_action(&mut refund, action)?;
-            erp_returns::service::ReturnsService::persist_supplier_refund(db, &mut refund, executor).await?;
-        },
-        DocumentType::ReceiptReversal => {
-            let mut reversal = db
-                .receipt_reversals()
-                .find_by_id(id, executor)
-                .await?
-                .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
-            adapter::execute_receipt_reversal_domain_action(&mut reversal, action)?;
-            erp_returns::service::ReturnsService::persist_receipt_reversal(db, &mut reversal, executor)
-                .await?;
-        },
-        DocumentType::PaymentReversal => {
-            let mut reversal = db
-                .payment_reversals()
-                .find_by_id(id, executor)
-                .await?
-                .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))?;
-            adapter::execute_payment_reversal_domain_action(&mut reversal, action)?;
-            erp_returns::service::ReturnsService::persist_payment_reversal(db, &mut reversal, executor)
-                .await?;
-        },
-        other => {
-            return Err(Error::ValidationError(format!("{} 不属于退货退款审批动作端口", other.label())));
-        },
+        actor,
+        executor,
+    )
+    .await
+}
+
+/// 同事务驳回退款与冲正单；资金事实仅由最终通过产生，驳回不反向写正式事实。
+/// # 参数
+/// * `db` - 数据库。
+/// * `document_type` / `id` - 原单身份。
+/// * `expected_subject_version` - 被驳回实例冻结的审批主题版本。
+/// * `action` - 对应的驳回领域动作。
+/// * `actor` - 已授权审批人。
+/// * `executor` - 审批运行时事务。
+/// # 返回
+/// 保存已驳回状态和审计。
+/// # 错误
+/// 非对应驳回动作、单据不存在或状态冲突时拒绝。
+pub async fn reject_approval(
+    db: &Database,
+    document_type: DocumentType,
+    id: &str,
+    expected_subject_version: u32,
+    action: ApprovalDomainAction,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if executor.session().is_none() {
+        return Err(Error::Internal("退款冲正驳回缺少运行时事务".into()));
     }
-    let audit =
-        actor.clone().resource_log("returns.cancel_approval", document_type.as_str(), id.to_string())?;
-    persist_log(db, &audit, executor).await?;
-    Ok(())
+    let expected = match document_type {
+        DocumentType::CustomerRefund => ApprovalDomainAction::CustomerRefundReject,
+        DocumentType::SupplierRefund => ApprovalDomainAction::SupplierRefundReject,
+        DocumentType::ReceiptReversal => ApprovalDomainAction::ReceiptReversalReject,
+        DocumentType::PaymentReversal => ApprovalDomainAction::PaymentReversalReject,
+        _ => return Err(Error::ValidationError("单据不支持退款冲正驳回".into())),
+    };
+    if action != expected {
+        return Err(Error::ValidationError("单据与驳回动作不匹配".into()));
+    }
+    persist_approval_outcome(
+        db,
+        ApprovalOutcome {
+            document_type,
+            id,
+            action,
+            expected_subject_version: Some(expected_subject_version),
+            audit_action: "returns.reject_approval",
+        },
+        actor,
+        executor,
+    )
+    .await
 }

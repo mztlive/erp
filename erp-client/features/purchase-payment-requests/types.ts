@@ -134,6 +134,7 @@ export type RequestDraftInput = {
     attachment_ids: string[]
 }
 export type RequestCommand = {
+    resubmission_reason?: string
     expected_version: number
     idempotency_key: string
     reason?: string

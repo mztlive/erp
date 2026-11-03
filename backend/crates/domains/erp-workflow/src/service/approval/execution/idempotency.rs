@@ -159,8 +159,35 @@ mod tests {
     }
 
     #[test]
+    fn resubmission_explanation_changes_payload_without_changing_scope() {
+        let make = |reason| {
+            start_identity(StartIdentityParams {
+                resubmission_reason: reason,
+                idempotency_key: key(),
+                process_kind: "sales_order",
+                subject_kind: "sales_order",
+                subject_id: "order-1",
+                subject_version: 2,
+                binding_id: "definition",
+                definition_version: 1,
+                actor_participant_id: "seller",
+            })
+            .unwrap()
+        };
+        let original = make(Some("解释一"));
+        let changed = make(Some("解释二"));
+        let absent = make(None);
+        assert_eq!(original.current().scope(), changed.current().scope());
+        assert_ne!(original.current().digest(), changed.current().digest());
+        assert_ne!(original.current().digest(), absent.current().digest());
+        assert_eq!(original.scope_candidates().len(), 1, "带说明命令不得降级匹配无说明历史摘要");
+        assert_eq!(original.current().digest(), make(Some(" 解释一 ")).current().digest());
+    }
+
+    #[test]
     fn each_known_legacy_writer_is_read_as_an_exact_pair() {
         let start = start_identity(StartIdentityParams {
+            resubmission_reason: None,
             idempotency_key: key(),
             process_kind: "stock_adjustment",
             subject_kind: "STOCK_ADJUSTMENT",
@@ -265,6 +292,7 @@ mod tests {
     #[test]
     fn each_execution_command_has_stable_v3_golden_identity() {
         let start = start_identity(StartIdentityParams {
+            resubmission_reason: None,
             idempotency_key: key(),
             process_kind: "stock_adjustment",
             subject_kind: "STOCK_ADJUSTMENT",

@@ -1,6 +1,7 @@
 //! 开票申请 HTTP 协议适配；复用拥有领域及读模型 DTO。
 use erp_finance::dto::receivable::{
     CancelInvoiceRequest, InvoiceRequestAmounts, InvoiceRequestQuery, SubmitInvoiceRequest,
+    UpdateInvoiceRequest,
 };
 use erp_read_models::finance::funds_scope::{FundsScopedPage, FundsScopedResult, ScopedInvoiceRequestRow};
 use erp_read_models::finance::receivable::ReceivableReadService;
@@ -66,6 +67,30 @@ pub async fn invoice_request_submit(
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
             .with_object_read(state.application().approval_object_read())
             .submit_invoice_request(req, &actor)
+            .await?,
+    ))
+}
+
+/// 保存草稿或已驳回开票申请的修改。
+/// # 参数
+/// * `state` - 应用资源。
+/// * `actor` - 已认证的原申请人。
+/// * `id` - 当前申请。
+/// * `req` - 当前版本与待保存内容。
+/// # 返回
+/// 返回保存后的申请；已驳回状态保持，保存不占用开票额度。
+/// # 错误
+/// 权限、原申请人、版本、状态或内容不合法时拒绝。
+pub async fn invoice_request_update(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateInvoiceRequest>,
+) -> Result<InvoiceRequestView> {
+    Ok(ApiResponse::ok_with_data(
+        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
+            .with_object_read(state.application().approval_object_read())
+            .update_invoice_request(&id, req, &actor)
             .await?,
     ))
 }

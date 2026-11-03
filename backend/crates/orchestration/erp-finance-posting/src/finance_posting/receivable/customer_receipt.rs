@@ -32,6 +32,7 @@ use super::customer_receipt_posting::{
 };
 pub use super::customer_receipt_posting::{
     cancel_customer_receipt_approval_apply, post_customer_receipt_apply,
+    reject_customer_receipt_approval_apply,
 };
 use super::customer_receipt_submit::{persist_receipt_submit, submit_receipt};
 use super::dto::{
@@ -131,6 +132,7 @@ impl ReceivableProcess {
             &self.rbac,
             std::sync::Arc::clone(&self.object_read),
             CommitTransactionRequest {
+                resubmission_reason: req.resubmission_reason,
                 pending: pending_commit,
                 allocations,
                 idempotency_key: req.idempotency_key,
@@ -213,7 +215,7 @@ impl ReceivableProcess {
         let allocations =
             erp_finance::service::receivable::customer_receipt_commit::convert_allocations(&req.allocations)?;
         start_customer_receipt_approval(&mut receipt, allocations)?;
-        self.dispatch_customer_receipt_start(id, receipt, req.idempotency_key, actor, adapter, command).await
+        self.dispatch_customer_receipt_start(id, receipt, &req, actor, adapter, command).await
     }
 
     /// 撤回客户回款审批，成功后回到草稿且 `subject_version` 不回退。
@@ -266,12 +268,12 @@ impl ReceivableProcess {
         &self,
         id: &str,
         receipt: CustomerReceipt,
-        idempotency_key: String,
+        req: &SubmitCustomerReceiptRequest,
         actor: &AuditActor,
         adapter: adapter::CustomerReceiptAdapter,
         command: CommandReceipt,
     ) -> Result<CustomerReceiptView> {
-        let input = self.prepare_receipt_submit_input(id, receipt, &idempotency_key, actor, adapter).await?;
+        let input = self.prepare_receipt_submit_input(id, receipt, req, actor, adapter).await?;
         let persisted = persist_receipt_submit(&self.db, &self.rbac, input, command.clone()).await;
         if let Err(error) = persisted {
             if !error.command_may_have_committed() {

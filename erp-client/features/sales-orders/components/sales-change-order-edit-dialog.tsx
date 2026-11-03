@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { XIcon } from "lucide-react"
 import {
     SalesChangeBlockers,
@@ -139,6 +140,8 @@ export function SalesChangeOrderEditDialog({
 }
 
 type EditIntent = {
+    shouldSubmit: boolean
+    resubmissionReason?: string
     original: SalesChangeDraft
     values: SalesChangeDraftValues
     save: SaveSalesChangeDraft
@@ -171,8 +174,18 @@ function SalesChangeDraftForm({
     const submitMutation = useSubmitSalesChangeOrderMutation()
     const commands = useSalesChangeDraftCommands(changeOrderId)
     const [pending, setPending] = React.useState(false)
+    const [saved, setSaved] = React.useState(false)
+    const shouldSubmit = React.useRef(true)
     const [uncertain, setUncertain] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
+    const rework = useResubmissionReason({
+        open: true,
+        required:
+            draft.status === "REJECTED" ||
+            approval?.instance?.status === "REJECTED",
+        id: `${id}-resubmission-reason`,
+        disabled: pending || uncertain,
+    })
     const intent = React.useRef<EditIntent | null>(null)
     const inFlight = React.useRef(false)
     React.useEffect(() => {
@@ -184,6 +197,7 @@ function SalesChangeDraftForm({
         onBusyChange(true)
         setPending(true)
         setError(null)
+        setSaved(false)
         let checkingUnknown = false
         try {
             if (!command.submit) {
@@ -211,6 +225,12 @@ function SalesChangeDraftForm({
                             "原单内容已变化，本次保存未能确认，请重新读取后核对",
                         )
                 } else saved = await commands.save(command.save)
+                if (!command.shouldSubmit) {
+                    intent.current = null
+                    setUncertain(false)
+                    setSaved(true)
+                    return
+                }
                 command.submit = {
                     version: saved.version,
                     contentHash: saved.content_hash,
@@ -237,6 +257,7 @@ function SalesChangeDraftForm({
                 salesOrderId,
                 nature,
                 version: command.submit.version,
+                resubmissionReason: command.resubmissionReason,
                 idempotencyKey: command.submit.idempotencyKey,
             })
             intent.current = null
@@ -267,9 +288,12 @@ function SalesChangeDraftForm({
         defaultValues: salesChangeDraftValues(draft),
         validators: { onChange: salesChangeDraftSchema },
         onSubmit: async ({ value }) => {
-            if (pending || uncertain) return
+            if (pending || uncertain || (shouldSubmit.current && !rework.valid))
+                return
             try {
                 const command: EditIntent = {
+                    shouldSubmit: shouldSubmit.current,
+                    resubmissionReason: rework.reason,
                     original: draft,
                     values: structuredClone(value),
                     save: {
@@ -305,6 +329,7 @@ function SalesChangeDraftForm({
             className="space-y-6"
             onSubmit={(event) => {
                 event.preventDefault()
+                shouldSubmit.current = true
                 void form.handleSubmit()
             }}
         >
@@ -316,7 +341,13 @@ function SalesChangeDraftForm({
                 disabled={disabled}
                 onError={setError}
             />
+            {rework.field}
             <SubmissionRouteConfirmation definition={approval?.definition} />
+            {saved ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    修改已保存，尚未重新提交审批。
+                </p>
+            ) : null}
             {error ? (
                 <p role="alert" className="text-sm text-destructive">
                     {error}
@@ -341,6 +372,21 @@ function SalesChangeDraftForm({
                         >
                             取消
                         </Button>
+                        {!uncertain ? (
+                            <LoadingButton
+                                id={`${id}-save`}
+                                type="button"
+                                variant="outline"
+                                disabled={pending}
+                                loading={pending && !shouldSubmit.current}
+                                onClick={() => {
+                                    shouldSubmit.current = false
+                                    void form.handleSubmit()
+                                }}
+                            >
+                                保存修改
+                            </LoadingButton>
+                        ) : null}
                         {uncertain ? (
                             <LoadingButton
                                 id={`${id}-recover`}
@@ -360,7 +406,7 @@ function SalesChangeDraftForm({
                                     id={`${id}-submit`}
                                     label="提交改单"
                                     loading={pending}
-                                    disabled={pending}
+                                    disabled={pending || !rework.valid}
                                 />
                             </form.AppForm>
                         )}

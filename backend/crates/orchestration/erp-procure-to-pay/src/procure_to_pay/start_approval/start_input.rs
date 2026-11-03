@@ -42,6 +42,8 @@ use crate::{Error, Result};
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择。
 pub(crate) struct PurchaseOrderStartInput<'a> {
+    /// 重提说明，与冻结提交一同保存。
+    pub resubmission_reason: Option<String>,
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 冻结绑定。
@@ -87,6 +89,7 @@ pub(crate) fn build_purchase_order_start_input(
     input: PurchaseOrderStartInput<'_>,
 ) -> Result<StartExecutionInput> {
     let PurchaseOrderStartInput {
+        resubmission_reason,
         graph,
         binding,
         subject,
@@ -109,6 +112,7 @@ pub(crate) fn build_purchase_order_start_input(
     })
     .map_err(map_start_plan_error)?;
     Ok(StartExecutionInput {
+        resubmission_reason,
         command: ExecutionCommandInput {
             graph,
             current_eligibility: plan.entry_eligibility.clone(),
@@ -289,6 +293,7 @@ pub(crate) mod tests {
         organization_id: &'a str,
     ) -> PurchaseOrderStartInput<'a> {
         PurchaseOrderStartInput {
+            resubmission_reason: None,
             graph,
             binding,
             subject: bpm::model::SubjectRef::new("purchase_order", "po-1").unwrap(),
@@ -362,6 +367,7 @@ pub(crate) mod tests {
     #[test]
     fn purchase_order_start_replays_matching_receipt() {
         let identity = start_identity(StartIdentityParams {
+            resubmission_reason: None,
             idempotency_key: bpm::model::IdempotencyKey::parse("key-1").unwrap(),
             process_kind: process_kind_of(DocumentType::PurchaseOrder).as_str(),
             subject_kind: "purchase_order",

@@ -86,6 +86,7 @@ fn current_pointer_ids(orders: &[PurchaseOrder]) -> Vec<PurchaseOrderSubmissionI
             matches!(
                 order.stable.status,
                 PurchaseOrderStatus::Draft
+                    | PurchaseOrderStatus::Rejected
                     | PurchaseOrderStatus::PendingFinanceReview
                     | PurchaseOrderStatus::InApproval
             )

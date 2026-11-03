@@ -211,6 +211,8 @@ pub struct ProcessRequiredApprovalPolicy {
     pub start_action: ApprovalDomainAction,
     /// 最终通过动作。
     pub final_approve_action: ApprovalDomainAction,
+    /// 终态驳回动作。
+    pub on_reject: ApprovalDomainAction,
     /// 撤回与受阻取消动作。
     pub cancel_action: ApprovalDomainAction,
 }
@@ -444,14 +446,14 @@ pub fn require_process_required(document_type: DocumentType) -> Result<ProcessRe
 /// # 错误
 /// 三类动作不互异时返回 `ApprovalPolicyNotRegistered`。
 pub fn ensure_actions_registered(policy: &ProcessRequiredApprovalPolicy) -> Result<()> {
-    ensure_real_action(policy.start_action)?;
-    ensure_real_action(policy.final_approve_action)?;
-    ensure_real_action(policy.cancel_action)?;
     if !ApprovalDomainAction::are_distinct(
         policy.start_action,
         policy.final_approve_action,
         policy.cancel_action,
-    ) {
+    ) || [policy.start_action, policy.final_approve_action, policy.cancel_action]
+        .contains(&policy.on_reject)
+        || policy.on_reject.document_type() != policy.document_type
+    {
         return Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered));
     }
     Ok(())
@@ -540,8 +542,29 @@ fn process_required(
         owner_organization_source: OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId,
         start_action,
         final_approve_action,
+        on_reject: reject_action(document_type)?,
         cancel_action,
     }))
+}
+
+/// 解析必须审批单据的终态驳回动作。
+fn reject_action(document_type: DocumentType) -> Result<ApprovalDomainAction> {
+    match document_type {
+        DocumentType::SalesOrder => Ok(ApprovalDomainAction::SalesOrderReject),
+        DocumentType::VoucherSalesOrder => Ok(ApprovalDomainAction::VoucherSalesOrderReject),
+        DocumentType::SalesChangeOrder => Ok(ApprovalDomainAction::SalesChangeOrderReject),
+        DocumentType::PurchaseOrder => Ok(ApprovalDomainAction::PurchaseOrderReject),
+        DocumentType::PurchaseChangeOrder => Ok(ApprovalDomainAction::PurchaseChangeOrderReject),
+        DocumentType::StockAdjustment => Ok(ApprovalDomainAction::StockAdjustmentReject),
+        DocumentType::SalesInvoiceRequest => Ok(ApprovalDomainAction::SalesInvoiceRequestReject),
+        DocumentType::CustomerReceipt => Ok(ApprovalDomainAction::CustomerReceiptReject),
+        DocumentType::CustomerRefund => Ok(ApprovalDomainAction::CustomerRefundReject),
+        DocumentType::SupplierRefund => Ok(ApprovalDomainAction::SupplierRefundReject),
+        DocumentType::ReceiptReversal => Ok(ApprovalDomainAction::ReceiptReversalReject),
+        DocumentType::PaymentReversal => Ok(ApprovalDomainAction::PaymentReversalReject),
+        DocumentType::PurchasePaymentRequest => Ok(ApprovalDomainAction::PurchasePaymentRequestReject),
+        _ => Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered)),
+    }
 }
 
 /// 构造无审批政策。
@@ -582,55 +605,6 @@ fn owner_role(document_type: DocumentType) -> Result<WorkItemOwnerRole> {
         _ => return Err(Error::Internal("无审批类型不得注册责任角色".to_string())),
     };
     Ok(WorkItemOwnerRole { value })
-}
-
-/// 穷尽识别已注册领域动作。
-///
-/// # 错误
-/// 编译器将拒绝未覆盖变体；运行期不会落到失败分支。
-fn ensure_real_action(action: ApprovalDomainAction) -> Result<()> {
-    match action {
-        ApprovalDomainAction::SalesOrderStartApprovalSubmission
-        | ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
-        | ApprovalDomainAction::SalesOrderCancelApprovalSubmission
-        | ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission
-        | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission
-        | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission
-        | ApprovalDomainAction::SalesChangeOrderSubmitSalesChange
-        | ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange
-        | ApprovalDomainAction::SalesChangeOrderCancelApproval
-        | ApprovalDomainAction::PurchaseOrderSubmit
-        | ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder
-        | ApprovalDomainAction::PurchaseOrderCancelApproval
-        | ApprovalDomainAction::PurchaseChangeOrderSubmitChange
-        | ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange
-        | ApprovalDomainAction::PurchaseChangeOrderCancelApproval
-        | ApprovalDomainAction::StockAdjustmentSubmit
-        | ApprovalDomainAction::StockAdjustmentPost
-        | ApprovalDomainAction::StockAdjustmentCancelApproval
-        | ApprovalDomainAction::SalesInvoiceRequestSubmit
-        | ApprovalDomainAction::SalesInvoiceRequestApprove
-        | ApprovalDomainAction::SalesInvoiceRequestCancelApproval
-        | ApprovalDomainAction::PurchasePaymentRequestSubmit
-        | ApprovalDomainAction::PurchasePaymentRequestApprove
-        | ApprovalDomainAction::PurchasePaymentRequestReject
-        | ApprovalDomainAction::PurchasePaymentRequestCancelApproval
-        | ApprovalDomainAction::CustomerReceiptSubmit
-        | ApprovalDomainAction::CustomerReceiptPost
-        | ApprovalDomainAction::CustomerReceiptCancelApproval
-        | ApprovalDomainAction::CustomerRefundSubmit
-        | ApprovalDomainAction::CustomerRefundPost
-        | ApprovalDomainAction::CustomerRefundCancelApproval
-        | ApprovalDomainAction::SupplierRefundSubmit
-        | ApprovalDomainAction::SupplierRefundPost
-        | ApprovalDomainAction::SupplierRefundCancelApproval
-        | ApprovalDomainAction::ReceiptReversalSubmit
-        | ApprovalDomainAction::ReceiptReversalPost
-        | ApprovalDomainAction::ReceiptReversalCancelApproval
-        | ApprovalDomainAction::PaymentReversalSubmit
-        | ApprovalDomainAction::PaymentReversalPost
-        | ApprovalDomainAction::PaymentReversalCancelApproval => Ok(()),
-    }
 }
 
 /// 销售单不再强制采购确认用途；仅拒绝未知用途字符串。

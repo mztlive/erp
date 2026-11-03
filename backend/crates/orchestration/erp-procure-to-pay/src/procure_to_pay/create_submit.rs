@@ -302,6 +302,7 @@ async fn prepare_created_order_start(
     let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
     let start_input = build_purchase_order_start_input(PurchaseOrderStartInput {
+        resubmission_reason: None,
         graph,
         binding: &binding,
         subject: purchase_order_subject_ref(&order.base.id)?,
@@ -362,6 +363,7 @@ async fn persist_frozen_created_order_start(
     persist_purchase_order_start(
         db,
         PurchaseOrderStartPersistInput {
+            resubmission_reason: None,
             ports: Arc::new(ports.clone()),
             order: input.frozen.order,
             document: input.frozen.document,

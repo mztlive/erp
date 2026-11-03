@@ -1,11 +1,12 @@
 "use client"
 
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     fetchPurchaseChangeDraft,
+    savePurchaseChangeDraft,
     fetchPurchaseChangeSubmissionState,
 } from "../api/purchase-change-draft"
 
@@ -45,4 +46,19 @@ export function usePurchaseChangeSubmissionQuery(changeOrderId: string) {
         ])
     }
     return { query, confirm }
+}
+
+/** 独立保存后更新原单版本，后续提交继续消费同一个变更单。 */
+export function useSavePurchaseChangeDraftMutation(changeOrderId: string) {
+    const client = useQueryClient()
+    return useMutation({
+        mutationFn: savePurchaseChangeDraft,
+        onSuccess: async (draft) => {
+            client.setQueryData(
+                ["purchase-orders", "change-draft", changeOrderId],
+                draft,
+            )
+            await client.invalidateQueries({ queryKey: ["purchase-orders"] })
+        },
+    })
 }

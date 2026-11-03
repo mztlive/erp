@@ -73,7 +73,7 @@ impl SalesChangeOrder {
         if !self.matches_version(expected_version) {
             return Err(Error::ConflictError("销售变更单已变化，请刷新后重试".into()));
         }
-        if !self.is_draft() {
+        if !self.is_editable() {
             return Err(Error::ConflictError("请先撤回销售变更审批，再修改原单".into()));
         }
         self.update(SalesChangeOrderUpdate { reason: Some(reason), change_type: None }, actor_id)?;
@@ -125,7 +125,7 @@ impl SalesOrderWorkingCopy {
     /// # 错误
     /// 引用不一致、变更不是草稿或副本状态不可编辑时拒绝。
     pub fn ensure_change_editable(&self, change: &SalesChangeOrder) -> Result<()> {
-        if !change.is_draft()
+        if !change.is_editable()
             || self.working_purpose != WorkingPurpose::SalesChange
             || self.sales_change_order_id.as_ref().map(AsRef::as_ref) != Some(change.base.id.as_str())
             || self.sales_order_id != change.sales_order_id
@@ -424,6 +424,30 @@ mod tests {
         )
         .unwrap();
         (change, copy, vec![line])
+    }
+
+    #[test]
+    fn rejected_change_clones_submitted_copy_without_rewriting_history() {
+        let (mut change, mut copy, _) = fixture();
+        change.start_approval(SalesChangeSubmissionId::new("sub-1"), "hash-1", "sales-1").unwrap();
+        copy.lock_for_submission_if_needed().unwrap();
+        change.reject_approval("approver").unwrap();
+        let historical = copy.clone();
+        let editable = copy
+            .editable_change_copy(
+                &change,
+                copy.base.version,
+                SalesOrderWorkingCopyId::new("copy-2"),
+                "sales-1",
+            )
+            .unwrap();
+        assert_eq!(copy, historical);
+        assert_eq!(copy.stable.status, WorkingCopyStatus::Submitted);
+        assert_eq!(editable.stable.status, WorkingCopyStatus::Editing);
+        assert_eq!(editable.base.id, "copy-2");
+        assert_eq!(editable.base_revision_id, copy.base_revision_id);
+        assert_eq!(editable.content_hash, copy.content_hash);
+        assert_eq!(editable.sales_change_order_id, copy.sales_change_order_id);
     }
 
     #[test]

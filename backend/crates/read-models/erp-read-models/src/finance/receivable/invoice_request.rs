@@ -3,14 +3,14 @@ use std::collections::HashMap;
 
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::{InvoiceRequestAmounts, InvoiceRequestQuery, PageView};
-use erp_finance::entity::receivable::{InvoiceRequestStatus, SalesInvoiceRequest};
+use erp_finance::entity::receivable::{CustomerReceiptStatus, InvoiceRequestStatus, SalesInvoiceRequest};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::BpmExt;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
 use super::ReceivableReadService;
@@ -63,13 +63,30 @@ impl ReceivableReadService {
     /// # 错误
     /// 申请或来源销售单不存在时返回 `NotFound`；审批绑定、流程实例或账号读取失败时返回对应错误。
     pub async fn invoice_request_detail(&self, id: &str) -> Result<InvoiceRequestView> {
+        self.invoice_request_detail_with_executor(id, &mut NoTransaction).await
+    }
+
+    /// 在调用方已授权事务内读取申请及审批详情，避免授权和响应读取跨快照。
+    ///
+    /// # 参数
+    /// * `id` - 已授权申请身份。
+    /// * `executor` - 当前命令或回放的同一事务。
+    /// # 返回
+    /// 返回同一快照内的申请详情。
+    /// # 错误
+    /// 申请、来源或审批资料缺失及仓储错误时拒绝。
+    pub async fn invoice_request_detail_with_executor(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoiceRequestView> {
         let request = self
             .db
             .sales_invoice_requests()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("开票申请不存在".into()))?;
-        self.invoice_request_view(request).await
+        self.invoice_request_view(request, executor).await
     }
     /// 汇总本应收的审批中、批准待开与可申请额度。
     ///
@@ -116,29 +133,27 @@ impl ReceivableReadService {
         })
     }
     /// 装配申请的真实销售单号与审批绑定，缺失来源时失败关闭。
-    async fn invoice_request_view(&self, request: SalesInvoiceRequest) -> Result<InvoiceRequestView> {
+    async fn invoice_request_view(
+        &self,
+        request: SalesInvoiceRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoiceRequestView> {
         let binding = erp_workflow::service::document_registry::find_approval_binding(
             &self.db,
             &request.base.id,
-            &mut NoTransaction,
+            executor,
         )
         .await?;
-        let status = match request.status {
-            InvoiceRequestStatus::Draft => erp_finance::entity::receivable::CustomerReceiptStatus::Draft,
-            InvoiceRequestStatus::InApproval => {
-                erp_finance::entity::receivable::CustomerReceiptStatus::InApproval
-            },
-            _ => erp_finance::entity::receivable::CustomerReceiptStatus::Posted,
-        };
+        let status = approval_status(request.status);
         let order = self
             .db
             .sales_orders()
-            .find_by_id(&request.sales_order_id, &mut NoTransaction)
+            .find_by_id(&request.sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
         let mut approval = super::approval_view::document_approval_view(binding.as_ref(), None, status);
         if let (Some(binding), Some(definition)) = (binding.as_ref(), approval.definition.as_mut()) {
-            let (name, nodes) = binding_route(&self.db, binding, &mut NoTransaction).await?;
+            let (name, nodes) = binding_route(&self.db, binding, executor).await?;
             definition.name = name;
             definition.nodes = nodes;
         }
@@ -146,15 +161,13 @@ impl ReceivableReadService {
             erp_workflow::DocumentType::SalesInvoiceRequest,
             &request.base.id,
         )?;
-        if let Some(instance) =
-            self.db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await?
-        {
+        if let Some(instance) = self.db.bpm_workflow().find_latest_by_subject(&subject, executor).await? {
             let current = self
                 .db
                 .bpm_workflow()
                 .find_current_execution(
                     &bpm::ApprovalProcessInstanceId::new(instance.base.id.clone()),
-                    &mut NoTransaction,
+                    executor,
                 )
                 .await?;
             approval.instance = Some(
@@ -170,7 +183,7 @@ impl ReceivableReadService {
         let creator = self
             .db
             .accounts()
-            .list_work_item_party_accounts(std::slice::from_ref(&request.created_by), &mut NoTransaction)
+            .list_work_item_party_accounts(std::slice::from_ref(&request.created_by), executor)
             .await?
             .into_iter()
             .next();
@@ -223,5 +236,22 @@ impl ReceivableReadService {
                 })
             })
             .collect()
+    }
+}
+
+/// 把开票申请状态投影到共用审批动作策略，不改变原单据状态。
+///
+/// # 参数
+/// * `status` - 当前开票申请业务状态。
+/// # 返回
+/// 草稿、驳回和审批中分别保留动作资格，其余状态禁止提交或撤回。
+/// # 错误
+/// 不返回错误。
+fn approval_status(status: InvoiceRequestStatus) -> CustomerReceiptStatus {
+    match status {
+        InvoiceRequestStatus::Draft => CustomerReceiptStatus::Draft,
+        InvoiceRequestStatus::Rejected => CustomerReceiptStatus::Rejected,
+        InvoiceRequestStatus::InApproval => CustomerReceiptStatus::InApproval,
+        _ => CustomerReceiptStatus::Posted,
     }
 }

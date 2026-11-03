@@ -1,4 +1,4 @@
-//! 统一节点进入。启动、通过、驳回与恢复必须复用本函数。
+//! 统一节点进入。启动、通过与恢复必须复用本函数。
 
 use super::event::{BpmEvent, BpmEventKind};
 use super::transition_plan::{CommitRequired, TaskIntent, TransitionPlan};
@@ -54,7 +54,7 @@ pub(crate) struct EnterNodeInput<'a> {
 /// 节点缺失且无法形成合法快照，或模型不变式失败时返回错误。
 ///
 /// # 约束
-/// 启动、通过、驳回与恢复必须复用本函数。
+/// 启动、通过与恢复必须复用本函数。
 pub(crate) fn plan_enter_node(mut input: EnterNodeInput<'_>) -> EngineResult<TransitionPlan> {
     let Some(node) = input.graph.node(input.node_key) else {
         let message = if input.node_key.trim().is_empty() {

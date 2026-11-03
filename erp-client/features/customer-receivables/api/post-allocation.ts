@@ -139,6 +139,7 @@ async function executeAllocation(
                         allocated_amount: line.amount,
                     })),
                     idempotency_key: commandInput.idempotencyKey,
+                    resubmission_reason: commandInput.resubmissionReason,
                 },
             )
             const approval = mapCustomerReceiptApproval(submitted.approval)

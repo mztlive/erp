@@ -37,6 +37,7 @@ export async function submitCustomerRefund(input: {
     refundId: string
     expectedVersion: number
     idempotencyKey: string
+    resubmissionReason?: string
 }): Promise<
     | {
           status: "succeeded"
@@ -49,6 +50,7 @@ export async function submitCustomerRefund(input: {
             `/admin/customer-refunds/${encodeURIComponent(input.refundId)}/submit`,
             buildCustomerRefundSubmitRequest({
                 expectedVersion: input.expectedVersion,
+                resubmissionReason: input.resubmissionReason,
                 idempotencyKey: input.idempotencyKey,
             }),
         )
@@ -66,6 +68,7 @@ export async function submitReceiptReversal(input: {
     reversalId: string
     expectedVersion: number
     idempotencyKey: string
+    resubmissionReason?: string
 }): Promise<
     | {
           status: "succeeded"
@@ -78,6 +81,7 @@ export async function submitReceiptReversal(input: {
             `/admin/receipt-reversals/${encodeURIComponent(input.reversalId)}/submit`,
             buildReceiptReversalSubmitRequest({
                 expectedVersion: input.expectedVersion,
+                resubmissionReason: input.resubmissionReason,
                 idempotencyKey: input.idempotencyKey,
             }),
         )

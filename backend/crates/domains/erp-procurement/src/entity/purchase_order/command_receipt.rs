@@ -13,8 +13,9 @@ use sha2::{Digest, Sha256};
 
 use super::{CreationReceipt, PurchaseSubmitReceipt, SaveDraftReceipt, SourcingReceipt, VoidDraftReceipt};
 use crate::dto::purchase_order::{
-    CREATE_ACTION, CREATE_EXPENSE_ACTION, CREATE_SOURCING_ACTION, PURCHASE_SUBMIT_ACTION, SAVE_ACTION,
-    VOID_ACTION,
+    CREATE_ACTION, CREATE_EXPENSE_ACTION, CREATE_SOURCING_ACTION, PURCHASE_CHANGE_SAVE_ACTION,
+    PURCHASE_CHANGE_SUBMIT_ACTION, PURCHASE_SUBMIT_ACTION, PurchaseChangeDraftView,
+    PurchaseChangeSubmitResult, SAVE_ACTION, VOID_ACTION,
 };
 
 /// 原采购长度前缀 SHA-256 算法的版本化摘要。
@@ -79,7 +80,15 @@ impl PurchaseCommandReceiptIdentity {
     /// 验证身份形态；未知 schema 或空身份阻断恢复。
     fn valid(&self) -> bool {
         self.schema_version == 1
-            && self.resource_type == "purchase_order"
+            && self.resource_type
+                == if matches!(
+                    self.action.as_str(),
+                    PURCHASE_CHANGE_SUBMIT_ACTION | PURCHASE_CHANGE_SAVE_ACTION
+                ) {
+                    "purchase_change_order"
+                } else {
+                    "purchase_order"
+                }
             && [&self.command_id, &self.actor_id, &self.action].into_iter().all(|v| !v.trim().is_empty())
             && self.scope_id.as_ref().is_none_or(|v| !v.trim().is_empty())
             && self.idempotency_key_digest.valid()
@@ -118,6 +127,8 @@ mod sealed {
     impl Sealed for super::VoidDraftReceipt {}
     impl Sealed for super::SourcingReceipt {}
     impl Sealed for super::PurchaseSubmitReceipt {}
+    impl Sealed for super::PurchaseChangeSubmitResult {}
+    impl Sealed for super::PurchaseChangeDraftView {}
 }
 
 /// 与正式事实及审计同事务提交的不可变采购回执。
@@ -171,7 +182,12 @@ impl<T> PurchaseCommandReceipt<T> {
             command_id: format!("{prefix}{}", digest_parts(parts)),
             actor_id: actor_id.into(),
             action: action.into(),
-            resource_type: "purchase_order".into(),
+            resource_type: if matches!(action, PURCHASE_CHANGE_SUBMIT_ACTION | PURCHASE_CHANGE_SAVE_ACTION) {
+                "purchase_change_order"
+            } else {
+                "purchase_order"
+            }
+            .into(),
             scope_id: target_id.map(str::to_string),
             idempotency_key_digest: PurchaseCommandFingerprint::new(&digest_parts([idempotency_key]))?,
         })
@@ -380,6 +396,43 @@ impl PurchaseReceiptResult for PurchaseSubmitReceipt {
                 .all(|v| !v.trim().is_empty())
             && (self.work_item_id.is_empty() == (self.task_version == 0))
             && (self.work_item_id.is_empty() || !self.work_item_id.trim().is_empty())
+    }
+}
+
+impl PurchaseReceiptResult for PurchaseChangeSubmitResult {
+    /// 校验采购变更提交首次结果与命令目标一致。
+    /// # 参数
+    /// * `identity` - 当前提交命令身份。
+    /// # 返回
+    /// 返回结果是否具有完整冻结提交引用。
+    /// # 错误
+    /// 无；损坏结果返回 false。
+    fn valid_result(&self, identity: &PurchaseCommandReceiptIdentity) -> bool {
+        identity.action == PURCHASE_CHANGE_SUBMIT_ACTION
+            && identity.scope_id.as_deref() == Some(self.change_id.as_str())
+            && self.status == "IN_APPROVAL"
+            && self.lock_version > 0
+            && !self.submission_id.trim().is_empty()
+            && !self.submission_no.trim().is_empty()
+            && self.reference == format!("CS-{}", self.submission_no)
+    }
+}
+
+impl PurchaseReceiptResult for PurchaseChangeDraftView {
+    /// 校验保存回执具有完整目标和新乐观锁版本。
+    /// # 参数
+    /// * `identity` - 独立保存命令身份。
+    /// # 返回
+    /// 合法首次结果返回 true。
+    /// # 错误
+    /// 无；损坏结果返回 false。
+    fn valid_result(&self, identity: &PurchaseCommandReceiptIdentity) -> bool {
+        identity.action == PURCHASE_CHANGE_SAVE_ACTION
+            && identity.scope_id.is_some()
+            && self.version > 0
+            && !self.lines.is_empty()
+            && self.line_keys.len() == self.lines.len()
+            && !self.payment_term_code.trim().is_empty()
     }
 }
 

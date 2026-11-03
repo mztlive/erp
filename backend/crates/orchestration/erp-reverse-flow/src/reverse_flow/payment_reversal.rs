@@ -147,7 +147,14 @@ impl ReturnsProcess {
         let mut reversal = self.domain().load_payment_reversal(id, &mut NoTransaction).await?;
         conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         start_payment_reversal_approval(&mut reversal)?;
-        self.dispatch_payment_reversal_start(reversal, req.idempotency_key, adapter, submission).await
+        self.dispatch_payment_reversal_start(
+            reversal,
+            req.idempotency_key,
+            req.resubmission_reason,
+            adapter,
+            submission,
+        )
+        .await
     }
 
     /// 撤回付款冲正审批，成功后回到草稿且 `subject_version` 不回退。
@@ -186,6 +193,7 @@ impl ReturnsProcess {
         &self,
         reversal: PaymentReversal,
         idempotency_key: String,
+        resubmission_reason: Option<String>,
         adapter: super::adapter::PaymentReversalAdapter,
         submission: ReversalSubmitReplayInput,
     ) -> Result<PaymentReversalView> {
@@ -206,6 +214,7 @@ impl ReturnsProcess {
             load_payment_reversal_start_receipt(&self.db, &subject, version, &idempotency_key).await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_payment_reversal_start_input(ReverseStartInput {
+            resubmission_reason: resubmission_reason.clone(),
             graph,
             binding: &binding,
             subject,
@@ -219,6 +228,7 @@ impl ReturnsProcess {
         let prepared = prepare_start(start_input)?;
         self.complete_payment_reversal_start(
             PaymentReversalStartPersistInput {
+                resubmission_reason,
                 reversal,
                 command_receipt: submission.command_receipt.clone(),
                 actor: actor.clone(),

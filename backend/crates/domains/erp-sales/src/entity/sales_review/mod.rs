@@ -4,6 +4,10 @@
 //! 销售变更走统一审批；选源由采购单创建路径承担。
 
 mod draft_edit;
+mod submission_receipt;
+pub use submission_receipt::{
+    SalesChangeSubmissionCommand, SalesChangeSubmissionFact, SalesChangeSubmissionReceipt,
+};
 mod terms;
 pub use terms::SalesChangeTerms;
 mod formal_revision;

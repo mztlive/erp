@@ -25,6 +25,17 @@ import type {
 } from "@/features/customer-receivables/types"
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
 
+type RefundSubmitPayload = {
+    refundId: string
+    expectedVersion: number
+    resubmissionReason?: string
+}
+type ReversalSubmitPayload = {
+    reversalId: string
+    expectedVersion: number
+    resubmissionReason?: string
+}
+
 /**
  * 反向记录（冲正/退款/红票）确认流程。
  *
@@ -48,16 +59,22 @@ export function useReverseFlow(args: {
     setReverseAmount: React.Dispatch<React.SetStateAction<string>>
     confirmReverse: () => Promise<void>
     prepareRefundDraft: (reason: string) => Promise<void>
-    confirmRefundSubmit: () => Promise<void>
+    confirmRefundSubmit: (resubmissionReason?: string) => Promise<void>
     beginRefundSubmit: (row: CustomerRefundRow) => void
     refundDraft: CustomerRefundRow | null
     refundSubmitOpen: boolean
+    refundSubmitUnknown: boolean
+    endRefundRecovery: () => void
+    refundSubmitReason?: string
     setRefundSubmitOpen: React.Dispatch<React.SetStateAction<boolean>>
     prepareReversalDraft: (reason: string) => Promise<void>
-    confirmReversalSubmit: () => Promise<void>
+    confirmReversalSubmit: (resubmissionReason?: string) => Promise<void>
     beginReversalSubmit: (row: ReceiptReversalRow) => void
     reversalDraft: ReceiptReversalRow | null
     reversalSubmitOpen: boolean
+    reversalSubmitUnknown: boolean
+    endReversalRecovery: () => void
+    reversalSubmitReason?: string
     setReversalSubmitOpen: React.Dispatch<React.SetStateAction<boolean>>
     reverseMutation: ReturnType<typeof useReverseFactMutation>
     refundDraftPending: boolean
@@ -90,6 +107,8 @@ export function useReverseFlow(args: {
         reason: string
     } | null>(null)
     const [refundSubmitOpen, setRefundSubmitOpen] = React.useState(false)
+    const [refundSubmitUnknown, setRefundSubmitUnknown] = React.useState(false)
+    const refundSubmitLedger = React.useRef(new FormalCommandKeyLedger())
     const refundSlotRef = React.useRef<CustomerRefundIdempotencySlot | null>(
         null,
     )
@@ -101,6 +120,9 @@ export function useReverseFlow(args: {
         reason: string
     } | null>(null)
     const [reversalSubmitOpen, setReversalSubmitOpen] = React.useState(false)
+    const [reversalSubmitUnknown, setReversalSubmitUnknown] =
+        React.useState(false)
+    const reversalSubmitLedger = React.useRef(new FormalCommandKeyLedger())
     const reversalSlotRef = React.useRef<ReceiptReversalIdempotencySlot | null>(
         null,
     )
@@ -127,6 +149,9 @@ export function useReverseFlow(args: {
      * @param reason 非空退款原因。
      */
     async function prepareRefundDraft(reason: string) {
+        if (refundSubmitUnknown) {
+            throw new Error("请先核对上一笔退款提交结果，再开始新的办理。")
+        }
         if (!reverseConfirm || reverseConfirm.kind !== "refund") return
         const slot = bindRefundSlot(reverseConfirm.sourceFactId, reason)
         const intent = {
@@ -138,7 +163,7 @@ export function useReverseFlow(args: {
         refundSlotRef.current = slot
         setRefundDraft(null)
         setReverseReason(reason)
-        await confirmRefundSubmit(intent)
+        await confirmRefundSubmit(undefined, intent)
     }
 
     /**
@@ -147,6 +172,14 @@ export function useReverseFlow(args: {
      * @param row 当前退款草稿投影。
      */
     function beginRefundSubmit(row: CustomerRefundRow) {
+        if (refundSubmitUnknown) {
+            if (row.refundId !== refundDraft?.refundId) {
+                setActionError("请先核对上一笔退款提交结果，再提交其他单据。")
+                return
+            }
+            setRefundSubmitOpen(true)
+            return
+        }
         setPendingRefund(null)
         setRefundDraft(row)
         const current = refundSlotRef.current
@@ -184,6 +217,9 @@ export function useReverseFlow(args: {
      * @param reason 非空冲正原因。
      */
     async function prepareReversalDraft(reason: string) {
+        if (reversalSubmitUnknown) {
+            throw new Error("请先核对上一笔冲正提交结果，再开始新的办理。")
+        }
         if (!reverseConfirm || reverseConfirm.kind !== "receipt_reverse") return
         const slot = bindReversalSlot(reverseConfirm.sourceFactId, reason)
         const intent = {
@@ -195,7 +231,7 @@ export function useReverseFlow(args: {
         reversalSlotRef.current = slot
         setReversalDraft(null)
         setReverseReason(reason)
-        await confirmReversalSubmit(intent)
+        await confirmReversalSubmit(undefined, intent)
     }
 
     /**
@@ -204,6 +240,14 @@ export function useReverseFlow(args: {
      * @param row 当前冲正草稿投影。
      */
     function beginReversalSubmit(row: ReceiptReversalRow) {
+        if (reversalSubmitUnknown) {
+            if (row.reversalId !== reversalDraft?.reversalId) {
+                setActionError("请先核对上一笔冲正提交结果，再提交其他单据。")
+                return
+            }
+            setReversalSubmitOpen(true)
+            return
+        }
         setPendingReversal(null)
         setReversalDraft(row)
         const current = reversalSlotRef.current
@@ -223,6 +267,7 @@ export function useReverseFlow(args: {
      * 按冻结路线提交回款冲正审批。
      */
     async function confirmReversalSubmit(
+        resubmissionReason?: string,
         intent?: NonNullable<typeof pendingReversal>,
     ) {
         const submitted = intent ?? pendingReversal
@@ -269,24 +314,42 @@ export function useReverseFlow(args: {
             onChanged?.()
             return
         }
+        const command =
+            reversalSubmitLedger.current.acquire<ReversalSubmitPayload>(
+                "submit",
+                "reversal-resubmit",
+                {
+                    reversalId: reversalDraft!.reversalId,
+                    expectedVersion: reversalDraft!.baselineVersion,
+                    resubmissionReason,
+                },
+            )
         const res = await submitReversalMutation.mutateAsync({
-            reversalId: reversalDraft!.reversalId,
-            expectedVersion: reversalDraft!.baselineVersion,
-            idempotencyKey: slot.key,
+            ...command.payload,
+            idempotencyKey: command.idempotencyKey,
         })
-        if (res.status === "unknown") {
+        const remainsUnknown =
+            res.status !== "succeeded" &&
+            (reversalSubmitUnknown || res.status === "unknown")
+        reversalSubmitLedger.current.settle(
+            "submit",
+            remainsUnknown ? "unknown" : res.status,
+        )
+        setReversalSubmitUnknown(remainsUnknown)
+        if (
+            res.status === "unknown" ||
+            (res.status === "failed" && remainsUnknown)
+        ) {
             setLastResult({
                 status: "unknown",
                 title: "冲正结果待确认",
                 description: res.message,
             })
-            setReversalSubmitOpen(false)
-            return
+            throw new SubmissionResultUnknownError(res.message)
         }
         if (res.status === "failed") {
             setActionError(res.message)
-            setReversalSubmitOpen(false)
-            return
+            throw new Error(res.message)
         }
         setLastResult({
             status: "succeeded",
@@ -311,6 +374,7 @@ export function useReverseFlow(args: {
      * 按冻结路线提交客户退款审批。
      */
     async function confirmRefundSubmit(
+        resubmissionReason?: string,
         intent?: NonNullable<typeof pendingRefund>,
     ) {
         const submitted = intent ?? pendingRefund
@@ -357,24 +421,41 @@ export function useReverseFlow(args: {
             onChanged?.()
             return
         }
+        const command = refundSubmitLedger.current.acquire<RefundSubmitPayload>(
+            "submit",
+            "refund-resubmit",
+            {
+                refundId: refundDraft!.refundId,
+                expectedVersion: refundDraft!.baselineVersion,
+                resubmissionReason,
+            },
+        )
         const res = await submitRefundMutation.mutateAsync({
-            refundId: refundDraft!.refundId,
-            expectedVersion: refundDraft!.baselineVersion,
-            idempotencyKey: slot.key,
+            ...command.payload,
+            idempotencyKey: command.idempotencyKey,
         })
-        if (res.status === "unknown") {
+        const remainsUnknown =
+            res.status !== "succeeded" &&
+            (refundSubmitUnknown || res.status === "unknown")
+        refundSubmitLedger.current.settle(
+            "submit",
+            remainsUnknown ? "unknown" : res.status,
+        )
+        setRefundSubmitUnknown(remainsUnknown)
+        if (
+            res.status === "unknown" ||
+            (res.status === "failed" && remainsUnknown)
+        ) {
             setLastResult({
                 status: "unknown",
                 title: "退款结果待确认",
                 description: res.message,
             })
-            setRefundSubmitOpen(false)
-            return
+            throw new SubmissionResultUnknownError(res.message)
         }
         if (res.status === "failed") {
             setActionError(res.message)
-            setRefundSubmitOpen(false)
-            return
+            throw new Error(res.message)
         }
         setLastResult({
             status: "succeeded",
@@ -466,12 +547,38 @@ export function useReverseFlow(args: {
         beginRefundSubmit,
         refundDraft,
         refundSubmitOpen,
+        refundSubmitUnknown,
+        endRefundRecovery: () => {
+            refundSubmitLedger.current = new FormalCommandKeyLedger()
+            setRefundSubmitUnknown(false)
+            setRefundSubmitOpen(false)
+            refundSlotRef.current = null
+            setLastResult(null)
+            if (refundDraft) openRefundPreview(refundDraft.refundId)
+            setRefundDraft(null)
+        },
+        refundSubmitReason:
+            refundSubmitLedger.current.peek<RefundSubmitPayload>("submit")
+                ?.payload.resubmissionReason,
         setRefundSubmitOpen,
         prepareReversalDraft,
         confirmReversalSubmit,
         beginReversalSubmit,
         reversalDraft,
         reversalSubmitOpen,
+        reversalSubmitUnknown,
+        endReversalRecovery: () => {
+            reversalSubmitLedger.current = new FormalCommandKeyLedger()
+            setReversalSubmitUnknown(false)
+            setReversalSubmitOpen(false)
+            reversalSlotRef.current = null
+            setLastResult(null)
+            if (reversalDraft) openReversalPreview(reversalDraft.reversalId)
+            setReversalDraft(null)
+        },
+        reversalSubmitReason:
+            reversalSubmitLedger.current.peek<ReversalSubmitPayload>("submit")
+                ?.payload.resubmissionReason,
         setReversalSubmitOpen,
         reverseMutation,
         refundDraftPending: false,

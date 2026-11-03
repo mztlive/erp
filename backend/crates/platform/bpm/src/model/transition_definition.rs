@@ -24,14 +24,14 @@ pub struct ApprovalTransitionDefinition {
     pub event: ApprovalTransitionEvent,
     /// 指向下一节点时必填。
     pub to_node_key: Option<String>,
-    /// 指向终态时必填，且只能是通过。
+    /// 指向终态时必填，且必须与事件一致。
     pub terminal_result: Option<ApprovalTerminalResult>,
 }
 
 impl ApprovalTransitionDefinition {
     /// 创建指向下一节点的连线。
     ///
-    /// 驳回连线必须走本入口；通过连线也可以指向节点。
+    /// 通过连线指向下一节点；历史驳回连线仅用于读取已冻结定义。
     ///
     /// # 参数
     /// * `id` - 连线主键
@@ -76,7 +76,7 @@ impl ApprovalTransitionDefinition {
 
     /// 创建指向最终通过的连线。
     ///
-    /// 驳回不得携带终态。
+    /// 通过事件只能指向通过终态。
     ///
     /// # 参数
     /// * `id` - 连线主键
@@ -115,6 +115,35 @@ impl ApprovalTransitionDefinition {
         })
     }
 
+    /// 创建指向本次审批已驳回终态的连线。
+    ///
+    /// # 参数
+    /// * `id` - 连线主键。
+    /// * `process_definition_id` - 所属定义。
+    /// * `from_node_key` - 来源节点。
+    /// * `at` - 调用方时间。
+    /// # 返回
+    /// 返回驳回事件对应的终态连线。
+    /// # 错误
+    /// 来源键非法或时间无法持久化时返回错误。
+    pub fn to_rejected(
+        id: ApprovalTransitionDefinitionId,
+        process_definition_id: ApprovalProcessDefinitionId,
+        from_node_key: impl Into<String>,
+        at: Timestamp,
+    ) -> ModelResult<Self> {
+        let mut transition = Self::to_approved(
+            id,
+            process_definition_id,
+            from_node_key,
+            ApprovalTransitionEvent::Approve,
+            at,
+        )?;
+        transition.event = ApprovalTransitionEvent::Reject;
+        transition.terminal_result = Some(ApprovalTerminalResult::Rejected);
+        Ok(transition)
+    }
+
     /// 校验单条连线形状：节点目标与终态恰有一个。
     ///
     /// 本方法不判断该节点是否入口或末节点。
@@ -136,9 +165,8 @@ impl ApprovalTransitionDefinition {
                 Ok(())
             },
             (ApprovalTransitionEvent::Approve, None, Some(ApprovalTerminalResult::Approved)) => Ok(()),
-            (ApprovalTransitionEvent::Reject, _, Some(_)) => {
-                Err(ModelError::InvalidTransition("驳回连线必须指向节点"))
-            },
+            (ApprovalTransitionEvent::Reject, None, Some(ApprovalTerminalResult::Rejected)) => Ok(()),
+            (_, None, Some(_)) => Err(ModelError::InvalidTransition("连线事件与终态不一致")),
             (ApprovalTransitionEvent::Approve, None, None) => {
                 Err(ModelError::InvalidTransition("通过连线必须指向节点或终态"))
             },
@@ -159,7 +187,7 @@ mod tests {
         ApprovalProcessDefinitionId::new("def")
     }
 
-    /// 通过可指向节点或终态；驳回只能指向节点。
+    /// 通过与驳回终态匹配事件，并兼容历史驳回节点连线。
     #[test]
     fn transition_shape_rules() {
         let at = Timestamp::from_unix_secs(1).unwrap();
@@ -206,5 +234,19 @@ mod tests {
         )
         .unwrap();
         assert!(reject.validate_shape().is_ok());
+        let mut rejected = ApprovalTransitionDefinition::to_rejected(
+            ApprovalTransitionDefinitionId::new("t5"),
+            def_id(),
+            "n2",
+            at,
+        )
+        .unwrap();
+        assert!(rejected.validate_shape().is_ok());
+        assert_eq!(rejected.terminal_result, Some(ApprovalTerminalResult::Rejected));
+        rejected.event = ApprovalTransitionEvent::Approve;
+        assert!(rejected.validate_shape().is_err());
+        rejected.event = ApprovalTransitionEvent::Reject;
+        rejected.to_node_key = Some("n1".into());
+        assert!(rejected.validate_shape().is_err());
     }
 }

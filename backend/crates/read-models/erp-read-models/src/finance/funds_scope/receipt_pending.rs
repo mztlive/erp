@@ -100,9 +100,9 @@ impl FundsAccess {
 
 fn pending_for_status(source: &CustomerReceiptRow) -> Vec<PendingReceiptAllocation> {
     match source.status {
-        CustomerReceiptStatus::Draft | CustomerReceiptStatus::InApproval => {
-            source.pending_allocations.clone()
-        },
+        CustomerReceiptStatus::Draft
+        | CustomerReceiptStatus::Rejected
+        | CustomerReceiptStatus::InApproval => source.pending_allocations.clone(),
         _ => Vec::new(),
     }
 }
@@ -170,6 +170,12 @@ mod tests {
         );
         apply_pending(&mut row, &lines, &HashSet::from(["entry".into()]));
         assert!(row.pending_allocations.is_none());
+    }
+
+    #[test]
+    fn rejected_receipt_keeps_editable_pending_arrangement_without_posting_it() {
+        let source = source(CustomerReceiptStatus::Rejected);
+        assert_eq!(pending_for_status(&source), source.pending_allocations);
     }
 
     #[test]

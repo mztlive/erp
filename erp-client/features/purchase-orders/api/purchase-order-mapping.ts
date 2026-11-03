@@ -230,7 +230,9 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
     const approval = mapPurchaseOrderApproval(center.approval)
     const hasActiveChange = (center.changes ?? []).some(
         (change) =>
-            change.status === "DRAFT" || change.status === "IN_APPROVAL",
+            change.status === "DRAFT" ||
+            change.status === "IN_APPROVAL" ||
+            change.status === "REJECTED",
     )
 
     return {

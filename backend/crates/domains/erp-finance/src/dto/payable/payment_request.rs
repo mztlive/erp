@@ -30,6 +30,9 @@ pub struct ExecutePurchasePaymentRequestDeposit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitPurchasePaymentRequest {
+    /// 驳回后重新提交的必填说明；首次提交可省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resubmission_reason: Option<String>,
     pub expected_version: u64,
     pub idempotency_key: String,
 }

@@ -41,6 +41,7 @@ const WORKSPACE_IDS = new Set<string>(
 )
 
 const WORKSPACE_ACTIONS = new Set<WorkspaceActionCode>([
+    "ABANDON_REWORK",
     "VIEW",
     "PROCESS",
     "REASSIGN",

@@ -169,8 +169,8 @@ impl DocumentState for ReviewStatus {
     ///
     /// `SalesOrder` 与 `VoucherSalesOrder` 目标路径均为
     /// `NOT_SUBMITTED → IN_APPROVAL → APPROVED`，撤回
-    /// `IN_APPROVAL → NOT_SUBMITTED`。驳回不改业务状态。
-    /// 旧逐节点复核态与 `REJECTED` 不得由新提交写入；邻接仅保留给未删除旧数据。
+    /// `IN_APPROVAL → NOT_SUBMITTED`。驳回由专用实体方法原子退回草稿并记录 `REJECTED`。
+    /// 旧逐节点复核态不得由新提交写入；已驳回可重新提交。
     ///
     /// # 参数
     /// 无。

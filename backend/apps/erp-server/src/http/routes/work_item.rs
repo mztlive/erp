@@ -62,6 +62,15 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
             with_permission(post(work_item::work_item_close), rbac, permissions::work_item::CLOSE),
         )
         .route(
+            "/work-items/{id}/abandon-rework",
+            with_permission(post(work_item::abandon_rework), rbac, permissions::work_item::ABANDON_REWORK),
+        )
+        .merge(finance_responsibility_routes(rbac))
+}
+
+fn finance_responsibility_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
+        .route(
             "/finance-responsibility-rules",
             with_permission(
                 get(work_item::finance_responsibility::finance_responsibility_rule_list),

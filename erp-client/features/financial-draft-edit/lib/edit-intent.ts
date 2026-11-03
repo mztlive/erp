@@ -24,6 +24,7 @@ export type FinancialSavedIntent = {
 }
 
 export type FinancialSubmitIntent = {
+    resubmissionReason?: string
     stage: "submit"
     version: number
     idempotencyKey: string

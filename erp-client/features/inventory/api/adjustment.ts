@@ -65,6 +65,7 @@ export const buildCancelStockAdjustmentApprovalRequest = (input: {
  * 构造保存最终草稿并提交审批的原子命令，不得带复核人或审批人。
  */
 export const buildAdjustmentSubmitRequest = (input: {
+    resubmissionReason?: string
     command: StockAdjustmentSubmitCommand
     balanceId: string
     expectedBalanceVersion: string
@@ -85,6 +86,7 @@ export const buildAdjustmentSubmitRequest = (input: {
         expectedVersion: string
     }[]
 }) => ({
+    resubmission_reason: input.resubmissionReason,
     expected_version: input.command.expectedVersion,
     expected_subject_version: input.command.expectedSubjectVersion,
     reason_type: reasonTypeBackend(input.reasonType),
@@ -208,6 +210,7 @@ export async function createAdjustmentDraft(input: {
 }
 
 export async function submitAdjustment(input: {
+    resubmissionReason?: string
     stockAdjustmentId: string
     submitCommand: StockAdjustmentSubmitCommand
     balanceId: string
@@ -235,6 +238,7 @@ export async function submitAdjustment(input: {
             `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}/submit`,
             buildAdjustmentSubmitRequest({
                 command: input.submitCommand,
+                resubmissionReason: input.resubmissionReason,
                 balanceId: input.balanceId,
                 expectedBalanceVersion: input.expectedBalanceLockVersion,
                 lineId: input.lineId,

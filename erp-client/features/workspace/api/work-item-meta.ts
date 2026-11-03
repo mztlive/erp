@@ -34,6 +34,13 @@ type TypeMeta = Readonly<{
 }>
 
 export const TYPE_META: Record<string, TypeMeta> = {
+    APPROVAL_REWORK: {
+        label: "驳回待处理",
+        family: "approval",
+        badgeLabel: "驳回待处理",
+        badgeVariant: "orange",
+        openActionLabel: "修改原单",
+    },
     SALES_INQUIRY_PROCESSING: {
         label: "询价处理",
         family: "procurement",
@@ -352,7 +359,10 @@ export function workspaceDocumentBadge(
     businessObjectType: string,
     fallbackLabel?: string,
 ): WorkspaceDocumentBadgeMeta {
-    if (DOCUMENT_TYPED_WORK_ITEMS.has(workItemType)) {
+    if (
+        DOCUMENT_TYPED_WORK_ITEMS.has(workItemType) ||
+        workItemType === "APPROVAL_REWORK"
+    ) {
         const documentMeta = documentMetaOf(businessObjectType)
         if (documentMeta) {
             return {

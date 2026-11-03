@@ -286,7 +286,9 @@ impl WorkItem {
     /// # 错误
     /// 单据审批任务或带审批节点执行引用时返回固定禁止错误。
     pub fn ensure_generic_responsibility_mutation(&self) -> Result<()> {
-        if self.approval_node_execution_id.is_some() || self.work_item_type.is_document_approval() {
+        if self.approval_node_execution_id.is_some()
+            || matches!(self.work_item_type, WorkItemType::DocumentApproval | WorkItemType::ApprovalRework)
+        {
             return Err(Error::from("APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN"));
         }
         Ok(())
@@ -358,7 +360,7 @@ impl WorkItem {
         Err(Error::from("只有开放任务可以执行责任动作"))
     }
 
-    fn ensure_current_owner(&self, actor_id: &str) -> Result<()> {
+    pub(super) fn ensure_current_owner(&self, actor_id: &str) -> Result<()> {
         self.ensure_open()?;
         if self.owner_user_id.as_deref() == Some(actor_id) {
             return Ok(());

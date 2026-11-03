@@ -11,6 +11,7 @@ use crate::{Error, Result};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WorkItemCommandResult {
+    ReworkAbandoned { work_item_id: String, task_version: u64, reason: String },
     Reassigned { work_item_id: String, task_version: u64, target_user_id: String, reason: String },
     PaymentFollowUp { work_item_id: String, task_version: u64, follow_up_date: String },
     Closed { work_item_id: String, task_version: u64, evidence_reference: String },
@@ -63,6 +64,9 @@ impl WorkItemCommandReceipt {
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted())?;
         let (id, version, action, detail) = match &self.result {
+            WorkItemCommandResult::ReworkAbandoned { work_item_id, task_version, reason } => {
+                (work_item_id, *task_version, "work_item.abandon_rework", reason)
+            },
             WorkItemCommandResult::Reassigned { work_item_id, task_version, target_user_id, reason } => {
                 if reason.trim().is_empty() {
                     return Err(corrupted());
@@ -109,7 +113,8 @@ impl WorkItemCommandReceipt {
             StructuredReceiptMatch::SamePayload => {},
         }
         Ok(match &self.result {
-            WorkItemCommandResult::Reassigned { work_item_id, task_version, .. }
+            WorkItemCommandResult::ReworkAbandoned { work_item_id, task_version, .. }
+            | WorkItemCommandResult::Reassigned { work_item_id, task_version, .. }
             | WorkItemCommandResult::PaymentFollowUp { work_item_id, task_version, .. }
             | WorkItemCommandResult::Closed { work_item_id, task_version, .. } => {
                 (work_item_id, *task_version)

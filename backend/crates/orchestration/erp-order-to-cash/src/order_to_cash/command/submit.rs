@@ -52,6 +52,7 @@ use crate::{Error, Result};
 
 /// 销售提交启动恢复入参。
 struct RecoverSalesSubmissionStartInput<'a> {
+    resubmission_reason: Option<&'a str>,
     /// 销售单主键。
     sales_order_id: &'a str,
     /// 提交时冻结的单据类型。
@@ -87,6 +88,7 @@ struct RecoverSalesSubmissionStartInput<'a> {
 /// # 关键业务约束
 /// 提交行必须由当前工作副本冻结。
 struct ApprovalSubmissionStart<'a> {
+    resubmission_reason: Option<String>,
     /// 销售单主键。
     id: &'a str,
     /// 已进入审批中的销售单。
@@ -209,6 +211,7 @@ impl SalesOrderCommandProcess {
         {
             return Ok(existing);
         }
+        let resubmission_reason = req.resubmission_reason.clone();
         let PreparedSubmissionCopy { order, mut working_copy, copy_lines, working_copy_plan } =
             self.prepare_submission_copy(req, actor, &access, authorized_order).await?;
         if let Some(existing) = self.submission_for_copy(&working_copy).await? {
@@ -216,20 +219,13 @@ impl SalesOrderCommandProcess {
         }
         self.sales().ensure_sellable_working_copy_lines(&copy_lines, &self.catalog()).await?;
         self.ensure_procurement_responsibility_before_submit(&order, &copy_lines).await?;
-        let order_id = SalesOrderId::new(order.base.id.clone());
-        let latest_submission_no = self
-            .db
-            .sales_order_submissions()
-            .find_latest_by_order(&order_id, &mut NoTransaction)
-            .await?
-            .map(|submission| submission.submission_no)
-            .unwrap_or(0);
-        let submission_no = SalesOrderSubmission::next_submission_no(latest_submission_no)?;
+        let submission_no = self.next_submission_no(&order).await?;
         let submission = build_submission(&working_copy, &copy_lines, submission_no, actor)?;
         let submission_lines = build_submission_lines(&submission, &copy_lines)?;
         working_copy.submit()?;
         self.start_approval_submission(
             ApprovalSubmissionStart {
+                resubmission_reason,
                 id,
                 order,
                 working_copy,
@@ -244,6 +240,19 @@ impl SalesOrderCommandProcess {
             fingerprint,
         )
         .await
+    }
+
+    /// 从最新冻结提交递增序号，保留原仓储读取及溢出校验。
+    async fn next_submission_no(&self, order: &SalesOrder) -> Result<u32> {
+        let order_id = SalesOrderId::new(order.base.id.clone());
+        let latest = self
+            .db
+            .sales_order_submissions()
+            .find_latest_by_order(&order_id, &mut NoTransaction)
+            .await?
+            .map(|submission| submission.submission_no)
+            .unwrap_or(0);
+        SalesOrderSubmission::next_submission_no(latest).map_err(Error::from)
     }
 
     /// 按原读取顺序加载并准备首次提交工作副本，不执行写入。
@@ -334,10 +343,12 @@ impl SalesOrderCommandProcess {
             self.prepare_sales_submission(start, actor, idempotency_key, &audit_id, &fingerprint).await?;
         let document_type = input.document_type;
         let subject_version = input.submission.submission_no;
+        let resubmission_reason = input.resubmission_reason.clone();
         match persist_sales_order_start(&self.db, access, expected_order_version, input).await {
             Ok(view) => Ok(view),
             Err(error) if error.command_may_have_committed() => {
                 self.recover_sales_submission_start(RecoverSalesSubmissionStartInput {
+                    resubmission_reason: resubmission_reason.as_deref(),
                     sales_order_id: id,
                     document_type,
                     subject_version,
@@ -364,7 +375,7 @@ impl SalesOrderCommandProcess {
     ) -> Result<PreparedSalesSubmission> {
         let context = self.prepare_submission_domain(&mut start, actor, idempotency_key).await?;
         let prepared = self.prepare_submission_runtime(&start, &context, actor, idempotency_key).await?;
-        let workflow_action = submission_workflow_action(start.id, actor)?;
+        let workflow_action = submission_workflow_action(start.id, actor, start.resubmission_reason.clone())?;
         let audit = submission_event(
             audit_id.to_string(),
             actor,
@@ -385,6 +396,7 @@ impl SalesOrderCommandProcess {
             access: context.access,
             expected_order_version: context.expected_order_version,
             input: SalesOrderStartPersistInput {
+                resubmission_reason: start.resubmission_reason,
                 order: start.order,
                 working_copy: start.working_copy,
                 submission: start.submission,
@@ -470,6 +482,7 @@ impl SalesOrderCommandProcess {
             resolve_start_approvers(&self.db, graph, actor.id(), receipt.as_ref(), &mut NoTransaction)
                 .await?;
         let input = build_sales_order_start_input(SalesOrderStartInput {
+            resubmission_reason: start.resubmission_reason.clone(),
             graph,
             binding: &context.binding,
             document_type: context.ports.document_type,
@@ -526,6 +539,7 @@ impl SalesOrderCommandProcess {
     ) -> Result<Option<SubmissionView>> {
         let db = self.db.clone();
         let recovery = SalesStartRecovery {
+            resubmission_reason: input.resubmission_reason.map(str::to_string),
             order_id: input.sales_order_id.to_string(),
             idempotency_key: input.idempotency_key.to_string(),
             actor_id: input.actor.id().to_string(),
@@ -620,7 +634,11 @@ fn submission_event(
 }
 
 /// 创建与本次提交同事务保存的状态变更记录。
-fn submission_workflow_action(id: &str, actor: &AuditActor) -> Result<WorkflowAction> {
+fn submission_workflow_action(
+    id: &str,
+    actor: &AuditActor,
+    resubmission_reason: Option<String>,
+) -> Result<WorkflowAction> {
     Ok(WorkflowAction::new(
         WorkflowActionId::new(next_id()),
         WorkflowActionData {
@@ -630,13 +648,14 @@ fn submission_workflow_action(id: &str, actor: &AuditActor) -> Result<WorkflowAc
             to_status: "PENDING_REVIEW".to_string(),
             actor_id: actor.id().to_string(),
             actor_role: "role-sales".to_string(),
-            comment: None,
+            comment: resubmission_reason,
         },
     )?)
 }
 
 /// 单次恢复所查证的冻结启动身份。
 struct SalesStartRecovery {
+    resubmission_reason: Option<String>,
     order_id: String,
     idempotency_key: String,
     actor_id: String,
@@ -664,6 +683,7 @@ impl SalesStartRecovery {
         replay_sales_order_start_with_executor(
             db,
             ReplaySalesOrderStartInput {
+                resubmission_reason: self.resubmission_reason.as_deref(),
                 document_type: self.document_type,
                 subject: &subject,
                 subject_version: self.subject_version,

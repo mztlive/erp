@@ -297,6 +297,7 @@ export async function saveSalesOrderDraft(
 
 /** 提交已存在的草稿进入审核轨（继续编辑场景的"提交"动作）。 */
 export type SubmitSalesOrderInput = DraftContentInput & {
+    resubmissionReason?: string
     salesOrderId: string
     version: number
     idempotencyKey: string
@@ -312,6 +313,7 @@ export async function submitSalesOrder(
     )
     await apiPost(`/admin/sales-orders/${input.salesOrderId}/submit`, {
         version: input.version,
+        resubmission_reason: input.resubmissionReason,
         idempotency_key: input.idempotencyKey,
         contract_id: input.contract.contractId || null,
         customer_id: input.customerId,
@@ -321,6 +323,7 @@ export async function submitSalesOrder(
 }
 
 export type SalesOrderDraftResumeData = {
+    rejected?: boolean
     inquirySource?: import("./inquiry-basis").InquirySalesSourceSnapshot | null
     selectionSource?: import("./selection-basis").SalesSelectionSource | null
     salesOrderId: string
@@ -399,7 +402,10 @@ function mapDraftLines(
 }
 
 function isEditableSalesOrder(detail: BackendSalesOrderDetail) {
-    return detail.commercial_status === "DRAFT"
+    return (
+        detail.commercial_status === "DRAFT" ||
+        detail.review_status === "REJECTED"
+    )
 }
 
 /**
@@ -440,6 +446,7 @@ export async function fetchSalesOrderDraftForResume(
         "CONTRACT"
 
     return {
+        rejected: detail.review_status === "REJECTED",
         inquirySource: detail.inquiry_source,
         selectionSource: detail.selection_source,
         salesOrderId: detail.id,

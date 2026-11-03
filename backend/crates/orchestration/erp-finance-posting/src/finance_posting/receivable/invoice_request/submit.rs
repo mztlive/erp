@@ -5,6 +5,7 @@ use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesInvoiceRequestId;
 use erp_finance::dto::receivable::SubmitInvoiceRequest;
+use erp_finance::entity::receivable::InvoiceRequestStatus;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
@@ -21,9 +22,9 @@ use erp_workflow::service::approval::execution::{PreparedExecution, prepare_star
 use erp_workflow::service::document_registry::{find_registered_document, new_registered_document};
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
-use persistence_core::NoTransaction;
 
 use super::super::{ReceivableProcess, start_approval};
+use super::authorization::{MongoAccess, RequestAction, authorize};
 use super::*;
 use crate::FinancePostingPorts;
 
@@ -49,15 +50,13 @@ impl ReceivableProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command, &mut NoTransaction)
-            .await?
-        {
-            return Ok(self.read.invoice_request_detail(&id).await?);
+        if let Some(view) = self.replay_invoice_request_command(&command, actor).await? {
+            return Ok(view);
         }
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let object_read = self.object_read.clone();
+        let response_actor = actor.clone();
         let actor = actor.clone();
         let recover = command.clone();
         let revision = rbac.current_policy_revision().await?;
@@ -65,33 +64,62 @@ impl ReceivableProcess {
             .clone()
             .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move {
-                    let receipts = FinanceCommandReceiptService::new(db.clone());
-                    if let Some(id) = receipts.committed_resource_id(&command, executor).await? {
-                        return Ok::<String, Error>(id);
+                    SubmitWrite {
+                        db: &db,
+                        rbac: &rbac,
+                        object_read: object_read.as_ref(),
+                        req: &req,
+                        actor: &actor,
+                        command: &command,
                     }
-                    let account = lock_account(&db, &req.receivable_account_id, executor).await?;
-                    let available = account
-                        .open_invoiceable_total
-                        .checked_sub(reserved(&db, &account.base.id, executor).await?);
-                    invoice_request_source::load(&db, &account, executor)
-                        .await?
-                        .validate(&req.data, available)?;
-                    let mut request = candidate(&db, &account, &req, &actor, executor).await?;
-                    request.submit(available)?;
-                    let binding = bind(&db, &rbac, object_read.as_ref(), &request, &actor, executor).await?;
-                    let id = request.base.id.clone();
-                    start(&db, &rbac, &mut request, &binding, &req.idempotency_key, &actor, executor).await?;
-                    let audit =
-                        super::command::event(&actor, &request, super::command::SUBMIT, Some(&command))?;
-                    receipts.save_resource(&command, id.clone(), audit.base.id.clone(), executor).await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<String, Error>(id)
+                    .apply(executor)
+                    .await
                 })
             })
             .await;
-        self.finish_invoice_request_command(result, &recover).await
+        self.finish_invoice_request_command(result, &recover, &response_actor).await
     }
 }
+/// 本次提交的权威输入与共享事务端口。
+struct SubmitWrite<'a> {
+    db: &'a Database,
+    rbac: &'a FinancePostingPorts,
+    object_read: &'a dyn erp_workflow::ApprovalObjectReadPort,
+    req: &'a SubmitInvoiceRequest,
+    actor: &'a AuditActor,
+    command: &'a CommandReceipt,
+}
+impl SubmitWrite<'_> {
+    /// 原事务内先授权或恢复回执，再冻结额度、审批与成功审计。
+    async fn apply(&self, executor: &mut dyn Executor) -> Result<String> {
+        let Self { db, rbac, object_read, req, actor, command } = *self;
+        let receipts = FinanceCommandReceiptService::new(db.clone());
+        let access = MongoAccess { db, rbac };
+        if access.replay(actor, command, executor).await?.is_some() {
+            return Err(super::command::replay_requires_readback());
+        }
+        if let Some(id) = req.request_id.as_deref() {
+            authorize(&access, actor, id, RequestAction::Submit, executor).await?;
+        }
+        let account = lock_account(db, &req.receivable_account_id, executor).await?;
+        let available =
+            account.open_invoiceable_total.checked_sub(reserved(db, &account.base.id, executor).await?);
+        invoice_request_source::load(db, &account, executor).await?.validate(&req.data, available)?;
+        let mut request = candidate(db, &account, req, actor, executor).await?;
+        if req.request_id.is_none() {
+            authorize(&access, actor, &request.base.id, RequestAction::Submit, executor).await?;
+        }
+        request.submit(available)?;
+        let binding = bind(db, rbac, object_read, &request, actor, executor).await?;
+        let id = request.base.id.clone();
+        start(db, rbac, &mut request, &binding, req, actor, executor).await?;
+        let audit = super::command::event(actor, &request, super::command::SUBMIT, Some(command))?;
+        receipts.save_resource(command, id.clone(), audit.base.id.clone(), executor).await?;
+        persist_log(db, &audit, executor).await?;
+        Ok::<String, Error>(id)
+    }
+}
+
 /// 固定销售应收来源；草稿修改仅限原申请人且必须提交版本。
 async fn candidate(
     db: &Database,
@@ -109,7 +137,7 @@ async fn candidate(
         if request.created_by != actor.id() || request.receivable_account_id.as_ref() != account.base.id {
             return Err(Error::Forbidden("只能修改本人申请且不能更换来源销售单".into()));
         }
-        if request.status != erp_finance::entity::receivable::InvoiceRequestStatus::Draft {
+        if !matches!(request.status, InvoiceRequestStatus::Draft | InvoiceRequestStatus::Rejected) {
             return Err(Error::ConflictError("申请已提交，请刷新后重试".into()));
         }
         request.data = req.data.clone().normalize()?;
@@ -188,7 +216,7 @@ async fn start(
     rbac: &FinancePostingPorts,
     request: &mut SalesInvoiceRequest,
     binding: &erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding,
-    key: &str,
+    req: &SubmitInvoiceRequest,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -197,6 +225,7 @@ async fn start(
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
     let subject = subject_ref_for(DocumentType::SalesInvoiceRequest, &request.base.id)?;
     let input = start_approval::build_document_start_input(start_approval::DocumentStartInput {
+        resubmission_reason: req.resubmission_reason.as_deref(),
         document_type: DocumentType::SalesInvoiceRequest,
         graph,
         binding,
@@ -204,7 +233,7 @@ async fn start(
         subject_version: request.approval_subject_version,
         actor_id: actor.id(),
         organization_id: request.counterparty_party_id.as_ref(),
-        idempotency_key: key,
+        idempotency_key: &req.idempotency_key,
         receipt: None,
         now,
     })?;
@@ -221,6 +250,7 @@ async fn start(
         rbac,
         &writes,
         start_approval::RuntimeStartInput {
+            resubmission_reason: req.resubmission_reason.as_deref(),
             document_type: DocumentType::SalesInvoiceRequest,
             snapshot_payload: &snapshot,
             owner_role: spec.owner_role.as_str(),

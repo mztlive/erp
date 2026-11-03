@@ -47,6 +47,7 @@ impl From<erp_order_to_cash::Error> for Error {
     /// 保留编排边界的原错误载荷和 HTTP 分类。
     fn from(err: erp_order_to_cash::Error) -> Self {
         boundary_error!(err, erp_order_to_cash;
+            erp_order_to_cash::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
             error @ erp_order_to_cash::Error::Rbac(_) => Self::Internal(error.to_string()),
             erp_order_to_cash::Error::Coded(code) => Self::Coded(code),
             erp_order_to_cash::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
@@ -102,6 +103,7 @@ impl From<erp_finance_posting::Error> for Error {
     /// 保留编排边界的原错误载荷和 HTTP 分类。
     fn from(err: erp_finance_posting::Error) -> Self {
         boundary_error!(err, erp_finance_posting;
+            erp_finance_posting::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
             error @ erp_finance_posting::Error::Rbac(_) => Self::Internal(error.to_string()),
             erp_finance_posting::Error::Coded(code) => Self::Coded(code),
             erp_finance_posting::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
@@ -124,6 +126,7 @@ impl From<erp_data_import::Error> for Error {
     /// 保留编排边界的原错误载荷和 HTTP 分类。
     fn from(err: erp_data_import::Error) -> Self {
         boundary_error!(err, erp_data_import;
+            erp_data_import::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
             error @ erp_data_import::Error::Rbac(_) => Self::Internal(error.to_string()),
             erp_data_import::Error::Coded(code) => Self::Coded(code),
             erp_data_import::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
@@ -146,6 +149,7 @@ impl From<wiring_errors::Error> for Error {
     /// 将实际组合边界错误转换为稳定 HTTP 响应。
     fn from(err: wiring_errors::Error) -> Self {
         boundary_error!(err, wiring_errors;
+            wiring_errors::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
             error @ wiring_errors::Error::Rbac(_) => Self::Internal(error.to_string()),
             wiring_errors::Error::Coded(code) => Self::Coded(code),
             wiring_errors::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),

@@ -1,6 +1,7 @@
 import type { PurchaseDeliveryAllocation } from "../types"
 import type { BackendExpenseDetail } from "./purchase-order-wire-types"
-import { apiGet } from "@/lib/api"
+import type { SubmitPurchaseChangeInput } from "./purchase-order-commands"
+import { apiGet, apiPost } from "@/lib/api"
 
 /** 与采购变更提交接口一致的完整行，关联与名称快照保持原值。 */
 export type PurchaseChangeDraftLine = {
@@ -57,5 +58,19 @@ export type PurchaseChangeSubmissionState = {
 export function fetchPurchaseChangeSubmissionState(changeOrderId: string) {
     return apiGet<PurchaseChangeSubmissionState>(
         `/admin/purchase-change-orders/${encodeURIComponent(changeOrderId)}`,
+    )
+}
+
+/** 仅保存原变更目标，幂等回放同一保存结果；不会发起审批或改变已驳回状态。 */
+export function savePurchaseChangeDraft(input: SubmitPurchaseChangeInput) {
+    return apiPost<PurchaseChangeDraft>(
+        `/admin/purchase-change-orders/${encodeURIComponent(input.purchaseChangeOrderId)}/draft`,
+        {
+            expected_lock_version: input.expectedLockVersion,
+            payment_term_code: input.paymentTermCode,
+            reason: input.reason,
+            lines: input.lines ?? [],
+            idempotency_key: input.idempotencyKey,
+        },
     )
 }

@@ -221,6 +221,14 @@ fn purchase_change_draft_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .route(
             "/purchase-change-orders/{id}/draft",
             with_permission(
+                post(purchase_order::change_draft::purchase_change_save_draft),
+                rbac,
+                permissions::purchase_order::CHANGE_DRAFT_SAVE,
+            ),
+        )
+        .route(
+            "/purchase-change-orders/{id}/draft",
+            with_permission(
                 get(purchase_order::change_draft::purchase_change_draft),
                 rbac,
                 permissions::purchase_order::CHANGE_DRAFT_PURCHASE_CHANGE_DRAFT,

@@ -11,8 +11,10 @@ import { hasPermission } from "@/lib/permissions"
 import {
     listRequests,
     getRequest,
+    getRequestSaveState,
     getRequestAmounts,
     submitRequest,
+    updateRequest,
     cancelRequest,
     normalizeInvoiceRequest,
     type RequestQuery,
@@ -58,6 +60,14 @@ export const useInvoiceRequest = (id?: string) => {
         ...(seeded ? { initialData: seeded, initialDataUpdatedAt: 0 } : {}),
     })
 }
+/** 保存结果未知时显式读取权威版本，不以缓存快照作为成功证据。 */
+export const useInvoiceRequestSaveState = (id?: string) =>
+    useQuery({
+        queryKey: [...requestKeys.all, "save-state", id],
+        queryFn: () => getRequestSaveState(id!),
+        enabled: false,
+        retry: false,
+    })
 /** 应收额度是服务端事实，禁止用列表合计替代。 */
 export const useInvoiceRequestAmounts = (id?: string, enabled = true) =>
     useQuery({
@@ -106,5 +116,13 @@ export function useInvoiceRequestCommands() {
         mutationFn: cancelRequest,
         onSuccess: refresh,
     })
-    return { submit, cancel, refresh }
+    const update = useMutation({
+        mutationFn: updateRequest,
+        onSuccess: async (payload) => {
+            const request = normalizeInvoiceRequest(payload)
+            if (request.id) rememberSubmittedInvoiceRequest(request)
+            await refresh()
+        },
+    })
+    return { submit, update, cancel, refresh }
 }

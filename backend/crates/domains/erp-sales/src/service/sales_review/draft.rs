@@ -102,7 +102,7 @@ impl SalesReviewService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".into()))?;
-        if !change.is_draft() {
+        if !change.is_editable() {
             return Err(Error::ConflictError("请先撤回销售变更审批，再修改原单".into()));
         }
         let copy = self
@@ -150,6 +150,7 @@ impl SalesReviewService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单基准版本不存在".into()))?;
         Ok(SalesChangeDraftView {
+            status: change.stable.status,
             base_gross_amount: base.gross_amount,
             base_lines: self.base_lines(change, executor).await?,
             version: change.base.version,

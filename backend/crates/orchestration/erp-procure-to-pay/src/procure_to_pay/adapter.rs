@@ -47,6 +47,8 @@ pub struct PurchaseOrderAdapter {
     pub on_approval_start: ApprovalDomainAction,
     /// 最终通过动作。
     pub on_final_approve: ApprovalDomainAction,
+    /// 终态驳回动作。
+    pub on_reject: ApprovalDomainAction,
     /// 撤回与受阻取消动作。
     pub cancel_action: ApprovalDomainAction,
     /// WorkItem 责任角色。
@@ -83,6 +85,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseOrderAdapter> 
         || spec.subject_version_source != ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         || spec.on_approval_start != ApprovalDomainAction::PurchaseOrderSubmit
         || spec.on_final_approve != ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder
+        || spec.on_reject != ApprovalDomainAction::PurchaseOrderReject
         || spec.cancel_action != ApprovalDomainAction::PurchaseOrderCancelApproval
         || spec.owner_role.as_str() != "purchase_order_approver"
         || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
@@ -100,6 +103,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseOrderAdapter> 
         subject_snapshot_builder: "build_purchase_order_snapshot",
         on_approval_start: spec.on_approval_start,
         on_final_approve: spec.on_final_approve,
+        on_reject: spec.on_reject,
         cancel_action: spec.cancel_action,
         owner_role: spec.owner_role.as_str(),
         owner_organization_snapshot: spec.owner_organization_source,
@@ -167,6 +171,9 @@ pub fn execute_purchase_order_domain_action(
         },
         ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder => {
             Ok(ensure_final_approve_formalize(order)?)
+        },
+        ApprovalDomainAction::PurchaseOrderReject => {
+            Ok(order.reject_approval(order.approval_subject_version, updated_by)?)
         },
         ApprovalDomainAction::PurchaseOrderCancelApproval => {
             Ok(cancel_purchase_order_to_draft(order, updated_by)?)

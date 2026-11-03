@@ -54,7 +54,7 @@ impl PurchasePaymentRequest {
     /// # 参数
     /// * `data` - 新表单。
     /// # 返回
-    /// 成功时替换表单并回到草稿，保留先前冻结材料至重新提交。
+    /// 成功时替换表单；已驳回状态保持，保留先前冻结材料至重新提交。
     /// # 错误
     /// 审批中或已批准申请不可修改，表单非法时返回错误。
     pub fn update(&mut self, data: PurchasePaymentRequestData) -> Result<()> {
@@ -64,7 +64,9 @@ impl PurchasePaymentRequest {
         self.supplier_id = data.supplier_id.clone();
         self.data = data;
         self.total_amount = total;
-        self.status = PurchasePaymentRequestStatus::Draft;
+        if self.status != PurchasePaymentRequestStatus::Rejected {
+            self.status = PurchasePaymentRequestStatus::Draft;
+        }
         Ok(())
     }
 

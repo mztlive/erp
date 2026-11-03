@@ -272,7 +272,9 @@ export function SalesOrderCreateForm({
     )
 
     /** 负毛利在提交预览后再确认一次；待完善或非负毛利直接提交。 */
-    const handleSubmitConfirm = () => {
+    const resubmissionReasonRef = React.useRef<string | undefined>(undefined)
+    const handleSubmitConfirm = (resubmissionReason?: string) => {
+        resubmissionReasonRef.current = resubmissionReason
         const values = form.state.values
         if (blocksSalesOrderSubmit(values)) return
         const grossProfit =
@@ -284,13 +286,21 @@ export function SalesOrderCreateForm({
             setNegativeProfit(grossProfit)
             return
         }
-        void submission.handleSubmit(values, form)
+        void submission.handleSubmit(
+            values,
+            form,
+            resubmissionReasonRef.current,
+        )
     }
 
     const handleNegativeProfitConfirm = () => {
         if (blocksSalesOrderSubmit(form.state.values)) return
         setNegativeProfit(null)
-        void submission.handleSubmit(form.state.values, form)
+        void submission.handleSubmit(
+            form.state.values,
+            form,
+            resubmissionReasonRef.current,
+        )
     }
 
     const dirty = useSelector(
@@ -1023,6 +1033,10 @@ export function SalesOrderCreateForm({
                     onOpenChange={submission.setSubmitConfirmOpen}
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
+                    resubmitting={
+                        initialDraft?.rejected ||
+                        submission.approval?.instance?.status === "REJECTED"
+                    }
                     onConfirm={handleSubmitConfirm}
                 />
             ) : (
@@ -1031,6 +1045,10 @@ export function SalesOrderCreateForm({
                     onOpenChange={submission.setSubmitConfirmOpen}
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
+                    resubmitting={
+                        initialDraft?.rejected ||
+                        submission.approval?.instance?.status === "REJECTED"
+                    }
                     onConfirm={handleSubmitConfirm}
                 />
             )}

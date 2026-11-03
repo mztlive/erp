@@ -48,6 +48,7 @@ pub(super) async fn create_and_submit(
     let draft = PurchasePaymentRequest::new(id_generator::next_id(), data, actor.id())?;
     let draft = draft::create_draft(db, rbac, draft, actor, executor).await?;
     let req = SubmitPurchasePaymentRequest {
+        resubmission_reason: None,
         expected_version: draft.base.version,
         idempotency_key: command.id().to_owned(),
     };
@@ -73,6 +74,10 @@ impl PurchasePaymentRequestProcess {
         req: SubmitPurchasePaymentRequest,
         actor: &AuditActor,
     ) -> Result<PurchasePaymentRequest> {
+        let mut payload = vec![id.to_owned(), req.expected_version.to_string()];
+        if let Some(reason) = &req.resubmission_reason {
+            payload.push(reason.clone());
+        }
         let command = CommandReceipt::from_resource_parts(
             "payment-request-submit-",
             actor.id(),
@@ -80,7 +85,7 @@ impl PurchasePaymentRequestProcess {
             "purchase_payment_request",
             id,
             &req.idempotency_key,
-            [id.to_owned(), req.expected_version.to_string()],
+            payload,
         )?;
         if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
             .committed_resource_id(&command, &mut NoTransaction)
@@ -209,6 +214,7 @@ impl SubmitWrite<'_> {
             rbac,
             &writes,
             start_approval::RuntimeStartInput {
+                resubmission_reason: self.req.resubmission_reason.as_deref(),
                 document_type: DocumentType::PurchasePaymentRequest,
                 snapshot_payload: &snapshot,
                 owner_role: spec.owner_role.as_str(),
@@ -309,6 +315,7 @@ impl SubmitWrite<'_> {
             return Err(Error::ConflictError("付款申请人不得审批本人申请，请配置合格财务审批人".into()));
         }
         let input = start_approval::build_document_start_input(start_approval::DocumentStartInput {
+            resubmission_reason: req.resubmission_reason.as_deref(),
             document_type: DocumentType::PurchasePaymentRequest,
             graph,
             binding,

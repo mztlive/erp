@@ -16,8 +16,8 @@ use erp_read_models::{
 };
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::work_item::{
-    CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome,
-    WorkItemReassignCandidateView,
+    AbandonApprovalReworkRequest, CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemConflictKind,
+    WorkItemMutationOutcome, WorkItemReassignCandidateView,
 };
 use erp_workflow::{Error as WorkflowError, ErrorCode};
 use serde::{Deserialize, Serialize};
@@ -484,6 +484,33 @@ pub async fn work_item_close(
 ) -> WorkItemActionResult {
     let outcome = work_item_service(state.application().db(), state.application().rbac())
         .close(id, req, actor.clone())
+        .await?;
+    work_item_action_response(state, actor, outcome, headers).await
+}
+
+/// 放弃本次驳回处理责任，保留原单据及审批历史。
+///
+/// # 参数
+/// * `state` - 应用状态。
+/// * `actor` - 当前认证原提交人。
+/// * `headers` - 响应追踪上下文。
+/// * `id` - 驳回处理任务。
+/// * `req` - 版本、幂等键及放弃原因。
+///
+/// # 返回
+/// 返回已关闭任务的授权视图。
+///
+/// # 错误
+/// 责任、身份、类型或版本失效时拒绝；持久化错误保留原分类。
+pub async fn abandon_rework(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(req): Json<AbandonApprovalReworkRequest>,
+) -> WorkItemActionResult {
+    let outcome = work_item_service(state.application().db(), state.application().rbac())
+        .abandon_rework(id, req, actor.clone())
         .await?;
     work_item_action_response(state, actor, outcome, headers).await
 }

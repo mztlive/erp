@@ -146,7 +146,7 @@ export function reasonDirection(reason: string): "increase" | "decrease" {
 /**
  * 把库存调整业务状态收敛到合同生命周期。
  *
- * 旧人工复核旁路与审批导致的业务驳回不得再上屏。
+ * 驳回保留独立结果，后续编辑不会把结果重置为草稿。
  */
 export function adjustmentStatusMap(status: string): {
     status: string
@@ -183,9 +183,9 @@ export function adjustmentStatusMap(status: string): {
             }
         case "REJECTED":
             return {
-                status: "DRAFT",
-                statusLabel: "草稿",
-                statusTone: "neutral",
+                status: "REJECTED",
+                statusLabel: "已驳回",
+                statusTone: "destructive",
             }
         default:
             return {
@@ -197,10 +197,10 @@ export function adjustmentStatusMap(status: string): {
 }
 
 /**
- * 判断调整单是否仍处于未提交草稿。未知态不可提交。
+ * 判断调整单是否可编辑或重新提交。未知态不可提交。
  */
 export const isDraftAdjustmentStatus = (status?: string): boolean =>
-    adjustmentStatusMap(status ?? "").status === "DRAFT"
+    ["DRAFT", "REJECTED"].includes(adjustmentStatusMap(status ?? "").status)
 
 export function filterSummary(query: InventoryQuery, total: number): string {
     const parts = [

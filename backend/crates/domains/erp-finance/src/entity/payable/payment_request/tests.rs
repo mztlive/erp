@@ -512,3 +512,19 @@ fn deposit_release_updates_original_reservation_and_removes_only_after_full_rele
     assert!(!request.deposit_reservations.contains_key("reservation"));
     assert_eq!(request.available_to_execute("account-1").unwrap(), amount("100"));
 }
+
+/// 驳回后保存修改不再清除驳回状态，也不重新取得付款额度。
+#[test]
+fn rejected_request_edit_preserves_rejection_and_releases_authority() {
+    let mut request = draft(&[("account-1", "100")]);
+    request.submit(submission(&request)).unwrap();
+    request.reject("补充付款依据").unwrap();
+    request.update(data(&[("account-1", "80")])).unwrap();
+    assert_eq!(request.status, PurchasePaymentRequestStatus::Rejected);
+    assert_eq!(request.last_reason.as_deref(), Some("补充付款依据"));
+    assert_eq!(request.reserved_for("account-1"), Amount::zero());
+    assert_eq!(request.approval_subject_version, 1);
+    request.submit(submission(&request)).unwrap();
+    assert_eq!(request.approval_subject_version, 2);
+    assert_eq!(request.reserved_for("account-1"), amount("80"));
+}

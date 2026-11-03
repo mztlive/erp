@@ -232,6 +232,7 @@ impl DefinitionGraph {
 #[cfg(test)]
 mod tests {
     use super::enter_node::{EnterNodeInput, plan_enter_node};
+    use super::event::BpmEventKind;
     use super::test_fixtures::{at, blocked, eligible, node, participant};
     use super::{
         CancelCommand, CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError,
@@ -470,9 +471,9 @@ mod tests {
         assert_eq!(blocked_plan.instance.status, ApprovalProcessInstanceStatus::Blocked);
     }
 
-    /// 任一节点驳回都进入下一轮入口，subject_version 不变。
+    /// 任一节点驳回都终止本次实例，subject_version 和历史轮次不变。
     #[test]
-    fn engine_reject_restarts_entry_round() {
+    fn engine_reject_terminates_without_restart() {
         let started = start_two_node(eligible("u1", "张三"));
         let subject_version = started.instance.subject_version;
         let current = started.created_executions[0].clone();
@@ -492,12 +493,14 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(plan.instance.current_round_no, 2);
+        assert_eq!(plan.instance.current_round_no, 1);
         assert_eq!(plan.instance.subject_version, subject_version);
         assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Rejected);
-        assert_eq!(plan.created_executions[0].node_key, "n1");
-        assert_eq!(plan.created_executions[0].round_no, 2);
-        assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Running);
+        assert!(plan.created_executions.is_empty());
+        assert!(plan.created_assignees.is_empty());
+        assert!(plan.instance.current_node_execution_id.is_none());
+        assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Rejected);
+        assert!(!plan.events.iter().any(|event| event.kind == BpmEventKind::RoundRestarted));
     }
 
     /// 当前审批人失效提交 BLOCKED 事实并关闭任务，而不是返回不可提交错误。
@@ -1293,7 +1296,7 @@ mod or_sign_tests {
     }
 
     #[test]
-    fn reject_restarts_group_or_terminates_according_to_existing_policy() {
+    fn reject_always_terminates_group_without_new_tasks() {
         let graph = graph();
         let start = started(&graph);
         let plan = decide(
@@ -1303,9 +1306,10 @@ mod or_sign_tests {
             command("u2", ApprovalDecision::Reject),
         )
         .unwrap();
-        assert_eq!(plan.instance.current_round_no, 2);
-        assert_eq!(plan.created_executions[0].additional_assignees.len(), 1);
-        assert_eq!(plan.task_intents.len(), 3);
+        assert_eq!(plan.instance.current_round_no, 1);
+        assert!(plan.created_executions.is_empty());
+        assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Rejected);
+        assert!(matches!(plan.task_intents.as_slice(), [TaskIntent::CompleteTask { .. }]));
         let terminal = reject_terminal(
             start.instance,
             start.created_executions[0].clone(),

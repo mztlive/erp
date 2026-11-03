@@ -231,3 +231,6 @@ pub use payment_arrangement::sync_payment_arrangement;
 
 mod payment_follow_up;
 pub use payment_follow_up::SchedulePaymentFollowUp;
+
+mod rejection;
+pub use rejection::{reject_change_approval, reject_order_approval};

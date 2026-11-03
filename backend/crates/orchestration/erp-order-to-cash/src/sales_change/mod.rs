@@ -22,6 +22,7 @@ mod draft;
 mod posting;
 mod procurement;
 mod start_approval;
+mod submission_receipt;
 pub use adapter::sales_change_order_object_readable;
 use posting::persist_effective_writes;
 

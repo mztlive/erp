@@ -144,6 +144,35 @@ impl<'a> BpmWorkflowRepository<'a> {
         Ok(rows.pop())
     }
 
+    /// 读取新提交之外的最近审批实例，含终态。
+    ///
+    /// # 参数
+    /// * `subject` - 同一业务对象。
+    /// * `excluded_id` - 本次事务已创建的新实例。
+    /// * `executor` - 调用方事务执行器。
+    /// # 返回
+    /// 返回最近旧实例；没有历史时返回空。
+    /// # 错误
+    /// 查询或解码失败时返回错误。
+    pub async fn previous_instance_by_subject(
+        &self,
+        subject: &SubjectRef,
+        excluded_id: &ApprovalProcessInstanceId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalProcessInstance>> {
+        let mut filter = latest_subject_filter(subject);
+        filter.insert("id", doc! { "$ne": excluded_id.as_ref() });
+        let mut rows = find_limited(
+            &self.db.collection(INSTANCES),
+            filter,
+            doc! { "started_at": -1, "id": -1 },
+            1,
+            executor,
+        )
+        .await?;
+        Ok(rows.pop())
+    }
+
     /// 按实例主键批量读取审批运行的有界列表投影。
     ///
     /// # 参数

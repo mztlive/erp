@@ -545,6 +545,31 @@ impl PurchaseOrder {
         Ok(())
     }
 
+    /// 终止本次审批并保留可编辑的已驳回状态。
+    ///
+    /// # 参数
+    /// * `expected_subject_version` - 当前实例冻结的审批提交版本。
+    /// * `updated_by` - 当前审批决定人。
+    /// # 返回
+    /// 状态改为已驳回，提交版本保持不变。
+    /// # 错误
+    /// 非审批中状态拒绝，重复释放由外层审批回执阻断。
+    pub fn reject_approval(
+        &mut self,
+        expected_subject_version: u32,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if self.approval_subject_version != expected_subject_version {
+            return Err(Error::from("审批提交版本已变化，不得驳回历史提交"));
+        }
+        if self.stable.status != PurchaseOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购单可以驳回"));
+        }
+        self.stable.status = PurchaseOrderStatus::Rejected;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 最终通过：仅 `IN_APPROVAL` 可进入生效。
     ///
     /// 不改写 `PurchaseReviewStatus`，审批结果取实例投影。
@@ -720,7 +745,7 @@ impl PurchaseOrder {
     /// # 错误
     /// 非草稿状态时返回错误。
     fn ensure_draft(&self) -> Result<()> {
-        if self.stable.status != PurchaseOrderStatus::Draft {
+        if !matches!(self.stable.status, PurchaseOrderStatus::Draft | PurchaseOrderStatus::Rejected) {
             return Err(Error::from("只有草稿状态的采购单可以编辑"));
         }
         Ok(())
@@ -804,6 +829,45 @@ mod tests {
             crate::entity::test_support::payment_term,
         )
         .unwrap()
+    }
+
+    /// 驳回保留版本与来源，编辑后仍已驳回，重提创建更高版本。
+    #[test]
+    fn rejected_order_remains_editable_until_resubmission() {
+        let mut order = new_order();
+        assert!(order.reject_approval(1, "approver").is_err());
+        order.start_approval("submission-1", "buyer").unwrap();
+        let version = order.approval_subject_version;
+        order.reject_approval(1, "approver").unwrap();
+        assert_eq!(order.stable.status, PurchaseOrderStatus::Rejected);
+        assert_eq!(order.current_submission_id.as_deref(), Some("submission-1"));
+        assert_eq!(order.approval_subject_version, version);
+        assert!(order.reject_approval(1, "approver").is_err());
+        order
+            .update(PurchaseOrderUpdate::default(), "buyer", crate::entity::test_support::payment_term)
+            .unwrap();
+        assert_eq!(order.stable.status, PurchaseOrderStatus::Rejected);
+        order.start_approval("submission-2", "buyer").unwrap();
+        assert_eq!(order.approval_subject_version, version + 1);
+        assert_eq!(order.stable.status, PurchaseOrderStatus::InApproval);
+    }
+
+    /// 旧审批实例不得驳回新提交，失败不改变单据及当前提交。
+    #[test]
+    fn rejection_refuses_previous_approval_version() {
+        let mut order = new_order();
+        order.start_approval("submission-1", "buyer").unwrap();
+        order.reject_approval(1, "approver").unwrap();
+        order.start_approval("submission-2", "buyer").unwrap();
+        let before = order.clone();
+
+        assert_eq!(
+            order.reject_approval(1, "approver").unwrap_err().to_string(),
+            "审批提交版本已变化，不得驳回历史提交"
+        );
+        assert_eq!(order, before);
+        order.reject_approval(2, "approver").unwrap();
+        assert_eq!(order.stable.status, PurchaseOrderStatus::Rejected);
     }
 
     #[test]

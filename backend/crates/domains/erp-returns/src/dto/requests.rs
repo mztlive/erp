@@ -164,6 +164,10 @@ pub struct PostCustomerRefundRequest {}
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitCustomerRefundRequest {
+    /// 驳回后重新提交的说明。
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,
@@ -228,6 +232,10 @@ pub struct PostSupplierRefundRequest {}
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitSupplierRefundRequest {
+    /// 驳回后重新提交的说明。
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,
@@ -286,6 +294,10 @@ pub struct PostReceiptReversalRequest {}
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitReceiptReversalRequest {
+    /// 驳回后重新提交的说明。
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,
@@ -342,6 +354,10 @@ pub struct PostPaymentReversalRequest {}
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitPaymentReversalRequest {
+    /// 驳回后重新提交的说明。
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,

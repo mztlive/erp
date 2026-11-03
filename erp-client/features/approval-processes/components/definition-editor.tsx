@@ -441,9 +441,7 @@ export function DefinitionEditor({
                                         <span className="font-medium text-foreground">
                                             驳回规则：
                                         </span>
-                                        {rejectionPolicyCopy(
-                                            detail.document_type,
-                                        )}
+                                        {rejectionPolicyCopy()}
                                     </p>
                                 </div>
                             )

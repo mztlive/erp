@@ -17,7 +17,7 @@ use erp_sales::dto::sales_review::{
     CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, SubmitSalesChangeRequest,
     VoidSalesChangeOrderRequest,
 };
-use erp_sales::entity::sales_review::SalesChangeOrder;
+use erp_sales::entity::sales_review::{SalesChangeOrder, SalesChangeSubmissionCommand};
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_sales::service::sales_review::{
     CreatedChangeWrite, SalesChangeSubmissionWrite, SalesReviewService, latest_change_submission_no,
@@ -32,10 +32,10 @@ use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
+use erp_workflow::service::approval::execution::{PreparedExecution, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
+use erp_workflow::service::work_item::approval_rework::complete_document_rework;
 use id_generator::next_id;
-use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
@@ -52,8 +52,8 @@ use super::cancel_approval::{
 use super::start_approval::{
     SalesChangeStartInput, SalesChangeStartPersistInput, build_sales_change_start_input,
     load_bound_definition_graph, load_start_receipt, persist_sales_change_start,
-    replay_sales_change_start_with_executor,
 };
+use super::submission_receipt::replay_submission;
 use crate::{Error, Result};
 
 impl SalesChangeProcess {
@@ -154,21 +154,28 @@ impl SalesChangeProcess {
     ) -> Result<SalesChangeOrderDetailView> {
         req.validate()?;
         let adapter = sales_change_order_adapter()?;
-        let preview = self
-            .db
-            .sales_change_orders()
-            .find_by_id(id, &mut NoTransaction)
+        let command = SalesChangeSubmissionCommand::new(
+            id,
+            actor.id(),
+            req.version,
+            &req.idempotency_key,
+            req.resubmission_reason.as_deref(),
+        )?;
+        if replay_submission(&self.db, self.require_rbac()?, actor, &command, &mut NoTransaction)
             .await?
-            .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".to_string()))?;
-        self.command_access(actor, "submit")?
-            .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
-            .await?;
+            .is_some()
+        {
+            return SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+                .sales_change_order_detail(id, actor)
+                .await
+                .map_err(Error::from);
+        }
         let change_order =
             SalesReviewService::new(self.db.clone()).load_for_submission(id, req.version).await?;
-        self.start_change_approval(id, change_order, req.idempotency_key.clone(), actor, adapter).await
+        self.start_change_approval(id, change_order, req, command, actor, adapter).await
     }
 
-    /// 作废销售变更单（仅草稿态）。
+    /// 作废草稿或已驳回的销售变更单。
     ///
     /// # 参数
     /// * `id` - 变更单 ID
@@ -203,6 +210,7 @@ impl SalesChangeProcess {
         let client = db.client().clone();
         let rbac = self.require_rbac()?;
         let actor_for_tx = actor.clone();
+        let document_id = id.to_string();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -211,6 +219,15 @@ impl SalesChangeProcess {
                         .await
                         .map_err(crate::Error::from)?;
                     sales_write.persist(&db, executor).await?;
+                    complete_document_rework(
+                        &db,
+                        "sales_change_order",
+                        &document_id,
+                        actor_for_tx.id(),
+                        Instant::now(),
+                        executor,
+                    )
+                    .await?;
                     persist_log(&db, &audit, executor).await?;
                     Ok::<(), crate::Error>(())
                 })
@@ -301,20 +318,26 @@ impl SalesChangeProcess {
         &self,
         id: &str,
         change_order: SalesChangeOrder,
-        idempotency_key: String,
+        request: SubmitSalesChangeRequest,
+        command: SalesChangeSubmissionCommand,
         actor: &AuditActor,
         adapter: SalesChangeOrderAdapter,
     ) -> Result<SalesChangeOrderDetailView> {
-        let context = self.prepare_change_context(id, change_order, actor).await?;
-        let recovery_subject_version = context.sales_write.submission().submission_no;
-        let input = self.prepare_change_start(id, context, &idempotency_key, actor, adapter).await?;
+        let idempotency_key = request.idempotency_key;
+        let resubmission_reason = request.resubmission_reason;
+        let from_status = change_order.stable.status.as_str();
+        let mut context = self.prepare_change_context(id, change_order, actor).await?;
+        context.resubmission_reason = resubmission_reason.clone();
+        let mut input =
+            self.prepare_change_start(id, context, &idempotency_key, actor, adapter, command.clone()).await?;
+        input.workflow_action.comment = resubmission_reason.clone();
+        input.workflow_action.from_status = from_status.to_string();
         let persisted = persist_sales_change_start(&self.db, input).await;
         if let Err(error) = persisted {
             if !error.command_may_have_committed() {
                 return Err(error);
             }
-            self.recover_sales_change_start(id, recovery_subject_version, &idempotency_key, actor, error)
-                .await?;
+            self.recover_sales_change_start(&command, actor, error).await?;
         }
         SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
             .sales_change_order_detail(id, actor)
@@ -352,7 +375,15 @@ impl SalesChangeProcess {
             now,
         )?;
         let organization_id = sales_change_responsible_org_id(&sales_order.settlement_party_id)?;
-        Ok(SalesChangeApprovalContext { sales_write, subject, binding, now, snapshot, organization_id })
+        Ok(SalesChangeApprovalContext {
+            sales_write,
+            subject,
+            binding,
+            now,
+            snapshot,
+            organization_id,
+            resubmission_reason: None,
+        })
     }
 
     /// 从冻结定义生成启动计划及元数据，保留审批人重验和审计构造顺序。
@@ -363,37 +394,24 @@ impl SalesChangeProcess {
         idempotency_key: &str,
         actor: &AuditActor,
         adapter: SalesChangeOrderAdapter,
+        command: SalesChangeSubmissionCommand,
     ) -> Result<SalesChangeStartPersistInput> {
-        let SalesChangeApprovalContext { sales_write, subject, binding, now, snapshot, organization_id } =
-            context;
-        let submission = sales_write.submission();
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt =
-            load_start_receipt(&self.db, &subject, submission.submission_no, idempotency_key).await?;
-        let graph = resolve_start_approvers(
-            &self.db,
-            graph,
-            actor.id(),
-            existing_receipt.as_ref(),
-            &mut NoTransaction,
-        )
-        .await?;
-        let start_input = build_sales_change_start_input(SalesChangeStartInput {
-            graph,
-            binding: &binding,
-            subject,
-            subject_version: submission.submission_no,
-            actor_id: actor.id(),
-            organization_id: &organization_id,
-            idempotency_key,
-            receipt: existing_receipt,
+        let prepared = self.prepare_change_runtime(&context, idempotency_key, actor).await?;
+        let SalesChangeApprovalContext {
+            sales_write,
+            subject: _,
+            binding: _,
             now,
-        })?;
-        let prepared = prepare_start(start_input)?;
+            snapshot,
+            organization_id,
+            resubmission_reason,
+        } = context;
         let workflow_action = submission_workflow_action(id, actor, adapter.owner_role)?;
         let audit =
             actor.clone().resource_log("sales_change_order.submit", "sales_change_order", id.to_string())?;
         Ok(SalesChangeStartPersistInput {
+            command,
+            resubmission_reason,
             approvals: self.services.approvals.clone(),
             sales_write,
             workflow_action,
@@ -408,32 +426,55 @@ impl SalesChangeProcess {
         })
     }
 
+    /// 读取冻结定义与回执并解析审批人，构造本次启动计划。
+    async fn prepare_change_runtime(
+        &self,
+        context: &SalesChangeApprovalContext,
+        idempotency_key: &str,
+        actor: &AuditActor,
+    ) -> Result<PreparedExecution> {
+        let graph = load_bound_definition_graph(&self.db, &context.binding).await?;
+        let subject_version = context.sales_write.submission().submission_no;
+        let existing_receipt =
+            load_start_receipt(&self.db, &context.subject, subject_version, idempotency_key).await?;
+        let graph = resolve_start_approvers(
+            &self.db,
+            graph,
+            actor.id(),
+            existing_receipt.as_ref(),
+            &mut NoTransaction,
+        )
+        .await?;
+        let start_input = build_sales_change_start_input(SalesChangeStartInput {
+            resubmission_reason: context.resubmission_reason.clone(),
+            graph,
+            binding: &context.binding,
+            subject: context.subject.clone(),
+            subject_version,
+            actor_id: actor.id(),
+            organization_id: &context.organization_id,
+            idempotency_key,
+            receipt: existing_receipt,
+            now: context.now,
+        })?;
+        prepare_start(start_input).map_err(Error::from)
+    }
+
     /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
     async fn recover_sales_change_start(
         &self,
-        change_order_id: &str,
-        subject_version: u32,
-        idempotency_key: &str,
+        command: &SalesChangeSubmissionCommand,
         actor: &AuditActor,
         original_error: Error,
     ) -> Result<String> {
+        let rbac = self.require_rbac()?;
         recover_approval_command(original_error, || {
             let db = self.db.clone();
-            let change_order_id = change_order_id.to_string();
-            let idempotency_key = idempotency_key.to_string();
-            let actor_id = actor.id().to_string();
+            let command = command.clone();
+            let actor = actor.clone();
+            let rbac = rbac.clone();
             self.db.client().with_transaction(move |executor| {
-                Box::pin(async move {
-                    replay_change_start(
-                        &db,
-                        &change_order_id,
-                        subject_version,
-                        &idempotency_key,
-                        &actor_id,
-                        executor,
-                    )
-                    .await
-                })
+                Box::pin(async move { replay_submission(&db, rbac, &actor, &command, executor).await })
             })
         })
         .await
@@ -548,48 +589,13 @@ async fn persist_bound_change_document(
 }
 
 struct SalesChangeApprovalContext {
+    resubmission_reason: Option<String>,
     sales_write: SalesChangeSubmissionWrite,
     subject: SubjectRef,
     binding: ApprovalDefinitionBinding,
     now: Instant,
     snapshot: ApprovalSubjectSnapshotPayload,
     organization_id: String,
-}
-
-/// 在单次恢复事务内查证原对象、冻结绑定和启动回执。
-async fn replay_change_start(
-    db: &Database,
-    change_order_id: &str,
-    subject_version: u32,
-    idempotency_key: &str,
-    actor_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    let change = db
-        .sales_change_orders()
-        .find_by_id(change_order_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-    let sales_order = db
-        .sales_orders()
-        .find_by_id(&change.sales_order_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-    let organization_id = sales_change_responsible_org_id(&sales_order.settlement_party_id)?;
-    let _ = sales_change_order_object_readable(&organization_id, actor_id)?;
-    let binding = find_approval_binding(db, change_order_id, executor).await.map_err(crate::Error::from)?;
-    let binding = require_frozen_binding(binding.as_ref())?;
-    let subject = sales_change_order_subject_ref(change_order_id)?;
-    replay_sales_change_start_with_executor(
-        db,
-        &subject,
-        subject_version,
-        idempotency_key,
-        binding,
-        actor_id,
-        executor,
-    )
-    .await
 }
 
 /// 构造本次提交的工作流元数据；不承载状态迁移规则。

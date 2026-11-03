@@ -1,6 +1,8 @@
 //! 业务对象快照。与 BPM 实例一对一，使用有界强类型结构。
 
 use bpm::ApprovalProcessInstanceId;
+use bpm::model::ApprovalProcessInstance;
+use bpm::model::types::ApprovalProcessInstanceStatus;
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
@@ -82,6 +84,9 @@ pub struct ApprovalSubjectSnapshot {
     /// 提交时从当前业务对象证明并冻结的材料引用；历史缺失保持空，不回填当前附件。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub material_files: Vec<ApprovalMaterialFile>,
+    /// 本次重新提交的冻结说明；旧快照缺失时保持为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resubmission_reason: Option<String>,
 }
 
 impl ApprovalSubjectSnapshot {
@@ -125,7 +130,73 @@ impl ApprovalSubjectSnapshot {
             payload,
             display: None,
             material_files: Vec::new(),
+            resubmission_reason: None,
         })
+    }
+
+    /// 校验前次审批并冻结本次重新提交说明。
+    ///
+    /// # 参数
+    /// * `previous` - 排除当前实例后的最近审批实例。
+    /// * `reason` - 本次请求说明。
+    /// * `actor_id` - 已认证的本次提交人。
+    /// # 返回
+    /// 返回应关闭待处理任务的已驳回实例 ID；没有时返回空。
+    /// # 错误
+    /// 身份不符、旧实例未结束、版本未递增、驳回后缺说明或说明超长时拒绝。
+    pub fn record_resubmission(
+        &mut self,
+        previous: Option<&ApprovalProcessInstance>,
+        reason: Option<&str>,
+        actor_id: &str,
+    ) -> Result<Option<ApprovalProcessInstanceId>> {
+        if self.payload.submitted_by != actor_id {
+            return Err(Error::from("重新提交人与冻结提交身份不一致"));
+        }
+        let reason = reason.map(str::trim).filter(|value| !value.is_empty());
+        if reason.is_some_and(|value| value.chars().count() > 1000) {
+            return Err(Error::from("重新提交说明不能超过1000字"));
+        }
+        let mut rejected = None;
+        if let Some(previous) = previous {
+            if previous.subject.subject_id() != self.business_object_id
+                || previous.subject.subject_kind() != self.document_type.as_str()
+                || previous.base.id == self.approval_process_instance_id.as_ref()
+            {
+                return Err(Error::from("前次审批与当前提交对象不一致"));
+            }
+            if !previous.status.is_terminal() || previous.subject_version >= self.subject_version {
+                return Err(Error::from("前次审批未结束或重新提交版本未递增"));
+            }
+            if previous.status == ApprovalProcessInstanceStatus::Rejected {
+                if reason.is_none() {
+                    return Err(Error::from("驳回后重新提交必须填写说明"));
+                }
+                rejected = Some(previous.typed_id());
+            }
+        }
+        self.resubmission_reason = reason.map(ToOwned::to_owned);
+        Ok(rejected)
+    }
+
+    /// 在材料展示冻结后补充本次重新提交说明。
+    ///
+    /// # 参数
+    /// 无；读取已校验的说明与展示快照。
+    /// # 返回
+    /// 说明追加到冻结展示资料，首次提交不追加。
+    /// # 错误
+    /// 有说明但缺少展示资料，或追加后超出展示边界时返回错误。
+    pub fn freeze_resubmission_display(&mut self) -> Result<()> {
+        let Some(reason) = self.resubmission_reason.as_ref() else {
+            return Ok(());
+        };
+        let display = self.display.as_mut().ok_or_else(|| Error::from("重新提交缺少冻结展示资料"))?;
+        display.source.extra_sections.push(super::display_snapshot::ApprovalBriefSection::new(
+            "重新提交说明".to_owned(),
+            reason.clone(),
+        ));
+        display.validate()
     }
 
     /// 为新提交快照冻结已由业务领域证明的材料文件引用。
@@ -301,6 +372,8 @@ mod tests {
     use std::str::FromStr;
 
     use bpm::ApprovalProcessInstanceId;
+    use bpm::model::ApprovalProcessInstance;
+    use bpm::model::types::ApprovalProcessInstanceStatus;
     use erp_core::common::time::Instant;
     use erp_core::ids::{ApprovalSubjectSnapshotId, WarehouseId};
     use erp_core::money::Quantity;
@@ -321,6 +394,92 @@ mod tests {
             total_quantity: Some(Quantity::from_str("2").unwrap()),
             line_count: 1,
         }
+    }
+
+    fn previous_submission() -> ApprovalProcessInstance {
+        use bpm::ids::ApprovalProcessDefinitionId;
+        use bpm::model::{NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
+        let mut instance = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("old-instance"),
+            process_definition_id: ApprovalProcessDefinitionId::new("definition"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("user-1").unwrap(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
+        .unwrap();
+        instance.complete_rejected(Timestamp::from_unix_secs(2).unwrap()).unwrap();
+        instance
+    }
+
+    fn resubmission_snapshot() -> ApprovalSubjectSnapshot {
+        ApprovalSubjectSnapshot::new(
+            ApprovalSubjectSnapshotId::new("new-snapshot"),
+            ApprovalProcessInstanceId::new("new-instance"),
+            DocumentType::StockAdjustment,
+            "adj-1",
+            2,
+            stock_payload(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn rejected_resubmission_requires_explanation_and_preserves_new_frozen_record() {
+        let old = previous_submission();
+        let mut snapshot = resubmission_snapshot();
+        snapshot.display = Some(super::super::display_snapshot::ApprovalDisplaySnapshot::new("adj-1".into()));
+        assert!(snapshot.record_resubmission(Some(&old), None, "user-1").is_err());
+        assert!(snapshot.record_resubmission(Some(&old), Some("  "), "user-1").is_err());
+        assert_eq!(
+            snapshot.record_resubmission(Some(&old), Some(" 已核实，沿用原内容 "), "user-1").unwrap(),
+            Some(old.typed_id())
+        );
+        assert_eq!(snapshot.resubmission_reason.as_deref(), Some("已核实，沿用原内容"));
+        snapshot.freeze_resubmission_display().unwrap();
+        let display = snapshot.display.as_ref().unwrap();
+        assert_eq!(display.source.extra_sections[0].label, "重新提交说明");
+        assert_eq!(display.source.extra_sections[0].value, "已核实，沿用原内容");
+        assert_eq!(old.status, ApprovalProcessInstanceStatus::Rejected);
+        assert_eq!(old.subject_version, 1);
+        let encoded = serde_json::to_value(&snapshot).unwrap();
+        assert_eq!(encoded["resubmission_reason"].as_str(), Some("已核实，沿用原内容"));
+    }
+
+    #[test]
+    fn resubmission_refuses_active_wrong_subject_and_unchanged_version() {
+        let old = previous_submission();
+        let mut snapshot = resubmission_snapshot();
+        assert!(snapshot.record_resubmission(Some(&old), Some("说明"), "other").is_err());
+        snapshot.subject_version = 1;
+        assert!(snapshot.record_resubmission(Some(&old), Some("说明"), "user-1").is_err());
+        snapshot.subject_version = 2;
+        let mut active = old.clone();
+        active.status = ApprovalProcessInstanceStatus::Running;
+        assert!(snapshot.record_resubmission(Some(&active), Some("说明"), "user-1").is_err());
+        snapshot.business_object_id = "other".into();
+        assert!(snapshot.record_resubmission(Some(&old), Some("说明"), "user-1").is_err());
+    }
+
+    #[test]
+    fn first_submission_and_cancelled_retry_do_not_require_rejection_explanation() {
+        let mut snapshot = resubmission_snapshot();
+        assert!(snapshot.record_resubmission(None, None, "user-1").unwrap().is_none());
+        let mut old = previous_submission();
+        old.status = ApprovalProcessInstanceStatus::Cancelled;
+        assert!(snapshot.record_resubmission(Some(&old), None, "user-1").unwrap().is_none());
+        assert!(
+            snapshot
+                .record_resubmission(Some(&previous_submission()), Some(&"字".repeat(1000)), "user-1")
+                .is_ok()
+        );
+        assert!(
+            snapshot
+                .record_resubmission(Some(&previous_submission()), Some(&"字".repeat(1001)), "user-1")
+                .is_err()
+        );
     }
 
     /// 快照规范化文本，并与实例一一对应。

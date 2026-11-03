@@ -417,7 +417,12 @@ pub(super) fn authorized_fields(
                     access,
                     fact,
                 )
-                || !fact.authority.subject_versions.accepts(&row.subject_version)
+                || !fact.authority.subject_versions.accepts_task(
+                    row.work_item_type,
+                    row.status,
+                    &row.id,
+                    &row.subject_version,
+                )
             {
                 return None;
             }
@@ -473,7 +478,12 @@ pub(super) fn authorized_item_fields(
             access,
             fact,
         )
-        || !fact.authority.subject_versions.accepts(&item.subject_version)
+        || !fact.authority.subject_versions.accepts_task(
+            item.work_item_type,
+            item.status,
+            &item.base.id,
+            &item.subject_version,
+        )
     {
         return None;
     }
@@ -842,5 +852,58 @@ mod approval_admission_tests {
             .with_permissions(vec![Permission::parse("sales_order:detail").unwrap()]);
         assert!(object_access_shapes(&ordinary).iter().all(|(kind, _)| !kind.is_document_approval()));
         assert!(object_access_shapes(&ActorAccess::new("none".into())).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod rework_history_tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+    use erp_workflow::entity::work_item::{
+        AssignmentSource, WorkItemData, WorkItemPriority, WorkItemSubjectVersions,
+    };
+    use erp_workflow::ports::{ObjectFact, ObjectKind};
+
+    use super::*;
+
+    #[test]
+    fn action_response_reads_closed_v1_after_v2_without_granting_missing_object_permission() {
+        let mut item = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("approval-rework:v1"),
+            WorkItemData {
+                work_item_type: WorkItemType::ApprovalRework,
+                business_object_type: "purchase_payment_request".into(),
+                business_object_id: "request".into(),
+                subject_version: "1".into(),
+                owner_role: "approval_submitter".into(),
+                owner_organization_id: "org".into(),
+                owner_user_id: "submitter".into(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+            "approval_rework:v1",
+        )
+        .unwrap();
+        item.abandon_approval_rework("submitter", "不再办理", Instant::from_unix_secs(1)).unwrap();
+        let mut fact = ObjectFact::new("request", "付款申请", "submitter");
+        fact.subject_versions = WorkItemSubjectVersions::constrained(vec!["2".into()]).unwrap();
+        fact.subject_versions.register_rework_history(&bpm::ApprovalProcessInstanceId::new("v1"), 1);
+        let facts = WorkbenchObjectFactMap::from([(
+            (ObjectKind::PurchasePaymentRequest, "request".into()),
+            super::super::WorkbenchObjectFact::from_authority(fact),
+        )]);
+        let access = ActorAccess::new("submitter".into())
+            .with_permissions(vec![Permission::parse("purchase_payment_request:detail").unwrap()]);
+        let view = authorized_item_fields(item.clone(), &access, &facts).unwrap();
+        assert_eq!(view.status, WorkItemStatus::Closed);
+        assert_eq!(view.subject_version, "1");
+        assert!(
+            authorized_item_fields(item.clone(), &ActorAccess::new("submitter".into()), &facts).is_none()
+        );
+        item.status = WorkItemStatus::Open;
+        assert!(authorized_item_fields(item, &access, &facts).is_none());
     }
 }

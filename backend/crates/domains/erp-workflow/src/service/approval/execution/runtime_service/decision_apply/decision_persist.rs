@@ -4,6 +4,7 @@
 
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::ApprovalNodeExecution;
+use bpm::model::types::ApprovalProcessInstanceStatus;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -11,6 +12,7 @@ use persistence_core::Executor;
 use super::super::super::apply_plan::PlannedWrites;
 use super::super::notifications::{DecisionNotificationFacts, persist_decision_notifications};
 use super::super::require_cas_applied;
+use super::super::tasks::rejected::close_rejected_tasks;
 use super::super::tasks::{
     CompleteOrCloseTasksInput, CreateOpenTasksInput, complete_or_close_tasks, create_open_tasks,
 };
@@ -18,6 +20,7 @@ use crate::error::{Error, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::BpmExt;
 use crate::repository::bpm::ApprovalInstanceListProjection;
+use crate::service::work_item::approval_rework::create_rework;
 
 /// 决定写库事务所需的计划、版本守卫与通知事实。
 ///
@@ -86,6 +89,19 @@ pub(super) async fn persist_decision_writes(
 ) -> Result<()> {
     persist_decision_runtime_facts(db, &input, executor).await?;
     persist_decision_task_writes(db, &input, executor).await?;
+    if input.writes.instance.status == ApprovalProcessInstanceStatus::Rejected {
+        close_rejected_tasks(db, &input.writes.instance, input.actor_id, input.now, executor).await?;
+        create_rework(
+            db,
+            &input.writes.instance,
+            input.owner_organization_id,
+            input.document_no,
+            input.reject_reason.unwrap_or_default(),
+            input.now,
+            executor,
+        )
+        .await?;
+    }
     persist_decision_side_effects(db, &input, executor).await?;
     Ok(())
 }

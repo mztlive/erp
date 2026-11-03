@@ -42,9 +42,10 @@ export const paymentReversalStatusLabel = (status?: string): string => {
     switch (status) {
         case "DRAFT":
         case "draft":
+            return "草稿"
         case "REJECTED":
         case "rejected":
-            return "草稿"
+            return "已驳回"
         case "IN_APPROVAL":
         case "PENDING_REVIEW":
         case "pending_review":
@@ -74,6 +75,7 @@ export const paymentReversalStatusTone = (
             return "success"
         case "审批中":
             return "warning"
+        case "已驳回":
         case "已冲正":
             return "destructive"
         default:
@@ -136,17 +138,20 @@ export const isPaymentReversalWorkItem = (workItem?: {
     workItem?.businessObjectType === PAYMENT_REVERSAL_OBJECT_TYPE
 
 /**
- * 构造付款冲正提交审批请求。只允许版本与幂等键。
+ * 构造付款冲正提交审批请求。包含版本、重提说明与幂等键。
  *
  * @param input 提交所需字段。
  */
 export const buildPaymentReversalSubmitRequest = (input: {
     expectedVersion: number
     idempotencyKey: string
+    resubmissionReason?: string
 }): Readonly<{
     expected_version: number
     idempotency_key: string
+    resubmission_reason?: string
 }> => ({
+    resubmission_reason: input.resubmissionReason,
     expected_version: input.expectedVersion,
     idempotency_key: input.idempotencyKey,
 })

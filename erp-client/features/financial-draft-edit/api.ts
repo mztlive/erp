@@ -48,11 +48,13 @@ export function submitFinancialDraft(input: {
     id: string
     version: number
     idempotencyKey: string
+    resubmissionReason?: string
     allocations?: FinancialDraftAllocation[]
 }) {
     return apiPost<FinancialDraft>(
         `${draftPath(input.kind, input.id)}/submit`,
         {
+            resubmission_reason: input.resubmissionReason,
             expected_version: input.version,
             idempotency_key: input.idempotencyKey,
             ...(input.kind === "customer_receipt"

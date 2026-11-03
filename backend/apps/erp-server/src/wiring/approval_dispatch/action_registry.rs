@@ -18,6 +18,8 @@ use erp_workflow::{ApprovalActionContext, ApprovalActionFuture, ApprovalDomainAc
 use mongodb::Database;
 use persistence_core::Executor;
 
+mod rejection;
+
 use super::PaymentRequestRestoration;
 use super::error::{DispatchError as ServiceError, Result as ServiceResult, map_service_error};
 use crate::wiring::sales::sales_services;
@@ -65,6 +67,32 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
 }
 
 async fn dispatch_action(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    match action {
+        ApprovalDomainAction::SalesOrderReject
+        | ApprovalDomainAction::VoucherSalesOrderReject
+        | ApprovalDomainAction::SalesChangeOrderReject
+        | ApprovalDomainAction::PurchaseOrderReject
+        | ApprovalDomainAction::PurchaseChangeOrderReject
+        | ApprovalDomainAction::StockAdjustmentReject
+        | ApprovalDomainAction::SalesInvoiceRequestReject
+        | ApprovalDomainAction::CustomerReceiptReject
+        | ApprovalDomainAction::CustomerRefundReject
+        | ApprovalDomainAction::SupplierRefundReject
+        | ApprovalDomainAction::ReceiptReversalReject
+        | ApprovalDomainAction::PaymentReversalReject => {
+            rejection::dispatch(registry, action, context, actor, executor).await
+        },
+        _ => dispatch_business_action(registry, action, context, actor, executor).await,
+    }
+}
+
+async fn dispatch_business_action(
     registry: &ApprovalActionRegistry,
     action: ApprovalDomainAction,
     context: &ApprovalActionContext,

@@ -351,9 +351,7 @@ async fn revalidate_decision_eligibilities(
         executor,
     )
     .await?;
-    if loaded.document_type == DocumentType::PurchasePaymentRequest
-        && command.decision == ApprovalDecision::Reject
-    {
+    if command.decision == ApprovalDecision::Reject {
         return Ok((graph, current_eligibility.clone(), current_eligibility));
     }
     let decision_target = graph

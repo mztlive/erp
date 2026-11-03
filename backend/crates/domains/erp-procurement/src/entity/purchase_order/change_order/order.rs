@@ -14,6 +14,7 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::PurchaseChangeSubmission;
 use crate::entity::purchase_order::types::status_display;
 
 /// 变更原因最大长度。
@@ -24,8 +25,8 @@ const CONTENT_HASH_MAX_LEN: usize = 128;
 /// 采购变更单状态（合同 §4.4.1 / §4.4.2：草稿、审批中、已生效、作废）。
 ///
 /// 创建与提交均为 `Draft`，启动后 `InApproval`，最终通过 `Effective`。
-/// `PENDING_WAREHOUSE_IMPACT`、`PENDING_FINANCE_REVIEW` 与审批导致的 `Rejected`
-/// 已删除，节点事实只存在于审批实例。
+/// 驳回进入 `Rejected`，保存保持该状态；重新提交推进版本并进入审批中。
+/// 节点事实只存在于审批实例。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum PurchaseChangeOrderStatus {
@@ -34,6 +35,8 @@ pub enum PurchaseChangeOrderStatus {
     /// 审批中。
     #[serde(rename = "IN_APPROVAL")]
     InApproval,
+    /// 本次审批已驳回，允许编辑重提。
+    Rejected,
     /// 已生效。
     Effective,
     /// 作废。
@@ -43,6 +46,7 @@ pub enum PurchaseChangeOrderStatus {
 status_display!(PurchaseChangeOrderStatus, {
     Draft => ("草稿", "DRAFT"),
     InApproval => ("审批中", "IN_APPROVAL"),
+    Rejected => ("已驳回", "REJECTED"),
     Effective => ("已生效", "EFFECTIVE"),
     Voided => ("作废", "VOIDED"),
 });
@@ -59,7 +63,7 @@ impl PurchaseChangeOrderStatus {
     /// # 错误
     /// 不返回错误。
     pub fn is_in_progress(self) -> bool {
-        matches!(self, Self::Draft | Self::InApproval)
+        matches!(self, Self::Draft | Self::Rejected | Self::InApproval)
     }
 }
 
@@ -198,7 +202,10 @@ impl PurchaseChangeOrder {
     /// # 错误
     /// 非草稿状态返回领域错误。
     pub fn ensure_draft_for_submission(&self) -> Result<()> {
-        if self.stable.status != PurchaseChangeOrderStatus::Draft {
+        if !matches!(
+            self.stable.status,
+            PurchaseChangeOrderStatus::Draft | PurchaseChangeOrderStatus::Rejected
+        ) {
             return Err(Error::from("变更单已提交，请勿重复提交"));
         }
         Ok(())
@@ -222,6 +229,27 @@ impl PurchaseChangeOrder {
             return Err(Error::from("生效提交必须是当前冻结提交，不得使用历史提交"));
         }
         Ok(current)
+    }
+
+    /// 校验当前审批仍引用本变更单的待处理冻结提交。
+    ///
+    /// # 参数
+    /// * `submission` - 同一事务按当前提交指针读取的提交。
+    /// # 返回
+    /// 提交身份、所属单据、基准版本和待处理状态一致时成功。
+    /// # 错误
+    /// 历史提交、跨单据提交、错误基准或非待处理提交均拒绝。
+    pub fn ensure_current_approval_submission(&self, submission: &PurchaseChangeSubmission) -> Result<()> {
+        if self.current_submission_id.as_ref().map(AsRef::as_ref) != Some(submission.base.id.as_str())
+            || submission.purchase_change_order_id.as_ref() != self.base.id
+            || submission.base_revision_id != self.base_revision_id
+            || submission.base.is_deleted()
+            || submission.submitted_at.is_none()
+            || submission.submitted_by.is_none()
+        {
+            return Err(Error::from("采购变更审批提交身份不匹配"));
+        }
+        submission.ensure_pending()
     }
 
     /// 校验变更基准版本仍是采购单当前生效版本。
@@ -296,7 +324,12 @@ impl PurchaseChangeOrder {
         update: PurchaseChangeOrderUpdate,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        if update_has_content(&update) && self.stable.status != PurchaseChangeOrderStatus::Draft {
+        if update_has_content(&update)
+            && !matches!(
+                self.stable.status,
+                PurchaseChangeOrderStatus::Draft | PurchaseChangeOrderStatus::Rejected
+            )
+        {
             return Err(Error::from("只有草稿状态的采购变更单可以编辑内容"));
         }
         if let Some(reason) = update.reason {
@@ -341,7 +374,10 @@ impl PurchaseChangeOrder {
         target_content_hash: impl Into<String>,
         updated_by: impl Into<String>,
     ) -> Result<u32> {
-        if self.stable.status != PurchaseChangeOrderStatus::Draft {
+        if !matches!(
+            self.stable.status,
+            PurchaseChangeOrderStatus::Draft | PurchaseChangeOrderStatus::Rejected
+        ) {
             return Err(Error::from("只有草稿状态的采购变更单可以提交审批"));
         }
         let next =
@@ -379,6 +415,31 @@ impl PurchaseChangeOrder {
         Ok(())
     }
 
+    /// 终止本次审批并允许保存后重新提交。
+    ///
+    /// # 参数
+    /// * `expected_subject_version` - 当前实例冻结的审批提交版本。
+    /// * `updated_by` - 当前审批决定人。
+    /// # 返回
+    /// 状态改为已驳回，冻结提交和提交版本保留。
+    /// # 错误
+    /// 非审批中状态返回领域错误。
+    pub fn reject_approval(
+        &mut self,
+        expected_subject_version: u32,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if self.approval_subject_version != expected_subject_version {
+            return Err(Error::from("审批提交版本已变化，不得驳回历史提交"));
+        }
+        if self.stable.status != PurchaseChangeOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购变更单可以驳回"));
+        }
+        self.stable.status = PurchaseChangeOrderStatus::Rejected;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 作废草稿变更单：仅 `DRAFT` 可进入 `VOIDED`，原采购单当前版本保持不变。
     ///
     /// # 参数
@@ -390,7 +451,10 @@ impl PurchaseChangeOrder {
     /// # 错误
     /// 审批中、已生效或已作废时返回冲突；审批中须先撤回。
     pub fn void(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        if self.stable.status != PurchaseChangeOrderStatus::Draft {
+        if !matches!(
+            self.stable.status,
+            PurchaseChangeOrderStatus::Draft | PurchaseChangeOrderStatus::Rejected
+        ) {
             return Err(Error::from("只有草稿状态的采购变更单可以作废，审批中请先撤回"));
         }
         self.stable.status = PurchaseChangeOrderStatus::Voided;
@@ -469,6 +533,42 @@ mod tests {
             base_revision_id: PurchaseOrderRevisionId::new("por-1"),
             reason: " 成本上涨调整 ".to_string(),
         }
+    }
+
+    /// 已驳回目标可修改或原内容重提，旧冻结目标不被删除。
+    #[test]
+    fn rejected_change_keeps_target_and_allows_resubmission() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("change"), change_data(), "buyer").unwrap();
+        assert!(order.reject_approval(1, "approver").is_err());
+        order.start_approval(PurchaseChangeSubmissionId::new("first"), "hash", "buyer").unwrap();
+        order.reject_approval(1, "approver").unwrap();
+        assert_eq!(order.stable.status, PurchaseChangeOrderStatus::Rejected);
+        assert_eq!(order.current_submission_id.as_ref().unwrap().as_ref(), "first");
+        assert!(order.reject_approval(1, "approver").is_err());
+        order.update_submission_reason(Some("补充变更理由"), "buyer").unwrap();
+        assert_eq!(order.stable.status, PurchaseChangeOrderStatus::Rejected);
+        order.start_approval(PurchaseChangeSubmissionId::new("second"), "hash", "buyer").unwrap();
+        assert_eq!(order.approval_subject_version, 2);
+    }
+
+    /// 重提后来自旧实例的驳回不得修改新的审批版本。
+    #[test]
+    fn rejection_refuses_previous_approval_version() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("change"), change_data(), "buyer").unwrap();
+        order.start_approval(PurchaseChangeSubmissionId::new("first"), "hash", "buyer").unwrap();
+        order.reject_approval(1, "approver").unwrap();
+        order.start_approval(PurchaseChangeSubmissionId::new("second"), "hash", "buyer").unwrap();
+        let before = order.clone();
+
+        assert_eq!(
+            order.reject_approval(1, "approver").unwrap_err().to_string(),
+            "审批提交版本已变化，不得驳回历史提交"
+        );
+        assert_eq!(order, before);
+        order.reject_approval(2, "approver").unwrap();
+        assert_eq!(order.stable.status, PurchaseChangeOrderStatus::Rejected);
     }
 
     #[test]

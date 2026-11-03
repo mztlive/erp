@@ -146,7 +146,8 @@ fn build_change_submission_with_no(
         actor.id(),
     )?;
     let line_datas = data.lines.clone();
-    let submission = SalesChangeSubmission::new(SalesChangeSubmissionId::new(next_id()), data)?;
+    let mut submission = SalesChangeSubmission::new(SalesChangeSubmissionId::new(next_id()), data)?;
+    submission.source_version = Some(change_order.base.version);
     let mut submission_lines = Vec::with_capacity(line_datas.len());
     for data in line_datas {
         submission_lines.push(SalesChangeSubmissionLine::new(

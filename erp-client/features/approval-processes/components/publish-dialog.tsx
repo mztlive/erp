@@ -110,7 +110,7 @@ export function PublishDialog({
                         className="text-xs leading-5 text-muted-foreground"
                         data-testid="publish-reject-copy"
                     >
-                        {rejectionPolicyCopy(detail.document_type)}
+                        {rejectionPolicyCopy()}
                     </p>
                     <p className="text-xs leading-5 text-muted-foreground">
                         发布后当前已发布版本将退役。已绑定单据和进行中的审批不受影响。

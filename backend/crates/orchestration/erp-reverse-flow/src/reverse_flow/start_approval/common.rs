@@ -23,6 +23,8 @@ use crate::{Error, Result};
 /// 收拢四类逆向单据启动输入的全部共用字段；单据差异由
 /// [`ReverseStartContracts`] 声明。
 pub struct ReverseStartInput<'a> {
+    /// 本次重新提交说明。
+    pub resubmission_reason: Option<String>,
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 冻结绑定。
@@ -75,6 +77,7 @@ pub fn build_reverse_start_input(
     contracts: &ReverseStartContracts,
 ) -> Result<StartExecutionInput> {
     let ReverseStartInput {
+        resubmission_reason,
         graph,
         binding,
         subject,
@@ -98,6 +101,7 @@ pub fn build_reverse_start_input(
         graph,
         bindings,
         StartInputContext {
+            resubmission_reason,
             binding,
             document_type: contracts.document_type,
             subject,
@@ -229,6 +233,7 @@ mod tests {
         binding: &'a ApprovalDefinitionBinding,
     ) -> ReverseStartInput<'a> {
         ReverseStartInput {
+            resubmission_reason: None,
             graph,
             binding,
             subject: SubjectRef::new(document_type.as_str(), "document").unwrap(),

@@ -577,7 +577,12 @@ pub fn authorized_fields(
                     access,
                     fact,
                 ))
-                || !fact.subject_versions.accepts(&row.subject_version)
+                || !fact.subject_versions.accepts_task(
+                    row.work_item_type,
+                    row.status,
+                    &row.id,
+                    &row.subject_version,
+                )
             {
                 return None;
             }
@@ -628,7 +633,12 @@ pub fn authorized_item_fields(
             access,
             fact,
         ))
-        || !fact.subject_versions.accepts(&item.subject_version)
+        || !fact.subject_versions.accepts_task(
+            item.work_item_type,
+            item.status,
+            &item.base.id,
+            &item.subject_version,
+        )
     {
         return None;
     }

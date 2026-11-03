@@ -9,10 +9,8 @@ use super::dto;
 
 /// 销售单当前阶段 `(code, label, tone)`（服务端权威计算）。
 ///
-/// 移植自 erp-client `api.ts::mapPrimaryStatus`；用真实枚举类型消掉了原实现里
-/// 防御性的字符串兜底分支——后端只会产出这里覆盖到的枚举组合（`Draft` 恒配
-/// `NotSubmitted`，`PendingReview` 恒配非 `NotSubmitted` 的审核轨阶段，见
-/// `SalesOrder::submit_for_review`/`return_to_draft` 的不变式，两者不会交叉）。
+/// 商业草稿可处于未提交或已驳回审核状态；已驳回保留独立展示。
+/// 关闭、作废及已生效状态优先于审核轨状态。
 ///
 /// # 参数
 /// * `commercial` - 商业主状态。
@@ -46,9 +44,8 @@ pub(super) fn stage_code_label_tone(
     }
     match review {
         ReviewStatus::PendingProcurementConfirmation => ("awaiting_confirm", "待二次确认", "warning"),
-        ReviewStatus::PendingLowMarginSuperior | ReviewStatus::Rejected => {
-            ("awaiting_sales", "待销售处理", "warning")
-        },
+        ReviewStatus::PendingLowMarginSuperior => ("awaiting_sales", "待销售处理", "warning"),
+        ReviewStatus::Rejected => ("rejected", "已驳回", "warning"),
         ReviewStatus::PendingSalesLeader => ("awaiting_sales_lead", "待销售领导审批", "warning"),
         ReviewStatus::PendingOperations => ("awaiting_ops", "待运营审批", "warning"),
         ReviewStatus::Approved => ("effective", "已生效", "success"),
@@ -147,7 +144,7 @@ pub(super) fn compute_can_start_sales_change(
             Some("这单由商城开单，商业数据同步中，本系统只能查看；改内容请在商城处理。".to_string()),
         );
     }
-    if matches!(stage_code, "draft" | "voided" | "closed") {
+    if matches!(stage_code, "draft" | "rejected" | "voided" | "closed") {
         return (false, Some(format!("当前状态是「{stage_label}」，不能发起改单。")));
     }
     if matches!(
@@ -252,7 +249,7 @@ mod tests {
         let cases = [
             (ReviewStatus::PendingProcurementConfirmation, ("awaiting_confirm", "待二次确认", "warning")),
             (ReviewStatus::PendingLowMarginSuperior, ("awaiting_sales", "待销售处理", "warning")),
-            (ReviewStatus::Rejected, ("awaiting_sales", "待销售处理", "warning")),
+            (ReviewStatus::Rejected, ("rejected", "已驳回", "warning")),
             (ReviewStatus::PendingSalesLeader, ("awaiting_sales_lead", "待销售领导审批", "warning")),
             (ReviewStatus::PendingOperations, ("awaiting_ops", "待运营审批", "warning")),
             (ReviewStatus::Approved, ("effective", "已生效", "success")),
@@ -340,7 +337,7 @@ mod tests {
 
     #[test]
     fn can_start_sales_change_blocks_terminal_and_pending_stages() {
-        for code in ["draft", "voided", "closed"] {
+        for code in ["draft", "rejected", "voided", "closed"] {
             let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Erp, code, "任意", false);
             assert!(!allowed, "stage={code}");
             assert!(reason.is_some());

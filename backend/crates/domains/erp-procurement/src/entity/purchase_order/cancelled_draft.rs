@@ -67,7 +67,11 @@ impl PurchaseOrder {
             return Err(Error::from("采购单不是可恢复草稿的审批提交"));
         }
         let mut cancelled = previous.clone();
-        cancelled.cancel_approval(self.stable.updated_by.clone())?;
+        if self.stable.status == PurchaseOrderStatus::Rejected {
+            cancelled.reject_approval(previous.approval_subject_version, self.stable.updated_by.clone())?;
+        } else {
+            cancelled.cancel_approval(self.stable.updated_by.clone())?;
+        }
         if &cancelled != self {
             return Err(Error::from("采购单取消版本或内容已变化"));
         }
@@ -297,6 +301,24 @@ mod tests {
                 PurchaseOrderSubmissionLineId::new("draft-logistics"),
             ],
         )
+    }
+
+    /// 驳回生成可编辑的新提交，原冻结提交和来源占用身份保留。
+    #[test]
+    fn rejected_order_reopens_independent_draft_without_changing_history() {
+        let (previous, _, source, lines) = fixture();
+        let before = source.clone();
+        let mut rejected = previous.clone();
+        rejected.reject_approval(previous.approval_subject_version, "approver").unwrap();
+        let draft = reopen(&mut rejected, &previous, &source, &lines).unwrap();
+        assert_eq!(rejected.stable.status, PurchaseOrderStatus::Rejected);
+        assert_eq!(source, before);
+        assert_eq!(draft.submission.status, SubmissionStatus::Draft);
+        assert_ne!(draft.submission.base.id, source.base.id);
+        assert_eq!(rejected.approval_subject_version, previous.approval_subject_version);
+        assert_eq!(rejected.current_submission_id.as_deref(), Some(draft.submission.base.id.as_str()));
+        assert_eq!(draft.lines.len(), lines.len());
+        assert_eq!(draft.submission.gross_amount, source.gross_amount);
     }
 
     #[test]

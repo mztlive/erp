@@ -29,8 +29,8 @@ impl SalesReviewService {
         if !change_order.matches_version(expected_version) {
             return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
-        if !change_order.is_draft() {
-            return Err(Error::ConflictError("只有草稿状态的销售变更单可以提交审批".to_string()));
+        if !change_order.is_editable() {
+            return Err(Error::ConflictError("只有草稿或已驳回的销售变更单可以提交审批".to_string()));
         }
         Ok(change_order)
     }

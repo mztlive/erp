@@ -53,13 +53,12 @@ fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> Document
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。
 fn allowed_document_actions(status: SalesChangeOrderStatus) -> Vec<String> {
     match status {
-        SalesChangeOrderStatus::Draft => vec!["SUBMIT".to_string()],
+        SalesChangeOrderStatus::Draft | SalesChangeOrderStatus::Rejected => vec!["SUBMIT".to_string()],
         SalesChangeOrderStatus::InApproval => vec!["CANCEL".to_string()],
         SalesChangeOrderStatus::Effective
         | SalesChangeOrderStatus::Voided
         | SalesChangeOrderStatus::PendingImpactConfirmation
-        | SalesChangeOrderStatus::PendingFinanceReview
-        | SalesChangeOrderStatus::Rejected => Vec::new(),
+        | SalesChangeOrderStatus::PendingFinanceReview => Vec::new(),
     }
 }
 
@@ -83,6 +82,8 @@ mod tests {
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
         assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
+        let rejected = document_approval_view(Some(&binding), None, SalesChangeOrderStatus::Rejected);
+        assert_eq!(rejected.allowed_actions, vec!["SUBMIT".to_string()]);
         let running = document_approval_view(Some(&binding), None, SalesChangeOrderStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }

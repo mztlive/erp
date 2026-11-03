@@ -43,6 +43,7 @@ impl StockAdjustmentSubmission {
         writes: PlannedWrites,
     ) -> start_persist::StockAdjustmentStartPersistInput {
         start_persist::StockAdjustmentStartPersistInput {
+            resubmission_reason: req.resubmission_reason.clone(),
             workflow,
             adjustment: self.adjustment,
             actor: actor.clone(),
@@ -199,6 +200,7 @@ impl InventoryAdjustmentProcess {
             &self.db,
             self.workflow.as_ref(),
             start_approval::StockAdjustmentStartInput {
+                resubmission_reason: req.resubmission_reason.clone(),
                 graph,
                 binding: &context.binding,
                 subject: context.subject.clone(),

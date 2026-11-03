@@ -45,7 +45,7 @@ export function PurchaseOrderDetailDialogs({
     submitPending: boolean
     savePending: boolean
     voidPending: boolean
-    onConfirmSubmit: () => void
+    onConfirmSubmit: (resubmissionReason?: string) => void
     onConfirmVoid: () => void
     onSaveAndLeave: () => void
     onDiscardAndLeave: () => void
@@ -56,6 +56,7 @@ export function PurchaseOrderDetailDialogs({
                 idPrefix="procurement-orders-detail-submit-confirm"
                 open={submitConfirmOpen}
                 pending={submitPending || savePending}
+                rejected={order.identity.status === "REJECTED"}
                 approval={order.approval}
                 onOpenChange={onSubmitConfirmOpenChange}
                 onConfirm={onConfirmSubmit}

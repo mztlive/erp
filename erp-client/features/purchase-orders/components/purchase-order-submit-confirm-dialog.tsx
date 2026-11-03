@@ -1,5 +1,6 @@
 "use client"
 
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { FormalActionConfirmDialog } from "@/components/business"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { PurchaseOrderApprovalArea } from "@/features/purchase-orders/components/purchase-order-approval-area"
@@ -15,6 +16,7 @@ export function PurchaseOrderSubmitConfirmDialog({
     open,
     pending,
     approval,
+    rejected = false,
     onOpenChange,
     onConfirm,
 }: {
@@ -22,10 +24,18 @@ export function PurchaseOrderSubmitConfirmDialog({
     idPrefix?: string
     open: boolean
     pending: boolean
+    rejected?: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void | Promise<void>
+    onConfirm: (resubmissionReason?: string) => void | Promise<void>
 }) {
+    const resubmitting = rejected || approval?.instance?.status === "REJECTED"
+    const rework = useResubmissionReason({
+        open,
+        required: resubmitting,
+        id: `${idPrefix ?? id ?? "purchase-submit"}-resubmission-reason`,
+        disabled: pending,
+    })
     return (
         <FormalActionConfirmDialog
             actionVariant="default"
@@ -35,11 +45,16 @@ export function PurchaseOrderSubmitConfirmDialog({
             onOpenChange={onOpenChange}
             actionLabel="提交采购单"
             confirmLabel="确认提交"
-            fromStatus={{ label: "草稿", tone: "neutral" }}
+            fromStatus={{
+                label: resubmitting ? "已驳回" : "草稿",
+                tone: resubmitting ? "destructive" : "neutral",
+            }}
             toStatus={{ label: "审批中", tone: "warning" }}
             description={
                 <div className="space-y-3">
-                    <p>审批期间不可修改；驳回后重新提交将从首节点审批。</p>
+                    <p>
+                        审批期间不可修改；驳回后可修改原单，填写重提说明后重新发起审批。
+                    </p>
                     <PurchaseOrderApprovalArea
                         phase="confirm"
                         approval={approval}
@@ -48,7 +63,9 @@ export function PurchaseOrderSubmitConfirmDialog({
             }
             effects={["全部节点通过后形成采购生效版本"]}
             pending={pending}
-            onConfirm={onConfirm}
+            formContent={rework.field}
+            confirmDisabled={!rework.valid}
+            onConfirm={() => onConfirm(rework.reason)}
         />
     )
 }

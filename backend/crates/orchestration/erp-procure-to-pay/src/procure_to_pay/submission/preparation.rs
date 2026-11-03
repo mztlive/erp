@@ -237,6 +237,7 @@ impl PurchaseOrderProcess {
         )
         .await?;
         let input = build_purchase_order_start_input(PurchaseOrderStartInput {
+            resubmission_reason: command.request.resubmission_reason.clone(),
             graph,
             binding: &draft.binding,
             subject,
@@ -281,6 +282,7 @@ impl PurchaseOrderProcess {
         let purchase_order_id = draft.order.base.id.clone();
         let subject_version = draft.order.approval_subject_version;
         let input = PurchaseOrderStartPersistInput {
+            resubmission_reason: command.request.resubmission_reason.clone(),
             ports: self.ports.clone(),
             order: draft.order,
             document: context.document,

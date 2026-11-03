@@ -205,6 +205,7 @@ async fn prepare_bound_submission(
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
     let start_input = build_sales_order_start_input(SalesOrderStartInput {
+        resubmission_reason: None,
         graph,
         binding,
         document_type: approval.ports.document_type,
@@ -255,6 +256,7 @@ async fn persist_created_runtime(
             db,
             &writes,
             SalesOrderRuntimeWriteInput {
+                resubmission_reason: None,
                 approvals: context.services.approvals.as_ref(),
                 document_type: approval.ports.document_type,
                 snapshot_payload: &approval.snapshot,

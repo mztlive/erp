@@ -47,8 +47,19 @@ fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> Document
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。
 fn allowed_document_actions(status: CustomerReceiptStatus) -> Vec<String> {
     match status {
-        CustomerReceiptStatus::Draft => vec!["SUBMIT".to_string()],
+        CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected => vec!["SUBMIT".to_string()],
         CustomerReceiptStatus::InApproval => vec!["CANCEL".to_string()],
         CustomerReceiptStatus::Posted | CustomerReceiptStatus::Reversed => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejection_allows_resubmission_without_cancellation() {
+        assert_eq!(allowed_document_actions(CustomerReceiptStatus::Rejected), vec!["SUBMIT".to_owned()]);
+        assert_eq!(allowed_document_actions(CustomerReceiptStatus::InApproval), vec!["CANCEL".to_owned()]);
     }
 }

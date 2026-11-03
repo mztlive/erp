@@ -1,4 +1,4 @@
-mod recovery;
+pub(in crate::procure_to_pay) mod recovery;
 
 use application_core::AuditActor;
 use bpm::model::SubjectRef;
@@ -12,7 +12,8 @@ use erp_procurement::dto::purchase_order::{
     StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
 };
 use erp_procurement::entity::purchase_order::{
-    PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, inherit_revision_sources,
+    PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseCommandReceiptIdentity, PurchaseOrder,
+    inherit_revision_sources,
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::service::purchase_order::change::lock_draft_change;
@@ -33,7 +34,7 @@ use erp_workflow::service::approval::business_adapter::BindingRevalidationContex
 use erp_workflow::service::approval::execution::{PreparedExecution, prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use persistence_core::{Executor, NoTransaction, Transactional};
-use recovery::replay_change_start;
+use recovery::replay_change_command;
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
@@ -49,7 +50,6 @@ use super::super::change_cancel::{
 use super::super::change_start::{
     PurchaseChangeStartInput, PurchaseChangeStartPersistInput, build_purchase_change_start_input,
     load_bound_definition_graph, load_start_receipt, persist_purchase_change_start,
-    replay_purchase_change_start_with_executor,
 };
 use super::guard::check_change_inputs;
 use crate::procure_to_pay::PurchaseOrderPorts;
@@ -134,6 +134,13 @@ impl PurchaseOrderProcess {
         self.command_access(actor, "submit")
             .current(change.purchase_order_id.as_ref(), &mut NoTransaction)
             .await?;
+        let identity = req.command_identity(change_id, actor.id())?;
+        let fingerprint = req.request_fingerprint(change_id)?;
+        if let Some(result) =
+            replay_change_command(&self.db, &identity, &fingerprint, &mut NoTransaction).await?
+        {
+            return Ok(result);
+        }
         let change = lock_draft_change(change, req.expected_lock_version)?;
         let result = self.start_change_approval(change_id, change, req, actor, adapter).await?;
         Ok(result)
@@ -295,7 +302,8 @@ impl PurchaseOrderProcess {
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
         apply_change_reason(&mut change, req.reason.as_deref(), actor.id())?;
-        let prepared = self.freeze_change_submission(&change, &order, &req, actor).await?;
+        let mut prepared = self.prepare_change_target(&change, &order, &req, actor).await?;
+        prepared.submission.submit(Instant::now(), actor.id())?;
         start_purchase_change_approval(
             &mut change,
             prepared.submission.base.id.clone().into(),
@@ -310,7 +318,7 @@ impl PurchaseOrderProcess {
     ///
     /// # 错误
     /// 基准版本缺失或行非法时返回错误。
-    async fn freeze_change_submission(
+    pub(super) async fn prepare_change_target(
         &self,
         change: &PurchaseChangeOrder,
         order: &PurchaseOrder,
@@ -325,8 +333,11 @@ impl PurchaseOrderProcess {
             .ok_or_else(|| Error::NotFound("基准版本不存在".to_string()))?;
         let mut normalized_request = req.clone();
         if normalized_request.lines.is_empty() {
-            normalized_request.lines =
-                self.domain().change_lines_from_base_revision(&change.base_revision_id).await?;
+            let previous = self.domain().change_draft(change, order, &mut NoTransaction).await?;
+            normalized_request.lines = previous.lines;
+            if normalized_request.payment_term_code.is_none() {
+                normalized_request.payment_term_code = Some(previous.payment_term_code);
+            }
         }
         let supplier_names =
             erp_read_models::purchase_center::repository::supplier_names::current_legal_names_by_account_ids(
@@ -353,13 +364,14 @@ impl PurchaseOrderProcess {
         inherit_revision_sources(&mut inputs, &source_lines)?;
         check_change_inputs(&self.db, order, &inputs, submission.gross_amount, &mut NoTransaction).await?;
         let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
-        let mut submission_mut = submission.clone();
-        submission_mut.submit(Instant::now(), actor.id())?;
         Ok(FrozenChangeSubmission {
-            submission: submission_mut,
+            submission,
             lines,
             content_hash: content_fingerprint(&normalized_request.lines),
             idempotency_key: req.idempotency_key.clone(),
+            command_identity: req.command_identity(&change.base.id, actor.id())?,
+            request_fingerprint: req.request_fingerprint(&change.base.id)?,
+            resubmission_reason: req.resubmission_reason.clone(),
         })
     }
 
@@ -439,6 +451,7 @@ impl PurchaseOrderProcess {
         )
         .await?;
         let start_input = build_purchase_change_start_input(PurchaseChangeStartInput {
+            resubmission_reason: dispatch.prepared.resubmission_reason.clone(),
             graph,
             binding: &context.binding,
             subject: context.subject.clone(),
@@ -460,18 +473,21 @@ impl PurchaseOrderProcess {
         prepared_exec: PreparedExecution,
         actor: &AuditActor,
     ) -> Result<PurchaseChangeSubmitResult> {
-        let ChangeStartDispatch { id, change, prepared, adapter, .. } = dispatch;
+        let ChangeStartDispatch { change, prepared, adapter, .. } = dispatch;
         let PurchaseChangeApprovalContext { snapshot, organization_id, now, .. } = context;
         let audit = actor.clone().resource_log(
             "purchase_change_order.submit",
             "purchase_change_order",
             change.base.id.clone(),
         )?;
-        let recovery_subject_version = change.approval_subject_version;
-        let recovery_idempotency_key = prepared.idempotency_key.clone();
+        let identity = prepared.command_identity.clone();
+        let fingerprint = prepared.request_fingerprint.clone();
         let persisted = persist_purchase_change_start(
             &self.db,
             PurchaseChangeStartPersistInput {
+                command_identity: identity.clone(),
+                request_fingerprint: fingerprint.clone(),
+                resubmission_reason: prepared.resubmission_reason.clone(),
                 ports: self.ports.clone(),
                 change_order: change.clone(),
                 submission: prepared.submission.clone(),
@@ -486,56 +502,28 @@ impl PurchaseOrderProcess {
             },
         )
         .await;
-        if let Err(error) = persisted {
-            if !error.command_may_have_committed() {
-                return Err(error);
-            }
-            return self
-                .recover_purchase_change_start(
-                    id,
-                    recovery_subject_version,
-                    &recovery_idempotency_key,
-                    actor,
-                    error,
-                )
-                .await;
+        match persisted {
+            Ok(result) => Ok(result),
+            Err(error) if error.command_may_have_committed() => {
+                self.recover_purchase_change_start(&identity, &fingerprint, error).await
+            },
+            Err(error) => Err(error),
         }
-        Ok(PurchaseChangeSubmitResult {
-            change_id: change.base.id.clone(),
-            submission_id: prepared.submission.base.id.clone(),
-            submission_no: prepared.submission.submission_no.clone(),
-            status: change.stable.status.as_str().to_string(),
-            lock_version: change.base.version,
-            reference: format!("CS-{}", prepared.submission.submission_no),
-        })
     }
 
-    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    /// 原事务提交未知或并发撞键后，仅按完整原请求回读首次命令结果。
     async fn recover_purchase_change_start(
         &self,
-        change_order_id: &str,
-        subject_version: u32,
-        idempotency_key: &str,
-        actor: &AuditActor,
+        identity: &PurchaseCommandReceiptIdentity,
+        fingerprint: &str,
         original_error: Error,
     ) -> Result<PurchaseChangeSubmitResult> {
         recover_approval_command(original_error, || {
             let db = self.db.clone();
-            let change_order_id = change_order_id.to_string();
-            let idempotency_key = idempotency_key.to_string();
-            let actor_id = actor.id().to_string();
+            let identity = identity.clone();
+            let fingerprint = fingerprint.to_string();
             self.db.client().with_transaction(move |executor| {
-                Box::pin(async move {
-                    replay_change_start(
-                        &db,
-                        &change_order_id,
-                        subject_version,
-                        &idempotency_key,
-                        &actor_id,
-                        executor,
-                    )
-                    .await
-                })
+                Box::pin(async move { replay_change_command(&db, &identity, &fingerprint, executor).await })
             })
         })
         .await
@@ -623,15 +611,18 @@ struct ChangeStartDispatch<'a> {
 }
 
 /// 已冻结的变更提交与指纹。
-struct FrozenChangeSubmission {
+pub(super) struct FrozenChangeSubmission {
+    command_identity: PurchaseCommandReceiptIdentity,
+    request_fingerprint: String,
     /// 已提交的不可变头。
-    submission: PurchaseChangeSubmission,
+    pub(super) submission: PurchaseChangeSubmission,
     /// 提交明细。
-    lines: Vec<erp_procurement::entity::purchase_order::PurchaseChangeSubmissionLine>,
+    pub(super) lines: Vec<erp_procurement::entity::purchase_order::PurchaseChangeSubmissionLine>,
     /// 目标内容指纹。
-    content_hash: String,
+    pub(super) content_hash: String,
     /// 启动幂等键。
     idempotency_key: String,
+    resubmission_reason: Option<String>,
 }
 
 /// 在创建事务内写入变更单、绑定发布定义并登记单据。

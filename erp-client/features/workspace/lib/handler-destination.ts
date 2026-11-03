@@ -157,7 +157,10 @@ export type HandlerNavigationInput = Readonly<{
     approvalInstanceId?: string
     trackingOnly?: boolean
     queueContextId?: string
-    routeContext?: Readonly<{ confirmationScope?: string }>
+    routeContext?: Readonly<{
+        confirmationScope?: string
+        documentType?: string
+    }>
 }>
 
 /**
@@ -328,6 +331,33 @@ function withParams(path: string, params: URLSearchParams): string {
  * 目标工作面重新查询。任一必需上下文缺失或 handler/工作面不匹配时失败关闭。
  */
 export function buildHandlerHref(item: HandlerNavigationInput): string | null {
+    if (item.handlerKey === "approval_rework") {
+        const type = item.routeContext?.documentType ?? item.businessObjectType
+        const destination = REWORK_WORKSPACES[type ?? ""]
+        if (!destination) return null
+        const href = buildDocumentApprovalHref({
+            ...item,
+            businessObjectType: type,
+            destinationWorkspaceId: destination,
+        })
+        if (!href) return null
+        const [path, query] = href.split("?", 2)
+        const params = new URLSearchParams(query)
+        params.delete("workItemId")
+        params.delete("currentWorkItemId")
+        params.delete("queueContextId")
+        if (
+            type === "sales_order" ||
+            type === "voucher_sales_order" ||
+            type === "purchase_order"
+        )
+            params.set("section", "overview")
+        if (type === "purchase_order") params.set("mode", "edit")
+        if (type === "sales_change_order")
+            params.set("editChange", item.businessObjectId)
+        if (type === "purchase_change_order") params.set("editChange", "1")
+        return withParams(path, params)
+    }
     if (item.handlerKey === "document_approval") {
         return buildDocumentApprovalHref(item)
     }
@@ -470,4 +500,20 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
             params.set("currentWorkItemId", workItemId)
             return withParams(registration.baseHref, params)
     }
+}
+
+const REWORK_WORKSPACES: Readonly<Record<string, HandlerWorkspaceId>> = {
+    sales_order: "W05",
+    voucher_sales_order: "W05",
+    sales_change_order: "W05",
+    purchase_order: "W08",
+    purchase_change_order: "W08",
+    stock_adjustment: "W10",
+    sales_invoice_request: "W11",
+    customer_receipt: "W11",
+    customer_refund: "W11",
+    receipt_reversal: "W11",
+    purchase_payment_request: "W12",
+    supplier_refund: "W12",
+    payment_reversal: "W12",
 }

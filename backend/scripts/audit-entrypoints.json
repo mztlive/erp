@@ -2677,6 +2677,36 @@
       "reason": "用例 register_business_document 在自身事务或已声明 run_audited 边界通过 PreparedWorkflowAudit::resource、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
+      "path": "crates/domains/erp-workflow/src/service/work_item/abandon_rework.rs",
+      "function": "abandon_rework",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "PreparedWorkflowAudit::resource_with_message",
+        "audit.validate"
+      ],
+      "call_counts": {
+        "PreparedWorkflowAudit::resource_with_message": 1,
+        "audit.validate": 1
+      },
+      "location_count": 1,
+      "reason": "放弃驳回处理入口先规范化原任务版本、原因和幂等键，通过 PreparedWorkflowAudit::resource_with_message 构造并 validate 审计上下文，再开启唯一事务调用 apply_abandon_rework；此处构造和校验不代表审计已经持久化。"
+    },
+    {
+      "path": "crates/domains/erp-workflow/src/service/work_item/abandon_rework.rs",
+      "function": "apply_abandon_rework",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "audit.persist"
+      ],
+      "call_counts": {
+        "audit.persist": 1
+      },
+      "location_count": 1,
+      "reason": "接收 abandon_rework 的同一 Executor，在原提交人、任务及对象资格和版本重验后关闭驳回处理任务，audit.persist 与任务、命令回执同事务写入；精确收据回放在状态和审计写入之前返回，不重复生成事件。"
+    },
+    {
       "path": "crates/domains/erp-workflow/src/service/work_item/close.rs",
       "function": "close_with_domain_evidence",
       "policy": "Audited",
@@ -3629,6 +3659,22 @@
       "reason": "用例或步骤 post_customer_receipt_apply 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
+      "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/customer_receipt_posting.rs",
+      "function": "reject_customer_receipt_approval_apply",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "沿审批决定的同一 Executor 读取客户回款单、核对冻结审批版本、迁移已驳回并释放本次分配占用；通过 resource_log 构造 customer_receipt.reject，persist_log 与业务及运行时终结共用原事务，不另开事务或重试。"
+    },
+    {
       "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/draft_save.rs",
       "function": "draft_audit",
       "policy": "Audited",
@@ -3761,6 +3807,36 @@
       "reason": "用例或步骤 cancel_and_record 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
+      "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/invoice_request/cancel.rs",
+      "function": "cancel_invoice_request",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "开票申请撤回先通过当前授权回放入口查证精确回执；新命令在 run_authorized_policy_transaction 中使用同一 Executor 再次校验账号、撤回动作权限、原申请人和真实来源范围，再保存运行时取消、申请状态、审计及命令回执。成功及未知恢复的详情读取复用当前授权入口，不凭历史绑定或回执直接返回。"
+    },
+    {
+      "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/invoice_request/cancel.rs",
+      "function": "reject",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "沿审批决定的同一 Executor 核对开票申请审批版本、锁定应收账户并将申请置为已驳回；sales_invoice_request.reject 由 resource_log 构造并通过 persist_log 同事务保存，额度释放随申请状态生效，不生成实际开票事实。"
+    },
+    {
       "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/invoice_request/command.rs",
       "function": "event",
       "policy": "Audited",
@@ -3792,19 +3868,49 @@
     },
     {
       "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/invoice_request/submit.rs",
+      "function": "apply",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "SubmitWrite::apply 接收开票提交原事务 Executor，先执行当前授权及精确回执匹配，再锁定应收、校验来源与额度、冻结申请和启动审批；原申请或新建申请均通过原申请人及真实来源资格校验。财务回执和 persist_log 审计同 Executor 保存，精确回放在写入前返回。"
+    },
+    {
+      "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/invoice_request/submit.rs",
       "function": "submit_invoice_request",
       "policy": "Audited",
       "stage": "Command",
       "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "开票申请提交构造绑定完整原请求的财务命令身份，先走授权回放；新请求由 run_authorized_policy_transaction 委托 SubmitWrite::apply 执行业务及审计写入，最终响应或未知恢复均重新验证当前结果读取资格。本入口不再直接调用 persist_log。"
+    },
+    {
+      "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/invoice_request/update.rs",
+      "function": "update_invoice_request",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
         ".run_authorized_policy_transaction",
         "persist_log"
       ],
       "call_counts": {
+        ".resource_log": 1,
         ".run_authorized_policy_transaction": 1,
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 submit_invoice_request 通过 .run_authorized_policy_transaction、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "独立保存开票申请通过 run_authorized_policy_transaction 开启授权事务，重验账号、提交权限、对象资格、原申请人和期望版本；申请修改与 sales_invoice_request.update 审计使用同一 Executor 写入，保留草稿或已驳回状态及审批版本，不取得开票额度。"
     },
     {
       "path": "crates/orchestration/erp-finance-posting/src/finance_posting/receivable/red_invoice.rs",
@@ -4131,6 +4237,22 @@
       },
       "location_count": 1,
       "reason": "用例或步骤 post_stock_adjustment_write 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+    },
+    {
+      "path": "crates/orchestration/erp-fulfillment-execution/src/inventory_adjustment/reject.rs",
+      "function": "reject",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "明确要求审批运行时事务；使用原 Executor 读取库存调整单并核对冻结审批版本，保存已驳回状态及 stock_adjustment.reject 审计，不写库存流水，不开启第二事务。"
     },
     {
       "path": "crates/orchestration/erp-fulfillment-execution/src/supply_execution/cancel.rs",
@@ -5195,6 +5317,22 @@
       "reason": "用例或步骤 apply 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
+      "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/change/save.rs",
+      "function": "persist_save",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "使用 save_change_draft 的原 Executor 重验来源更新及提交资格、锁版本和生效基准；精确回执命中先返回。新编辑副本、完整明细、purchase_change_order.save_draft 审计和原请求回执同事务保存，保留驳回状态及审批版本，不启动审批或调整报价占用。"
+    },
+    {
       "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/change/submit.rs",
       "function": "persist_cancelled_change",
       "policy": "Audited",
@@ -5545,6 +5683,38 @@
       "reason": "采购付款跟进命令在当前策略版本事务中重验采购来源；事务内委托 schedule 同步写入任务、成功审计与独立命令回执，本登记不改变既有授权或事务。"
     },
     {
+      "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/rejection.rs",
+      "function": "reject_change_approval",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "使用审批决定原 Executor 核验精确实例快照、采购变更身份、冻结审批版本及当前提交归属；迁移已驳回、恢复原生效报价数量及地址、释放新增占用，并同事务保存 purchase_change_order.reject 审计，保留原生效版本和冻结目标。"
+    },
+    {
+      "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/rejection.rs",
+      "function": "reject_order_approval",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "使用审批决定原 Executor 核验精确实例快照、采购单身份和冻结提交版本，迁移已驳回并派生独立编辑副本；purchase_order.reject 审计与业务和运行时终结同事务保存，保留草稿来源及费用占用。"
+    },
+    {
       "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/responsibility/service.rs",
       "function": "create_rule",
       "policy": "Audited",
@@ -5735,6 +5905,22 @@
       "reason": "用例或步骤 receipt 通过 .resource_log_with_id、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
+      "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/approval_outcome.rs",
+      "function": "persist_approval_outcome",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "退款及冲正的撤回或终态驳回共用此步骤；按真实单据类型调用所属实体迁移，驳回必须核对冻结审批版本。业务保存和 resource_log 构造的对应动作审计通过 persist_log 使用调用方同一 Executor，不读取审计决定业务状态或另开事务。"
+    },
+    {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/cancel_write.rs",
       "function": "audit",
       "policy": "Audited",
@@ -5869,22 +6055,6 @@
       },
       "location_count": 1,
       "reason": "用例 update_financial_draft 在自身事务或已声明 run_audited 边界通过 .resource_log、run_audited 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
-    },
-    {
-      "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/mod.rs",
-      "function": "cancel_approval",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        ".resource_log",
-        "persist_log"
-      ],
-      "call_counts": {
-        ".resource_log": 1,
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "用例或步骤 cancel_approval 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/payment_posting.rs",
@@ -6038,17 +6208,15 @@
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/customer_refund.rs",
       "function": "persist_start",
       "policy": "Audited",
-      "stage": "Command",
+      "stage": "Transaction",
       "boundaries": [
-        ".resource_log",
-        "persist_log"
+        ".resource_log"
       ],
       "call_counts": {
-        ".resource_log": 1,
-        "persist_log": 1
+        ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 persist_start 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "客户退款启动事务先重新授权并匹配包含原请求版本及重提说明的业务收据，同载荷回放直接返回；新提交通过 resource_log 构造 customer_refund.submit，在同一 Executor 保存业务、审批运行事实和冻结快照，再委托 reversal_submit::persist_submit_receipt 保存审计与精确请求回执。本函数不再直接调用 persist_log。"
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/payment_reversal.rs",
@@ -6065,20 +6233,6 @@
       "reason": "元数据工厂/准备步骤 persist_payment_reversal_start_apply 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/payment_reversal.rs",
-      "function": "persist_submit_receipt",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        "persist_log"
-      ],
-      "call_counts": {
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "用例或步骤 persist_submit_receipt 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
-    },
-    {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/receipt_reversal.rs",
       "function": "persist_receipt_reversal_start_apply",
       "policy": "Audited",
@@ -6093,10 +6247,10 @@
       "reason": "元数据工厂/准备步骤 persist_receipt_reversal_start_apply 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/receipt_reversal.rs",
+      "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/reversal_submit.rs",
       "function": "persist_submit_receipt",
       "policy": "Audited",
-      "stage": "Command",
+      "stage": "Transaction",
       "boundaries": [
         "persist_log"
       ],
@@ -6104,23 +6258,21 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 persist_submit_receipt 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "四类退款及冲正提交共用审计和精确请求回执保存步骤；接收原提交事务 Executor，通过 persist_log 写入调用方构造的业务审计，再用同一 Executor 保存绑定原请求版本及说明的 ReturnsCommandReceipt。不重新构造事件、开启事务或自动重放业务。"
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/supplier_refund.rs",
       "function": "persist_start",
       "policy": "Audited",
-      "stage": "Command",
+      "stage": "Transaction",
       "boundaries": [
-        ".resource_log",
-        "persist_log"
+        ".resource_log"
       ],
       "call_counts": {
-        ".resource_log": 1,
-        "persist_log": 1
+        ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 persist_start 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "供应商退款启动事务先重新授权并匹配包含原请求版本及重提说明的业务收据，同载荷回放直接返回；新提交校验结算并通过 resource_log 构造 supplier_refund.submit，在同一 Executor 保存业务、审批运行事实和冻结快照，再委托 reversal_submit::persist_submit_receipt 保存审计与精确请求回执。本函数不再直接调用 persist_log。"
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/supplier_refund.rs",

@@ -34,6 +34,7 @@ fn execution() -> ApprovalNodeExecution {
 
 fn submit_request() -> SubmitStockAdjustmentRequest {
     SubmitStockAdjustmentRequest {
+        resubmission_reason: None,
         expected_version: 7,
         expected_subject_version: 2,
         reason_type: AdjustmentReasonType::StockGain,
@@ -201,6 +202,36 @@ fn stock_start_identity_normalizes_order_and_signs_balance_version() {
     equivalent.balances[0].expected_version += 1;
     let changed = stock_adjustment_start_identity("adj-1", &equivalent, "actor", "def-1", 3).unwrap();
     assert_eq!(changed.classify(Some(&receipt)), ReceiptBranch::PayloadConflict);
+}
+
+/// 重提说明必须绑定启动身份，并禁止降级匹配未包含说明的历史收据。
+#[test]
+fn stock_resubmission_identity_binds_reason_without_legacy_fallback() {
+    let mut req = submit_request();
+    req.resubmission_reason = Some(" 已核实盘点数量 ".into());
+    let identity = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3).unwrap();
+    let receipt = ApprovalCommandReceipt::new(
+        ApprovalCommandReceiptId::new("receipt-1"),
+        identity.current(),
+        "instance-1",
+        Timestamp::from_unix_secs(10).unwrap(),
+    )
+    .unwrap();
+    req.resubmission_reason = Some("已核实盘点数量".into());
+    let normalized = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3).unwrap();
+    assert!(matches!(normalized.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)));
+    for reason in [None, Some("调整盘点数量".into())] {
+        req.resubmission_reason = reason;
+        let changed = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3).unwrap();
+        assert_eq!(changed.classify(Some(&receipt)), ReceiptBranch::PayloadConflict);
+    }
+    let scopes = stock_adjustment_start_scopes("adj-1", req.expected_subject_version).unwrap();
+    let mut legacy = receipt.clone();
+    legacy.scope_id = scopes[1].clone();
+    legacy.payload_digest = stock_adjustment_start_digest(&req, "actor").unwrap();
+    assert_eq!(identity.classify(Some(&legacy)), ReceiptBranch::PayloadConflict);
+    legacy.payload_digest = legacy_payload_digest("def-1\u{1f}3\u{1f}2\u{1f}actor");
+    assert_eq!(identity.classify(Some(&legacy)), ReceiptBranch::PayloadConflict);
 }
 
 /// 规范化启动身份时明细数量解析失败必须停止，不能生成可回放身份。

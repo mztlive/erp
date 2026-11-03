@@ -159,6 +159,7 @@ mod tests {
         assert!(ensure_receipt_owner(&receipt, "").is_err());
         for status in [
             CustomerReceiptStatus::Draft,
+            CustomerReceiptStatus::Rejected,
             CustomerReceiptStatus::InApproval,
             CustomerReceiptStatus::Posted,
             CustomerReceiptStatus::Reversed,
@@ -167,7 +168,7 @@ mod tests {
             ensure_receipt_owner(&receipt, "creator").unwrap();
             assert_eq!(
                 receipt.ensure_draft_editor("creator").is_ok(),
-                status == CustomerReceiptStatus::Draft
+                matches!(status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected)
             );
         }
         receipt.created_by.clear();

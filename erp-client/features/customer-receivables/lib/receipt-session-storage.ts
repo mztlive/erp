@@ -76,6 +76,7 @@ const sessionSchema = z
     })
     .passthrough()
 const inputSchema = z.object({
+    resubmissionReason: z.string().optional(),
     draftSessionId: z.string(),
     editVersion: z.number(),
     idempotencyKey: z.string(),

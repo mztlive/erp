@@ -109,6 +109,9 @@ fn payment_reversal_view(reversal: PaymentReversal) -> SupplierPaymentReversalVi
             erp_returns::entity::returns::PaymentReversalStatus::Draft => {
                 erp_finance::dto::payable::PaymentReversalStatus::Draft
             },
+            erp_returns::entity::returns::PaymentReversalStatus::Rejected => {
+                erp_finance::dto::payable::PaymentReversalStatus::Rejected
+            },
             erp_returns::entity::returns::PaymentReversalStatus::InApproval => {
                 erp_finance::dto::payable::PaymentReversalStatus::InApproval
             },

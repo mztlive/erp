@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 pub enum InvoiceRequestStatus {
     Draft,
     InApproval,
+    Rejected,
     Approved,
     Completed,
 }
@@ -32,6 +33,7 @@ impl InvoiceRequestStatus {
         match self {
             Self::Draft => "draft",
             Self::InApproval => "in_approval",
+            Self::Rejected => "rejected",
             Self::Approved => "approved",
             Self::Completed => "completed",
         }
@@ -50,6 +52,7 @@ impl InvoiceRequestStatus {
         match self {
             Self::Draft => "草稿",
             Self::InApproval => "审批中",
+            Self::Rejected => "已驳回",
             Self::Approved => "待开票",
             Self::Completed => "已开票",
         }
@@ -144,6 +147,21 @@ impl SalesInvoiceRequest {
             work_item_id: None,
         })
     }
+    /// 保存草稿或已驳回申请的资料，保留业务状态和审批版本。
+    ///
+    /// # 参数
+    /// * `data` - 待规范化的完整开票资料。
+    /// # 返回
+    /// 成功时替换开票资料，不占用额度。
+    /// # 错误
+    /// 不可编辑状态或资料非法时返回错误且不改变实体。
+    pub fn update(&mut self, data: InvoiceRequestData) -> Result<()> {
+        if !matches!(self.status, InvoiceRequestStatus::Draft | InvoiceRequestStatus::Rejected) {
+            return Err(Error::from("只有草稿或已驳回的开票申请可以修改"));
+        }
+        self.data = data.normalize()?;
+        Ok(())
+    }
     /// 返回尚未执行的本次授权或申请额度。
     ///
     /// # 参数
@@ -184,7 +202,7 @@ impl SalesInvoiceRequest {
     /// # 错误
     /// 非草稿、申请金额超过 `available` 或版本溢出时返回错误，且不改变实体。
     pub fn submit(&mut self, available: Amount) -> Result<()> {
-        if self.status != InvoiceRequestStatus::Draft {
+        if !matches!(self.status, InvoiceRequestStatus::Draft | InvoiceRequestStatus::Rejected) {
             return Err(Error::from("只有草稿可以提交开票申请"));
         }
         if self.data.amount > available {
@@ -230,6 +248,22 @@ impl SalesInvoiceRequest {
         self.status = InvoiceRequestStatus::Draft;
         Ok(())
     }
+    /// 驳回当前申请并释放审批额度；历史资料及版本保留。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 状态变为已驳回，`reserved` 返回零。
+    /// # 错误
+    /// 非审批中状态拒绝，禁止重复释放及撤销已批准事实。
+    pub fn reject(&mut self) -> Result<()> {
+        if self.status != InvoiceRequestStatus::InApproval {
+            return Err(Error::from("只有审批中的开票申请可以驳回"));
+        }
+        self.status = InvoiceRequestStatus::Rejected;
+        Ok(())
+    }
+
     /// 读取附件确认应完成的全部剩余批准金额。
     /// # 参数
     /// 用户核对附件时的申请版本。

@@ -53,6 +53,7 @@ export function fromBackendStatus(status: string): PurchaseOrderStatus {
         case "VOIDED":
             return "VOID"
         case "DRAFT":
+        case "REJECTED":
         case "EFFECTIVE":
         case "COMPLETED":
             return status
@@ -160,7 +161,7 @@ export function mapFulfillment(value: string): FulfillmentResponsibility {
  */
 export function deriveAllowedActions(status: PurchaseOrderStatus): string[] {
     const common = ["OPEN_CENTER", "PRINT"]
-    if (status === "DRAFT") {
+    if (status === "DRAFT" || status === "REJECTED") {
         return [...common, "EDIT", "SUBMIT", "VOID"]
     }
     if (status === "PENDING_REVIEW") {

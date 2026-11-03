@@ -29,6 +29,7 @@ export type WorkItemProcessingState =
     | "EXECUTION_BLOCKED"
 
 export type WorkItemAllowedAction =
+    | "ABANDON_REWORK"
     | "REASSIGN"
     | "CLOSE"
     | "VIEW"
@@ -85,6 +86,7 @@ export type WorkItemDto = Readonly<{
     destination_workspace_id?: string | null
     route_context?: Readonly<{
         confirmation_scope?: string | null
+        document_type?: string | null
     }> | null
     approval_step_instance_id: string | null
     approval_process_instance_id?: string | null
@@ -166,7 +168,7 @@ export type WorkItemProjection = Readonly<{
     workItemType: string
     handlerKey: string
     destinationWorkspaceId?: string
-    routeContext?: { confirmationScope?: string }
+    routeContext?: { documentType?: string; confirmationScope?: string }
     approvalStepInstanceId?: string
     approvalProcessInstanceId?: string
     approvalNodeExecutionId?: string
@@ -239,6 +241,7 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         destinationWorkspaceId: dto.destination_workspace_id ?? undefined,
         routeContext: dto.route_context
             ? {
+                  documentType: dto.route_context.document_type ?? undefined,
                   confirmationScope:
                       dto.route_context.confirmation_scope ?? undefined,
               }

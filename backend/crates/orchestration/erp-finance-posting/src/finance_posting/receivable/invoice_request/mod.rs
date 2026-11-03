@@ -1,9 +1,11 @@
 //! 开票申请正式用例；应收写锁串行化提交、撤回、审批与开票额度变更。
+mod authorization;
 mod cancel;
 mod command;
 mod execution;
 mod submit;
-pub use cancel::cancel;
+mod update;
+pub use cancel::{cancel, reject};
 use erp_core::money::Amount;
 use erp_finance::entity::receivable::{ReceivableAccount, SalesInvoiceRequest};
 use erp_finance::repository::ReceivableExt;

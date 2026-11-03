@@ -41,6 +41,9 @@ fn event_context(audit: &PreparedWorkflowAudit) -> Result<BusinessEventContext> 
         Some(WorkflowAuditOperation::Closed) => {
             ("work_item.close", "work_item", "关闭异常任务", CLOSE_FIELDS)
         },
+        Some(WorkflowAuditOperation::ApprovalReworkAbandoned) => {
+            ("work_item.abandon_rework", "work_item", "放弃驳回处理", CLOSE_FIELDS)
+        },
         None => return Err(Error::ValidationError("工作流业务事件未登记".to_string())),
     };
     if audit.action != code || audit.resource_type != resource_type || audit.command_id.is_none() {
@@ -85,10 +88,12 @@ fn resource_log_from_prepared(audit: &PreparedWorkflowAudit) -> Result<AuditLog>
 
 fn event_content(audit: &PreparedWorkflowAudit) -> BusinessEventContent {
     let facts = match audit.operation {
-        Some(WorkflowAuditOperation::Closed) => vec![AuditFact {
-            field: "status".to_string(),
-            value: AuditValue::Code { code: "CLOSED".to_string(), label: "已关闭".to_string() },
-        }],
+        Some(WorkflowAuditOperation::Closed | WorkflowAuditOperation::ApprovalReworkAbandoned) => {
+            vec![AuditFact {
+                field: "status".to_string(),
+                value: AuditValue::Code { code: "CLOSED".to_string(), label: "已关闭".to_string() },
+            }]
+        },
         _ => vec![
             AuditFact { field: "owner".to_string(), value: AuditValue::Changed },
             AuditFact { field: "reason".to_string(), value: AuditValue::Changed },
@@ -210,6 +215,7 @@ mod tests {
                 ("purchase_order.owner_reassign", "purchase_order")
             },
             WorkflowAuditOperation::Closed => ("work_item.close", "work_item"),
+            WorkflowAuditOperation::ApprovalReworkAbandoned => ("work_item.abandon_rework", "work_item"),
         };
         PreparedWorkflowAudit::resource_with_message(
             AuditActor::new("actor".into(), "account".into(), AccountKind::Admin),
@@ -228,6 +234,7 @@ mod tests {
             WorkflowAuditOperation::Reassigned,
             WorkflowAuditOperation::PurchaseOwnerReassigned,
             WorkflowAuditOperation::Closed,
+            WorkflowAuditOperation::ApprovalReworkAbandoned,
         ] {
             let audit = prepared(operation);
             let log = event_context(&audit).unwrap().log(event_content(&audit)).unwrap();
@@ -280,6 +287,7 @@ mod tests {
             WorkflowAuditOperation::Reassigned,
             WorkflowAuditOperation::PurchaseOwnerReassigned,
             WorkflowAuditOperation::Closed,
+            WorkflowAuditOperation::ApprovalReworkAbandoned,
         ] {
             let mut audit = prepared(operation).with_event_sequence(NonZeroU32::new(7).unwrap());
             audit.actor_name_snapshot = Some("发生时名称".into());

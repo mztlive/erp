@@ -2,10 +2,53 @@
 
 use erp_core::{Error, Result};
 
-use super::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
-use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderRevision, PurchaseOrderRevisionLine};
+use super::{
+    PurchaseChangeOrder, PurchaseChangeOrderUpdate, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
+};
+use crate::entity::purchase_order::{
+    PurchaseOrder, PurchaseOrderRevision, PurchaseOrderRevisionLine, SubmissionStatus,
+};
 
 impl PurchaseChangeOrder {
+    /// 切换独立编辑副本，保留已驳回状态、审批版本和历史提交。
+    /// # 参数
+    /// * `submission` / `lines` - 使用新身份的完整草稿头、行。
+    /// * `reason` / `content_hash` - 变更原因及完整目标摘要。
+    /// * `actor_id` - 保存操作人。
+    /// # 返回
+    /// 仅切换编辑目标和更新审计，审批版本不变。
+    /// # 错误
+    /// 非可编辑状态、非草稿提交、来源或行身份不一致时拒绝。
+    pub fn save_draft_target(
+        &mut self,
+        submission: &PurchaseChangeSubmission,
+        lines: &[PurchaseChangeSubmissionLine],
+        reason: Option<String>,
+        content_hash: String,
+        actor_id: &str,
+    ) -> Result<()> {
+        self.ensure_draft_for_submission()?;
+        if submission.status != SubmissionStatus::Draft
+            || submission.submitted_at.is_some()
+            || submission.submitted_by.is_some()
+            || submission.purchase_change_order_id.as_ref() != self.base.id
+            || submission.base_revision_id != self.base_revision_id
+            || self.current_submission_id.as_ref().map(AsRef::as_ref) == Some(submission.base.id.as_str())
+            || lines.is_empty()
+            || lines.iter().any(|line| line.purchase_change_submission_id.as_ref() != submission.base.id)
+        {
+            return Err(Error::from("采购变更保存必须使用独立的完整草稿提交"));
+        }
+        self.update(
+            PurchaseChangeOrderUpdate {
+                reason,
+                current_submission_id: Some(submission.base.id.clone().into()),
+                target_content_hash: Some(content_hash),
+                ..Default::default()
+            },
+            actor_id,
+        )
+    }
     /// 校验编辑仍属于原采购单且基准仍为当前版本。
     ///
     /// # 参数
@@ -71,6 +114,26 @@ impl PurchaseChangeOrder {
         {
             return Err(Error::from("采购变更当前冻结提交或明细不一致"));
         }
+        Ok(())
+    }
+}
+
+impl PurchaseChangeSubmission {
+    /// 将新构建的未提交目标标记为独立编辑副本，不消费正式 CS 序号。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 将草稿编号设置为独立 DRAFT 身份。
+    /// # 错误
+    /// 已提交或已处理的历史目标不得转为编辑副本。
+    pub fn mark_editing_copy(&mut self) -> Result<()> {
+        if self.status != SubmissionStatus::Draft
+            || self.submitted_at.is_some()
+            || self.submitted_by.is_some()
+        {
+            return Err(Error::from("历史采购变更提交不得改为编辑副本"));
+        }
+        self.submission_no = format!("DRAFT-{}", self.base.id);
         Ok(())
     }
 }

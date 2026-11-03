@@ -14,6 +14,8 @@ use crate::error::{Error, ErrorCode, Result};
 /// 启动编排输入。
 #[derive(Debug, Clone)]
 pub struct StartExecutionInput {
+    /// 本次重新提交说明，参与启动命令摘要。
+    pub resubmission_reason: Option<String>,
     /// 公共命令输入。
     pub command: ExecutionCommandInput,
     /// 流程种类。
@@ -50,6 +52,7 @@ pub struct StartExecutionInput {
 /// 命令身份或 scope 不合法、异载荷冲突、引擎失败或收据构造失败时返回错误。
 pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
     let identity = start_identity(StartIdentityParams {
+        resubmission_reason: input.resubmission_reason.as_deref(),
         idempotency_key: input.command.idempotency_key.clone(),
         process_kind: input.process_kind.as_str(),
         subject_kind: input.subject.subject_kind(),

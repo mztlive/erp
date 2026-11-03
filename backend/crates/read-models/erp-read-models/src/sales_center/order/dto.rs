@@ -70,7 +70,7 @@ pub struct SalesOrderView {
 /// `SalesOrderReadService::sales_order_list`），审核轨未在途或无命中待办时为 `None`。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderStageSummary {
-    /// 阶段码：`draft`/`awaiting_confirm`/`awaiting_sales`/`awaiting_sales_lead`/
+    /// 阶段码：`draft`/`rejected`/`awaiting_confirm`/`awaiting_sales`/`awaiting_sales_lead`/
     /// `awaiting_ops`/`fulfilling`/`effective`/`closed`/`voided`。
     pub code: &'static str,
     /// 中文展示文案。

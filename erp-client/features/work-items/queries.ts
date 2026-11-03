@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query"
 
 import {
+    abandonApprovalRework,
     getWorkItem,
     getWorkItemReassignCandidates,
     listWorkItems,
@@ -27,6 +28,17 @@ export const workItemKeys = {
     list: (params: WorkItemListParams) =>
         [...workItemKeys.all, "list", params] as const,
     inboxCount: () => [...workItemKeys.all, "mine-count"] as const,
+}
+
+export function useAbandonApprovalReworkMutation() {
+    const client = useQueryClient()
+    return useMutation({
+        mutationFn: abandonApprovalRework,
+        onSuccess: async (item) => {
+            client.setQueryData(workItemKeys.detail(item.id), item)
+            await client.invalidateQueries({ queryKey: workItemKeys.all })
+        },
+    })
 }
 
 /** 冲突后保留可见最新摘要，并令列表、详情、统计与统一队列全部重新验证。 */

@@ -106,6 +106,7 @@ pub(crate) async fn load_start_receipt(
 ///
 /// # 错误
 /// 幂等键非法、同键异载荷、收据引用的实例不存在、收据与冻结运行事实不一致，或仓储读取失败时返回错误。
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn replay_purchase_order_start_with_executor(
     db: &Database,
     subject: &SubjectRef,
@@ -113,11 +114,13 @@ pub(crate) async fn replay_purchase_order_start_with_executor(
     idempotency_key: &str,
     binding: &ApprovalDefinitionBinding,
     actor_id: &str,
+    resubmission_reason: Option<&str>,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     replay_start(
         db,
         ApprovalStartIdentity {
+            resubmission_reason,
             process_kind: process_kind_of(DocumentType::PurchaseOrder),
             subject,
             subject_version,

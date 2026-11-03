@@ -105,7 +105,7 @@ export function PurchaseOrderSourceUpdateNotice({
         )
     }
     const status = order.identity.status
-    const draft = status === "DRAFT"
+    const draft = status === "DRAFT" || status === "REJECTED"
     const effective =
         status === "EFFECTIVE" || status === "PARTIAL" || status === "COMPLETED"
 

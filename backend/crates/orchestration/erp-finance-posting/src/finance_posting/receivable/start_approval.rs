@@ -23,6 +23,7 @@ use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::read;
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -146,6 +147,7 @@ pub(crate) async fn load_start_receipt_with_executor(
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择。
 pub(crate) struct DocumentStartInput<'a> {
+    pub resubmission_reason: Option<&'a str>,
     /// 必须审批的业务类型。
     pub document_type: DocumentType,
     /// 绑定定义图。
@@ -188,6 +190,7 @@ pub(crate) struct DocumentStartInput<'a> {
 /// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(crate) fn build_document_start_input(input: DocumentStartInput<'_>) -> Result<StartExecutionInput> {
     let DocumentStartInput {
+        resubmission_reason,
         document_type,
         graph,
         binding,
@@ -211,6 +214,7 @@ pub(crate) fn build_document_start_input(input: DocumentStartInput<'_>) -> Resul
         graph,
         bindings,
         StartInputContext {
+            resubmission_reason: resubmission_reason.map(str::to_owned),
             binding,
             document_type,
             subject,
@@ -265,6 +269,7 @@ fn start_bindings_from_graph(
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
 pub(crate) struct CustomerReceiptStartPersistInput {
+    pub resubmission_reason: Option<String>,
     /// 已进入 `IN_APPROVAL` 的回款单。
     pub receipt: CustomerReceipt,
     /// 审计操作人。
@@ -308,6 +313,7 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     executor: &mut dyn Executor,
 ) -> Result<CustomerReceipt> {
     let CustomerReceiptStartPersistInput {
+        resubmission_reason,
         receipt,
         actor: _,
         id: _,
@@ -320,6 +326,46 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(receipt);
     };
+    claim_receipt_start(db, &writes, now, executor).await?;
+    reserve_receipt(db, &receipt, executor).await?;
+    // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。
+    let mut receipt = receipt;
+    db.customer_receipts().update(&mut receipt, executor).await?;
+    persist_runtime_writes(
+        db,
+        rbac,
+        &writes,
+        RuntimeStartInput {
+            resubmission_reason: resubmission_reason.as_deref(),
+            document_type: DocumentType::CustomerReceipt,
+            snapshot_payload: &snapshot_payload,
+            owner_role,
+            organization_id: &organization_id,
+            now,
+        },
+        executor,
+    )
+    .await?;
+    Ok(receipt)
+}
+
+/// 依次仲裁启动收据和注册行，保持审批子步骤的首写顺序。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `writes` - 已准备的审批启动写集。
+/// * `now` - 本次启动时间。
+/// * `executor` - 调用方事务。
+/// # 返回
+/// 两项启动守卫均已写入。
+/// # 错误
+/// 收据争用、注册行状态冲突或仓储错误时返回错误。
+async fn claim_receipt_start(
+    db: &Database,
+    writes: &PlannedWrites,
+    now: Instant,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, executor)
         .await
@@ -338,29 +384,12 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     if guarded.is_none() {
         return Err(Error::ConflictError("客户回款单审批启动守卫冲突，请刷新后重试".to_string()));
     }
-    reserve_receipt(db, &receipt, executor).await?;
-    // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。
-    let mut receipt = receipt;
-    db.customer_receipts().update(&mut receipt, executor).await?;
-    persist_runtime_writes(
-        db,
-        rbac,
-        &writes,
-        RuntimeStartInput {
-            document_type: DocumentType::CustomerReceipt,
-            snapshot_payload: &snapshot_payload,
-            owner_role,
-            organization_id: &organization_id,
-            now,
-        },
-        executor,
-    )
-    .await?;
-    Ok(receipt)
+    Ok(())
 }
 
 /// 启动时固定的业务类型及提交快照。
 pub(crate) struct RuntimeStartInput<'a> {
+    pub resubmission_reason: Option<&'a str>,
     pub document_type: DocumentType,
     pub snapshot_payload: &'a ApprovalSubjectSnapshotPayload,
     pub owner_role: &'a str,
@@ -388,7 +417,14 @@ pub(crate) async fn persist_runtime_writes(
     input: RuntimeStartInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let RuntimeStartInput { document_type, snapshot_payload, owner_role, organization_id, now } = input;
+    let RuntimeStartInput {
+        resubmission_reason,
+        document_type,
+        snapshot_payload,
+        owner_role,
+        organization_id,
+        now,
+    } = input;
     let mut snapshot = persist_start_runtime(
         db,
         writes,
@@ -402,6 +438,15 @@ pub(crate) async fn persist_runtime_writes(
     snapshot.display = Some(
         capture_approval_display(db, snapshot.document_type, &snapshot.business_object_id, executor).await?,
     );
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        resubmission_reason,
+        writes.instance.started_by.as_str(),
+        now,
+        executor,
+    )
+    .await?;
     rbac.runtime.persist_start_snapshot(db, snapshot, executor).await?;
     persist_start_tasks(
         db,

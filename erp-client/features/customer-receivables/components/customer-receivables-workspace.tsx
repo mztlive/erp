@@ -1,5 +1,7 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+
 import * as React from "react"
 import {
     receiptRegistrationHref,
@@ -468,6 +470,25 @@ export function CustomerReceivablesWorkspace({
                 />
             ) : null}
 
+            {reverseFlow.refundSubmitUnknown ? (
+                <Button
+                    id="customer-refund-resume-submit"
+                    variant="outline"
+                    onClick={() => reverseFlow.setRefundSubmitOpen(true)}
+                >
+                    继续核对退款提交结果
+                </Button>
+            ) : null}
+            {reverseFlow.reversalSubmitUnknown ? (
+                <Button
+                    id="customer-reversal-resume-submit"
+                    variant="outline"
+                    onClick={() => reverseFlow.setReversalSubmitOpen(true)}
+                >
+                    继续核对冲正提交结果
+                </Button>
+            ) : null}
+
             {actionError ? (
                 <Alert variant="destructive">
                     <AlertTitle>操作未成功</AlertTitle>
@@ -634,18 +655,23 @@ export function CustomerReceivablesWorkspace({
 
             <CustomerRefundSubmitConfirmDialog
                 open={reverseFlow.refundSubmitOpen}
+                unknown={reverseFlow.refundSubmitUnknown}
+                frozenReason={reverseFlow.refundSubmitReason}
+                documentId={reverseFlow.refundDraft?.refundId}
+                expectedVersion={reverseFlow.refundDraft?.baselineVersion}
+                onEndRecovery={reverseFlow.endRefundRecovery}
                 pending={reverseFlow.refundSubmitPending}
                 approval={
                     reverseFlow.refundDraft?.approval ??
                     detailQuery.data?.refund?.approval
                 }
                 onOpenChange={reverseFlow.setRefundSubmitOpen}
-                onConfirm={() => {
+                onConfirm={(resubmissionReason) => {
                     if (!permissions.canSubmitRefund) {
                         setActionError(permissions.reason)
                         return
                     }
-                    void reverseFlow.confirmRefundSubmit()
+                    return reverseFlow.confirmRefundSubmit(resubmissionReason)
                 }}
             />
 
@@ -674,18 +700,23 @@ export function CustomerReceivablesWorkspace({
 
             <ReceiptReversalSubmitConfirmDialog
                 open={reverseFlow.reversalSubmitOpen}
+                unknown={reverseFlow.reversalSubmitUnknown}
+                frozenReason={reverseFlow.reversalSubmitReason}
+                documentId={reverseFlow.reversalDraft?.reversalId}
+                expectedVersion={reverseFlow.reversalDraft?.baselineVersion}
+                onEndRecovery={reverseFlow.endReversalRecovery}
                 pending={reverseFlow.reversalSubmitPending}
                 approval={
                     reverseFlow.reversalDraft?.approval ??
                     detailQuery.data?.reversal?.approval
                 }
                 onOpenChange={reverseFlow.setReversalSubmitOpen}
-                onConfirm={() => {
+                onConfirm={(resubmissionReason) => {
                     if (!permissions.canSubmitReversal) {
                         setActionError(permissions.reason)
                         return
                     }
-                    void reverseFlow.confirmReversalSubmit()
+                    return reverseFlow.confirmReversalSubmit(resubmissionReason)
                 }}
             />
         </>

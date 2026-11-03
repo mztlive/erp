@@ -24,7 +24,7 @@ pub struct DecideCommand {
     pub actor: ParticipantId,
     /// 当前责任人写时资格。
     pub current_eligibility: Eligibility,
-    /// 下一节点或入口节点资格。
+    /// 通过后的下一节点资格；驳回不读取此资格。
     pub next_eligibility: Eligibility,
     /// 下一执行主键。
     pub next_execution_id: ApprovalNodeExecutionId,
@@ -34,10 +34,10 @@ pub struct DecideCommand {
     pub now: Timestamp,
 }
 
-/// 对当前活动执行应用决定，并按连线进入下一节点、终态或下一轮入口。
+/// 对当前活动执行应用决定，并进入下一节点或终态。
 ///
 /// 当前责任人失效，或当前节点的通过/驳回连线缺失、重复时，不接受决定，但返回可提交的阻塞计划。
-/// 驳回未指向入口、通过连线缺少目标节点仍返回错误。下一审批人失效时保留本次通过事实。
+/// 驳回连线非法、通过连线缺少目标节点仍返回错误。下一审批人失效时保留本次通过事实。
 ///
 /// # 参数
 /// * `instance` - 当前流程实例
@@ -50,7 +50,7 @@ pub struct DecideCommand {
 /// 返回 `CommitRequired::Blocked` 的阻塞计划。
 ///
 /// # 错误
-/// 实例已终态、执行不是当前活动令牌、驳回原因为空、驳回未指向入口、
+/// 实例已终态、执行不是当前活动令牌、驳回原因为空、驳回连线非法、
 /// 无法形成合法快照，或模型不变式失败时返回错误。
 pub fn decide(
     instance: ApprovalProcessInstance,
@@ -92,41 +92,15 @@ pub fn decide(
 /// # 错误
 /// 非驳回命令、空原因、令牌不一致或定义非法时返回错误。
 pub fn reject_terminal(
-    mut instance: ApprovalProcessInstance,
-    mut current: ApprovalNodeExecution,
+    instance: ApprovalProcessInstance,
+    current: ApprovalNodeExecution,
     graph: &DefinitionGraph,
     command: DecideCommand,
 ) -> EngineResult<TransitionPlan> {
-    ensure_current_token(&instance, &current)?;
-    ensure_actor(&current, graph, &command)?;
     if command.decision != ApprovalDecision::Reject {
         return Err(EngineError::InvalidCommand("终态驳回只接受驳回命令"));
     }
-    if let Some(code) = command.current_eligibility.blocked_code() {
-        return block_current(instance, current, code, command.now);
-    }
-    let (_, reject_edge) = match require_decision_edges(graph, &current.node_key) {
-        Ok(edges) => edges,
-        Err(EngineError::GraphCorrupted) => {
-            return block_current(
-                instance,
-                current,
-                ApprovalBlockerCode::DefinitionGraphCorrupted,
-                command.now,
-            );
-        },
-        Err(error) => return Err(error),
-    };
-    ensure_reject_to_entry(graph, reject_edge)?;
-    let reason = command
-        .reason
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or(EngineError::InvalidCommand("驳回原因不能为空"))?;
-    current.record_reject(command.actor.clone(), reason, command.now)?;
-    instance.complete_rejected(command.now)?;
-    Ok(completed_current_plan(instance, current, command.actor, BpmEventKind::NodeRejected))
+    decide(instance, current, graph, command)
 }
 
 fn ensure_actor(
@@ -177,7 +151,7 @@ fn apply_approve(
     enter_after_decision(plan, graph, next_key, command)
 }
 
-/// 驳回当前节点，轮次加一并进入入口。
+/// 驳回当前节点并终止本次实例，冻结提交与历史轮次保持不变。
 fn apply_reject(
     mut instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,
@@ -191,16 +165,10 @@ fn apply_reject(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or(EngineError::InvalidCommand("驳回原因不能为空"))?;
-    ensure_reject_to_entry(graph, reject_edge)?;
+    ensure_reject_transition(graph, reject_edge)?;
     current.record_reject(command.actor.clone(), reason, command.now)?;
-    instance.next_round(command.now)?;
-    let mut plan =
-        completed_current_plan(instance, current, command.actor.clone(), BpmEventKind::NodeRejected);
-    plan.events.push(
-        BpmEvent::new(BpmEventKind::RoundRestarted, plan.instance.typed_id(), plan.instance.current_round_no)
-            .with_reason(reason),
-    );
-    enter_after_decision(plan, graph, &graph.definition.entry_node_key, command)
+    instance.complete_rejected(command.now)?;
+    Ok(completed_current_plan(instance, current, command.actor, BpmEventKind::NodeRejected))
 }
 
 /// 记录已完成的当前执行，并关闭对应任务。
@@ -307,16 +275,17 @@ fn ensure_current_token(
     Ok(())
 }
 
-/// 驳回连线必须指向入口。
-fn ensure_reject_to_entry(
+/// 驳回指向终态；历史冻结的入口边仍按终止解释。
+fn ensure_reject_transition(
     graph: &DefinitionGraph,
     reject_edge: &ApprovalTransitionDefinition,
 ) -> EngineResult<()> {
     if reject_edge.event != ApprovalTransitionEvent::Reject {
         return Err(EngineError::GraphCorrupted);
     }
-    if reject_edge.to_node_key.as_deref() != Some(graph.definition.entry_node_key.as_str()) {
-        return Err(EngineError::GraphCorrupted);
+    match (reject_edge.to_node_key.as_deref(), reject_edge.terminal_result) {
+        (None, Some(ApprovalTerminalResult::Rejected)) => Ok(()),
+        (Some(key), None) if key == graph.definition.entry_node_key => Ok(()),
+        _ => Err(EngineError::GraphCorrupted),
     }
-    Ok(())
 }

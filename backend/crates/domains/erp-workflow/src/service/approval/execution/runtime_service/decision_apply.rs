@@ -23,8 +23,8 @@ use persistence_core::{Executor, Transactional};
 use super::super::apply_plan::DomainActionKind;
 use super::super::authorization::hidden_forbidden;
 use super::super::idempotency::{
-    ReceiptBranch, decision_identity, map_receipt_first_write_error, normalize_idempotency_key,
-    payload_conflict_error,
+    PreparedCommandIdentity, ReceiptBranch, decision_identity, map_receipt_first_write_error,
+    normalize_idempotency_key, payload_conflict_error,
 };
 use super::super::view::{ApprovalCommandView, map_command_view};
 use super::query::first_open_task;
@@ -35,7 +35,7 @@ use super::{
     ApprovalRuntimeService, commit_or_recover, find_receipt_for_identity, hidden_not_found,
     persisted_command_view_with_executor, recover_by_replay,
 };
-use crate::entity::approval_integration::{ApprovalDomainAction, ApprovalSubjectSnapshot};
+use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::work_item::{
     ApprovalDecisionTaskError, AssignmentSource, WorkItem, WorkItemStatus, WorkItemType,
 };
@@ -291,6 +291,7 @@ async fn replay_terminal_receipt_view(
         return Err(decision_terminal_fresh_error());
     };
     // 历史无版本摘要可能存在分隔符碰撞，必须先证明收据仍指向该任务的冻结运行身份。
+    ensure_decision_receipt_scope(&receipt, &identity)?;
     let ended_execution =
         verify_decision_receipt_runtime_identity(db, &receipt, execution_id, executor).await?;
     let is_current_v3 = receipt.scope_id == identity.current().scope().as_str();
@@ -343,14 +344,7 @@ async fn submit_decision_apply(
     if prepared.should_finalize {
         action_port.execute(loaded.spec.on_final_approve, &prepared.action_context, actor, executor).await?;
     } else if prepared.writes.domain_action == Some(DomainActionKind::Reject) {
-        action_port
-            .execute(
-                ApprovalDomainAction::PurchasePaymentRequestReject,
-                &prepared.action_context,
-                actor,
-                executor,
-            )
-            .await?;
+        action_port.execute(loaded.spec.on_reject, &prepared.action_context, actor, executor).await?;
     }
     persist_decision_writes(db, persist_decision_input(&loaded, &prepared, command, audit_port), executor)
         .await?;
@@ -400,6 +394,17 @@ fn persist_decision_input<'a>(
     }
 }
 
+/// 收据作用域只能来自同一命令身份的当前 V3 或精确历史候选。
+fn ensure_decision_receipt_scope(
+    receipt: &ApprovalCommandReceipt,
+    identity: &PreparedCommandIdentity,
+) -> Result<()> {
+    if !identity.scope_candidates().contains(&receipt.scope_id.as_str()) {
+        return Err(hidden_not_found());
+    }
+    Ok(())
+}
+
 /// 在 legacy 摘要双读前验证收据、任务执行、实例、流程类型与冻结主体属于同一运行身份。
 async fn verify_decision_receipt_runtime_identity(
     db: &Database,
@@ -407,9 +412,6 @@ async fn verify_decision_receipt_runtime_identity(
     expected_execution_id: &ApprovalNodeExecutionId,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalNodeExecution> {
-    if receipt.scope_id != expected_execution_id.as_ref() {
-        return Err(hidden_not_found());
-    }
     let execution = db
         .bpm_workflow()
         .find_execution_by_id(expected_execution_id, executor)
@@ -686,4 +688,68 @@ pub(super) fn map_approval_task_error(error: ApprovalDecisionTaskError) -> Error
 /// 持久化图缺失或重复决定连线时不得继续推导下一审批人。
 pub(super) fn map_runtime_graph_error(error: ModelError) -> Error {
     Error::ConflictError(error.to_string())
+}
+
+#[cfg(test)]
+mod rejection_replay_tests {
+    use bpm::ids::ApprovalCommandReceiptId;
+    use bpm::model::Timestamp;
+
+    use super::*;
+
+    #[test]
+    fn terminal_decision_replay_accepts_exact_v3_scope_and_keeps_payload_conflicts() {
+        let identity = decision_identity(
+            normalize_idempotency_key("reject-key").unwrap(),
+            "execution-1",
+            "task-1",
+            "REJECT",
+            Some("依据不足"),
+            7,
+            "reviewer",
+        )
+        .unwrap();
+        let receipt = ApprovalCommandReceipt::new(
+            ApprovalCommandReceiptId::new("receipt"),
+            identity.current(),
+            "instance-1",
+            Timestamp::from_unix_secs(10).unwrap(),
+        )
+        .unwrap();
+        ensure_decision_receipt_scope(&receipt, &identity).unwrap();
+        assert!(matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)));
+        let changed = decision_identity(
+            normalize_idempotency_key("reject-key").unwrap(),
+            "execution-1",
+            "task-1",
+            "REJECT",
+            Some("另一个理由"),
+            7,
+            "reviewer",
+        )
+        .unwrap();
+        assert!(matches!(changed.classify(Some(&receipt)), ReceiptBranch::PayloadConflict));
+        let actor = decision_identity(
+            normalize_idempotency_key("reject-key").unwrap(),
+            "execution-1",
+            "task-1",
+            "REJECT",
+            Some("依据不足"),
+            7,
+            "other",
+        )
+        .unwrap();
+        assert!(matches!(actor.classify(Some(&receipt)), ReceiptBranch::PayloadConflict));
+        let other = decision_identity(
+            normalize_idempotency_key("reject-key").unwrap(),
+            "execution-other",
+            "task-1",
+            "REJECT",
+            Some("依据不足"),
+            7,
+            "reviewer",
+        )
+        .unwrap();
+        assert!(ensure_decision_receipt_scope(&receipt, &other).is_err());
+    }
 }

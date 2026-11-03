@@ -1,5 +1,7 @@
 "use client"
 
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
+
 import { ArrowRightIcon } from "lucide-react"
 
 import { PaperDocumentViewport } from "@/components/business"
@@ -24,17 +26,25 @@ export function SalesOrderSubmitConfirmDialog({
     open,
     pending,
     snapshot,
-    description = "提交后进入审批；任一层驳回后将从第一节点开始下一轮。",
+    resubmitting = false,
+    description = "提交后进入审批；任一节点驳回将结束本次审批，退回提交人处理。",
     onOpenChange,
     onConfirm,
 }: {
     open: boolean
     pending: boolean
     snapshot: SalesOrderSubmitSnapshot
+    resubmitting?: boolean
     description?: string
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void | Promise<void>
+    onConfirm: (resubmissionReason?: string) => void | Promise<void>
 }) {
+    const rework = useResubmissionReason({
+        open,
+        required: resubmitting,
+        id: "sales-orders-submit-reason",
+        disabled: pending,
+    })
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -48,7 +58,10 @@ export function SalesOrderSubmitConfirmDialog({
                             <DialogDescription>{description}</DialogDescription>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                            <StatusBadge tone="neutral" label="草稿" />
+                            <StatusBadge
+                                tone="neutral"
+                                label={resubmitting ? "已驳回" : "草稿"}
+                            />
                             <ArrowRightIcon aria-hidden="true" />
                             <StatusBadge tone="warning" label="审批中" />
                         </div>
@@ -66,6 +79,9 @@ export function SalesOrderSubmitConfirmDialog({
                     <SalesOrderSubmitPaper snapshot={snapshot} />
                 </PaperDocumentViewport>
 
+                {resubmitting ? (
+                    <div className="shrink-0 px-6 py-3">{rework.field}</div>
+                ) : null}
                 <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
                     <Button
                         id="sales-orders-submit-confirm-cancel"
@@ -80,9 +96,9 @@ export function SalesOrderSubmitConfirmDialog({
                         id="sales-orders-submit-confirm-confirm"
                         loading={pending}
                         type="button"
-                        disabled={pending}
+                        disabled={pending || !rework.valid}
                         onClick={() => {
-                            void onConfirm()
+                            void onConfirm(rework.reason)
                         }}
                     >
                         {pending ? "提交中…" : "确认提交"}

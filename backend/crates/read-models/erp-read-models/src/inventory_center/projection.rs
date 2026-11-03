@@ -64,15 +64,16 @@ fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> Document
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。
 fn allowed_document_actions(status: StockAdjustmentState, can_submit: bool, can_cancel: bool) -> Vec<String> {
     match status {
-        StockAdjustmentState::Draft if can_submit => vec!["SUBMIT".to_string()],
-        StockAdjustmentState::Draft => Vec::new(),
+        StockAdjustmentState::Draft | StockAdjustmentState::Rejected if can_submit => {
+            vec!["SUBMIT".to_string()]
+        },
+        StockAdjustmentState::Draft | StockAdjustmentState::Rejected => Vec::new(),
         StockAdjustmentState::InApproval if can_cancel => vec!["CANCEL".to_string()],
         StockAdjustmentState::InApproval => Vec::new(),
         StockAdjustmentState::Posted
         | StockAdjustmentState::Reversed
         | StockAdjustmentState::PendingWarehouseReview
-        | StockAdjustmentState::PendingFinanceReview
-        | StockAdjustmentState::Rejected => Vec::new(),
+        | StockAdjustmentState::PendingFinanceReview => Vec::new(),
     }
 }
 

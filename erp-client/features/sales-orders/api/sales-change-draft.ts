@@ -45,6 +45,7 @@ export type SalesChangeTerms = {
 }
 
 export type SalesChangeDraft = {
+    status?: string
     base_gross_amount: string
     base_lines: SalesChangeDraftLine[]
     terms: SalesChangeTerms

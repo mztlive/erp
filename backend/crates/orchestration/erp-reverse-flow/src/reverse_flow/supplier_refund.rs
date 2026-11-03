@@ -1,7 +1,6 @@
 use crate::ReverseFlowPorts;
 mod commit;
 
-use erp_approval_runtime::approval_recovery::recover_approval_command;
 use erp_audit::execution::persist_log;
 
 mod commit_source;
@@ -49,10 +48,10 @@ use super::cancel_approval::{
     persist_supplier_refund_cancel,
 };
 use super::start_approval::{
-    ReplayReturnStartInput, ReverseStartInput, SupplierRefundStartPersistInput,
+    ReversalSubmitReplayInput, ReverseStartInput, SupplierRefundStartPersistInput,
     build_supplier_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_start_graph, load_supplier_refund_start_receipt,
-    persist_supplier_refund_start, replay_return_start_with_executor, replay_subject_versions,
+    persist_supplier_refund_start, reversal_result_read_error,
 };
 use crate::{Error, Result};
 
@@ -117,14 +116,28 @@ impl ReturnsProcess {
     ) -> Result<SupplierRefundView> {
         req.validate()?;
         req.idempotency_key = normalize_idempotency_key(&req.idempotency_key)?.as_str().to_string();
-        if self.replay_supplier_refund_start(id, &req.idempotency_key, actor).await?.is_some() {
-            return self.reads().supplier_refund_detail(id).await.map_err(crate::Error::from);
+        let submission = ReversalSubmitReplayInput {
+            id: id.to_owned(),
+            document_type: DocumentType::SupplierRefund,
+            submit_permission: "supplier_refund:submit",
+            command_receipt: req.command_receipt(id, actor.id())?,
+            actor: actor.clone(),
+        };
+        if let Some(id) = self.replay_reversal_submit(&submission).await? {
+            return self.reads().supplier_refund_detail(&id).await.map_err(reversal_result_read_error);
         }
         let adapter = supplier_refund_adapter()?;
         let mut refund = self.domain().load_supplier_refund(id, &mut NoTransaction).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         start_supplier_refund_approval(&mut refund)?;
-        self.dispatch_supplier_refund_start(id, refund, req.idempotency_key, actor, adapter).await
+        self.dispatch_supplier_refund_start(
+            refund,
+            req.idempotency_key,
+            req.resubmission_reason,
+            adapter,
+            submission,
+        )
+        .await
     }
 
     /// 撤回供应商退款审批，成功后回到草稿且 `subject_version` 不回退。
@@ -161,12 +174,14 @@ impl ReturnsProcess {
     /// 无绑定、定义缺失或写入失败时返回错误。
     async fn dispatch_supplier_refund_start(
         &self,
-        id: &str,
         refund: SupplierRefund,
         idempotency_key: String,
-        actor: &AuditActor,
+        resubmission_reason: Option<String>,
         adapter: super::adapter::SupplierRefundAdapter,
+        submission: ReversalSubmitReplayInput,
     ) -> Result<SupplierRefundView> {
+        let id = submission.id.as_str();
+        let actor = &submission.actor;
         let subject = supplier_refund_subject_ref(id)?;
         let binding =
             find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
@@ -184,6 +199,7 @@ impl ReturnsProcess {
         .await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_supplier_refund_start_input(ReverseStartInput {
+            resubmission_reason: resubmission_reason.clone(),
             graph,
             binding: &binding,
             subject,
@@ -197,6 +213,8 @@ impl ReturnsProcess {
         let prepared = prepare_start(start_input)?;
         self.complete_supplier_refund_start(
             SupplierRefundStartPersistInput {
+                command_receipt: submission.command_receipt.clone(),
+                resubmission_reason: resubmission_reason.clone(),
                 refund,
                 actor: actor.clone(),
                 id: id.to_string(),
@@ -206,129 +224,20 @@ impl ReturnsProcess {
                 organization_id,
                 now,
             },
-            &idempotency_key,
+            &submission,
         )
         .await
     }
 
-    /// 持久化失败时按原主题版本执行有界恢复，然后读取业务视图。
+    /// 持久化失败后只回读精确原请求收据，再返回当前单据视图。
     async fn complete_supplier_refund_start(
         &self,
         input: SupplierRefundStartPersistInput,
-        idempotency_key: &str,
+        submission: &ReversalSubmitReplayInput,
     ) -> Result<SupplierRefundView> {
-        let recovery_subject_version = input.refund.approval_subject_version;
-        let id = input.id.clone();
-        let actor = input.actor.clone();
-        let persisted = persist_supplier_refund_start(&self.db, &self.rbac, input).await;
-        if let Err(error) = persisted {
-            if !error.command_may_have_committed() {
-                return Err(error);
-            }
-            self.recover_supplier_refund_start(&id, recovery_subject_version, idempotency_key, &actor, error)
-                .await?;
-        }
-        self.reads().supplier_refund_detail(&id).await.map_err(crate::Error::from)
-    }
-
-    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
-    async fn recover_supplier_refund_start(
-        &self,
-        refund_id: &str,
-        subject_version: u32,
-        idempotency_key: &str,
-        actor: &AuditActor,
-        original_error: Error,
-    ) -> Result<String> {
-        recover_approval_command(original_error, || {
-            self.replay_supplier_refund_start_version(refund_id, subject_version, idempotency_key, actor)
-        })
-        .await
-    }
-
-    /// 在任何当前状态/版本门禁前，以当前或下一主题版本精确回放既有启动。
-    async fn replay_supplier_refund_start(
-        &self,
-        refund_id: &str,
-        idempotency_key: &str,
-        actor: &AuditActor,
-    ) -> Result<Option<String>> {
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let refund_id = refund_id.to_string();
-        let idempotency_key = idempotency_key.to_string();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let refund = authorized_supplier_refund(&db, &rbac, &actor, &refund_id, executor).await?;
-                    let binding =
-                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
-                    let binding = require_supplier_refund_binding(binding.as_ref())?;
-                    let subject = supplier_refund_subject_ref(&refund_id)?;
-                    for subject_version in replay_subject_versions(refund.approval_subject_version)? {
-                        if let Some(instance_id) = replay_return_start_with_executor(
-                            &db,
-                            ReplayReturnStartInput {
-                                document_type: DocumentType::SupplierRefund,
-                                subject: &subject,
-                                subject_version,
-                                idempotency_key: &idempotency_key,
-                                binding,
-                                actor_id: actor.id(),
-                            },
-                            executor,
-                        )
-                        .await?
-                        {
-                            return Ok(Some(instance_id));
-                        }
-                    }
-                    Ok(None)
-                })
-            })
-            .await
-    }
-
-    /// 单一候选版本的 fresh-session 当前授权与 exact receipt 回放。
-    async fn replay_supplier_refund_start_version(
-        &self,
-        refund_id: &str,
-        subject_version: u32,
-        idempotency_key: &str,
-        actor: &AuditActor,
-    ) -> Result<Option<String>> {
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let refund_id = refund_id.to_string();
-        let idempotency_key = idempotency_key.to_string();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorized_supplier_refund(&db, &rbac, &actor, &refund_id, executor).await?;
-                    let binding =
-                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
-                    let binding = require_supplier_refund_binding(binding.as_ref())?;
-                    let subject = supplier_refund_subject_ref(&refund_id)?;
-                    replay_return_start_with_executor(
-                        &db,
-                        ReplayReturnStartInput {
-                            document_type: DocumentType::SupplierRefund,
-                            subject: &subject,
-                            subject_version,
-                            idempotency_key: &idempotency_key,
-                            binding,
-                            actor_id: actor.id(),
-                        },
-                        executor,
-                    )
-                    .await
-                })
-            })
-            .await
+        let persisted = persist_supplier_refund_start(&self.db, &self.rbac, input).await.map(|_| ());
+        self.finish_reversal_submit(submission, persisted).await?;
+        self.reads().supplier_refund_detail(&submission.id).await.map_err(reversal_result_read_error)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -589,7 +498,15 @@ async fn persist_bound_supplier_refund_document(
 }
 
 /// 按原顺序重验账号、退款来源和提交权限，沿用调用方事务。
-async fn authorized_supplier_refund(
+/// # 参数
+/// * `db` / `rbac` - 数据库与审批授权端口。
+/// * `actor` / `refund_id` - 当前操作人与退款单主键。
+/// * `executor` - 同一事务执行器。
+/// # 返回
+/// 返回完成原来源授权重验的退款单。
+/// # 错误
+/// 原单或往来主体不存在、来源无权限或提交资格失效时返回错误。
+pub(super) async fn authorized_supplier_refund(
     db: &Database,
     rbac: &ReverseFlowPorts,
     actor: &AuditActor,

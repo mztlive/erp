@@ -2,6 +2,7 @@
 
 import { InfoIcon } from "lucide-react"
 import { FormalActionConfirmDialog, MoneyValue } from "@/components/business"
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
 
@@ -29,7 +30,7 @@ export function CustomerReceiptSubmitConfirmDialog({
     pending: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void | Promise<void>
+    onConfirm: (resubmissionReason?: string) => void | Promise<void>
     id?: string
     idPrefix?: string
     counterpartyName: string
@@ -39,6 +40,13 @@ export function CustomerReceiptSubmitConfirmDialog({
     allocatedAmount: string
     unallocatedAmount: string
 }) {
+    const rejected = approval?.instance?.status === "REJECTED"
+    const resubmission = useResubmissionReason({
+        open,
+        required: rejected,
+        id: `${idPrefix ?? id}-resubmission-reason`,
+        disabled: pending,
+    })
     return (
         <FormalActionConfirmDialog
             actionVariant="default"
@@ -49,11 +57,15 @@ export function CustomerReceiptSubmitConfirmDialog({
             onOpenChange={onOpenChange}
             actionLabel="提交回款"
             confirmLabel="确认提交"
-            fromStatus={{ label: "草稿", tone: "neutral" }}
+            fromStatus={{
+                label: rejected ? "已驳回" : "草稿",
+                tone: rejected ? "destructive" : "neutral",
+            }}
             toStatus={{ label: "审批中", tone: "warning" }}
             description="请核对回款金额与核销分配，提交后进入审批。"
             formContent={
                 <div className="min-w-0 space-y-5">
+                    {resubmission.field}
                     <section
                         aria-label="回款核对"
                         className="overflow-hidden rounded-lg border border-border"
@@ -113,14 +125,15 @@ export function CustomerReceiptSubmitConfirmDialog({
                                 审批全部通过后，回款过账并核销。
                             </p>
                             <p>
-                                审批期间不可修改；驳回后重新提交将从首节点审批。
+                                审批期间不可修改；驳回后可修改原单，填写重提说明后重新发起审批。
                             </p>
                         </div>
                     </div>
                 </div>
             }
             pending={pending}
-            onConfirm={onConfirm}
+            confirmDisabled={!resubmission.valid}
+            onConfirm={() => onConfirm(resubmission.reason)}
         />
     )
 }

@@ -16,6 +16,8 @@ use crate::service::approval::process_kind::process_kind_of;
 
 /// 调用方已完成版本、幂等键、提交人及专属资格检查的启动上下文。
 pub struct StartInputContext<'a> {
+    /// 本次重新提交说明。
+    pub resubmission_reason: Option<String>,
     /// 调用方已核对定义版本的冻结绑定。
     pub binding: &'a ApprovalDefinitionBinding,
     /// 本次审批的单据类型。
@@ -90,6 +92,7 @@ pub fn assemble_start_input(
         .map(|item| item.eligibility.clone())
         .ok_or_else(|| Error::ConflictError("入口节点缺少审批人绑定".to_string()))?;
     Ok(StartExecutionInput {
+        resubmission_reason: context.resubmission_reason,
         command: ExecutionCommandInput {
             graph,
             current_eligibility: entry_eligibility.clone(),
@@ -165,6 +168,7 @@ mod tests {
 
     fn context(binding: &ApprovalDefinitionBinding) -> StartInputContext<'_> {
         StartInputContext {
+            resubmission_reason: None,
             binding,
             document_type: DocumentType::SalesOrder,
             subject: SubjectRef::new("sales_order", "order-1").unwrap(),

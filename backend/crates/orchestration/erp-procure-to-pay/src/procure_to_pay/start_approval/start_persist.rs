@@ -27,6 +27,7 @@ use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::{PreparedExecution, map_receipt_first_write_error};
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -61,6 +62,8 @@ const SUBMIT_SOURCE_AFFECTED: &str = "来源销售已变更并影响本采购，
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与提交快照同事务。
 pub(crate) struct PurchaseOrderStartPersistInput {
+    /// 驳回后的重新提交说明。
+    pub resubmission_reason: Option<String>,
     pub ports: Arc<PurchaseOrderPorts>,
     /// 已进入审批中的采购单。
     pub order: PurchaseOrder,
@@ -356,6 +359,7 @@ impl StartPosting<'_> {
                 organization_id: &input.organization_id,
                 now: input.now,
             },
+            input.resubmission_reason.as_deref(),
             executor,
         )
         .await?;
@@ -397,15 +401,25 @@ async fn persist_runtime_writes(
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartTaskContext<'_>,
+    resubmission_reason: Option<&str>,
     executor: &mut dyn Executor,
 ) -> Result<Option<(String, u64)>> {
-    let snapshot = persist_start_runtime(
+    let mut snapshot = persist_start_runtime(
         db,
         writes,
         context.document_type,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交采购单",
+        executor,
+    )
+    .await?;
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        resubmission_reason,
+        writes.instance.started_by.as_str(),
+        context.now,
         executor,
     )
     .await?;

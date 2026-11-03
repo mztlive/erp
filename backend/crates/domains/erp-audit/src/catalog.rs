@@ -124,6 +124,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("customer_receipt.post", "customer_receipt", "过账客户回款"),
     action("customer_receipt.submit", "customer_receipt", "提交客户回款"),
     action("customer_receipt.update", "customer_receipt", "修改客户回款"),
+    action("customer_receipt.reject", "customer_receipt", "驳回客户回款审批"),
     action("customer_refund.cancel_approval", "customer_refund", "撤回审批客户退款单"),
     action("customer_refund.create", "customer_refund", "创建客户退款单"),
     action("customer_refund.post", "customer_refund", "过账客户退款单"),
@@ -215,6 +216,8 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("purchase_change_order.effect", "purchase_change_order", "生效采购变更单"),
     action("purchase_change_order.submit", "purchase_change_order", "提交审批采购变更单"),
     action("purchase_change_order.void", "purchase_change_order", "作废采购变更单"),
+    action("purchase_change_order.reject", "purchase_change_order", "驳回采购变更审批"),
+    action("purchase_change_order.save_draft", "purchase_change_order", "保存采购变更草稿"),
     action("purchase_invoice_allocation.post", "purchase_invoice_allocation", "登记进项发票"),
     action("purchase_order.cancel_approval", "purchase_order", "撤回审批采购单"),
     action("purchase_order.confirm_expense", "purchase_order", "确认采购费用已发生"),
@@ -228,6 +231,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("purchase_order.update", "purchase_order", "修改采购单草稿"),
     action("purchase_order.void", "purchase_order", "作废采购单"),
     action("purchase_order.waive_freight", "purchase_order", "标记供应商不收运费"),
+    action("purchase_order.reject", "purchase_order", "驳回采购单审批"),
     action("purchase_payment_request.create", "purchase_payment_request", "创建采购付款申请"),
     action("purchase_payment_request.update", "purchase_payment_request", "修改采购付款申请"),
     action("purchase_payment_request.submit", "purchase_payment_request", "提交采购付款申请"),
@@ -261,6 +265,10 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("returns.cancel_approval", "payment_reversal", "撤回付款冲正审批"),
     action("returns.cancel_approval", "receipt_reversal", "撤回回款冲正审批"),
     action("returns.cancel_approval", "supplier_refund", "撤回供应商退款审批"),
+    action("returns.reject_approval", "customer_refund", "驳回客户退款审批"),
+    action("returns.reject_approval", "payment_reversal", "驳回付款冲正审批"),
+    action("returns.reject_approval", "receipt_reversal", "驳回回款冲正审批"),
+    action("returns.reject_approval", "supplier_refund", "驳回供应商退款审批"),
     action("role.create", "role", "创建角色"),
     action("role.delete", "role", "删除角色"),
     action("role.update", "role", "修改角色"),
@@ -275,6 +283,8 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("sales_invoice_request.approve", "sales_invoice_request", "审批通过开票申请"),
     action("sales_invoice_request.cancel", "sales_invoice_request", "撤回开票申请"),
     action("sales_invoice_request.submit", "sales_invoice_request", "提交开票申请"),
+    action("sales_invoice_request.reject", "sales_invoice_request", "驳回开票申请"),
+    action("sales_invoice_request.update", "sales_invoice_request", "修改开票申请"),
     action("sales_inquiry.create", "sales_inquiry", "创建销售询价"),
     action("sales_inquiry.save", "sales_inquiry", "保存询价需求"),
     action("sales_inquiry.submit", "sales_inquiry", "提交询价需求"),
@@ -320,6 +330,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("stock_adjustment.post", "stock_adjustment", "过账库存调整单"),
     action("stock_adjustment.submit", "stock_adjustment", "提交审批库存调整单"),
     action("stock_adjustment.update", "stock_adjustment", "修改库存调整单"),
+    action("stock_adjustment.reject", "stock_adjustment", "驳回库存调整审批"),
     action("supplier.delete", "supplier", "删除供应商"),
     action("supplier.handover", "supplier", "供应商交接"),
     action(
@@ -457,6 +468,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("work_item.payment_follow_up", "work_item", "安排采购付款跟进"),
     action("work_item.close", "work_item", "关闭异常任务"),
     action("work_item.reassign", "work_item", "转交任务责任"),
+    action("work_item.abandon_rework", "work_item", "放弃驳回处理"),
     action("workflow_action.append", "workflow_action", "登记工作流操作"),
 ];
 
@@ -649,6 +661,40 @@ mod tests {
         ] {
             assert!(registered_action(code, "sales_inquiry").unwrap().allowed_fields.is_empty());
             assert!(registered_action(code, "sales_order").is_err());
+        }
+    }
+
+    /// 使用生产资源日志入口及持久化前解析，防止领域驳回成功后因审计目录缺失回滚。
+    #[test]
+    fn terminal_rejection_and_rework_actions_create_persistable_runtime_logs() {
+        for (code, resource) in [
+            // 销售单、卡券销售单和销售变更沿用运行时审批决定日志。
+            ("approval.decide", "approval_process_instance"),
+            ("purchase_payment_request.reject", "purchase_payment_request"),
+            ("customer_receipt.reject", "customer_receipt"),
+            ("purchase_order.reject", "purchase_order"),
+            ("purchase_change_order.reject", "purchase_change_order"),
+            ("purchase_change_order.save_draft", "purchase_change_order"),
+            ("sales_invoice_request.reject", "sales_invoice_request"),
+            ("sales_invoice_request.update", "sales_invoice_request"),
+            ("stock_adjustment.reject", "stock_adjustment"),
+            ("returns.reject_approval", "customer_refund"),
+            ("returns.reject_approval", "payment_reversal"),
+            ("returns.reject_approval", "receipt_reversal"),
+            ("returns.reject_approval", "supplier_refund"),
+            ("work_item.abandon_rework", "work_item"),
+        ] {
+            let log = finance_actor().resource_log(code, resource, "document-1".into()).unwrap();
+            let prepared = crate::prepare_business_log(&log).unwrap();
+            assert!(prepared.success);
+            assert_eq!(prepared.action, code);
+            assert_eq!(prepared.resource_type, resource);
+            assert_eq!(prepared.resource_id.as_deref(), Some("document-1"));
+            let event = prepared.structured_event.as_ref().unwrap();
+            assert_eq!(event.action_code, code);
+            assert_eq!(event.resource_type, resource);
+            assert!(registered_action(code, resource).unwrap().allowed_fields.is_empty());
+            assert!(finance_actor().resource_log(code, "invalid_resource", "document-1".into()).is_err());
         }
     }
 

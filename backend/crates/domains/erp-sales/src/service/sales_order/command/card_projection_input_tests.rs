@@ -72,3 +72,25 @@ fn creation_idempotency_identity_is_stable_and_full_payload_bound() {
             .unwrap()
     );
 }
+
+#[test]
+fn resubmission_reason_is_bound_to_the_sales_command_identity() {
+    let mut request = submission_request(1);
+    assert!(request.resubmission_reason.is_none());
+    let first = sales_submission_fingerprint("actor-1", "order-1", &request).unwrap();
+    request.resubmission_reason = Some("内容不变，已核实价格".into());
+    let resubmission = sales_submission_fingerprint("actor-1", "order-1", &request).unwrap();
+    assert_ne!(first, resubmission);
+    request.resubmission_reason = Some("补充了合同说明".into());
+    assert_ne!(resubmission, sales_submission_fingerprint("actor-1", "order-1", &request).unwrap());
+}
+
+#[test]
+fn sales_resubmission_reason_allows_one_thousand_characters() {
+    use validator::Validate;
+    let mut request = submission_request(1);
+    request.resubmission_reason = Some("字".repeat(1000));
+    assert!(request.validate().is_ok());
+    request.resubmission_reason = Some("字".repeat(1001));
+    assert!(request.validate().unwrap_err().field_errors().contains_key("resubmission_reason"));
+}

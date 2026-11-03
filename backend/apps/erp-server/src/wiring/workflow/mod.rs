@@ -40,6 +40,10 @@ fn map_service(error: Error) -> WorkflowError {
         Error::Logic(error) => WorkflowError::Logic(error),
         Error::Rbac(message) => WorkflowError::Rbac(message),
         Error::OutcomeUnknown(error) => WorkflowError::OutcomeUnknown(error),
+        // 此边界只接收授权、事实及调用方执行器内步骤；不调用开票提交后回读。
+        Error::CommittedResultUnavailable(_) => {
+            WorkflowError::Internal("WORKFLOW_PORT_UNEXPECTED_COMMITTED_RESPONSE".into())
+        },
         Error::RepositoryError(error) => WorkflowError::from(error),
         Error::Coded(code) => WorkflowError::Coded(code),
     }
@@ -182,4 +186,18 @@ pub fn attach_published_binding(
     binding: erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
     erp_workflow::service::approval::binding::attach_published_binding(document, binding).map_err(Error::from)
+}
+
+#[cfg(test)]
+mod committed_response_tests {
+    use super::*;
+
+    #[test]
+    fn workflow_port_rejects_impossible_response_without_claiming_unknown_commit() {
+        let error = map_service(Error::CommittedResultUnavailable("unreadable invoice contents".into()));
+        assert!(matches!(
+            error,
+            WorkflowError::Internal(message) if message == "WORKFLOW_PORT_UNEXPECTED_COMMITTED_RESPONSE"
+        ));
+    }
 }

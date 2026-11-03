@@ -21,7 +21,7 @@ const BANK_REFERENCE_MAX_LEN: usize = 256;
 /// 创建人标识最大长度。
 const CREATOR_ID_MAX_LEN: usize = 128;
 
-/// 回款单状态（合同 §4.4.2：`PENDING_REVIEW` 收敛为 `IN_APPROVAL`，删除审批 `REJECTED`）。
+/// 回款单状态；驳回终止本次审批并保留原单供修改重提。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CustomerReceiptStatus {
@@ -30,6 +30,9 @@ pub enum CustomerReceiptStatus {
     /// 审批中。
     #[serde(rename = "IN_APPROVAL")]
     InApproval,
+    /// 本次审批已驳回，允许原登记人修改并重新提交。
+    #[serde(rename = "REJECTED")]
+    Rejected,
     /// 已过账。
     Posted,
     /// 已冲正（存在正式反向事实，原事实不删除）。
@@ -51,6 +54,7 @@ impl CustomerReceiptStatus {
         match self {
             Self::Draft => "草稿",
             Self::InApproval => "审批中",
+            Self::Rejected => "已驳回",
             Self::Posted => "已过账",
             Self::Reversed => "已冲正",
         }
@@ -70,6 +74,7 @@ impl CustomerReceiptStatus {
         match self {
             Self::Draft => "draft",
             Self::InApproval => "IN_APPROVAL",
+            Self::Rejected => "REJECTED",
             Self::Posted => "posted",
             Self::Reversed => "reversed",
         }
@@ -85,15 +90,15 @@ impl DocumentState for CustomerReceiptStatus {
     /// 无。
     ///
     /// # 返回
-    /// `Draft` 只返回 `InApproval`；`InApproval` 返回 `Posted` 与 `Draft`；
+    /// `Draft`、`Rejected` 返回 `InApproval`；`InApproval` 返回 `Posted`、`Draft` 与 `Rejected`；
     /// `Posted` 只返回 `Reversed`；`Reversed` 返回空切片。
     ///
     /// # 错误
     /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::InApproval],
-            Self::InApproval => &[Self::Posted, Self::Draft],
+            Self::Draft | Self::Rejected => &[Self::InApproval],
+            Self::InApproval => &[Self::Posted, Self::Draft, Self::Rejected],
             Self::Posted => &[Self::Reversed],
             Self::Reversed => &[],
         }
@@ -223,8 +228,8 @@ impl CustomerReceipt {
         if actor_id.is_empty() || self.created_by != actor_id {
             return Err(DraftEditError::Forbidden("仅原回款登记人可以修改本单草稿".into()));
         }
-        if self.status != CustomerReceiptStatus::Draft {
-            return Err(DraftEditError::ConflictError("请先将驳回回款撤回草稿后再修改".into()));
+        if !matches!(self.status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected) {
+            return Err(DraftEditError::ConflictError("只有草稿或已驳回回款可以修改".into()));
         }
         Ok(())
     }
@@ -427,8 +432,8 @@ impl CustomerReceipt {
     /// # 错误
     /// 非草稿、分配非法或版本溢出时返回冲突。
     pub fn start_approval(&mut self, allocations: Vec<PendingReceiptAllocation>) -> Result<u32> {
-        if self.status != CustomerReceiptStatus::Draft {
-            return Err(Error::from("只有草稿状态的客户回款单可以提交审批"));
+        if !matches!(self.status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected) {
+            return Err(Error::from("只有草稿或已驳回的客户回款单可以提交审批"));
         }
         ensure_pending_allocations(&self.amount, &allocations)?;
         if self.approval_subject_version > 0 {
@@ -457,6 +462,21 @@ impl CustomerReceipt {
             return Err(Error::from("只有审批中的客户回款单可以撤回审批"));
         }
         self.transition(CustomerReceiptStatus::Draft)
+    }
+
+    /// 驳回本次审批，保留分配依据及提交版本以供修改重提。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 回款状态变为已驳回；审批中占用由状态查询自动释放。
+    /// # 错误
+    /// 非审批中状态拒绝，禁止重复执行或撤销已过账事实。
+    pub fn reject_approval(&mut self) -> Result<()> {
+        if self.status != CustomerReceiptStatus::InApproval {
+            return Err(Error::from("只有审批中的客户回款单可以驳回"));
+        }
+        self.transition(CustomerReceiptStatus::Rejected)
     }
 
     /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
@@ -498,7 +518,7 @@ impl CustomerReceipt {
     /// # 错误
     /// 状态非草稿时返回错误。
     fn ensure_editable(&self) -> Result<()> {
-        if self.status != CustomerReceiptStatus::Draft {
+        if !matches!(self.status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected) {
             return Err(Error::from("已过账或已冲正的回款单不可编辑"));
         }
         Ok(())
@@ -828,5 +848,41 @@ mod tests {
         receipt.cancel_approval().unwrap();
         assert!(receipt.save_allocations(vec![line("two", "10")]).is_err());
         receipt.save_allocations(vec![line("three", "10")]).unwrap();
+    }
+    /// 驳回后原人可直接编辑并重提，保存不清除驳回状态且旧决定不可再执行。
+    #[test]
+    fn rejected_receipt_preserves_identity_and_can_be_edited_and_resubmitted() {
+        let mut receipt =
+            CustomerReceipt::new(CustomerReceiptId::new("rejected"), data(), "creator-1").unwrap();
+        let allocations = vec![
+            PendingReceiptAllocation::new(
+                ReceivableEntryId::new("entry-1"),
+                Amount::from_str("100").unwrap(),
+            )
+            .unwrap(),
+        ];
+        assert!(receipt.reject_approval().is_err());
+        receipt.start_approval(allocations.clone()).unwrap();
+        receipt.reject_approval().unwrap();
+        assert_eq!(receipt.status, CustomerReceiptStatus::Rejected);
+        assert_eq!(receipt.approval_subject_version, 1);
+        assert_eq!(receipt.pending_allocations, allocations);
+        assert!(receipt.reject_approval().is_err());
+        assert!(receipt.cancel_approval().is_err());
+        assert!(receipt.ensure_draft_editor("other").is_err());
+        receipt.ensure_draft_editor("creator-1").unwrap();
+        receipt
+            .update(CustomerReceiptUpdate {
+                amount: Some(Amount::from_str("150").unwrap()),
+                received_at: None,
+                bank_reference: Some("UPDATED".into()),
+            })
+            .unwrap();
+        assert_eq!(receipt.status, CustomerReceiptStatus::Rejected);
+        assert_eq!(receipt.base.id, "rejected");
+        assert_eq!(receipt.start_approval(allocations).unwrap(), 2);
+        receipt.mark_posted().unwrap();
+        assert!(receipt.reject_approval().is_err());
+        assert_eq!(receipt.status, CustomerReceiptStatus::Posted);
     }
 }

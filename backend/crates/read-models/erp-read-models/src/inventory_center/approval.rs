@@ -224,7 +224,9 @@ async fn submit_token(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Option<SubmitStockAdjustmentApprovalTokenView>> {
-    if adjustment.status != StockAdjustmentState::Draft || binding.is_none() {
+    if !matches!(adjustment.status, StockAdjustmentState::Draft | StockAdjustmentState::Rejected)
+        || binding.is_none()
+    {
         return Ok(None);
     }
     if !service.policy.actor_can_submit(adjustment, actor, executor).await? {

@@ -61,6 +61,7 @@ impl WorkflowAuditFact {
 /// 允许提交的工作项业务动作；内容只携带安全变更标记。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkflowAuditOperation {
+    ApprovalReworkAbandoned,
     Reassigned,
     PurchaseOwnerReassigned,
     Closed,
@@ -133,6 +134,7 @@ impl PreparedWorkflowAudit {
                 ("purchase_order.owner_reassign", "purchase_order")
             },
             WorkflowAuditOperation::Closed => ("work_item.close", "work_item"),
+            WorkflowAuditOperation::ApprovalReworkAbandoned => ("work_item.abandon_rework", "work_item"),
         };
         if self.action != action || self.resource_type != resource || command_id.trim().is_empty() {
             return Err(Error::ValidationError("工作流审计动作或命令身份无效".to_string()));

@@ -79,6 +79,7 @@ function statusMeta(status: ReceivableAccountRow["status"]): {
 }
 
 function mapReceiptStatus(s: string): ReceiptRow["status"] {
+    if (s === "REJECTED" || s === "rejected") return "rejected"
     if (s === "reversed" || s === "REVERSED") return "reversed"
     if (s === "posted" || s === "POSTED") return "posted"
     if (
@@ -93,6 +94,7 @@ function mapReceiptStatus(s: string): ReceiptRow["status"] {
 }
 
 function mapRefundStatus(s: string): CustomerRefundRow["status"] {
+    if (s === "REJECTED" || s === "rejected") return "rejected"
     if (s === "reversed" || s === "REVERSED") return "reversed"
     if (s === "posted" || s === "POSTED") return "posted"
     if (
@@ -227,7 +229,7 @@ export function projectReceipt(
     const status = mapReceiptStatus(r.status)
     const isPosted = status === "posted" || status === "reversed"
     const allowed: AllowedAction[] = ["VIEW_DETAIL"]
-    if (status === "draft") {
+    if (status === "draft" || status === "rejected") {
         allowed.push("CONTINUE_ALLOCATE")
     }
     if (status === "posted") {
@@ -302,6 +304,7 @@ export function projectCustomerRefund(
 }
 
 function mapReversalStatus(s: string): ReceiptReversalRow["status"] {
+    if (s === "REJECTED" || s === "rejected") return "rejected"
     if (s === "reversed" || s === "REVERSED") return "reversed"
     if (s === "posted" || s === "POSTED") return "posted"
     if (

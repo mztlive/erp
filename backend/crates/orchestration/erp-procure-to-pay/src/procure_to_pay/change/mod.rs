@@ -5,11 +5,12 @@ mod effect;
 mod guard;
 mod mapping;
 mod posting;
+mod save;
 mod submit;
 mod void;
-
 #[cfg(test)]
 use erp_procurement::service::purchase_order::change::state::start_purchase_change_approval;
+pub(super) use submit::recovery::replay_change_command;
 
 pub(super) use super::change_adapter;
 #[cfg(test)]

@@ -245,6 +245,12 @@ impl DefinitionGraph {
         };
         let edge = self.unique_transition(current_node_key, event)?;
         edge.validate_shape()?;
+        if decision == ApprovalDecision::Reject {
+            if edge.to_node_key.as_deref().is_some_and(|key| key != self.definition.entry_node_key) {
+                return Err(ModelError::InvalidTransition("历史驳回连线必须指向入口"));
+            }
+            return Ok(None);
+        }
         Ok(edge.to_node_key.clone())
     }
 

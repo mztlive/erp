@@ -74,7 +74,7 @@ impl ReceivableProcess {
         &self,
         id: &str,
         receipt: CustomerReceipt,
-        idempotency_key: &str,
+        req: &SubmitCustomerReceiptRequest,
         actor: &AuditActor,
         adapter: adapter::CustomerReceiptAdapter,
     ) -> Result<CustomerReceiptStartPersistInput> {
@@ -92,11 +92,13 @@ impl ReceivableProcess {
             receipt.approval_subject_version,
             &organization_id,
             actor.id(),
-            idempotency_key,
+            &req.idempotency_key,
+            req.resubmission_reason.as_deref(),
             now,
         )
         .await?;
         Ok(CustomerReceiptStartPersistInput {
+            resubmission_reason: req.resubmission_reason.clone(),
             receipt,
             actor: actor.clone(),
             id: id.to_owned(),
@@ -378,6 +380,7 @@ mod tests {
     #[test]
     fn submit_receipt_requires_the_complete_original_payload() {
         let request = SubmitCustomerReceiptRequest {
+            resubmission_reason: None,
             expected_version: 2,
             idempotency_key: "retry".into(),
             allocations: vec![ReceiptAllocationLineRequest {
@@ -396,7 +399,9 @@ mod tests {
         changed_amount.allocations[0].allocated_amount = "40.00".parse().unwrap();
         let mut changed_source = request.clone();
         changed_source.allocations[0].receivable_entry_id = ReceivableEntryId::new("other");
-        for changed in [changed_version, changed_amount, changed_source] {
+        let mut changed_reason = request.clone();
+        changed_reason.resubmission_reason = Some("已补充说明".into());
+        for changed in [changed_version, changed_amount, changed_source, changed_reason] {
             let command = submit_receipt("receipt", &changed, "creator").unwrap();
             assert!(matches!(fact.resource_id(&command), Err(FinanceError::ConflictError(_))));
         }
@@ -412,6 +417,7 @@ mod tests {
 
     fn request() -> SubmitCustomerReceiptRequest {
         SubmitCustomerReceiptRequest {
+            resubmission_reason: None,
             expected_version: 2,
             idempotency_key: "retry".into(),
             allocations: vec![ReceiptAllocationLineRequest {

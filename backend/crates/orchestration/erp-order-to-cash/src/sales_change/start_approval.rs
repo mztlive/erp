@@ -6,16 +6,17 @@ use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, SubjectRef, Timestamp};
 use erp_approval_runtime::ApprovalRuntimePort;
-use erp_approval_runtime::approval_start::{
-    StartReplayErrors, StartTaskContext, persist_start_runtime, persist_start_tasks, replay_start,
-};
+use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
 use erp_audit::AuditLog;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
-use erp_read_models::sales_center::access::SalesAccess;
+use erp_sales::entity::sales_review::{
+    SalesChangeSubmissionCommand, SalesChangeSubmissionFact, SalesChangeSubmissionReceipt,
+};
+use erp_sales::repository::SalesCommandExt;
 use erp_sales::service::sales_review::SalesChangeSubmissionWrite;
-use erp_workflow::entity::approval_integration::{ApprovalStartIdentity, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{DocumentType, WorkflowAction};
 use erp_workflow::repository::prelude::*;
@@ -28,13 +29,14 @@ use erp_workflow::service::approval::execution::start_input::{
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
-use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::read;
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::adapter::sales_change_order_object_readable;
+use super::submission_receipt::{receipt_write_error, replay_submission};
 use crate::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -88,51 +90,6 @@ pub(super) async fn load_start_receipt(
     .map_err(Error::from)
 }
 
-/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的销售变更启动结果。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `subject` - 业务对象引用。
-/// * `subject_version` - 冻结提交版本。
-/// * `idempotency_key` - 调用方幂等键。
-/// * `binding` - 创建时冻结的定义绑定。
-/// * `actor_id` - 启动人。
-/// * `executor` - 当前事务执行器。
-///
-/// # 返回
-/// 已提交且与冻结事实一致的审批实例 ID。没有同载荷收据时为 `None`。
-///
-/// # 错误
-/// 幂等键非法、收据载荷冲突、收据指向的实例不存在、实例与冻结事实不一致，或仓储读取失败时返回错误。
-pub(super) async fn replay_sales_change_start_with_executor(
-    db: &Database,
-    subject: &SubjectRef,
-    subject_version: u32,
-    idempotency_key: &str,
-    binding: &ApprovalDefinitionBinding,
-    actor_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    replay_start(
-        db,
-        ApprovalStartIdentity {
-            process_kind: process_kind_of(DocumentType::SalesChangeOrder),
-            subject,
-            subject_version,
-            binding,
-            actor_id,
-        },
-        idempotency_key,
-        StartReplayErrors {
-            missing_instance: "销售变更启动收据引用的审批实例不存在",
-            identity_mismatch: "销售变更启动收据与冻结运行事实不一致",
-        },
-        executor,
-    )
-    .await
-    .map_err(Error::from)
-}
-
 /// 销售变更启动输入。
 ///
 /// # 用途
@@ -150,6 +107,7 @@ pub(super) async fn replay_sales_change_start_with_executor(
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择。
 pub(super) struct SalesChangeStartInput<'a> {
+    pub resubmission_reason: Option<String>,
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 冻结绑定。
@@ -192,6 +150,7 @@ pub(super) fn build_sales_change_start_input(
     input: SalesChangeStartInput<'_>,
 ) -> Result<StartExecutionInput> {
     let SalesChangeStartInput {
+        resubmission_reason,
         graph,
         binding,
         subject,
@@ -214,6 +173,7 @@ pub(super) fn build_sales_change_start_input(
         graph,
         bindings,
         StartInputContext {
+            resubmission_reason,
             binding,
             document_type: DocumentType::SalesChangeOrder,
             subject,
@@ -268,6 +228,8 @@ fn start_bindings_from_graph(
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与提交快照同事务。
 pub(super) struct SalesChangeStartPersistInput {
+    pub command: SalesChangeSubmissionCommand,
+    pub resubmission_reason: Option<String>,
     pub approvals: Arc<dyn ApprovalRuntimePort>,
     /// 销售本域冻结提交与副本写入计划。
     pub sales_write: SalesChangeSubmissionWrite,
@@ -314,28 +276,28 @@ pub(super) async fn persist_sales_change_start(
 ) -> Result<()> {
     let db = db.clone();
     let client = db.client().clone();
-    if !matches!(input.prepared, PreparedExecution::Apply(_)) {
-        return Ok(());
-    }
     client.with_transaction(move |executor| Box::pin(async move { input.persist(&db, executor).await })).await
 }
 
 impl SalesChangeStartPersistInput {
     /// 在入口事务中重验来源授权，并依原顺序写收据、业务事实、运行态和审计。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
-        let PreparedExecution::Apply(writes) = self.prepared else {
+        if replay_submission(db, self.rbac.clone(), &self.actor, &self.command, executor).await?.is_some() {
             return Ok(());
+        }
+        let PreparedExecution::Apply(writes) = self.prepared else {
+            return Err(Error::ConflictError("销售变更历史启动缺少完整请求回执，不能安全回放".into()));
         };
-        SalesAccess::new(db.clone(), self.rbac)
-            .require_object(
-                &self.actor,
-                "submit",
-                self.sales_write.change().sales_order_id.as_ref(),
-                &[],
-                executor,
-            )
+        let receipt = SalesChangeSubmissionReceipt::new(
+            self.command,
+            SalesChangeSubmissionFact::from(self.sales_write.submission()),
+            writes.instance.base.id.clone(),
+            self.audit.base.id.clone(),
+        )?;
+        db.sales_change_submission_receipts()
+            .create(&receipt, executor)
             .await
-            .map_err(Error::from)?;
+            .map_err(receipt_write_error)?;
         db.bpm_workflow()
             .insert_command_receipt(&writes.receipt, executor)
             .await
@@ -360,7 +322,7 @@ impl SalesChangeStartPersistInput {
             db,
             &writes,
             &self.snapshot_payload,
-            (self.owner_role, &self.organization_id),
+            (self.owner_role, &self.organization_id, self.resubmission_reason.as_deref()),
             self.approvals.as_ref(),
             self.now,
             executor,
@@ -380,18 +342,27 @@ async fn persist_runtime_writes(
     db: &Database,
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
-    (owner_role, organization_id): (&str, &str),
+    (owner_role, organization_id, resubmission_reason): (&str, &str, Option<&str>),
     approvals: &dyn ApprovalRuntimePort,
     now: Instant,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let snapshot = persist_start_runtime(
+    let mut snapshot = persist_start_runtime(
         db,
         writes,
         DocumentType::SalesChangeOrder,
         snapshot_payload,
         now,
         "启动计划缺少入口执行，不得提交销售变更单",
+        executor,
+    )
+    .await?;
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        resubmission_reason,
+        writes.instance.started_by.as_str(),
+        now,
         executor,
     )
     .await?;

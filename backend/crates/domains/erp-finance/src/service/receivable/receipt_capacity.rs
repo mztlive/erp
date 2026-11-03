@@ -50,6 +50,34 @@ pub async fn reserve_receipt(
     receipt: &CustomerReceipt,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let accounts = lock_receipt_accounts(db, receipt, executor).await?;
+    load(db, accounts, Some(&receipt.base.id), executor).await?.validate(receipt)
+}
+
+/// 释放审批占用前锁定原来源子账，不要求旧分配仍可重新占用。
+///
+/// # 参数
+/// * `db` - 财务数据库。
+/// * `receipt` - 尚保留原分配的回款单。
+/// * `executor` - 同一驳回事务执行器。
+/// # 返回
+/// 原来源子账已锁定；调用方须在同一事务将回款移出审批中。
+/// # 错误
+/// 来源子账缺失或并发写入冲突时返回错误。
+pub async fn release_receipt(
+    db: &Database,
+    receipt: &CustomerReceipt,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    lock_receipt_accounts(db, receipt, executor).await?;
+    Ok(())
+}
+
+async fn lock_receipt_accounts(
+    db: &Database,
+    receipt: &CustomerReceipt,
+    executor: &mut dyn Executor,
+) -> Result<Vec<ReceivableAccount>> {
     let entry_ids =
         receipt.pending_allocations.iter().map(|line| line.receivable_entry_id.clone()).collect::<Vec<_>>();
     let entries = db.receivable_entries().find_entries_by_ids(&entry_ids, executor).await?;
@@ -66,7 +94,7 @@ pub async fn reserve_receipt(
         db.receivable_accounts().update(&mut account, executor).await?;
         accounts.push(account);
     }
-    load(db, accounts, Some(&receipt.base.id), executor).await?.validate(receipt)
+    Ok(accounts)
 }
 
 async fn load(

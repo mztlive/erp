@@ -1,10 +1,8 @@
 use application_core::{AuditActor, CommandReceipt};
 use bpm::model::SubjectRef;
 use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
-use erp_audit::execution::persist_log;
-use erp_audit::{AuditActorLogs, AuditLog};
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
-use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::entity::returns::PaymentReversal;
 use erp_returns::repository::ReturnsExt;
 use erp_returns::service::ReturnsService;
@@ -14,13 +12,14 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::super::adapter::payment_reversal_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::prepare::{ensure_return_start_replay_authorized, load_start_receipt_for_document_type};
-use super::reversal_submit::{committed_reversal_submit, mark_reversal_started};
+use super::reversal_submit::{committed_reversal_submit, mark_reversal_started, persist_submit_receipt};
 use crate::{Error, Result, ReverseFlowPorts};
 
 ///
@@ -98,6 +97,8 @@ pub fn build_payment_reversal_start_input(input: ReverseStartInput<'_>) -> Resul
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
 pub struct PaymentReversalStartPersistInput {
+    /// 本次重新提交说明。
+    pub resubmission_reason: Option<String>,
     /// 已进入 `IN_APPROVAL` 的冲正单。
     pub reversal: PaymentReversal,
     /// 包含请求原版本的精确提交收据，与启动事实同事务持久化。
@@ -161,6 +162,7 @@ async fn persist_payment_reversal_start_apply(
         return Ok(reversal);
     }
     let PaymentReversalStartPersistInput {
+        resubmission_reason,
         reversal,
         command_receipt,
         actor,
@@ -186,6 +188,7 @@ async fn persist_payment_reversal_start_apply(
     let mut reversal = reversal;
     ReturnsService::persist_payment_reversal(db, &mut reversal, executor).await?;
     persist_payment_reversal_runtime(
+        resubmission_reason.as_deref(),
         db,
         rbac,
         &writes,
@@ -228,21 +231,6 @@ async fn replay_committed_start(
     Ok(None)
 }
 
-/// 在原写入位置按顺序保存业务审计与同事务提交回执。
-async fn persist_submit_receipt(
-    db: &Database,
-    command_receipt: &CommandReceipt,
-    id: String,
-    audit: &AuditLog,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    persist_log(db, audit, executor).await?;
-    ReturnsCommandReceiptService::new(db.clone())
-        .save_resource(command_receipt, id, audit.base.id.clone(), executor)
-        .await?;
-    Ok(())
-}
-
 /// 引擎回放必须存在精确原版本请求收据，否则不能把历史 BPM 收据当作原提交。
 async fn replay_persisted_payment_reversal(
     db: &Database,
@@ -274,6 +262,7 @@ async fn replay_persisted_payment_reversal(
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
 pub async fn persist_payment_reversal_runtime(
+    resubmission_reason: Option<&str>,
     db: &Database,
     rbac: &ReverseFlowPorts,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
@@ -301,6 +290,15 @@ pub async fn persist_payment_reversal_runtime(
         )
         .await?,
     );
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        resubmission_reason,
+        writes.instance.started_by.as_str(),
+        context.now,
+        executor,
+    )
+    .await?;
     rbac.runtime.persist_start_snapshot(db, snapshot, executor).await?;
     persist_start_tasks(db, writes, context, executor).await.map(|_| ()).map_err(Into::into)
 }

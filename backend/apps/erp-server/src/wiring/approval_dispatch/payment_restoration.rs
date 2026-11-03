@@ -62,6 +62,10 @@ fn map_error(error: PostingError) -> ReverseError {
         PostingError::Logic(value) => ReverseError::Logic(value),
         PostingError::Rbac(value) => ReverseError::Rbac(value),
         PostingError::OutcomeUnknown(value) => ReverseError::OutcomeUnknown(value),
+        // 恢复步骤仅在调用方执行器内更新申请与占用，不调用提交后开票回读。
+        PostingError::CommittedResultUnavailable(_) => {
+            ReverseError::Internal("PAYMENT_RESTORATION_PORT_UNEXPECTED_COMMITTED_RESPONSE".into())
+        },
         PostingError::RepositoryError(value) => ReverseError::RepositoryError(value),
         PostingError::Coded(value) => ReverseError::Coded(value),
     }
@@ -96,5 +100,14 @@ mod tests {
         assert!(
             matches!(map_error(PostingError::ValidationError("field".into())), ReverseError::ValidationError(value) if value == "field")
         );
+    }
+
+    #[test]
+    fn restoration_port_rejects_impossible_committed_response() {
+        let error = map_error(PostingError::CommittedResultUnavailable("unreadable invoice contents".into()));
+        assert!(matches!(
+            error,
+            ReverseError::Internal(message) if message == "PAYMENT_RESTORATION_PORT_UNEXPECTED_COMMITTED_RESPONSE"
+        ));
     }
 }

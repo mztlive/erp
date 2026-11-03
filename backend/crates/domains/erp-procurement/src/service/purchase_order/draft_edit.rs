@@ -79,7 +79,7 @@ pub fn ensure_save_target(
     if current_version != expected_lock_version {
         return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
     }
-    if status != PurchaseOrderStatus::Draft {
+    if !matches!(status, PurchaseOrderStatus::Draft | PurchaseOrderStatus::Rejected) {
         return Err(Error::BusinessLogicError("只有草稿状态的采购单可以编辑".to_string()));
     }
     Ok(())

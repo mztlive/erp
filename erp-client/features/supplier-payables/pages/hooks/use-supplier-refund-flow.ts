@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { SubmissionResultUnknownError } from "@/lib/submission-result"
 
 import {
@@ -17,6 +18,12 @@ import type {
     SupplierRefundRow,
 } from "@/features/supplier-payables/types"
 
+type ExistingSubmitPayload = {
+    refundId: string
+    expectedVersion: number
+    resubmissionReason?: string
+}
+
 /**
  * 供应商退款确认流程：本地确认后由一个原子命令创建单据并启动审批。
  */
@@ -32,10 +39,13 @@ export function useSupplierRefundFlow(args: {
         React.SetStateAction<SupplierRefundRequest | null>
     >
     prepareRefundDraft: (reason: string, amount?: string) => Promise<void>
-    confirmRefundSubmit: () => Promise<void>
+    confirmRefundSubmit: (resubmissionReason?: string) => Promise<void>
     beginRefundSubmit: (row: SupplierRefundRow) => void
     refundDraft: SupplierRefundRow | null
     refundSubmitOpen: boolean
+    refundSubmitUnknown: boolean
+    endRefundRecovery: () => void
+    refundSubmitReason?: string
     setRefundSubmitOpen: React.Dispatch<React.SetStateAction<boolean>>
     refundDraftPending: boolean
     refundSubmitPending: boolean
@@ -57,6 +67,8 @@ export function useSupplierRefundFlow(args: {
         reason: string
     } | null>(null)
     const [refundSubmitOpen, setRefundSubmitOpen] = React.useState(false)
+    const [refundSubmitUnknown, setRefundSubmitUnknown] = React.useState(false)
+    const submitLedger = React.useRef(new FormalCommandKeyLedger())
     const refundSlotRef = React.useRef<SupplierRefundIdempotencySlot | null>(
         null,
     )
@@ -89,6 +101,9 @@ export function useSupplierRefundFlow(args: {
      * @param reason 非空退款原因。
      */
     async function prepareRefundDraft(reason: string, amount?: string) {
+        if (refundSubmitUnknown) {
+            throw new Error("请先核对上一笔退款提交结果，再开始新的办理。")
+        }
         if (!refundRequest) return
         const slot = bindRefundSlot(
             `${refundRequest.sourcePaymentId}:${refundRequest.settlementMethod ?? "CASH_REFUND"}:${refundRequest.sourcePurchaseOrderId ?? ""}:${refundRequest.settlementDecisionKey ?? ""}`,
@@ -106,7 +121,7 @@ export function useSupplierRefundFlow(args: {
         setPendingCommit(intent)
         refundSlotRef.current = slot
         setRefundDraft(null)
-        await confirmRefundSubmit(intent)
+        await confirmRefundSubmit(undefined, intent)
     }
 
     /**
@@ -115,6 +130,14 @@ export function useSupplierRefundFlow(args: {
      * @param row 当前退款草稿投影。
      */
     function beginRefundSubmit(row: SupplierRefundRow) {
+        if (refundSubmitUnknown) {
+            if (row.refundId !== refundDraft?.refundId) {
+                setActionError("请先核对上一笔退款提交结果，再提交其他单据。")
+                return
+            }
+            setRefundSubmitOpen(true)
+            return
+        }
         setPendingCommit(null)
         setRefundDraft(row)
         const current = refundSlotRef.current
@@ -134,21 +157,52 @@ export function useSupplierRefundFlow(args: {
      * 按冻结路线提交供应商退款审批。
      */
     async function confirmRefundSubmit(
+        resubmissionReason?: string,
         intent?: NonNullable<typeof pendingCommit>,
     ) {
         const submitted = intent ?? pendingCommit
         const slot = refundSlotRef.current
         if (!slot || (!submitted && !refundDraft)) return
+        const command =
+            !submitted && refundDraft
+                ? submitLedger.current.acquire<ExistingSubmitPayload>(
+                      "submit",
+                      "refund-resubmit",
+                      {
+                          refundId: refundDraft.refundId,
+                          expectedVersion: refundDraft.baselineVersion,
+                          resubmissionReason,
+                      },
+                  )
+                : undefined
         const res = submitted
             ? await commitRefundMutation.mutateAsync({
                   ...submitted,
                   idempotencyKey: slot.key,
               })
             : await submitRefundMutation.mutateAsync({
-                  refundId: refundDraft!.refundId,
-                  expectedVersion: refundDraft!.baselineVersion,
-                  idempotencyKey: slot.key,
+                  ...command!.payload,
+                  idempotencyKey: command!.idempotencyKey,
               })
+        const remainsUnknown =
+            !submitted &&
+            res.status !== "succeeded" &&
+            (refundSubmitUnknown || res.status === "unknown")
+        if (!submitted) {
+            submitLedger.current.settle(
+                "submit",
+                remainsUnknown ? "unknown" : res.status,
+            )
+            setRefundSubmitUnknown(remainsUnknown)
+        }
+        if (res.status !== "succeeded" && remainsUnknown) {
+            setLastResult({
+                status: "unknown",
+                title: "退款结果待确认",
+                description: res.message,
+            })
+            throw new SubmissionResultUnknownError(res.message)
+        }
         if (res.status === "unknown") {
             setLastResult({
                 status: "unknown",
@@ -162,9 +216,8 @@ export function useSupplierRefundFlow(args: {
         }
         if (res.status === "failed") {
             setActionError(res.message)
-            setRefundSubmitOpen(false)
-            if (intent) throw new Error(res.message)
-            return
+            if (submitted) setRefundSubmitOpen(false)
+            throw new Error(res.message)
         }
         setLastResult({
             status: "succeeded",
@@ -195,6 +248,19 @@ export function useSupplierRefundFlow(args: {
         beginRefundSubmit,
         refundDraft,
         refundSubmitOpen,
+        refundSubmitUnknown,
+        endRefundRecovery: () => {
+            submitLedger.current = new FormalCommandKeyLedger()
+            setRefundSubmitUnknown(false)
+            setRefundSubmitOpen(false)
+            refundSlotRef.current = null
+            setLastResult(null)
+            if (refundDraft) openRefundPreview(refundDraft.refundId)
+            setRefundDraft(null)
+        },
+        refundSubmitReason:
+            submitLedger.current.peek<ExistingSubmitPayload>("submit")?.payload
+                .resubmissionReason,
         setRefundSubmitOpen,
         refundDraftPending: false,
         refundSubmitPending:

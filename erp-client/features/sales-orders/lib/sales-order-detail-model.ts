@@ -87,7 +87,7 @@ export function isSalesOrderDraft(order: SalesOrderListItem) {
 
 /** 草稿直接使用建单表单，已提交单据进入只读对象中心。 */
 export function shouldOpenSalesOrderEditor(order: SalesOrderListItem) {
-    return isSalesOrderDraft(order)
+    return isSalesOrderDraft(order) || order.primaryStatus.code === "rejected"
 }
 
 export function isWorkSection(section?: string): section is WorkSectionId {

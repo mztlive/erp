@@ -58,6 +58,8 @@ pub fn start_scope_candidates(
 /// 绑定 ID、定义版本与操作人进入 STANDARD 变体 digest。
 #[derive(Debug, Clone)]
 pub struct StartIdentityParams<'a> {
+    /// 本次重新提交说明；有说明时禁止旧无说明命令回放。
+    pub resubmission_reason: Option<&'a str>,
     /// 规范化幂等键。
     pub idempotency_key: IdempotencyKey,
     /// 流程种类稳定码。
@@ -94,6 +96,7 @@ pub struct StartIdentityParams<'a> {
 /// 专属启动命令应走 [`specialized_start_identity`]，不得复用 STANDARD digest。
 pub fn start_identity(params: StartIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
     let StartIdentityParams {
+        resubmission_reason,
         idempotency_key,
         process_kind,
         subject_kind,
@@ -103,20 +106,28 @@ pub fn start_identity(params: StartIdentityParams<'_>) -> Result<PreparedCommand
         definition_version,
         actor_participant_id,
     } = params;
+    let reason = resubmission_reason.map(str::trim).filter(|value| !value.is_empty());
+    let mut fields = vec![
+        CommandPayloadField::Text(binding_id),
+        CommandPayloadField::U32(definition_version),
+        CommandPayloadField::U32(subject_version),
+        CommandPayloadField::Text(actor_participant_id),
+    ];
+    if let Some(reason) = reason {
+        fields.push(CommandPayloadField::Text(reason));
+    }
     let current = specialized_start_identity(
         idempotency_key,
         process_kind,
         subject_kind,
         subject_id,
         subject_version,
-        "STANDARD",
-        vec![
-            CommandPayloadField::Text(binding_id),
-            CommandPayloadField::U32(definition_version),
-            CommandPayloadField::U32(subject_version),
-            CommandPayloadField::Text(actor_participant_id),
-        ],
+        if reason.is_some() { "STANDARD_RESUBMISSION" } else { "STANDARD" },
+        fields,
     )?;
+    if reason.is_some() {
+        return Ok(current);
+    }
     Ok(current.with_legacy(legacy_standard_start_receipt_identity(
         process_kind,
         subject_kind,

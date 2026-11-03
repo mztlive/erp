@@ -73,7 +73,7 @@ pub fn document_approval_view(
     process_required_view(
         binding,
         instance,
-        matches!(status, CustomerRefundStatus::Draft),
+        matches!(status, CustomerRefundStatus::Draft | CustomerRefundStatus::Rejected),
         matches!(status, CustomerRefundStatus::InApproval),
     )
 }
@@ -100,7 +100,7 @@ pub fn supplier_refund_approval_view(
     process_required_view(
         binding,
         instance,
-        matches!(status, SupplierRefundStatus::Draft),
+        matches!(status, SupplierRefundStatus::Draft | SupplierRefundStatus::Rejected),
         matches!(status, SupplierRefundStatus::InApproval),
     )
 }
@@ -127,7 +127,7 @@ pub fn receipt_reversal_approval_view(
     process_required_view(
         binding,
         instance,
-        matches!(status, ReceiptReversalStatus::Draft),
+        matches!(status, ReceiptReversalStatus::Draft | ReceiptReversalStatus::Rejected),
         matches!(status, ReceiptReversalStatus::InApproval),
     )
 }
@@ -154,7 +154,7 @@ pub fn payment_reversal_approval_view(
     process_required_view(
         binding,
         instance,
-        matches!(status, PaymentReversalStatus::Draft),
+        matches!(status, PaymentReversalStatus::Draft | PaymentReversalStatus::Rejected),
         matches!(status, PaymentReversalStatus::InApproval),
     )
 }
@@ -216,6 +216,10 @@ mod tests {
             binding_from_published(ApprovalProcessDefinitionId::new("def-1"), 2, Instant::from_unix_secs(1))
                 .unwrap();
         let views = [
+            document_approval_view(Some(&binding), None, CustomerRefundStatus::Rejected),
+            supplier_refund_approval_view(Some(&binding), None, SupplierRefundStatus::Rejected),
+            receipt_reversal_approval_view(Some(&binding), None, ReceiptReversalStatus::Rejected),
+            payment_reversal_approval_view(Some(&binding), None, PaymentReversalStatus::Rejected),
             document_approval_view(Some(&binding), None, CustomerRefundStatus::Draft),
             supplier_refund_approval_view(Some(&binding), None, SupplierRefundStatus::Draft),
             receipt_reversal_approval_view(Some(&binding), None, ReceiptReversalStatus::Draft),

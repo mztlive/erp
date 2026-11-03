@@ -136,6 +136,7 @@ mod tests {
 
     fn base_request() -> CommitCustomerReceiptRequest {
         CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: None,
             expected_version: None,
             receipt: None,
@@ -161,6 +162,7 @@ mod tests {
     #[test]
     fn prepare_accepts_existing_with_id_and_version() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: Some("cr-1".to_string()),
             expected_version: Some(2),
             receipt: None,
@@ -180,6 +182,7 @@ mod tests {
     #[test]
     fn prepare_rejects_both_provided() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: Some("cr-1".to_string()),
             expected_version: Some(1),
             receipt: Some(valid_receipt()),
@@ -193,6 +196,7 @@ mod tests {
     #[test]
     fn prepare_rejects_both_missing() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: None,
             expected_version: None,
             receipt: None,
@@ -205,6 +209,7 @@ mod tests {
     #[test]
     fn prepare_rejects_version_zero() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: Some("cr-1".to_string()),
             expected_version: Some(0),
             receipt: None,
@@ -218,6 +223,7 @@ mod tests {
     #[test]
     fn prepare_rejects_version_missing() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: Some("cr-1".to_string()),
             expected_version: None,
             receipt: None,
@@ -230,6 +236,7 @@ mod tests {
     #[test]
     fn prepare_rejects_allocation_invalid_zero() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt: Some(valid_receipt()),
             allocations: vec![allocation("0.00")],
             ..base_request()
@@ -244,6 +251,7 @@ mod tests {
     #[test]
     fn prepare_rejects_allocation_invalid_negative() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt: Some(valid_receipt()),
             allocations: vec![allocation("-10.00")],
             ..base_request()
@@ -257,6 +265,7 @@ mod tests {
     #[test]
     fn prepare_rejects_empty_allocations() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt: Some(valid_receipt()),
             allocations: vec![],
             ..base_request()
@@ -268,6 +277,7 @@ mod tests {
     #[test]
     fn prepare_preserves_illegal_combo_error_message_compat() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: Some("cr-1".to_string()),
             expected_version: Some(1),
             receipt: Some(valid_receipt()),
@@ -284,6 +294,7 @@ mod tests {
     #[test]
     fn prepare_keeps_allocation_order_deterministic() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt: Some(valid_receipt()),
             allocations: vec![allocation("10.00"), allocation("20.00"), allocation("30.00")],
             ..base_request()
@@ -310,6 +321,7 @@ mod tests {
         // 领域校验负责；此处验证 prepare 不 panic
         let huge = "79228162514264337593543950330";
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt: Some(valid_receipt()),
             allocations: vec![allocation(huge), allocation("10.00")],
             ..base_request()
@@ -324,6 +336,7 @@ mod tests {
     #[test]
     fn legal_new_command_serializes_stably() {
         let req = CommitCustomerReceiptRequest {
+            resubmission_reason: None,
             receipt_id: None,
             expected_version: None,
             receipt: Some(valid_receipt()),

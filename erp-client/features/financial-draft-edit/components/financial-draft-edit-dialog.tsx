@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
@@ -199,6 +200,12 @@ function FinancialDraftForm({
     const submissionInFlight = React.useRef(false)
     const commandInFlight = React.useRef(false)
     const pending = mutations.save.isPending || mutations.submit.isPending
+    const rework = useResubmissionReason({
+        open: true,
+        required: draft.status.toLowerCase() === "rejected",
+        id: `${id}-resubmission-reason`,
+        disabled: pending || Boolean(unknown),
+    })
     const defaultValues = React.useMemo(
         () => financialDraftFormValues(draft),
         [draft],
@@ -263,6 +270,7 @@ function FinancialDraftForm({
         onSubmit: async ({ value }) => {
             if (!canSave || pending || unknown || submissionInFlight.current)
                 return
+            if (submitAfterSave.current && !rework.valid) return
             submissionInFlight.current = true
             const shouldSubmit = submitAfterSave.current
             setError(null)
@@ -288,6 +296,7 @@ function FinancialDraftForm({
                 id: draft.id,
                 version: intent.version,
                 idempotencyKey: intent.idempotencyKey,
+                resubmissionReason: intent.resubmissionReason,
                 allocations: intent.allocations,
             })
             setUnknown(null)
@@ -309,6 +318,7 @@ function FinancialDraftForm({
         values: FinancialDraftFormValues,
     ): FinancialSubmitIntent => ({
         stage: "submit",
+        resubmissionReason: rework.reason,
         version,
         idempotencyKey: `financial-draft-${kind}-${draft.id}-${crypto.randomUUID()}`,
         allocations:
@@ -362,7 +372,7 @@ function FinancialDraftForm({
                     onClose()
                 } else
                     setError(
-                        "原单仍为草稿，本次提交尚未确认。可使用原操作重试。",
+                        "原单尚未进入审批，本次提交尚未确认。可使用原操作重试。",
                     )
             } else if (unknown.stage === "save") {
                 if (
@@ -556,6 +566,7 @@ function FinancialDraftForm({
                         </form.AppField>
                     )}
                 </FieldGroup>
+                {rework.field}
                 {editable ? (
                     <SubmissionRouteConfirmation
                         definition={approval?.definition}
@@ -732,6 +743,7 @@ function FinancialDraftForm({
                                     type="submit"
                                     disabled={
                                         !canSubmit ||
+                                        !rework.valid ||
                                         !formCanSubmit ||
                                         pending ||
                                         submitting ||

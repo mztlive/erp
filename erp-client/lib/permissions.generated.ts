@@ -449,6 +449,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/abandon-rework",
+                description: "原提交人放弃本人驳回处理任务",
+                permission: {
+                    resource: "work_item",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/work-items/{id}/purchase-payment",
                 description: "查看采购履约付款进度",
@@ -3845,6 +3855,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/draft",
+                description: "保存原采购变更草稿",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/purchase-change-orders/{id}/draft",
                 description: "读取原采购变更草稿",
@@ -5112,6 +5132,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/sales-invoice-requests/amounts/{id}",
+                description: "查询可申请开票额度",
+                permission: {
+                    resource: "sales_invoice_request",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/sales-invoice-requests/{id}",
                 description: "查询开票申请详情",
                 permission: {
@@ -5131,12 +5161,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "GET",
-                path: "/admin/sales-invoice-requests/amounts/{id}",
-                description: "查询可申请开票额度",
+                method: "PUT",
+                path: "/admin/sales-invoice-requests/{id}",
+                description: "保存可编辑开票申请",
                 permission: {
                     resource: "sales_invoice_request",
-                    action: "list",
+                    action: "submit",
                 },
             },
         ],

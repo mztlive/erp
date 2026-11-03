@@ -214,7 +214,7 @@ export function usePurchaseOrderDetailEditActions({
         return response.status === "succeeded"
     }
 
-    async function handleSubmit() {
+    async function handleSubmit(resubmissionReason?: string) {
         if (!order) return
         if (mode === "edit" && !draftEditToken) return
         let submitCommand =
@@ -237,6 +237,7 @@ export function usePurchaseOrderDetailEditActions({
                 `purchase:${purchaseOrderId}:submit`,
                 {
                     purchaseOrderId,
+                    resubmissionReason,
                     expectedLockVersion: order.identity.lockVersion,
                     expectedDraftContentHash:
                         order.currentContent.subjectHash ??

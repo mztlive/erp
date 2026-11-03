@@ -47,7 +47,10 @@ pub(crate) mod start_approval;
 pub use invoice::InvoiceWithAssetsResult;
 
 pub use self::adapter::customer_receipt_object_readable;
-pub use self::customer_receipt::{cancel_customer_receipt_approval_apply, post_customer_receipt_apply};
+pub use self::customer_receipt::{
+    cancel_customer_receipt_approval_apply, post_customer_receipt_apply,
+    reject_customer_receipt_approval_apply,
+};
 /// 客户往来服务。
 ///
 /// 提供应收台账、回款与销项发票的查询与过账编排。

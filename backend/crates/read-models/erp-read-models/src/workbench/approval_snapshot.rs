@@ -85,7 +85,15 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
 }
 
 /// 以注册对象类型与业务身份精确关联；历史快照缺失保持原缺失规则。
-fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: ApprovalSubjectSnapshot) {
+///
+/// # 参数
+/// * `facts` - 已加载且已授权的业务对象事实。
+/// * `snapshot` - 当前对象某次提交的不可变审批快照。
+/// # 返回
+/// 只覆盖快照所属版本的展示，不改变授权事实。
+/// # 错误
+/// 不返回错误；无对象或无有效展示时保留原缺失规则。
+pub(super) fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: ApprovalSubjectSnapshot) {
     let Some(policy) = object_policy(WorkItemType::DocumentApproval, snapshot.document_type.as_str()) else {
         return;
     };

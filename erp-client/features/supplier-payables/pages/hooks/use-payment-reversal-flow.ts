@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { SubmissionResultUnknownError } from "@/lib/submission-result"
 
 import {
@@ -16,6 +17,12 @@ import type {
     PaymentReversalRequest,
     PaymentReversalRow,
 } from "@/features/supplier-payables/types"
+
+type ExistingSubmitPayload = {
+    reversalId: string
+    expectedVersion: number
+    resubmissionReason?: string
+}
 
 /**
  * 付款冲正确认流程：本地确认后由一个原子命令创建单据并启动审批。
@@ -35,10 +42,13 @@ export function usePaymentReversalFlow(args: {
         reason: string,
         request?: PaymentReversalRequest | null,
     ) => Promise<void>
-    confirmReversalSubmit: () => Promise<void>
+    confirmReversalSubmit: (resubmissionReason?: string) => Promise<void>
     beginReversalSubmit: (row: PaymentReversalRow) => void
     reversalDraft: PaymentReversalRow | null
     reversalSubmitOpen: boolean
+    reversalSubmitUnknown: boolean
+    endReversalRecovery: () => void
+    reversalSubmitReason?: string
     setReversalSubmitOpen: React.Dispatch<React.SetStateAction<boolean>>
     reversalDraftPending: boolean
     reversalSubmitPending: boolean
@@ -57,6 +67,9 @@ export function usePaymentReversalFlow(args: {
         reason: string
     } | null>(null)
     const [reversalSubmitOpen, setReversalSubmitOpen] = React.useState(false)
+    const [reversalSubmitUnknown, setReversalSubmitUnknown] =
+        React.useState(false)
+    const submitLedger = React.useRef(new FormalCommandKeyLedger())
     const reversalSlotRef = React.useRef<PaymentReversalIdempotencySlot | null>(
         null,
     )
@@ -86,6 +99,9 @@ export function usePaymentReversalFlow(args: {
         reason: string,
         request?: PaymentReversalRequest | null,
     ) {
+        if (reversalSubmitUnknown) {
+            throw new Error("请先核对上一笔冲正提交结果，再开始新的办理。")
+        }
         const current = request ?? reversalRequest
         if (!current) return
         const slot = bindReversalSlot(current.sourcePaymentId, reason)
@@ -97,7 +113,7 @@ export function usePaymentReversalFlow(args: {
         setPendingCommit(intent)
         reversalSlotRef.current = slot
         setReversalDraft(null)
-        await confirmReversalSubmit(intent)
+        await confirmReversalSubmit(undefined, intent)
     }
 
     /**
@@ -106,6 +122,14 @@ export function usePaymentReversalFlow(args: {
      * @param row 当前冲正草稿投影。
      */
     function beginReversalSubmit(row: PaymentReversalRow) {
+        if (reversalSubmitUnknown) {
+            if (row.reversalId !== reversalDraft?.reversalId) {
+                setActionError("请先核对上一笔冲正提交结果，再提交其他单据。")
+                return
+            }
+            setReversalSubmitOpen(true)
+            return
+        }
         setPendingCommit(null)
         setReversalDraft(row)
         const current = reversalSlotRef.current
@@ -125,21 +149,52 @@ export function usePaymentReversalFlow(args: {
      * 按冻结路线提交付款冲正审批。
      */
     async function confirmReversalSubmit(
+        resubmissionReason?: string,
         intent?: NonNullable<typeof pendingCommit>,
     ) {
         const submitted = intent ?? pendingCommit
         const slot = reversalSlotRef.current
         if (!slot || (!submitted && !reversalDraft)) return
+        const command =
+            !submitted && reversalDraft
+                ? submitLedger.current.acquire<ExistingSubmitPayload>(
+                      "submit",
+                      "reversal-resubmit",
+                      {
+                          reversalId: reversalDraft.reversalId,
+                          expectedVersion: reversalDraft.baselineVersion,
+                          resubmissionReason,
+                      },
+                  )
+                : undefined
         const res = submitted
             ? await commitReversalMutation.mutateAsync({
                   ...submitted,
                   idempotencyKey: slot.key,
               })
             : await submitReversalMutation.mutateAsync({
-                  reversalId: reversalDraft!.reversalId,
-                  expectedVersion: reversalDraft!.baselineVersion,
-                  idempotencyKey: slot.key,
+                  ...command!.payload,
+                  idempotencyKey: command!.idempotencyKey,
               })
+        const remainsUnknown =
+            !submitted &&
+            res.status !== "succeeded" &&
+            (reversalSubmitUnknown || res.status === "unknown")
+        if (!submitted) {
+            submitLedger.current.settle(
+                "submit",
+                remainsUnknown ? "unknown" : res.status,
+            )
+            setReversalSubmitUnknown(remainsUnknown)
+        }
+        if (res.status !== "succeeded" && remainsUnknown) {
+            setLastResult({
+                status: "unknown",
+                title: "冲正结果待确认",
+                description: res.message,
+            })
+            throw new SubmissionResultUnknownError(res.message)
+        }
         if (res.status === "unknown") {
             setLastResult({
                 status: "unknown",
@@ -153,9 +208,8 @@ export function usePaymentReversalFlow(args: {
         }
         if (res.status === "failed") {
             setActionError(res.message)
-            setReversalSubmitOpen(false)
-            if (intent) throw new Error(res.message)
-            return
+            if (submitted) setReversalSubmitOpen(false)
+            throw new Error(res.message)
         }
         setLastResult({
             status: "succeeded",
@@ -183,6 +237,19 @@ export function usePaymentReversalFlow(args: {
         beginReversalSubmit,
         reversalDraft,
         reversalSubmitOpen,
+        reversalSubmitUnknown,
+        endReversalRecovery: () => {
+            submitLedger.current = new FormalCommandKeyLedger()
+            setReversalSubmitUnknown(false)
+            setReversalSubmitOpen(false)
+            reversalSlotRef.current = null
+            setLastResult(null)
+            if (reversalDraft) openReversalPreview(reversalDraft.reversalId)
+            setReversalDraft(null)
+        },
+        reversalSubmitReason:
+            submitLedger.current.peek<ExistingSubmitPayload>("submit")?.payload
+                .resubmissionReason,
         setReversalSubmitOpen,
         reversalDraftPending: false,
         reversalSubmitPending:

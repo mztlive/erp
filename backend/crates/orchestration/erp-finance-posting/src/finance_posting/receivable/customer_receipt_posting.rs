@@ -13,6 +13,7 @@ use erp_finance::repository::prelude::*;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::customer_receipt_commit::PreparedCustomerReceiptCommit;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
+use erp_finance::service::receivable::receipt_capacity::release_receipt;
 use erp_read_models::sales_money_progress::SalesMoneyProgressReader;
 use erp_sales::service::sales_order::progress::update_sales_order_money_progress;
 use erp_workflow::DocumentRegistryExt;
@@ -46,6 +47,7 @@ use crate::{Error, FinancePostingPorts, Result};
 
 /// 提交事务的已捆绑输入：待提交候选、冻结分配与幂等身份。
 pub(super) struct CommitTransactionRequest {
+    pub(super) resubmission_reason: Option<String>,
     /// 新建候选或已有草稿身份。
     pub(super) pending: PendingCustomerReceiptCommit,
     /// 冻结核销分配。
@@ -80,6 +82,7 @@ pub(super) async fn run_commit_transaction(
     request: CommitTransactionRequest,
 ) -> Result<CustomerReceipt> {
     let CommitTransactionRequest {
+        resubmission_reason,
         pending,
         allocations,
         idempotency_key,
@@ -106,6 +109,7 @@ pub(super) async fn run_commit_transaction(
                     &db,
                     &rbac,
                     LoadedCommitStart {
+                        resubmission_reason,
                         receipt,
                         binding,
                         allocations,
@@ -216,6 +220,42 @@ pub async fn cancel_customer_receipt_approval_apply(
         "customer_receipt",
         receipt_id.to_string(),
     )?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
+}
+
+/// 在审批事务内终态驳回回款，保留内容并释放审批占用。
+///
+/// # 参数
+/// * `db` - 当前数据库。
+/// * `receipt_id` - 当前回款 ID。
+/// * `expected_subject_version` - 当前被决定的审批实例主题版本。
+/// * `actor` - 已授权的审批人。
+/// * `executor` - 审批运行时使用的同一事务。
+/// # 返回
+/// 状态及审计成功写入时返回空结果。
+/// # 错误
+/// 单据不存在、状态无效或任一写入失败时整笔事务回滚。
+pub async fn reject_customer_receipt_approval_apply(
+    db: &Database,
+    receipt_id: &str,
+    expected_subject_version: u32,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut receipt = db
+        .customer_receipts()
+        .find_by_id(receipt_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
+    if receipt.approval_subject_version != expected_subject_version {
+        return Err(Error::ConflictError("审批主题版本已变化，请刷新后重试".into()));
+    }
+    receipt.reject_approval()?;
+    release_receipt(db, &receipt, executor).await?;
+    db.customer_receipts().update(&mut receipt, executor).await?;
+    let audit =
+        actor.clone().resource_log("customer_receipt.reject", "customer_receipt", receipt_id.to_owned())?;
     persist_log(db, &audit, executor).await?;
     Ok(())
 }
@@ -464,6 +504,7 @@ async fn load_existing_commit_records(
 
 /// 提交启动事务的已加载输入：回款、冻结绑定与冻结分配。
 pub(super) struct LoadedCommitStart {
+    pub(super) resubmission_reason: Option<String>,
     /// 已落盘或已校验的回款实体。
     pub(super) receipt: CustomerReceipt,
     /// 创建时冻结的定义绑定。
@@ -510,7 +551,9 @@ pub(super) async fn load_commit_receipt(
                 .ok_or_else(|| Error::ValidationError("已有回款缺少主键".to_string()))?;
             let version =
                 expected_version.ok_or_else(|| Error::ValidationError("已有回款缺少期望版本".to_string()))?;
-            load_existing_commit_records(db, receipt_id, version, executor).await
+            let (receipt, binding) = load_existing_commit_records(db, receipt_id, version, executor).await?;
+            receipt.ensure_draft_editor(actor.id())?;
+            Ok((receipt, binding))
         },
     }
 }
@@ -554,7 +597,8 @@ pub(super) async fn persist_loaded_commit_start(
     .await?;
     let graph =
         resolve_start_approvers(db, graph, request.actor.id(), existing_receipt.as_ref(), executor).await?;
-    let start_input = build_document_start_input(DocumentStartInput {
+    let prepared = prepare_start(build_document_start_input(DocumentStartInput {
+        resubmission_reason: request.resubmission_reason.as_deref(),
         document_type: DocumentType::CustomerReceipt,
         graph,
         binding: &binding,
@@ -565,12 +609,12 @@ pub(super) async fn persist_loaded_commit_start(
         idempotency_key: &request.idempotency_key,
         receipt: existing_receipt,
         now,
-    })?;
-    let prepared = prepare_start(start_input)?;
+    })?)?;
     let committed = persist_customer_receipt_start_apply(
         db,
         rbac,
         CustomerReceiptStartPersistInput {
+            resubmission_reason: request.resubmission_reason,
             receipt: request.receipt,
             actor: request.actor.clone(),
             id,
@@ -654,6 +698,7 @@ pub(super) async fn prepare_dispatch_start(
     organization_id: &str,
     actor_id: &str,
     idempotency_key: &str,
+    resubmission_reason: Option<&str>,
     now: Instant,
 ) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
     let graph = load_bound_definition_graph(db, binding).await?;
@@ -661,6 +706,7 @@ pub(super) async fn prepare_dispatch_start(
     let graph =
         resolve_start_approvers(db, graph, actor_id, existing_receipt.as_ref(), &mut NoTransaction).await?;
     let start_input = build_document_start_input(DocumentStartInput {
+        resubmission_reason,
         document_type: DocumentType::CustomerReceipt,
         graph,
         binding,

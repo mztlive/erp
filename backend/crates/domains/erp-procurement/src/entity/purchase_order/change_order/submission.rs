@@ -277,16 +277,18 @@ mod tests {
 
     use erp_core::common::time::Instant;
     use erp_core::ids::{
-        PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderRevisionId, SupplierAccountId,
-        SupplierCommercialProfileRevisionId,
+        PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId, PurchaseOrderRevisionId,
+        SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
     use erp_core::money::Amount;
 
     use super::{PurchaseChangeSubmission, PurchaseChangeSubmissionData};
-    use crate::entity::purchase_order::PaymentSubjectSnapshot;
     use crate::entity::purchase_order::purchase_submission::SubmissionStatus;
     use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
     use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
+    use crate::entity::purchase_order::{
+        PaymentSubjectSnapshot, PurchaseChangeOrder, PurchaseChangeOrderData,
+    };
 
     fn snapshot() -> SupplierSnapshot {
         SupplierSnapshot::new("北京华联供应商".to_string()).unwrap()
@@ -324,6 +326,105 @@ mod tests {
             gross_amount: Amount::from_str("29.97").unwrap(),
             net_amount: Amount::from_str("26.07").unwrap(),
             tax_amount: Amount::from_str("3.90").unwrap(),
+        }
+    }
+
+    /// 独立保存保留驳回状态、旧审批版本和历史提交，正式序号仅重提时推进。
+    #[test]
+    fn save_rejected_target_preserves_history_and_approval_version() {
+        use super::super::line::tests::change_line_data;
+        use crate::entity::purchase_order::{PurchaseChangeOrderStatus, PurchaseChangeSubmissionLine};
+
+        let mut change = PurchaseChangeOrder::new(
+            PurchaseChangeOrderId::new("pco-1"),
+            PurchaseChangeOrderData {
+                purchase_order_id: PurchaseOrderId::new("po-1"),
+                base_revision_id: PurchaseOrderRevisionId::new("por-1"),
+                reason: "修改采购".into(),
+            },
+            "buyer",
+        )
+        .unwrap();
+        let mut old =
+            PurchaseChangeSubmission::new(PurchaseChangeSubmissionId::new("old"), change_submission_data())
+                .unwrap();
+        old.submit(Instant::from_unix_secs(1_700_000_000), "buyer").unwrap();
+        change.start_approval(PurchaseChangeSubmissionId::new("old"), "old-hash", "buyer").unwrap();
+        change.reject_approval(1, "approver").unwrap();
+        let history = old.clone();
+        assert!(old.mark_editing_copy().is_err());
+        assert_eq!(old, history);
+
+        let mut draft =
+            PurchaseChangeSubmission::new(PurchaseChangeSubmissionId::new("pcs-1"), change_submission_data())
+                .unwrap();
+        draft.mark_editing_copy().unwrap();
+        let lines = vec![
+            PurchaseChangeSubmissionLine::new("draft-line".to_string().into(), change_line_data()).unwrap(),
+        ];
+        change
+            .save_draft_target(&draft, &lines, Some("补充成本".into()), "new-hash".into(), "buyer")
+            .unwrap();
+        assert_eq!(change.stable.status, PurchaseChangeOrderStatus::Rejected);
+        assert_eq!(change.approval_subject_version, 1);
+        assert_eq!(change.current_submission_id.as_ref().unwrap().as_ref(), "pcs-1");
+        assert_eq!(old, history);
+        assert_eq!(draft.status, SubmissionStatus::Draft);
+        assert!(draft.submitted_at.is_none());
+        assert_eq!(PurchaseChangeSubmission::next_submission_no(&[old, draft.clone()]).unwrap(), "CS-000002");
+        let before = change.clone();
+        assert!(change.save_draft_target(&draft, &[], None, "invalid".into(), "buyer").is_err());
+        assert_eq!(change, before);
+        change.start_approval(PurchaseChangeSubmissionId::new("new-formal"), "new-hash", "buyer").unwrap();
+        assert_eq!(change.approval_subject_version, 2);
+        assert!(change.save_draft_target(&draft, &lines, None, "invalid".into(), "buyer").is_err());
+    }
+
+    /// 当前审批提交必须同时满足当前指针、所属变更单、基准版本和待处理状态。
+    #[test]
+    fn current_approval_submission_refuses_history_and_foreign_identity() {
+        let mut change = PurchaseChangeOrder::new(
+            PurchaseChangeOrderId::new("pco-1"),
+            PurchaseChangeOrderData {
+                purchase_order_id: PurchaseOrderId::new("po-1"),
+                base_revision_id: PurchaseOrderRevisionId::new("por-1"),
+                reason: "采购调整".into(),
+            },
+            "buyer",
+        )
+        .unwrap();
+        let mut submission = PurchaseChangeSubmission::new(
+            PurchaseChangeSubmissionId::new("pcs-current"),
+            change_submission_data(),
+        )
+        .unwrap();
+        change.start_approval(PurchaseChangeSubmissionId::new("pcs-current"), "hash", "buyer").unwrap();
+        assert!(change.ensure_current_approval_submission(&submission).is_err());
+        submission.submit(Instant::from_unix_secs(1_700_000_000), "buyer").unwrap();
+        change.ensure_current_approval_submission(&submission).unwrap();
+        for invalid in [
+            {
+                let mut value = submission.clone();
+                value.base.id = "history".into();
+                value
+            },
+            {
+                let mut value = submission.clone();
+                value.purchase_change_order_id = PurchaseChangeOrderId::new("other");
+                value
+            },
+            {
+                let mut value = submission.clone();
+                value.base_revision_id = PurchaseOrderRevisionId::new("other");
+                value
+            },
+            {
+                let mut value = submission.clone();
+                value.approve().unwrap();
+                value
+            },
+        ] {
+            assert!(change.ensure_current_approval_submission(&invalid).is_err());
         }
     }
 

@@ -6,6 +6,8 @@ use crate::entity::document_registry::business_document::ApprovalDefinitionBindi
 
 /// 启动人、主题与定义绑定共同确定的预期审批身份。
 pub struct ApprovalStartIdentity<'a> {
+    /// 驳回后重新提交的说明，参与命令摘要。
+    pub resubmission_reason: Option<&'a str>,
     /// 入口按单据类型确定的流程种类。
     pub process_kind: ProcessKind,
     /// 已冻结的审批主题。
@@ -79,6 +81,7 @@ mod tests {
         let binding = binding();
         let subject = SubjectRef::new("sales_order", "order-1").unwrap();
         let expected = ApprovalStartIdentity {
+            resubmission_reason: None,
             process_kind: ProcessKind::SalesOrder,
             subject: &subject,
             subject_version: 3,
@@ -95,6 +98,7 @@ mod tests {
         let binding = binding();
         let subject = SubjectRef::new("sales_order", "order-1").unwrap();
         let expected = ApprovalStartIdentity {
+            resubmission_reason: None,
             process_kind: ProcessKind::SalesOrder,
             subject: &subject,
             subject_version: 3,

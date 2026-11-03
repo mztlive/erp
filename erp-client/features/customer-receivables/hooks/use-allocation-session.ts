@@ -576,7 +576,7 @@ export function useAllocationSession({
         setConfirmOpen(false)
     }
 
-    async function doPost() {
+    async function doPost(resubmissionReason?: string) {
         setRemovedLine(null)
         if (!canOperate) {
             setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
@@ -609,6 +609,7 @@ export function useAllocationSession({
                 submittedVersion = saved.editVersion
             }
             const command: PostAllocationInput = {
+                resubmissionReason,
                 workItemId: isReceipt ? undefined : workItemId,
                 expectedTaskVersion: isReceipt
                     ? undefined

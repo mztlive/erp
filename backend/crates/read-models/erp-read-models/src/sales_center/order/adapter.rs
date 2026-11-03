@@ -84,7 +84,9 @@ fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> Document
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。
 fn allowed_document_actions(commercial: CommercialStatus, review: ReviewStatus) -> Vec<String> {
     match (commercial, review) {
-        (CommercialStatus::Draft, ReviewStatus::NotSubmitted) => vec!["SUBMIT".to_string()],
+        (CommercialStatus::Draft, ReviewStatus::NotSubmitted | ReviewStatus::Rejected) => {
+            vec!["SUBMIT".to_string()]
+        },
         (CommercialStatus::PendingReview, ReviewStatus::InApproval) => vec!["CANCEL".to_string()],
         _ => Vec::new(),
     }

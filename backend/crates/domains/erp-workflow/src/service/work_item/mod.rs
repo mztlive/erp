@@ -3,7 +3,10 @@
 //! 查询范围由认证身份、RBAC 角色与数据范围形成；客户端不能提交任意责任人或
 //! 组织扩大范围。正式业务决定继续由各任务类型的强类型命令与审批运行时完成。
 
+mod abandon_rework;
 pub mod access;
+pub mod approval_rework;
+pub use abandon_rework::AbandonApprovalReworkRequest;
 mod close;
 mod finance_responsibility;
 pub mod order_access;

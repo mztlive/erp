@@ -25,6 +25,7 @@ pub(super) const CLOSE_REASON_MAX_LEN: usize = 512;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkItemSubjectVersions {
     values: Vec<String>,
+    historical_rework: Vec<(String, String)>,
 }
 
 impl WorkItemSubjectVersions {
@@ -69,7 +70,7 @@ impl WorkItemSubjectVersions {
             .collect::<Result<Vec<_>>>()?;
         normalized.sort();
         normalized.dedup();
-        Ok(Self { values: normalized })
+        Ok(Self { values: normalized, historical_rework: Vec::new() })
     }
 
     /// 判断任务对象版本是否被当前关系接受。
@@ -84,6 +85,46 @@ impl WorkItemSubjectVersions {
     /// 不返回错误。
     pub fn accepts(&self, actual: &str) -> bool {
         self.values.is_empty() || self.values.iter().any(|expected| expected == actual)
+    }
+
+    /// 登记当前对象不可变审批快照证明的历史驳回任务版本。
+    ///
+    /// # 参数
+    /// * `instance_id` / `subject_version` - 当前对象持久化快照中的实例及提交版本。
+    /// # 返回
+    /// 仅记录该实例唯一驳回任务的精确身份，不扩大当前可执行版本集合。
+    /// # 错误
+    /// 不返回错误；调用方须从匹配当前对象的不可变快照取得参数。
+    pub fn register_rework_history(
+        &mut self,
+        instance_id: &bpm::ApprovalProcessInstanceId,
+        subject_version: u32,
+    ) {
+        let identity = (format!("approval-rework:{instance_id}"), subject_version.to_string());
+        if !self.historical_rework.contains(&identity) {
+            self.historical_rework.push(identity);
+        }
+    }
+
+    /// 校验当前任务版本或有不可变快照证明的已结束驳回责任。
+    ///
+    /// # 参数
+    /// * `kind` / `status` / `task_id` / `actual` - 持久化任务的类型、状态、身份和版本。
+    /// # 返回
+    /// 当前版本沿原规则；历史版本只接受精确匹配且已结束的驳回任务。
+    /// # 错误
+    /// 不返回错误。本方法不替代当前账号、权限、对象范围和责任历史校验。
+    pub fn accepts_task(
+        &self,
+        kind: WorkItemType,
+        status: WorkItemStatus,
+        task_id: &str,
+        actual: &str,
+    ) -> bool {
+        self.accepts(actual)
+            || (kind == WorkItemType::ApprovalRework
+                && matches!(status, WorkItemStatus::Completed | WorkItemStatus::Closed)
+                && self.historical_rework.iter().any(|(id, version)| id == task_id && version == actual))
     }
 
     /// 返回已规范化的权威版本集合。
@@ -435,6 +476,14 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("付款安排任务必须冻结采购单身份和责任键"));
         }
+        if self.work_item_type == WorkItemType::ApprovalRework
+            && (self.work_item_type.brief_relation(&self.business_object_type).is_none()
+                || !responsibility_key
+                    .is_some_and(|key| key.starts_with("approval_rework:") && key.len() > 16)
+                || self.owner_role != "approval_submitter")
+        {
+            return Err(Error::from("驳回待处理必须冻结原审批实例、单据和提交人责任"));
+        }
         self.ensure_scope_contract(responsibility_key, scope_ids)?;
         if matches!(
             self.work_item_type,
@@ -703,5 +752,40 @@ mod tests {
             )
             .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod rework_history_tests {
+    use super::*;
+
+    #[test]
+    fn archived_rework_identity_never_authorizes_old_open_or_execution_tasks() {
+        let mut versions = WorkItemSubjectVersions::constrained(vec!["2".into()]).unwrap();
+        versions.register_rework_history(&bpm::ApprovalProcessInstanceId::new("v1"), 1);
+        for status in [WorkItemStatus::Closed, WorkItemStatus::Completed] {
+            assert!(versions.accepts_task(WorkItemType::ApprovalRework, status, "approval-rework:v1", "1"));
+            assert!(!versions.accepts_task(
+                WorkItemType::ApprovalRework,
+                status,
+                "approval-rework:other",
+                "1"
+            ));
+            assert!(!versions.accepts_task(WorkItemType::ApprovalRework, status, "approval-rework:v1", "0"));
+            assert!(!versions.accepts_task(
+                WorkItemType::SupplierPaymentExecution,
+                status,
+                "approval-rework:v1",
+                "1"
+            ));
+        }
+        assert!(!versions.accepts_task(
+            WorkItemType::ApprovalRework,
+            WorkItemStatus::Open,
+            "approval-rework:v1",
+            "1"
+        ));
+        assert!(!versions.accepts("1"));
+        assert!(versions.accepts("2"));
     }
 }

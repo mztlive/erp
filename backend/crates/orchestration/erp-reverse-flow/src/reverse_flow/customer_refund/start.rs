@@ -1,5 +1,4 @@
 //! 客户退款审批启动、精确授权回放、8次fresh恢复与撤回编排。
-use erp_approval_runtime::approval_recovery::recover_approval_command;
 use erp_returns::service::ReturnsService;
 use persistence_core::NoTransaction;
 
@@ -9,10 +8,10 @@ impl ReturnsProcess {
     /// 从绑定读取定义并持久化启动事实。
     ///
     /// # 参数
-    /// * `id` - 退款单主键。
     /// * `refund` - 已进入提交状态的退款单。
     /// * `idempotency_key` - 启动幂等键。
-    /// * `actor` - 已通过鉴权的审计操作人。
+    /// * `resubmission_reason` - 本次重提说明。
+    /// * `submission` - 绑定原单、已授权操作人与精确请求收据的提交上下文。
     /// * `adapter` - 客户退款审批适配器。
     ///
     /// # 返回
@@ -22,12 +21,14 @@ impl ReturnsProcess {
     /// 无绑定、定义缺失、写入失败或视图读取失败时返回错误。提交结果未知且有界回读未确认时返回原错误。
     pub(super) async fn dispatch_customer_refund_start(
         &self,
-        id: &str,
         refund: CustomerRefund,
         idempotency_key: String,
-        actor: &AuditActor,
+        resubmission_reason: Option<String>,
         adapter: super::super::adapter::CustomerRefundAdapter,
+        submission: ReversalSubmitReplayInput,
     ) -> Result<CustomerRefundView> {
+        let id = submission.id.as_str();
+        let actor = &submission.actor;
         let subject = customer_refund_subject_ref(id)?;
         let binding =
             find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
@@ -40,6 +41,7 @@ impl ReturnsProcess {
             load_start_receipt(&self.db, &subject, refund.approval_subject_version, &idempotency_key).await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_customer_refund_start_input(ReverseStartInput {
+            resubmission_reason: resubmission_reason.clone(),
             graph,
             binding: &binding,
             subject,
@@ -51,11 +53,12 @@ impl ReturnsProcess {
             now,
         })?;
         let prepared = prepare_start(start_input)?;
-        let recovery_subject_version = refund.approval_subject_version;
         let persisted = persist_customer_refund_start(
             &self.db,
             &self.rbac,
             CustomerRefundStartPersistInput {
+                command_receipt: submission.command_receipt.clone(),
+                resubmission_reason: resubmission_reason.clone(),
                 refund,
                 actor: actor.clone(),
                 id: id.to_string(),
@@ -67,109 +70,8 @@ impl ReturnsProcess {
             },
         )
         .await;
-        if let Err(error) = persisted {
-            if !error.command_may_have_committed() {
-                return Err(error);
-            }
-            self.recover_customer_refund_start(id, recovery_subject_version, &idempotency_key, actor, error)
-                .await?;
-        }
-        self.reads().customer_refund_detail(id).await.map_err(crate::Error::from)
-    }
-    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
-    async fn recover_customer_refund_start(
-        &self,
-        refund_id: &str,
-        subject_version: u32,
-        idempotency_key: &str,
-        actor: &AuditActor,
-        original_error: Error,
-    ) -> Result<String> {
-        recover_approval_command(original_error, || {
-            let db = self.db.clone();
-            let rbac = self.rbac.clone();
-            let refund_id = refund_id.to_string();
-            let idempotency_key = idempotency_key.to_string();
-            let actor = actor.clone();
-            self.db.client().with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorized_customer_refund(&db, &rbac, &actor, &refund_id, executor).await?;
-                    let binding =
-                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
-                    let binding = require_frozen_binding(binding.as_ref())?;
-                    let subject = customer_refund_subject_ref(&refund_id)?;
-                    replay_return_start_with_executor(
-                        &db,
-                        ReplayReturnStartInput {
-                            document_type: DocumentType::CustomerRefund,
-                            subject: &subject,
-                            subject_version,
-                            idempotency_key: &idempotency_key,
-                            binding,
-                            actor_id: actor.id(),
-                        },
-                        executor,
-                    )
-                    .await
-                })
-            })
-        })
-        .await
-    }
-    /// 在任何当前状态/版本门禁前，以当前或下一主题版本精确回放既有启动。
-    ///
-    /// # 参数
-    /// * `refund_id` - 退款单主键。
-    /// * `idempotency_key` - 启动幂等键。
-    /// * `actor` - 回放操作人。
-    ///
-    /// # 返回
-    /// 命中同载荷启动时返回审批实例 ID；未命中时返回 `None`。
-    ///
-    /// # 错误
-    /// 账号失效、客户不存在、来源授权失败、绑定缺失、主题版本溢出、收据核对失败或事务失败时返回对应错误。
-    pub(super) async fn replay_customer_refund_start(
-        &self,
-        refund_id: &str,
-        idempotency_key: &str,
-        actor: &AuditActor,
-    ) -> Result<Option<String>> {
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let refund_id = refund_id.to_string();
-        let idempotency_key = idempotency_key.to_string();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let refund = authorized_customer_refund(&db, &rbac, &actor, &refund_id, executor).await?;
-                    let binding =
-                        find_approval_binding(&db, &refund_id, executor).await.map_err(crate::Error::from)?;
-                    let binding = require_frozen_binding(binding.as_ref())?;
-                    let subject = customer_refund_subject_ref(&refund_id)?;
-                    for subject_version in replay_subject_versions(refund.approval_subject_version)? {
-                        if let Some(instance_id) = replay_return_start_with_executor(
-                            &db,
-                            ReplayReturnStartInput {
-                                document_type: DocumentType::CustomerRefund,
-                                subject: &subject,
-                                subject_version,
-                                idempotency_key: &idempotency_key,
-                                binding,
-                                actor_id: actor.id(),
-                            },
-                            executor,
-                        )
-                        .await?
-                        {
-                            return Ok(Some(instance_id));
-                        }
-                    }
-                    Ok(None)
-                })
-            })
-            .await
+        self.finish_reversal_submit(&submission, persisted.map(|_| ())).await?;
+        self.reads().customer_refund_detail(id).await.map_err(reversal_result_read_error)
     }
     /// 加载撤回运行事实并写回草稿。
     ///
@@ -240,7 +142,15 @@ impl ReturnsProcess {
 }
 
 /// 按原顺序重验账号、退款来源和提交权限，沿用调用方事务。
-async fn authorized_customer_refund(
+/// # 参数
+/// * `db` / `rbac` - 数据库与审批授权端口。
+/// * `actor` / `refund_id` - 当前操作人与退款单主键。
+/// * `executor` - 同一事务执行器。
+/// # 返回
+/// 返回完成原来源授权重验的退款单。
+/// # 错误
+/// 原单或往来主体不存在、来源无权限或提交资格失效时返回错误。
+pub(in crate::reverse_flow) async fn authorized_customer_refund(
     db: &Database,
     rbac: &ReverseFlowPorts,
     actor: &AuditActor,

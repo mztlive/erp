@@ -134,7 +134,7 @@ export type ReceiptRow = Readonly<{
     bankReferenceRestricted?: boolean
     allocatedTotal: string
     unallocatedAmount: string
-    status: "draft" | "in_approval" | "posted" | "reversed"
+    status: "draft" | "rejected" | "in_approval" | "posted" | "reversed"
     statusLabel: string
     statusTone: StatusTone
     baselineVersion: number
@@ -161,7 +161,7 @@ export type CustomerRefundRow = Readonly<{
     reasonText: string
     amount: string
     occurredAt: string
-    status: "draft" | "in_approval" | "posted" | "reversed"
+    status: "draft" | "rejected" | "in_approval" | "posted" | "reversed"
     statusLabel: string
     statusTone: StatusTone
     baselineVersion: number
@@ -178,7 +178,7 @@ export type ReceiptReversalRow = Readonly<{
     reasonText: string
     amount: string
     occurredAt: string
-    status: "draft" | "in_approval" | "posted" | "reversed"
+    status: "draft" | "rejected" | "in_approval" | "posted" | "reversed"
     statusLabel: string
     statusTone: StatusTone
     baselineVersion: number
@@ -375,6 +375,7 @@ export type SaveAllocationDraftInput = {
 }
 
 export type PostAllocationInput = {
+    resubmissionReason?: string
     workItemId?: string
     expectedTaskVersion?: string
     draftSessionId: string

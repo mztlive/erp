@@ -158,12 +158,14 @@ impl ApprovalTransitionEvent {
     }
 }
 
-/// 流程终态结果。第一阶段只有通过。
+/// 流程终态结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalTerminalResult {
     /// 最终通过。
     Approved,
+    /// 本次审批已驳回。
+    Rejected,
 }
 
 impl ApprovalTerminalResult {
@@ -173,22 +175,25 @@ impl ApprovalTerminalResult {
     /// 无。
     ///
     /// # 返回
-    /// 返回 `APPROVED`。
+    /// 返回 `APPROVED` 或 `REJECTED`。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn as_str(self) -> &'static str {
-        "APPROVED"
+        match self {
+            Self::Approved => "APPROVED",
+            Self::Rejected => "REJECTED",
+        }
     }
 }
 
-/// 节点决定。不得包含退回申请人或终止审批。
+/// 节点决定。驳回终止本次审批实例。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalDecision {
     /// 通过当前节点。
     Approve,
-    /// 驳回并进入下一轮入口。
+    /// 驳回并终止本次审批。
     Reject,
 }
 
@@ -211,7 +216,7 @@ impl ApprovalDecision {
     }
 }
 
-/// 运行实例状态。调用方可选择驳回重启或驳回终止政策。
+/// 运行实例状态。驳回终止当前实例，重新提交创建新实例。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalProcessInstanceStatus {

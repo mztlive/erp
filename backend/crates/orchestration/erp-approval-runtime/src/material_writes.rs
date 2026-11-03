@@ -25,7 +25,9 @@ pub async fn freeze_approval_materials<A: WorkflowAuthorizationPort>(
     auth: &A,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalSubjectSnapshot> {
-    Ok(freeze_materials(db, auth, snapshot, executor).await?)
+    let mut snapshot = freeze_materials(db, auth, snapshot, executor).await?;
+    snapshot.freeze_resubmission_display()?;
+    Ok(snapshot)
 }
 
 /// 在原提交事务保存冻结快照并生成开始抄送。

@@ -38,6 +38,7 @@ export type WorkspaceMetricKey =
 export type WorkspaceActionCode =
     | "VIEW"
     | "PROCESS"
+    | "ABANDON_REWORK"
     | "REASSIGN"
     | "OPEN_DOCUMENT"
     | "APPROVE"
@@ -83,6 +84,7 @@ export type WorkspaceWorkItem = Readonly<{
     queueContextId?: string
     handlerKey: string
     routeContext?: {
+        documentType?: string
         confirmationScope?: string
     }
     enteredAtLabel: string

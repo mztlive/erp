@@ -98,6 +98,7 @@ export function useSalesOrderCreateSubmission({
     const handleSubmit = async (
         value: CreateSalesOrderFormValues,
         form: { reset: () => void },
+        resubmissionReason?: string,
     ) => {
         const evidenceFileAssetIds =
             value.orderBasis === "evidence"
@@ -151,6 +152,7 @@ export function useSalesOrderCreateSubmission({
             }
 
             const completeDraft = {
+                resubmissionReason,
                 ...draftContent,
                 salesOrderId: draftIdentity.salesOrderId,
                 version: draftIdentity.version,

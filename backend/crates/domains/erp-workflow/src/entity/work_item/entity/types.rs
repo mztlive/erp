@@ -57,6 +57,8 @@ pub enum WorkItemType {
     BusinessException,
     /// 通用单据审批任务。
     DocumentApproval,
+    /// 审批驳回后由原提交人修改、重提或放弃的责任。
+    ApprovalRework,
 }
 
 /// 工作项简报关联的权威业务对象种类。
@@ -362,6 +364,84 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         business_object_type: "payment_reversal",
         read_permission: "purchase_order:detail",
     },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::SalesOrder,
+        business_object_type: "sales_order",
+        read_permission: "sales_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::SalesOrder,
+        business_object_type: "voucher_sales_order",
+        read_permission: "sales_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
+        business_object_type: "sales_change_order",
+        read_permission: "sales_change_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::PurchaseOrder,
+        business_object_type: "purchase_order",
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::PurchaseChangeOrder,
+        business_object_type: "purchase_change_order",
+        read_permission: "purchase_change_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::StockAdjustment,
+        business_object_type: "stock_adjustment",
+        read_permission: "stock_adjustment:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::PurchasePaymentRequest,
+        business_object_type: "purchase_payment_request",
+        read_permission: "purchase_payment_request:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::SalesInvoiceRequest,
+        business_object_type: "sales_invoice_request",
+        read_permission: "sales_invoice_request:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::CustomerReceipt,
+        business_object_type: "customer_receipt",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::CustomerRefund,
+        business_object_type: "customer_refund",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::ReceiptReversal,
+        business_object_type: "receipt_reversal",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::SupplierRefund,
+        business_object_type: "supplier_refund",
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ApprovalRework,
+        object_kind: WorkItemBriefObjectKind::PaymentReversal,
+        business_object_type: "payment_reversal",
+        read_permission: "purchase_order:detail",
+    },
 ];
 
 impl WorkItemType {
@@ -402,6 +482,7 @@ impl WorkItemType {
             Self::IntegrationResultUnknown => "集成结果未知",
             Self::BusinessException => "业务异常",
             Self::DocumentApproval => "单据审批",
+            Self::ApprovalRework => "驳回待处理",
         }
     }
 
@@ -442,6 +523,7 @@ impl WorkItemType {
             Self::IntegrationResultUnknown => "INTEGRATION_RESULT_UNKNOWN",
             Self::BusinessException => "BUSINESS_EXCEPTION",
             Self::DocumentApproval => "DOCUMENT_APPROVAL",
+            Self::ApprovalRework => "APPROVAL_REWORK",
         }
     }
 
@@ -488,7 +570,8 @@ impl WorkItemType {
     pub fn assignment_separation_policy(self) -> WorkItemAssignmentSeparationPolicy {
         match self {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
-            Self::SalesInquiryProcessing
+            Self::ApprovalRework
+            | Self::SalesInquiryProcessing
             | Self::ProcurementOrderCreation
             | Self::PurchaseSourceUpdate
             | Self::PurchasePaymentArrangement

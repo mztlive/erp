@@ -535,7 +535,7 @@ export function AllocationSessionPanel({
                     allocatedAmount={proposedAllocated}
                     unallocatedAmount={proposedUnallocated}
                     onOpenChange={setConfirmOpen}
-                    onConfirm={() => void doPost()}
+                    onConfirm={(reason) => void doPost(reason)}
                 />
             ) : (
                 <FormalActionConfirmDialog

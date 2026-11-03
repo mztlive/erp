@@ -563,6 +563,7 @@ fn purchase_lines<'a>(
 ) -> Option<Result<Vec<PurchaseLineFacts<'a>>>> {
     match order.stable.status {
         PurchaseOrderStatus::Draft
+        | PurchaseOrderStatus::Rejected
         | PurchaseOrderStatus::PendingFinanceReview
         | PurchaseOrderStatus::InApproval => {
             let pointer = order.current_submission_id.as_deref()?;

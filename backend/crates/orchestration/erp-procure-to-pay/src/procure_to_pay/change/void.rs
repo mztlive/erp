@@ -3,10 +3,12 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_core::common::time::Instant;
 use erp_procurement::dto::purchase_order::VoidPurchaseChangeRequest;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::service::purchase_order::change::state::void_purchase_change;
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
+use erp_workflow::service::work_item::approval_rework::complete_document_rework;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
@@ -69,6 +71,15 @@ impl PurchaseOrderProcess {
                     )
                     .await?;
                     db.purchase_change_orders().update(&mut change, executor).await?;
+                    complete_document_rework(
+                        &db,
+                        "purchase_change_order",
+                        &change_id,
+                        &actor_id,
+                        Instant::now(),
+                        executor,
+                    )
+                    .await?;
                     persist_log(&db, &audit, executor).await?;
                     Ok::<(), Error>(())
                 })

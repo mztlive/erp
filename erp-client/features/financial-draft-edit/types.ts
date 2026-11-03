@@ -40,9 +40,9 @@ export type FinancialDraftFormValues = {
     allocations: { receivableEntryId: string; allocatedAmount: string }[]
 }
 
-/** 财务实体草稿状态采用接口的 snake_case 序列化值。 */
+/** 草稿与已驳回原单均可继续编辑；各财务接口保留既有状态大小写。 */
 export function isFinancialDraft(draft: FinancialDraft) {
-    return draft.status === "draft"
+    return ["draft", "rejected"].includes(draft.status.toLowerCase())
 }
 
 /** 回款专用读取已校验原创建人，逆向原单要求原经办且经办复核分离。 */

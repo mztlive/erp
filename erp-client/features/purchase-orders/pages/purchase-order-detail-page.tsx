@@ -260,7 +260,8 @@ export function PurchaseOrderDetailPage({
 
     const modeLabel =
         mode === "edit"
-            ? order.identity.reviewStatus === "REJECTED"
+            ? order.identity.status === "REJECTED" ||
+              order.identity.reviewStatus === "REJECTED"
                 ? "被驳回待修改"
                 : "采购草稿编辑"
             : "详情"
@@ -398,7 +399,9 @@ export function PurchaseOrderDetailPage({
                 submitPending={editActions.submitPending}
                 savePending={editActions.savePending}
                 voidPending={editActions.voidPending}
-                onConfirmSubmit={() => void editActions.handleSubmit()}
+                onConfirmSubmit={(reason) =>
+                    void editActions.handleSubmit(reason)
+                }
                 onConfirmVoid={() => void editActions.handleVoid()}
                 onSaveAndLeave={() => void guard.saveAndLeave()}
                 onDiscardAndLeave={guard.discardAndLeave}

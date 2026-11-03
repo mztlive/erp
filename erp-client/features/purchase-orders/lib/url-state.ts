@@ -24,6 +24,7 @@ export type PurchaseOrdersUrlState = {
 const STATUS_VALUES: readonly PurchaseOrderStatusFilter[] = [
     "all",
     "DRAFT",
+    "REJECTED",
     "PENDING_REVIEW",
     "EFFECTIVE",
     "PARTIAL",

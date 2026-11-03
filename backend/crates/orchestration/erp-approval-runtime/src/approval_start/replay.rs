@@ -90,6 +90,7 @@ async fn replay_from_store(
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     let identity = start_identity(StartIdentityParams {
+        resubmission_reason: expected.resubmission_reason,
         idempotency_key: normalize_idempotency_key(idempotency_key)?,
         process_kind: expected.process_kind.as_str(),
         subject_kind: expected.subject.subject_kind(),
@@ -158,6 +159,7 @@ mod tests {
 
         fn expected(&self) -> ApprovalStartIdentity<'_> {
             ApprovalStartIdentity {
+                resubmission_reason: None,
                 process_kind: ProcessKind::SalesOrder,
                 subject: &self.subject,
                 subject_version: 3,
@@ -168,6 +170,7 @@ mod tests {
 
         fn identity(&self) -> PreparedCommandIdentity {
             start_identity(StartIdentityParams {
+                resubmission_reason: None,
                 idempotency_key: normalize_idempotency_key("key-1").unwrap(),
                 process_kind: "sales_order",
                 subject_kind: "sales_order",

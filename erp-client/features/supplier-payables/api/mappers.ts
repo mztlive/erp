@@ -490,6 +490,7 @@ function projectPaymentReversalSummary(
 }
 
 function mapRefundStatus(s: string): SupplierRefundRow["status"] {
+    if (s === "REJECTED" || s === "rejected") return "rejected"
     if (s === "reversed" || s === "REVERSED") return "reversed"
     if (s === "posted" || s === "POSTED") return "posted"
     if (
@@ -535,6 +536,7 @@ export function projectSupplierRefund(
 }
 
 function mapReversalStatus(s: string): PaymentReversalRow["status"] {
+    if (s === "REJECTED" || s === "rejected") return "rejected"
     if (s === "reversed" || s === "REVERSED") return "reversed"
     if (s === "posted" || s === "POSTED") return "posted"
     if (

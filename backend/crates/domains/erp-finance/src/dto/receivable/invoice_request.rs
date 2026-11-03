@@ -9,11 +9,23 @@ use crate::entity::receivable::{InvoiceRequestData, InvoiceRequestStatus};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitInvoiceRequest {
+    /// 驳回后重新提交的必填说明；首次提交可省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resubmission_reason: Option<String>,
     pub receivable_account_id: String,
     pub request_id: Option<String>,
     pub expected_version: Option<u64>,
     pub data: InvoiceRequestData,
     pub idempotency_key: String,
+}
+/// 保存原开票申请的可编辑资料，不启动审批或占用额度。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateInvoiceRequest {
+    /// 当前原单乐观锁版本。
+    pub expected_version: u64,
+    /// 待保存的完整开票资料。
+    pub data: InvoiceRequestData,
 }
 /// 撤回命令；保留同一载荷重试以恢复未知结果。
 #[derive(Debug, Clone, Serialize, Deserialize)]

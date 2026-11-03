@@ -27,6 +27,10 @@ export function useSalesChangeDraftCommands(id: string) {
     const save = useMutation({
         mutationFn: (request: SaveSalesChangeDraft) =>
             saveSalesChangeDraft(id, request),
+        onSuccess: (draft) => {
+            client.setQueryData(draftKey(id), draft)
+            void client.invalidateQueries({ queryKey: ["sales-orders"] })
+        },
     })
     return {
         save: save.mutateAsync,

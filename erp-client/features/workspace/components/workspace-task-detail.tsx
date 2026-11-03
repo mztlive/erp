@@ -10,6 +10,7 @@ import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
+import { WorkspaceApprovalRework } from "./workspace-approval-rework"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
@@ -135,6 +136,17 @@ function WorkspaceTaskSurface({
     grantedPermissions = [],
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
+    if (
+        item.workItemType === "APPROVAL_REWORK" &&
+        item.handlerKey === "approval_rework"
+    ) {
+        return (
+            <WorkspaceApprovalRework
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
     if (
         item.workItemType === "SALES_INQUIRY_PROCESSING" &&
         item.handlerKey === "sales_inquiry_processing" &&

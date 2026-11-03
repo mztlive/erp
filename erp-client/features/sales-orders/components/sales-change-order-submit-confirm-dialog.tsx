@@ -34,7 +34,9 @@ export function SalesChangeOrderSubmitConfirmDialog({
             toStatus={{ label: "审批中", tone: "warning" }}
             description={
                 <div className="space-y-3">
-                    <p>审批期间不可修改；驳回后重新提交将从首节点审批。</p>
+                    <p>
+                        审批期间不可修改；驳回后可修改原单，填写重提说明后重新发起审批。
+                    </p>
                     <SalesChangeOrderApprovalArea
                         phase="confirm"
                         approval={approval}

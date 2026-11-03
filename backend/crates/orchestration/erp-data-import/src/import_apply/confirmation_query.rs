@@ -237,6 +237,7 @@ fn work_item_action_code(action: WorkItemAllowedAction) -> &'static str {
         WorkItemAllowedAction::Reject => "REJECT",
         WorkItemAllowedAction::Reassign => "REASSIGN",
         WorkItemAllowedAction::Close => "CLOSE",
+        WorkItemAllowedAction::AbandonRework => "ABANDON_REWORK",
     }
 }
 

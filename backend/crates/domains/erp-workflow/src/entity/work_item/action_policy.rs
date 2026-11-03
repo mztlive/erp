@@ -12,6 +12,8 @@ pub enum WorkItemAllowedAction {
     View,
     /// 进入固定强类型处理器。
     Process,
+    /// 原提交人放弃继续处理本次驳回，保留单据和历史。
+    AbandonRework,
     /// 审批通过。
     Approve,
     /// 审批驳回。
@@ -82,6 +84,12 @@ impl WorkItemActionPolicy<'_> {
     ) -> Vec<WorkItemAllowedAction> {
         let mut actions = vec![WorkItemAllowedAction::View];
         let owned = self.owner_user_id == Some(access.actor_id);
+        if self.work_item_type == WorkItemType::ApprovalRework {
+            if owned && self.status == WorkItemStatus::Open && permits(WorkItemActionRequirement::Execute) {
+                actions.extend([WorkItemAllowedAction::Process, WorkItemAllowedAction::AbandonRework]);
+            }
+            return actions;
+        }
         if owned && permits(WorkItemActionRequirement::Execute) {
             actions.push(WorkItemAllowedAction::Process);
         }
@@ -199,6 +207,32 @@ mod tests {
             policy.allowed_actions(WorkItemActionAccess { actor_id: "other", ..access }, decision_only),
             vec![WorkItemAllowedAction::View]
         );
+        assert_eq!(policy.allowed_actions(access, |_| false), vec![WorkItemAllowedAction::View]);
+    }
+
+    #[test]
+    fn rework_actions_require_open_original_owner_and_exclude_generic_management() {
+        let policy =
+            WorkItemActionPolicy { work_item_type: WorkItemType::ApprovalRework, ..exception_policy() };
+        let access = manager_access();
+        assert_eq!(
+            policy.allowed_actions(access, granted),
+            vec![
+                WorkItemAllowedAction::View,
+                WorkItemAllowedAction::Process,
+                WorkItemAllowedAction::AbandonRework
+            ]
+        );
+        assert_eq!(
+            policy.allowed_actions(WorkItemActionAccess { actor_id: "manager", ..access }, granted),
+            vec![WorkItemAllowedAction::View]
+        );
+        for status in [WorkItemStatus::Completed, WorkItemStatus::Closed] {
+            assert_eq!(
+                WorkItemActionPolicy { status, ..policy }.allowed_actions(access, granted),
+                vec![WorkItemAllowedAction::View]
+            );
+        }
         assert_eq!(policy.allowed_actions(access, |_| false), vec![WorkItemAllowedAction::View]);
     }
 

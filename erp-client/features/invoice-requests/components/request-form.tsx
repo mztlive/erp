@@ -1,5 +1,6 @@
 "use client"
 
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { RequiredMark } from "@/components/ui/required-mark"
 import { useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -21,12 +22,18 @@ import { MoneyValue } from "@/components/business"
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
 import { loadReceivables } from "@/features/customer-receivables/api/loaders"
 import { classifyFormalCommandError } from "@/lib/formal-command"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
 import {
     useInvoiceRequestAmounts,
     useInvoiceRequestCommands,
+    useInvoiceRequestSaveState,
 } from "../hooks/queries"
-import type { InvoiceRequest, SubmitRequest } from "../api"
+import {
+    requestStatusLabels,
+    type InvoiceRequest,
+    type SubmitRequest,
+    type UpdateRequest,
+} from "../api"
 
 const schema = z.object({
     receivableAccountId: z.string(),
@@ -42,7 +49,7 @@ const schema = z.object({
 export function InvoiceRequestForm({
     salesOrderId,
     accountId,
-    existing,
+    existing: original,
     presentation = "inline",
     onDone,
     onCancel,
@@ -55,9 +62,37 @@ export function InvoiceRequestForm({
     onCancel: () => void
 }) {
     const commands = useInvoiceRequestCommands()
+    const [adopted, setAdopted] = useState<Pick<
+        InvoiceRequest,
+        "id" | "version" | "status"
+    > | null>(null)
+    const existing =
+        original && adopted?.id === original.id
+            ? { ...original, ...adopted }
+            : original
+    const saveState = useInvoiceRequestSaveState(existing?.id)
+    const [checked, setChecked] = useState<Pick<
+        InvoiceRequest,
+        "id" | "version" | "status"
+    > | null>(null)
+
     const pending = useRef<SubmitRequest | null>(null)
+    const pendingSave = useRef<UpdateRequest | null>(null)
+    const intent = useRef<"submit" | "save">("submit")
+    const [saveUncertain, setSaveUncertain] = useState(false)
     const [uncertain, setUncertain] = useState(false)
+    const [committedUnreadable, setCommittedUnreadable] = useState(false)
     const [error, setError] = useState<unknown>(null)
+    const rework = useResubmissionReason({
+        open: true,
+        required: existing?.status === "rejected",
+        id: "invoice-request-resubmission-reason",
+        disabled:
+            commands.submit.isPending ||
+            commands.update.isPending ||
+            uncertain ||
+            saveUncertain,
+    })
     const form = useAppForm({
         defaultValues: {
             receivableAccountId:
@@ -70,6 +105,34 @@ export function InvoiceRequestForm({
         validators: { onSubmit: schema },
         onSubmit: async ({ value }) => {
             if (
+                commands.update.isPending ||
+                commands.submit.isPending ||
+                uncertain ||
+                saveUncertain
+            )
+                return
+            if (intent.current === "save" && existing) {
+                const input = pendingSave.current ?? {
+                    id: existing.id,
+                    expected_version: existing.version,
+                    data: {
+                        amount: value.amount,
+                        invoice_title:
+                            amounts.data?.invoice_title ??
+                            existing.data.invoice_title,
+                        tax_number:
+                            amounts.data?.tax_number ??
+                            existing.data.tax_number,
+                        invoice_content: value.invoice_content,
+                        reason: value.reason,
+                    },
+                }
+                pendingSave.current = input
+                await save(input)
+                return
+            }
+            if (
+                !rework.valid ||
                 !resolvedAccountId ||
                 !amounts.data?.can_submit ||
                 amounts.isError ||
@@ -77,6 +140,7 @@ export function InvoiceRequestForm({
             )
                 return
             const input = pending.current ?? {
+                resubmission_reason: rework.reason,
                 receivable_account_id: resolvedAccountId,
                 request_id: existing?.id,
                 expected_version: existing?.version,
@@ -118,7 +182,51 @@ export function InvoiceRequestForm({
                 ? accounts.data.items[0]?.id
                 : undefined))
     const amounts = useInvoiceRequestAmounts(resolvedAccountId)
-    const locked = commands.submit.isPending || uncertain
+    const locked =
+        commands.submit.isPending ||
+        commands.update.isPending ||
+        uncertain ||
+        saveUncertain
+    const latest = checked?.id === existing?.id ? checked : null
+    const versionAdvanced = Boolean(
+        latest &&
+        pendingSave.current &&
+        latest.version > pendingSave.current.expected_version,
+    )
+    const latestEditable =
+        latest?.status === "draft" || latest?.status === "rejected"
+    async function checkSave() {
+        setChecked(null)
+        const result = await saveState.refetch()
+        if (result.isError) {
+            setError(result.error)
+            return
+        }
+        if (result.data) setChecked(result.data)
+    }
+    function adoptLatest() {
+        if (!latest || !versionAdvanced || !latestEditable) return
+        setAdopted(latest)
+        pendingSave.current = null
+        setSaveUncertain(false)
+        setError(null)
+        setChecked(null)
+    }
+    async function save(input: UpdateRequest) {
+        setError(null)
+        setChecked(null)
+        try {
+            const result = await commands.update.mutateAsync(input)
+            pendingSave.current = null
+            setSaveUncertain(false)
+            onDone(result)
+        } catch (err) {
+            setError(err)
+            const unknown = classifyFormalCommandError(err) === "unknown"
+            setSaveUncertain((previous) => previous || unknown)
+            if (!unknown && !saveUncertain) pendingSave.current = null
+        }
+    }
     /** 成功时关闭表单；未知结果保持同一请求，明确失败才允许修改。 */
     async function send(input: SubmitRequest) {
         setError(null)
@@ -126,12 +234,17 @@ export function InvoiceRequestForm({
             const result = await commands.submit.mutateAsync(input)
             pending.current = null
             setUncertain(false)
+            setCommittedUnreadable(false)
             onDone(result)
         } catch (err) {
             setError(err)
-            const unknown = classifyFormalCommandError(err) === "unknown"
-            setUncertain(unknown)
-            if (!unknown) pending.current = null
+            const committed =
+                getErrorCode(err) === "COMMITTED_RESULT_UNAVAILABLE"
+            const unknown =
+                committed || classifyFormalCommandError(err) === "unknown"
+            setCommittedUnreadable((previous) => previous || committed)
+            setUncertain((previous) => previous || unknown)
+            if (!unknown && !uncertain) pending.current = null
         }
     }
     const content = (
@@ -140,6 +253,7 @@ export function InvoiceRequestForm({
             className="space-y-4"
             onSubmit={(event) => {
                 event.preventDefault()
+                intent.current = "submit"
                 void form.handleSubmit()
             }}
         >
@@ -234,6 +348,7 @@ export function InvoiceRequestForm({
                         value={
                             pending.current?.data.invoice_title ??
                             amounts.data?.invoice_title ??
+                            existing?.data.invoice_title ??
                             ""
                         }
                         placeholder="选择结算主体后自动带入"
@@ -249,6 +364,7 @@ export function InvoiceRequestForm({
                         value={
                             pending.current?.data.tax_number ??
                             amounts.data?.tax_number ??
+                            existing?.data.tax_number ??
                             ""
                         }
                         placeholder="从结算主体档案自动带入"
@@ -275,12 +391,89 @@ export function InvoiceRequestForm({
                     </form.AppField>
                 </div>
             </fieldset>
+            {rework.field}
             {error ? (
                 <p role="alert" className="text-sm text-destructive">
-                    {uncertain
-                        ? "提交结果尚未确认，请核对本次提交结果，勿重复新建申请。"
-                        : getErrorMessage(error, "提交失败，请检查后重试")}
+                    {saveUncertain
+                        ? "保存结果尚未确认，请核对本次保存结果。"
+                        : committedUnreadable
+                          ? "已提交，结果暂不可读取。请稍后核对本次提交结果。"
+                          : uncertain
+                            ? "提交结果尚未确认，请核对本次提交结果，勿重复新建申请。"
+                            : getErrorMessage(error, "提交失败，请检查后重试")}
                 </p>
+            ) : null}
+            {saveUncertain ? (
+                <div
+                    role="status"
+                    className="space-y-3 rounded-lg border p-3 text-sm"
+                >
+                    <p>
+                        原保存结果仍未确认，本地输入已保留。读取最新版本不会认定原保存成功。
+                    </p>
+                    <LoadingButton
+                        id="invoice-request-check-save"
+                        type="button"
+                        variant="outline"
+                        loading={saveState.isFetching}
+                        disabled={
+                            commands.update.isPending || saveState.isFetching
+                        }
+                        onClick={() => void checkSave()}
+                    >
+                        读取最新版本
+                    </LoadingButton>
+                    {saveState.isError ? (
+                        <p role="alert" className="text-destructive">
+                            {getErrorMessage(
+                                saveState.error,
+                                "读取最新版本失败，请重试",
+                            )}
+                        </p>
+                    ) : null}
+                    {latest ? (
+                        <p>
+                            服务端当前版本 {latest.version} ·{" "}
+                            {requestStatusLabels[latest.status]}。
+                            {versionAdvanced
+                                ? "版本已前进，原版本不能再次保存。"
+                                : "版本尚未前进，可重试原保存请求。"}
+                        </p>
+                    ) : null}
+                    {versionAdvanced && latestEditable ? (
+                        <Button
+                            id="invoice-request-adopt-latest"
+                            type="button"
+                            variant="outline"
+                            disabled={
+                                saveState.isFetching ||
+                                commands.update.isPending
+                            }
+                            onClick={adoptLatest}
+                        >
+                            采用最新版本并保留输入
+                        </Button>
+                    ) : null}
+                    {versionAdvanced && !latestEditable ? (
+                        <>
+                            <p>
+                                当前状态不能修改。可保留此页查看本地输入，或退出编辑；退出不表示原保存成功。
+                            </p>
+                            <Button
+                                id="invoice-request-exit-save-recovery"
+                                type="button"
+                                variant="outline"
+                                disabled={
+                                    saveState.isFetching ||
+                                    commands.update.isPending
+                                }
+                                onClick={onCancel}
+                            >
+                                退出编辑
+                            </Button>
+                        </>
+                    ) : null}
+                </div>
             ) : null}
             <div className="flex justify-end gap-2">
                 <Button
@@ -292,6 +485,30 @@ export function InvoiceRequestForm({
                 >
                     取消
                 </Button>
+                {existing && !uncertain ? (
+                    <LoadingButton
+                        id="invoice-request-save"
+                        type="button"
+                        variant="outline"
+                        loading={commands.update.isPending}
+                        disabled={
+                            commands.update.isPending ||
+                            commands.submit.isPending ||
+                            saveState.isFetching ||
+                            (saveUncertain && versionAdvanced)
+                        }
+                        onClick={() => {
+                            if (saveUncertain && pendingSave.current) {
+                                void save(pendingSave.current)
+                                return
+                            }
+                            intent.current = "save"
+                            void form.handleSubmit()
+                        }}
+                    >
+                        {saveUncertain ? "重试原保存请求" : "保存修改"}
+                    </LoadingButton>
+                ) : null}
                 {uncertain ? (
                     <LoadingButton
                         id="invoice-request-resolve"
@@ -311,6 +528,7 @@ export function InvoiceRequestForm({
                         loading={commands.submit.isPending}
                         disabled={
                             locked ||
+                            !rework.valid ||
                             amounts.isError ||
                             amounts.isFetching ||
                             !amounts.data?.can_submit
@@ -336,7 +554,9 @@ export function InvoiceRequestForm({
                         {existing ? "修改开票申请" : "申请开票"}
                     </DialogTitle>
                     <DialogDescription>
-                        提交申请，审批通过后由财务开票。
+                        {existing
+                            ? "保存修改保留当前状态；重新提交需说明依据，审批通过后由财务开票。"
+                            : "提交申请，审批通过后由财务开票。"}
                     </DialogDescription>
                 </DialogHeader>
                 {content}

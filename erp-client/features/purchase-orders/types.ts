@@ -16,6 +16,7 @@ export type FulfillmentResponsibility =
 
 export type PurchaseOrderStatus =
     | "DRAFT"
+    | "REJECTED"
     | "PENDING_REVIEW"
     | "EFFECTIVE"
     | "PARTIAL"
@@ -40,6 +41,7 @@ export const PO_STATUS_FILTER_LABEL: Record<PurchaseOrderStatusFilter, string> =
     {
         all: "全部状态",
         DRAFT: "草稿",
+        REJECTED: "已驳回",
         PENDING_REVIEW: "审批中",
         EFFECTIVE: "已生效",
         PARTIAL: "部分执行",
@@ -570,6 +572,7 @@ export type VoidPurchaseOrderInput = {
 }
 
 export type SubmitPurchaseOrderInput = {
+    resubmissionReason?: string
     purchaseOrderId: string
     expectedLockVersion: number
     expectedDraftContentHash: string
@@ -639,6 +642,7 @@ export const FULFILLMENT_RESPONSIBILITY_LABEL: Record<
 
 export const PO_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
     DRAFT: "草稿",
+    REJECTED: "已驳回",
     PENDING_REVIEW: "审批中",
     EFFECTIVE: "已生效",
     PARTIAL: "部分执行",
@@ -648,6 +652,7 @@ export const PO_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
 
 export const PO_STATUS_TONE: Record<PurchaseOrderStatus, StatusTone> = {
     DRAFT: "neutral",
+    REJECTED: "destructive",
     PENDING_REVIEW: "warning",
     EFFECTIVE: "success",
     PARTIAL: "info",

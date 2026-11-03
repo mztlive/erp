@@ -74,7 +74,7 @@ async fn resize<L: InquiryPurchaseLine>(
     }
     Ok(())
 }
-/// 变更正式作废时恢复原生效数量的采用余额，不使撤回/驳回提前释放。
+/// 变更终态驳回或作废时恢复原生效数量的采用余额，释放本次变更增加占用。
 pub(in crate::procure_to_pay) async fn restore_current_quotes(
     db: &Database,
     order_id: &str,

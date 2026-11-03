@@ -31,6 +31,7 @@ use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
+pub(super) use start::authorized_customer_refund;
 use validator::Validate;
 
 use super::ReturnsProcess;
@@ -44,10 +45,10 @@ use super::cancel_approval::{
     persist_customer_refund_cancel,
 };
 use super::start_approval::{
-    CustomerRefundStartPersistInput, ReplayReturnStartInput, ReverseStartInput,
+    CustomerRefundStartPersistInput, ReversalSubmitReplayInput, ReverseStartInput,
     build_customer_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_start_graph, load_start_receipt,
-    persist_customer_refund_start, replay_return_start_with_executor, replay_subject_versions,
+    persist_customer_refund_start, reversal_result_read_error,
 };
 use crate::{Error, Result};
 
@@ -111,14 +112,28 @@ impl ReturnsProcess {
     ) -> Result<CustomerRefundView> {
         req.validate()?;
         req.idempotency_key = normalize_idempotency_key(&req.idempotency_key)?.as_str().to_string();
-        if self.replay_customer_refund_start(id, &req.idempotency_key, actor).await?.is_some() {
-            return self.reads().customer_refund_detail(id).await.map_err(crate::Error::from);
+        let submission = ReversalSubmitReplayInput {
+            id: id.to_owned(),
+            document_type: DocumentType::CustomerRefund,
+            submit_permission: "customer_refund:submit",
+            command_receipt: req.command_receipt(id, actor.id())?,
+            actor: actor.clone(),
+        };
+        if let Some(id) = self.replay_reversal_submit(&submission).await? {
+            return self.reads().customer_refund_detail(&id).await.map_err(reversal_result_read_error);
         }
         let adapter = customer_refund_adapter()?;
         let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         start_customer_refund_approval(&mut refund)?;
-        self.dispatch_customer_refund_start(id, refund, req.idempotency_key, actor, adapter).await
+        self.dispatch_customer_refund_start(
+            refund,
+            req.idempotency_key,
+            req.resubmission_reason,
+            adapter,
+            submission,
+        )
+        .await
     }
 
     /// 撤回客户退款审批，成功后回到草稿且 `subject_version` 不回退。

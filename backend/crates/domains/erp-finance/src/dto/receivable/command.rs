@@ -81,6 +81,9 @@ pub struct PostCustomerReceiptRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitCustomerReceiptRequest {
+    /// 驳回后重新提交的必填说明；首次提交可省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,
@@ -99,6 +102,9 @@ pub struct SubmitCustomerReceiptRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CommitCustomerReceiptRequest {
+    /// 驳回后重新提交的必填说明；首次提交可省略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resubmission_reason: Option<String>,
     /// 已有回款草稿主键。
     pub receipt_id: Option<String>,
     /// 已有草稿期望乐观锁版本。
@@ -126,6 +132,7 @@ impl CommitCustomerReceiptRequest {
     /// 无。
     pub fn new(idempotency_key: impl Into<String>) -> Self {
         Self {
+            resubmission_reason: None,
             receipt_id: None,
             expected_version: None,
             receipt: None,

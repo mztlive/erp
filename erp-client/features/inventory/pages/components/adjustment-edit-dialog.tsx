@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,10 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AdjustmentApprovalArea } from "../../components/adjustment-approval-area"
 import type { EditableAdjustment } from "../../api/adjustment-edit"
-import { useEditableAdjustmentQuery } from "../../hooks/use-adjustment-edit"
+import {
+    useEditableAdjustmentQuery,
+    useSaveAdjustmentMutation,
+} from "../../hooks/use-adjustment-edit"
 import {
     useResolveAdjustmentUnknownMutation,
     useSubmitAdjustmentMutation,
@@ -79,7 +83,7 @@ export function AdjustmentEditDialog({
                         {query.data ? ` · ${query.data.adjustmentNo}` : ""}
                     </DialogTitle>
                     <DialogDescription>
-                        修改原单后重新提交审批，审批通过后调整库存。
+                        保存修改会保留当前状态；重新提交审批通过后才调整库存。
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending ? (
@@ -147,7 +151,9 @@ function AdjustmentEditForm({
     onSubmitted: () => void
     onRefresh: () => Promise<unknown>
 }) {
+    const save = useSaveAdjustmentMutation()
     const submit = useSubmitAdjustmentMutation()
+    const saveOnly = React.useRef(false)
     const resolve = useResolveAdjustmentUnknownMutation()
     const ledger = React.useRef(new FormalCommandKeyLedger())
     const inFlight = React.useRef(false)
@@ -167,8 +173,15 @@ function AdjustmentEditForm({
         }),
         [draft],
     )
-    const pending = submit.isPending || resolve.isPending
+    const pending = save.isPending || submit.isPending || resolve.isPending
     const locked = pending || Boolean(unknown)
+    const rework = useResubmissionReason({
+        open: true,
+        required:
+            draft.rejected || draft.approval.instance?.status === "REJECTED",
+        id: `${prefix}-resubmission-reason`,
+        disabled: locked,
+    })
 
     async function execute(command: FormalCommandIdentity<SubmitInput>) {
         if (inFlight.current) return
@@ -210,12 +223,34 @@ function AdjustmentEditForm({
         onSubmit: async ({ value }) => {
             if (locked || inFlight.current || !draft.approval.submitCommand)
                 return
+            if (saveOnly.current) {
+                inFlight.current = true
+                setError(null)
+                try {
+                    await save.mutateAsync({
+                        ...value,
+                        id: draft.id,
+                        version: draft.approval.submitCommand.expectedVersion,
+                    })
+                    onSubmitted()
+                    onClose()
+                } catch (cause) {
+                    setError(
+                        getErrorMessage(cause, "保存未完成，请刷新后重试。"),
+                    )
+                } finally {
+                    inFlight.current = false
+                }
+                return
+            }
+            if (!rework.valid) return
             const first = draft.lines[0]
             const command = ledger.current.acquire(
                 "submit",
                 `inventory:${draft.id}:submit`,
                 {
                     stockAdjustmentId: draft.id,
+                    resubmissionReason: rework.reason,
                     submitCommand: draft.approval.submitCommand,
                     balanceId: first.balanceId,
                     lineId: first.lineId,
@@ -376,6 +411,7 @@ function AdjustmentEditForm({
                         />
                     )}
                 />
+                {rework.field}
                 <AdjustmentApprovalArea
                     phase="confirm"
                     approval={draft.approval}
@@ -424,11 +460,28 @@ function AdjustmentEditForm({
                 >
                     重新加载草稿
                 </Button>
+                <LoadingButton
+                    id={`${prefix}-save`}
+                    type="button"
+                    variant="outline"
+                    disabled={locked}
+                    loading={save.isPending}
+                    onClick={async () => {
+                        saveOnly.current = true
+                        try {
+                            await form.handleSubmit()
+                        } finally {
+                            saveOnly.current = false
+                        }
+                    }}
+                >
+                    保存修改
+                </LoadingButton>
                 <form.AppForm>
                     <form.SubmitButton
                         id={`${prefix}-submit`}
                         label="保存并提交审批"
-                        disabled={locked}
+                        disabled={locked || !rework.valid}
                         loading={submit.isPending}
                     />
                 </form.AppForm>

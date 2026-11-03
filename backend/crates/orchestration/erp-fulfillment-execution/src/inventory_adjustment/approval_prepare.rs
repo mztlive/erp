@@ -179,18 +179,8 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
         return Err(payload_conflict_error().into());
     }
-    let legacy_standard_identity = start_identity(StartIdentityParams {
-        idempotency_key: key.clone(),
-        process_kind: process_kind_of(DocumentType::StockAdjustment).as_str(),
-        subject_kind: DocumentType::StockAdjustment.as_str(),
-        subject_id: adjustment_id,
-        subject_version: req.expected_subject_version,
-        binding_id: binding.approval_process_definition_id.as_ref(),
-        definition_version: binding.approval_definition_version,
-        actor_participant_id: actor.id(),
-    })?;
     let weak_legacy_receipt =
-        matches!(legacy_standard_identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_));
+        legacy_standard_receipt_matches(adjustment_id, req, actor.id(), &binding, &receipt)?;
     let adjustment = db
         .inventory()
         .stock_adjustment(adjustment_id, executor)
@@ -206,6 +196,28 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     }
     ensure_submit_authorized(db, rbac, &adjustment, actor, executor).await?;
     Ok(Some(instance.base.id))
+}
+
+/// 核对旧通用身份；带重提说明的请求不得退回缺少说明的历史载荷。
+fn legacy_standard_receipt_matches(
+    adjustment_id: &str,
+    req: &SubmitStockAdjustmentRequest,
+    actor_id: &str,
+    binding: &ApprovalDefinitionBinding,
+    receipt: &ApprovalCommandReceipt,
+) -> Result<bool> {
+    let identity = start_identity(StartIdentityParams {
+        resubmission_reason: req.resubmission_reason.as_deref(),
+        idempotency_key: normalize_idempotency_key(&req.idempotency_key)?,
+        process_kind: process_kind_of(DocumentType::StockAdjustment).as_str(),
+        subject_kind: DocumentType::StockAdjustment.as_str(),
+        subject_id: adjustment_id,
+        subject_version: req.expected_subject_version,
+        binding_id: binding.approval_process_definition_id.as_ref(),
+        definition_version: binding.approval_definition_version,
+        actor_participant_id: actor_id,
+    })?;
+    Ok(matches!(identity.classify(Some(receipt)), ReceiptBranch::SamePayload(_)))
 }
 
 /// 在收据身份校验后，按原顺序读取实例、冻结快照和绑定。
@@ -493,6 +505,8 @@ pub(crate) async fn authorize_submit_with<A: WorkflowAuthorizationPort>(
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择。
 pub struct StockAdjustmentStartInput<'a> {
+    /// 本次重新提交说明。
+    pub resubmission_reason: Option<String>,
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 冻结绑定。
@@ -541,6 +555,7 @@ pub async fn build_stock_adjustment_start_input(
     executor: &mut dyn Executor,
 ) -> Result<StartExecutionInput> {
     let StockAdjustmentStartInput {
+        resubmission_reason,
         graph,
         binding,
         subject,
@@ -563,6 +578,7 @@ pub async fn build_stock_adjustment_start_input(
         graph,
         bindings,
         StartInputContext {
+            resubmission_reason,
             binding,
             document_type: DocumentType::StockAdjustment,
             subject,

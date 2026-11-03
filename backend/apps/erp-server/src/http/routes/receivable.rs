@@ -140,22 +140,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT,
             ),
         )
-        .route(
-            "/sales-invoice-requests/{id}",
-            with_permission(
-                get(receivable::invoice_request::invoice_request_detail),
-                rbac,
-                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
-            ),
-        )
-        .route(
-            "/sales-invoice-requests/{id}/cancel",
-            with_permission(
-                post(receivable::invoice_request::invoice_request_cancel),
-                rbac,
-                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_CANCEL,
-            ),
-        )
+        .merge(invoice_request_edit_routes(rbac))
         .route(
             "/sales-invoice-requests/amounts/{id}",
             with_permission(
@@ -256,4 +241,32 @@ fn receipt_file_routes(rbac: &SharedRbacService) -> Router<HttpState> {
             permissions::receivable::RECEIPT_FILES_CUSTOMER_RECEIPT_SAVE_WITH_FILES,
         ),
     )
+}
+
+fn invoice_request_edit_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/sales-invoice-requests/{id}",
+            with_permission(
+                get(receivable::invoice_request::invoice_request_detail),
+                rbac,
+                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
+            ),
+        )
+        .route(
+            "/sales-invoice-requests/{id}/cancel",
+            with_permission(
+                post(receivable::invoice_request::invoice_request_cancel),
+                rbac,
+                permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_CANCEL,
+            ),
+        )
+        .route(
+            "/sales-invoice-requests/{id}",
+            with_permission(
+                put(receivable::invoice_request::invoice_request_update),
+                rbac,
+                permissions::receivable::INVOICE_REQUEST_UPDATE,
+            ),
+        )
 }

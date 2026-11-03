@@ -67,7 +67,7 @@ impl StockAdjustmentState {
             Self::PendingWarehouseReview => "待仓储复核",
             Self::PendingFinanceReview => "待财务确认",
             Self::Posted => "已过账",
-            Self::Rejected => "驳回",
+            Self::Rejected => "已驳回",
             Self::Reversed => "已冲正",
             Self::InApproval => "审批中",
         }
@@ -134,19 +134,19 @@ impl DocumentState for StockAdjustmentState {
     ///
     /// # 返回
     /// 返回当前状态的静态后继切片，不含自身：`Draft` 为 `PendingWarehouseReview` 与 `InApproval`；
-    /// `InApproval` 为 `Posted` 与 `Draft`；`PendingWarehouseReview` 为 `PendingFinanceReview` 与
+    /// `InApproval` 为 `Posted`、`Draft` 与 `Rejected`；`PendingWarehouseReview` 为 `PendingFinanceReview` 与
     /// `Rejected`；`PendingFinanceReview` 为 `Posted` 与 `Rejected`；`Rejected` 为
-    /// `PendingWarehouseReview`；`Posted` 为 `Reversed`；`Reversed` 为空切片。
+    /// `PendingWarehouseReview` 与 `InApproval`；`Posted` 为 `Reversed`；`Reversed` 为空切片。
     ///
     /// # 错误
     /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::PendingWarehouseReview, Self::InApproval],
-            Self::InApproval => &[Self::Posted, Self::Draft],
+            Self::InApproval => &[Self::Posted, Self::Draft, Self::Rejected],
             Self::PendingWarehouseReview => &[Self::PendingFinanceReview, Self::Rejected],
             Self::PendingFinanceReview => &[Self::Posted, Self::Rejected],
-            Self::Rejected => &[Self::PendingWarehouseReview],
+            Self::Rejected => &[Self::PendingWarehouseReview, Self::InApproval],
             Self::Posted => &[Self::Reversed],
             Self::Reversed => &[],
         }
@@ -461,7 +461,7 @@ impl StockAdjustment {
     /// # 错误
     /// 非草稿或审批主题版本溢出时返回错误。
     pub fn start_approval(&mut self) -> Result<u32> {
-        if self.status != StockAdjustmentState::Draft {
+        if !matches!(self.status, StockAdjustmentState::Draft | StockAdjustmentState::Rejected) {
             return Err(Error::from("只有草稿状态的库存调整单可以提交审批"));
         }
         let next =
@@ -469,6 +469,24 @@ impl StockAdjustment {
         self.approval_subject_version = next;
         self.status = StockAdjustmentState::InApproval;
         Ok(next)
+    }
+
+    /// 结束本次审批，保留原单和明细供修改重提。
+    /// # 参数
+    /// * `expected_subject_version` - 被驳回实例冻结的审批主题版本。
+    /// # 返回
+    /// 进入已驳回且审批版本保持不变。
+    /// # 错误
+    /// 非审批中时拒绝；不会生成库存流水。
+    pub fn reject_approval(&mut self, expected_subject_version: u32) -> Result<()> {
+        if self.approval_subject_version != expected_subject_version {
+            return Err(Error::from("审批提交版本已变化，请刷新后重试"));
+        }
+        if self.status != StockAdjustmentState::InApproval {
+            return Err(Error::from("只有审批中的库存调整单可以驳回"));
+        }
+        self.status = StockAdjustmentState::Rejected;
+        Ok(())
     }
 
     /// 撤回审批并回到草稿，审批主题版本保持不变。
@@ -591,6 +609,9 @@ impl StockAdjustment {
     /// # 错误
     /// 当前状态不允许驳回时返回错误。
     pub fn reject(&mut self) -> Result<()> {
+        if self.status == StockAdjustmentState::InApproval {
+            return Err(Error::from("审批中的库存调整单必须按提交版本驳回"));
+        }
         ensure_transition(self.status, StockAdjustmentState::Rejected)?;
         self.status = StockAdjustmentState::Rejected;
         Ok(())
@@ -880,6 +901,7 @@ mod tests {
         assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
 
         let submitted = adjustment.clone();
+        assert!(adjustment.reject().is_err());
         assert!(adjustment.start_approval().is_err());
         assert_eq!(adjustment, submitted, "重复提交不得修改实体");
 
@@ -902,7 +924,6 @@ mod tests {
             StockAdjustmentState::PendingWarehouseReview,
             StockAdjustmentState::PendingFinanceReview,
             StockAdjustmentState::Posted,
-            StockAdjustmentState::Rejected,
             StockAdjustmentState::Reversed,
         ];
         for status in forbidden {
@@ -1047,9 +1068,35 @@ mod tests {
         );
         assert_eq!(serde_json::to_string(&AdjustmentReasonType::StockGain).unwrap(), "\"STOCK_GAIN\"");
         assert_eq!(AdjustmentReasonType::Damage.label(), "损坏");
-        assert_eq!(StockAdjustmentState::Rejected.label(), "驳回");
+        assert_eq!(StockAdjustmentState::Rejected.label(), "已驳回");
 
         let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a6"), data(), "creator-1").unwrap();
         adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
+    }
+    /// 驳回不产生库存事实，保存不清除结果，重新提交使用新的版本。
+    #[test]
+    fn rejection_is_editable_and_resubmission_advances_version() {
+        let mut adjustment = adjustment_in_state(StockAdjustmentState::Draft, 0);
+        assert!(adjustment.reject_approval(1).is_err());
+        adjustment.start_approval().unwrap();
+        let submitted = adjustment.clone();
+        assert!(adjustment.reject_approval(0).is_err());
+        assert!(adjustment.reject_approval(2).is_err());
+        assert_eq!(adjustment, submitted);
+        adjustment.reject_approval(1).unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Rejected);
+        assert_eq!(adjustment.approval_subject_version, 1);
+        assert!(adjustment.is_editable());
+        let before = adjustment.clone();
+        assert!(adjustment.reject_approval(1).is_err());
+        assert!(adjustment.ensure_approval_postable().is_err());
+        assert_eq!(adjustment, before);
+        adjustment.update(StockAdjustmentUpdate::default()).unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Rejected);
+        assert_eq!(adjustment.start_approval().unwrap(), 2);
+        assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
+        let resubmitted = adjustment.clone();
+        assert!(adjustment.reject_approval(1).is_err());
+        assert_eq!(adjustment, resubmitted);
     }
 }

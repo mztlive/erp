@@ -55,7 +55,7 @@ impl VoidChangeWrite {
     }
 }
 impl SalesReviewService {
-    /// 作废销售变更单（仅草稿态）。
+    /// 作废草稿或已驳回的销售变更单。
     ///
     /// # 参数
     /// * `id` - 变更单 ID
@@ -92,6 +92,7 @@ impl SalesReviewService {
             .sales_order_working_copies()
             .find_by_sales_change_order(&SalesChangeOrderId::new(id), &mut NoTransaction)
             .await?;
+        working_copy = working_copy.filter(|copy| !copy.is_submitted());
         if let Some(copy) = &mut working_copy {
             copy.abandon()?;
         }

@@ -37,6 +37,7 @@ import { cancelRequest, requestStatusLabels, type InvoiceRequest } from "../api"
 
 const requestStatusTones: Record<InvoiceRequest["status"], StatusTone> = {
     draft: "neutral",
+    rejected: "destructive",
     in_approval: "warning",
     approved: "info",
     completed: "success",
@@ -310,7 +311,7 @@ function InvoiceRequestDetailBody({
                     </Button>
                 ) : null}
                 {request.created_by === permissions.userId &&
-                request.status === "draft" &&
+                (request.status === "draft" || request.status === "rejected") &&
                 permissions.canSubmit ? (
                     <Button
                         id="invoice-request-edit"

@@ -422,7 +422,7 @@ pub(super) fn handler_route(
     } else {
         None
     };
-    if work_item_type == WorkItemType::DocumentApproval {
+    if matches!(work_item_type, WorkItemType::DocumentApproval | WorkItemType::ApprovalRework) {
         route_context = Some(WorkItemRouteContext {
             document_type: Some(business_object_type.to_string()),
             ..Default::default()
@@ -539,6 +539,9 @@ fn handler_destination(kind: WorkItemType, object: &str) -> Result<(&'static str
             exception_destination(kind, object)
         },
         WorkItemType::DocumentApproval => document_approval_route(object),
+        WorkItemType::ApprovalRework => {
+            document_approval_route(object).map(|(_, workspace)| ("approval_rework", workspace))
+        },
         WorkItemType::PurchaseOrderReview
         | WorkItemType::SalesChangeImpactReview
         | WorkItemType::SalesChangeFinanceReview
@@ -635,6 +638,34 @@ mod payment_request_tests {
     use super::*;
     use crate::workbench::access::ViewAccess;
     use crate::workbench::action_projection::ActionProjection;
+
+    /// 每类审批驳回均进入同一个处理器，并保留原单据工作面。
+    #[test]
+    fn rejected_documents_share_rework_handler_and_preserve_document_routes() {
+        let documents = [
+            ("sales_order", "W05"),
+            ("voucher_sales_order", "W05"),
+            ("sales_change_order", "W05"),
+            ("purchase_order", "W08"),
+            ("purchase_change_order", "W08"),
+            ("stock_adjustment", "W10"),
+            ("sales_invoice_request", "W11"),
+            ("customer_receipt", "W11"),
+            ("customer_refund", "W11"),
+            ("receipt_reversal", "W11"),
+            ("purchase_payment_request", "W12"),
+            ("supplier_refund", "W12"),
+            ("payment_reversal", "W12"),
+        ];
+        for (document, workspace) in documents {
+            assert_eq!(
+                handler_destination(WorkItemType::ApprovalRework, document).unwrap(),
+                ("approval_rework", workspace)
+            );
+            assert!(WorkItemType::ApprovalRework.brief_relation(document).is_some());
+        }
+        assert!(handler_destination(WorkItemType::ApprovalRework, "unregistered").is_err());
+    }
 
     /// 正式付款申请审批任务可同时进入队列及统计投影，保留精确执行和决定动作。
     #[test]
@@ -786,6 +817,7 @@ pub(crate) fn role_label(role: &str) -> String {
         "supplier_refund_approver" => "供应商退款审批人",
         "receipt_reversal_approver" => "回款冲正审批人",
         "payment_reversal_approver" => "付款冲正审批人",
+        "approval_submitter" => "原提交人",
         "approver" => "审批人",
         _ => "责任人",
     }

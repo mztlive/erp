@@ -246,6 +246,7 @@ async fn write_commit(
     ReturnsService::persist_created_receipt_reversal(db, &input.reversal, executor).await?;
     if let PreparedExecution::Apply(writes) = prepared {
         persist_receipt_reversal_runtime(
+            None,
             db,
             rbac,
             &writes,
@@ -275,6 +276,7 @@ async fn prepare_commit_start(
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
     let start_input = build_receipt_reversal_start_input(ReverseStartInput {
+        resubmission_reason: None,
         graph,
         binding,
         subject: approval.subject.clone(),

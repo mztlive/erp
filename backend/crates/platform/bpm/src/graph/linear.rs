@@ -23,7 +23,7 @@ pub struct LinearTransitionDraft {
     pub terminal_result: Option<ApprovalTerminalResult>,
 }
 
-/// 按节点顺序生成线性通过链与驳回到首节点的连线。
+/// 按节点顺序生成线性通过链与驳回终止的连线。
 ///
 /// 调用方传入的第一个键视为入口。本函数不读取定义实体，也不判断运行时末节点。
 ///
@@ -37,7 +37,6 @@ pub struct LinearTransitionDraft {
 /// 节点为空、键非法或存在重复时返回错误。
 pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<LinearTransitionDraft>> {
     let keys = normalize_keys(node_keys)?;
-    let entry = keys[0];
     let mut drafts = Vec::with_capacity(keys.len() * 2);
     for (index, from) in keys.iter().enumerate() {
         let next = keys.get(index + 1);
@@ -50,8 +49,8 @@ pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<Line
         drafts.push(LinearTransitionDraft {
             from_node_key: (*from).to_string(),
             event: ApprovalTransitionEvent::Reject,
-            to_node_key: Some(entry.to_string()),
-            terminal_result: None,
+            to_node_key: None,
+            terminal_result: Some(ApprovalTerminalResult::Rejected),
         });
     }
     Ok(drafts)
@@ -98,6 +97,14 @@ pub fn build_linear_transitions(
                     at,
                 );
             }
+            if draft.event == ApprovalTransitionEvent::Reject {
+                return ApprovalTransitionDefinition::to_rejected(
+                    transition_id,
+                    definition_id.clone(),
+                    draft.from_node_key,
+                    at,
+                );
+            }
             ApprovalTransitionDefinition::to_approved(
                 transition_id,
                 definition_id.clone(),
@@ -136,7 +143,7 @@ mod tests {
         ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, NODE_KEY_MAX_LEN,
     };
 
-    /// 单节点：通过进终态，驳回回自身。
+    /// 单节点的通过与驳回分别进入对应终态。
     #[test]
     fn single_node_approves_to_terminal() {
         let drafts = generate_linear_transitions(&["n1".to_string()]).unwrap();
@@ -144,12 +151,13 @@ mod tests {
         assert_eq!(drafts[0].event, ApprovalTransitionEvent::Approve);
         assert_eq!(drafts[0].terminal_result, Some(ApprovalTerminalResult::Approved));
         assert_eq!(drafts[1].event, ApprovalTransitionEvent::Reject);
-        assert_eq!(drafts[1].to_node_key.as_deref(), Some("n1"));
+        assert!(drafts[1].to_node_key.is_none());
+        assert_eq!(drafts[1].terminal_result, Some(ApprovalTerminalResult::Rejected));
     }
 
-    /// 多节点按顺序通过，驳回一律指向第一个键。
+    /// 多节点按顺序通过，驳回一律进入驳回终态。
     #[test]
-    fn linear_chain_rejects_to_first_key() {
+    fn linear_chain_rejects_to_terminal() {
         let drafts = generate_linear_transitions(&[" n1 ".to_string(), "n2".to_string()]).unwrap();
         assert_eq!(drafts.len(), 4);
         assert_eq!(drafts[0].to_node_key.as_deref(), Some("n2"));
@@ -158,7 +166,8 @@ mod tests {
             drafts
                 .iter()
                 .filter(|item| item.event == ApprovalTransitionEvent::Reject)
-                .all(|item| item.to_node_key.as_deref() == Some("n1"))
+                .all(|item| item.to_node_key.is_none()
+                    && item.terminal_result == Some(ApprovalTerminalResult::Rejected))
         );
     }
 

@@ -30,6 +30,8 @@ pub enum PurchaseOrderStatus {
     /// 审批中。
     #[serde(rename = "IN_APPROVAL")]
     InApproval,
+    /// 审批已驳回，可修改后重新提交。
+    Rejected,
 }
 
 status_display!(PurchaseOrderStatus, {
@@ -40,6 +42,7 @@ status_display!(PurchaseOrderStatus, {
     Completed => ("已完成", "COMPLETED"),
     Voided => ("已作废", "VOIDED"),
     InApproval => ("审批中", "IN_APPROVAL"),
+    Rejected => ("已驳回", "REJECTED"),
 });
 
 impl PurchaseOrderStatus {
@@ -74,7 +77,8 @@ impl DocumentState for PurchaseOrderStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval, Self::Voided],
-            Self::InApproval => &[Self::Effective, Self::Draft],
+            Self::InApproval => &[Self::Effective, Self::Draft, Self::Rejected],
+            Self::Rejected => &[Self::InApproval, Self::Voided],
             Self::PendingFinanceReview => &[],
             Self::Effective => &[Self::PartiallyExecuted],
             Self::PartiallyExecuted => &[Self::Completed],

@@ -29,6 +29,7 @@ use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::map_receipt_first_write_error;
 use erp_workflow::service::approval::process_kind::process_kind_of;
+use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -58,6 +59,8 @@ use crate::{Error, Result};
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
 pub struct StockAdjustmentStartPersistInput {
+    /// 本次重新提交说明。
+    pub resubmission_reason: Option<String>,
     /// 授权服务；事务内重验提交人与节点候选人权限。
     pub workflow: std::sync::Arc<dyn crate::workflow::FulfillmentWorkflow>,
     /// 已进入 `IN_APPROVAL` 的调整单。
@@ -124,6 +127,7 @@ pub async fn persist_stock_adjustment_start(
                     &input.writes,
                     &input.snapshot_payload,
                     StartRuntimeContext {
+                        resubmission_reason: input.resubmission_reason.as_deref(),
                         workflow: input.workflow.as_ref(),
                         owner_role: input.owner_role,
                         organization_id: &input.organization_id,
@@ -243,7 +247,7 @@ fn ensure_fresh_start_document(
     if current.base.id != target.base.id
         || current.base.version != expected_document_version
         || target.base.version != expected_document_version
-        || current.status != StockAdjustmentState::Draft
+        || !matches!(current.status, StockAdjustmentState::Draft | StockAdjustmentState::Rejected)
         || target.status != StockAdjustmentState::InApproval
         || expected_next_subject != expected_subject_version
         || target.approval_subject_version != expected_subject_version
@@ -421,6 +425,7 @@ async fn validate_balance_versions(
 
 /// 启动运行事实写入时已冻结的单据、责任与时间。
 struct StartRuntimeContext<'a> {
+    resubmission_reason: Option<&'a str>,
     workflow: &'a dyn crate::workflow::FulfillmentWorkflow,
     owner_role: &'a str,
     organization_id: &'a str,
@@ -454,6 +459,15 @@ async fn persist_runtime_writes(
     .await?;
     snapshot.display =
         Some(capture_stock_adjustment_display(db, context.adjustment, context.lines, executor).await?);
+    complete_resubmission(
+        db,
+        &mut snapshot,
+        context.resubmission_reason,
+        context.submitted_by,
+        context.now,
+        executor,
+    )
+    .await?;
     context.workflow.persist_start_snapshot(snapshot, executor).await?;
     persist_start_tasks(
         db,

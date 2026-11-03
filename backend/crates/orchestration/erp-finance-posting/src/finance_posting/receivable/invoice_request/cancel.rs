@@ -1,6 +1,7 @@
 //! 撤回申请与受阻取消共用领域转换，释放占用与关闭审批任务同事务。
 
 use application_core::{AuditActor, CommandReceipt};
+use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_finance::dto::receivable::CancelInvoiceRequest;
@@ -15,9 +16,10 @@ use erp_workflow::service::approval::execution::{
     PlannedWrites, PreparedExecution, claim_and_persist_document_cancel_runtime, prepare_cancel,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::NoTransaction;
 
 use super::super::{ReceivableProcess, cancel_approval};
+use super::authorization::{MongoAccess, RequestAction, authorize};
 use super::*;
 
 impl ReceivableProcess {
@@ -38,29 +40,31 @@ impl ReceivableProcess {
         actor: &AuditActor,
     ) -> Result<InvoiceRequestView> {
         let command = cancel_receipt(id, &req, actor)?;
-        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command, &mut NoTransaction)
-            .await?
-        {
-            return Ok(self.read.invoice_request_detail(&id).await?);
+        if let Some(view) = self.replay_invoice_request_command(&command, actor).await? {
+            return Ok(view);
         }
         let Some(prepared) = self.prepare_invoice_request_cancel(id, &req, actor).await? else {
-            return Ok(self.read.invoice_request_detail(id).await?);
+            return super::command::committed_result(
+                self.authorized_invoice_request_result(id, actor, RequestAction::Cancel).await,
+            );
         };
         let db = self.db.clone();
         let rbac = self.rbac.clone();
+        let response_actor = actor.clone();
         let actor = actor.clone();
         let id = id.to_string();
         let recover = command.clone();
-        let result = db
-            .client()
+        let revision = rbac.current_policy_revision().await?;
+        let result = rbac
             .clone()
-            .with_transaction(move |executor| {
+            .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move {
                     let receipts = FinanceCommandReceiptService::new(db.clone());
-                    if let Some(id) = receipts.committed_resource_id(&command, executor).await? {
-                        return Ok::<String, Error>(id);
+                    let access = MongoAccess { db: &db, rbac: &rbac };
+                    if access.replay(&actor, &command, executor).await?.is_some() {
+                        return Err(super::command::replay_requires_readback());
                     }
+                    authorize(&access, &actor, &id, RequestAction::Cancel, executor).await?;
                     claim_and_persist_document_cancel_runtime(
                         &db,
                         &prepared.writes,
@@ -77,7 +81,7 @@ impl ReceivableProcess {
                 })
             })
             .await;
-        self.finish_invoice_request_command(result, &recover).await
+        self.finish_invoice_request_command(result, &recover, &response_actor).await
     }
 
     /// 保持申请人、版本、审批绑定与运行时的既有首错顺序。
@@ -169,6 +173,38 @@ async fn cancel_and_record(
     let audit = super::command::event(actor, &request, super::command::CANCEL, command)?;
     persist_log(db, &audit, executor).await?;
     Ok(audit.base.id)
+}
+
+/// 在审批事务内驳回申请并释放申请额度。
+///
+/// # 参数
+/// * `db` - 当前数据库。
+/// * `id` - 开票申请身份。
+/// * `expected_subject_version` - 当前被决定的审批实例主题版本。
+/// * `actor` - 已授权审批人。
+/// * `executor` - 审批运行时使用的同一事务。
+/// # 返回
+/// 申请已驳回、额度不再占用且审计保存成功。
+/// # 错误
+/// 申请缺失、状态无效、应收锁冲突或保存失败时返回错误。
+pub async fn reject(
+    db: &Database,
+    id: &str,
+    expected_subject_version: u32,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut request = load(db, id, executor).await?;
+    if request.approval_subject_version != expected_subject_version {
+        return Err(Error::ConflictError("审批主题版本已变化，请刷新后重试".into()));
+    }
+    lock_account(db, request.receivable_account_id.as_ref(), executor).await?;
+    request.reject()?;
+    db.sales_invoice_requests().update(&mut request, executor).await?;
+    let audit =
+        actor.clone().resource_log("sales_invoice_request.reject", "sales_invoice_request", id.to_owned())?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
 }
 
 #[cfg(test)]

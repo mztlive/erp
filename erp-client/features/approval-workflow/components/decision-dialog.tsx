@@ -41,7 +41,6 @@ export function DecisionDialog({
     expectedTaskVersion,
     defaultDecision,
     initialReason = "",
-    documentType,
     allowedActions,
     context,
     onApplied,
@@ -75,10 +74,8 @@ export function DecisionDialog({
     )
     const canApprove = allowedActions.includes("APPROVE")
     const canReject = allowedActions.includes("REJECT")
-    const closesPaymentRequest = documentType === "purchase_payment_request"
-    const rejectDescription = closesPaymentRequest
-        ? "驳回后结束本次申请并释放未付金额，采购重新提交后重新审核。"
-        : "驳回后，重新提交将从首节点审批。"
+    const rejectDescription =
+        "驳回后结束本次审批并关闭审批待办，退回原提交人处理；重新提交须填写说明并重新审批。"
 
     const form = useAppForm({
         defaultValues: {
@@ -167,9 +164,7 @@ export function DecisionDialog({
                             <dd className="min-w-0 break-words">
                                 {context.impactSummary?.trim() ||
                                     (defaultDecision === "REJECT"
-                                        ? closesPaymentRequest
-                                            ? rejectDescription
-                                            : "驳回后从首节点进入下一轮审批。"
+                                        ? rejectDescription
                                         : "通过后进入下一审批节点；如无后续节点，则完成本轮审批。")}
                             </dd>
                         </dl>

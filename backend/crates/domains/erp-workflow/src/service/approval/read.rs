@@ -283,6 +283,7 @@ mod tests {
 
     fn receipt() -> ApprovalCommandReceipt {
         let identity = start_identity(StartIdentityParams {
+            resubmission_reason: None,
             idempotency_key: normalize_idempotency_key("key-1").unwrap(),
             process_kind: process_kind_of(DocumentType::StockAdjustment).as_str(),
             subject_kind: DocumentType::StockAdjustment.as_str(),

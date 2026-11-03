@@ -181,6 +181,7 @@ export async function submitPurchaseOrderForReview(
             {
                 expected_lock_version: input.expectedLockVersion,
                 payment_term_code: input.paymentTermCode,
+                resubmission_reason: input.resubmissionReason,
                 line_patches: input.lines.map(toLinePatch),
                 idempotency_key: input.idempotencyKey,
             },
@@ -243,6 +244,7 @@ export async function startPurchaseChange(input: {
  * @param input 变更单版本、原采购单与幂等键。
  */
 export type SubmitPurchaseChangeInput = {
+    resubmissionReason?: string
     purchaseChangeOrderId: string
     purchaseOrderId: string
     expectedLockVersion: number
@@ -263,6 +265,7 @@ export async function submitPurchaseChange(
                 expected_lock_version: input.expectedLockVersion,
                 payment_term_code: input.paymentTermCode,
                 reason: input.reason,
+                resubmission_reason: input.resubmissionReason,
                 // 已编辑的完整目标行原样提交；无编辑目标时沿用服务端基准。
                 lines: input.lines ?? [],
                 idempotency_key: input.idempotencyKey,

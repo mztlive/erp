@@ -60,18 +60,8 @@ pub(super) async fn validate_settlement(
     } else {
         decision.refund_amount
     };
-    let used = purchase_settlements(db, id, executor)
-        .await?
-        .into_iter()
-        .filter(|row| {
-            row.base.id != refund.base.id
-                && row.settlement_method == refund.settlement_method
-                && row.settlement_decision_key == refund.settlement_decision_key
-        })
-        .fold(Amount::zero(), |total, row| total.checked_add(row.amount));
-    if refund.amount > limit.checked_sub(used) {
-        return Err(Error::ConflictError("本次金额超过采购方案剩余可处理金额，审批中的金额也已占用".into()));
-    }
+    let settlements = purchase_settlements(db, id, executor).await?;
+    refund.ensure_settlement_limit(limit, &settlements)?;
     // 同采购所有处置申请、退回和销售依据变化竞争同一 CAS。
     db.purchase_orders().update(&mut order, executor).await?;
     let account = db

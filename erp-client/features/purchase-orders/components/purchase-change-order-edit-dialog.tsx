@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { XIcon } from "lucide-react"
 import { useAppForm } from "@/components/form"
 import { BusinessFailureState } from "@/components/business"
@@ -26,6 +27,7 @@ import {
 } from "../hooks/queries"
 import {
     usePurchaseChangeDraftQuery,
+    useSavePurchaseChangeDraftMutation,
     usePurchaseChangeSubmissionQuery,
 } from "../hooks/use-purchase-change-draft"
 import type { PurchaseOrderDetailResult } from "../hooks/use-purchase-order-detail-command-state"
@@ -198,6 +200,12 @@ function PurchaseChangeEditForm({
     onResult?: (result: PurchaseOrderDetailResult) => void
 }) {
     const mutation = useSubmitPurchaseChangeMutation()
+    const saveMutation = useSavePurchaseChangeDraftMutation(changeOrderId)
+    const shouldSubmit = React.useRef(true)
+    const [unknownOperation, setUnknownOperation] = React.useState<
+        "save" | "submit"
+    >("submit")
+    const [saved, setSaved] = React.useState(false)
     const submissionState = usePurchaseChangeSubmissionQuery(changeOrderId)
     const centerQuery = usePurchaseOrderCenterQuery(purchaseOrderId)
     const expenseStateUnavailable = centerQuery.isError || !centerQuery.data
@@ -227,6 +235,8 @@ function PurchaseChangeEditForm({
         if (inFlight.current) return
         if (payload && expenseStateUnavailable) return
         const wasUnknown = unknown
+        setUnknownOperation("submit")
+        setSaved(false)
         const command =
             ledger.peek<EditPayload>(slot) ??
             (payload
@@ -272,6 +282,43 @@ function PurchaseChangeEditForm({
         }
     }
 
+    const save = async (payload?: EditPayload) => {
+        if (inFlight.current) return
+        const command =
+            ledger.peek<EditPayload>(`${slot}:save`) ??
+            (payload
+                ? ledger.acquire(
+                      `${slot}:save`,
+                      `purchase-change:${changeOrderId}:save`,
+                      payload,
+                  )
+                : undefined)
+        if (!command) return
+        const wasUnknown = unknown
+        setUnknownOperation("save")
+        setSaved(false)
+        inFlight.current = true
+        onBusyChange(true)
+        setError(null)
+        try {
+            await saveMutation.mutateAsync({
+                ...command.payload,
+                idempotencyKey: command.idempotencyKey,
+            })
+            ledger.settle(`${slot}:save`, "succeeded")
+            setUnknown(false)
+            setSaved(true)
+        } catch (cause) {
+            const result = classifyFormalCommandError(cause)
+            const remainsUnknown = wasUnknown || result === "unknown"
+            ledger.settle(`${slot}:save`, remainsUnknown ? "unknown" : result)
+            setUnknown(remainsUnknown)
+            setError(getErrorMessage(cause, "修改未保存，请重试"))
+        } finally {
+            inFlight.current = false
+        }
+    }
+
     const resolve = async () => {
         const command = ledger.peek<EditPayload>(slot)
         if (!command || inFlight.current) return
@@ -308,32 +355,63 @@ function PurchaseChangeEditForm({
         }
     }
 
+    const rework = useResubmissionReason({
+        open: true,
+        required: approval?.instance?.status === "REJECTED",
+        id: `${id}-resubmission-reason`,
+        disabled: mutation.isPending || saveMutation.isPending || unknown,
+    })
     const form = useAppForm({
         defaultValues: purchaseChangeDraftValues(draft, options),
         validators: { onChange: schema },
         onSubmit: async ({ value }) => {
-            if (unknown || mutation.isPending || expenseStateUnavailable) return
-            await submit({
+            if (
+                unknown ||
+                mutation.isPending ||
+                saveMutation.isPending ||
+                expenseStateUnavailable ||
+                (shouldSubmit.current && !rework.valid)
+            )
+                return
+            const payload: EditPayload = {
                 purchaseChangeOrderId: changeOrderId,
+                resubmissionReason: rework.reason,
                 purchaseOrderId,
                 expectedLockVersion: draft.version,
                 paymentTermCode: value.paymentTermCode,
                 reason: value.reason.trim(),
                 lines: purchaseChangeTargetLines(value),
-            })
+            }
+            if (shouldSubmit.current) await submit(payload)
+            else await save(payload)
         },
     })
     React.useEffect(() => {
         onBusyChange(
-            mutation.isPending || submissionState.query.isFetching || unknown,
+            mutation.isPending ||
+                saveMutation.isPending ||
+                submissionState.query.isFetching ||
+                unknown,
         )
     }, [
         mutation.isPending,
+        saveMutation.isPending,
         submissionState.query.isFetching,
         onBusyChange,
         unknown,
     ])
-    const disabled = mutation.isPending || unknown || expenseStateUnavailable
+    const disabled =
+        mutation.isPending ||
+        saveMutation.isPending ||
+        unknown ||
+        expenseStateUnavailable
+    const appliedVersion = React.useRef(draft.version)
+    React.useEffect(() => {
+        if (!disabled && appliedVersion.current !== draft.version) {
+            form.reset(purchaseChangeDraftValues(draft, options))
+            appliedVersion.current = draft.version
+        }
+    }, [draft, disabled, form, options])
 
     return (
         <form
@@ -342,6 +420,7 @@ function PurchaseChangeEditForm({
             onSubmit={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
+                shouldSubmit.current = true
                 void form.handleSubmit()
             }}
         >
@@ -367,6 +446,12 @@ function PurchaseChangeEditForm({
                 disabled={disabled}
                 occurredExpenseIds={occurredExpenseIds}
             />
+            {saved ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    修改已保存，尚未重新提交审批。
+                </p>
+            ) : null}
+            {rework.field}
             <SubmissionRouteConfirmation definition={approval?.definition} />
             {error ? (
                 <p role="alert" className="text-sm text-destructive">
@@ -375,9 +460,15 @@ function PurchaseChangeEditForm({
             ) : null}
             {unknown ? (
                 <Alert variant="warning">
-                    <AlertTitle>提交结果待确认</AlertTitle>
+                    <AlertTitle>
+                        {unknownOperation === "save"
+                            ? "保存结果待确认"
+                            : "提交结果待确认"}
+                    </AlertTitle>
                     <AlertDescription>
-                        当前改单内容已保留。请查询改单状态或使用本次操作重试，确认前不能修改或关闭。
+                        {unknownOperation === "save"
+                            ? "当前修改已保留，请使用本次保存重试，确认前不能修改或关闭。"
+                            : "当前改单内容已保留。请查询改单状态或使用本次操作重试，确认前不能修改或关闭。"}
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -396,12 +487,41 @@ function PurchaseChangeEditForm({
                             id={`${id}-cancel`}
                             type="button"
                             variant="outline"
-                            disabled={mutation.isPending || unknown}
+                            disabled={
+                                mutation.isPending ||
+                                saveMutation.isPending ||
+                                unknown
+                            }
                             onClick={onClose}
                         >
                             取消
                         </Button>
-                        {unknown ? (
+                        {!unknown ? (
+                            <LoadingButton
+                                id={`${id}-save`}
+                                type="button"
+                                variant="outline"
+                                disabled={disabled}
+                                loading={saveMutation.isPending}
+                                onClick={() => {
+                                    shouldSubmit.current = false
+                                    void form.handleSubmit()
+                                }}
+                            >
+                                保存修改
+                            </LoadingButton>
+                        ) : null}
+                        {unknown && unknownOperation === "save" ? (
+                            <LoadingButton
+                                id={`${id}-retry-save`}
+                                type="button"
+                                loading={saveMutation.isPending}
+                                disabled={saveMutation.isPending}
+                                onClick={() => void save()}
+                            >
+                                使用本次保存重试
+                            </LoadingButton>
+                        ) : unknown ? (
                             <>
                                 <LoadingButton
                                     id={`${id}-resolve-submit`}
@@ -435,7 +555,7 @@ function PurchaseChangeEditForm({
                                     id={`${id}-submit`}
                                     label="提交改单"
                                     pendingLabel="正在提交…"
-                                    disabled={disabled}
+                                    disabled={disabled || !rework.valid}
                                 />
                             </form.AppForm>
                         )}

@@ -70,7 +70,7 @@ type SalesChangeOrderListPage = PageView<BackendSalesChangeOrder> & {
 }
 
 const isOpenSalesChangeStatus = (status?: string): boolean =>
-    status !== "EFFECTIVE" && status !== "VOIDED" && status !== "REJECTED"
+    status !== "EFFECTIVE" && status !== "VOIDED"
 
 /**
  * 把变更列表页的范围元数据收成前端字段；`no_scope` 一律空集。
@@ -160,6 +160,7 @@ export async function fetchSalesChangeOrderDetail(
 }
 
 export type SubmitSalesChangeOrderInput = Readonly<{
+    resubmissionReason?: string
     salesChangeOrderId: string
     salesOrderId: string
     version: number
@@ -179,6 +180,7 @@ export async function submitSalesChangeOrder(
         `/admin/sales-change-orders/${encodeURIComponent(input.salesChangeOrderId)}/submit-impact`,
         {
             version: input.version,
+            resubmission_reason: input.resubmissionReason,
             idempotency_key: input.idempotencyKey,
         },
     )

@@ -531,7 +531,8 @@ export function EditSurface({
             <Card className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
                     <CardTitle>
-                        {order.identity.reviewStatus === "REJECTED"
+                        {order.identity.status === "REJECTED" ||
+                        order.identity.reviewStatus === "REJECTED"
                             ? "被驳回待修改"
                             : "采购草稿"}
                     </CardTitle>

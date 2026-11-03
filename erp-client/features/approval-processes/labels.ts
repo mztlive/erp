@@ -155,15 +155,11 @@ export const versionLabel = (version: number | null | undefined): string => {
     return `${versionText.version} ${version}`
 }
 
-/** 固定驳回语义说明。 */
-export const REJECT_RESTART_COPY =
-    "任一层驳回后，将从第一个节点开始下一轮审批。"
+/** 所有单据统一终态驳回；重新提交建立新的审批。 */
+export const REJECT_END_COPY =
+    "任一节点驳回将结束本次审批，退回原提交人处理；填写重新提交说明后可重新发起审批。"
 
-/** 付款申请驳回终止本次审批，重新提交须重新冻结并审核。 */
-export const rejectionPolicyCopy = (documentType: DocumentType): string =>
-    documentType === "purchase_payment_request"
-        ? "任一层驳回后，本次申请结束并释放未付金额；重新提交后从第一个节点重新审核。"
-        : REJECT_RESTART_COPY
+export const rejectionPolicyCopy = (): string => REJECT_END_COPY
 
 /**
  * 把线性审批人显示名拼成发布预览路径。

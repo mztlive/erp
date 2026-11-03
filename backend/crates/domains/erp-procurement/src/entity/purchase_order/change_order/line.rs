@@ -304,7 +304,7 @@ fn ensure_line_no(line_no: u32) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use std::str::FromStr;
 
     use erp_core::common::time::BusinessDate;
@@ -317,7 +317,8 @@ mod tests {
     use super::{PurchaseChangeSubmissionLine, PurchaseChangeSubmissionLineData};
     use crate::entity::purchase_order::types::PurchaseLineType;
 
-    fn change_line_data() -> PurchaseChangeSubmissionLineData {
+    pub(in crate::entity::purchase_order::change_order) fn change_line_data()
+    -> PurchaseChangeSubmissionLineData {
         let (gross, net, tax) = line_amounts(
             UnitPrice::from_str("9.9900").unwrap(),
             Quantity::from_str("3.000000").unwrap(),

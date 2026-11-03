@@ -19,6 +19,9 @@ pub struct ApprovalRecoveryAuthorization {
 /// 目标运行编排的启动命令。不得包含 definition key 或审批人。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApprovalStartCommand {
+    /// 驳回后重新提交必填说明。
+    #[serde(default)]
+    pub resubmission_reason: Option<String>,
     /// 业务对象种类。
     pub subject_kind: String,
     /// 业务对象 ID。

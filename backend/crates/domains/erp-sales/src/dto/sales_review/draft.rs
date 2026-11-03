@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::entity::sales_order::SalesOrderWorkingCopyLineData;
-use crate::entity::sales_review::SalesChangeTerms;
+use crate::entity::sales_review::{SalesChangeOrderStatus, SalesChangeTerms};
 
 /// 可重新编辑的销售变更工作副本。
 #[derive(Debug, Clone, Serialize)]
 pub struct SalesChangeDraftView {
+    /// 当前业务状态；修改保存保留已驳回。
+    pub status: SalesChangeOrderStatus,
     /// 当前变更基准版本含税金额。
     pub base_gross_amount: Amount,
     /// 销售变更单版本。

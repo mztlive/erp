@@ -1,13 +1,19 @@
 /** 开票申请 API；所有调用由 TanStack Query 管理。 */
-import { apiGet, apiPost, type Page } from "@/lib/api"
+import { apiGet, apiPost, apiPut, type Page } from "@/lib/api"
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import {
     enrichSubmittedInvoiceRequest,
     submittedInvoiceRequest,
 } from "./pending-detail"
-export type RequestStatus = "draft" | "in_approval" | "approved" | "completed"
+export type RequestStatus =
+    | "draft"
+    | "rejected"
+    | "in_approval"
+    | "approved"
+    | "completed"
 export const requestStatusLabels: Record<RequestStatus, string> = {
     draft: "草稿",
+    rejected: "已驳回",
     in_approval: "审批中",
     approved: "待开票",
     completed: "已开票",
@@ -59,6 +65,7 @@ export type RequestQuery = {
     page_size?: number
 }
 export type SubmitRequest = {
+    resubmission_reason?: string
     receivable_account_id: string
     request_id?: string
     expected_version?: number
@@ -210,4 +217,42 @@ export const cancelRequest = (input: {
         `/admin/sales-invoice-requests/${encodeURIComponent(id)}/cancel`,
         body,
     )
+}
+
+/** 原单保存不启动审批；没有命令回执时不得以最新资料推断原保存成功。 */
+export type UpdateRequest = {
+    id: string
+    expected_version: number
+    data: RequestData
+}
+export async function updateRequest(
+    input: UpdateRequest,
+): Promise<InvoiceRequest> {
+    const { id, ...body } = input
+    return apiPut<InvoiceRequest>(
+        `/admin/sales-invoice-requests/${encodeURIComponent(id)}`,
+        body,
+    )
+}
+
+/** 核对保存后的服务端版本和状态，不使用提交快照补齐缺失字段。 */
+export async function getRequestSaveState(
+    id: string,
+): Promise<Pick<InvoiceRequest, "id" | "version" | "status">> {
+    const wire = asRecord(
+        await apiGet<unknown>(
+            `/admin/sales-invoice-requests/${encodeURIComponent(id)}`,
+        ),
+    )
+    const status = knownRequestStatus(wire.status)
+    if (
+        wire.id !== id ||
+        typeof wire.version !== "number" ||
+        !Number.isSafeInteger(wire.version) ||
+        wire.version < 1 ||
+        !status
+    ) {
+        throw new Error("未取得完整的服务端申请版本和状态，请重新核对")
+    }
+    return { id, version: wire.version, status }
 }

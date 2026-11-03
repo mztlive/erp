@@ -63,7 +63,7 @@ async fn change_actions(
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     let action = match change.stable.status() {
-        SalesChangeOrderStatus::Draft => "submit",
+        SalesChangeOrderStatus::Draft | SalesChangeOrderStatus::Rejected => "submit",
         SalesChangeOrderStatus::InApproval if cancellable => "cancel_approval",
         _ => return Ok(Vec::new()),
     };

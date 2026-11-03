@@ -71,7 +71,7 @@ export function DefinitionReadView({
                             <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
                                 <dt className="font-medium">驳回</dt>
                                 <dd className="text-muted-foreground">
-                                    {rejectionPolicyCopy(detail.document_type)}
+                                    {rejectionPolicyCopy()}
                                 </dd>
                             </div>
                         </dl>

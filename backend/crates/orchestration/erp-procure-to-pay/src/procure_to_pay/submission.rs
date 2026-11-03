@@ -39,6 +39,7 @@ struct PurchaseSubmitCommand<'a> {
 
 /// 采购提交启动恢复入参。
 struct RecoverPurchaseSubmitStartInput<'a> {
+    resubmission_reason: Option<&'a str>,
     /// 采购单主键。
     purchase_order_id: &'a str,
     /// 提交时冻结的审批主题版本。
@@ -129,6 +130,7 @@ impl PurchaseOrderProcess {
             Err(error) if error.command_may_have_committed() => {
                 return self
                     .recover_purchase_submit_start(RecoverPurchaseSubmitStartInput {
+                        resubmission_reason: command.request.resubmission_reason.as_deref(),
                         purchase_order_id: command.purchase_order_id,
                         subject_version,
                         idempotency_key: &command.request.idempotency_key,
@@ -260,6 +262,7 @@ impl PurchaseOrderProcess {
         let idempotency_key = input.idempotency_key.to_string();
         let actor_id = input.actor.id().to_string();
         let subject_version = input.subject_version;
+        let resubmission_reason = input.resubmission_reason.map(str::to_string);
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -283,6 +286,7 @@ impl PurchaseOrderProcess {
                         &idempotency_key,
                         binding,
                         &actor_id,
+                        resubmission_reason.as_deref(),
                         executor,
                     )
                     .await

@@ -29,6 +29,9 @@ pub enum CustomerRefundStatus {
     /// 审批中。
     #[serde(rename = "IN_APPROVAL")]
     InApproval,
+    /// 已驳回，允许原经办人修改后重新提交。
+    #[serde(rename = "REJECTED")]
+    Rejected,
     /// 已过账。
     Posted,
     /// 已冲正（存在正式反向事实，原事实不删除）。
@@ -50,6 +53,7 @@ impl CustomerRefundStatus {
         match self {
             Self::Draft => "草稿",
             Self::InApproval => "审批中",
+            Self::Rejected => "已驳回",
             Self::Posted => "已过账",
             Self::Reversed => "已冲正",
         }
@@ -69,6 +73,7 @@ impl CustomerRefundStatus {
         match self {
             Self::Draft => "draft",
             Self::InApproval => "IN_APPROVAL",
+            Self::Rejected => "REJECTED",
             Self::Posted => "posted",
             Self::Reversed => "reversed",
         }
@@ -79,7 +84,7 @@ impl DocumentState for CustomerRefundStatus {
     /// 返回全部合法后继状态（合同 §4.4.1 / §4.4.2）。
     ///
     /// 复核态唯一为 `IN_APPROVAL`；草稿不得直接过账；审批中可过账或受控
-    /// 撤回回草稿；`REVERSED` 是终态。审批导致的业务 `REJECTED` 已删除。
+    /// 撤回回草稿；`REVERSED` 是终态。驳回进入 `REJECTED`，重提创建新的审批实例。
     ///
     /// # 参数
     /// 无。
@@ -93,7 +98,8 @@ impl DocumentState for CustomerRefundStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval],
-            Self::InApproval => &[Self::Posted, Self::Draft],
+            Self::InApproval => &[Self::Posted, Self::Draft, Self::Rejected],
+            Self::Rejected => &[Self::InApproval],
             Self::Posted => &[Self::Reversed],
             Self::Reversed => &[],
         }
@@ -129,7 +135,7 @@ pub struct CustomerRefundData {
     pub evidence_attachment_id: Option<FileAssetId>,
 }
 
-/// 客户退款更新数据（仅草稿可编辑）。
+/// 客户退款更新数据（草稿或已驳回可编辑）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct CustomerRefundUpdate {
     /// 原因代码；`None` 表示不修改，`Some("")` 清除。
@@ -193,16 +199,16 @@ impl CustomerRefund {
     /// * `actor_id` - 当前编辑人的账号
     ///
     /// # 返回
-    /// 原经办人与复核岗位分离且单据为草稿时返回成功。
+    /// 原经办人与复核岗位分离且单据为草稿或已驳回时返回成功。
     ///
     /// # 错误
-    /// 非原经办人返回权限错误，非草稿返回状态冲突。
+    /// 非原经办人返回权限错误，不可编辑状态返回状态冲突。
     pub fn ensure_draft_editor(&self, actor_id: &str) -> DraftEditResult<()> {
         FinancialDraftEditPolicy::ensure(
             &self.handled_by,
             &self.reviewed_by,
             actor_id,
-            self.status == CustomerRefundStatus::Draft,
+            matches!(self.status, CustomerRefundStatus::Draft | CustomerRefundStatus::Rejected),
         )
     }
 
@@ -295,7 +301,7 @@ impl CustomerRefund {
 
     /// 更新客户退款草稿。
     ///
-    /// 复用 `new` 的校验规则；仅草稿可编辑；退款单号、客户与原事实引用是
+    /// 复用 `new` 的校验规则；草稿或已驳回可编辑；退款单号、客户与原事实引用是
     /// 固定字段不允许修改。
     ///
     /// # 参数
@@ -305,10 +311,10 @@ impl CustomerRefund {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当状态非草稿或更新字段校验失败时返回错误。
+    /// 当状态不可编辑或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: CustomerRefundUpdate) -> Result<()> {
-        if self.status != CustomerRefundStatus::Draft {
-            return Err(Error::from("非草稿状态的退款不可编辑"));
+        if !matches!(self.status, CustomerRefundStatus::Draft | CustomerRefundStatus::Rejected) {
+            return Err(Error::from("只有草稿或已驳回的退款可编辑"));
         }
         if let Some(amount) = update.amount {
             ensure_positive_amount(amount, "退款金额必须为正数")?;
@@ -360,15 +366,34 @@ impl CustomerRefund {
     /// 返回冻结后的提交版本。
     ///
     /// # 错误
-    /// 非草稿或审批版本溢出时返回 `LogicError`。
+    /// 状态不可提交或审批版本溢出时返回 `LogicError`。
     pub fn start_approval(&mut self) -> Result<u32> {
-        if self.status != CustomerRefundStatus::Draft {
-            return Err(Error::from("只有草稿状态的客户退款单可以提交审批"));
+        if !matches!(self.status, CustomerRefundStatus::Draft | CustomerRefundStatus::Rejected) {
+            return Err(Error::from("只有草稿或已驳回状态的客户退款单可以提交审批"));
         }
         let next = next_approval_version(self.approval_subject_version)?;
         self.approval_subject_version = next;
         self.status = CustomerRefundStatus::InApproval;
         Ok(next)
+    }
+
+    /// 结束本次审批并保留已驳回状态与原单内容。
+    ///
+    /// # 参数
+    /// * `expected_subject_version` - 被驳回实例冻结的审批主题版本。
+    /// # 返回
+    /// 成功时进入已驳回；审批版本保持不变。
+    /// # 错误
+    /// 非审批中时拒绝，禁止重复驳回或更改已过账事实。
+    pub fn reject_approval(&mut self, expected_subject_version: u32) -> Result<()> {
+        if self.approval_subject_version != expected_subject_version {
+            return Err(Error::from("审批提交版本已变化，请刷新后重试"));
+        }
+        if self.status != CustomerRefundStatus::InApproval {
+            return Err(Error::from("只有审批中的客户退款单可以驳回"));
+        }
+        self.status = CustomerRefundStatus::Rejected;
+        Ok(())
     }
 
     /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
@@ -599,7 +624,7 @@ pub(crate) mod tests {
             record.status = status;
             let before = record.clone();
             assert!(matches!(record.start_approval(), Err(Error::LogicError(message))
-                if message == "只有草稿状态的客户退款单可以提交审批"));
+                if message == "只有草稿或已驳回状态的客户退款单可以提交审批"));
             assert_eq!(record, before);
         }
         Ok(())
@@ -664,5 +689,34 @@ pub(crate) mod tests {
         assert_eq!(record.amount.to_string(), "120.00");
         assert_eq!(record.reason_text, "修正金额后重新提交");
         assert_eq!(record.start_approval().unwrap(), 2);
+    }
+    /// 驳回保留原单，编辑不清除结果，重新提交递增版本且禁止终态过账。
+    #[test]
+    fn rejection_preserves_content_and_supports_new_submission() {
+        let mut record = CustomerRefund::new(CustomerRefundId::new("rejected-1"), data(), "creator").unwrap();
+        assert!(record.reject_approval(1).is_err());
+        assert_eq!(record.start_approval().unwrap(), 1);
+        let submitted = record.clone();
+        assert!(record.reject_approval(0).is_err());
+        assert!(record.reject_approval(2).is_err());
+        assert_eq!(record, submitted);
+        record.reject_approval(1).unwrap();
+        assert_eq!(record.status, CustomerRefundStatus::Rejected);
+        assert_eq!(record.approval_subject_version, 1);
+        let before = record.clone();
+        assert!(record.reject_approval(1).is_err());
+        assert!(record.mark_posted().is_err());
+        assert_eq!(record, before);
+        assert!(record.ensure_draft_editor("other").is_err());
+        assert!(record.ensure_draft_editor("handler-1").is_ok());
+        record.update(CustomerRefundUpdate::default()).unwrap();
+        assert_eq!(record.status, CustomerRefundStatus::Rejected);
+        assert_eq!(record.start_approval().unwrap(), 2);
+        assert_eq!(record.status, CustomerRefundStatus::InApproval);
+        let resubmitted = record.clone();
+        assert!(record.reject_approval(1).is_err());
+        assert_eq!(record, resubmitted);
+        record.mark_posted().unwrap();
+        assert!(record.reject_approval(1).is_err());
     }
 }

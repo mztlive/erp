@@ -11,6 +11,10 @@ pub const PURCHASE_SUBMIT_ACTION: &str = "purchase_order.submit";
 /// 提交财务审核请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SubmitPurchaseOrderRequest {
+    /// 驳回后重新提交的必填说明。
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "重新提交说明最多1000个字符"))]
+    pub resubmission_reason: Option<String>,
     /// 期望的乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_lock_version: u64,
@@ -41,11 +45,15 @@ impl SubmitPurchaseOrderRequest {
     /// 同一幂等键用于不同期望版本或草稿补丁时必须冲突；形态文本按字段顺序显式
     /// 编码（不依赖 Debug 派生），摘要形态与存量收据一致，修改会破坏幂等兼容。
     pub fn request_fingerprint(&self, purchase_order_id: &str) -> String {
-        digest_parts([
+        let original = digest_parts([
             purchase_order_id.to_string(),
             self.expected_lock_version.to_string(),
             submit_request_shape(&self.payment_term_code, &self.line_patches),
-        ])
+        ]);
+        match self.resubmission_reason.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(reason) => digest_parts([original, reason.to_string()]),
+            None => original,
+        }
     }
 }
 

@@ -18,6 +18,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
@@ -79,6 +80,12 @@ export function RequestDetail({
         task.allowedActions.includes("PROCESS")
     const scopedWorkItemId =
         isApprovalTask || isPaymentTask ? task?.workItemId : undefined
+    const resubmission = useResubmissionReason({
+        open: submitOpen,
+        required: request.status === "rejected",
+        id: "ppr-submit-resubmission-reason",
+        disabled: command.isPending || submitUnknown,
+    })
     const submitUnsettled = command.isPending || submitUnknown
     const closeLabel =
         request.status === "paid" ? "终止付款授权" : "关闭未付部分"
@@ -250,11 +257,15 @@ export function RequestDetail({
                         希望付款日：{request.desired_payment_date}
                     </span>,
                 ]}
+                confirmDisabled={!submitUnknown && !resubmission.valid}
                 formContent={
-                    <SubmissionRouteConfirmation
-                        documentType="purchase_payment_request"
-                        definition={approval?.definition}
-                    />
+                    <div className="space-y-4">
+                        {resubmission.field}
+                        <SubmissionRouteConfirmation
+                            documentType="purchase_payment_request"
+                            definition={approval?.definition}
+                        />
+                    </div>
                 }
                 effects={[
                     "提交后冻结采购、销售与审核材料，并保留本次未付申请金额。",
@@ -263,6 +274,7 @@ export function RequestDetail({
                 onConfirm={async () => {
                     submitIdentity.current ??= {
                         expected_version: request.version,
+                        resubmission_reason: resubmission.reason,
                         idempotency_key: `ppr-submit:${crypto.randomUUID()}`,
                     }
                     try {

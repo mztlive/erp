@@ -15,7 +15,6 @@ import type { ApprovalDefinitionBinding } from "../types"
  */
 export function SubmissionRouteConfirmation({
     definition,
-    documentType,
 }: {
     definition?: ApprovalDefinitionBinding
     documentType?: string
@@ -32,9 +31,7 @@ export function SubmissionRouteConfirmation({
         )
     }
 
-    const firstNode = preview.nodes[0]
     const route = displayRoute(preview.nodes)
-    const firstLabel = displayRoute([firstNode])
 
     return (
         <Alert>
@@ -56,9 +53,7 @@ export function SubmissionRouteConfirmation({
                     </p>
                 )}
                 <p className="mt-2">
-                    {documentType === "purchase_payment_request"
-                        ? `任一层驳回后，本次申请结束并释放未付金额；重新提交后从${firstLabel}重新审核。`
-                        : `任一层驳回后，将从${firstLabel}开始下一轮审批。`}
+                    任一节点驳回将结束本次审批，退回提交人处理。填写重新提交说明后可重新发起审批。
                 </p>
             </AlertDescription>
         </Alert>

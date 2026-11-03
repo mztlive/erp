@@ -1,5 +1,7 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+
 import { getErrorMessage } from "@/lib/api/errors"
 import { FinancialDraftEditDialog } from "@/features/financial-draft-edit/components/financial-draft-edit-dialog"
 import { BusinessEmptyState, PageScaffold } from "@/components/business"
@@ -286,6 +288,25 @@ export function SupplierAccountsPage() {
                 onDismiss={() => setLastResult(null)}
             />
 
+            {refundFlow.refundSubmitUnknown ? (
+                <Button
+                    id="supplier-refund-resume-submit"
+                    variant="outline"
+                    onClick={() => refundFlow.setRefundSubmitOpen(true)}
+                >
+                    继续核对退款提交结果
+                </Button>
+            ) : null}
+            {reversalFlow.reversalSubmitUnknown ? (
+                <Button
+                    id="supplier-reversal-resume-submit"
+                    variant="outline"
+                    onClick={() => reversalFlow.setReversalSubmitOpen(true)}
+                >
+                    继续核对冲正提交结果
+                </Button>
+            ) : null}
+
             {data && !data.moduleAllowed ? (
                 <BusinessEmptyState
                     kind="no-scope"
@@ -441,13 +462,18 @@ export function SupplierAccountsPage() {
 
             <SupplierRefundSubmitConfirmDialog
                 open={refundFlow.refundSubmitOpen}
+                unknown={refundFlow.refundSubmitUnknown}
+                frozenReason={refundFlow.refundSubmitReason}
+                documentId={refundFlow.refundDraft?.refundId}
+                expectedVersion={refundFlow.refundDraft?.baselineVersion}
+                onEndRecovery={refundFlow.endRefundRecovery}
                 pending={refundFlow.refundSubmitPending}
                 approval={
                     refundFlow.refundDraft?.approval ??
                     refundQuery.data?.approval
                 }
                 onOpenChange={refundFlow.setRefundSubmitOpen}
-                onConfirm={() => void refundFlow.confirmRefundSubmit()}
+                onConfirm={(reason) => refundFlow.confirmRefundSubmit(reason)}
             />
 
             <PaymentReversalRequestDialog
@@ -501,13 +527,20 @@ export function SupplierAccountsPage() {
 
             <PaymentReversalSubmitConfirmDialog
                 open={reversalFlow.reversalSubmitOpen}
+                unknown={reversalFlow.reversalSubmitUnknown}
+                frozenReason={reversalFlow.reversalSubmitReason}
+                documentId={reversalFlow.reversalDraft?.reversalId}
+                expectedVersion={reversalFlow.reversalDraft?.baselineVersion}
+                onEndRecovery={reversalFlow.endReversalRecovery}
                 pending={reversalFlow.reversalSubmitPending}
                 approval={
                     reversalFlow.reversalDraft?.approval ??
                     reversalQuery.data?.approval
                 }
                 onOpenChange={reversalFlow.setReversalSubmitOpen}
-                onConfirm={() => void reversalFlow.confirmReversalSubmit()}
+                onConfirm={(reason) =>
+                    reversalFlow.confirmReversalSubmit(reason)
+                }
             />
 
             {reverseTarget && reverseTarget.kind === "invoice" ? (

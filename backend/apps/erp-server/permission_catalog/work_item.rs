@@ -67,6 +67,10 @@ pub const CLOSE: PermissionDef = PermissionDef {
 /// 查询本人有权查看的待办详情。
 pub const TIMELINE_TASK_TIMELINE: PermissionDef = DETAIL;
 
+/// 原提交人放弃本人驳回处理任务；服务层再次校验责任身份与版本。
+pub const ABANDON_REWORK: PermissionDef =
+    DETAIL.described(groups::FINANCIAL_FILES, "原提交人放弃本人驳回处理任务");
+
 /// 本模块可供路由引用的显式权限定义。
 pub const ENTRIES: &[(&str, PermissionDef)] = &[
     (
@@ -92,5 +96,6 @@ pub const ENTRIES: &[(&str, PermissionDef)] = &[
     ("REASSIGN_CANDIDATES", REASSIGN_CANDIDATES),
     ("REASSIGN", REASSIGN),
     ("CLOSE", CLOSE),
+    ("ABANDON_REWORK", ABANDON_REWORK),
     ("TIMELINE_TASK_TIMELINE", TIMELINE_TASK_TIMELINE),
 ];

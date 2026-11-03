@@ -260,6 +260,9 @@ pub struct SalesChangeSubmission {
     pub sales_change_order_id: SalesChangeOrderId,
     /// 提交序号。
     pub submission_no: u32,
+    /// 提交命令读取的变更单版本，用于完整载荷幂等回放；历史提交可为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_version: Option<u64>,
     /// 基准版本。
     pub base_revision_id: SalesOrderRevisionId,
     /// 原销售单。
@@ -316,6 +319,7 @@ impl PartialEq for SalesChangeSubmission {
             && self.stable.updated_by == other.stable.updated_by
             && self.sales_change_order_id == other.sales_change_order_id
             && self.submission_no == other.submission_no
+            && self.source_version == other.source_version
             && self.base_revision_id == other.base_revision_id
             && self.sales_order_id == other.sales_order_id
             && self.working_copy_id == other.working_copy_id
@@ -343,7 +347,38 @@ impl PartialEq for SalesChangeSubmission {
 
 impl Eq for SalesChangeSubmission {}
 
+/// 依原行顺序验证类型、稳定身份与行号，不更改创建提交的首错顺序。
+fn validate_submission_lines(
+    business_type: BusinessType,
+    lines: Vec<SalesChangeSubmissionLineData>,
+) -> Result<()> {
+    let summaries = lines
+        .into_iter()
+        .map(|line| LineSummary {
+            line_no: line.line_no,
+            line_id: line.sales_order_line_id,
+            line_type: line.line_type,
+        })
+        .collect::<Vec<_>>();
+    validate_line_list(business_type, &summaries)
+}
+
 impl SalesChangeSubmission {
+    /// 验证重放请求使用原提交命令读取的单据版本。
+    ///
+    /// # 参数
+    /// * `expected_version` - 当前请求携带的单据版本。
+    /// # 返回
+    /// 版本一致或历史提交未记录来源版本时成功。
+    /// # 错误
+    /// 同一幂等身份对应不同版本时返回冲突。
+    pub fn ensure_source_version(&self, expected_version: u64) -> Result<()> {
+        if self.source_version.is_some_and(|version| version != expected_version) {
+            return Err(Error::from("幂等键已用于不同的销售变更提交请求"));
+        }
+        Ok(())
+    }
+
     /// 创建变更提交（不可变目标快照）。
     ///
     /// 完成全部文本字段的校验与规范化，并强制不变式：卡券类目与履约期限同时
@@ -376,22 +411,14 @@ impl SalesChangeSubmission {
             return Err(Error::from("卡券类目与卡券履约期限必须同时提供或同时省略"));
         }
         validate_amount_triple(data.gross_amount, data.net_amount, data.tax_amount)?;
-        let lines = data
-            .lines
-            .into_iter()
-            .map(|line| LineSummary {
-                line_no: line.line_no,
-                line_id: line.sales_order_line_id,
-                line_type: line.line_type,
-            })
-            .collect::<Vec<_>>();
-        validate_line_list(data.business_type, &lines)?;
+        validate_submission_lines(data.business_type, data.lines)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(SubmissionStatus::InReview, submitted_by.clone()),
             sales_change_order_id: data.sales_change_order_id,
             submission_no: data.submission_no,
+            source_version: None,
             base_revision_id: data.base_revision_id,
             sales_order_id: data.sales_order_id,
             working_copy_id: data.working_copy_id,
@@ -753,6 +780,20 @@ mod tests {
     }
 
     /// 改单有效行须补齐采购供给价，移除历史缺价行仍可提交。
+    #[test]
+    fn replay_requires_original_source_version_and_reads_historical_submissions() {
+        let mut submission =
+            SalesChangeSubmission::new(SalesChangeSubmissionId::new("s-replay"), header_data()).unwrap();
+        assert!(submission.ensure_source_version(7).is_ok());
+        submission.source_version = Some(7);
+        assert!(submission.ensure_source_version(7).is_ok());
+        assert!(submission.ensure_source_version(8).is_err());
+        let value = serde_json::to_value(&submission).unwrap();
+        assert_eq!(value["source_version"], 7);
+        let restored: SalesChangeSubmission = serde_json::from_value(value).unwrap();
+        assert_eq!(restored.source_version, Some(7));
+    }
+
     #[test]
     fn change_submission_requires_supply_price_except_removed_lines() {
         for quantity in ["0", "3"] {

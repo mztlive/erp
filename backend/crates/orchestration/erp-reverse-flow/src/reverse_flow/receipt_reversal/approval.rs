@@ -71,7 +71,14 @@ impl ReturnsProcess {
         let adapter = receipt_reversal_adapter()?;
         let mut reversal = self.domain().load_receipt_reversal(id).await?;
         prepare_receipt_reversal_submit(&mut reversal, req.expected_version)?;
-        self.dispatch_receipt_reversal_start(reversal, req.idempotency_key, adapter, submission).await
+        self.dispatch_receipt_reversal_start(
+            reversal,
+            req.idempotency_key,
+            req.resubmission_reason,
+            adapter,
+            submission,
+        )
+        .await
     }
 
     /// 撤回回款冲正审批，成功后回到草稿且 `subject_version` 不回退。
@@ -110,6 +117,7 @@ impl ReturnsProcess {
         &self,
         reversal: ReceiptReversal,
         idempotency_key: String,
+        resubmission_reason: Option<String>,
         adapter: super::super::adapter::ReceiptReversalAdapter,
         submission: ReversalSubmitReplayInput,
     ) -> Result<ReceiptReversalView> {
@@ -127,6 +135,7 @@ impl ReturnsProcess {
             load_receipt_reversal_start_receipt(&self.db, &subject, version, &idempotency_key).await?;
         let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_receipt_reversal_start_input(ReverseStartInput {
+            resubmission_reason: resubmission_reason.clone(),
             graph,
             binding: &binding,
             subject,
@@ -140,6 +149,7 @@ impl ReturnsProcess {
         let prepared = prepare_start(start_input)?;
         self.complete_receipt_reversal_start(
             ReceiptReversalStartPersistInput {
+                resubmission_reason,
                 reversal,
                 command_receipt: submission.command_receipt.clone(),
                 actor: actor.clone(),

@@ -340,8 +340,9 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(rejected.created_executions[0].assignee_participant_id.as_str(), "leader");
-        assert_eq!(rejected.created_executions[0].round_no, 2);
+        assert!(rejected.created_executions.is_empty());
+        assert_eq!(rejected.instance.current_round_no, 1);
+        assert!(rejected.instance.status.is_terminal());
     }
     #[tokio::test]
     async fn duplicate_leaders_keep_separate_nodes_and_copy_preserves_rules() {

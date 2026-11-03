@@ -140,7 +140,7 @@ export function PurchaseSourceUpdateDraftDialog({
                 submitPending={actions.submitPending}
                 savePending={actions.savePending}
                 voidPending={false}
-                onConfirmSubmit={() => void actions.handleSubmit()}
+                onConfirmSubmit={(reason) => void actions.handleSubmit(reason)}
                 onConfirmVoid={() => undefined}
                 onSaveAndLeave={() => void guard.saveAndLeave()}
                 onDiscardAndLeave={guard.discardAndLeave}

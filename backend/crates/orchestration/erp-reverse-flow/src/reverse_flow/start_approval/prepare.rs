@@ -1,12 +1,9 @@
 use application_core::AuditActor;
 use bpm::engine::DefinitionGraph;
 use bpm::model::{ApprovalCommandReceipt, SubjectRef};
-use erp_approval_runtime::approval_start::{StartReplayErrors, replay_start};
 use erp_approval_runtime::approver_directory::resolve_start_approvers;
-use erp_workflow::entity::approval_integration::ApprovalStartIdentity;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::read;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -70,29 +67,6 @@ pub async fn ensure_return_start_replay_authorized(
         executor,
     )
     .await
-}
-
-/// 顺序重试先查当前已冻结版本；草稿首次/重提再查严格下一版本。
-///
-/// # 参数
-/// * `current` - 当前已冻结的审批主题版本。
-///
-/// # 返回
-/// `current` 大于 0 时先包含它，再包含严格下一版本。
-///
-/// # 错误
-/// `current + 1` 溢出时返回冲突。
-pub fn replay_subject_versions(current: u32) -> Result<Vec<u32>> {
-    let mut versions = Vec::with_capacity(2);
-    if current > 0 {
-        versions.push(current);
-    }
-    let next =
-        current.checked_add(1).ok_or_else(|| Error::ConflictError("审批主题版本已达上限".to_string()))?;
-    if !versions.contains(&next) {
-        versions.push(next);
-    }
-    Ok(versions)
 }
 
 /// 加载绑定定义并解析新申请负责人；收据回放恢复原实例指派。
@@ -164,60 +138,4 @@ pub async fn load_start_receipt_for_document_type(
     read::start_receipt(db, document_type, subject, subject_version, idempotency_key, &mut NoTransaction)
         .await
         .map_err(Error::from)
-}
-
-/// 退款/冲正启动收据回放入参。
-pub struct ReplayReturnStartInput<'a> {
-    /// 退款或冲正单据类型。
-    pub document_type: DocumentType,
-    /// 审批主题引用。
-    pub subject: &'a SubjectRef,
-    /// 主题版本。
-    pub subject_version: u32,
-    /// 启动幂等键。
-    pub idempotency_key: &'a str,
-    /// 冻结的审批定义绑定。
-    pub binding: &'a ApprovalDefinitionBinding,
-    /// 启动人账号 ID。
-    pub actor_id: &'a str,
-}
-
-/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的退款/冲正启动结果。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `input` - 单据类型、主题、绑定与启动人
-/// * `executor` - 当前事务执行器
-///
-/// # 返回
-/// 命中同载荷收据时返回实例 ID；无收据时返回 `None`。
-///
-/// # 错误
-/// 载荷冲突或收据与冻结运行事实不一致时返回冲突错误。
-///
-/// # 关键业务约束
-/// 必须按完整 V3/legacy 身份候选范围回读，禁止只认单一 scope。
-pub async fn replay_return_start_with_executor(
-    db: &Database,
-    input: ReplayReturnStartInput<'_>,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    replay_start(
-        db,
-        ApprovalStartIdentity {
-            process_kind: process_kind_of(input.document_type),
-            subject: input.subject,
-            subject_version: input.subject_version,
-            binding: input.binding,
-            actor_id: input.actor_id,
-        },
-        input.idempotency_key,
-        StartReplayErrors {
-            missing_instance: "退款/冲正启动收据引用的审批实例不存在",
-            identity_mismatch: "退款/冲正启动收据与冻结运行事实不一致",
-        },
-        executor,
-    )
-    .await
-    .map_err(Into::into)
 }

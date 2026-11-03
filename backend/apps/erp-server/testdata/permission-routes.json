@@ -468,6 +468,18 @@
     ]
   },
   {
+    "method": "POST",
+    "path": "/work-items/{id}/abandon-rework",
+    "handler": "work_item::abandon_rework",
+    "code": "work_item:detail",
+    "group": "统一待办",
+    "group_desc": "待办队列与责任处理",
+    "description": "原提交人放弃本人驳回处理任务",
+    "guards": [
+      "work_item:detail"
+    ]
+  },
+  {
     "method": "GET",
     "path": "/finance-responsibility-rules",
     "handler": "work_item::finance_responsibility::finance_responsibility_rule_list",
@@ -3985,6 +3997,54 @@
     ]
   },
   {
+    "method": "POST",
+    "path": "/sales-selection-books/{id}/copy",
+    "handler": "sales_selection::booklet_copy",
+    "code": "sales_selection_booklet:create",
+    "group": "销售选品",
+    "group_desc": "选品册与销售方案",
+    "description": "复制选品册",
+    "guards": [
+      "sales_selection_booklet:create"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/sales-selection-booklets/{id}/copy",
+    "handler": "sales_selection::booklet_copy",
+    "code": "sales_selection_booklet:create",
+    "group": "销售选品",
+    "group_desc": "选品册与销售方案",
+    "description": "复制选品册",
+    "guards": [
+      "sales_selection_booklet:create"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/sales-selection-books/{id}/prices",
+    "handler": "sales_selection::booklet_update_prices",
+    "code": "sales_selection_booklet:maintain",
+    "group": "销售选品",
+    "group_desc": "选品册与销售方案",
+    "description": "调整选品册客户售价",
+    "guards": [
+      "sales_selection_booklet:maintain"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/sales-selection-booklets/{id}/prices",
+    "handler": "sales_selection::booklet_update_prices",
+    "code": "sales_selection_booklet:maintain",
+    "group": "销售选品",
+    "group_desc": "选品册与销售方案",
+    "description": "调整选品册客户售价",
+    "guards": [
+      "sales_selection_booklet:maintain"
+    ]
+  },
+  {
     "method": "GET",
     "path": "/sales-selection-books/{id}",
     "handler": "sales_selection::booklet_detail",
@@ -4630,6 +4690,18 @@
     "description": "采购变更生效",
     "guards": [
       "purchase_change_order:post"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/purchase-change-orders/{id}/draft",
+    "handler": "purchase_order::change_draft::purchase_change_save_draft",
+    "code": "purchase_change_order:submit",
+    "group": "采购单",
+    "group_desc": "采购单、采购提交与采购变更管理",
+    "description": "保存原采购变更草稿",
+    "guards": [
+      "purchase_change_order:submit"
     ]
   },
   {
@@ -5666,30 +5738,6 @@
   },
   {
     "method": "GET",
-    "path": "/sales-invoice-requests/{id}",
-    "handler": "receivable::invoice_request::invoice_request_detail",
-    "code": "sales_invoice_request:detail",
-    "group": "开票申请",
-    "group_desc": "开票申请与授权管理",
-    "description": "查询开票申请详情",
-    "guards": [
-      "sales_invoice_request:detail"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/sales-invoice-requests/{id}/cancel",
-    "handler": "receivable::invoice_request::invoice_request_cancel",
-    "code": "sales_invoice_request:cancel",
-    "group": "开票申请",
-    "group_desc": "开票申请与授权管理",
-    "description": "撤回开票申请",
-    "guards": [
-      "sales_invoice_request:cancel"
-    ]
-  },
-  {
-    "method": "GET",
     "path": "/sales-invoice-requests/amounts/{id}",
     "handler": "receivable::invoice_request::invoice_request_amounts",
     "code": "sales_invoice_request:list",
@@ -5806,6 +5854,42 @@
     "description": "保存回款草稿及凭证附件",
     "guards": [
       "customer_receipt:submit"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/sales-invoice-requests/{id}",
+    "handler": "receivable::invoice_request::invoice_request_detail",
+    "code": "sales_invoice_request:detail",
+    "group": "开票申请",
+    "group_desc": "开票申请与授权管理",
+    "description": "查询开票申请详情",
+    "guards": [
+      "sales_invoice_request:detail"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/sales-invoice-requests/{id}/cancel",
+    "handler": "receivable::invoice_request::invoice_request_cancel",
+    "code": "sales_invoice_request:cancel",
+    "group": "开票申请",
+    "group_desc": "开票申请与授权管理",
+    "description": "撤回开票申请",
+    "guards": [
+      "sales_invoice_request:cancel"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/sales-invoice-requests/{id}",
+    "handler": "receivable::invoice_request::invoice_request_update",
+    "code": "sales_invoice_request:submit",
+    "group": "开票申请",
+    "group_desc": "开票申请与授权管理",
+    "description": "保存可编辑开票申请",
+    "guards": [
+      "sales_invoice_request:submit"
     ]
   },
   {

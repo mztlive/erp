@@ -193,7 +193,9 @@ export async function saveReceiptDraft(
             approval: mapCustomerReceiptApproval(saved.approval),
             recoveryPending: undefined,
             serverStatus: saved.status,
-            status: saved.status === "draft" ? "draft" : "posted",
+            status: ["draft", "REJECTED", "rejected"].includes(saved.status)
+                ? "draft"
+                : "posted",
         }
         writeReceiptSession(next, null)
         if (files.length) clearUploadCopy(fileKey)

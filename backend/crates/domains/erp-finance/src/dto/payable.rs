@@ -290,6 +290,7 @@ mod reversal_status_wire_tests {
         for (status, value) in [
             (PaymentReversalStatus::Draft, "draft"),
             (PaymentReversalStatus::InApproval, "IN_APPROVAL"),
+            (PaymentReversalStatus::Rejected, "REJECTED"),
             (PaymentReversalStatus::Posted, "posted"),
             (PaymentReversalStatus::Reversed, "reversed"),
         ] {

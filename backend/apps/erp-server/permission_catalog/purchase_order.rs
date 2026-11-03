@@ -5,6 +5,10 @@ use super::{PermissionDef, groups, purchase_payment_request};
 pub const CHANGE_DRAFT_PURCHASE_CHANGE_DRAFT: PermissionDef =
     PURCHASE_CHANGE_SUBMIT.described(groups::PURCHASE_ORDER, "读取原采购变更草稿");
 
+/// 保存原采购变更草稿。
+pub const CHANGE_DRAFT_SAVE: PermissionDef =
+    PURCHASE_CHANGE_SUBMIT.described(groups::PURCHASE_ORDER, "保存原采购变更草稿");
+
 /// 作废采购变更单。
 pub const CHANGE_VOID_PURCHASE_CHANGE_VOID: PermissionDef = PermissionDef {
     code: "purchase_change_order:delete",
@@ -179,6 +183,7 @@ pub const SALES_MATERIAL_PURCHASE_SALES_MATERIAL_DOWNLOAD: PermissionDef =
 /// 本模块可供路由引用的显式权限定义。
 pub const ENTRIES: &[(&str, PermissionDef)] = &[
     ("CHANGE_DRAFT_PURCHASE_CHANGE_DRAFT", CHANGE_DRAFT_PURCHASE_CHANGE_DRAFT),
+    ("CHANGE_DRAFT_SAVE", CHANGE_DRAFT_SAVE),
     ("CHANGE_VOID_PURCHASE_CHANGE_VOID", CHANGE_VOID_PURCHASE_CHANGE_VOID),
     ("CORRESPONDENCE_PURCHASE_PAPER", CORRESPONDENCE_PURCHASE_PAPER),
     ("CORRESPONDENCE_SEND_PURCHASE_EMAIL", CORRESPONDENCE_SEND_PURCHASE_EMAIL),

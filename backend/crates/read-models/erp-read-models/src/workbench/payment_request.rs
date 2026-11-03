@@ -1,12 +1,15 @@
 //! 待审核与待付款申请使用同一真实申请身份，精确版本约束不引用旧应付任务。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use bpm::ApprovalProcessInstanceId;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestLine};
 use erp_finance::repository::PurchasePaymentRequestExt;
 use erp_workflow::entity::approval_integration::display_snapshot::{ApprovalBriefLine, ApprovalBriefSource};
+use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemSubjectVersions;
 use erp_workflow::ports::{ObjectFact, ObjectFactMap, ObjectKind};
+use erp_workflow::repository::{ApprovalIntegrationExt, ApprovalSubjectSnapshotRepositoryExt};
 use persistence_core::Executor;
 
 use super::authority::WorkItemFactsReader;
@@ -34,10 +37,11 @@ impl WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+        let history = request_history(&self.db, &ids, executor).await?;
         for request in self.db.purchase_payment_requests().list_active_by_ids(&ids, executor).await? {
             facts.insert(
                 (ObjectKind::PurchasePaymentRequest, request.base.id.clone()),
-                request_fact(&request)?,
+                request_fact(&request, history.get(&request.base.id).map(Vec::as_slice).unwrap_or_default())?,
             );
         }
         Ok(())
@@ -64,10 +68,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let requests = self.db.purchase_payment_requests().list_active_by_ids(&ids, executor).await?;
+        let history = request_history(&self.db, &ids, executor).await?;
         let users = requests.iter().map(|request| request.created_by.clone()).collect::<Vec<_>>();
         let names = self.load_account_names(&users, executor).await?;
         for request in requests {
-            let mut fact = WorkbenchObjectFact::from_authority(request_fact(&request)?);
+            let mut fact = WorkbenchObjectFact::from_authority(request_fact(
+                &request,
+                history.get(&request.base.id).map(Vec::as_slice).unwrap_or_default(),
+            )?);
             fact.display.brief_source =
                 Some(request_brief(&request, names.get(&request.created_by).cloned()));
             fact.display.approval_subject_version = Some(request.submission_version);
@@ -77,11 +85,34 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 
-fn request_fact(request: &PurchasePaymentRequest) -> Result<ObjectFact> {
+/// 历史任务仅引用当前付款申请已冻结的实例及提交版本，不读取当前草稿替代历史。
+async fn request_history(
+    db: &mongodb::Database,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, Vec<(ApprovalProcessInstanceId, u32)>>> {
+    let objects = ids.iter().map(|id| (DocumentType::PurchasePaymentRequest, id.clone())).collect::<Vec<_>>();
+    let mut history: HashMap<String, Vec<(ApprovalProcessInstanceId, u32)>> = HashMap::new();
+    for snapshot in db.approval_subject_snapshots().list_by_business_objects(&objects, executor).await? {
+        history
+            .entry(snapshot.business_object_id)
+            .or_default()
+            .push((snapshot.approval_process_instance_id, snapshot.subject_version));
+    }
+    Ok(history)
+}
+
+fn request_fact(
+    request: &PurchasePaymentRequest,
+    history: &[(ApprovalProcessInstanceId, u32)],
+) -> Result<ObjectFact> {
     let mut fact =
         ObjectFact::new(&request.base.id, format!("付款申请 {}", request.request_no), &request.created_by);
     fact.subject_versions =
         WorkItemSubjectVersions::constrained(vec![request.submission_version.to_string()])?;
+    for (instance_id, version) in history {
+        fact.subject_versions.register_rework_history(instance_id, *version);
+    }
     fact.counterparty_label = supplier_name(request);
     fact.impact_summary = Some(format!(
         "申请 {} · 待付 {}",

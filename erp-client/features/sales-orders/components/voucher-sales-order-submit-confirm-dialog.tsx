@@ -10,21 +10,24 @@ export function VoucherSalesOrderSubmitConfirmDialog({
     open,
     pending,
     snapshot,
+    resubmitting,
     onOpenChange,
     onConfirm,
 }: {
     open: boolean
     pending: boolean
     snapshot: SalesOrderSubmitSnapshot
+    resubmitting?: boolean
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void | Promise<void>
+    onConfirm: (resubmissionReason?: string) => void | Promise<void>
 }) {
     return (
         <SalesOrderSubmitConfirmDialog
             open={open}
             pending={pending}
             snapshot={snapshot}
-            description="提交后按已绑定的审批流程办理；任一层驳回后将从第一节点开始下一轮。"
+            resubmitting={resubmitting}
+            description="提交后按已绑定的审批流程办理；任一节点驳回将结束本次审批，退回提交人处理。"
             onOpenChange={onOpenChange}
             onConfirm={onConfirm}
         />
