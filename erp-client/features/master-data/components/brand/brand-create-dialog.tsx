@@ -50,7 +50,7 @@ export function BrandCreateDialog({
             try {
                 const prepared = prepareBrandLogoFields(
                     {
-                        code: value.code.trim(),
+                        code: "",
                         logo: value.logo.trim() || undefined,
                     },
                     pendingFilesRef.current.get(`logo::${value.logo}`),

@@ -15,8 +15,10 @@ use erp_catalog::{
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, ProductCategoryView, SkuAttributeValueView,
     SkuAttributeView, UnitOfMeasureView,
 };
-use id_generator::next_id;
+use erp_core::common::time::BusinessDate;
+use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
 use mongodb::Database;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use crate::{Error, Result};
@@ -94,13 +96,23 @@ pub async fn create_unit_of_measure(
 pub async fn create_product_category(
     db: Database,
     service: CatalogService,
-    req: CreateProductCategoryRequest,
+    mut req: CreateProductCategoryRequest,
     actor: AuditActor,
 ) -> Result<ProductCategoryView> {
     req.validate()?;
     let parent_id = req.parent_category_id.clone();
     let id = ProductCategoryId::new(next_id());
     service.ensure_parent_chain_ok(id.as_ref(), parent_id.as_ref()).await?;
+    if req.category_code.trim().is_empty() {
+        req.category_code = DocumentNumberGenerator::new(db.clone())
+            .next_number(
+                DocumentNumberKind::ProductCategory,
+                BusinessDate::today().as_naive_date(),
+                &mut NoTransaction,
+            )
+            .await
+            .map_err(|error| Error::Internal(error.to_string()))?;
+    }
     let category = ProductCategory::new(
         id.clone(),
         ProductCategoryData {

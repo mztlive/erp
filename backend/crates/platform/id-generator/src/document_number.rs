@@ -86,6 +86,12 @@ pub enum DocumentNumberKind {
     /// 公司商品（SPU），对应内部建档未指定编号时的 `product.product_no`。
     Product,
 
+    /// 商品品牌，对应自动生成的 `product_brand.brand_code`。
+    ProductBrand,
+
+    /// 商品分类，对应自动生成的 `product_category.category_code`。
+    ProductCategory,
+
     /// API 供应商批量入库作业，对应 `supplier_catalog_adoption_batches.batch_no`。
     SupplierCatalogAdoption,
     /// 供应商预存款充值申请。
@@ -154,6 +160,8 @@ impl DocumentNumberKind {
             Self::SupplierFulfillment => ("SF", "supplier_fulfillment"),
             Self::SupplierSettlement => ("SS", "supplier_settlement"),
             Self::Product => ("SPU", "product"),
+            Self::ProductBrand => ("BR", "product_brand"),
+            Self::ProductCategory => ("CAT", "product_category"),
             Self::SupplierCatalogAdoption => ("SCA", "supplier_catalog_adoption"),
             Self::SupplierDepositRecharge => ("DR", "supplier_deposit_recharge"),
         }
@@ -291,7 +299,7 @@ mod tests {
 
     use super::{COUNTER_COLLECTION, DocumentNumberKind, SEQ_WIDTH, format_number};
 
-    const KIND_TABLE: [(DocumentNumberKind, &str); 15] = [
+    const KIND_TABLE: [(DocumentNumberKind, &str); 17] = [
         (DocumentNumberKind::SalesOrder, "SO"),
         (DocumentNumberKind::PurchaseOrder, "PO"),
         (DocumentNumberKind::PurchaseReceipt, "GRN"),
@@ -306,6 +314,8 @@ mod tests {
         (DocumentNumberKind::SupplierFulfillment, "SF"),
         (DocumentNumberKind::SupplierSettlement, "SS"),
         (DocumentNumberKind::Product, "SPU"),
+        (DocumentNumberKind::ProductBrand, "BR"),
+        (DocumentNumberKind::ProductCategory, "CAT"),
         (DocumentNumberKind::SupplierCatalogAdoption, "SCA"),
     ];
 
@@ -352,6 +362,8 @@ mod tests {
         assert_eq!(format_number(DocumentNumberKind::SalesOrder, date, 123), "SO20260701-000123");
         assert_eq!(format_number(DocumentNumberKind::Invoice, date, 1), "INV20260701-000001");
         assert_eq!(format_number(DocumentNumberKind::Product, date, 7), "SPU20260701-000007");
+        assert_eq!(format_number(DocumentNumberKind::ProductBrand, date, 1), "BR20260701-000001");
+        assert_eq!(format_number(DocumentNumberKind::ProductCategory, date, 1), "CAT20260701-000001");
         assert_eq!(format_number(DocumentNumberKind::SupplierCatalogAdoption, date, 8), "SCA20260701-000008");
     }
 

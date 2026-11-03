@@ -58,7 +58,7 @@ pub async fn product_category_list(
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ category_code, parent_category_id?, name, product_kind, status? }`）
+/// * `req` - 创建请求（`{ category_code?, parent_category_id?, name, product_kind, status? }`）；省略代码时自动取号。
 ///
 /// # 返回
 /// 返回新建分类的响应视图。
@@ -157,7 +157,7 @@ pub async fn product_brand_list(
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ brand_code, name, status? }`）
+/// * `req` - 创建请求（`{ brand_code?, name, status? }`）；省略代码时自动取号。
 ///
 /// # 返回
 /// 返回新建品牌的响应视图。

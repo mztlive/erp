@@ -55,7 +55,7 @@ export function CategoryCreateDialog({
                 effectiveFrom: defaultImmediateEffectiveFrom(),
                 changeReason: value.changeReason.trim(),
                 fields: {
-                    code: value.code.trim(),
+                    code: "",
                     parentId: value.parentId.trim() || undefined,
                     productKind: value.productKind.trim() || undefined,
                 },

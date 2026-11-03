@@ -10,12 +10,12 @@ use crate::repository::ProductCategoryRow;
 
 /// 商品分类列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const PRODUCT_CATEGORY_SORT_FIELDS: &[&str] = &["created_at", "category_code", "name"];
-/// 商品分类创建请求（HTTP 契约：`{ category_code, parent_category_id?, name,
+/// 商品分类创建请求（HTTP 契约：`{ category_code?, parent_category_id?, name,
 /// product_kind, status? }`）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateProductCategoryRequest {
-    /// 稳定分类代码（唯一，创建后不可修改）。
-    #[validate(custom(function = "non_blank", message = "分类代码不能为空"))]
+    /// 稳定分类代码；省略或空白时由服务端取号，创建后不可修改。
+    #[serde(default)]
     pub category_code: String,
     /// 父分类；空表示根分类。
     pub parent_category_id: Option<ProductCategoryId>,
@@ -206,5 +206,38 @@ impl ProductCategoryListParams {
                 PRODUCT_CATEGORY_SORT_FIELDS,
             )?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use validator::Validate;
+
+    use super::CreateProductCategoryRequest;
+
+    #[test]
+    fn category_request_accepts_missing_or_blank_code_for_automatic_numbering() {
+        for code in [None, Some(""), Some("   ")] {
+            let mut input = json!({ "name": "食品", "product_kind": "PHYSICAL" });
+            if let Some(code) = code {
+                input["category_code"] = json!(code);
+            }
+            let request: CreateProductCategoryRequest = serde_json::from_value(input).unwrap();
+            assert!(request.category_code.trim().is_empty());
+            assert!(request.validate().is_ok());
+        }
+    }
+
+    #[test]
+    fn category_request_preserves_explicit_code_and_rejects_blank_name() {
+        let mut request: CreateProductCategoryRequest = serde_json::from_value(json!({
+            "category_code": "CAT-001", "name": "食品", "product_kind": "PHYSICAL",
+        }))
+        .unwrap();
+        assert_eq!(request.category_code, "CAT-001");
+        assert!(request.validate().is_ok());
+        request.name = "   ".into();
+        assert!(request.validate().is_err());
     }
 }

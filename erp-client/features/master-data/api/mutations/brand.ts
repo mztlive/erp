@@ -22,7 +22,6 @@ export async function createBrand(
     const fields = input.fields as BrandFields
     try {
         const command = {
-            brand_code: fields.code,
             name: input.name.trim(),
             status: "active",
             logo_file_asset_id: fields.logoAssetId || null,

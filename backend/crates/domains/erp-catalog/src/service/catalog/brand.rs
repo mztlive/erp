@@ -2,7 +2,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use id_generator::next_id;
+use erp_core::common::time::BusinessDate;
+use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
@@ -14,7 +15,7 @@ use crate::dto::{
 };
 use crate::entity::catalog::ProductBrandId;
 use crate::entity::catalog::product_brand::{ProductBrand, ProductBrandData, ProductBrandUpdate};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
@@ -99,6 +100,16 @@ impl CatalogService {
         }
         pending_assets.ensure_all_used(&used)?;
         self.ensure_brand_logo_exists(req.logo_file_asset_id.as_ref(), &pending_assets).await?;
+        if req.brand_code.trim().is_empty() {
+            req.brand_code = DocumentNumberGenerator::new(self.db.clone())
+                .next_number(
+                    DocumentNumberKind::ProductBrand,
+                    BusinessDate::today().as_naive_date(),
+                    &mut NoTransaction,
+                )
+                .await
+                .map_err(|error| Error::Internal(error.to_string()))?;
+        }
         let id = ProductBrandId::new(next_id());
         let brand = ProductBrand::new(
             id.clone(),

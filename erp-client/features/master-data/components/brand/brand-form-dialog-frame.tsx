@@ -4,6 +4,8 @@ import * as React from "react"
 
 import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
     Dialog,
     DialogClose,
@@ -124,7 +126,7 @@ export function BrandFormDialogFrame({
                                     description={result.message}
                                 />
                             ) : null}
-                            <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-4">
                                 <form.AppField
                                     name="name"
                                     children={(field) => (
@@ -135,16 +137,30 @@ export function BrandFormDialogFrame({
                                         />
                                     )}
                                 />
-                                <form.AppField
-                                    name="code"
-                                    children={(field) => (
-                                        <field.TextField
-                                            label={masterDataCopy.fBrandCode}
-                                            id={`${prefix}-code`}
-                                            required
-                                        />
-                                    )}
-                                />
+                                {identity ? (
+                                    <form.AppField
+                                        name="code"
+                                        children={(field) => (
+                                            <div className="space-y-1.5">
+                                                <Label
+                                                    htmlFor={`${prefix}-code`}
+                                                >
+                                                    {masterDataCopy.fBrandCode}
+                                                </Label>
+                                                <Input
+                                                    id={`${prefix}-code`}
+                                                    value={field.state.value}
+                                                    readOnly
+                                                    className="num bg-muted/40"
+                                                />
+                                            </div>
+                                        )}
+                                    />
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                        品牌代码将在创建时自动生成。
+                                    </p>
+                                )}
                             </div>
                             <form.AppField
                                 name="logo"

@@ -15,8 +15,8 @@ pub(crate) const UNIT_OF_MEASURE_SORT_FIELDS: &[&str] = &["created_at", "unit_co
 /// 商品品牌创建请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateProductBrandRequest {
-    /// 稳定品牌代码（唯一，创建后不可修改）。
-    #[validate(custom(function = "non_blank", message = "品牌代码不能为空"))]
+    /// 稳定品牌代码；省略或空白时由服务端取号，创建后不可修改。
+    #[serde(default)]
     pub brand_code: String,
     /// 品牌名称。
     #[validate(custom(function = "non_blank", message = "品牌名称不能为空"))]
@@ -405,7 +405,20 @@ mod tests {
         assert_eq!(request.status, Some(EnableStatus::Disabled));
         assert!(request.validate().is_ok());
 
-        let empty = CreateProductBrandRequest::new("   ", "品牌");
+        let empty = CreateProductBrandRequest::new("", "   ");
         assert!(empty.validate().is_err());
+    }
+
+    #[test]
+    fn brand_request_accepts_missing_or_blank_code_for_automatic_numbering() {
+        for code in [None, Some(""), Some("   ")] {
+            let mut input = serde_json::json!({ "name": "品牌" });
+            if let Some(code) = code {
+                input["brand_code"] = serde_json::json!(code);
+            }
+            let request: CreateProductBrandRequest = serde_json::from_value(input).unwrap();
+            assert!(request.brand_code.trim().is_empty());
+            assert!(request.validate().is_ok());
+        }
     }
 }

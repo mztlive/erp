@@ -211,18 +211,14 @@ export function CategoryFormDialogFrame({
                                                     />
                                                 )}
                                             />
-                                            <form.AppField
-                                                name="code"
-                                                children={(field) =>
-                                                    mode === "create" ? (
-                                                        <field.TextField
-                                                            label={
-                                                                masterDataCopy.fCategoryCode
-                                                            }
-                                                            id={`${prefix}-code`}
-                                                            required
-                                                        />
-                                                    ) : (
+                                            {mode === "create" ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    分类代码将在创建时自动生成。
+                                                </p>
+                                            ) : (
+                                                <form.AppField
+                                                    name="code"
+                                                    children={(field) => (
                                                         <div className="space-y-1.5">
                                                             <Label
                                                                 htmlFor={`${prefix}-code`}
@@ -246,9 +242,9 @@ export function CategoryFormDialogFrame({
                                                                 创建后不可修改，可选中复制。
                                                             </p>
                                                         </div>
-                                                    )
-                                                }
-                                            />
+                                                    )}
+                                                />
+                                            )}
                                         </>
                                     ) : null}
                                     <form.AppField

@@ -20,7 +20,6 @@ export async function createCategory(
         const created = await apiPost<ProductCategoryDto>(
             "/admin/product-categories",
             {
-                category_code: fields.code,
                 parent_category_id: fields.parentId || null,
                 name: input.name.trim(),
                 product_kind: mapProductKindInput(fields.productKind),
