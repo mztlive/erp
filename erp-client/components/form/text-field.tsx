@@ -29,6 +29,8 @@ type TextFieldProps = {
     step?: React.ComponentProps<"input">["step"]
     testId?: string
     id?: string
+    onBlur?: React.FocusEventHandler<HTMLInputElement>
+    "aria-describedby"?: string
     /** 金额仍以元录入；显示保留全部精度的中文辅助读数。 */
     money?: boolean
 }
@@ -54,6 +56,8 @@ export function TextField({
     step,
     testId,
     id,
+    onBlur,
+    "aria-describedby": ariaDescribedBy,
     money = false,
 }: TextFieldProps) {
     const field = useFieldContext<string>()
@@ -65,6 +69,7 @@ export function TextField({
     const moneyHintId = `${resolvedId}-money-hint`
     const moneyHint = money ? describeMoney(field.state.value)?.readout : null
     const describedBy = [
+        ariaDescribedBy,
         description ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
         moneyHint ? moneyHintId : undefined,
@@ -97,7 +102,10 @@ export function TextField({
                 aria-invalid={isInvalid || undefined}
                 aria-describedby={describedBy || undefined}
                 className={inputClassName}
-                onBlur={field.handleBlur}
+                onBlur={(event) => {
+                    field.handleBlur()
+                    onBlur?.(event)
+                }}
                 onChange={(e) => field.handleChange(e.target.value)}
             />
             {description ? (

@@ -17,7 +17,7 @@ export type InlinePriceEditorContext = {
     onSubmit: (input: UpdateSelectionPricesInput) => Promise<unknown>
 }
 
-/** 表格内按 SKU 保存售价；结果未知时固定原请求重试。 */
+/** 表格内售价在回车或失焦时保存；结果未知时固定原请求主动确认。 */
 export function InlinePriceEditor({
     id,
     skuId,
@@ -104,7 +104,8 @@ export function InlinePriceEditor({
             onSubmit={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                void form.handleSubmit()
+                if (!pending && !form.state.isSubmitting)
+                    void form.handleSubmit()
             }}
         >
             <div className="flex items-start gap-1">
@@ -119,21 +120,36 @@ export function InlinePriceEditor({
                             inputMode="decimal"
                             disabled={pending || uncertain}
                             inputClassName="text-right num"
+                            aria-describedby={`${id}-save-hint`}
+                            onBlur={() => {
+                                if (
+                                    !pending &&
+                                    !uncertain &&
+                                    !form.state.isSubmitting
+                                ) {
+                                    void form.handleSubmit()
+                                }
+                            }}
                         />
                     )}
                 />
-                <form.AppForm>
-                    <form.SubmitButton
-                        id={`${id}-save`}
-                        size="sm"
-                        variant="outline"
-                        label={uncertain ? "确认结果" : "保存"}
-                        pendingLabel="保存中…"
-                        loading={pending}
-                        disabled={pending}
-                    />
-                </form.AppForm>
+                {uncertain ? (
+                    <form.AppForm>
+                        <form.SubmitButton
+                            id={`${id}-confirm`}
+                            size="sm"
+                            variant="outline"
+                            label="确认结果"
+                            pendingLabel="确认中…"
+                            loading={pending}
+                            disabled={pending}
+                        />
+                    </form.AppForm>
+                ) : null}
             </div>
+            <span id={`${id}-save-hint`} className="sr-only">
+                按回车或离开输入框保存客户售价。
+            </span>
             {error ? (
                 <p
                     id={`${id}-save-error`}

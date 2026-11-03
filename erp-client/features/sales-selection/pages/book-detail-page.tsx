@@ -268,12 +268,53 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                     "min-w-0 overflow-hidden rounded-xl border border-border p-5",
                 )}
             >
-                <div className="mb-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h2 className="text-sm font-semibold text-foreground">
-                            陈列预览
-                        </h2>
-                        {detail.status === "PENDING_PUBLISH" &&
+                <PreviewGrid
+                    summary={
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                            <h2 className="text-sm font-semibold text-foreground">
+                                陈列预览
+                            </h2>
+                            <dl
+                                aria-label="陈列指标"
+                                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+                            >
+                                <div className="flex gap-1">
+                                    <dt>有效陈列</dt>
+                                    <dd className="num font-medium text-foreground">
+                                        {detail.display_count}
+                                    </dd>
+                                </div>
+                                <div className="flex gap-1">
+                                    <dt>已剔除</dt>
+                                    <dd className="num">
+                                        {detail.removed_count}
+                                    </dd>
+                                </div>
+                                <div
+                                    className={cn(
+                                        "flex gap-1",
+                                        detail.missing_image_count > 0 &&
+                                            "font-medium text-warning-soft-foreground",
+                                    )}
+                                >
+                                    <dt>缺少图片</dt>
+                                    <dd className="num">
+                                        {detail.missing_image_count}
+                                    </dd>
+                                </div>
+                                {detail.selection_form === "PACKAGE" ? (
+                                    <div className="flex gap-1">
+                                        <dt>选品档位</dt>
+                                        <dd className="num">
+                                            {detail.tiers.length} 档
+                                        </dd>
+                                    </div>
+                                ) : null}
+                            </dl>
+                        </div>
+                    }
+                    actions={
+                        detail.status === "PENDING_PUBLISH" &&
                         canMaintain &&
                         visibleItems.length > 0 ? (
                             <Button
@@ -285,55 +326,8 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                             >
                                 统一加价
                             </Button>
-                        ) : null}
-                    </div>
-                    <dl
-                        aria-label="陈列指标"
-                        className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
-                    >
-                        <div className="flex gap-1">
-                            <dt>有效陈列</dt>
-                            <dd className="num font-medium text-foreground">
-                                {detail.display_count}
-                            </dd>
-                        </div>
-                        <div className="flex gap-1">
-                            <dt>已剔除</dt>
-                            <dd className="num">{detail.removed_count}</dd>
-                        </div>
-                        <div
-                            className={cn(
-                                "flex gap-1",
-                                detail.missing_image_count > 0 &&
-                                    "font-medium text-warning-soft-foreground",
-                            )}
-                        >
-                            <dt>缺少图片</dt>
-                            <dd className="num">
-                                {detail.missing_image_count}
-                            </dd>
-                        </div>
-                        {detail.selection_form === "PACKAGE" ? (
-                            <div className="flex gap-1">
-                                <dt>选品档位</dt>
-                                <dd className="num">
-                                    {detail.tiers.length} 档
-                                </dd>
-                            </div>
-                        ) : null}
-                    </dl>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                        {detail.status === "PENDING_PUBLISH"
-                            ? "待发布时可编辑客户售价、统一加价或删除陈列项；套餐可单档重生成。发布后价格与陈列冻结。"
-                            : detail.status === "DRAFT"
-                              ? "准备成功后可核对商品、调整售价并发布给客户。"
-                              : detail.status === "PREPARING"
-                                ? "系统正在准备新的陈列；已有陈列会在准备成功后更新。"
-                                : "陈列内容来自最近一次准备结果。"}
-                    </p>
-                </div>
-
-                <PreviewGrid
+                        ) : null
+                    }
                     emptyState={emptyState}
                     items={visibleItems.map((item) => ({
                         ...item,

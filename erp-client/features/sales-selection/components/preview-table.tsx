@@ -291,7 +291,12 @@ export function PreviewTable({
     return (
         <PriceCellContext.Provider value={{ pending, priceEditor }}>
             <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">价格均含税</p>
+                <p className="text-xs text-muted-foreground">
+                    价格均含税
+                    {priceEditor
+                        ? "，修改客户售价后按回车或离开输入框保存。"
+                        : ""}
+                </p>
                 <DataTable
                     id="selection-preview-table"
                     data={[...items]}

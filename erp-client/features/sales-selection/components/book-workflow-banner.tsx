@@ -368,7 +368,7 @@ export function BookWorkflowBanner({
 
             {detail.status === "PENDING_PUBLISH" && !failure ? (
                 <Alert
-                    variant="warning"
+                    variant="info"
                     className="flex flex-wrap items-center justify-between gap-4"
                 >
                     <div className="min-w-0 space-y-0.5">
@@ -377,14 +377,14 @@ export function BookWorkflowBanner({
                                 className="size-4"
                                 aria-hidden="true"
                             />
-                            <span>陈列已就绪，请核对并删减商品</span>
+                            <span>陈列已就绪，请核对商品与售价</span>
                         </div>
                         <p className="text-sm">
-                            下方已列出本次所有陈列项（共{" "}
+                            请核对下方商品、规格与客户售价（共{" "}
                             <span className="num font-medium">
                                 {detail.display_count}
                             </span>{" "}
-                            项）。请检查卡片，点击「删除该项」剔除不合适商品；确认无误后点击右上角「发布」。
+                            项），确认无误后点击右上角「发布」。
                         </p>
                     </div>
                     {detail.selection_form === "PACKAGE" && onEdit ? (

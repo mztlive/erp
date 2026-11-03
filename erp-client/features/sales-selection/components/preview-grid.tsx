@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 
 import { SnapshotImage } from "./snapshot-image"
-import { PriceComparison } from "./price-comparison"
+import { PriceAdjustment, PriceComparison } from "./price-comparison"
 import type { UpdateSelectionPricesInput } from "../api/books"
 import { PreviewTable } from "./preview-table"
 import {
@@ -33,7 +33,7 @@ import type { DisplayItem } from "@/features/sales-selection/types"
 import { cn } from "@/lib/utils"
 
 const previewGridClassName =
-    "grid grid-cols-2 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4"
+    "grid grid-cols-[repeat(auto-fill,minmax(0,min(100%,16rem)))] gap-3.5"
 
 /**
  * 单张陈列卡片，视觉对齐公司商品池画廊卡。
@@ -56,12 +56,13 @@ const PreviewCard = ({
     const cardKey = toAutomationIdSegment(item.item_id)
     const members = item.kind === "PACKAGE" ? (item.members ?? []) : []
     const extraMembers = Math.max(0, members.length - 3)
+    const unit = item.kind === "PACKAGE" ? "套" : item.unit
 
     return (
         <article className="min-w-0">
             <Card
                 size="sm"
-                className="group relative flex h-full flex-col justify-between overflow-hidden border border-border/70 bg-card p-0 transition-all hover:border-border hover:shadow-xs"
+                className="group relative flex h-full flex-col justify-between gap-0 overflow-hidden border border-border/70 bg-card p-0 transition-all hover:border-border hover:shadow-xs"
             >
                 <div>
                     <div className="relative aspect-square w-full overflow-hidden bg-muted/60">
@@ -90,7 +91,7 @@ const PreviewCard = ({
                     </div>
 
                     <CardHeader className="gap-1.5 p-3 pb-0">
-                        <div className="flex items-baseline gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                             <MoneyValue
                                 display="exact"
                                 className="text-base font-bold text-foreground"
@@ -99,18 +100,30 @@ const PreviewCard = ({
                             <span className="text-2xs text-muted-foreground">
                                 含税
                             </span>
+                            {item.markup_percent != null ? (
+                                <PriceAdjustment
+                                    markup_percent={item.markup_percent}
+                                />
+                            ) : null}
                         </div>
                         <PriceComparison
                             reference_prices={item.reference_prices}
                             original_price={item.original_price}
-                            markup_percent={item.markup_percent}
+                            showAdjustment={false}
                         />
-                        <CardTitle
-                            className="line-clamp-2 text-xs leading-snug font-medium text-foreground"
-                            title={item.name}
-                        >
-                            {item.name}
-                        </CardTitle>
+                        <div className="flex items-start justify-between gap-2">
+                            <CardTitle
+                                className="min-w-0 flex-1 line-clamp-2 text-xs leading-snug font-medium text-foreground"
+                                title={item.name}
+                            >
+                                {item.name}
+                            </CardTitle>
+                            {unit ? (
+                                <span className="shrink-0 text-2xs leading-snug text-muted-foreground">
+                                    单位：{unit}
+                                </span>
+                            ) : null}
+                        </div>
                     </CardHeader>
 
                     <CardContent className="flex flex-col gap-1 p-3 pt-1.5 text-xs text-muted-foreground">
@@ -139,8 +152,6 @@ const PreviewCard = ({
                                     </li>
                                 ) : null}
                             </ul>
-                        ) : item.unit ? (
-                            <p className="text-2xs">单位：{item.unit}</p>
                         ) : null}
                     </CardContent>
                 </div>
@@ -216,6 +227,8 @@ export const PreviewGrid = ({
     deletingItemId,
     regeneratingTierIds,
     emptyState,
+    summary,
+    actions,
 }: {
     items: readonly DisplayItem[]
     selectionForm: "SINGLE_SKU" | "PACKAGE"
@@ -232,6 +245,8 @@ export const PreviewGrid = ({
     deletingItemId?: string
     regeneratingTierIds?: readonly string[]
     emptyState?: { title: string; description: string }
+    summary?: React.ReactNode
+    actions?: React.ReactNode
 }) => {
     const canDelete = typeof onDelete === "function"
     const [tierFilter, setTierFilter] = React.useState<string>("ALL")
@@ -273,14 +288,17 @@ export const PreviewGrid = ({
 
     if (items.length === 0) {
         return (
-            <BusinessEmptyState
-                kind="no-data"
-                title={emptyState?.title ?? "暂无可预览陈列"}
-                description={
-                    emptyState?.description ??
-                    "开始准备后，系统生成的商品陈列将显示在这里。"
-                }
-            />
+            <div className="space-y-2">
+                {summary}
+                <BusinessEmptyState
+                    kind="no-data"
+                    title={emptyState?.title ?? "暂无可预览陈列"}
+                    description={
+                        emptyState?.description ??
+                        "开始准备后，系统生成的商品陈列将显示在这里。"
+                    }
+                />
+            </div>
         )
     }
 
@@ -325,14 +343,25 @@ export const PreviewGrid = ({
     return (
         <BusinessTableFrame
             title="陈列预览"
-            tableActions={viewToggle}
+            className="gap-2"
+            tableActions={
+                <>
+                    {actions}
+                    {viewToggle}
+                </>
+            }
             selectionBar={
-                <span className="text-xs text-muted-foreground">
-                    共 {tableItems.length} 项
-                    {tableItems.length !== items.length
-                        ? ` / 全部 ${items.length} 项`
-                        : ""}
-                </span>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                    {summary}
+                    {!summary || tableItems.length !== items.length ? (
+                        <span className="text-xs text-muted-foreground">
+                            共 {tableItems.length} 项
+                            {tableItems.length !== items.length
+                                ? ` / 全部 ${items.length} 项`
+                                : ""}
+                        </span>
+                    ) : null}
+                </div>
             }
             toolbar={
                 (selectionForm === "PACKAGE" && tierNames.length > 1) ||
