@@ -3,6 +3,11 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
+import {
+    workspaceQueueLocation,
+    workspaceQueueParams,
+} from "@/lib/workspace-queue-routes"
+import { workspaceHost } from "@/lib/workspace-tabs"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
@@ -44,8 +49,14 @@ export function useWorkspaceHome() {
     const queryClient = useQueryClient()
 
     const urlState = React.useMemo(
-        () => parseWorkspaceSearchParams(searchParams),
-        [searchParams],
+        () =>
+            parseWorkspaceSearchParams(
+                workspaceQueueParams(
+                    pathname,
+                    new URLSearchParams(searchParams),
+                ),
+            ),
+        [pathname, searchParams],
     )
 
     const queryInput = React.useMemo(
@@ -61,7 +72,9 @@ export function useWorkspaceHome() {
             accountProfileQuery.data &&
             hasPermission(
                 accountProfileQuery.data.permissions,
-                "work_item:list",
+                urlState.view === "started"
+                    ? "approval_instance:read"
+                    : "work_item:list",
             ),
         ),
     )
@@ -86,9 +99,12 @@ export function useWorkspaceHome() {
     const replaceUrl = React.useCallback(
         (next: WorkspaceUrlState) => {
             const qs = buildWorkspaceSearchParams(next)
-            router.replace(`${pathname}${qs}`, { scroll: false })
+            router.replace(
+                workspaceQueueLocation(next.view, new URLSearchParams(qs)),
+                { scroll: false },
+            )
         },
-        [pathname, router],
+        [router],
     )
 
     const viewStates = React.useRef<Partial<Record<string, WorkspaceUrlState>>>(
@@ -122,11 +138,17 @@ export function useWorkspaceHome() {
                             ? { due: "overdue" }
                             : { blocked: true },
                 })
-            router.push(`${pathname}${buildWorkspaceSearchParams(next)}`, {
-                scroll: false,
-            })
+            router.push(
+                workspaceQueueLocation(
+                    next.view,
+                    new URLSearchParams(buildWorkspaceSearchParams(next)),
+                ),
+                {
+                    scroll: false,
+                },
+            )
         },
-        [pathname, router, urlState],
+        [router, urlState],
     )
 
     const applyFilters = React.useCallback(
@@ -186,7 +208,10 @@ export function useWorkspaceHome() {
 
     const onSelectTask = React.useCallback(
         (item: WorkspaceWorkItem | string) => {
-            const returnTo = `${pathname}${buildWorkspaceSearchParams(urlState)}`
+            const returnTo = workspaceQueueLocation(
+                urlState.view,
+                new URLSearchParams(buildWorkspaceSearchParams(urlState)),
+            )
             router.push(
                 buildWorkspaceDetailHref(
                     typeof item !== "string" &&
@@ -198,7 +223,7 @@ export function useWorkspaceHome() {
                 ),
             )
         },
-        [pathname, router, urlState],
+        [router, urlState],
     )
 
     const onSortChange = React.useCallback(
@@ -218,6 +243,7 @@ export function useWorkspaceHome() {
             replaceUrl({ ...urlState, page: 1, scopeVersion: undefined })
         void accountProfileQuery.refetch().then((profileResult) => {
             if (!profileResult.isSuccess) return
+            workspaceHost()?.changed(window)
             for (const queryKey of [
                 workspaceHomeKeys.all,
                 ["workspace-filter-options"],

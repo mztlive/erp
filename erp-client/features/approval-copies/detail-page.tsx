@@ -29,7 +29,7 @@ export function ApprovalCopyDetailPage({ id }: { id: string }) {
     const params = useSearchParams()
     const returnTo = workspaceQueueHref(
         params.get("returnTo"),
-        "/workspace?view=copied",
+        "/workspace/copies",
     )
     return (
         <PageScaffold>

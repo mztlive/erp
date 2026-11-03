@@ -1,41 +1,21 @@
-export type WorkspaceDetailKind = "tasks" | "approvals" | "copies"
+import { workspaceQueueView } from "./workspace-queue-routes"
 
-/** 只把业务队列参数视为待办入口；页签容器参数不能改变首页类型。 */
-export function hasWorkspaceQueueParams(params: Pick<URLSearchParams, "has">) {
-    return [
-        "queue",
-        "view",
-        "filters",
-        "scopeVersion",
-        "due",
-        "blocked",
-        "type",
-        "q",
-        "handlerUserIds",
-        "salesOrderIds",
-        "purchaseOrderIds",
-        "sort",
-        "page",
-        "currentWorkItemId",
-        "copyReceiptId",
-        "overview",
-    ].some((key) => params.has(key))
-}
+export type WorkspaceDetailKind = "tasks" | "approvals" | "copies"
 
 /** 返回地址只允许工作台队列，移除旧的详情参数，避免返回详情自身。 */
 export function workspaceQueueHref(
     value?: string | null,
-    fallback = "/workspace",
+    fallback = "/workspace/tasks",
 ): string {
     if (!value?.startsWith("/workspace")) return fallback
     const url = new URL(value, "https://workspace.invalid")
     if (
         url.origin !== "https://workspace.invalid" ||
-        (url.pathname !== "/workspace" &&
+        (!workspaceQueueView(url.pathname) &&
             !/^\/workspace\/roles\/WB-(01|03|04)$/.test(url.pathname))
     )
         return fallback
-    if (url.pathname === "/workspace") url.searchParams.set("queue", "1")
+    url.searchParams.delete("_workspace_frame")
     url.searchParams.delete("currentWorkItemId")
     url.searchParams.delete("copyReceiptId")
     return `${url.pathname}${url.search}`

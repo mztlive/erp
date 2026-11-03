@@ -73,7 +73,7 @@ export function RoleWorkbenchEntry({
             !ids.length &&
             hasPermission(profile.permissions, "work_item:list")
         )
-            router.replace("/workspace?queue=1")
+            router.replace("/workspace/tasks")
         else setReady(true)
     }, [profile, router, settings])
     if (query.isError)
@@ -126,10 +126,10 @@ export function RoleWorkbenchEntry({
                 hasPermission(profile.permissions, "work_item:list") && (
                     <Link
                         id="workbench-entry-todos"
-                        href="/workspace?queue=1"
+                        href="/workspace/tasks"
                         className="text-sm underline"
                     >
-                        我的全部待办
+                        待我处理
                     </Link>
                 )}
         </PageScaffold>

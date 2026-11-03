@@ -101,7 +101,7 @@ export function PortalOfferingImpacts({
                                         "tasks",
                                         task.id,
                                         {
-                                            returnTo: `/workspace?view=managed&purchaseOrderIds=${encodeURIComponent(row.original.purchase_order_id)}`,
+                                            returnTo: `/workspace/tasks?view=managed&purchaseOrderIds=${encodeURIComponent(row.original.purchase_order_id)}`,
                                         },
                                     )}
                                     className="rounded-sm text-primary underline underline-offset-4"

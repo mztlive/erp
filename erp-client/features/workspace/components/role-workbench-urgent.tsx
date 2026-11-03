@@ -57,7 +57,7 @@ export function RoleWorkbenchUrgent({
                     </p>
                     <p>
                         仅展示最优先的 5
-                        项；更多匹配事项及常规待办请进入我的全部待办。
+                        项；更多匹配事项及常规待办请进入待我处理。
                     </p>
                 </WorkbenchDataInfo>
             </div>
@@ -170,7 +170,7 @@ export function RoleWorkbenchUrgent({
             <div className="border-t border-grid px-4 py-3">
                 <Link
                     id="role-workbench-urgent-all"
-                    href="/workspace?queue=1"
+                    href="/workspace/tasks"
                     className="inline-flex items-center gap-1 rounded-md text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
                 >
                     查看全部待办

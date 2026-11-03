@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { parseISO } from "date-fns"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useAppForm } from "@/components/form"
 import {
     ListSearchField,
@@ -34,18 +36,20 @@ const MORE_KEYS: WorkspaceChoiceKey[] = [
 ]
 
 /** 所有候选匹配由远端执行；查询失败有独立反馈，不伪装为空候选。 */
-function SearchChoice({
+export function WorkspaceSearchChoice({
     name,
     value,
     onChange,
     options,
     view,
+    label,
 }: {
     name: WorkspaceChoiceKey
     value: string[]
     onChange: (value: string[]) => void
     options: WorkspaceSearchOptions
     view: WorkspaceViewFilter
+    label?: string
 }) {
     const remote = useWorkspaceFilterOptions(view)
     const labels = useRef(new Map<string, WorkspaceSearchOption>())
@@ -71,7 +75,7 @@ function SearchChoice({
                 options={[...selected, ...choices]}
                 value={value}
                 onValueChange={onChange}
-                filterLabel={WORKSPACE_FILTER_LABELS[name]}
+                filterLabel={label ?? WORKSPACE_FILTER_LABELS[name]}
                 filterMode="remote"
                 onSearchChange={remote.setSearch}
                 loading={remote.isFetching}
@@ -103,6 +107,7 @@ export function WorkspaceSearchPanel({
     failed,
     onApply,
     onReset,
+    onScopeChange,
 }: {
     state: WorkspaceUrlState
     options: WorkspaceSearchOptions
@@ -110,7 +115,9 @@ export function WorkspaceSearchPanel({
     failed: boolean
     onApply: (query: string, filters: WorkspaceFilters) => void
     onReset: () => void
+    onScopeChange?: (view: "inbox" | "managed") => void
 }) {
+    const profile = useAccountProfileQuery().data
     const [moreOpen, setMoreOpen] = useState(false)
     const applied = useMemo(
         () => ({ query: state.query ?? "", filters: state.filters ?? {} }),
@@ -186,7 +193,7 @@ export function WorkspaceSearchPanel({
     const choice = (key: WorkspaceChoiceKey) => (
         <form.Field key={key} name="filters">
             {(field) => (
-                <SearchChoice
+                <WorkspaceSearchChoice
                     name={key}
                     value={field.state.value[key] ?? []}
                     onChange={(value) =>
@@ -208,7 +215,7 @@ export function WorkspaceSearchPanel({
                     idPrefix="workspace-query"
                     formAriaLabel="工作台查询条件"
                     density="compact"
-                    className="[&_[data-slot=list-toolbar-query-tools]]:sm:flex-col [&_[data-slot=list-toolbar-query-tools]]:sm:items-stretch [&_[data-slot=list-toolbar-search]]:sm:w-full [&_[data-slot=list-toolbar-search]]:lg:w-full"
+                    className="[&_[data-slot=list-toolbar-search]]:lg:w-auto [&_[data-slot=list-toolbar-search]]:lg:flex-1"
                     onSubmit={() => void form.handleSubmit()}
                     hasPendingChanges={isDirty}
                     search={
@@ -226,7 +233,36 @@ export function WorkspaceSearchPanel({
                     }
                     primaryFilters={
                         <>
-                            {choice("item_types")}
+                            {onScopeChange &&
+                                (state.view === "inbox" ||
+                                    state.view === "managed") &&
+                                hasPermission(
+                                    profile?.permissions,
+                                    "work_item:manage",
+                                ) && (
+                                    <FilterSelect
+                                        id="workspace-task-scope"
+                                        label="任务范围"
+                                        value={state.view}
+                                        options={[
+                                            {
+                                                value: "inbox",
+                                                label: "待我处理",
+                                            },
+                                            {
+                                                value: "managed",
+                                                label: "范围内待办",
+                                            },
+                                        ]}
+                                        onValueChange={(value) =>
+                                            onScopeChange(
+                                                value === "managed"
+                                                    ? "managed"
+                                                    : "inbox",
+                                            )
+                                        }
+                                    />
+                                )}
                             {choice("counterparties")}
                             {state.view !== "started" &&
                                 state.view !== "history" && (

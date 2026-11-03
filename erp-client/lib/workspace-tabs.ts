@@ -1,6 +1,5 @@
 import { WORKSPACE_NAV_GROUPS } from "@/lib/workspace-registry"
 import type { NavDeliveryRequest } from "@/lib/nav-delivery"
-import { hasWorkspaceQueueParams } from "@/lib/workspace-detail-href"
 
 export type WorkspaceFrameState = {
     href: string
@@ -120,10 +119,6 @@ export function tabHref(url: URL): string {
 
 /** Filters belong to a tab; separately named fulfillment lanes belong to different tabs. */
 export function workspaceTabKey(url: URL): string {
-    if (url.pathname === "/workspace")
-        return hasWorkspaceQueueParams(url.searchParams)
-            ? "/workspace?queue=1"
-            : "/workspace"
     if (url.pathname === "/finance/customer-accounts/receipts/new")
         return `${url.pathname}?${new URLSearchParams({ sessionId: url.searchParams.get("sessionId") ?? "" })}`
     if (url.pathname === "/finance/supplier-accounts/invoices/new") {

@@ -107,9 +107,9 @@ export function RoleWorkbenchHeader({
                     <Button
                         id="role-workbench-all-todos"
                         size="sm"
-                        render={<Link href="/workspace?queue=1" />}
+                        render={<Link href="/workspace/tasks" />}
                     >
-                        我的全部待办
+                        待我处理
                         <ArrowUpRightIcon aria-hidden="true" />
                     </Button>
                     <DropdownMenu>

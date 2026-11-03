@@ -4,5 +4,5 @@ export function fulfillmentTasksHref(query?: string): string {
         type: "FULFILLMENT_OPERATION",
     })
     if (query?.trim()) params.set("q", query.trim())
-    return `/workspace?${params.toString()}`
+    return `/workspace/tasks?${params.toString()}`
 }

@@ -139,56 +139,6 @@ function buildIdListParam(value: unknown): string | undefined {
 }
 
 /**
- * 从旧 `/workspace/tasks` 查询中只保留本页仍合法的键。
- */
-export const pickLegalWorkspaceQuery = (
-    searchParams:
-        | URLSearchParams
-        | Record<string, string | string[] | undefined>,
-): string => {
-    const get =
-        searchParams instanceof URLSearchParams
-            ? (key: string) => searchParams.get(key)
-            : (key: string) => {
-                  const value = searchParams[key]
-                  return Array.isArray(value)
-                      ? (value[0] ?? null)
-                      : (value ?? null)
-              }
-    const next = new URLSearchParams()
-    const viewRaw = get("view")
-    if (viewRaw === "started" || viewRaw === "managed" || viewRaw === "history")
-        next.set("view", viewRaw)
-    if (viewRaw === "approval-blockers") next.set("blocked", "1")
-    const due = get("due")
-    if (due === "today" || due === "overdue") next.set("due", due)
-    if (get("blocked") === "1" || get("blocked") === "true") {
-        next.set("blocked", "1")
-    }
-    const type = get("type")
-    if (type) next.set("type", type)
-    const query = get("q")
-    if (query) next.set("q", query)
-    for (const key of [
-        "handlerUserIds",
-        "salesOrderIds",
-        "purchaseOrderIds",
-    ] as const) {
-        const ids = parseIdListParam(get(key))
-        if (ids) next.set(key, ids)
-    }
-    const sort = get("sort")
-    if (sort && SORT_VALUES.includes(sort as WorkspaceSort))
-        next.set("sort", sort)
-    const filters = parseWorkspaceFilters(get("filters"))
-    if (filters) next.set("filters", JSON.stringify(filters))
-    const current = get("currentWorkItemId")
-    if (current) next.set("currentWorkItemId", current)
-    const qs = next.toString()
-    return qs ? `/workspace?${qs}` : "/workspace"
-}
-
-/**
  * 由 URL 推导当前选中的指标。
  */
 export function metricKeyFromUrlState(

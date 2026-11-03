@@ -13,7 +13,13 @@ function useCopyIdentity() {
     const profile = useAccountProfileQuery().data
     return {
         enabled: profile?.account_kind === "admin",
-        key: [profile?.userid, profile?.account_kind],
+        key: [
+            profile?.userid,
+            profile?.account_kind,
+            profile?.policy_version,
+            profile?.organization_version,
+            profile?.permissions,
+        ],
     }
 }
 export function useCopies(query: CopyFilters = {}) {
@@ -23,6 +29,7 @@ export function useCopies(query: CopyFilters = {}) {
         queryFn: () => fetchCopies(query),
         enabled: identity.enabled,
         refetchInterval: 60_000,
+        meta: { workspaceNavigation: true },
     })
 }
 export function useCopy(id: string | null, after?: string) {

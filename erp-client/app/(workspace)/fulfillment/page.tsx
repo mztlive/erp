@@ -23,5 +23,5 @@ export default async function Page({
         type: "FULFILLMENT_OPERATION",
     })
     if (query?.trim()) next.set("q", query.trim())
-    redirect(`/workspace?${next.toString()}`)
+    redirect(`/workspace/tasks?${next.toString()}`)
 }

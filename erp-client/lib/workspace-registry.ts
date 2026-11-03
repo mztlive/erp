@@ -11,6 +11,8 @@ import {
     HistoryIcon,
     LayoutDashboardIcon,
     ListChecksIcon,
+    SendIcon,
+    MailIcon,
     PackageIcon,
     PackageSearchIcon,
     PlugIcon,
@@ -77,6 +79,8 @@ export type WorkspaceId =
 /** 侧栏角标键：由 Shell 映射到对应工作面的实时计数，无数据时隐藏。 */
 export type WorkspaceNavBadgeKey =
     | "todo-count"
+    | "approval-started-count"
+    | "copy-unread-count"
     | "background-job-active-count"
     | "delivery-count"
     | "warehouse-count"
@@ -358,8 +362,10 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         id: "W09",
         name: "收货与发货 / 交付与代发",
         mode: "M1",
-        mainRoute: "/workspace?family=fulfillment&type=FULFILLMENT_OPERATION",
-        navHref: "/workspace?family=fulfillment&type=FULFILLMENT_OPERATION",
+        mainRoute:
+            "/workspace/tasks?family=fulfillment&type=FULFILLMENT_OPERATION",
+        navHref:
+            "/workspace/tasks?family=fulfillment&type=FULFILLMENT_OPERATION",
     },
     {
         id: "W10",
@@ -473,13 +479,41 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     icon: LayoutDashboardIcon,
                     requiredPermissions: [],
                 },
+            ],
+        },
+        {
+            label: "待办任务",
+            items: [
                 {
                     routeId: "W01",
-                    href: "/workspace?queue=1",
-                    label: "我的全部待办",
+                    href: "/workspace/tasks",
+                    label: "待我处理",
                     icon: ListChecksIcon,
                     badge: "todo-count",
                     requiredPermissions: ["work_item:list"],
+                },
+                {
+                    routeId: "W01",
+                    href: "/workspace/approvals",
+                    label: "我发起的审批",
+                    icon: SendIcon,
+                    badge: "approval-started-count",
+                    requiredPermissions: ["approval_instance:read"],
+                },
+                {
+                    routeId: "W01",
+                    href: "/workspace/history",
+                    label: "处理记录",
+                    icon: HistoryIcon,
+                    requiredPermissions: ["work_item:list"],
+                },
+                {
+                    routeId: "W01",
+                    href: "/workspace/copies",
+                    label: "抄送给我",
+                    icon: MailIcon,
+                    badge: "copy-unread-count",
+                    requiredPermissions: [],
                 },
             ],
         },

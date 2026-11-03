@@ -362,14 +362,28 @@ export async function fetchWorkspaceDashboard(
     query: TodayWorkspaceQuery,
     profile: AccountProfile,
 ): Promise<TodayWorkspaceView> {
-    const canManage = hasPermission(profile.permissions, "work_item:manage")
+    const canListWorkItems = hasPermission(
+        profile.permissions,
+        "work_item:list",
+    )
+    const canManage =
+        canListWorkItems &&
+        hasPermission(profile.permissions, "work_item:manage")
     const canReadStarted = hasPermission(
         profile.permissions,
         "approval_instance:read",
     )
     const filters = { ...query.filters, include_options: true }
     const [stats, startedMetric, managedMetric] = await Promise.all([
-        getWorkItemStats({ scope: "mine", timezone: query.timezone }),
+        canListWorkItems
+            ? getWorkItemStats({ scope: "mine", timezone: query.timezone })
+            : Promise.resolve({
+                  assigned: 0,
+                  due_today: 0,
+                  overdue: 0,
+                  exception: 0,
+                  as_of: 0,
+              } as WorkItemStats),
         canReadStarted
             ? listApprovalInstances({ view: "started", limit: 1 })
             : Promise.resolve({ items: [], total: 0 }),
@@ -439,7 +453,9 @@ export async function fetchWorkspaceDashboard(
         : (taskPage?.items ?? []).map((item) =>
               mapWorkspaceWorkItem(item, query.timezone),
           )
-    const updatedAt = unixToIso(stats.as_of)
+    const updatedAt = canListWorkItems
+        ? unixToIso(stats.as_of)
+        : new Date().toISOString()
     return {
         access: "allowed",
         metrics,

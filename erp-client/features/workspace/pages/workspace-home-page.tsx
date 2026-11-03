@@ -1,9 +1,9 @@
 "use client"
 
-import { useSearchParams } from "next/navigation"
+import { usePathname } from "@/lib/navigation"
+import { WORKSPACE_QUEUE_ROUTES } from "@/lib/workspace-queue-routes"
 import { RefreshCwIcon } from "lucide-react"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { ApprovalCopiesPage } from "@/features/approval-copies/page"
 import {
     BusinessFailureState,
     DataFreshness,
@@ -15,13 +15,11 @@ import { WorkspaceQueuePanel } from "../components/workspace-queue-panel"
 import { useWorkspaceHome } from "../hooks/use-workspace-home"
 import { deriveWorkItemsFreshness } from "../lib/freshness"
 import { RoleWorkbenchEntry } from "./role-workbench-entry"
-import { hasWorkspaceQueueParams } from "@/lib/workspace-detail-href"
 
 export function WorkspaceHomePage() {
-    const params = useSearchParams()
+    const pathname = usePathname()
     const profile = useAccountProfileQuery().data
-    if (params.get("view") === "copied") return <ApprovalCopiesPage />
-    if (!hasWorkspaceQueueParams(params)) return <RoleWorkbenchEntry />
+    if (pathname === "/workspace") return <RoleWorkbenchEntry />
     return (
         <WorkspaceTaskHome
             key={`${profile?.userid}:${profile?.policy_version}:${profile?.organization_version}:${profile?.permissions.join(",")}`}
@@ -55,7 +53,11 @@ export function WorkspaceHomeView({
     return (
         <PageScaffold density="compact" className="min-h-0 gap-5 overflow-auto">
             <PageHeader
-                title="我的全部待办"
+                title={
+                    home.urlState.view === "managed"
+                        ? "范围内待办"
+                        : WORKSPACE_QUEUE_ROUTES[home.urlState.view].title
+                }
                 actions={
                     <div className="flex flex-wrap items-center gap-3">
                         {freshness && (

@@ -18,7 +18,8 @@ export const makeQueryClient = (
                 void client.invalidateQueries({
                     predicate: (query) =>
                         query.meta?.businessTimeline === true ||
-                        query.meta?.roleWorkbench === true,
+                        query.meta?.roleWorkbench === true ||
+                        query.meta?.workspaceNavigation === true,
                 })
             },
             onError: (error, _variables, _context, mutation) => {

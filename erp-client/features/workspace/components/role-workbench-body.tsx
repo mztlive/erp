@@ -171,7 +171,7 @@ function RoleWorkbenchTiming({ role }: { role: Role }) {
                                                 focus,
                                                 "hover:underline",
                                             )}
-                                            href={`/workspace?queue=1&type=${type}`}
+                                            href={`/workspace/tasks?type=${type}`}
                                         >
                                             {TYPE_META[type]?.label}
                                         </Link>
@@ -212,7 +212,7 @@ function RoleWorkbenchTiming({ role }: { role: Role }) {
                                                     <Link
                                                         id={`role-task-count-${type.toLowerCase()}-${column}`}
                                                         aria-label={`${TYPE_META[type]?.label}，${["待处理", "今日到期", "已超期"][column]} ${count} 项`}
-                                                        href={`/workspace?queue=1&type=${type}${column === 1 ? "&due=today" : column === 2 ? "&due=overdue" : ""}`}
+                                                        href={`/workspace/tasks?type=${type}${column === 1 ? "&due=today" : column === 2 ? "&due=overdue" : ""}`}
                                                         className={cn(
                                                             focus,
                                                             "inline-flex min-w-7 justify-center px-1 py-1 hover:bg-muted",

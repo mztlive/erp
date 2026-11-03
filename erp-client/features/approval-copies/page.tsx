@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
+import { workspaceHost } from "@/lib/workspace-tabs"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import {
     BusinessEmptyState,
@@ -12,12 +13,9 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MailIcon, RefreshCwIcon, SearchIcon, XIcon } from "lucide-react"
-import { FilterSelect } from "@/components/business/filter-select"
+import { WorkspaceTypeNav } from "@/features/workspace/components/workspace-type-nav"
+import { queueQuickTypes } from "@/features/workspace/lib/queue-presentation"
 import { OptionCombobox } from "@/components/business/option-combobox"
-import {
-    WorkspaceViewNav,
-    WorkspaceViewNavItem,
-} from "@/components/business/workspace-view-nav"
 import {
     InputGroup,
     InputGroupAddon,
@@ -29,7 +27,6 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { COPY_TRIGGER_LABELS } from "@/features/approval-processes/copy-rules"
 import { isDocumentType } from "@/features/approval-processes/parse"
 import { documentTypeLabel as knownDocumentTypeLabel } from "@/features/approval-processes/labels"
-import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api"
 import { useCopies, useReadCopies } from "./queries"
@@ -47,30 +44,6 @@ const STATUS: Record<string, string> = {
     SUPERSEDED: "已替换",
 }
 
-export function CopyNavLink({ active = false }: { active?: boolean }) {
-    const profile = useAccountProfileQuery().data
-    const query = useCopies()
-    const params = useSearchParams()
-    if (profile?.account_kind !== "admin") return null
-    return (
-        <WorkspaceViewNavItem
-            id="workspace-queue-scope-copied"
-            active={active}
-            href={`/workspace?${new URLSearchParams({ view: "copied", ...(params.get("q") ? { q: params.get("q")! } : {}) })}`}
-        >
-            <span>抄送给我</span>
-            {query.data && (
-                <span
-                    className="num ml-1 text-xs text-muted-foreground"
-                    aria-label={`${query.data.unread_count} 条未读`}
-                >
-                    {query.data.unread_count}
-                </span>
-            )}
-        </WorkspaceViewNavItem>
-    )
-}
-
 export function ApprovalCopiesPage() {
     const params = useSearchParams()
     const router = useRouter()
@@ -83,8 +56,6 @@ export function ApprovalCopiesPage() {
         document_type: params.get("documentType") || undefined,
         query: params.get("q") || undefined,
     }
-    const scopeHref = (view: string) =>
-        `/workspace?${new URLSearchParams({ view, ...(filters.query ? { q: filters.query } : {}) })}`
     const list = useCopies(filters)
     const [search, setSearch] = useState(filters.query ?? "")
     const [selected, setSelected] = useState<string[]>([])
@@ -102,12 +73,13 @@ export function ApprovalCopiesPage() {
     )
     const update = (changes: Record<string, string | undefined>) => {
         const next = new URLSearchParams(params)
-        next.set("view", "copied")
+        next.delete("view")
+        next.delete("_workspace_frame")
         for (const [key, value] of Object.entries(changes)) {
             if (value) next.set(key, value)
             else next.delete(key)
         }
-        router.push(`/workspace?${next}`)
+        router.push(`/workspace/copies?${next}`)
         setSelected([])
     }
     useEffect(() => setSearch(filters.query ?? ""), [filters.query])
@@ -165,7 +137,10 @@ export function ApprovalCopiesPage() {
                             variant="ghost"
                             size="sm"
                             disabled={list.isFetching}
-                            onClick={() => void list.refetch()}
+                            onClick={() => {
+                                void list.refetch()
+                                workspaceHost()?.changed(window)
+                            }}
                         >
                             <RefreshCwIcon />
                             刷新
@@ -173,49 +148,44 @@ export function ApprovalCopiesPage() {
                     </div>
                 }
             />
-            <WorkspaceViewNav>
-                {hasPermission(profile.data.permissions, "work_item:list") && (
-                    <WorkspaceViewNavItem
-                        id="copy-nav-inbox"
-                        href={scopeHref("inbox")}
-                    >
-                        待我处理
-                    </WorkspaceViewNavItem>
+            <WorkspaceTypeNav
+                state={{
+                    view: "started",
+                    sort: "created_desc",
+                    filters: {
+                        item_types: filters.document_type
+                            ? [`approval:${filters.document_type}`]
+                            : [],
+                    },
+                }}
+                options={{
+                    item_types: types.map((kind) => ({
+                        value: `approval:${kind}`,
+                        label: `${documentTypeLabel(kind)}审批`,
+                    })),
+                }}
+                types={queueQuickTypes(
+                    types.map((kind) => ({
+                        value: `approval:${kind}`,
+                        label: `${documentTypeLabel(kind)}审批`,
+                    })),
                 )}
-                {hasPermission(profile.data.permissions, "work_item:list") &&
-                    hasPermission(
-                        profile.data.permissions,
-                        "work_item:manage",
-                    ) && (
-                        <WorkspaceViewNavItem
-                            id="copy-nav-managed"
-                            href={scopeHref("managed")}
-                        >
-                            范围内待办
-                        </WorkspaceViewNavItem>
-                    )}
-                {hasPermission(profile.data.permissions, "work_item:list") &&
-                    hasPermission(
-                        profile.data.permissions,
-                        "approval_instance:read",
-                    ) && (
-                        <WorkspaceViewNavItem
-                            id="copy-nav-started"
-                            href={scopeHref("started")}
-                        >
-                            我发起的审批
-                        </WorkspaceViewNavItem>
-                    )}
-                {hasPermission(profile.data.permissions, "work_item:list") && (
-                    <WorkspaceViewNavItem
-                        id="copy-nav-history"
-                        href={scopeHref("history")}
-                    >
-                        处理记录
-                    </WorkspaceViewNavItem>
+                counts={Object.fromEntries(
+                    types.map((kind) => [
+                        `approval:${kind}`,
+                        list.data?.document_type_counts[kind],
+                    ]),
                 )}
-                <CopyNavLink active />
-            </WorkspaceViewNav>
+                onChange={(selectedTypes) =>
+                    update({
+                        documentType: selectedTypes[0]?.replace(
+                            /^approval:/,
+                            "",
+                        ),
+                        page: undefined,
+                    })
+                }
+            />
             <section
                 aria-label="抄送查询条件"
                 className="space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4"
@@ -313,26 +283,6 @@ export function ApprovalCopiesPage() {
                         )}
                     </div>
                 </form>
-                <FilterSelect
-                    id="copy-document-type"
-                    label="审批类型"
-                    className="w-60"
-                    value={filters.document_type ?? "all"}
-                    onValueChange={(value) =>
-                        update({
-                            documentType:
-                                value && value !== "all" ? value : undefined,
-                            page: undefined,
-                        })
-                    }
-                    options={[
-                        { value: "all", label: "全部" },
-                        ...types.map((kind) => ({
-                            value: kind,
-                            label: `${documentTypeLabel(kind)}（${list.data?.document_type_counts[kind] ?? 0}）`,
-                        })),
-                    ]}
-                />
                 {hasActiveFilter && (
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span>
@@ -393,7 +343,13 @@ export function ApprovalCopiesPage() {
                             <>
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-grid bg-muted/35 px-4 py-3 text-xs sm:px-5">
                                     <span className="font-medium">
-                                        抄送事项
+                                        <span className="inline-flex items-center gap-2">
+                                            <MailIcon
+                                                className="size-3.5"
+                                                aria-hidden="true"
+                                            />
+                                            抄送事项
+                                        </span>
                                     </span>
                                     <div className="flex flex-wrap items-center gap-3">
                                         {selectedIds.length > 0 && (
@@ -448,7 +404,7 @@ export function ApprovalCopiesPage() {
                                                         "copies",
                                                         row.id,
                                                         {
-                                                            returnTo: `/workspace?${params}`,
+                                                            returnTo: `/workspace/copies?${params}`,
                                                         },
                                                     ),
                                                 )

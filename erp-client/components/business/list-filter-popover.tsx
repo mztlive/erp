@@ -89,9 +89,9 @@ export function ListFilterPopover({
                 align="end"
                 sideOffset={8}
                 className={cn(
-                    // 工作区 iframe 隐藏会中断动画；关闭立即隐藏，不依赖退场动画卸载。
+                    // 打开使用淡入缩放；关闭立即隐藏，避免 iframe 隐藏中断退场动画。
                     // 保持字段挂载，取消或切换 Tab 后仍保留未应用的筛选草稿。
-                    "max-h-[min(44rem,var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0 data-open:animate-none data-closed:hidden data-closed:animate-none",
+                    "max-h-[min(44rem,var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0 data-open:duration-200 data-closed:hidden data-closed:animate-none motion-reduce:animate-none",
                     size === "compact" ? "w-80" : "w-[36rem]",
                 )}
             >

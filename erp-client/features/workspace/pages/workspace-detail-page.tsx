@@ -1,5 +1,7 @@
 "use client"
 
+import { workspaceQueueParams } from "@/lib/workspace-queue-routes"
+
 import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "@/lib/navigation"
@@ -55,7 +57,7 @@ function WorkspaceDetailContent({
     const profile = useAccountProfileQuery()
     const returnTo = workspaceQueueHref(
         params.get("returnTo"),
-        approval ? "/workspace?view=started" : "/workspace",
+        approval ? "/workspace/approvals" : "/workspace/tasks",
     )
     const [autoNext, setAutoNext] = useState(params.get("autoNext") === "1")
     const [completion, setCompletion] = useState<{
@@ -74,7 +76,10 @@ function WorkspaceDetailContent({
     const detail = approval ? approvalQuery : taskQuery
     useWorkspaceDetailDocumentTitle(detail.data)
     const queueState = parseWorkspaceSearchParams(
-        new URLSearchParams(returnTo.split("?")[1]),
+        workspaceQueueParams(
+            returnTo.split("?")[0],
+            new URLSearchParams(returnTo.split("?")[1]),
+        ),
     )
     const queue = useWorkspaceDashboardQuery(
         toTodayWorkspaceQuery(queueState, "Asia/Shanghai"),

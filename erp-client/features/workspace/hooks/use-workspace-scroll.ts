@@ -2,10 +2,15 @@
 import { useLayoutEffect, useRef } from "react"
 const positions = new Map<string, number>()
 /** 返回总览或队列时，恢复对应筛选条件的滚动位置。 */
-export function useWorkspaceScroll<T extends HTMLElement>(key: string) {
+export function useWorkspaceScroll<T extends HTMLElement>(
+    key: string,
+    selector?: string,
+) {
     const ref = useRef<T>(null)
     useLayoutEffect(() => {
-        const element = ref.current
+        const element = selector
+            ? ref.current?.querySelector<HTMLElement>(selector)
+            : ref.current
         if (!element) return
         element.scrollTop = positions.get(key) ?? 0
         const remember = () => {
@@ -15,6 +20,6 @@ export function useWorkspaceScroll<T extends HTMLElement>(key: string) {
         }
         element.addEventListener("scroll", remember, { passive: true })
         return () => element.removeEventListener("scroll", remember)
-    }, [key])
+    }, [key, selector])
     return ref
 }

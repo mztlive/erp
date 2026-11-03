@@ -1,61 +1,78 @@
 "use client"
 
-import { WorkspaceTaskCard, workspaceTaskColumns } from "./workspace-task-card"
-import { workspaceTaskColumnLabels } from "../lib/task-right-content"
+import { useMemo } from "react"
+import { DataTable } from "@/components/business/data-table"
 import { useWorkspaceScroll } from "../hooks/use-workspace-scroll"
 import type { WorkspaceWorkItem } from "../types"
+import { queueTaskRow, workspaceTaskColumns } from "./workspace-task-columns"
 
-/**
- * 工作台左列待办列表。跨领域混排，通栏贴分割线，与作业面同一条竖线。
- */
+/** 通栏表格复用列设置和键盘操作，页码及滚动位置由队列状态恢复。 */
 export function WorkspaceTaskList({
     items,
-    selectedWorkItemId,
     onSelect,
     tracking = false,
-    workItemType,
-    scrollKey = "",
+    history = false,
+    selectedTypes,
+    scrollKey,
+    total,
+    page,
+    onPageChange,
+    loading,
+    emptyState,
 }: {
     items: readonly WorkspaceWorkItem[]
-    selectedWorkItemId?: string
     onSelect: (item: WorkspaceWorkItem) => void
     tracking?: boolean
-    workItemType?: string
-    scrollKey?: string
+    history?: boolean
+    selectedTypes: readonly string[]
+    scrollKey: string
+    total: number
+    page: number
+    onPageChange: (page: number) => void
+    loading: boolean
+    emptyState: React.ReactNode
 }) {
-    const scrollRef = useWorkspaceScroll<HTMLUListElement>(`queue:${scrollKey}`)
-    const columns = workspaceTaskColumnLabels(workItemType, tracking)
+    const scrollRef = useWorkspaceScroll<HTMLDivElement>(
+        `queue:${scrollKey}`,
+        "[data-slot=table-container]",
+    )
+    const rows = useMemo(() => items.map(queueTaskRow), [items])
+    const columns = useMemo(
+        () =>
+            workspaceTaskColumns({
+                selectedTypes,
+                tracking,
+                history,
+                onSelect,
+            }),
+        [selectedTypes, tracking, history, onSelect],
+    )
     return (
-        <div className="@container/workspace-queue flex min-h-0 flex-1 flex-col">
-            <div
-                aria-hidden="true"
-                className={
-                    workspaceTaskColumns +
-                    " shrink-0 border-b border-grid bg-muted/35 px-4 py-3 text-xs font-medium"
+        <div ref={scrollRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <DataTable
+                idPrefix="workspace-task-table"
+                data={rows}
+                columns={columns}
+                getRowId={(row) => row.item.workItemId}
+                rowLabel={(row) =>
+                    `${row.presentation.typeLabel} ${row.presentation.number} ${row.presentation.title}`
                 }
-            >
-                <span>事项</span>
-                <span>{columns.metric}</span>
-                <span className="hidden @min-[600px]/workspace-queue:block">
-                    {columns.status}
-                </span>
-                <span className="hidden @min-[600px]/workspace-queue:block" />
-            </div>
-            <ul
-                ref={scrollRef}
-                className="flex min-h-0 flex-1 flex-col divide-y divide-grid overflow-auto scroll-fade-b"
-                aria-label="待办列表"
-            >
-                {items.map((item) => (
-                    <li key={item.workItemId}>
-                        <WorkspaceTaskCard
-                            item={item}
-                            selected={item.workItemId === selectedWorkItemId}
-                            onSelect={onSelect}
-                        />
-                    </li>
-                ))}
-            </ul>
+                caption="待办事项"
+                rowCount={total}
+                density="comfortable"
+                defaultColumnVisibility={{ source: false }}
+                scrollable
+                enableColumnResizing={false}
+                showToolbarSummary={false}
+                showRefreshingBanner={false}
+                pagination={{ pageIndex: page - 1, pageSize: 50 }}
+                pageSizeOptions={[50]}
+                onPaginationChange={(next) => onPageChange(next.pageIndex + 1)}
+                onRowOpen={(row) => onSelect(row.item)}
+                loading={loading}
+                emptyState={emptyState}
+                className="gap-0"
+            />
         </div>
     )
 }

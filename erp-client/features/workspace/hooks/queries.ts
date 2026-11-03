@@ -1,7 +1,9 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useQueries, useQuery } from "@tanstack/react-query"
 
+import { fetchQueueCount } from "../api/queue-count"
+import { hasPermission } from "@/lib/permissions"
 import type { AccountProfile } from "@/features/auth/api"
 import { getWorkItem } from "@/features/work-items/api"
 import { mapWorkspaceWorkItem } from "../api/dashboard"
@@ -114,3 +116,34 @@ export function useWorkspaceInboxCountQuery(enabled = true) {
 }
 
 export { workspaceHomeKeys }
+
+/** 菜单计数不受页面筛选影响；按账号和权限版本隔离，并随办理成功失效。 */
+export function useWorkspaceNavigationCounts(profile?: AccountProfile) {
+    const views = ["inbox", "started"] as const
+    const queries = useQueries({
+        queries: views.map((view) => ({
+            queryKey: [
+                ...workspaceHomeKeys.all,
+                "navigation-count",
+                view,
+                profile?.userid,
+                profile?.policy_version,
+                profile?.organization_version,
+                profile?.role_ids,
+                profile?.permissions,
+            ],
+            queryFn: () => fetchQueueCount(view, undefined, {}),
+            enabled:
+                Boolean(profile) &&
+                hasPermission(
+                    profile?.permissions,
+                    view === "started"
+                        ? "approval_instance:read"
+                        : "work_item:list",
+                ),
+            refetchInterval: 60_000,
+            meta: { workspaceNavigation: true },
+        })),
+    })
+    return { inbox: queries[0], started: queries[1] }
+}

@@ -25,6 +25,7 @@ import {
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
+import { workspaceQueueView } from "@/lib/workspace-queue-routes"
 import { isNavItemActive } from "@/lib/nav-active"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -42,11 +43,15 @@ import {
     useProcurementInquiryCountQuery,
 } from "@/features/sales-inquiries/hooks/queries"
 import { useActionableBookCountQuery } from "@/features/sales-selection/hooks/queries"
-import { useWorkspaceInboxCountQuery } from "@/features/workspace/hooks/queries"
+import { useWorkspaceNavigationCounts } from "@/features/workspace/hooks/queries"
+import { useCopies } from "@/features/approval-copies/queries"
+import { WorkspaceSidebarSection } from "./workspace-sidebar-section"
 
 type NavBadgeCounts = {
     backgroundJobs: number | undefined
-    todo: number
+    started?: number
+    copied?: number
+    todo: number | undefined
     selectionActionable: number
     inquiryFeedback: number | undefined
     procurementInquiry: number | undefined
@@ -59,6 +64,10 @@ function badgeCountFor(
     switch (key) {
         case "background-job-active-count":
             return counts.backgroundJobs
+        case "approval-started-count":
+            return counts.started
+        case "copy-unread-count":
+            return counts.copied
         case "todo-count":
             return counts.todo
         case "selection-actionable-count":
@@ -195,12 +204,31 @@ export function WorkspaceSidebarNav() {
     const pathname = usePathname()
     // 必须订阅 searchParams：同 path 只改 lane 时 pathname 不变，否则高亮卡死
     const searchParams = useSearchParams()
-    const search = searchParams.toString()
+    const returnTo = searchParams.get("returnTo")
+    const parentPath = returnTo?.split("?")[0]
+    const fromQueue =
+        /^\/workspace\/(tasks|approvals|copies)\/[^/]+$/.test(pathname) &&
+        parentPath &&
+        workspaceQueueView(parentPath)
+    const navPathname = fromQueue ? parentPath : pathname
+    const search = fromQueue
+        ? (returnTo?.split("?")[1] ?? "")
+        : searchParams.toString()
     const profileQuery = useAccountProfileQuery()
     const permissions = profileQuery.data?.permissions
     const navGroups = React.useMemo(
-        () => filterNavGroupsByPermissions(WORKSPACE_NAV_GROUPS, permissions),
-        [permissions],
+        () =>
+            filterNavGroupsByPermissions(WORKSPACE_NAV_GROUPS, permissions)
+                .map((group) => ({
+                    ...group,
+                    items: group.items.filter(
+                        (item) =>
+                            item.badge !== "copy-unread-count" ||
+                            profileQuery.data?.account_kind === "admin",
+                    ),
+                }))
+                .filter((group) => group.items.length > 0),
+        [permissions, profileQuery.data?.account_kind],
     )
     const allHrefs = React.useMemo(
         () =>
@@ -208,9 +236,8 @@ export function WorkspaceSidebarNav() {
         [navGroups],
     )
 
-    const todoCountQuery = useWorkspaceInboxCountQuery(
-        hasPermission(permissions, "work_item:list"),
-    )
+    const navigationCounts = useWorkspaceNavigationCounts(profileQuery.data)
+    const copyCountQuery = useCopies()
     const canListSelectionBooks = hasPermission(
         permissions,
         "sales_selection_booklet:list",
@@ -231,7 +258,15 @@ export function WorkspaceSidebarNav() {
         backgroundJobs: backgroundJobCountQuery.isError
             ? undefined
             : backgroundJobCountQuery.data,
-        todo: todoCountQuery.data?.mine ?? 0,
+        todo: navigationCounts.inbox.isError
+            ? undefined
+            : navigationCounts.inbox.data,
+        started: navigationCounts.started.isError
+            ? undefined
+            : navigationCounts.started.data,
+        copied: copyCountQuery.isError
+            ? undefined
+            : copyCountQuery.data?.unread_count,
         selectionActionable: selectionCountQuery.data ?? 0,
         inquiryFeedback: inquiryFeedbackCountQuery.isError
             ? undefined
@@ -286,18 +321,36 @@ export function WorkspaceSidebarNav() {
     return (
         <>
             {navGroups.map((group, index) => (
-                <SidebarGroup key={group.label} className="gap-1 px-1 py-1">
-                    <SidebarGroupLabel
-                        className={index > 0 ? "mt-2" : undefined}
-                    >
-                        {group.label}
-                    </SidebarGroupLabel>
+                <WorkspaceSidebarSection
+                    key={group.label}
+                    label={group.label}
+                    index={index}
+                    active={
+                        group.label === "待办任务" &&
+                        group.items.some((item) =>
+                            isNavItemActive(
+                                navPathname,
+                                item.href,
+                                allHrefs,
+                                search,
+                            ),
+                        )
+                    }
+                    count={
+                        (hasPermission(permissions, "work_item:list") &&
+                            counts.todo === undefined) ||
+                        (profileQuery.data?.account_kind === "admin" &&
+                            counts.copied === undefined)
+                            ? undefined
+                            : (counts.todo ?? 0) + (counts.copied ?? 0)
+                    }
+                >
                     <SidebarGroupContent>
                         <SidebarMenu className="gap-0.5">
                             {group.items.map((item) => {
                                 const Icon = item.icon
                                 const isActive = isNavItemActive(
-                                    pathname,
+                                    navPathname,
                                     item.href,
                                     allHrefs,
                                     search,
@@ -306,28 +359,42 @@ export function WorkspaceSidebarNav() {
                                     ? badgeCountFor(item.badge, counts)
                                     : undefined
                                 const badgeQuery =
-                                    item.badge === "inquiry-feedback-count"
-                                        ? inquiryFeedbackCountQuery
+                                    item.badge === "todo-count"
+                                        ? navigationCounts.inbox
                                         : item.badge ===
-                                            "procurement-inquiry-count"
-                                          ? procurementInquiryCountQuery
-                                          : item.badge ===
-                                              "background-job-active-count"
-                                            ? backgroundJobCountQuery
-                                            : undefined
+                                            "approval-started-count"
+                                          ? navigationCounts.started
+                                          : item.badge === "copy-unread-count"
+                                            ? copyCountQuery
+                                            : item.badge ===
+                                                "inquiry-feedback-count"
+                                              ? inquiryFeedbackCountQuery
+                                              : item.badge ===
+                                                  "procurement-inquiry-count"
+                                                ? procurementInquiryCountQuery
+                                                : item.badge ===
+                                                    "background-job-active-count"
+                                                  ? backgroundJobCountQuery
+                                                  : undefined
                                 const badgeError = badgeQuery?.isError
                                     ? `${item.label}数量加载失败：${getErrorMessage(badgeQuery.error, "请稍后重试")}`
                                     : undefined
                                 const badgeLabel =
-                                    item.badge === "inquiry-feedback-count"
-                                        ? `${badgeCount} 张询价单有新反馈待处理`
+                                    item.badge === "copy-unread-count"
+                                        ? `${badgeCount} 条未读抄送`
                                         : item.badge ===
-                                            "procurement-inquiry-count"
-                                          ? `${badgeCount} 张采购询价待处理`
+                                            "approval-started-count"
+                                          ? `${badgeCount} 条我发起的审批`
                                           : item.badge ===
-                                              "background-job-active-count"
-                                            ? `${badgeCount} 项后台任务尚未完成`
-                                            : `${badgeCount} 项待处理`
+                                              "inquiry-feedback-count"
+                                            ? `${badgeCount} 张询价单有新反馈待处理`
+                                            : item.badge ===
+                                                "procurement-inquiry-count"
+                                              ? `${badgeCount} 张采购询价待处理`
+                                              : item.badge ===
+                                                  "background-job-active-count"
+                                                ? `${badgeCount} 项后台任务尚未完成`
+                                                : `${badgeCount} 项待处理`
 
                                 return (
                                     <SidebarMenuItem
@@ -375,7 +442,7 @@ export function WorkspaceSidebarNav() {
                             })}
                         </SidebarMenu>
                     </SidebarGroupContent>
-                </SidebarGroup>
+                </WorkspaceSidebarSection>
             ))}
         </>
     )
