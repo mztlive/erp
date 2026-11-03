@@ -20,10 +20,10 @@ pub(super) struct CurrentWorkRepository<'a> {
     pub(super) db: &'a Database,
 }
 
-/// 关联任务及其已授权来源单据的展示编号。
+/// 关联任务及仍有效的当前审批节点；关联单据仅在服务端用于解析责任。
 pub(super) struct CurrentWorkTasks {
     pub(super) tasks: Vec<WorkItem>,
-    pub(super) purchase_numbers: HashMap<String, String>,
+    pub(super) approval_nodes: HashMap<String, String>,
 }
 
 impl CurrentWorkRepository<'_> {
@@ -35,8 +35,8 @@ impl CurrentWorkRepository<'_> {
     /// # 错误
     /// 任一来源或任务查询失败时返回错误。
     pub(super) async fn tasks(&self, order: &SalesOrder) -> Result<CurrentWorkTasks> {
-        let mut purchase_numbers = HashMap::new();
-        let objects = self.objects(order, &mut purchase_numbers).await?;
+        let mut approval_nodes = HashMap::new();
+        let objects = self.objects(order).await?;
         // 复用 business_object_type + business_object_id 索引；每个分支均限定来源。
         let tasks = self
             .db
@@ -47,7 +47,10 @@ impl CurrentWorkRepository<'_> {
                 &mut NoTransaction,
             )
             .await?;
-        Ok(CurrentWorkTasks { tasks: self.current_approvals(tasks).await?, purchase_numbers })
+        Ok(CurrentWorkTasks {
+            tasks: self.current_approvals(tasks, &mut approval_nodes).await?,
+            approval_nodes,
+        })
     }
 
     /// 按本单销售、采购、交付与应收关系构建对象查询，不扫描全量工作队列。
@@ -57,11 +60,7 @@ impl CurrentWorkRepository<'_> {
     /// 返回绑定本单及其关联身份的查询分支；空来源保持空匹配。
     /// # 错误
     /// 关联仓储读取失败时返回错误。
-    async fn objects(
-        &self,
-        order: &SalesOrder,
-        purchase_numbers: &mut HashMap<String, String>,
-    ) -> Result<Vec<Document>> {
+    async fn objects(&self, order: &SalesOrder) -> Result<Vec<Document>> {
         let sale = &order.base.id;
         let mut objects = vec![doc! {
             "business_object_type": { "$in": ["sales_order", "voucher_sales_order"] },
@@ -72,8 +71,6 @@ impl CurrentWorkRepository<'_> {
         }
         let purchases =
             self.db.purchase_orders().find_many(doc! { "sales_order_id": sale }, &mut NoTransaction).await?;
-        purchase_numbers
-            .extend(purchases.iter().map(|order| (order.base.id.clone(), order.purchase_no.clone())));
         let purchase_ids = purchases.into_iter().map(|row| row.base.id).collect::<Vec<_>>();
         objects.push(object_filter("purchase_order", purchase_ids.clone()));
         let deliveries =

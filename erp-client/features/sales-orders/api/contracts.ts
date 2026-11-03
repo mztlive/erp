@@ -328,16 +328,14 @@ export type BackendRevisionCommercial = Omit<BackendRevision, "lines"> & {
 export type BackendSalesOrderCurrentWork = {
     id: string
     kind: string
-    object_id?: string
-    object_type?: string
-    document_number?: string | null
+    count: number
+    current_node?: string | null
     section: "approval" | "fulfillment" | "acceptance" | "invoice"
     label: string
     role_label: string
     owner_user_id?: string | null
     owner_name?: string | null
     owner_org_name?: string | null
-    scope: string[]
     instruction: string
 }
 

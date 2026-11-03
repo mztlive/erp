@@ -1,6 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+    Fragment,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react"
 import {
     Handle,
     MarkerType,
@@ -32,6 +39,7 @@ import {
     type ProcessState,
     type ProcessStep,
 } from "../lib/sales-order-current-work"
+import { SalesOrderProcessWorkSheet } from "./sales-order-process-work-sheet"
 import { remainingReceivableAmount } from "../lib/sales-order-receivable"
 import type { NavSectionId } from "../lib/sales-order-detail-model"
 import { SalesOrderApprovalDialog } from "./sales-order-approval-dialog"
@@ -60,6 +68,7 @@ type DiagramData = {
     step?: ProcessStep
     lane?: ProcessLane
     prefix: string
+    selectedId?: string
     laneWidth: number
     effectiveDate?: string
     onMeasure: (id: string, height: number) => void
@@ -81,7 +90,7 @@ function StateIcon({ state }: { state: ProcessState }) {
         <Icon
             aria-hidden="true"
             className={cn(
-                "mt-0.5 size-5 shrink-0",
+                "size-5 shrink-0",
                 state === "done"
                     ? "text-success"
                     : state === "active"
@@ -95,17 +104,19 @@ function StateIcon({ state }: { state: ProcessState }) {
 function Step({ step, data }: { step: ProcessStep; data: DiagramData }) {
     const group = step.groups[0]
     return (
-        <div className="flex min-w-0 gap-2.5">
+        <div className="grid min-w-0 grid-cols-[20px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1.5">
             <StateIcon state={step.state} />
-            <div className="min-w-0 space-y-1.5">
-                <div
-                    className={cn(
-                        "inline-flex rounded-md border px-3 py-1 text-sm font-semibold",
-                        stateStyles[step.state],
-                    )}
-                >
-                    {step.title}
-                </div>
+            <div
+                className={cn(
+                    "inline-flex min-h-8 w-fit items-center rounded-md border px-3 py-1 text-sm font-semibold",
+                    stateStyles[step.state],
+                    data.selectedId === step.id &&
+                        "ring-2 ring-ring ring-offset-2",
+                )}
+            >
+                {step.title}
+            </div>
+            <div className="col-start-2 min-w-0 space-y-1.5">
                 <p className="sr-only">{stateNames[step.state]}</p>
                 <p className="text-xs leading-5 text-muted-foreground">
                     {group
@@ -123,10 +134,18 @@ function Step({ step, data }: { step: ProcessStep; data: DiagramData }) {
                         className="nodrag nopan h-7 text-xs"
                         variant="outline"
                         size="sm"
+                        aria-haspopup={
+                            step.groups.length ? "dialog" : undefined
+                        }
+                        aria-expanded={
+                            step.groups.length
+                                ? data.selectedId === step.id
+                                : undefined
+                        }
                         onClick={() => data.onOpen(step)}
                     >
                         {step.groups.length
-                            ? "查看当前办理"
+                            ? "查看待办进度"
                             : step.section === "approval"
                               ? "查看审批"
                               : step.section === "receipt"
@@ -219,8 +238,12 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
     return (
         <div
             ref={nodeRef}
-            className="flex min-h-[140px] items-start gap-5 border-t border-border/70 bg-background py-5"
-            style={{ width: data.laneWidth }}
+            className="grid min-h-[140px] items-start gap-x-4 border-t border-border/70 bg-background py-5"
+            style={{
+                width: data.laneWidth,
+                gridTemplateColumns:
+                    "144px minmax(0,1fr) 20px minmax(0,1fr) 20px minmax(0,1fr)",
+            }}
         >
             <Handle
                 type="target"
@@ -234,19 +257,17 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
                 {data.lane.title}
             </div>
             {data.lane.steps.map((step, index) => (
-                <div
-                    key={step.id}
-                    className="flex shrink-0 items-start gap-3"
-                    style={{ width: (data.laneWidth - 204) / 3 }}
-                >
+                <Fragment key={step.id}>
                     {index > 0 ? (
-                        <ArrowRightIcon
-                            className="mt-2 size-5 shrink-0 text-muted-foreground/60"
-                            aria-hidden="true"
-                        />
+                        <div className="flex h-8 items-center justify-center">
+                            <ArrowRightIcon
+                                className="size-5 text-muted-foreground/60"
+                                aria-hidden="true"
+                            />
+                        </div>
                     ) : null}
                     <Step step={step} data={data} />
-                </div>
+                </Fragment>
             ))}
         </div>
     )
@@ -268,6 +289,7 @@ export function SalesOrderProcessDiagram({
     onSelectSection: (section: NavSectionId) => void
 }) {
     const [expanded, setExpanded] = useState<string>()
+    const lastTrigger = useRef<HTMLElement | null>(null)
     const [approvalOpen, setApprovalOpen] = useState(false)
     const [nodeHeights, setNodeHeights] = useState<Record<string, number>>({})
     const onMeasure = useCallback((id: string, height: number) => {
@@ -309,6 +331,7 @@ export function SalesOrderProcessDiagram({
     const selected = allSteps.find((step) => step.id === expanded)
     const data: DiagramData = {
         prefix,
+        selectedId: expanded,
         onMeasure,
         laneWidth: Math.max(990, canvasWidth - 220),
         effectiveDate: order.revisions.find(
@@ -320,9 +343,10 @@ export function SalesOrderProcessDiagram({
             if (step.section === "approval") {
                 setApprovalOpen(true)
             } else if (step.groups.length) {
-                setExpanded((current) =>
-                    current === step.id ? undefined : step.id,
+                lastTrigger.current = document.getElementById(
+                    `${prefix}-${step.id}-open`,
                 )
+                setExpanded(step.id)
             } else {
                 onSelectSection(step.section)
             }
@@ -468,70 +492,13 @@ export function SalesOrderProcessDiagram({
                             : "暂无明确的当前办理事项，可进入各分区核对进度。"}
                 </p>
             </div>
-            {selected?.groups.length ? (
-                <section
-                    aria-label={`${selected.title}当前办理`}
-                    className="rounded-lg border p-4"
-                >
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold">
-                            {selected.title} · 当前办理
-                        </h3>
-                        <Button
-                            id={`${prefix}-close-details`}
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setExpanded(undefined)}
-                        >
-                            收起
-                        </Button>
-                    </div>
-                    <div className="space-y-3">
-                        {selected.groups.map((group) => (
-                            <details
-                                key={group.id}
-                                className="rounded-md border px-3 py-2"
-                            >
-                                <summary
-                                    id={`${prefix}-group-${toAutomationIdSegment(group.id)}`}
-                                    className="cursor-pointer text-sm"
-                                >
-                                    {group.label} · {group.owner} ·{" "}
-                                    {group.count} 项
-                                </summary>
-                                <ul className="mt-2 space-y-2 pl-4 text-xs leading-5 text-muted-foreground">
-                                    {group.tasks.map((task) => (
-                                        <li key={task.id}>
-                                            {task.document_number ||
-                                                task.scope.join("、") ||
-                                                task.label}
-                                            ：{task.instruction}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </details>
-                        ))}
-                    </div>
-                    {visibleSections.includes(selected.section) ? (
-                        <Button
-                            id={`${prefix}-open-business`}
-                            className="mt-3"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onSelectSection(selected.section)}
-                        >
-                            进入
-                            {selected.section === "approval"
-                                ? "审批记录"
-                                : selected.section === "invoice"
-                                  ? "开票"
-                                  : selected.section === "acceptance"
-                                    ? "客户验收"
-                                    : "采购与交付"}
-                        </Button>
-                    ) : null}
-                </section>
-            ) : null}
+            <SalesOrderProcessWorkSheet
+                key={order.id}
+                step={selected}
+                prefix={prefix}
+                finalFocus={lastTrigger}
+                onClose={() => setExpanded(undefined)}
+            />
         </section>
     )
 }

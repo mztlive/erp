@@ -13,12 +13,16 @@ use crate::Result;
 impl CurrentWorkRepository<'_> {
     /// 批量校验审批任务的实例、当前节点、轮次、对象版本与实际责任人。
     /// # 参数
-    /// `tasks` 为关联本销售单的开放任务。
+    /// `tasks` 为关联本销售单的开放任务，`node_names` 接收仍有效的当前审批节点名称。
     /// # 返回
     /// 返回仍匹配当前审批责任的任务及其他业务任务。
     /// # 错误
     /// 审批实例或节点读取失败时返回错误。
-    pub(super) async fn current_approvals(&self, tasks: Vec<WorkItem>) -> Result<Vec<WorkItem>> {
+    pub(super) async fn current_approvals(
+        &self,
+        tasks: Vec<WorkItem>,
+        node_names: &mut HashMap<String, String>,
+    ) -> Result<Vec<WorkItem>> {
         let execution_ids =
             tasks.iter().filter_map(|task| task.approval_node_execution_id.clone()).collect::<Vec<_>>();
         let executions =
@@ -45,7 +49,11 @@ impl CurrentWorkRepository<'_> {
                         task.approval_node_execution_id.as_ref().and_then(|id| executions.get(id.as_ref()));
                     let instance =
                         execution.and_then(|execution| instances.get(execution.process_instance_id.as_ref()));
-                    matches_current_approval(task, execution, instance)
+                    let current = matches_current_approval(task, execution, instance);
+                    if current && let Some(execution) = execution {
+                        node_names.insert(task.base.id.clone(), execution.node_name.clone());
+                    }
+                    current
                 },
                 // 此类型已由统一审批替代，遗留 OPEN 记录不再代表可办理责任。
                 WorkItemType::PurchaseOrderReview => false,

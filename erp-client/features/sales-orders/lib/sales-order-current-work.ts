@@ -39,13 +39,13 @@ export type ProcessLane = {
     steps: ProcessStep[]
 }
 
-/** 同一环节与处理人合并；数量按业务对象去重，不把多条责任记录计为多笔单据。 */
+/** 同一环节与处理人合并；数量使用服务端去重后的摘要，不读取关联单据身份。 */
 function workGroups(tasks: BackendSalesOrderCurrentWork[]): WorkGroup[] {
     const groups = new Map<string, BackendSalesOrderCurrentWork[]>()
     for (const task of tasks) {
         const key = JSON.stringify([
             task.kind,
-            task.object_type,
+            task.current_node,
             task.label,
             task.role_label,
             task.owner_user_id,
@@ -56,7 +56,7 @@ function workGroups(tasks: BackendSalesOrderCurrentWork[]): WorkGroup[] {
         id,
         label: items[0].label,
         owner: `${items[0].role_label} · ${displayActorName(items[0].owner_name) || (items[0].owner_user_id ? "姓名待补全" : "待分配")}`,
-        count: new Set(items.map((item) => item.object_id ?? item.id)).size,
+        count: items.reduce((count, item) => count + item.count, 0),
         tasks: items,
     }))
 }

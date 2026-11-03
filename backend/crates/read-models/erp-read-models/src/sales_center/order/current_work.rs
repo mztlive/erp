@@ -1,13 +1,12 @@
 //! 已授权销售单的当前办理摘要；不授予关联单据读取或任务操作权限。
 mod repository;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use erp_core::common::time::Instant;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::organization::OrganizationRepository;
 use erp_identity::repository::prelude::*;
-use erp_sales::dto::sales_order::RevisionView;
 use erp_sales::entity::sales_order::{CommercialStatus, SalesOrder};
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use persistence_core::NoTransaction;
@@ -24,12 +23,13 @@ pub struct SalesOrderCurrentWork {
     pub id: String,
     /// 固定任务种类，供页面判定重复提示，不直接展示枚举。
     pub kind: WorkItemType,
-    /// 关联对象身份，仅用于分组计数，不作为读取授权。
-    pub object_id: String,
-    /// 关联对象种类，供区分入库与发货等环节。
-    pub object_type: String,
-    /// 来源采购单的业务编号；缺失时不展示内部身份。
-    pub document_number: Option<String>,
+    /// 仅供服务端去重，不向销售详情返回关联对象身份。
+    #[serde(skip)]
+    object_key: String,
+    /// 同一事项、环节与责任人下去重后的待办数量。
+    pub count: usize,
+    /// 当前审批节点名称；仅在匹配当前活动审批时返回。
+    pub current_node: Option<String>,
     /// 详情页内导航分区。
     pub section: &'static str,
     /// 当前环节中文名称。
@@ -42,8 +42,6 @@ pub struct SalesOrderCurrentWork {
     pub owner_name: Option<String>,
     /// 当前处理人的有效主属组织名称；不使用业务单所属公司替代部门。
     pub owner_org_name: Option<String>,
-    /// 本任务负责的商品范围；只取当前销售版本的商品名称。
-    pub scope: Vec<String>,
     /// 下一步办理事项。
     pub instruction: &'static str,
 }
@@ -51,16 +49,12 @@ pub struct SalesOrderCurrentWork {
 impl SalesOrderReadService {
     /// 在销售详情授权内汇总开放责任，只返回该销售单及其直接来源对象的办理摘要。
     /// # 参数
-    /// `order` 为已授权销售单，`revisions` 为该单已读取的版本快照。
+    /// `order` 为已授权销售单。
     /// # 返回
-    /// 返回按环节和创建顺序稳定排列的当前任务；终结任务与无关任务不进入结果。
+    /// 返回按环节与责任人合并的待办摘要；终结任务与关联单据明细不进入结果。
     /// # 错误
     /// 关联读取、责任读取或姓名查询失败时返回错误，不伪装成无人处理。
-    pub(super) async fn current_work(
-        &self,
-        order: &SalesOrder,
-        revisions: &[RevisionView],
-    ) -> Result<Vec<SalesOrderCurrentWork>> {
+    pub(super) async fn current_work(&self, order: &SalesOrder) -> Result<Vec<SalesOrderCurrentWork>> {
         if order.commercial_status == CommercialStatus::Voided {
             return Ok(Vec::new());
         }
@@ -71,31 +65,13 @@ impl SalesOrderReadService {
         let org_names = OrganizationRepository::new(&self.db)
             .primary_org_names(&ids, Instant::now(), &mut NoTransaction)
             .await?;
-        let lines = revisions
-            .iter()
-            .find(|revision| Some(revision.id.as_str()) == order.current_revision_id())
-            .map(|revision| {
-                revision
-                    .commercial_lines
-                    .iter()
-                    .map(|line| {
-                        (
-                            line.sales_order_line_id.clone(),
-                            format!("第 {} 项 · {}", line.line_no, line.item_name_snapshot),
-                        )
-                    })
-                    .collect::<HashMap<_, _>>()
-            })
-            .unwrap_or_default();
         let mut rows = tasks
             .iter()
-            .filter_map(|task| SalesOrderCurrentWork::from_task(task, &names, &lines))
+            .filter_map(|task| SalesOrderCurrentWork::from_task(task, &names))
             .collect::<Vec<_>>();
         for row in &mut rows {
             row.owner_org_name = row.owner_user_id.as_ref().and_then(|id| org_names.get(id).cloned());
-            if row.object_type == "purchase_order" {
-                row.document_number = current.purchase_numbers.get(&row.object_id).cloned();
-            }
+            row.current_node = current.approval_nodes.get(&row.id).cloned();
         }
         rows.sort_by_key(|row| match row.section {
             "approval" => 0,
@@ -104,17 +80,35 @@ impl SalesOrderReadService {
             "invoice" => 3,
             _ => 4,
         });
-        Ok(rows)
+        Ok(SalesOrderCurrentWork::summarize(rows))
     }
 }
 
 impl SalesOrderCurrentWork {
+    /// 按事项、当前节点与责任人合并，业务身份只在内存中用于去重。
+    fn summarize(rows: Vec<Self>) -> Vec<Self> {
+        let mut positions = HashMap::new();
+        let mut summaries: Vec<(Self, HashSet<String>)> = Vec::new();
+        for mut row in rows {
+            let key =
+                format!("{:?}", (row.kind, row.label, row.role_label, &row.owner_user_id, &row.current_node));
+            let object = std::mem::take(&mut row.object_key);
+            if let Some(&index) = positions.get(&key) {
+                let (summary, objects): &mut (Self, HashSet<String>) = &mut summaries[index];
+                objects.insert(object);
+                summary.count = objects.len();
+            } else {
+                row.id = key.clone();
+                row.count = 1;
+                positions.insert(key, summaries.len());
+                summaries.push((row, HashSet::from([object])));
+            }
+        }
+        summaries.into_iter().map(|(row, _)| row).collect()
+    }
+
     /// 从开放任务映射有限展示信息，不使用自由文本摘要或历史责任人。
-    fn from_task(
-        task: &WorkItem,
-        names: &HashMap<String, String>,
-        lines: &HashMap<String, String>,
-    ) -> Option<Self> {
+    fn from_task(task: &WorkItem, names: &HashMap<String, String>) -> Option<Self> {
         if task.status != WorkItemStatus::Open {
             return None;
         }
@@ -122,9 +116,9 @@ impl SalesOrderCurrentWork {
         Some(Self {
             id: task.base.id.clone(),
             kind: task.work_item_type,
-            object_id: task.business_object_id.clone(),
-            object_type: task.business_object_type.clone(),
-            document_number: None,
+            object_key: format!("{}:{}", task.business_object_type, task.business_object_id),
+            count: 1,
+            current_node: None,
             section,
             label,
             role_label,
@@ -132,11 +126,6 @@ impl SalesOrderCurrentWork {
             owner_user_id: task.owner_user_id.clone(),
             owner_name: task.owner_user_id.as_ref().and_then(|id| names.get(id).cloned()),
             owner_org_name: None,
-            scope: if task.work_item_type == WorkItemType::ProcurementOrderCreation {
-                task.responsibility_scope_ids().iter().filter_map(|id| lines.get(id).cloned()).collect()
-            } else {
-                Vec::new()
-            },
         })
     }
 }
@@ -234,19 +223,56 @@ mod tests {
     }
 
     #[test]
-    fn parallel_procurement_preserves_each_owner_and_product_scope() {
-        let names = HashMap::from([("buyer-a".into(), "张采购".into()), ("buyer-b".into(), "李采购".into())]);
-        let lines = HashMap::from([
-            ("line-a".into(), "第 1 项 · 茶叶".into()),
-            ("line-b".into(), "第 2 项 · 咖啡".into()),
-        ]);
-        let first = SalesOrderCurrentWork::from_task(&task("buyer-a", "line-a"), &names, &lines).unwrap();
-        let second = SalesOrderCurrentWork::from_task(&task("buyer-b", "line-b"), &names, &lines).unwrap();
-        assert_eq!(first.owner_name.as_deref(), Some("张采购"));
-        assert_eq!(first.scope, vec!["第 1 项 · 茶叶"]);
-        assert_eq!(second.owner_name.as_deref(), Some("李采购"));
-        assert_eq!(second.scope, vec!["第 2 项 · 咖啡"]);
-        assert_eq!(first.section, "fulfillment");
+    fn summary_merges_repeated_tasks_but_counts_distinct_objects() {
+        let mut first = task("reviewer", "line");
+        first.work_item_type = WorkItemType::DocumentApproval;
+        first.business_object_type = "purchase_order".into();
+        first.business_object_id = "private-purchase-a".into();
+        let mut second = first.clone();
+        second.business_object_id = "private-purchase-b".into();
+        let names = HashMap::from([("reviewer".into(), "刘志强".into())]);
+        let rows = [&first, &first, &second]
+            .into_iter()
+            .map(|task| SalesOrderCurrentWork::from_task(task, &names).unwrap())
+            .collect();
+        let summary = SalesOrderCurrentWork::summarize(rows);
+        assert_eq!(summary.len(), 1);
+        assert_eq!(summary[0].count, 2);
+        assert_eq!(summary[0].owner_name.as_deref(), Some("刘志强"));
+        let wire = serde_json::to_value(&summary[0]).unwrap();
+        let keys = wire.as_object().unwrap().keys().map(String::as_str).collect::<HashSet<_>>();
+        assert_eq!(
+            keys,
+            HashSet::from([
+                "id",
+                "kind",
+                "count",
+                "current_node",
+                "section",
+                "label",
+                "role_label",
+                "owner_user_id",
+                "owner_name",
+                "owner_org_name",
+                "instruction"
+            ])
+        );
+        assert!(!wire.to_string().contains("private-purchase"));
+        assert!(!wire.to_string().contains(&first.base.id));
+    }
+
+    #[test]
+    fn summary_keeps_different_owners_and_current_nodes_separate() {
+        let names = HashMap::new();
+        let first = SalesOrderCurrentWork::from_task(&task("a", "line"), &names).unwrap();
+        let second = SalesOrderCurrentWork::from_task(&task("b", "line"), &names).unwrap();
+        let mut third = first.clone();
+        third.current_node = Some("财务复核".into());
+        let summary = SalesOrderCurrentWork::summarize(vec![first, second, third]);
+        assert_eq!(summary.len(), 3);
+        assert!(summary.iter().all(|row| row.count == 1));
+        assert_eq!(summary[2].current_node.as_deref(), Some("财务复核"));
+        assert!(SalesOrderCurrentWork::summarize(Vec::new()).is_empty());
     }
 
     #[test]
@@ -254,7 +280,7 @@ mod tests {
         let mut item = task("buyer", "line");
         for status in [WorkItemStatus::Completed, WorkItemStatus::Closed] {
             item.status = status;
-            assert!(SalesOrderCurrentWork::from_task(&item, &HashMap::new(), &HashMap::new()).is_none());
+            assert!(SalesOrderCurrentWork::from_task(&item, &HashMap::new()).is_none());
         }
     }
 
@@ -263,12 +289,11 @@ mod tests {
         let mut item = task("buyer", "removed-line");
         item.completed_by = Some("old-reviewer".into());
         let names = HashMap::from([("old-reviewer".into(), "历史审批人".into())]);
-        let missing = SalesOrderCurrentWork::from_task(&item, &names, &HashMap::new()).unwrap();
+        let missing = SalesOrderCurrentWork::from_task(&item, &names).unwrap();
         assert_eq!(missing.owner_user_id.as_deref(), Some("buyer"));
         assert!(missing.owner_name.is_none());
-        assert!(missing.scope.is_empty());
         item.owner_user_id = None;
-        let unassigned = SalesOrderCurrentWork::from_task(&item, &names, &HashMap::new()).unwrap();
+        let unassigned = SalesOrderCurrentWork::from_task(&item, &names).unwrap();
         assert!(unassigned.owner_user_id.is_none());
         assert!(unassigned.owner_name.is_none());
     }
@@ -292,11 +317,11 @@ mod tests {
             item.work_item_type = kind;
             item.business_object_type = object.into();
             item.owner_role = role.into();
-            let row = SalesOrderCurrentWork::from_task(&item, &HashMap::new(), &HashMap::new()).unwrap();
+            let row = SalesOrderCurrentWork::from_task(&item, &HashMap::new()).unwrap();
             assert_eq!(row.section, section);
             assert_eq!(row.role_label, label);
         }
         item.business_object_type = "unrelated".into();
-        assert!(SalesOrderCurrentWork::from_task(&item, &HashMap::new(), &HashMap::new()).is_none());
+        assert!(SalesOrderCurrentWork::from_task(&item, &HashMap::new()).is_none());
     }
 }
