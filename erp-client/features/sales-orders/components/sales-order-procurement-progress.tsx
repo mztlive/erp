@@ -37,9 +37,9 @@ export function SalesOrderProcurementProgress({
     const label = progress.sourceChanged
         ? "采购依据待更新"
         : hasGap
-          ? "供给未完全覆盖"
+          ? "部分商品待安排"
           : progress.status === "covered"
-            ? "供给已覆盖"
+            ? "已全部安排"
             : progress.label
     const StatusIcon = needsAttention
         ? TriangleAlertIcon
@@ -49,7 +49,12 @@ export function SalesOrderProcurementProgress({
     const headingId = `sales-order-${surface}-procurement-heading`
 
     return (
-        <section aria-labelledby={headingId} className="space-y-3">
+        <section
+            id={`sales-order-${surface}-procurement-progress`}
+            tabIndex={-1}
+            aria-labelledby={headingId}
+            className="space-y-3"
+        >
             <div
                 className={cn(
                     "overflow-hidden rounded-xl border",
@@ -100,7 +105,7 @@ export function SalesOrderProcurementProgress({
                                         : "text-muted-foreground",
                                 )}
                             >
-                                {hasGap ? "待覆盖数量" : "已覆盖数量"}
+                                {hasGap ? "待安排数量" : "已安排数量"}
                             </div>
                             <div
                                 className={cn(
@@ -129,12 +134,12 @@ export function SalesOrderProcurementProgress({
                         </div>
                         <div className="space-y-1 text-xs text-muted-foreground sm:text-right">
                             <p>
-                                供给目标{" "}
+                                销售数量{" "}
                                 <QuantityValue
                                     value={progress.salesQuantity}
                                     unit={null}
                                 />{" "}
-                                · 已覆盖{" "}
+                                · 已安排{" "}
                                 <QuantityValue
                                     value={progress.coveredQuantity}
                                     unit={null}
@@ -153,7 +158,7 @@ export function SalesOrderProcurementProgress({
                 </div>
                 {hasGap ? (
                     <div className="border-t border-warning-border/60 px-4 py-4 md:px-5">
-                        <h3 className="text-sm font-medium">待覆盖明细</h3>
+                        <h3 className="text-sm font-medium">待安排明细</h3>
                         {uncoveredLines?.length ? (
                             <ul className="mt-2 divide-y divide-border/60">
                                 {uncoveredLines.map((line) => (
@@ -174,7 +179,7 @@ export function SalesOrderProcurementProgress({
                                         </div>
                                         <div className="shrink-0 space-y-1 text-right">
                                             <p className="text-sm font-semibold text-warning-soft-foreground">
-                                                待覆盖{" "}
+                                                待安排{" "}
                                                 <QuantityValue
                                                     value={
                                                         line.remainingQuantity
@@ -184,7 +189,7 @@ export function SalesOrderProcurementProgress({
                                                 />
                                             </p>
                                             <p className="text-xs text-muted-foreground">
-                                                已覆盖{" "}
+                                                已安排{" "}
                                                 <QuantityValue
                                                     value={line.coveredQuantity}
                                                     unit={null}
@@ -201,7 +206,7 @@ export function SalesOrderProcurementProgress({
                             </ul>
                         ) : (
                             <p className="mt-2 text-xs text-muted-foreground">
-                                逐项覆盖明细暂不可用，请刷新后查看。
+                                逐项采购与库存安排明细暂不可用，请刷新后查看。
                             </p>
                         )}
                     </div>

@@ -107,17 +107,35 @@ export function SalesOrderDetailPage({
         changeOrderId,
         query.data?.nature,
     )
+    const [purchaseFocusRequested, setPurchaseFocusRequested] =
+        React.useState(false)
+    React.useEffect(() => {
+        if (!purchaseFocusRequested) return
+        // 等页签正文挂载、独立滚动区复位后再定位；当前已在采购页签也会执行。
+        const frame = requestAnimationFrame(() => {
+            const target = document.getElementById(
+                "sales-order-purchase-procurement-progress",
+            )
+            if (!target) return
+            target.scrollIntoView({ block: "start" })
+            target.focus({ preventScroll: true })
+            setPurchaseFocusRequested(false)
+        })
+        return () => cancelAnimationFrame(frame)
+    }, [purchaseFocusRequested, section, query.data])
     const selectSection = React.useCallback(
         (
             next: Parameters<typeof selectUrlSection>[0],
             extras?: { mode?: "register" },
-        ) =>
+        ) => {
+            setPurchaseFocusRequested(false)
             selectUrlSection(
                 next,
                 focusedWorkItem?.workItemType ===
                     "CUSTOMER_ACCEPTANCE_REGISTRATION",
                 extras,
-            ),
+            )
+        },
         [focusedWorkItem?.workItemType, selectUrlSection],
     )
 
@@ -295,7 +313,10 @@ export function SalesOrderDetailPage({
                 order.primaryStatus.code !== "voided" ? (
                     <SalesOrderProcurementAlert
                         progress={order.related.procurementProgress}
-                        onOpenPurchase={() => selectSection("fulfillment")}
+                        onOpenPurchase={() => {
+                            selectSection("fulfillment")
+                            setPurchaseFocusRequested(true)
+                        }}
                     />
                 ) : null}
                 <SalesOrderCurrentTask

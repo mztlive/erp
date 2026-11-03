@@ -31,7 +31,7 @@ export function SalesOrderProcurementAlert({
             <TriangleAlertIcon aria-hidden="true" />
             <AlertDescription className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <div className="min-w-0 flex-1 basis-64 break-words">
-                    <span className="font-medium">采购异常：</span>
+                    <span className="font-medium">采购待处理：</span>
                     {hasExcess ? (
                         <span>
                             {singleExcess ? (
@@ -51,7 +51,11 @@ export function SalesOrderProcurementAlert({
                             ，待采购调减。
                         </span>
                     ) : null}
-                    {hasGap ? <span>供给未完全覆盖，待分配供给。</span> : null}
+                    {hasGap ? (
+                        <span>
+                            部分商品尚未安排采购或库存出库，请联系采购人员处理。
+                        </span>
+                    ) : null}
                     {progress.sourceChanged ? (
                         <span>
                             {progress.affectedPurchaseCount}{" "}
@@ -72,7 +76,7 @@ export function SalesOrderProcurementAlert({
                     className="h-auto p-0"
                     onClick={onOpenPurchase}
                 >
-                    查看采购
+                    查看采购进度
                     <ArrowRightIcon aria-hidden="true" data-icon="inline-end" />
                 </Button>
             </AlertDescription>
