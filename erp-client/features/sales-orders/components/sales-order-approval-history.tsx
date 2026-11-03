@@ -32,10 +32,12 @@ export function SalesOrderApprovalHistory({
     instance,
     items,
     hasMore,
+    idPrefix = "sales-order-approval",
 }: {
     instance: ApprovalRuntimeInstance
     items: readonly ApprovalHistoryItem[]
     hasMore: boolean
+    idPrefix?: string
 }) {
     const rounds = [...groupByRound(items)].reverse()
     return (
@@ -46,6 +48,7 @@ export function SalesOrderApprovalHistory({
                     <ApprovalRound
                         key={round.roundNo}
                         instance={instance}
+                        idPrefix={idPrefix}
                         roundNo={round.roundNo}
                         items={round.items}
                         defaultExpanded={index === 0}
@@ -63,12 +66,14 @@ function ApprovalRound({
     items,
     defaultExpanded,
     incomplete,
+    idPrefix,
 }: {
     instance: ApprovalRuntimeInstance
     roundNo: number
     items: readonly ApprovalHistoryItem[]
     defaultExpanded: boolean
     incomplete: boolean
+    idPrefix: string
 }) {
     const [expanded, setExpanded] = useState(defaultExpanded)
     const current = roundNo === instance.currentRoundNo
@@ -95,7 +100,7 @@ function ApprovalRound({
             onToggle={(event) => setExpanded(event.currentTarget.open)}
         >
             <summary
-                id={`sales-order-approval-round-${roundNo}`}
+                id={`${idPrefix}-round-${roundNo}`}
                 className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-md py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
             >
                 <ChevronRightIcon
@@ -121,7 +126,11 @@ function ApprovalRound({
                 ) : null}
                 <Timeline aria-label={`${displayRound(roundNo)}审批记录`}>
                     {items.map((item) => (
-                        <ApprovalEntry key={item.executionId} item={item} />
+                        <ApprovalEntry
+                            key={item.executionId}
+                            item={item}
+                            idPrefix={idPrefix}
+                        />
                     ))}
                 </Timeline>
             </div>
@@ -129,7 +138,13 @@ function ApprovalRound({
     )
 }
 
-function ApprovalEntry({ item }: { item: ApprovalHistoryItem }) {
+function ApprovalEntry({
+    item,
+    idPrefix,
+}: {
+    item: ApprovalHistoryItem
+    idPrefix: string
+}) {
     const actor = displayActorName(item.assigneeName, item.decidedBy)
     const time = displayUnixSeconds(item.decidedAt)
     const reason = item.decisionReason?.trim()
@@ -165,7 +180,7 @@ function ApprovalEntry({ item }: { item: ApprovalHistoryItem }) {
                 longReason ? (
                     <details className="group/reason mt-2 text-sm text-muted-foreground">
                         <summary
-                            id={`sales-order-approval-reason-${toAutomationIdSegment(item.executionId)}`}
+                            id={`${idPrefix}-reason-${toAutomationIdSegment(item.executionId)}`}
                             className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                             查看完整处理意见

@@ -16,8 +16,10 @@ import type { ApprovalRuntimeInstance } from "@/features/approval-workflow/types
 /** 当前状态与流程资料分开呈现；历史驳回意见只在所属轮次展示。 */
 export function SalesOrderApprovalSummary({
     instance,
+    idPrefix = "sales-order-approval",
 }: {
     instance: ApprovalRuntimeInstance
+    idPrefix?: string
 }) {
     const inProgress = isOpenInstanceStatus(instance.status)
     const node = displayReadableName(
@@ -61,7 +63,7 @@ export function SalesOrderApprovalSummary({
                     <span>{displayRound(instance.currentRoundNo)}</span>
                     <details className="group max-w-full">
                         <summary
-                            id="sales-order-approval-process-info"
+                            id={`${idPrefix}-process-info`}
                             className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                             流程信息

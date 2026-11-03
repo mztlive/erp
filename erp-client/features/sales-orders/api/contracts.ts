@@ -11,6 +11,7 @@ import type {
 // ─── 导出视图类型（保持 queries 契约） ───────────────────────────────────────
 
 export type SalesOrderDetailView = SalesOrderListItem & {
+    currentWork?: BackendSalesOrderCurrentWork[]
     inquirySource?: import("./inquiry-basis").InquirySalesSourceSnapshot | null
     loadWarnings?: string[]
     selectionSource?: import("./selection-basis").SalesSelectionSource | null
@@ -323,7 +324,25 @@ export type BackendRevisionCommercial = Omit<BackendRevision, "lines"> & {
     receivable_due_date?: string | null
 }
 
+/** 销售详情授权内的办理摘要，不授予关联单据访问或任务操作权限。 */
+export type BackendSalesOrderCurrentWork = {
+    id: string
+    kind: string
+    object_id?: string
+    object_type?: string
+    document_number?: string | null
+    section: "approval" | "fulfillment" | "acceptance" | "invoice"
+    label: string
+    role_label: string
+    owner_user_id?: string | null
+    owner_name?: string | null
+    owner_org_name?: string | null
+    scope: string[]
+    instruction: string
+}
+
 export type BackendSalesOrderDetail = {
+    current_work?: BackendSalesOrderCurrentWork[]
     inquiry_source?: import("./inquiry-basis").InquirySalesSourceSnapshot | null
     selection_source?: import("./selection-basis").SalesSelectionSource | null
     id: string

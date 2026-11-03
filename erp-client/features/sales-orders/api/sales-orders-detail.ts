@@ -249,6 +249,7 @@ export async function fetchSalesOrderDetail(
     const queriedAt = formatIsoNow()
     return {
         ...order,
+        currentWork: detail.current_work,
         loadWarnings: loadWarnings.sort(),
         inquirySource: detail.inquiry_source,
         selectionSource: detail.selection_source,

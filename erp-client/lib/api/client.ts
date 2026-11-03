@@ -207,8 +207,12 @@ const apiFetch = async <T>(
         })
     }
 
-    // 成功：优先取信封 data，非信封形态（如纯 JSON 接口）直接返回原体
-    return (envelope?.data ?? parsed) as T
+    // 成功：按 data 字段是否存在解包，保留无业务数据时的 null。
+    if (envelope && typeof envelope === "object" && "data" in envelope) {
+        return envelope.data as T
+    }
+    // 非信封形态（如纯 JSON 接口）直接返回原体。
+    return parsed as T
 }
 
 /**

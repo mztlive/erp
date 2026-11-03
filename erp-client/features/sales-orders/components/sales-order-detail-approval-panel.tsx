@@ -11,7 +11,15 @@ import { SalesOrderApprovalHistory } from "./sales-order-approval-history"
 import { SalesOrderApprovalSummary } from "./sales-order-approval-summary"
 
 /** 销售单只读审批记录：最新轮次优先，决定仍在工作台办理。 */
-export function ApprovalPanel({ order }: { order: SalesOrderDetailView }) {
+export function ApprovalPanel({
+    order,
+    idPrefix = "sales-order-approval",
+    orientation = "vertical",
+}: {
+    order: SalesOrderDetailView
+    idPrefix?: string
+    orientation?: "vertical" | "horizontal"
+}) {
     const approval = order.approval
     const instance = approval?.instance
     const history = useApprovalHistoryInfiniteQuery(
@@ -33,50 +41,96 @@ export function ApprovalPanel({ order }: { order: SalesOrderDetailView }) {
     const hasMore = history.hasNextPage ?? approval.historyHasMore
     return (
         <div className="space-y-6">
-            <SalesOrderApprovalSummary instance={instance} />
+            <SalesOrderApprovalSummary
+                instance={instance}
+                idPrefix={idPrefix}
+            />
             {history.data?.pages[0]?.route ? (
                 <section className="space-y-4" aria-label="本次审批路线">
-                    <h3 className="text-sm font-medium">审批人链条</h3>
-                    <ApprovalRoute route={history.data.pages[0].route} />
+                    <h3 className="text-sm font-medium">
+                        审批链条{" "}
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            共 {history.data.pages[0].route.nodes.length} 个节点
+                        </span>
+                    </h3>
+                    <ApprovalRoute
+                        route={history.data.pages[0].route}
+                        orientation={orientation}
+                    />
                 </section>
             ) : null}
             {history.isError ? (
                 <BusinessFailureState
-                    id="sales-order-approval-history-retry"
+                    id={`${idPrefix}-history-retry`}
                     title="审批记录加载失败"
                     error={history.error}
                     onRetry={() => void history.refetch()}
                 />
             ) : null}
-            {history.isPending && items.length === 0 ? (
-                <p role="status" className="py-4 text-sm text-muted-foreground">
-                    正在读取审批记录…
+            {orientation === "horizontal" && history.isPending ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    正在读取完整审批链…
                 </p>
-            ) : items.length > 0 ? (
-                <SalesOrderApprovalHistory
-                    key={`${instance.id}-${instance.currentRoundNo}`}
-                    instance={instance}
-                    items={items}
-                    hasMore={hasMore}
-                />
-            ) : !history.isError ? (
-                <p className="text-sm text-muted-foreground">暂无审批记录。</p>
             ) : null}
-            {history.hasNextPage ? (
-                <Button
-                    id="sales-order-approval-history-load-more"
-                    variant="outline"
-                    size="sm"
-                    disabled={history.isFetchingNextPage}
-                    onClick={() => void history.fetchNextPage()}
+            {orientation === "horizontal" &&
+            history.isSuccess &&
+            !history.data.pages[0]?.route ? (
+                <p className="text-sm text-muted-foreground">
+                    本次审批链暂不可用，请刷新后重试。
+                </p>
+            ) : null}
+            <details
+                open={orientation === "vertical" ? true : undefined}
+                className="space-y-4"
+            >
+                <summary
+                    id={`${idPrefix}-records-toggle`}
+                    className={
+                        orientation === "horizontal"
+                            ? "cursor-pointer text-sm font-medium"
+                            : "hidden"
+                    }
                 >
-                    {history.isFetchingNextPage ? "正在读取…" : "加载更早记录"}
-                </Button>
-            ) : null}
-            <ApprovalCopyHistory
-                instanceId={instance.id}
-                idPrefix="sales-order-approval-copies"
-            />
+                    查看审批记录与处理意见
+                </summary>
+                {history.isPending && items.length === 0 ? (
+                    <p
+                        role="status"
+                        className="py-4 text-sm text-muted-foreground"
+                    >
+                        正在读取审批记录…
+                    </p>
+                ) : items.length > 0 ? (
+                    <SalesOrderApprovalHistory
+                        key={`${instance.id}-${instance.currentRoundNo}`}
+                        instance={instance}
+                        idPrefix={idPrefix}
+                        items={items}
+                        hasMore={hasMore}
+                    />
+                ) : !history.isError ? (
+                    <p className="text-sm text-muted-foreground">
+                        暂无审批记录。
+                    </p>
+                ) : null}
+                {history.hasNextPage ? (
+                    <Button
+                        id={`${idPrefix}-history-load-more`}
+                        variant="outline"
+                        size="sm"
+                        disabled={history.isFetchingNextPage}
+                        onClick={() => void history.fetchNextPage()}
+                    >
+                        {history.isFetchingNextPage
+                            ? "正在读取…"
+                            : "加载更早记录"}
+                    </Button>
+                ) : null}
+                <ApprovalCopyHistory
+                    instanceId={instance.id}
+                    idPrefix={`${idPrefix}-copies`}
+                />
+            </details>
         </div>
     )
 }

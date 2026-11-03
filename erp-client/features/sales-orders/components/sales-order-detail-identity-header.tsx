@@ -56,7 +56,7 @@ export function SalesOrderIdentityHeader({
                 identityOnly ? undefined : (
                     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span>
-                            负责人{" "}
+                            销售负责人{" "}
                             <span className="font-medium text-foreground">
                                 {order.ownerName}
                             </span>

@@ -1,19 +1,39 @@
 "use client"
 
-import { CheckIcon, CircleAlertIcon, Clock3Icon, MinusIcon } from "lucide-react"
+import {
+    ArrowRightIcon,
+    CheckIcon,
+    CircleAlertIcon,
+    Clock3Icon,
+    MinusIcon,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
     displayActorName,
     displayExecutionStatus,
     displayReadableName,
+    displayUnixSeconds,
 } from "../display"
 import type { ApprovalRoute as ApprovalRouteView } from "../types"
 
 /** 本轮完整审批链条：状态与冻结人员均来自服务端，不按前端角色推断。 */
-export function ApprovalRoute({ route }: { route: ApprovalRouteView }) {
+export function ApprovalRoute({
+    route,
+    orientation = "vertical",
+}: {
+    route: ApprovalRouteView
+    orientation?: "vertical" | "horizontal"
+}) {
+    const horizontal = orientation === "horizontal"
     return (
-        <ol aria-label="完整审批人链条" className="min-w-0 flex-1 space-y-5">
+        <ol
+            aria-label="完整审批人链条"
+            className={cn(
+                "min-w-0 flex-1",
+                horizontal ? "flex gap-5 overflow-x-auto py-2" : "space-y-5",
+            )}
+        >
             {route.nodes.map((node, index) => {
                 const current =
                     node.result === "ACTIVE" || node.result === "BLOCKED"
@@ -39,13 +59,28 @@ export function ApprovalRoute({ route }: { route: ApprovalRouteView }) {
                     <li
                         key={node.key}
                         aria-current={current ? "step" : undefined}
-                        className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1"
+                        className={cn(
+                            "relative",
+                            horizontal
+                                ? "flex w-52 shrink-0 flex-col items-start gap-3 rounded-lg border border-border p-4 pr-8"
+                                : "grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1",
+                            horizontal &&
+                                current &&
+                                "border-warning-border bg-warning-soft/40",
+                        )}
                     >
                         {index < route.nodes.length - 1 ? (
-                            <span
-                                aria-hidden="true"
-                                className="absolute top-9 left-4 h-[calc(100%-12px)] w-px bg-border"
-                            />
+                            horizontal ? (
+                                <ArrowRightIcon
+                                    aria-hidden="true"
+                                    className="absolute top-6 right-2 size-4 text-muted-foreground"
+                                />
+                            ) : (
+                                <span
+                                    aria-hidden="true"
+                                    className="absolute top-9 left-4 h-[calc(100%-12px)] w-px bg-border"
+                                />
+                            )
                         ) : null}
                         <span
                             aria-hidden="true"
@@ -56,7 +91,7 @@ export function ApprovalRoute({ route }: { route: ApprovalRouteView }) {
                                     : failed
                                       ? "border-destructive-border bg-destructive/10 text-destructive"
                                       : current
-                                        ? "border-primary bg-primary text-primary-foreground ring-4 ring-primary/5"
+                                        ? "border-warning-border bg-warning-soft text-warning-soft-foreground ring-4 ring-warning/5"
                                         : "border-border bg-background text-muted-foreground",
                             )}
                         >
@@ -85,6 +120,20 @@ export function ApprovalRoute({ route }: { route: ApprovalRouteView }) {
                                 "审批人未标注"}{" "}
                             · {status}
                         </span>
+                        {horizontal && node.execution?.decidedAt ? (
+                            <time
+                                className="text-xs text-muted-foreground"
+                                dateTime={
+                                    displayUnixSeconds(node.execution.decidedAt)
+                                        ?.dateTime
+                                }
+                            >
+                                {
+                                    displayUnixSeconds(node.execution.decidedAt)
+                                        ?.label
+                                }
+                            </time>
+                        ) : null}
                         {node.execution?.decisionReason ? (
                             <p
                                 className={cn(

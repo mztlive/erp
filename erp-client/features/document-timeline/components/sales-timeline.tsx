@@ -8,6 +8,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useTimelineQuery } from "../hooks/queries"
 import type { TimelineCategory, TimelineSource } from "../types"
 import { TimelineEvents } from "./timeline-events"
+import { GroupedTimelineEvents } from "./grouped-timeline-events"
 
 export const timelineCategories: Array<{
     value: TimelineCategory
@@ -31,6 +32,7 @@ export function SalesTimeline({
     embedded = false,
     includeDetails: includedDetails,
     plainApprovalReasons = false,
+    groupByDocument = false,
 }: {
     salesOrderId: string
     idPrefix: string
@@ -41,6 +43,7 @@ export function SalesTimeline({
     embedded?: boolean
     includeDetails?: boolean
     plainApprovalReasons?: boolean
+    groupByDocument?: boolean
 }) {
     const [category, setCategory] = useState<TimelineCategory | undefined>()
     const [includeDetails, setIncludeDetails] = useState(false)
@@ -53,6 +56,8 @@ export function SalesTimeline({
         },
     )
     const events = query.data?.pages.flatMap((page) => page.items) ?? []
+    const Events =
+        groupByDocument && !compact ? GroupedTimelineEvents : TimelineEvents
     return (
         <section
             className="space-y-5"
@@ -139,7 +144,7 @@ export function SalesTimeline({
                     </Button>
                 </div>
             ) : (
-                <TimelineEvents
+                <Events
                     events={compact ? events.slice(0, 5) : events}
                     idPrefix={idPrefix}
                     plainApprovalReasons={plainApprovalReasons}

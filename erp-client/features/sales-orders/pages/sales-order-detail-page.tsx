@@ -18,7 +18,6 @@ import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/compone
 import { SalesOrderDetailSecondaryActions } from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
 import { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-panels"
-import { SalesOrderCurrentTask } from "../components/sales-order-current-task"
 import { SalesOrderProcurementAlert } from "../components/sales-order-procurement-alert"
 import { SalesOrderDetailSidebar } from "@/features/sales-orders/components/sales-order-detail-sidebar"
 import { SalesOrderDetailTabs } from "@/features/sales-orders/components/sales-order-detail-tabs"
@@ -319,14 +318,6 @@ export function SalesOrderDetailPage({
                         }}
                     />
                 ) : null}
-                <SalesOrderCurrentTask
-                    order={order}
-                    canAccept={derived.canAccept}
-                    progress={
-                        deliveryQuery.isError ? undefined : deliveryQuery.data
-                    }
-                    onSelectSection={selectSection}
-                />
             </div>
             <SalesOrderDetailTabs
                 beforeContent={

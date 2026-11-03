@@ -24,3 +24,5 @@
 /outputs
 
 *.pem
+
+/.worktrees/

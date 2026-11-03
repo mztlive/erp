@@ -1,5 +1,7 @@
 //! 目录授权所需的有界组织事实；历史关系不进入当前目录索引。
 
+use std::collections::HashMap;
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use mongodb::Database;
@@ -118,4 +120,121 @@ async fn bounded<T: DeserializeOwned + Send + Sync>(
         return Err(Error::ValidationError("目录组织索引超过 10000 项，请收窄范围或组织条件".into()));
     }
     Ok(rows)
+}
+
+impl OrganizationRepository<'_> {
+    /// 批量读取明确账号当前主属组织的可读名称。
+    /// # 参数
+    /// `ids` 为调用方已授权展示的账号，`at` 为统一查询时点，沿用 `executor`。
+    /// # 返回
+    /// 返回账号与有效组织名称；无关系或组织已停用时不补造名称。
+    /// # 错误
+    /// 查询超限、主属关系冲突或数据库错误时拒绝。
+    pub async fn primary_org_names(
+        &self,
+        ids: &[String],
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        let memberships = self.directory_memberships(Some(ids), None, at, executor).await?;
+        let org_ids = memberships.iter().map(|row| row.org_unit_id.clone()).collect::<Vec<_>>();
+        if org_ids.is_empty() {
+            return Ok(Default::default());
+        }
+        let units = bounded::<OrgUnit>(
+            self.db,
+            ORG_UNITS,
+            doc! { "id": { "$in": org_ids }, "enabled": true },
+            executor,
+        )
+        .await?;
+        primary_names(ids, &memberships, &units, at)
+    }
+}
+
+/// 保留唯一有效主属关系，缺少组织名称时维持未知。
+fn primary_names(
+    ids: &[String],
+    memberships: &[OrgMembership],
+    units: &[OrgUnit],
+    at: Instant,
+) -> Result<HashMap<String, String>> {
+    let mut names = HashMap::new();
+    for id in ids {
+        if let Some(org) = OrgMembership::primary_org(memberships, id, at)?
+            && let Some(unit) =
+                units.iter().find(|unit| unit.base.id == org && unit.enabled && !unit.base.is_deleted())
+        {
+            names.insert(id.clone(), unit.name.clone());
+        }
+    }
+    Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::slice::from_ref;
+
+    use entity_core::BaseModel;
+
+    use super::*;
+    use crate::entity::organization::{OrgUnitKind, OrgValidity};
+
+    fn fixture() -> (OrgMembership, OrgUnit) {
+        let mut unit = OrgUnit {
+            base: BaseModel::fake(),
+            name: "采购部".into(),
+            parent_id: None,
+            kind: OrgUnitKind::Department,
+            leader: None,
+            enabled: true,
+            changed_by: "admin".into(),
+            reason: "测试".into(),
+        };
+        unit.base.id = "purchasing".into();
+        let membership = OrgMembership {
+            base: BaseModel::fake(),
+            user_id: "reviewer".into(),
+            org_unit_id: unit.base.id.clone(),
+            validity: OrgValidity {
+                valid_from: Instant::from_unix_secs(10),
+                valid_to: Some(Instant::from_unix_secs(20)),
+            },
+            changed_by: "admin".into(),
+            reason: "测试".into(),
+        };
+        (membership, unit)
+    }
+
+    #[test]
+    fn names_require_current_membership_and_enabled_unit() {
+        let (membership, mut unit) = fixture();
+        let ids = vec!["reviewer".into(), "missing".into()];
+        let names =
+            primary_names(&ids, from_ref(&membership), from_ref(&unit), Instant::from_unix_secs(10)).unwrap();
+        assert_eq!(names.get("reviewer").map(String::as_str), Some("采购部"));
+        assert!(!names.contains_key("missing"));
+        assert!(
+            primary_names(&ids, from_ref(&membership), from_ref(&unit), Instant::from_unix_secs(20))
+                .unwrap()
+                .is_empty()
+        );
+        unit.enabled = false;
+        assert!(primary_names(&ids, &[membership], &[unit], Instant::from_unix_secs(15)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn conflicting_memberships_do_not_choose_an_arbitrary_department() {
+        let (membership, unit) = fixture();
+        let duplicate = membership.clone();
+        assert!(
+            primary_names(
+                &["reviewer".into()],
+                &[membership, duplicate],
+                &[unit],
+                Instant::from_unix_secs(15)
+            )
+            .is_err()
+        );
+    }
 }

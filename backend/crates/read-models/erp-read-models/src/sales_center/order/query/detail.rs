@@ -63,9 +63,11 @@ impl SalesOrderReadService {
         let facts = self.load_detail_facts(&order).await?;
         let presentation = self.detail_presentation(&order, &facts, actor).await?;
         let inquiry_source = inquiry_sources(&self.db).find_by_id(id, &mut NoTransaction).await?;
+        let current_work = self.current_work(&order, &facts.revisions).await?;
         self.recheck_detail_access(id, actor, access_version).await?;
         let mut view = SalesOrderDetailView::from_facts(order, facts, presentation);
         view.inquiry_source = inquiry_source;
+        view.current_work = current_work;
         Ok(view)
     }
 
@@ -258,6 +260,7 @@ impl SalesOrderDetailView {
             submissions: facts.submissions,
             revisions: facts.revisions,
             stage: presentation.stage,
+            current_work: Vec::new(),
             close_eligibility,
             can_start_sales_change_order: presentation.can_start_sales_change_order,
             change_order_blocker: presentation.change_order_blocker,

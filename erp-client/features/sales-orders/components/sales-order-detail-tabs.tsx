@@ -194,6 +194,11 @@ export function SalesOrderDetailTabs({
                 ) : null}
                 {group === "timeline" ? (
                     <SalesOrderProcessPanel
+                        deliveryQuery={deliveryQuery}
+                        canReadDelivery={canReadDelivery}
+                        visibleSections={visibleNav
+                            .filter((item) => item.show)
+                            .map((item) => item.id)}
                         key={order.id}
                         order={order}
                         section={navSection}

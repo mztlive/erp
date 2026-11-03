@@ -8,6 +8,7 @@ use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, OriginSyste
 use erp_workflow::service::work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView};
 use serde::Serialize;
 
+pub use super::current_work::SalesOrderCurrentWork;
 pub use crate::purchase_center::freight_follow_up::FreightFollowUpView;
 /// 销售单列表行视图（契约形状；金额以字符串序列化）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -331,6 +332,8 @@ pub struct SalesOrderDetailView {
     pub revisions: Vec<RevisionView>,
     /// 当前阶段详情（含责任人与时限）。
     pub stage: SalesOrderStageSummary,
+    /// 当前开放任务的环节与责任人摘要，不包含任务操作权限。
+    pub current_work: Vec<SalesOrderCurrentWork>,
     /// 结案资格判定。
     pub close_eligibility: CloseEligibilityView,
     /// 是否可以发起销售变更单。
