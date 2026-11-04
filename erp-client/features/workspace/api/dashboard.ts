@@ -482,18 +482,6 @@ export async function fetchWorkspaceDashboard(
     }
 }
 
-/**
- * 顶栏待办角标：本人开放任务数，来自服务端统计。
- */
-export async function fetchWorkspaceInboxCount(): Promise<{ mine: number }> {
-    const stats = await getWorkItemStats({
-        scope: "mine",
-        timezone:
-            Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-    })
-    return { mine: stats.inbox ?? stats.assigned }
-}
-
 export function startedInstanceToWorkItem(
     item: ApprovalInstanceListItem,
     timezone: string,

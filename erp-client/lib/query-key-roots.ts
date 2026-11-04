@@ -3,6 +3,15 @@
  * 各 feature 的完整 query key 工厂仍由本域公开入口持有。
  */
 export const queryKeyRoots = {
+    accountProfile: ["account", "profile"] as const,
+    workItems: ["work-items"] as const,
+    approvals: ["approval"] as const,
+    approvalCopies: ["approval-copies"] as const,
+    salesInquiries: ["sales-inquiries"] as const,
+    salesSelection: ["sales-selection"] as const,
+    backgroundJobs: ["background-jobs"] as const,
+    dataTransfers: ["data-transfer-context"] as const,
+    paymentRequests: ["purchase-payment-requests"] as const,
     invoiceRequests: ["invoice-requests"] as const,
     purchaseOrders: ["purchase-orders"] as const,
     salesOrders: ["sales-orders"] as const,

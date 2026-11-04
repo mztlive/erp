@@ -14,3 +14,5 @@ pub use rate_limit::Error as RateLimitError;
 
 pub mod state;
 mod tasks;
+
+mod notification_feed;

@@ -108,7 +108,6 @@ export const useActionableBookCountQuery = (enabled = true) =>
         queryKey: salesSelectionKeys.actionableCount(),
         queryFn: fetchActionableBookCount,
         enabled,
-        refetchInterval: 30_000,
     })
 
 /** 选品册详情查询。 */

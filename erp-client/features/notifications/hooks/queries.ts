@@ -9,11 +9,11 @@ import {
 import { z } from "zod"
 import type { AccountProfile } from "@/features/auth/api"
 import { apiEventStream } from "@/lib/api/event-stream"
-import { queryKeyRoots } from "@/lib/query-key-roots"
+import { createRefreshQueue, refreshFrameSchema } from "../lib/refresh"
 import type { InboxCursor } from "../api"
 import { getInbox, readNotification } from "../api"
 
-const snapshotSchema = z.object({
+const snapshotSchema = refreshFrameSchema.extend({
     unread_count: z.number().int().nonnegative(),
     todo_count: z.number().int().nonnegative().nullable(),
 })
@@ -40,25 +40,32 @@ export function useNotificationFeed(profile?: AccountProfile, connect = false) {
         queryKey: key,
         queryFn: async ({ signal }) => {
             let latest: NotificationSnapshot | undefined
-            await apiEventStream(
-                "/account/notifications/events",
+            const refresh = createRefreshQueue(
+                client,
+                notificationKeys.inbox(profile?.userid),
                 signal,
-                (event, raw) => {
-                    if (event !== "snapshot") return
-                    latest = snapshotSchema.parse(JSON.parse(raw))
-                    const previous =
-                        client.getQueryData<NotificationSnapshot>(key)
-                    client.setQueryData(key, latest)
-                    void client.invalidateQueries({
-                        queryKey: notificationKeys.inbox(profile?.userid),
-                    })
-                    if (previous && previous.todo_count !== latest.todo_count) {
-                        void client.invalidateQueries({
-                            queryKey: queryKeyRoots.workspaceHome,
-                        })
-                    }
-                },
             )
+            try {
+                await apiEventStream(
+                    "/account/notifications/events",
+                    signal,
+                    (event, raw) => {
+                        if (signal.aborted) return
+                        if (event === "snapshot") {
+                            latest = snapshotSchema.parse(JSON.parse(raw))
+                            client.setQueryData(key, latest)
+                            refresh.enqueue(latest.topics)
+                        } else if (event === "refresh") {
+                            refresh.enqueue(
+                                refreshFrameSchema.parse(JSON.parse(raw))
+                                    .topics,
+                            )
+                        }
+                    },
+                )
+            } finally {
+                refresh.close()
+            }
             if (!latest) throw new Error("实时消息暂不可用，请稍后重试")
             return latest
         },

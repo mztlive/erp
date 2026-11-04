@@ -4,6 +4,7 @@ use std::sync::Arc;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::NoTransaction;
+use persistence_core::change_feed::ChangeSource;
 
 use crate::ports::NotificationChannel;
 use crate::{Channel, Error, InboxPage, InboxQuery, NotificationData, Result, repository};
@@ -42,6 +43,17 @@ impl NotificationService {
                 self.channels.get(name).ok_or(Error::ChannelUnavailable)?.deliver(&message).await
             },
         }
+    }
+
+    /// 声明站内信新增和已读变化的订阅来源。
+    /// # 参数
+    /// topic 为消费方刷新主题。
+    /// # 返回
+    /// 只带不可变收件账号的来源声明。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn changes<T>(&self, topic: T) -> ChangeSource<T> {
+        ChangeSource::personal(repository::COLLECTION, topic, "recipient_id")
     }
 
     /// 查询当前账号每页 20 条消息及全部未读数。

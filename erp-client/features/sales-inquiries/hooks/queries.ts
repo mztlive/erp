@@ -36,7 +36,6 @@ export function useInquiryFeedbackCountQuery(enabled = true) {
         },
         enabled,
         staleTime: 30_000,
-        refetchInterval: 30_000,
         refetchOnWindowFocus: true,
     })
 }
@@ -54,7 +53,6 @@ export function useProcurementInquiryCountQuery(enabled = true) {
         },
         enabled,
         staleTime: 30_000,
-        refetchInterval: 30_000,
         refetchOnWindowFocus: true,
     })
 }

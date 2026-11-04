@@ -12,6 +12,7 @@ use storage::S3Storage;
 use tokio::sync::RwLock;
 
 use super::auth::{JwtEngine, JwtError};
+use super::notification_feed::NotificationFeed;
 use super::tasks::RequestTasks;
 use crate::wiring::{Application, supplier_access};
 
@@ -22,6 +23,7 @@ pub struct HttpState {
     jwt_engine: Arc<RwLock<Option<(String, JwtEngine)>>>,
     jd_vop_authorization: Arc<JdVopAuthorizationTasks>,
     tasks: RequestTasks,
+    pub(crate) notification_feed: NotificationFeed,
 }
 impl HttpState {
     /// 为 HTTP 装配独立的缓存和任务管理。
@@ -37,6 +39,7 @@ impl HttpState {
             jwt_engine: Arc::new(RwLock::new(None)),
             jd_vop_authorization: Arc::new(JdVopAuthorizationTasks::default()),
             tasks: RequestTasks::default(),
+            notification_feed: NotificationFeed::default(),
         }
     }
     /// 构造使用失败关闭连接器的 HTTP 状态。

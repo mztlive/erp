@@ -9,6 +9,7 @@ use mongodb::{Collection, Database};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::change_feed::ChangeSource;
 use crate::errors::{Error, Result};
 use crate::{Executor, mongo_ops};
 
@@ -222,6 +223,17 @@ where
     /// 不返回错误。
     pub fn new(db: &'a Database, collection_name: &'a str) -> Self {
         Self { db, collection_name, _phantom: std::marker::PhantomData }
+    }
+
+    /// 声明本仓储集合的已提交变更来源，不暴露业务文档。
+    /// # 参数
+    /// topic 为消费方刷新主题。
+    /// # 返回
+    /// 可交给统一订阅器的来源声明。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn changes<U>(&self, topic: U) -> ChangeSource<U> {
+        ChangeSource::shared(self.collection_name, topic)
     }
 
     /// 返回本仓储绑定的 MongoDB 数据库句柄。

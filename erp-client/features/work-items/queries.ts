@@ -27,7 +27,6 @@ export const workItemKeys = {
         [...workItemKeys.all, "reassign-candidates", workItemId] as const,
     list: (params: WorkItemListParams) =>
         [...workItemKeys.all, "list", params] as const,
-    inboxCount: () => [...workItemKeys.all, "mine-count"] as const,
 }
 
 export function useAbandonApprovalReworkMutation() {

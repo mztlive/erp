@@ -47,7 +47,6 @@ export function useBackgroundJobActiveCountQuery(enabled: boolean) {
             return page.total
         },
         enabled,
-        refetchInterval: 2000,
         refetchOnWindowFocus: "always",
     })
 }

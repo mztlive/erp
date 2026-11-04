@@ -22,6 +22,9 @@ pub(crate) async fn serve(state: Application, role: ProcessRole, port: u16) -> R
     let readiness = Arc::new(AtomicBool::new(true));
     let workers = if role.runs_workers() { Some(Workers::start(state.clone()).await?) } else { None };
     let http_state = role.serves_api().then(|| HttpState::from_application(state));
+    if let Some(state) = &http_state {
+        state.notification_feed.start(state.application().clone(), state.tasks())?;
+    }
     let app = application(http_state.as_ref(), workers.as_ref(), readiness.clone());
     let (stop, mut receive) = watch::channel(false);
     let http = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
@@ -38,6 +41,9 @@ pub(crate) async fn serve(state: Application, role: ProcessRole, port: u16) -> R
     readiness.store(false, Ordering::Release);
     if let Some(workers) = &workers {
         workers.request_stop();
+    }
+    if let Some(state) = &http_state {
+        state.notification_feed.stop();
     }
     stop.send_replace(true);
     drain(http, http_finished, http_state, workers).await?;

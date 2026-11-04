@@ -9,11 +9,7 @@ import { hasPermission } from "@/lib/permissions"
 import type { AccountProfile } from "@/features/auth/api"
 import { getWorkItem } from "@/features/work-items/api"
 import { mapWorkspaceWorkItem } from "../api/dashboard"
-import { workItemKeys } from "@/features/work-items/queries"
-import {
-    fetchWorkspaceDashboard,
-    fetchWorkspaceInboxCount,
-} from "@/features/workspace/api/dashboard"
+import { fetchWorkspaceDashboard } from "@/features/workspace/api/dashboard"
 import type { TodayWorkspaceQuery } from "@/features/workspace/types"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { fetchWorkspaceApprovalDetail } from "../api/approval-detail"
@@ -106,17 +102,6 @@ export function useWorkspaceTaskDetailQuery(
     })
 }
 
-/**
- * 顶栏待办角标。数量来自服务端统计，不对列表求和。
- */
-export function useWorkspaceInboxCountQuery(enabled = true) {
-    return useQuery({
-        queryKey: workItemKeys.inboxCount(),
-        queryFn: fetchWorkspaceInboxCount,
-        enabled,
-    })
-}
-
 export { workspaceHomeKeys }
 
 /** 菜单按账号隔离：待我处理取待办数，我发起的审批只取未读进展数。 */
@@ -137,7 +122,6 @@ export function useWorkspaceNavigationCounts(profile?: AccountProfile) {
         enabled:
             Boolean(profile) &&
             hasPermission(profile?.permissions, "approval_instance:read"),
-        refetchInterval: 60_000,
         meta: { workspaceNavigation: true },
     })
     return {

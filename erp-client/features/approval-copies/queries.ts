@@ -28,7 +28,6 @@ export function useCopies(query: CopyFilters = {}) {
         queryKey: [...copyKeys, "list", identity.key, query],
         queryFn: () => fetchCopies(query),
         enabled: identity.enabled,
-        refetchInterval: 60_000,
         meta: { workspaceNavigation: true },
     })
 }

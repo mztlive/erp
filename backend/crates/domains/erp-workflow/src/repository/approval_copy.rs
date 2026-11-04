@@ -6,6 +6,7 @@ use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
+use persistence_core::change_feed::ChangeSource;
 use persistence_core::{Executor, Repository, Result, insert_literal_regex_filter, mongo_ops};
 use serde::{Deserialize, Serialize};
 
@@ -276,4 +277,15 @@ impl ApprovalCopyExt for Database {
     fn approval_copies(&self) -> CopyRepository<'_> {
         CopyRepository::new(self)
     }
+}
+
+/// 声明个人抄送已提交变化，包括批量已读。
+/// # 参数
+/// topic 为消费方刷新主题。
+/// # 返回
+/// 按不可变收件账号投递的来源声明。
+/// # 错误
+/// 不执行 I/O。
+pub fn changes<T>(topic: T) -> ChangeSource<T> {
+    ChangeSource::personal(RECEIPTS, topic, "recipient_user_id")
 }

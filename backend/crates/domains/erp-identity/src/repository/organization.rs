@@ -4,6 +4,7 @@ mod directory;
 
 use entity_core::{BaseModel, HasBaseModel};
 use mongodb::Database;
+use persistence_core::change_feed::ChangeSource;
 use persistence_core::{Executor, Repository, Result};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -171,4 +172,15 @@ where
         }
     }
     Ok(())
+}
+
+/// 声明组织版本提交后的授权刷新来源。
+/// # 参数
+/// topic 为消费方主题。
+/// # 返回
+/// 组织事务完成后才可见的版本事件。
+/// # 错误
+/// 不执行 I/O。
+pub fn changes<T>(topic: T) -> ChangeSource<T> {
+    ChangeSource::shared(ORG_REVISIONS, topic)
 }

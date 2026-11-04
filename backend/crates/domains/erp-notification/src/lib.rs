@@ -4,10 +4,11 @@ mod entity;
 mod error;
 pub mod indexes;
 pub mod ports;
+mod refresh;
 mod repository;
 mod service;
-
 pub use dto::{InboxPage, InboxQuery, NotificationView};
 pub use entity::{Channel, Notification, NotificationData};
 pub use error::{Error, Result};
+pub use refresh::{RefreshHub, RefreshSignal, RefreshTopic};
 pub use service::NotificationService;
