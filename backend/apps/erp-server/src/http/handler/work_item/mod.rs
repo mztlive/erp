@@ -3,6 +3,7 @@
 //! 已删除 start-processing / release-to-team / claim。通用写接口拒绝审批任务。
 
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use axum::Extension;
@@ -262,7 +263,7 @@ async fn work_item_action_response(
         WorkItemMutationOutcome::Applied { work_item_id } => {
             let view = WorkbenchReadService::new(
                 state.application().db(),
-                workflow_auth(state.application().db(), state.application().rbac()),
+                Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
             )
             .work_item_detail(work_item_id, actor)
             .await?;
@@ -273,7 +274,7 @@ async fn work_item_action_response(
             let current = match conflict.work_item_id() {
                 Some(id) => WorkbenchReadService::new(
                     state.application().db(),
-                    workflow_auth(state.application().db(), state.application().rbac()),
+                    Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
                 )
                 .work_item_detail(id.to_string(), actor)
                 .await
@@ -322,7 +323,7 @@ pub async fn work_item_list(
 ) -> Result<WorkItemHttpPageView> {
     let page = WorkbenchReadService::new(
         state.application().db(),
-        workflow_auth(state.application().db(), state.application().rbac()),
+        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
     )
     .work_item_search(WorkItemSearchParams { base: params, filters: search.filters }, actor)
     .await?;
@@ -348,7 +349,7 @@ pub async fn fulfillment_queue_list(
 ) -> Result<FulfillmentQueuePageView> {
     let page = WorkbenchReadService::new(
         state.application().db(),
-        workflow_auth(state.application().db(), state.application().rbac()),
+        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
     )
     .fulfillment_queue_list(params, actor)
     .await?;
@@ -374,7 +375,7 @@ pub async fn work_item_stats(
 ) -> Result<WorkItemStatsView> {
     let stats = WorkbenchReadService::new(
         state.application().db(),
-        workflow_auth(state.application().db(), state.application().rbac()),
+        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
     )
     .work_item_stats(params, actor)
     .await?;
@@ -400,7 +401,7 @@ pub async fn work_item_detail(
 ) -> Result<WorkItemHttpView> {
     let view = WorkbenchReadService::new(
         state.application().db(),
-        workflow_auth(state.application().db(), state.application().rbac()),
+        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
     )
     .work_item_detail(id, actor)
     .await?;

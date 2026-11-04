@@ -7,7 +7,7 @@ use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalRelatedSalesSnapshot;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::{ApprovalIntegrationExt, DocumentType, WorkflowAuthorizationPort};
+use erp_workflow::{ApprovalIntegrationExt, DocumentType};
 use persistence_core::Executor;
 
 use super::super::WorkbenchReadService;
@@ -15,7 +15,7 @@ use super::SearchDocument;
 use super::sources::SubjectKey;
 use crate::{Error, Result};
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 读取已授权审批的冻结来源版本，追加全部商品名称和规格。
     /// # 参数
     /// `keys` 为已授权精确提交身份，`documents` 为检索资料，`executor` 为当前事务。

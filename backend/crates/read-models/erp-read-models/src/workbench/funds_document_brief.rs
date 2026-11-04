@@ -51,7 +51,7 @@ struct FundsOrigins {
     counterparties: HashMap<String, String>,
     briefs: HashMap<String, FundsOriginBrief>,
 }
-impl<A: erp_workflow::WorkflowAuthorizationPort> super::WorkbenchReadService<A> {
+impl super::WorkbenchFactsReader<'_> {
     /// 只绑定数据库，不执行命令 load；富显示仍按原插槽逐次调用原子来源。
     fn funds_reader(&self) -> super::authority::WorkItemFactsReader {
         super::authority::WorkItemFactsReader::new(self.db.clone())

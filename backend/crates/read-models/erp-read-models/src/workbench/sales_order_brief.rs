@@ -22,10 +22,10 @@ use super::brief::{
     join_list_summary, line_title, non_empty, push_section,
 };
 use super::presentation::format_yuan;
-use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, object_ids};
 use crate::errors::Result;
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 读取销售单身份，并按当前审核中提交写入客户、金额、付款条件和明细简报。
     ///
     /// 没有提交时仍保留最小标题，避免任务因对象事实缺失被授权过滤丢弃。

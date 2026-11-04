@@ -4,12 +4,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use erp_workflow::ports::{
     ObjectFactMap, ObjectKind, OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact,
 };
-use erp_workflow::service::approval::approval_participant_permissions_with_executor;
 use erp_workflow::service::work_item::access::required_execution_permissions;
 use persistence_core::Executor;
 
@@ -17,6 +15,7 @@ use super::action_projection::ActionProjection;
 use super::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemView, WorkbenchReadService,
 };
+use crate::ports::workbench_authorization::WorkbenchAuthorizationReadPort;
 use crate::{Error, Result};
 
 /// 一个统计扫描阶段内最多复用 128 个负责人的角色事实，不保存对象授权结论。
@@ -77,7 +76,7 @@ impl QualificationCache {
     }
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 对当前页的订单关联任务按负责人分组重验；保留原责任和受控管理动作。
     ///
     /// # 参数
@@ -156,7 +155,8 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 }
                 continue;
             };
-            qualify_portal_owner(&self.auth, items, account, &indices, qualification, executor).await?;
+            qualify_portal_owner(self.auth.as_ref(), items, account, &indices, qualification, executor)
+                .await?;
         }
         Ok(())
     }
@@ -188,7 +188,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             eligible.insert(
                 account.id.clone(),
                 account.is_active_backoffice()
-                    && approval_participant_permissions_with_executor(&self.auth, &actor, executor).await?,
+                    && self.auth.approval_participant_permissions(&actor, executor).await?,
             );
         }
         for item in items
@@ -248,7 +248,8 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .filter_map(|(index, _)| execution_permissions(&items[*index]))
             .flatten()
             .collect::<BTreeSet<_>>();
-        let permissions = owner_permissions(&self.auth, account, required, qualification, executor).await?;
+        let permissions =
+            owner_permissions(self.auth.as_ref(), account, required, qualification, executor).await?;
         let sources = tasks
             .iter()
             .filter(|(index, _)| !task_source_grant(&items[*index]))
@@ -281,7 +282,7 @@ fn qualify_order_action(item: &mut ActionProjection, readable: bool, permissions
 
 /// 处理人权限和每个申请范围分别证明，任务责任不替代 DataScope。
 async fn qualify_portal_owner(
-    auth: &impl WorkflowAuthorizationPort,
+    auth: &dyn WorkbenchAuthorizationReadPort,
     items: &mut [ActionProjection],
     account: &WorkflowAccountFact,
     indices: &[usize],
@@ -306,7 +307,7 @@ async fn qualify_portal_owner(
 
 /// 同拍同策略版本复用共同角色事实；来源资格仍由每批的精确订单授权独立证明。
 async fn owner_permissions(
-    auth: &impl WorkflowAuthorizationPort,
+    auth: &dyn WorkbenchAuthorizationReadPort,
     account: &WorkflowAccountFact,
     required: BTreeSet<&'static str>,
     qualification: &mut QualificationCache,

@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use erp_workflow::entity::work_item::WorkItemType;
-use erp_workflow::{WorkItem, WorkItemRow, WorkflowAuthorizationPort};
+use erp_workflow::{WorkItem, WorkItemRow};
 use persistence_core::Executor;
 
 use super::access::{ActorAccess, authorized_item_fields};
@@ -64,7 +64,7 @@ fn owned_fulfillment_task_item(item: &WorkItem) -> OwnedFulfillmentTask<'_> {
     }
 }
 
-impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 为完整任务列表重新读取对象并执行参与权过滤。
     ///
     /// # 参数

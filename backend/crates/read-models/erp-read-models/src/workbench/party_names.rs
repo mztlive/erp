@@ -12,14 +12,14 @@ use persistence_core::Executor;
 
 use super::dto::WorkItemSummarySection;
 use super::presentation::resolve_owner_display_name;
-use super::{WorkItemView, WorkbenchReadService};
+use super::{WorkItemView, WorkbenchFactsReader, WorkbenchReadService};
 use crate::errors::Result;
 
 /// 简报里提交人段的标签，与 `brief.rs` 写入端保持一致。
 const SUBMITTER_LABEL: &str = "提交人";
 const RESPONSIBLE_LABEL: &str = "责任人";
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 在指定执行器上批量解析处理人姓名。
     ///
     /// # 参数
@@ -40,7 +40,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if account_ids.is_empty() {
             return Ok(());
         }
-        let names = self.load_account_names(&account_ids, executor).await?;
+        let names = self.object_reader().load_account_names(&account_ids, executor).await?;
         for item in items {
             if let Some(owner) = item.owner_user.as_mut() {
                 owner.display_name = resolve_owner_display_name(&owner.id, &names);
@@ -76,13 +76,15 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         if ids.is_empty() {
             return Ok(());
         }
-        let names = self.load_account_names(&ids, executor).await?;
+        let names = self.object_reader().load_account_names(&ids, executor).await?;
         for summary in items.iter_mut().filter_map(|item| item.document_summary.as_mut()) {
             apply_submitter_name(&mut summary.summary_sections, &names);
         }
         Ok(())
     }
+}
 
+impl WorkbenchFactsReader<'_> {
     /// 按账号 ID 批量读取姓名。
     ///
     /// # 参数

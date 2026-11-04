@@ -5,14 +5,13 @@ use std::collections::HashSet;
 use erp_core::common::time::Instant;
 use erp_integration::dto::{DifferenceView, ErrorTaskView};
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 use super::integration_brief_labels::{
     business_type_label, difference_type_label, evidence_category, external_reference,
 };
 use super::{
-    ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, brief, dto, object_ids,
+    ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, brief, dto, object_ids,
 };
 use crate::errors::Result;
 use crate::integration_center::display::object_labels;
@@ -175,7 +174,7 @@ fn base_created_at_datetime(created_at: u64) -> Option<String> {
         .map(brief::format_instant_datetime)
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     pub(super) async fn load_integration_error_task_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -188,7 +187,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         }
         let tasks = self.facts_reader().read_integration_errors(&ids, executor).await?;
         let views = tasks.iter().cloned().map(ErrorTaskView::from).collect::<Vec<_>>();
-        let mut labels = integration_error_labels(&self.db, &views, executor).await?;
+        let mut labels = integration_error_labels(self.db, &views, executor).await?;
         for task in tasks {
             let mut fact =
                 WorkbenchObjectFact::from_authority(super::authority::command::integration_error_fact(&task));
@@ -213,7 +212,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         }
         let differences = self.facts_reader().read_reconciliation_differences(&ids, executor).await?;
         let views = differences.iter().cloned().map(DifferenceView::from).collect::<Vec<_>>();
-        let labels = object_labels(&self.db, &views, executor).await?;
+        let labels = object_labels(self.db, &views, executor).await?;
         for difference in differences {
             let mut fact = WorkbenchObjectFact::from_authority(
                 super::authority::command::reconciliation_difference_fact(&difference),

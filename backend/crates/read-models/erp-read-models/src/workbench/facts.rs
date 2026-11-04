@@ -2,16 +2,51 @@
 
 use std::collections::{HashMap, HashSet};
 
+use erp_workflow::WorkItemRow;
 use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
 use erp_workflow::ports::ObjectFactMap;
 pub(crate) use erp_workflow::ports::ObjectKind;
-use erp_workflow::service::work_item::order_access::filter_order_facts;
-use erp_workflow::{WorkItemRow, WorkflowAuthorizationPort};
+use futures_util::future::BoxFuture;
+use mongodb::Database;
 use persistence_core::Executor;
 
+use super::authority::WorkItemFactsReader;
 pub(crate) use super::authority::object_ids;
 use super::{WorkbenchReadService, brief, dto};
 use crate::errors::Result;
+
+/// 工作台对象事实与展示的只读装载器；授权由调用方单独执行。
+///
+/// 读取不依赖授权 Port 的具体类型，避免为每种授权实现重复生成整条读取链。
+pub(super) struct WorkbenchFactsReader<'db> {
+    pub(super) db: &'db Database,
+}
+
+impl<'db> WorkbenchFactsReader<'db> {
+    /// 借用调用方数据库，不执行查询或授权。
+    ///
+    /// # 参数
+    /// * `db` - 与当前用例共用的数据库句柄。
+    /// # 返回
+    /// 返回不持有授权 Port 的事实读取器。
+    /// # 错误
+    /// 不返回错误。
+    pub(super) fn new(db: &'db Database) -> Self {
+        Self { db }
+    }
+
+    /// 绑定权威事实来源，沿用各读取步骤传入的执行器。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回与当前读取器共用数据库的权威事实来源。
+    /// # 错误
+    /// 不返回错误。
+    pub(super) fn facts_reader(&self) -> WorkItemFactsReader {
+        WorkItemFactsReader::new(self.db.clone())
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WorkbenchSubjectDisplay {
@@ -251,7 +286,7 @@ pub(super) struct OwnedFulfillmentTask<'a> {
     pub owner_user_id: Option<&'a str>,
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 共享命令端的订单来源和公共范围判定；必须先过滤再分页或统计。
     ///
     /// # 参数
@@ -271,7 +306,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut authority = facts.iter().map(|(key, fact)| (key.clone(), fact.authority.clone())).collect();
-        filter_order_facts(&self.auth, actor_id, &mut authority, executor).await?;
+        self.auth.filter_order_facts(actor_id, &mut authority, executor).await?;
         facts.retain(|key, _| authority.contains_key(key));
         Ok(())
     }
@@ -332,7 +367,7 @@ fn restore_owned_fulfillment_facts<'a>(
     }
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 无关键词扫描只装载授权、版本与订单来源；关键词保持原富显示检索语义。
     ///
     /// # 参数
@@ -440,7 +475,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<WorkbenchObjectFactMap> {
         let mut facts = self.load_live_object_facts(keys, executor).await?;
-        self.load_approval_displays(keys, &mut facts, executor).await?;
+        self.object_reader().load_approval_displays(keys, &mut facts, executor).await?;
         Ok(facts)
     }
 
@@ -460,28 +495,57 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         keys: &HashSet<(ObjectKind, String)>,
         executor: &mut dyn Executor,
     ) -> Result<WorkbenchObjectFactMap> {
-        let mut facts = WorkbenchObjectFactMap::new();
-        let mut inquiries = ObjectFactMap::new();
-        self.facts_reader().load_inquiry_facts(keys, &mut inquiries, executor).await?;
-        facts.extend(
-            inquiries.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
-        );
-        self.load_sales_order_facts(keys, &mut facts, executor).await?;
-        self.load_purchase_order_facts(keys, &mut facts, executor).await?;
-        self.load_fulfillment_operation_facts(keys, &mut facts, executor).await?;
-        self.load_purchase_change_facts(keys, &mut facts, executor).await?;
-        self.load_sales_change_review_facts(keys, &mut facts, executor).await?;
-        self.load_receivable_account_facts(keys, &mut facts, executor).await?;
-        self.load_payable_account_facts(keys, &mut facts, executor).await?;
-        self.load_purchase_payment_request_facts(keys, &mut facts, executor).await?;
-        self.load_customer_receipt_facts(keys, &mut facts, executor).await?;
-        self.load_customer_refund_facts(keys, &mut facts, executor).await?;
-        self.load_receipt_reversal_facts(keys, &mut facts, executor).await?;
-        self.load_supplier_payment_facts(keys, &mut facts, executor).await?;
-        self.load_supplier_refund_facts(keys, &mut facts, executor).await?;
-        self.load_payment_reversal_facts(keys, &mut facts, executor).await?;
-        self.load_independent_object_facts(keys, &mut facts, executor).await?;
+        let reader = self.object_reader();
+        let mut facts = reader.load_document_facts(keys, executor).await?;
+        self.load_supplier_portal_briefs(keys, &mut facts, executor).await?;
+        reader.load_operational_briefs(keys, &mut facts, executor).await?;
         Ok(facts)
+    }
+}
+
+impl WorkbenchFactsReader<'_> {
+    /// 读取业务对象当前事实；调用方继续按原顺序装载供应商申请人和运营展示。
+    ///
+    /// # 参数
+    /// * `keys` - 对象种类与 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回销售、采购、履约、变更、资金及独立对象的当前事实，不含审批历史快照。
+    ///
+    /// # 错误
+    /// 任一类事实读取失败时返回错误。
+    // 每批只分配一次，将大型异步状态机留在读模型 crate 内生成。
+    #[inline(never)]
+    fn load_document_facts<'a>(
+        &'a self,
+        keys: &'a HashSet<(ObjectKind, String)>,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<WorkbenchObjectFactMap>> {
+        Box::pin(async move {
+            let mut facts = WorkbenchObjectFactMap::new();
+            let mut inquiries = ObjectFactMap::new();
+            self.facts_reader().load_inquiry_facts(keys, &mut inquiries, executor).await?;
+            facts.extend(
+                inquiries.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
+            );
+            self.load_sales_order_facts(keys, &mut facts, executor).await?;
+            self.load_purchase_order_facts(keys, &mut facts, executor).await?;
+            self.load_fulfillment_operation_facts(keys, &mut facts, executor).await?;
+            self.load_purchase_change_facts(keys, &mut facts, executor).await?;
+            self.load_sales_change_review_facts(keys, &mut facts, executor).await?;
+            self.load_receivable_account_facts(keys, &mut facts, executor).await?;
+            self.load_payable_account_facts(keys, &mut facts, executor).await?;
+            self.load_purchase_payment_request_facts(keys, &mut facts, executor).await?;
+            self.load_customer_receipt_facts(keys, &mut facts, executor).await?;
+            self.load_customer_refund_facts(keys, &mut facts, executor).await?;
+            self.load_receipt_reversal_facts(keys, &mut facts, executor).await?;
+            self.load_supplier_payment_facts(keys, &mut facts, executor).await?;
+            self.load_supplier_refund_facts(keys, &mut facts, executor).await?;
+            self.load_payment_reversal_facts(keys, &mut facts, executor).await?;
+            self.load_independent_object_facts(keys, &mut facts, executor).await?;
+            Ok(facts)
+        })
     }
 
     /// 装载库存、结算、导入、集成和供应侧对象事实。
@@ -509,9 +573,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         self.load_reconciliation_difference_facts(keys, facts, executor).await?;
         self.load_supplier_fulfillment_order_facts(keys, facts, executor).await?;
         self.load_supplier_offering_facts(keys, facts, executor).await?;
-        self.load_supplier_portal_facts(keys, facts, executor).await?;
-        self.load_supplier_portal_briefs(keys, facts, executor).await?;
-        self.load_operational_briefs(keys, facts, executor).await
+        self.load_supplier_portal_facts(keys, facts, executor).await
     }
 
     /// 权威申请归属与冻结版本由命令和显示共用的 reader 唯一生成。

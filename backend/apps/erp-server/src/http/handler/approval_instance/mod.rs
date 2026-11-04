@@ -11,6 +11,8 @@ pub mod http;
 pub mod materials;
 pub mod progress;
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
@@ -74,21 +76,20 @@ pub async fn instance_list(
     let mut executor = persistence_core::NoTransaction;
     let reader = erp_read_models::workbench::WorkbenchReadService::new(
         state.application().db(),
-        crate::wiring::workflow::workflow_auth(state.application().db(), state.application().rbac()),
+        Arc::new(crate::wiring::workflow::workflow_auth(
+            state.application().db(),
+            state.application().rbac(),
+        )),
     );
     let page = match page {
         Some(page) => {
+            reader.approval_workspace_list(runtime_service(&state), actor, query, filters, page).await
+        },
+        None => {
             reader
-                .approval_workspace_list(
-                    runtime_service(&state).as_ref().clone(),
-                    actor,
-                    query,
-                    filters,
-                    page,
-                )
+                .approval_instance_list(runtime_service(&state).as_ref(), &actor, query, &mut executor)
                 .await
         },
-        None => reader.approval_instance_list(&runtime_service(&state), &actor, query, &mut executor).await,
     }
     .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let next_cursor = page.next_cursor.map(|cursor| InstanceListCursor::from_runtime(view, cursor).encode());

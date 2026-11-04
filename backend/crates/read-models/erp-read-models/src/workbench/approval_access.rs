@@ -3,10 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use application_core::AuditActor;
 use erp_workflow::entity::work_item::WorkItemType;
-use erp_workflow::service::approval::execution::runtime_service::{
-    approval_task_readable_with_executor, approval_tasks_readable_with_executor,
-};
-use erp_workflow::{WorkItem, WorkItemExt, WorkItemRow, WorkflowAuthorizationPort};
+use erp_workflow::{WorkItem, WorkItemExt, WorkItemRow};
 use persistence_core::Executor;
 
 use super::access::{ActorAccess, authorized_fields, authorized_item_fields};
@@ -16,7 +13,7 @@ use super::task_access::procurement_item_fields;
 use super::{WorkbenchObjectFactMap, WorkbenchReadService};
 use crate::Result;
 
-impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 审批读取先证明任务链，其他任务仍执行原业务范围过滤。
     ///
     /// # 参数
@@ -94,8 +91,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
             return Ok(HashSet::new());
         };
         let actor = AuditActor::new(account.id, account.login_account, account.kind);
-        let readable =
-            approval_tasks_readable_with_executor(&self.db, &self.auth, &actor, &items, executor).await?;
+        let readable = self.auth.approval_tasks_readable(&self.db, &actor, &items, executor).await?;
         Ok(items
             .into_iter()
             .zip(readable)
@@ -128,7 +124,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
             return Ok(None);
         };
         let actor = AuditActor::new(account.id, account.login_account, account.kind);
-        if !approval_task_readable_with_executor(&self.db, &self.auth, &actor, item, executor).await? {
+        if !self.auth.approval_task_readable(&self.db, &actor, item, executor).await? {
             return Ok(None);
         }
         Ok(approval_item_fields(item, facts))

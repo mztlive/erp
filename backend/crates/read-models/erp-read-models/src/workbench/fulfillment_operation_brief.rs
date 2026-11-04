@@ -5,7 +5,6 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_core::money::Amount;
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 #[cfg(test)]
@@ -14,12 +13,15 @@ use super::brief::{ObjectBriefSource, non_empty, push_document_section, push_sec
 use super::dto::WorkItemFields;
 use super::presentation::format_yuan;
 use super::supply_warnings::{apply_supply_warning_briefs, current_fulfillment_keys, current_purchase_ids};
-use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use super::{
+    ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService,
+    object_ids,
+};
 use crate::errors::Result;
 use crate::supplier_portal::PurchaseSupplyWarningReader;
 
 type SourceBriefs = HashMap<(ObjectKind, String), ObjectBriefSource>;
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 在当前页任务授权完成后批量补充当前供给影响提示。
     ///
     /// # 参数
@@ -57,7 +59,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 装载履约权威事实，并批量补充来源单据当前生效金额。
     ///
     /// # 参数
@@ -118,7 +120,7 @@ fn apply_source_brief(kind: ObjectKind, fact: &mut WorkbenchObjectFact, briefs: 
     fact.display.brief_source = Some(brief.clone());
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 批量读取发货来源销售单与其当前生效版本；缺失版本不回退审核中提交。
     async fn fulfillment_sales_briefs(
         &self,

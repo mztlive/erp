@@ -9,14 +9,14 @@ use super::super::brief::{
 };
 use super::super::presentation::format_yuan;
 use super::super::{
-    ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap, WorkbenchReadService,
+    ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap,
     object_ids,
 };
 use super::mapping::{amount_reason_brief, append_funds_origin, funds_fact_display, select_funds_origin};
 use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 供应商付款事实简报。
     ///
     /// # 参数

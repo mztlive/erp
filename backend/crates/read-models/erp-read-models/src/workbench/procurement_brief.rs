@@ -8,14 +8,13 @@ use erp_sales::entity::sales_order::{
 };
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 use super::brief::{
     BRIEF_LINE_LIMIT, BriefLine, ObjectBriefSource, format_instant_due_label, format_quantity, line_title,
 };
 use super::dto::WorkItemFields;
-use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap};
 use crate::Result;
 
 #[derive(Debug, Clone)]
@@ -24,7 +23,7 @@ pub(super) struct ProcurementBrief {
     lines: Vec<(String, BriefLine)>,
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 批量装载当前正式销售版本的供给资料，具体责任行在任务投影时收窄。
     ///
     /// # 参数

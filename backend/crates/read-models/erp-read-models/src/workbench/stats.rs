@@ -4,8 +4,9 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_workflow::WorkItemRow;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
-use erp_workflow::{WorkItemRow, WorkflowAuthorizationPort};
+use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -110,7 +111,7 @@ impl StatsCounts {
     }
 }
 
-impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 查询与正式队列复用同一授权快照的待办统计。
     ///
     /// # 参数
@@ -120,22 +121,25 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
     /// 返回个人、今日到期、超期、异常、任务族计数及服务端统计时点。
     /// # 错误
     /// 查询参数、权限范围或对象事实读取失败时返回错误。
-    pub async fn work_item_stats(
+    #[inline(never)]
+    pub fn work_item_stats(
         &self,
         params: WorkItemStatsParams,
         actor: AuditActor,
-    ) -> Result<WorkItemStatsView> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let all_families = params.family.is_none() && params.work_item_type.is_none();
-        let this = self.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { this.stats_at(query, actor, all_families, executor).await })
-            })
-            .await
+    ) -> BoxFuture<'_, Result<WorkItemStatsView>> {
+        Box::pin(async move {
+            params.validate()?;
+            let query = params.normalized()?;
+            let all_families = params.family.is_none() && params.work_item_type.is_none();
+            let this = self.clone();
+            self.db
+                .client()
+                .clone()
+                .with_transaction(move |executor| {
+                    Box::pin(async move { this.stats_at(query, actor, all_families, executor).await })
+                })
+                .await
+        })
     }
 
     /// 个人统计与任务族统计单遍计算；非个人选中范围仍执行其原授权查询。

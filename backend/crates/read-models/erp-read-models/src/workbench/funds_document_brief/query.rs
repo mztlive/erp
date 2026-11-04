@@ -17,7 +17,7 @@ use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use persistence_core::Executor;
 
-use super::super::WorkbenchReadService;
+use super::super::WorkbenchFactsReader;
 use super::super::brief::{BRIEF_LINE_LIMIT, BriefLine, format_instant_date};
 use super::super::presentation::format_yuan;
 use super::mapping::{
@@ -28,7 +28,7 @@ use super::{FundsOrigins, InvoiceRequirementBrief, ReceivableRevisionBriefs, Vou
 use crate::errors::Result;
 use crate::workbench::authority::funds::mapping::voucher_revision_ids;
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 批量读取应付供应商展示名。
     ///
     /// # 参数

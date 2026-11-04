@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use bpm::ids::ApprovalNodeExecutionId;
+use erp_workflow::BpmExt;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
-use erp_workflow::{BpmExt, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
 use super::access::ViewAccess;
@@ -86,7 +86,7 @@ impl ActionProjection {
     }
 }
 
-impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 统计仅需要与正式页面相同的审批上下文存在性，不装配节点文案和驳回摘要。
     ///
     /// # 参数

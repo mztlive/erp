@@ -12,6 +12,7 @@ mod brief;
 mod change_order_brief;
 mod dto;
 mod facts;
+use facts::WorkbenchFactsReader;
 mod fulfillment_operation_brief;
 mod fulfillment_queue;
 mod fulfillment_status;

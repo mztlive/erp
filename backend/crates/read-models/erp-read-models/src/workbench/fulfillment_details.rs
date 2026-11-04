@@ -14,12 +14,12 @@ use erp_warehouse::repository::WarehouseExt;
 use persistence_core::Executor;
 
 use super::brief::{BriefLine, BriefSection, format_instant_datetime, line_title, push_section};
-use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFactMap, object_ids};
 use crate::errors::Result;
 
 type Names = HashMap<String, (String, Option<String>)>;
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 批量追加四种履约单据的公共业务字段；缺失字段明确显示待登记，不展示内部身份。
     ///
     /// # 参数

@@ -1,16 +1,19 @@
 //! 审批展示快照的事务内捕获与授权后装载。
 use std::collections::{BTreeSet, HashSet};
+use std::sync::Arc;
 
+use erp_workflow::ApprovalIntegrationExt;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalDisplaySnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::{ApprovalIntegrationExt, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
 use super::facts::object_policy;
-use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService, WorkbenchSubjectDisplay};
+use super::{
+    ObjectKind, WorkbenchFactsReader, WorkbenchObjectFactMap, WorkbenchReadService, WorkbenchSubjectDisplay,
+};
 use crate::errors::{Error, Result};
 
 /// 在已授权提交的事务内捕获当前业务展示，不读取历史覆盖，也不授予任何权限。
@@ -32,8 +35,10 @@ pub async fn capture_approval_display(
     let policy = object_policy(WorkItemType::DocumentApproval, document_type.as_str())
         .ok_or_else(|| Error::ValidationError("单据未注册审批摘要".into()))?;
     let key = (policy.object_kind, id.to_owned());
-    let reader =
-        WorkbenchReadService::new(db.clone(), erp_workflow::ports::FailClosedWorkflowAuthorizationPort);
+    let reader = WorkbenchReadService::new(
+        db.clone(),
+        Arc::new(erp_workflow::ports::FailClosedWorkflowAuthorizationPort),
+    );
     let mut facts = reader.load_live_object_facts(&HashSet::from([key.clone()]), executor).await?;
     let fact = facts.remove(&key).ok_or_else(|| Error::ValidationError("审批单据不存在".into()))?;
     let snapshot = ApprovalDisplaySnapshot {
@@ -47,7 +52,7 @@ pub async fn capture_approval_display(
     Ok(snapshot)
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 批量加载不可变展示；只覆盖已存在业务事实的同类型、同版本摘要，不改变授权事实。
     ///
     /// # 参数

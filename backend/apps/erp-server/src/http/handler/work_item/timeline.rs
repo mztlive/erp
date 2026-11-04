@@ -1,4 +1,6 @@
 //! 工作台动态仅沿当前任务资格读取。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
@@ -27,7 +29,7 @@ pub async fn task_timeline(
 ) -> Result<TaskTimeline> {
     let workbench = WorkbenchReadService::new(
         state.application().db(),
-        workflow_auth(state.application().db(), state.application().rbac()),
+        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
     );
     let view = sales_timeline_service(state.application().db(), state.application().rbac())
         .task(workbench, &actor, &id, query)

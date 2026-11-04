@@ -8,7 +8,6 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::work_item::WorkItemType;
 use persistence_core::Executor;
 
@@ -18,7 +17,7 @@ use super::SearchDocument;
 use crate::Result;
 
 pub(super) type SubjectKey = (String, String, String);
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 补齐完整销售与采购提交商品行，不改变展示摘要长度。
     /// # 参数
     /// `fields` 为已授权候选；`executor` 为列表快照。

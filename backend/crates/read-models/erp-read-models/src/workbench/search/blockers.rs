@@ -1,6 +1,5 @@
 //! 受阻筛选复用正式任务投影，保持与办理入口一致的资格判断。
 use application_core::AuditActor;
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 use super::super::access::ActorAccess;
@@ -8,7 +7,7 @@ use super::super::dto::WorkItemFields;
 use super::super::{ProcessingState, WorkItemScope, WorkbenchReadService};
 use crate::Result;
 
-impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 将正式办理资格回填为查询事实。
     /// # 参数
     /// `fields` 为已授权事项，`scope`、`actor`、`access` 为查询范围及身份，`executor` 为同一事务。

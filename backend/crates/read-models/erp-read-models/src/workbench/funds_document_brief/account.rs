@@ -6,12 +6,12 @@ use persistence_core::Executor;
 
 use super::super::brief::{ObjectBriefSource, join_list_summary, push_document_section, push_section};
 use super::super::presentation::format_yuan;
-use super::super::{ObjectKind, WorkbenchObjectFactMap as ObjectFactMap, WorkbenchReadService, object_ids};
+use super::super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFactMap as ObjectFactMap, object_ids};
 use super::mapping::{invoice_tax_profile_label, payable_account_fact, receivable_fact_display};
 use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 应收子账销项开票任务的对象事实。
     ///
     /// # 参数

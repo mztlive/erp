@@ -10,8 +10,8 @@ use erp_fulfillment::entity::fulfillment::{
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use erp_workflow::{WorkItemExt, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
 use super::brief::push_section;
@@ -35,7 +35,7 @@ pub(super) struct FulfillmentSupplySource {
     validated_task_ids: HashSet<String>,
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 批量读取已授权开放任务所指向的当前履约草稿及其真实采购关联。
     ///
     /// # 参数

@@ -1,4 +1,6 @@
 //! 审批 outbox 到统一通知入口的组合层适配。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_identity::subject;
@@ -89,7 +91,7 @@ pub async fn todo_count(app: &Application, actor: &AuditActor) -> ApplicationRes
         "scope": "mine", "page": 1, "page_size": 1, "timezone": "Asia/Shanghai"
     }))
     .map_err(|error| ApplicationError::Internal(error.to_string()))?;
-    let page = WorkbenchReadService::new(app.db(), workflow_auth(app.db(), app.rbac()))
+    let page = WorkbenchReadService::new(app.db(), Arc::new(workflow_auth(app.db(), app.rbac())))
         .work_item_search(
             WorkItemSearchParams { base: params, filters: Some("{\"include_options\":false}".into()) },
             actor.clone(),

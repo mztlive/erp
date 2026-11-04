@@ -1,11 +1,10 @@
 //! 本人发起审批按完整授权集检索，结果按页码返回，保留旧游标接口。
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_workflow::WorkflowAuthorizationPort;
-use erp_workflow::service::approval::execution::runtime_service::{
-    ApprovalRuntimeService, RuntimeInstanceListQuery,
-};
+use erp_workflow::service::approval::execution::runtime_service::RuntimeInstanceListQuery;
+use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 
 use super::super::brief::BriefSection;
@@ -13,9 +12,10 @@ use super::super::query::AuthorizedPageCollector;
 use super::super::{ApprovalListItem, ApprovalListPage, WorkbenchReadService};
 use super::sources::SubjectKey;
 use super::{SearchDocument, SearchOptions, WorkspaceFilters, approval_label, collect_options};
+use crate::ports::approval_instance::ApprovalInstanceReadPort;
 use crate::{Error, Result};
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 在同一快照内完成本人审批的完整检索、筛选和分页。
     /// # 参数
     /// `runtime` 为审批授权服务，`actor` 为当前账号，`query` 为关键词查询；`filters` 为结构化筛选，`page` 从1开始。
@@ -23,43 +23,47 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 返回完整筛选总数、当前页和授权候选选项。
     /// # 错误
     /// 非法页码、授权或查询失败时返回错误。
-    pub async fn approval_workspace_list(
+    #[inline(never)]
+    pub fn approval_workspace_list(
         &self,
-        runtime: ApprovalRuntimeService<A>,
+        runtime: Arc<dyn ApprovalInstanceReadPort>,
         actor: AuditActor,
         query: RuntimeInstanceListQuery,
         mut filters: WorkspaceFilters,
         page: u64,
-    ) -> Result<ApprovalListPage> {
-        if page == 0 {
-            return Err(Error::ValidationError("页码必须大于0".into()));
-        }
-        if filters.date_field.as_deref().is_some_and(|v| v != "created")
-            && (filters.date_from.is_some() || filters.date_to.is_some() || filters.undated)
-        {
-            return Err(Error::ValidationError("我发起的审批只支持按提交时间筛选".into()));
-        }
-        if filters.due.is_some() {
-            return Err(Error::ValidationError("我发起的审批不支持截止快捷条件".into()));
-        }
-        if filters.date_field.is_none() {
-            filters.date_field = Some("created".into());
-        }
-        let this = self.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    this.approval_search_page(&runtime, &actor, query, &filters, page, executor).await
+    ) -> BoxFuture<'_, Result<ApprovalListPage>> {
+        Box::pin(async move {
+            if page == 0 {
+                return Err(Error::ValidationError("页码必须大于0".into()));
+            }
+            if filters.date_field.as_deref().is_some_and(|v| v != "created")
+                && (filters.date_from.is_some() || filters.date_to.is_some() || filters.undated)
+            {
+                return Err(Error::ValidationError("我发起的审批只支持按提交时间筛选".into()));
+            }
+            if filters.due.is_some() {
+                return Err(Error::ValidationError("我发起的审批不支持截止快捷条件".into()));
+            }
+            if filters.date_field.is_none() {
+                filters.date_field = Some("created".into());
+            }
+            let this = self.clone();
+            self.db
+                .client()
+                .clone()
+                .with_transaction(move |executor| {
+                    Box::pin(async move {
+                        this.approval_search_page(runtime.as_ref(), &actor, query, &filters, page, executor)
+                            .await
+                    })
                 })
-            })
-            .await
+                .await
+        })
     }
 
     async fn approval_search_page(
         &self,
-        runtime: &ApprovalRuntimeService<A>,
+        runtime: &dyn ApprovalInstanceReadPort,
         actor: &AuditActor,
         mut query: RuntimeInstanceListQuery,
         filters: &WorkspaceFilters,
@@ -74,7 +78,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let mut options = SearchOptions::new();
         let mut counts = BTreeMap::new();
         loop {
-            let (batch, next_cursor) = runtime.started_instance_page_with(actor, &query, executor).await?;
+            let (batch, next_cursor) = runtime.started_instance_page(actor, &query, executor).await?;
             let items = self.approval_list_summaries(batch, executor).await?;
             let documents = self.approval_search_documents(&items, executor).await?;
             for mut item in items {

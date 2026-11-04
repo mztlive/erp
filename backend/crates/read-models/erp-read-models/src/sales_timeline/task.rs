@@ -66,9 +66,9 @@ impl SalesTimelineReadService {
     /// 当前任务单据历史及另行授权的销售单入口。
     /// # 错误
     /// 任务失效、责任越界、参数无效或数据库故障时拒绝。
-    pub async fn task<A: WorkflowAuthorizationPort>(
+    pub async fn task(
         &self,
-        workbench: WorkbenchReadService<A>,
+        workbench: WorkbenchReadService,
         actor: &AuditActor,
         id: &str,
         query: TimelineQuery,

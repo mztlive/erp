@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
+use std::sync::Arc;
 
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity};
@@ -9,17 +10,19 @@ use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::repository::work_item::WorkItemScan;
 use erp_workflow::{BpmExt, WorkItemExt};
+use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::{ActorAccess, detail_scope};
-use super::facts::object_policy;
+use super::facts::{WorkbenchFactsReader, object_policy};
 use super::stats::apply_due_filter;
 use super::{
     ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
     WorkItemPageView, WorkItemScope, WorkItemSearchParams, WorkItemView, WorkspaceFilters, dto,
 };
 use crate::errors::{Error, Result};
+use crate::ports::workbench_authorization::WorkbenchAuthorizationReadPort;
 
 pub(super) const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
 
@@ -30,15 +33,29 @@ struct FocusedQueueContext<'a> {
 }
 
 /// Cross-domain workbench query service.
+///
+/// 查询入口使用固定 Future 类型，授权实现和内部查询状态机不进入调用方的类型。
 #[derive(Clone)]
-pub struct WorkbenchReadService<A> {
+pub struct WorkbenchReadService {
     /// MongoDB handle used for work-item and brief reads.
     pub db: mongodb::Database,
     /// Injected authorization port.
-    pub auth: A,
+    pub auth: Arc<dyn WorkbenchAuthorizationReadPort>,
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
+    /// 构造与授权类型无关的对象读取器，不执行查询或授权。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回借用当前数据库的对象事实读取器。
+    /// # 错误
+    /// 不返回错误。
+    pub(super) fn object_reader(&self) -> WorkbenchFactsReader<'_> {
+        WorkbenchFactsReader::new(&self.db)
+    }
+
     /// 用当前数据库构造工作项事实读取器，不执行查询。
     ///
     /// # 参数
@@ -64,12 +81,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: mongodb::Database, auth: A) -> Self {
+    pub fn new(db: mongodb::Database, auth: Arc<dyn WorkbenchAuthorizationReadPort>) -> Self {
         Self { db, auth }
     }
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 在供给影响读取中复用当前任务详情阅读资格，不另建事务。
     ///
     /// # 参数
@@ -80,28 +97,31 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     /// 任务详情授权成立时返回 `true`。任务不存在或禁止访问时返回 `false`，不返回任务或业务显示内容。
     /// # 错误
     /// 除不存在和禁止访问外，授权配置及对象读取故障继续传播。
-    pub(crate) async fn work_item_readable_with_executor(
-        &self,
-        actor: &AuditActor,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let result = async {
-            let item = self
-                .db
-                .work_items()
-                .find_work_item(id, executor)
-                .await?
-                .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-            let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
-            detail_scope(&item, actor.id(), &access)?;
-            Ok(!self.authorized_fields_for_items(vec![item], &access, executor).await?.is_empty())
-        }
-        .await;
-        match result {
-            Err(Error::NotFound(_) | Error::Forbidden(_)) => Ok(false),
-            other => other,
-        }
+    #[inline(never)]
+    pub(crate) fn work_item_readable_with_executor<'a>(
+        &'a self,
+        actor: &'a AuditActor,
+        id: &'a str,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            let result = async {
+                let item = self
+                    .db
+                    .work_items()
+                    .find_work_item(id, executor)
+                    .await?
+                    .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
+                let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+                detail_scope(&item, actor.id(), &access)?;
+                Ok(!self.authorized_fields_for_items(vec![item], &access, executor).await?.is_empty())
+            }
+            .await;
+            match result {
+                Err(Error::NotFound(_) | Error::Forbidden(_)) => Ok(false),
+                other => other,
+            }
+        })
     }
 
     /// 查询服务端授权过滤后的责任队列。
@@ -115,12 +135,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ///
     /// # 错误
     /// 查询参数非法、managed 未授权或授权事实无法读取时返回错误。
-    pub async fn work_item_list(
+    pub fn work_item_list(
         &self,
         params: WorkItemListParams,
         actor: AuditActor,
-    ) -> Result<WorkItemPageView> {
-        self.work_item_search(WorkItemSearchParams { base: params, filters: None }, actor).await
+    ) -> BoxFuture<'_, Result<WorkItemPageView>> {
+        self.work_item_search(WorkItemSearchParams { base: params, filters: None }, actor)
     }
 
     /// 查询带结构化条件的授权任务队列。
@@ -130,27 +150,30 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     /// 返回服务端筛选计数、分页及候选项。
     /// # 错误
     /// 非法条件、授权或查询失败时返回错误。
-    pub async fn work_item_search(
+    #[inline(never)]
+    pub fn work_item_search(
         &self,
         params: WorkItemSearchParams,
         actor: AuditActor,
-    ) -> Result<WorkItemPageView> {
-        params.base.validate()?;
-        let mut query = params.base.normalized()?;
-        query.filters = WorkspaceFilters::parse(params.filters.as_deref())?;
-        query.due = match query.filters.due.as_deref() {
-            Some("today") => Some(WorkItemDueFilter::Today),
-            Some("overdue") => Some(WorkItemDueFilter::Overdue),
-            _ => query.due,
-        };
-        let this = self.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { this.queue_page(query, actor, executor).await })
-            })
-            .await
+    ) -> BoxFuture<'_, Result<WorkItemPageView>> {
+        Box::pin(async move {
+            params.base.validate()?;
+            let mut query = params.base.normalized()?;
+            query.filters = WorkspaceFilters::parse(params.filters.as_deref())?;
+            query.due = match query.filters.due.as_deref() {
+                Some("today") => Some(WorkItemDueFilter::Today),
+                Some("overdue") => Some(WorkItemDueFilter::Overdue),
+                _ => query.due,
+            };
+            let this = self.clone();
+            self.db
+                .client()
+                .clone()
+                .with_transaction(move |executor| {
+                    Box::pin(async move { this.queue_page(query, actor, executor).await })
+                })
+                .await
+        })
     }
 
     /// 范围、对象事实、完整计数和分页共享原事务快照。
@@ -377,15 +400,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ///
     /// # 错误
     /// 任务不存在、不在安全责任范围、业务对象不可见，或授权与展示读取失败时返回错误。
-    pub async fn work_item_detail(self, id: String, actor: AuditActor) -> Result<WorkItemView> {
-        let this = self.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { this.detail_page(&id, &actor, executor).await })
-            })
-            .await
+    #[inline(never)]
+    pub fn work_item_detail(self, id: String, actor: AuditActor) -> BoxFuture<'static, Result<WorkItemView>> {
+        Box::pin(async move {
+            let this = self.clone();
+            self.db
+                .client()
+                .clone()
+                .with_transaction(move |executor| {
+                    Box::pin(async move { this.detail_page(&id, &actor, executor).await })
+                })
+                .await
+        })
     }
 
     /// 在同一事务快照内重验详情授权、对象事实与展示补齐。
@@ -403,38 +429,43 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ///
     /// # 关键业务约束
     /// 授权快照、对象事实与展示读取共用同一执行器，不得换成 `NoTransaction`。
-    pub(crate) async fn detail_page(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<WorkItemView> {
-        let item = self
-            .db
-            .work_items()
-            .find_work_item(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
-        let item_id = item.base.id.clone();
-        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
-        let scope = detail_scope(&item, actor.id(), &access)?;
-        let fields = self.authorized_fields_for_items(vec![item], &access, executor).await?;
-        let mut fields =
-            fields.into_iter().next().ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
-        self.apply_fulfillment_supply_warnings(std::slice::from_mut(&mut fields), executor).await?;
-        let queue_context_id = single_item_context_id(actor.id(), &item_id);
-        let view_access = self.view_access(&fields, scope, actor, &access)?;
-        let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
-            view_access.processing_state,
-            view_access.processing_blocker,
-            view_access.allowed_actions,
-            view_access.action_blockers,
-        );
-        self.apply_party_names_with(executor, std::slice::from_mut(&mut view)).await?;
-        self.apply_approval_contexts(std::slice::from_mut(&mut view), executor).await?;
-        self.apply_owner_qualification(std::slice::from_mut(&mut view), executor).await?;
-        self.apply_fulfillment_statuses(std::slice::from_mut(&mut view), executor).await?;
-        Ok(view)
+    #[inline(never)]
+    pub(crate) fn detail_page<'a>(
+        &'a self,
+        id: &'a str,
+        actor: &'a AuditActor,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<WorkItemView>> {
+        Box::pin(async move {
+            let item = self
+                .db
+                .work_items()
+                .find_work_item(id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
+            let item_id = item.base.id.clone();
+            let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+            let scope = detail_scope(&item, actor.id(), &access)?;
+            let fields = self.authorized_fields_for_items(vec![item], &access, executor).await?;
+            let mut fields = fields
+                .into_iter()
+                .next()
+                .ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
+            self.apply_fulfillment_supply_warnings(std::slice::from_mut(&mut fields), executor).await?;
+            let queue_context_id = single_item_context_id(actor.id(), &item_id);
+            let view_access = self.view_access(&fields, scope, actor, &access)?;
+            let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
+                view_access.processing_state,
+                view_access.processing_blocker,
+                view_access.allowed_actions,
+                view_access.action_blockers,
+            );
+            self.apply_party_names_with(executor, std::slice::from_mut(&mut view)).await?;
+            self.apply_approval_contexts(std::slice::from_mut(&mut view), executor).await?;
+            self.apply_owner_qualification(std::slice::from_mut(&mut view), executor).await?;
+            self.apply_fulfillment_statuses(std::slice::from_mut(&mut view), executor).await?;
+            Ok(view)
+        })
     }
 }
 

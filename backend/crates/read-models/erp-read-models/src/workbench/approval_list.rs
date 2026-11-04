@@ -4,8 +4,9 @@ use std::collections::{BTreeMap, HashSet};
 use application_core::AuditActor;
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::approval::execution::runtime_service::{
-    ApprovalRuntimeService, RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListQuery,
+    RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListQuery,
 };
+use futures_util::future::BoxFuture;
 use persistence_core::Executor;
 use serde::Serialize;
 
@@ -14,6 +15,7 @@ use super::dto::{WorkItemBriefLine, WorkItemSummarySection};
 use super::facts::{WorkbenchObjectFact, object_policy};
 use super::{SearchOptions, WorkbenchReadService};
 use crate::errors::Result;
+use crate::ports::approval_instance::ApprovalInstanceReadPort;
 
 /// 实例授权后的单据摘要；与责任队列使用同一组字段与明细格式。
 #[derive(Debug, Clone, Serialize)]
@@ -44,7 +46,7 @@ pub struct ApprovalListPage {
     /// 运行服务按相同授权范围返回的单据类型统计。
     pub document_type_counts: Option<BTreeMap<String, u64>>,
 }
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 先由已装配的运行服务执行原列表授权，再批量补齐相同单据摘要。
     ///
     /// # 参数
@@ -58,21 +60,24 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ///
     /// # 错误
     /// 保留运行服务的权限、参数错误；摘要仓储读取失败返回错误，不伪造完整数据。
-    pub async fn approval_instance_list(
-        &self,
-        runtime: &ApprovalRuntimeService<A>,
-        actor: &AuditActor,
+    #[inline(never)]
+    pub fn approval_instance_list<'a>(
+        &'a self,
+        runtime: &'a dyn ApprovalInstanceReadPort,
+        actor: &'a AuditActor,
         query: RuntimeInstanceListQuery,
-        executor: &mut dyn Executor,
-    ) -> Result<ApprovalListPage> {
-        let page = runtime.instance_list(actor, query).await?;
-        let items = self.approval_list_summaries(page.items, executor).await?;
-        Ok(ApprovalListPage {
-            filter_options: Default::default(),
-            items,
-            total: page.total,
-            next_cursor: page.next_cursor,
-            document_type_counts: page.document_type_counts,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<ApprovalListPage>> {
+        Box::pin(async move {
+            let page = runtime.instance_list(actor, query).await?;
+            let items = self.approval_list_summaries(page.items, executor).await?;
+            Ok(ApprovalListPage {
+                filter_options: Default::default(),
+                items,
+                total: page.total,
+                next_cursor: page.next_cursor,
+                document_type_counts: page.document_type_counts,
+            })
         })
     }
     /// 为已授权实例补齐精确版本摘要。

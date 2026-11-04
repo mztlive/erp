@@ -9,10 +9,10 @@ use erp_supply::repository::{SupplierFulfillmentExt, SupplierOfferingExt};
 use persistence_core::Executor;
 
 use super::brief::{ObjectBriefSource, format_instant_datetime, push_section};
-use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFactMap, object_ids};
 use crate::errors::Result;
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 对已授权装载的导入、供应商订单和供给异常补齐公共事实。
     ///
     /// # 参数

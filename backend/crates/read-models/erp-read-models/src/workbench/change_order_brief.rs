@@ -26,7 +26,7 @@ use mapping::{
 use persistence_core::Executor;
 
 use super::brief::BRIEF_LINE_LIMIT;
-use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, object_ids};
 use crate::errors::Result;
 
 pub(super) type LineStateMap = HashMap<String, DiffLineState>;
@@ -129,7 +129,7 @@ struct PurchaseChangeBriefContext {
     target_lines: HashMap<String, LineStateMap>,
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 销售变更审批任务的对象事实：任务对象是变更单本身。
     ///
     /// # 参数

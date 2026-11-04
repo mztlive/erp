@@ -6,14 +6,13 @@ use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine, DeliveryState
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 use serde::Serialize;
 
 use super::brief::{
     BriefSection, format_instant_date, format_instant_datetime, push_document_section, push_section,
 };
-use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFactMap};
 use crate::errors::Result;
 
 /// 发货批次明细。日期来自实际关联版本，缺失时保持空值。
@@ -46,7 +45,7 @@ struct DeliveryContext {
     expected: HashMap<String, (String, String)>,
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 为授权发货对象批量补齐来源资料和本批次数量。
     ///
     /// # 参数

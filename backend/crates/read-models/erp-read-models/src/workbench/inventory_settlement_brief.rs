@@ -13,9 +13,7 @@ use erp_supply::entity::supplier_settlement::{
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use erp_warehouse::WarehouseExt;
-use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalDisplaySnapshot;
-use erp_workflow::ports::FailClosedWorkflowAuthorizationPort;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -28,7 +26,7 @@ use super::brief::{
     join_list_summary, non_empty, push_section,
 };
 use super::presentation::format_yuan;
-use super::{ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, object_ids};
 use crate::errors::{Error, Result};
 
 #[derive(Default)]
@@ -58,7 +56,7 @@ pub async fn capture_stock_adjustment_display(
     lines: &[StockAdjustmentLine],
     executor: &mut dyn Executor,
 ) -> Result<ApprovalDisplaySnapshot> {
-    let reader = WorkbenchReadService::new(db.clone(), FailClosedWorkflowAuthorizationPort);
+    let reader = WorkbenchFactsReader::new(db);
     let mut warehouses =
         reader.stock_adjustment_warehouse_labels(std::slice::from_ref(adjustment), executor).await?;
     let mut grouped = reader.stock_adjustment_brief_lines_from_facts(lines, executor).await?;
@@ -78,7 +76,7 @@ pub async fn capture_stock_adjustment_display(
     Ok(snapshot)
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 库存调整审批任务的对象事实。
     ///
     /// # 参数

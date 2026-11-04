@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use erp_core::money::Amount;
-use erp_workflow::{WorkItemStatus, WorkItemType, WorkflowAuthorizationPort};
+use erp_workflow::{WorkItemStatus, WorkItemType};
 use persistence_core::Executor;
 use serde::Serialize;
 
@@ -46,7 +46,7 @@ impl WorkItemFulfillmentStatus {
     }
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 为当前页已授权的开放履约任务补齐付款与发货条件。
     ///
     /// # 参数

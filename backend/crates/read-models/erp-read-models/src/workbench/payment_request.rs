@@ -15,7 +15,7 @@ use persistence_core::Executor;
 use super::authority::WorkItemFactsReader;
 use super::brief::{BRIEF_LINE_LIMIT, push_section};
 use super::presentation::format_yuan;
-use super::{WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchReadService, object_ids};
+use super::{WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, object_ids};
 use crate::Result;
 
 impl WorkItemFactsReader {
@@ -48,7 +48,7 @@ impl WorkItemFactsReader {
     }
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 工作台直接显示希望付款日、主体、脱敏账户和逐采购批准金额。
     ///
     /// # 参数
@@ -68,7 +68,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             return Ok(());
         }
         let requests = self.db.purchase_payment_requests().list_active_by_ids(&ids, executor).await?;
-        let history = request_history(&self.db, &ids, executor).await?;
+        let history = request_history(self.db, &ids, executor).await?;
         let users = requests.iter().map(|request| request.created_by.clone()).collect::<Vec<_>>();
         let names = self.load_account_names(&users, executor).await?;
         for request in requests {

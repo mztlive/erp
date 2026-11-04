@@ -7,7 +7,6 @@ mod related_sales;
 mod sources;
 use std::collections::{BTreeMap, HashMap};
 
-use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::WorkItemType;
 pub use filters::{WorkItemSearchParams, WorkspaceFilters};
@@ -187,7 +186,7 @@ pub(super) fn collect_options(
     }
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 授权后批量补充用于搜索的姓名、关联单据和完整版本明细。
     /// # 参数
     /// `fields` 为已授权候选；`executor` 沿用查询快照。
@@ -201,7 +200,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = fields.iter().filter_map(|f| f.owner_user_id.clone()).collect::<Vec<_>>();
-        let names = self.load_account_names(&ids, executor).await?;
+        let names = self.object_reader().load_account_names(&ids, executor).await?;
         for field in fields.iter_mut() {
             field.search = task_document(field, &names);
         }

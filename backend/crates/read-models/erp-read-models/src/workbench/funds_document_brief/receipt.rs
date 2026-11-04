@@ -7,7 +7,7 @@ use persistence_core::Executor;
 use super::super::brief::{format_instant_date, join_list_summary, non_empty};
 use super::super::presentation::format_yuan;
 use super::super::{
-    ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap, WorkbenchReadService,
+    ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap as ObjectFactMap,
     object_ids,
 };
 use super::mapping::{
@@ -16,7 +16,7 @@ use super::mapping::{
 use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 回款审批任务的对象事实：任务对象是回款单本身。
     ///
     /// 创建人直接读取不可变领域字段；缺失身份不授予创建人参与资格。
@@ -209,7 +209,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 读取申请用于当前展示及不可变审批快照；税号与内容取提交实体。
     async fn load_invoice_request_facts(
         &self,

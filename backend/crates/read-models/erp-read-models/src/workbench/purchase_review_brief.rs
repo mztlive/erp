@@ -19,7 +19,7 @@ use persistence_core::Executor;
 use super::authority::purchase::{purchase_facts, purchase_line_counts};
 use super::brief::BriefLine;
 use super::change_order_brief::{LineStateMap, purchase_order_submission_line_states};
-use super::{ObjectKind, WorkbenchObjectFactMap, WorkbenchReadService};
+use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFactMap};
 use crate::errors::Result;
 
 /// 采购审核在对象事实中按提交版本保存的展示包。
@@ -39,7 +39,7 @@ struct PurchaseSubmissionLineContext {
     line_states: HashMap<String, LineStateMap>,
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchFactsReader<'_> {
     /// 读取采购单身份，并按提交版本写入供应商、金额、付款条件和明细简报。
     ///
     /// # 参数

@@ -13,6 +13,7 @@ use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
 use erp_workflow::entity::work_item::{
     QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType,
 };
+use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -317,7 +318,7 @@ pub struct FulfillmentQueuePageView {
     pub as_of: Instant,
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 查询当前个人责任范围内的 W09 履约队列。
     ///
     /// # 参数
@@ -329,21 +330,24 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ///
     /// # 错误
     /// 参数非法、队列上下文变化、授权事实或聚合读取失败时返回错误。
-    pub async fn fulfillment_queue_list(
+    #[inline(never)]
+    pub fn fulfillment_queue_list(
         &self,
         params: FulfillmentQueueListParams,
         actor: AuditActor,
-    ) -> Result<FulfillmentQueuePageView> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let this = self.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { this.fulfillment_queue_page(query, actor, executor).await })
-            })
-            .await
+    ) -> BoxFuture<'_, Result<FulfillmentQueuePageView>> {
+        Box::pin(async move {
+            params.validate()?;
+            let query = params.normalized()?;
+            let this = self.clone();
+            self.db
+                .client()
+                .clone()
+                .with_transaction(move |executor| {
+                    Box::pin(async move { this.fulfillment_queue_page(query, actor, executor).await })
+                })
+                .await
+        })
     }
 
     /// 授权快照、聚合读取、指标和分页共享原事务快照，并在返回前复验身份版本。

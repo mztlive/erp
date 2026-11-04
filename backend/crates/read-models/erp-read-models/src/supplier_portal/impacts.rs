@@ -220,7 +220,7 @@ impl<A: WorkflowAuthorizationPort> PortalOfferingImpactReadService<A> {
             .map(|fact| fact.order.current_owner_user_id().map(str::to_string))
             .collect::<erp_core::Result<Vec<_>>>()?;
         let names = self.db.accounts().names_by_ids(&owner_ids, executor).await?;
-        let workbench = WorkbenchReadService::new(self.db.clone(), self.workflow.clone());
+        let workbench = WorkbenchReadService::new(self.db.clone(), Arc::new(self.workflow.clone()));
         let mut result = Vec::new();
         for fact in facts {
             let mut tasks = Vec::new();

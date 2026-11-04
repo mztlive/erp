@@ -1,6 +1,5 @@
 //! 授权批次的查询累加器；计数、命中说明和分页共用同一筛选结果。
 use application_core::AuditActor;
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 use super::super::access::ActorAccess;
@@ -12,7 +11,7 @@ use super::super::{WorkItemFilter, WorkbenchObjectFactMap, WorkbenchReadService,
 use super::{SearchOptions, collect_options};
 use crate::Result;
 
-impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 扫描全部仓储候选，逐批授权后仅保留请求页。
     /// # 参数
     /// `filter`、`query` 为服务端查询，`actor`、`access` 为真实账号范围，`executor` 为同一事务。

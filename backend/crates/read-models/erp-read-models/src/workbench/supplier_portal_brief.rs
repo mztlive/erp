@@ -10,7 +10,6 @@ use erp_supply::portal::{
     FrozenOfferingSubmission, OfferingApplication, OfferingApplicationSnapshot, PortalAvailabilityStatus,
     PortalSupplyExt,
 };
-use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::Executor;
 
 use super::authority::supplier_portal::offering_kind_label;
@@ -27,7 +26,7 @@ struct PortalDisplayContext {
     applicants: HashMap<String, String>,
 }
 
-impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 为授权页补齐每次申请原稿的业务类型、原因、价格或新品规格摘要。
     ///
     /// # 参数
@@ -71,7 +70,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         applicant_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<PortalDisplayContext> {
-        let suppliers = self.supplier_display_names(supplier_ids, executor).await?;
+        let suppliers = self.object_reader().supplier_display_names(supplier_ids, executor).await?;
         let applicants = self
             .auth
             .load_accounts(applicant_ids, executor)

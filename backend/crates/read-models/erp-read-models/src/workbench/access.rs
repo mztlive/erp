@@ -4,12 +4,12 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet};
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::work_item::{
     WorkItem, WorkItemActionAccess, WorkItemActionRequirement, WorkItemStatus, WorkItemType,
 };
 use erp_workflow::ports::WorkflowQueueAccessFact;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::{DocumentRegistryExt, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
 use super::facts::{WorkbenchObjectFact, WorkbenchObjectFactMap, apply_object_display, object_policy};
@@ -18,6 +18,7 @@ use super::{
     WorkbenchReadService, dto,
 };
 use crate::errors::{Error, Result};
+use crate::ports::workbench_authorization::WorkbenchAuthorizationReadPort;
 
 pub(super) const MANAGE_PERMISSION: &str = "work_item:manage";
 pub(super) const REASSIGN_PERMISSION: &str = "work_item:reassign";
@@ -104,7 +105,7 @@ impl ActorAccess {
     }
 }
 
-impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
+impl WorkbenchReadService {
     /// 按账号类型与稳定 ID 构造责任队列授权快照。
     ///
     /// # 参数
@@ -124,7 +125,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         executor: &mut dyn Executor,
     ) -> Result<ActorAccess> {
         let actor = AuditActor::new(actor_id.to_string(), actor_id.to_string(), account_kind);
-        if let Some((access, _)) = optimized_access(&self.auth, &actor, false, executor).await? {
+        if let Some((access, _)) = optimized_access(self.auth.as_ref(), &actor, false, executor).await? {
             return Ok(access);
         }
         self.legacy_actor_access_for(account_kind, actor_id, executor).await
@@ -149,7 +150,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(ActorAccess, String)> {
-        if let Some((access, version)) = optimized_access(&self.auth, actor, true, executor).await? {
+        if let Some((access, version)) = optimized_access(self.auth.as_ref(), actor, true, executor).await? {
             return Ok((access, version.expect("首拍授权版本已校验")));
         }
         let version = self.auth.queue_scope_version(actor, executor).await?;
@@ -310,7 +311,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
 
 /// 从兼容端口请求身份事实；缺失首拍版本失败关闭，未装配时保留原授权路径。
 async fn optimized_access(
-    auth: &impl WorkflowAuthorizationPort,
+    auth: &dyn WorkbenchAuthorizationReadPort,
     actor: &AuditActor,
     include_version: bool,
     executor: &mut dyn Executor,
