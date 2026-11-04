@@ -30,10 +30,15 @@ export function SalesOrderDetailSidebar({
     const closed = order.primaryStatus.code === "closed"
     return (
         <aside
-            aria-label="本单待跟进"
+            aria-label="履约与票款进度"
             className="min-w-0 rounded-lg border border-border/70 p-5"
         >
-            <h2 className="text-lg font-semibold">本单待跟进</h2>
+            <h2 className="text-lg font-semibold">履约与票款进度</h2>
+            {order.activeChangeOrder ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                    以下为当前生效版本的执行情况，尚未包含本次改单。
+                </p>
+            ) : null}
             <div className="mt-2 divide-y divide-border/70">
                 <FollowUp
                     id="sales-order-follow-up-delivery"
@@ -104,19 +109,6 @@ export function SalesOrderDetailSidebar({
                         {order.invoicing.label}
                     </p>
                 </FollowUp>
-                {order.activeChangeOrder ? (
-                    <FollowUp
-                        id="sales-order-follow-up-change"
-                        icon={<FileTextIcon aria-hidden="true" />}
-                        title="改单跟进"
-                        onClick={() => onSelectSection("versions")}
-                    >
-                        <StatusBadge
-                            tone={order.activeChangeOrder.statusTone}
-                            label={order.activeChangeOrder.statusLabel}
-                        />
-                    </FollowUp>
-                ) : null}
             </div>
             <section
                 className="mt-3 border-t border-border/70 pt-5"

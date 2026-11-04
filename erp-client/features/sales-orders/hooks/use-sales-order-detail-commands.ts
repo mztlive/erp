@@ -47,8 +47,9 @@ export function useSalesOrderDetailStartChange() {
             commandLedger.settle("start-change", "succeeded")
             onResult({
                 status: "succeeded",
-                title: "请编辑销售变更",
-                description: `已进入「${change.statusLabel}」。当前版本对客户仍然有效。`,
+                title: "改单草稿已创建",
+                description:
+                    "尚未提交审批，请继续编辑；原销售单仍按当前生效版本执行。",
                 nextResponsible:
                     change.approval?.instance?.currentAssigneeName ??
                     change.approval?.instance?.currentAssignee,

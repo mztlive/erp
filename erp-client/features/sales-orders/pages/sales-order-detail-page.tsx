@@ -14,6 +14,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
 import { SalesOrderDetailSecondaryActions } from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
@@ -45,6 +46,22 @@ import { cn } from "@/lib/utils"
  * 待仓储验收 / 待采购处理 / 待财务处理是履约分工态，不是审批复核。
  */
 export function SalesOrderDetailPage({
+    salesOrderId,
+    section,
+}: {
+    salesOrderId: string
+    section?: string
+}) {
+    return (
+        <SalesOrderDetailContent
+            key={salesOrderId}
+            salesOrderId={salesOrderId}
+            section={section}
+        />
+    )
+}
+
+function SalesOrderDetailContent({
     salesOrderId,
     section,
 }: {
@@ -138,6 +155,23 @@ export function SalesOrderDetailPage({
         (next: SalesOrderDetailActionResult) => {
             if (next.status === "succeeded" || next.status === "unknown") {
                 refreshOrderDetail()
+            }
+            if (next.status === "succeeded") {
+                setResult(null)
+                toast.add({
+                    title: next.title,
+                    description: [
+                        next.description,
+                        next.nextResponsible
+                            ? `下一步：${next.nextResponsible}`
+                            : undefined,
+                    ]
+                        .filter(Boolean)
+                        .join(" "),
+                    type: "success",
+                    timeout: 5000,
+                })
+                return
             }
             setResult(next)
         },
@@ -261,6 +295,10 @@ export function SalesOrderDetailPage({
                     secondaryActions={
                         <SalesOrderDetailSecondaryActions
                             order={order}
+                            showChangeAction={
+                                !order.activeChangeOrder ||
+                                derived.navSection !== "overview"
+                            }
                             canStartChange={derived.canStartChange}
                             changeBlocker={derived.changeBlocker}
                             changePending={startChangeCommand.isPending}
@@ -306,6 +344,18 @@ export function SalesOrderDetailPage({
                                 status={result.status}
                                 title={result.title}
                                 description={result.description}
+                                actions={
+                                    result.status !== "unknown" ? (
+                                        <Button
+                                            id="sales-order-result-dismiss"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setResult(null)}
+                                        >
+                                            关闭提示
+                                        </Button>
+                                    ) : undefined
+                                }
                                 reference={result.reference}
                                 facts={
                                     result.nextResponsible
@@ -317,6 +367,18 @@ export function SalesOrderDetailPage({
                                           ]
                                         : undefined
                                 }
+                            />
+                        ) : null}
+
+                        {derived.navSection === "overview" &&
+                        order.activeChangeOrder ? (
+                            <SalesChangeOrderApprovalSection
+                                key={order.activeChangeOrder.id}
+                                readonlyApproval
+                                salesOrderId={order.id}
+                                nature={order.nature}
+                                changeOrder={order.activeChangeOrder}
+                                onResult={handleActionResult}
                             />
                         ) : null}
 
@@ -392,7 +454,7 @@ export function SalesOrderDetailPage({
                             status: "succeeded",
                             title: "改单已提交审批",
                             description:
-                                "审批通过后生成新版本，进度见下方「进行中的改单」。",
+                                "审批通过后生成新版本，进度见「变更与售后」。",
                         })
                         selectSection("versions")
                     }}

@@ -25,6 +25,7 @@ import type {
     SalesOrderNature,
 } from "@/features/sales-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { SalesChangeDraftSummary } from "./sales-change-draft-summary"
 
 /**
  * 销售变更单在详情页上的审批区入口。
@@ -106,7 +107,7 @@ export function SalesChangeOrderApprovalSection({
             })
             onResult?.({
                 status: "succeeded",
-                title: "改单已作废",
+                title: "已放弃本次改单",
                 description:
                     "销售单仍按当前生效版本执行，需要时可重新发起改单。",
             })
@@ -128,14 +129,16 @@ export function SalesChangeOrderApprovalSection({
             <Button
                 id="sales-orders-change-edit-original"
                 type="button"
-                variant="outline"
+                variant="default"
+                disabled={voidMutation.isPending}
                 onClick={() => setEditOpen(true)}
             >
-                编辑改单
+                继续编辑
             </Button>
             <ChangeOrderVoidButton
                 id="sales-orders-change-void"
                 sourceLabel="销售单"
+                label="放弃本次改单"
                 pending={voidMutation.isPending}
                 onConfirm={voidChange}
             />
@@ -156,6 +159,9 @@ export function SalesChangeOrderApprovalSection({
                     changeOrder={changeOrder}
                     counterparty="客户"
                     running={phase === "runtime"}
+                    title={
+                        phase === "draft" ? "本次改单尚未提交" : "本次改单进度"
+                    }
                     actions={
                         <>
                             <ApprovalActionBar
@@ -183,7 +189,22 @@ export function SalesChangeOrderApprovalSection({
                             {editButton}
                         </>
                     }
-                />
+                >
+                    {phase === "draft" ? (
+                        <>
+                            <p className="text-sm text-muted-foreground">
+                                {canSubmit
+                                    ? "请继续编辑并提交审批；不再需要修改时，可以放弃本次改单。"
+                                    : "等待有权限的销售人员编辑并提交审批。"}
+                            </p>
+                            {canSubmit ? (
+                                <SalesChangeDraftSummary
+                                    changeOrderId={changeOrder.id}
+                                />
+                            ) : null}
+                        </>
+                    ) : null}
+                </ChangeOrderPendingCard>
             ) : (
                 <>
                     <SalesChangeOrderApprovalArea

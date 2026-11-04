@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import * as React from "react"
 
 import { SalesOrderSelectionSource } from "./sales-order-selection-source"
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, QuantityValue } from "@/components/business"
 import {
     Table,
     TableBody,
@@ -119,7 +119,7 @@ function CardLineItemsTable({ order }: { order: SalesOrderDetailView }) {
     )
 }
 
-/** 概览展示销售摘要和交易约定；实物服务明细统一在交付分区查看。 */
+/** 概览展示当前生效版本的商品摘要；完整交付明细在交付分区查看。 */
 export function OverviewPanel({
     order,
     related,
@@ -142,6 +142,11 @@ export function OverviewPanel({
                         className="text-lg font-semibold"
                     >
                         {isCard ? "卡券明细" : "销售摘要"}
+                        {order.currentRevisionNo != null ? (
+                            <span className="ml-3 text-xs font-normal text-muted-foreground">
+                                当前生效 v{order.currentRevisionNo}
+                            </span>
+                        ) : null}
                     </h2>
                     <div className="flex flex-wrap items-center gap-3">
                         <p className="text-xs text-muted-foreground">
@@ -159,7 +164,72 @@ export function OverviewPanel({
                         ) : null}
                     </div>
                 </div>
-                {isCard ? <CardLineItemsTable order={order} /> : null}
+                {isCard ? (
+                    <CardLineItemsTable order={order} />
+                ) : (
+                    <>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>商品 / 服务</TableHead>
+                                    <TableHead data-align="end">数量</TableHead>
+                                    <TableHead>交付期限</TableHead>
+                                    <TableHead data-align="end">
+                                        含税金额
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {order.lineItems.slice(0, 3).map((line) => (
+                                    <TableRow key={line.id}>
+                                        <TableCell className="min-w-40 whitespace-normal">
+                                            <span>{line.name}</span>
+                                            {line.isGift ? (
+                                                <Badge
+                                                    className="ml-2"
+                                                    variant="secondary"
+                                                >
+                                                    赠品
+                                                </Badge>
+                                            ) : null}
+                                            {line.sku &&
+                                            line.sku !== "无规格" ? (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    {line.sku}
+                                                </p>
+                                            ) : null}
+                                        </TableCell>
+                                        <TableCell data-align="end">
+                                            <QuantityValue
+                                                value={line.quantity}
+                                                unit={line.unit}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            {line.dueDate || "未填写"}
+                                        </TableCell>
+                                        <TableCell data-align="end">
+                                            <MoneyValue
+                                                value={line.amountGross}
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                        {order.lineItems.length === 0 ? (
+                            <p className="py-4 text-sm text-muted-foreground">
+                                暂无销售明细
+                            </p>
+                        ) : null}
+                        {order.lineItems.length > 3 ? (
+                            <p className="mt-3 text-xs text-muted-foreground">
+                                已展示前 3 项，其余 {order.lineItems.length - 3}{" "}
+                                项请查看销售明细与交付。
+                            </p>
+                        ) : null}
+                    </>
+                )}
                 <div className="flex items-baseline justify-end gap-5 pt-5 text-sm">
                     <span className="text-muted-foreground">合计（含税）</span>
                     <MoneyValue
@@ -168,13 +238,6 @@ export function OverviewPanel({
                     />
                 </div>
             </section>
-            {order.inquirySource && (
-                <SalesOrderInquirySource source={order.inquirySource} />
-            )}
-            {order.selectionSource && (
-                <SalesOrderSelectionSource source={order.selectionSource} />
-            )}
-            {related}
             <section
                 aria-labelledby="sales-order-transaction-heading"
                 className="rounded-lg border border-border/70 p-4 md:p-5"
@@ -251,6 +314,13 @@ export function OverviewPanel({
                     ) : null}
                 </dl>
             </section>
+            {order.inquirySource && (
+                <SalesOrderInquirySource source={order.inquirySource} compact />
+            )}
+            {order.selectionSource && (
+                <SalesOrderSelectionSource source={order.selectionSource} />
+            )}
+            {related}
         </div>
     )
 }

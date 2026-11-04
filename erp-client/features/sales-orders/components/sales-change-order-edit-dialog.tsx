@@ -94,6 +94,7 @@ export function SalesChangeOrderEditDialog({
                     <DialogTitle>销售改单</DialogTitle>
                     <DialogDescription>
                         修改后填写变更原因并提交审批。审批通过前仍按当前销售版本执行，已有回款、开票和交付记录保留。
+                        关闭不会放弃本次改单；未保存的内容请先点「保存修改」。
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending ? (
@@ -370,7 +371,7 @@ function SalesChangeDraftForm({
                             disabled={disabled}
                             onClick={onClose}
                         >
-                            取消
+                            关闭
                         </Button>
                         {!uncertain ? (
                             <LoadingButton

@@ -22,6 +22,7 @@ export function SalesOrderDetailSecondaryActions({
     changePending,
     onOpenChangeConfirm,
     onApprovalResult,
+    showChangeAction = true,
 }: {
     order: SalesOrderDetailView
     canStartChange: boolean
@@ -29,6 +30,7 @@ export function SalesOrderDetailSecondaryActions({
     changePending: boolean
     onOpenChangeConfirm: () => void
     onApprovalResult?: (result: SalesOrderDetailActionResult) => void
+    showChangeAction?: boolean
 }) {
     const permissions = useSalesOrderDetailPermissions()
     const canContinue =
@@ -43,24 +45,30 @@ export function SalesOrderDetailSecondaryActions({
 
     return (
         <div className="flex flex-wrap items-center gap-2">
-            <Button
-                id="sales-orders-detail-start-change"
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={
-                    (!startChangeGate.enabled && !canContinue) || changePending
-                }
-                title={canContinue ? undefined : startChangeGate.reason}
-                onClick={onOpenChangeConfirm}
-            >
-                <FilePenLineIcon data-icon="inline-start" aria-hidden="true" />
-                {changePending
-                    ? "正在打开改单…"
-                    : canContinue
-                      ? "继续改单"
-                      : "发起改单"}
-            </Button>
+            {showChangeAction ? (
+                <Button
+                    id="sales-orders-detail-start-change"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                        (!startChangeGate.enabled && !canContinue) ||
+                        changePending
+                    }
+                    title={canContinue ? undefined : startChangeGate.reason}
+                    onClick={onOpenChangeConfirm}
+                >
+                    <FilePenLineIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                    />
+                    {changePending
+                        ? "正在打开改单…"
+                        : canContinue
+                          ? "继续改单"
+                          : "发起改单"}
+                </Button>
+            ) : null}
             <Popover>
                 <PopoverTrigger
                     id="sales-orders-detail-more-actions"

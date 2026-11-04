@@ -57,6 +57,7 @@ export function ChangeOrderPendingCard({
     running,
     actions,
     children,
+    title = "进行中的改单",
 }: {
     id: string
     changeOrder: ChangeOrderPendingSummary
@@ -67,6 +68,7 @@ export function ChangeOrderPendingCard({
     actions?: ReactNode
     /** 卡片正文附加内容，例如原因或对其他单据的影响。 */
     children?: ReactNode
+    title?: string
 }) {
     const approval = changeOrder.approval
     const instance = approval?.instance
@@ -102,7 +104,7 @@ export function ChangeOrderPendingCard({
                             id={`${id}-title`}
                             className="text-sm font-semibold"
                         >
-                            进行中的改单
+                            {title}
                         </h2>
                         <StatusBadge
                             tone={changeOrder.statusTone}

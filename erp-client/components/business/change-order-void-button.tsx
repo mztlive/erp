@@ -15,20 +15,23 @@ export function ChangeOrderVoidButton({
     sourceLabel,
     pending,
     onConfirm,
+    label = "作废改单",
 }: {
     id: string
     /** 原单称谓，例如「销售单」「采购单」。 */
     sourceLabel: string
     pending: boolean
     onConfirm: () => void | Promise<void>
+    /** 业务页面可使用「放弃本次改单」，采购等调用方保留默认文案。 */
+    label?: string
 }) {
     return (
         <FormalActionConfirmDialog
             idPrefix={id}
             actionVariant="destructive"
             layout="compact"
-            title="作废改单"
-            actionLabel="作废改单"
+            title={label}
+            actionLabel={label}
             confirmLabel="确认作废"
             cancelLabel="暂不作废"
             fromStatus={{ label: "草稿", tone: "neutral" }}
@@ -48,7 +51,7 @@ export function ChangeOrderVoidButton({
                     disabled={pending}
                 >
                     <Trash2Icon data-icon="inline-start" aria-hidden="true" />
-                    作废改单
+                    {label}
                 </Button>
             }
         />
