@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { useFulfillmentFieldLocation } from "../hooks/use-fulfillment-field-location"
 import { FulfillmentDraftForm } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
     OPERATION_ACTION_LABEL,
@@ -124,6 +125,7 @@ export function FulfillmentWorkSurface({
     onBack,
     onToggleShortcuts,
 }: FulfillmentWorkSurfaceProps) {
+    const { deliveryRef, locateIssue } = useFulfillmentFieldLocation()
     const paymentBlocked =
         operation.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP"
     const fieldIssues = validationIssues.filter((issue) => issue.id !== "gate")
@@ -339,6 +341,7 @@ export function FulfillmentWorkSurface({
                     />
 
                     <FulfillmentDraftForm
+                        deliveryRef={deliveryRef}
                         operation={operation}
                         draft={draft}
                         onChange={onDraftChange}
@@ -348,6 +351,7 @@ export function FulfillmentWorkSurface({
                     {fieldIssues.length > 0 ? (
                         <ValidationSummary
                             id="fulfillment-operations-field-validation"
+                            onLocate={locateIssue}
                             compact
                             title="请补充或检查履约信息"
                             issues={fieldIssues}

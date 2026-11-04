@@ -204,6 +204,7 @@ export type FulfillmentDraft =
           warehouseLabel: string
           trackingEntries?: DeliveryTrackingEntry[]
           pendingTrackingLineIds?: string[]
+          pendingBatchTrackingInput?: boolean
           /** 仅保留旧调用方的类型签名；生产流程不读取或提交。 */
           carrier?: string
           trackingNo?: string
@@ -214,6 +215,7 @@ export type FulfillmentDraft =
           type: "SUPPLIER_DIRECT"
           trackingEntries?: DeliveryTrackingEntry[]
           pendingTrackingLineIds?: string[]
+          pendingBatchTrackingInput?: boolean
           /** 仅保留旧调用方的类型签名；生产流程不读取或提交。 */
           carrier?: string
           trackingNo?: string

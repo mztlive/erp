@@ -34,6 +34,31 @@ export function trackingEntryKey(entry: DeliveryTrackingEntry): string {
     ])
 }
 
+/** 为选中的销售明细追加物流，保留已有记录并按明细、承运方和单号去重。 */
+export function appendTrackingEntries(
+    entries: readonly DeliveryTrackingEntry[],
+    salesOrderLineIds: readonly string[],
+    trackingNumbers: readonly string[],
+    carrier: string,
+): DeliveryTrackingEntry[] {
+    const next = [...entries]
+    const seen = new Set(entries.map(trackingEntryKey))
+    for (const salesOrderLineId of salesOrderLineIds) {
+        for (const trackingNo of trackingNumbers) {
+            const entry = {
+                salesOrderLineId,
+                trackingNo,
+                carrier: carrier.trim() || undefined,
+            }
+            const key = trackingEntryKey(entry)
+            if (seen.has(key)) continue
+            seen.add(key)
+            next.push(entry)
+        }
+    }
+    return next
+}
+
 export function trackingEntriesValidationMessage(
     entries: readonly DeliveryTrackingEntry[] | undefined,
     allowedLineIds: readonly string[],

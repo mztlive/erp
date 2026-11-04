@@ -20,6 +20,7 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { useFulfillmentFieldLocation } from "../hooks/use-fulfillment-field-location"
 import { FulfillmentDeliveryForm } from "../../components/forms/fulfillment-delivery-form"
 import { displayText } from "../../lib/readable-label"
 import type { FulfillmentDraft, FulfillmentOperation } from "../../types"
@@ -60,6 +61,7 @@ export function FulfillmentDeliveryDialogSurface({
     onDraftChange: (draft: FulfillmentDraft) => void
     actions: ReactNode
 }) {
+    const { deliveryRef, locateIssue } = useFulfillmentFieldLocation()
     const blocked =
         draft.type === "SUPPLIER_DIRECT" && operation.gate.state === "BLOCKED"
     const fields = [
@@ -154,6 +156,7 @@ export function FulfillmentDeliveryDialogSurface({
                 />
             )}
             <FulfillmentDeliveryForm
+                ref={deliveryRef}
                 operation={operation}
                 draft={draft}
                 onChange={onDraftChange}
@@ -162,6 +165,8 @@ export function FulfillmentDeliveryDialogSurface({
             />
             {showValidation && fieldIssues.length > 0 ? (
                 <ValidationSummary
+                    id="fulfillment-dialog-field-validation"
+                    onLocate={locateIssue}
                     title="还差这些没填好"
                     issues={fieldIssues}
                 />

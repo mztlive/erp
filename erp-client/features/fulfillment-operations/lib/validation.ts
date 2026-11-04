@@ -172,6 +172,14 @@ export function clientValidation(
     }
     if (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") {
         const kind = draft.type === "WAREHOUSE_SHIP" ? "ship" : "direct"
+        if (draft.pendingBatchTrackingInput) {
+            issues.push({
+                id: "tracking-batch-pending",
+                label: "批量物流",
+                message: "批量输入尚未添加，请点击“追加到所选商品”或清空输入",
+                targetId: `fulfillment-operations-${kind}-form-batch-tracking-no`,
+            })
+        }
         for (const lineId of draft.pendingTrackingLineIds ?? []) {
             issues.push({
                 id: `tracking-pending-${lineId}`,

@@ -102,10 +102,13 @@ export function useFulfillmentActions({
         if (
             (draft.type === "WAREHOUSE_SHIP" ||
                 draft.type === "SUPPLIER_DIRECT") &&
-            draft.pendingTrackingLineIds?.length
+            (draft.pendingTrackingLineIds?.length ||
+                draft.pendingBatchTrackingInput)
         ) {
             setActionError(
-                "物流号尚未添加，请按 Enter 或点击“添加”，再保存草稿",
+                draft.pendingBatchTrackingInput
+                    ? "批量输入尚未添加，请点击“追加到所选商品”或清空输入，再保存草稿"
+                    : "物流号尚未添加，请按 Enter 或点击“添加”，再保存草稿",
             )
             return false
         }

@@ -1,5 +1,8 @@
 "use client"
 
+import type { Ref } from "react"
+import type { FulfillmentDeliveryFormHandle } from "./fulfillment-delivery-form"
+
 import type {
     FulfillmentDraft,
     FulfillmentOperationType,
@@ -38,7 +41,7 @@ export function getFirstInputId(operation: FulfillmentOperation): string {
                 operation.operationType === "WAREHOUSE_SHIP" ? "ship" : "direct"
             const line = operation.lines[0]
             return line
-                ? `fulfillment-operations-${kind}-form-line-${toAutomationIdSegment(line.salesOrderLineId)}-tracking-no`
+                ? `fulfillment-operations-${kind}-form-line-${toAutomationIdSegment(line.salesOrderLineId)}-${operation.lines.length === 1 ? "tracking-no" : "toggle"}`
                 : ""
         }
         case "ELECTRONIC": {
@@ -75,11 +78,13 @@ export function FulfillmentDraftForm({
     draft,
     onChange,
     disabled,
+    deliveryRef,
 }: {
     operation: FulfillmentOperation
     draft: FulfillmentDraft
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
+    deliveryRef?: Ref<FulfillmentDeliveryFormHandle>
 }) {
     switch (draft.type) {
         case "RECEIPT":
@@ -94,6 +99,7 @@ export function FulfillmentDraftForm({
         case "WAREHOUSE_SHIP":
             return (
                 <FulfillmentShipForm
+                    ref={deliveryRef}
                     operation={operation}
                     draft={draft}
                     onChange={onChange}
@@ -103,6 +109,7 @@ export function FulfillmentDraftForm({
         case "SUPPLIER_DIRECT":
             return (
                 <FulfillmentDirectForm
+                    ref={deliveryRef}
                     operation={operation}
                     draft={draft}
                     onChange={onChange}
