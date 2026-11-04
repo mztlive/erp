@@ -13,7 +13,8 @@ export default async function Page({
     const { workItemId } = await params
     return (
         <Suspense fallback={<WorkspaceHomeSkeleton detail />}>
-            <WorkspaceDetailPage id={workItemId} />
+            {/* 路由参数保留百分号编码；还原任务 ID，避免 API 再编码冒号。 */}
+            <WorkspaceDetailPage id={decodeURIComponent(workItemId)} />
         </Suspense>
     )
 }

@@ -142,6 +142,9 @@ export function workspaceTaskColumns({
                 label: purchase ? "采购单号" : "单号 / 事项",
             },
             cell: ({ row: { original: row } }) => {
+                const rework =
+                    row.item.workItemType === "APPROVAL_REWORK" &&
+                    row.item.status === "OPEN"
                 const Icon = queueTypeIcon(
                     row.item.workItemType === "DOCUMENT_APPROVAL" || tracking
                         ? `approval:${row.item.businessObjectType}`
@@ -160,7 +163,14 @@ export function workspaceTaskColumns({
                             >
                                 {row.presentation.number}
                             </div>
-                            {(mixed || row.item.searchMatches?.length) && (
+                            {rework && (
+                                <StatusBadge
+                                    label={row.presentation.typeLabel}
+                                    tone="destructive"
+                                />
+                            )}
+                            {((mixed && !rework) ||
+                                row.item.searchMatches?.length) && (
                                 <div
                                     className="max-w-64 truncate text-xs text-muted-foreground"
                                     title={row.item.searchMatches?.join("；")}
