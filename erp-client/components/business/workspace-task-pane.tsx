@@ -70,6 +70,7 @@ export function WorkspaceTaskPageSlot({
 
 export type WorkspaceTaskPaneProps = {
     header: ReactNode
+    headerSupplement?: ReactNode
     footer?: ReactNode
     children: ReactNode
     className?: string
@@ -82,6 +83,7 @@ export type WorkspaceTaskPaneProps = {
  */
 export function WorkspaceTaskPane({
     header,
+    headerSupplement,
     footer,
     children,
     className,
@@ -130,6 +132,7 @@ export function WorkspaceTaskPane({
                             >
                                 {header}
                             </header>
+                            {headerSupplement}
                             <div
                                 data-slot="workspace-task-body"
                                 className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto"
@@ -194,6 +197,7 @@ export function WorkspaceTaskPane({
                             >
                                 {header}
                             </header>
+                            {headerSupplement}
                             {layout &&
                                 !layout.fullWidth &&
                                 !layout.singleColumn && (

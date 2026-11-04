@@ -10,6 +10,7 @@ use erp_data_import::product_import::ProductImportServices;
 use erp_data_import::sales_inquiry_import::SalesInquiryImportProcess;
 use erp_identity::SharedRbacService;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
+use erp_notification::NotificationService;
 use erp_order_to_cash::sales_inquiry::SalesInquiryProcess;
 use erp_party::SensitiveDataCodec;
 use erp_read_models::approval_subject::ApprovalUpgradeReadModel;
@@ -35,6 +36,7 @@ use serde::Serialize;
 use storage::S3Storage;
 use tokio::sync::watch;
 
+use super::notification::ApprovalNotifications;
 use crate::wiring::approval_dispatch::{ApprovalActionRegistry, ApprovalObjectRead};
 use crate::wiring::catalog_supply_query::MongoCatalogSupplyQuery;
 use crate::wiring::identity::shared_rbac_service;
@@ -138,6 +140,7 @@ pub struct Application {
     sensitive_data: Arc<SensitiveDataCodec>,
     approval_runtime_service: Arc<ApprovalRuntimeService<WorkflowAuth>>,
     approval_outbox: Arc<ApprovalNotificationOutboxPort>,
+    notifications: NotificationService,
     external_connectors: ExternalConnectorPorts,
     integration_evidence: Arc<dyn IntegrationEvidenceAuthority>,
     catalog_supply_query: Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort>,
@@ -187,7 +190,11 @@ impl Application {
             workflow_audit(db.clone()),
             workflow_object_facts(db.clone()),
         ));
-        let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::new(db.clone()));
+        let notifications = NotificationService::new(db.clone(), Default::default());
+        let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::with_sender(
+            db.clone(),
+            Arc::new(ApprovalNotifications::new(notifications.clone())),
+        ));
         let integration_evidence: Arc<dyn IntegrationEvidenceAuthority> =
             Arc::new(MongoIntegrationEvidenceAuthority::new(db.clone()));
         let catalog_supply_query: Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort> =
@@ -200,10 +207,22 @@ impl Application {
             sensitive_data,
             approval_runtime_service,
             approval_outbox,
+            notifications,
             external_connectors,
             integration_evidence,
             catalog_supply_query,
         }
+    }
+
+    /// 获取统一通知入口；首期未配置站外渠道。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 使用应用共享数据库的通知服务。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn notifications(&self) -> NotificationService {
+        self.notifications.clone()
     }
 
     /// 订阅配置变更通知。

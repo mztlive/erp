@@ -3,7 +3,7 @@ use axum::routing::{get, post};
 use axum::{Router, middleware};
 
 use crate::http::handler::approval_instance::copies;
-use crate::http::handler::{auth, data_transfer as transfers, region};
+use crate::http::handler::{auth, data_transfer as transfers, notification, region};
 use crate::http::middleware::authenticate;
 use crate::http::state::HttpState;
 
@@ -16,6 +16,10 @@ use crate::http::state::HttpState;
 /// 返回账号相关路由
 pub fn routes(state: HttpState) -> Router<HttpState> {
     Router::new()
+        // 本人收件箱沿用 account 路由认证；所有读写强制绑定会话账号。
+        .route("/notifications", get(notification::inbox))
+        .route("/notifications/{id}/read", post(notification::mark_read))
+        .route("/notifications/events", get(notification::events))
         .route("/profile", get(auth::profile::account_profile))
         .route("/approval-leader", get(auth::profile::own_approval_leader))
         .route("/regions", get(region::list_regions))

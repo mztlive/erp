@@ -1177,6 +1177,7 @@ dependencies = [
  "erp-import",
  "erp-integration",
  "erp-inventory",
+ "erp-notification",
  "erp-party",
  "erp-procurement",
  "erp-returns",
@@ -2293,6 +2294,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-notification"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "entity-core",
+ "entity-macros",
+ "erp-core",
+ "mongodb",
+ "persistence-core",
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "erp-order-to-cash"
 version = "0.1.0"
 dependencies = [
@@ -2590,6 +2607,7 @@ dependencies = [
  "erp-integration",
  "erp-inventory",
  "erp-master-data",
+ "erp-notification",
  "erp-order-to-cash",
  "erp-party",
  "erp-procure-to-pay",
@@ -2606,6 +2624,7 @@ dependencies = [
  "erp-support",
  "erp-warehouse",
  "erp-workflow",
+ "futures-util",
  "hmac 0.12.1",
  "id-generator",
  "image",

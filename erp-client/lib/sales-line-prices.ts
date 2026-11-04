@@ -14,6 +14,7 @@ export function salesLinePriceComparison(prices: SalesLinePrices) {
     const sales = prices.unit_price_gross
     const warnings: string[] = []
     let change: string | null = null
+    let adjustment: "increased" | "decreased" | "unchanged" | null = null
     try {
         if (
             original != null &&
@@ -22,6 +23,8 @@ export function salesLinePriceComparison(prices: SalesLinePrices) {
             supply !== ""
         ) {
             const order = compareDecimal(supply, original, 4)
+            adjustment =
+                order > 0 ? "increased" : order < 0 ? "decreased" : "unchanged"
             if (order !== 0) {
                 change = subtractFixed(
                     order > 0 ? supply : original,
@@ -50,5 +53,5 @@ export function salesLinePriceComparison(prices: SalesLinePrices) {
     } catch {
         warnings.push("价格格式需核对")
     }
-    return { warnings, change }
+    return { warnings, change, adjustment }
 }

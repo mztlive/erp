@@ -138,7 +138,12 @@ export function WorkspaceSalesApproval({
                                         </TableHead>
                                         {submission.business_type !==
                                             "VOUCHER" && (
-                                            <TableHead>采购供给价</TableHead>
+                                            <TableHead>
+                                                <div>采购供给价</div>
+                                                <div className="mt-0.5 text-xs font-normal">
+                                                    销售填写的含税单价
+                                                </div>
+                                            </TableHead>
                                         )}
                                         {submission.business_type !==
                                             "VOUCHER" && (
@@ -262,6 +267,8 @@ function SalesLine({
                     <SalesLinePriceComparison
                         prices={line}
                         showSalesPrice={false}
+                        compact
+                        unit={unit}
                     />
                 </TableCell>
             )}

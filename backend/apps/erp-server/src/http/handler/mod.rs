@@ -42,3 +42,5 @@ pub mod warehouse;
 pub mod work_item;
 
 pub mod data_transfer;
+
+pub mod notification;

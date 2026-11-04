@@ -14,6 +14,7 @@ members = [
   "crates/domains/erp-import",
   "crates/domains/erp-integration",
   "crates/domains/erp-inventory",
+  "crates/domains/erp-notification",
   "crates/domains/erp-party",
   "crates/domains/erp-procurement",
   "crates/domains/erp-returns",
@@ -84,6 +85,7 @@ erp-identity = { path = "crates/domains/erp-identity" }
 erp-import = { path = "crates/domains/erp-import" }
 erp-integration = { path = "crates/domains/erp-integration" }
 erp-inventory = { path = "crates/domains/erp-inventory" }
+erp-notification = { path = "crates/domains/erp-notification" }
 erp-party = { path = "crates/domains/erp-party" }
 erp-procurement = { path = "crates/domains/erp-procurement" }
 erp-returns = { path = "crates/domains/erp-returns" }

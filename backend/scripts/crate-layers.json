@@ -709,6 +709,12 @@
       "paths": [
         "apps/erp-server"
       ]
+    },
+    "erp-notification": {
+      "layer": "domains",
+      "paths": [
+        "crates/domains/erp-notification"
+      ]
     }
   }
 }

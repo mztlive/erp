@@ -11,6 +11,7 @@ pub(crate) async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::
     erp_identity::indexes::ensure_accounts_and_roles(db).await?;
     erp_identity::indexes::ensure_portal_indexes(db).await?;
     erp_audit::indexes::ensure(db).await?;
+    erp_notification::indexes::ensure(db).await?;
     erp_identity::indexes::ensure_authorization(db).await?;
     erp_workflow::indexes::ensure_approval_integration(db).await?;
     erp_workflow::indexes::ensure_bpm(db).await?;

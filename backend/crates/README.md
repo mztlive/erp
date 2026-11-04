@@ -2,13 +2,13 @@
 
 本目录的 crate 按业务职责和技术能力组织。开发时先确定“修改哪类业务事实”或“组合哪些业务步骤”，再选择对应入口。每个 crate 的 README 说明用途、使用场景、协作示例、代码入口及修改要求。
 
-活动 crate 以 [workspace](../Cargo.toml) 成员及[层次登记](../scripts/crate-layers.json)为准；19 个现有领域保留各自包名与事实归属。服务端应用见 [erp-server](../apps/erp-server/README.md)，运维命令见 [cli](../apps/cli/README.md)，全局开发要求见 [backend/AGENTS.md](../AGENTS.md)。
+活动 crate 以 [workspace](../Cargo.toml) 成员及[层次登记](../scripts/crate-layers.json)为准；20 个业务领域保留各自包名与事实归属。服务端应用见 [erp-server](../apps/erp-server/README.md)，运维命令见 [cli](../apps/cli/README.md)，全局开发要求见 [backend/AGENTS.md](../AGENTS.md)。
 
 ## 目录与登记要求
 
 | 目录 | 职责与成员 |
 | --- | --- |
-| `domains/` | 19 个现有业务领域；保留原包名、实体、服务、仓储和集合归属 |
+| `domains/` | 20 个业务领域；保留原包名、实体、服务、仓储和集合归属 |
 | `orchestration/` | 13 个编排库按业务链路执行跨域命令与事务；依赖必须逐项登记 |
 | `read-models/` | `erp-read-models`；组合只读事实，不依赖编排库 |
 | `adapters/` | 具体外部协议和 `erp-contract-recognition` 等技术实现 |
@@ -50,6 +50,7 @@
 
 | Crate | 用途 |
 | --- | --- |
+| [erp-notification](domains/erp-notification/README.md) | 统一站内信和站外渠道投递入口，维护个人收件箱、去重与已读状态。 |
 | [erp-party](domains/erp-party/README.md) | 管理往来公司或个人的基础身份，以及联系人、地址、银行账户、税务资料和敏感字段。 |
 | [erp-customer](domains/erp-customer/README.md) | 管理“哪些往来对象是我们的客户”，以及客户账户状态、负责人和客户分配记录。 |
 | [erp-supplier](domains/erp-supplier/README.md) | 管理“哪些往来对象可以作为供应商”，以及供应商能力、资质、评级和商业结算档案。 |

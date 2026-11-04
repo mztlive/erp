@@ -1,5 +1,8 @@
 //! 通知 outbox worker：租约、幂等发送、退避与死信。
 
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::NoTransaction;
@@ -273,10 +276,23 @@ impl NotificationSender for FailClosedNotificationSender {
     }
 }
 
+/// 已提交审批通知的异步投递端口；领域不依赖具体通知实现。
+#[async_trait]
+pub trait ApprovalNotificationDelivery: Send + Sync {
+    /// 使用完整不可变内容及去重键投递。
+    /// # 参数
+    /// item 为本轮已领取的通知。
+    /// # 返回
+    /// 成功、暂时失败或永久失败分类。
+    /// # 错误
+    /// 失败以 DeliveryAttempt 返回，交给现有 outbox 退避及死信。
+    async fn deliver(&self, item: &ApprovalNotificationOutbox) -> DeliveryAttempt;
+}
+
 /// Mongo 审批通知 outbox 应用端口。HTTP 只持有并启停，不得直连仓储。
 pub struct ApprovalNotificationOutboxPort {
     db: Database,
-    sender: FailClosedNotificationSender,
+    sender: Option<Arc<dyn ApprovalNotificationDelivery>>,
 }
 
 impl ApprovalNotificationOutboxPort {
@@ -291,7 +307,18 @@ impl ApprovalNotificationOutboxPort {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database) -> Self {
-        Self { db, sender: FailClosedNotificationSender }
+        Self { db, sender: None }
+    }
+
+    /// 装配已接入的异步通知提供方。
+    /// # 参数
+    /// db 为仓储数据库，sender 为组合根注入的投递端口。
+    /// # 返回
+    /// 可领取及处理通知的 outbox 服务。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn with_sender(db: Database, sender: Arc<dyn ApprovalNotificationDelivery>) -> Self {
+        Self { db, sender: Some(sender) }
     }
 
     /// 判断实际通知提供方是否已接入。
@@ -305,7 +332,7 @@ impl ApprovalNotificationOutboxPort {
     /// # 错误
     /// 不返回错误。
     pub fn is_ready(&self) -> bool {
-        self.sender.is_ready()
+        self.sender.is_some()
     }
 
     /// 领取并处理一批到期消息；未接入提供方时直接返回，不读写队列。
@@ -344,7 +371,10 @@ impl ApprovalNotificationOutboxPort {
     /// # 错误
     /// 实体状态或仓储 CAS 失败时返回错误。
     async fn persist_attempt(&self, worker_id: &str, mut item: ApprovalNotificationOutbox) -> Result<()> {
-        let attempt = self.sender.send_idempotent(&item.dedup_key);
+        let Some(sender) = &self.sender else {
+            return Ok(());
+        };
+        let attempt = sender.deliver(&item).await;
         let now = Instant::now();
         if attempt == DeliveryAttempt::Delivered {
             self.mark_delivered(&item.base.id, worker_id, now).await?;
@@ -404,6 +434,9 @@ impl ApprovalNotificationOutboxPort {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
     use erp_core::common::time::Instant;
     use erp_core::ids::ApprovalNotificationOutboxId;
 
@@ -415,6 +448,28 @@ mod tests {
         ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,
         ApprovalNotificationTemplateParams,
     };
+
+    #[tokio::test]
+    async fn async_delivery_port_is_explicitly_wired_and_unconfigured_tick_is_idle() {
+        use mongodb::Client;
+
+        use super::{ApprovalNotificationDelivery, ApprovalNotificationOutboxPort};
+
+        struct Ready;
+        #[async_trait]
+        impl ApprovalNotificationDelivery for Ready {
+            async fn deliver(&self, item: &ApprovalNotificationOutbox) -> DeliveryAttempt {
+                assert_eq!(item.recipient_user_ids, ["u1"]);
+                DeliveryAttempt::Delivered
+            }
+        }
+        let db = Client::with_options(Default::default()).unwrap().database("unused");
+        let paused = ApprovalNotificationOutboxPort::new(db.clone());
+        assert!(!paused.is_ready());
+        paused.process_tick("worker").await.unwrap();
+        let port = ApprovalNotificationOutboxPort::with_sender(db, Arc::new(Ready));
+        assert!(port.is_ready());
+    }
 
     /// 未接线发送口必须失败关闭，不得伪造成功。
     #[test]

@@ -1,10 +1,10 @@
 "use client"
 
-import { useQueries, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 
 import { getStartedApprovalUnreadCount } from "@/features/approval-workflow/api"
 
-import { fetchQueueCount } from "../api/queue-count"
+import { useNotificationFeed } from "@/features/notifications/hooks/queries"
 import { hasPermission } from "@/lib/permissions"
 import type { AccountProfile } from "@/features/auth/api"
 import { getWorkItem } from "@/features/work-items/api"
@@ -121,34 +121,31 @@ export { workspaceHomeKeys }
 
 /** 菜单按账号隔离：待我处理取待办数，我发起的审批只取未读进展数。 */
 export function useWorkspaceNavigationCounts(profile?: AccountProfile) {
-    const views = ["inbox", "started"] as const
-    const queries = useQueries({
-        queries: views.map((view) => ({
-            queryKey: [
-                ...workspaceHomeKeys.all,
-                "navigation-count",
-                view === "started" ? "started-unread" : view,
-                profile?.userid,
-                profile?.policy_version,
-                profile?.organization_version,
-                profile?.role_ids,
-                profile?.permissions,
-            ],
-            queryFn: () =>
-                view === "started"
-                    ? getStartedApprovalUnreadCount()
-                    : fetchQueueCount(view, undefined, {}),
-            enabled:
-                Boolean(profile) &&
-                hasPermission(
-                    profile?.permissions,
-                    view === "started"
-                        ? "approval_instance:read"
-                        : "work_item:list",
-                ),
-            refetchInterval: 60_000,
-            meta: { workspaceNavigation: true },
-        })),
+    const feed = useNotificationFeed(profile)
+    const started = useQuery({
+        queryKey: [
+            ...workspaceHomeKeys.all,
+            "navigation-count",
+            "started-unread",
+            profile?.userid,
+            profile?.policy_version,
+            profile?.organization_version,
+            profile?.role_ids,
+            profile?.permissions,
+        ],
+        queryFn: getStartedApprovalUnreadCount,
+        enabled:
+            Boolean(profile) &&
+            hasPermission(profile?.permissions, "approval_instance:read"),
+        refetchInterval: 60_000,
+        meta: { workspaceNavigation: true },
     })
-    return { inbox: queries[0], started: queries[1] }
+    return {
+        inbox: {
+            data: feed.data?.todo_count ?? undefined,
+            isError: feed.isError,
+            error: feed.error,
+        },
+        started,
+    }
 }

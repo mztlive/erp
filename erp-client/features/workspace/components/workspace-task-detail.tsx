@@ -21,6 +21,7 @@ import { WorkspacePurchaseApprovalStatus } from "./workspace-purchase-approval-s
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceSalesApproval } from "./workspace-sales-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
+import { WorkspaceApprovalRouteSummary } from "./workspace-approval-route-summary"
 import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
@@ -802,6 +803,11 @@ function WorkspaceDocumentTaskDetail({
                         ) : null}
                     </WorkspaceTaskHeaderActions>
                 </>
+            }
+            headerSupplement={
+                salesApproval && fullPage && instance ? (
+                    <WorkspaceApprovalRouteSummary instance={instance} />
+                ) : null
             }
             footer={actions}
             aria-label="当前任务"

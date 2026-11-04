@@ -21,17 +21,24 @@ import type { ApprovalRoute as ApprovalRouteView } from "../types"
 export function ApprovalRoute({
     route,
     orientation = "vertical",
+    compact = false,
 }: {
     route: ApprovalRouteView
-    orientation?: "vertical" | "horizontal"
+    orientation?: "vertical" | "horizontal" | "responsive"
+    compact?: boolean
 }) {
     const horizontal = orientation === "horizontal"
+    const responsive = orientation === "responsive"
     return (
         <ol
             aria-label="完整审批人链条"
             className={cn(
                 "min-w-0 flex-1",
-                horizontal ? "flex gap-5 overflow-x-auto py-2" : "space-y-5",
+                responsive
+                    ? "grid grid-cols-1 gap-3 @min-[640px]/document:grid-cols-3 @min-[1000px]/document:grid-cols-4"
+                    : horizontal
+                      ? "flex gap-5 overflow-x-auto py-2"
+                      : "space-y-5",
             )}
         >
             {route.nodes.map((node, index) => {
@@ -64,12 +71,13 @@ export function ApprovalRoute({
                             horizontal
                                 ? "flex w-52 shrink-0 flex-col items-start gap-3 rounded-lg border border-border p-4 pr-8"
                                 : "grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1",
-                            horizontal &&
+                            responsive && "rounded-lg border border-border p-3",
+                            (horizontal || responsive) &&
                                 current &&
                                 "border-warning-border bg-warning-soft/40",
                         )}
                     >
-                        {index < route.nodes.length - 1 ? (
+                        {!responsive && index < route.nodes.length - 1 ? (
                             horizontal ? (
                                 <ArrowRightIcon
                                     aria-hidden="true"
@@ -103,6 +111,7 @@ export function ApprovalRoute({
                                 current ? "font-semibold" : "font-medium",
                             )}
                         >
+                            {responsive ? `${index + 1}. ` : null}
                             {displayReadableName(node.name, node.key) ||
                                 "审批节点未标注"}
                         </span>
@@ -134,7 +143,8 @@ export function ApprovalRoute({
                                 }
                             </time>
                         ) : null}
-                        {node.execution?.decisionReason ? (
+                        {node.execution?.decisionReason &&
+                        (!compact || failed) ? (
                             <p
                                 className={cn(
                                     "col-start-2 mt-1 rounded-lg border px-3 py-2 text-xs leading-5 whitespace-pre-wrap break-words",

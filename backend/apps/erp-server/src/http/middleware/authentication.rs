@@ -80,8 +80,22 @@ async fn validate_current_identity(
     }
 }
 
+/// 长连接在每次发送前复验 JWT 与当前会话；失效后不得继续发送。
+/// # 参数
+/// state 为 HTTP 状态，token 为请求头中原始 Bearer 值。
+/// # 返回
+/// 当前会话仍可用时成功。
+/// # 错误
+/// 无效、过期、账号停用或认证读取失败时返回认证响应。
+pub(crate) async fn revalidate_session(state: &HttpState, token: &str) -> Result<(), ApiResponse<()>> {
+    let engine = state.jwt_engine().await.map_err(|_| ApiResponse::system_error())?;
+    let payload = engine.verify_token(token).map_err(|_| ApiResponse::unauthorized())?;
+    validate_current_identity(state, &payload).await?;
+    Ok(())
+}
+
 /// 从标准 Authorization 头提取非空 Bearer token。
-pub(super) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
     (scheme.eq_ignore_ascii_case("Bearer")

@@ -34,6 +34,7 @@ CONTRACT_RECOGNITION = "erp-contract-recognition"
 BUSINESS_DOMAINS = {
     "erp-identity",
     "erp-audit",
+    "erp-notification",
     "erp-workflow",
     "erp-support",
     "erp-party",
