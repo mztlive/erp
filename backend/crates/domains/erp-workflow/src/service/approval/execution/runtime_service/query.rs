@@ -44,6 +44,7 @@ use crate::service::approval::{
     approval_action_roles_with_executor, approval_actor_is_active,
     approval_participant_permissions_with_executor, require_approval_management_with_executor,
 };
+use crate::service::work_item::approval_rework::open_rework_id;
 
 /// 实例列表行。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,6 +81,16 @@ pub struct RuntimeInstanceListItem {
     pub started_at: Option<i64>,
     /// 最近驳回原因摘要。
     pub latest_rejection_summary: Option<String>,
+}
+
+/// 已授权实例详情及当前读者持有的开放驳回责任。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeInstanceDetail {
+    /// 保持详情已有的实例字段布局。
+    #[serde(flatten)]
+    pub instance: RuntimeInstanceListItem,
+    /// 精确实例对应的开放待办；办理权限仍由任务详情与命令重验。
+    pub rework_task_id: Option<String>,
 }
 
 /// 实例列表页。
@@ -170,11 +181,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         &self,
         actor: &AuditActor,
         instance_id: &str,
-    ) -> Result<RuntimeInstanceListItem> {
+    ) -> Result<RuntimeInstanceDetail> {
         self.ensure_active_instance_reader(actor).await?;
         let subject = self.load_runtime_read_subject(instance_id).await?;
         self.ensure_ordinary_runtime_read(actor, &subject).await?;
-        RuntimeInstanceListItem::from_read_subject(&subject)
+        let instance = RuntimeInstanceListItem::from_read_subject(&subject)?;
+        let rework_task_id =
+            open_rework_id(&self.db, &subject.instance, actor.id(), &mut NoTransaction).await?;
+        Ok(RuntimeInstanceDetail { instance, rework_task_id })
     }
 
     /// 读取实例执行历史。

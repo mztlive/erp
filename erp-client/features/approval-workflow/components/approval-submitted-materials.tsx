@@ -63,13 +63,11 @@ export function ApprovalSubmittedMaterialsContent({
     view = "all",
     sourceRevisionId,
     attachmentContent,
-    embedded = false,
 }: {
     data: ApprovalMaterials
     instanceId: string
     view?: "all" | "source-sales" | "attachments"
     sourceRevisionId?: string
-    embedded?: boolean
     attachmentContent?: ReactNode
 }) {
     const {
@@ -103,13 +101,7 @@ export function ApprovalSubmittedMaterialsContent({
         displayReadableName(source.customer)
     const isSummary = view === "all" && !salesOrder
     return (
-        <article
-            className={
-                embedded
-                    ? "space-y-6"
-                    : "space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10"
-            }
-        >
+        <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
             <header className="space-y-1.5 border-b pb-5 pr-8">
                 {isSummary ? (
                     <>

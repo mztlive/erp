@@ -32,7 +32,7 @@ impl SalesTimelineReadService {
     ) -> Result<TaskTimeline> {
         query.limit()?;
         query.cursor()?;
-        let before = runtime.instance_detail(actor, id).await?;
+        let before = runtime.instance_detail(actor, id).await?.instance;
         let kind = DocumentType::try_from_code(
             before.document_type.as_deref().ok_or_else(|| Error::NotFound("审批来源不可用".into()))?,
         )?;
@@ -51,7 +51,7 @@ impl SalesTimelineReadService {
                 })
             })
             .await?;
-        let after = runtime.instance_detail(actor, id).await?;
+        let after = runtime.instance_detail(actor, id).await?.instance;
         if before.document_id != after.document_id || before.subject_version != after.subject_version {
             return Err(Error::ConflictError("审批资料已变化，请刷新".into()));
         }

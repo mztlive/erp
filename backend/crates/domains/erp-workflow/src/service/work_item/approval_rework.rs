@@ -124,6 +124,36 @@ pub async fn complete_document_rework(
     Ok(())
 }
 
+/// 返回原提交人当前可办理的精确实例待办引用。
+/// # 参数
+/// 数据库、已授权读取的审批实例、当前读者与执行器。
+/// # 返回
+/// 仅已驳回实例的原提交人持有匹配的开放任务时返回任务 ID。
+/// # 错误
+/// 仓储读取失败时返回错误；身份不匹配或历史任务返回 None。
+pub async fn open_rework_id(
+    db: &Database,
+    instance: &ApprovalProcessInstance,
+    actor: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    if instance.status != ApprovalProcessInstanceStatus::Rejected || instance.started_by.as_str() != actor {
+        return Ok(None);
+    }
+    let Some(item) = db.work_items().find_work_item(&task_id(&instance.typed_id()), executor).await? else {
+        return Ok(None);
+    };
+    Ok(item
+        .is_open_rework_for(
+            &instance.base.id,
+            document_type_of(instance.process_kind).as_str(),
+            instance.subject.subject_id(),
+            instance.subject_version,
+            actor,
+        )
+        .then(|| item.base.id.clone()))
+}
+
 fn task_id(instance_id: &ApprovalProcessInstanceId) -> String {
     format!("approval-rework:{instance_id}")
 }

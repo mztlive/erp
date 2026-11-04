@@ -2,9 +2,32 @@
 use erp_core::common::time::Instant;
 use erp_core::{Error, Result};
 
-use super::{WorkItem, WorkItemCloseData, WorkItemType};
+use super::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType};
 
 impl WorkItem {
+    /// 判断当前读者是否持有指定提交实例的开放驳回责任。
+    /// # 参数
+    /// 实例 ID、单据类型与 ID、提交版本和当前读者。
+    /// # 返回
+    /// 任务身份、原提交人和开放状态全部匹配时返回 true。
+    /// # 错误
+    /// 无；不完整或不匹配的责任返回 false。
+    pub fn is_open_rework_for(
+        &self,
+        instance_id: &str,
+        document_type: &str,
+        document_id: &str,
+        subject_version: u32,
+        actor: &str,
+    ) -> bool {
+        self.ensure_approval_rework().is_ok()
+            && self.status == WorkItemStatus::Open
+            && self.owner_user_id.as_deref() == Some(actor)
+            && self.responsibility_key() == Some(format!("approval_rework:{instance_id}").as_str())
+            && self.matches_business_object(document_type, document_id)
+            && self.subject_version == subject_version.to_string()
+    }
+
     /// 原提交人放弃继续处理本次驳回，保留单据及历史。
     /// # 参数
     /// `actor` 为原提交人，`reason` 为必填说明，`now` 为操作时间。
@@ -78,6 +101,60 @@ mod tests {
             "approval_rework:instance",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn rework_link_covers_every_registered_rejection_document() {
+        for document_type in [
+            "sales_order",
+            "voucher_sales_order",
+            "sales_change_order",
+            "purchase_order",
+            "purchase_change_order",
+            "stock_adjustment",
+            "sales_invoice_request",
+            "customer_receipt",
+            "purchase_payment_request",
+            "customer_refund",
+            "supplier_refund",
+            "receipt_reversal",
+            "payment_reversal",
+        ] {
+            let mut item = task();
+            item.business_object_type = document_type.to_owned();
+            assert!(
+                item.is_open_rework_for("instance", document_type, "order", 1, "submitter"),
+                "{document_type}"
+            );
+            item.complete_approval_rework("submitter", Instant::from_unix_secs(100)).unwrap();
+            assert!(
+                !item.is_open_rework_for("instance", document_type, "order", 1, "submitter"),
+                "{document_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn rework_link_requires_exact_open_responsibility() {
+        let mut item = task();
+        assert!(item.is_open_rework_for("instance", "sales_order", "order", 1, "submitter"));
+        for (instance, kind, document, version, actor) in [
+            ("other", "sales_order", "order", 1, "submitter"),
+            ("instance", "purchase_order", "order", 1, "submitter"),
+            ("instance", "sales_order", "other", 1, "submitter"),
+            ("instance", "sales_order", "order", 2, "submitter"),
+            ("instance", "sales_order", "order", 1, "other"),
+        ] {
+            assert!(!item.is_open_rework_for(instance, kind, document, version, actor));
+        }
+        item.abandon_approval_rework("submitter", "不再办理", Instant::from_unix_secs(100)).unwrap();
+        assert!(!item.is_open_rework_for("instance", "sales_order", "order", 1, "submitter"));
+        let mut completed = task();
+        completed.complete_approval_rework("submitter", Instant::from_unix_secs(100)).unwrap();
+        assert!(!completed.is_open_rework_for("instance", "sales_order", "order", 1, "submitter"));
+        let mut malformed = task();
+        malformed.owner_role = "other".into();
+        assert!(!malformed.is_open_rework_for("instance", "sales_order", "order", 1, "submitter"));
     }
 
     #[test]

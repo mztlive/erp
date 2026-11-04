@@ -7,11 +7,11 @@ import { useMutation } from "@tanstack/react-query"
 import { downloadFileAsset } from "@/features/file-assets/api"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
-import Link from "next/link"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
-import { WorkspaceApprovalRework } from "./workspace-approval-rework"
+import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
+import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
@@ -58,10 +58,7 @@ import {
 } from "../api/work-item-meta"
 import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts"
 import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
-import {
-    buildDocumentHref,
-    buildSalesOrderReworkHref,
-} from "../lib/destination"
+import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
 import {
     isApprovalWorkbenchTask,
@@ -106,6 +103,7 @@ import {
  */
 type WorkspaceTaskDetailProps = Readonly<{
     item: WorkspaceWorkItem
+    reworkTask?: WorkspaceWorkItem
     canReadSensitive?: boolean
     onDecisionApplied?: (
         view: ApprovalCommandView,
@@ -138,22 +136,12 @@ export function WorkspaceTaskDetail(props: WorkspaceTaskDetailProps) {
 
 function WorkspaceTaskSurface({
     item,
+    reworkTask,
     canReadSensitive = true,
     onDecisionApplied,
     grantedPermissions = [],
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
-    if (
-        item.workItemType === "APPROVAL_REWORK" &&
-        item.handlerKey === "approval_rework"
-    ) {
-        return (
-            <WorkspaceApprovalRework
-                item={item}
-                onTaskCompleted={onTaskCompleted}
-            />
-        )
-    }
     if (
         item.workItemType === "SALES_INQUIRY_PROCESSING" &&
         item.handlerKey === "sales_inquiry_processing" &&
@@ -219,8 +207,25 @@ function WorkspaceTaskSurface({
                         }
                     />
                 }
+                footer={
+                    reworkTask &&
+                    canReadSensitive && (
+                        <WorkspaceApprovalReworkActions
+                            item={reworkTask}
+                            onTaskCompleted={onTaskCompleted}
+                        />
+                    )
+                }
                 aria-label="采购付款申请任务"
             >
+                {item.approval?.status === "REJECTED" && (
+                    <WorkspaceRejectionNotice
+                        item={item}
+                        actionable={Boolean(
+                            reworkTask?.allowedActions.includes("PROCESS"),
+                        )}
+                    />
+                )}
                 <PurchasePaymentRequestTask
                     item={item}
                     onDecisionApplied={(view: ApprovalCommandView) =>
@@ -480,6 +485,8 @@ function WorkspaceTaskSurface({
     return (
         <WorkspaceDocumentTaskDetail
             item={item}
+            reworkTask={reworkTask}
+            onTaskCompleted={onTaskCompleted}
             canReadSensitive={canReadSensitive}
             grantedPermissions={grantedPermissions}
             onDecisionApplied={onDecisionApplied}
@@ -489,12 +496,14 @@ function WorkspaceTaskSurface({
 
 function WorkspaceDocumentTaskDetail({
     item,
+    reworkTask,
     canReadSensitive,
     onDecisionApplied,
     onTaskCompleted,
     grantedPermissions = [],
 }: {
     item: WorkspaceWorkItem
+    reworkTask?: WorkspaceWorkItem
     canReadSensitive: boolean
     grantedPermissions?: readonly string[]
     onTaskCompleted?: (workItemId: string) => void
@@ -549,13 +558,6 @@ function WorkspaceDocumentTaskDetail({
     )
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const reworkHref = canReadSensitive
-        ? buildSalesOrderReworkHref(
-              item,
-              grantedPermissions,
-              searchParams.get("returnTo"),
-          )
-        : null
     const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
     const [paper, setPaper] = useState<WorkspacePaperTarget | null>(null)
     useEffect(() => {
@@ -612,43 +614,41 @@ function WorkspaceDocumentTaskDetail({
         item.workItemType === "FULFILLMENT_OPERATION" &&
         item.businessObjectType === "delivery" &&
         item.deliveryLines !== undefined
-    const actions = reworkHref ? (
-        <Button
-            id={`workspace-sales-order-rework-${toAutomationIdSegment(item.workItemId)}`}
-            render={<Link href={reworkHref} />}
-        >
-            修改并重新提交
-            <ArrowUpRightIcon aria-hidden="true" />
-        </Button>
-    ) : approvalTask && !trackingTask ? (
-        <ApprovalActionBar
-            presentation="workspace"
-            showInlineOpinion={!purchaseApproval}
-            id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
-            allowedActions={item.allowedActions}
-            recoveryOptions={recoveryQuery.data?.actions ?? []}
-            workItemId={item.workItemId}
-            expectedTaskVersion={item.taskVersion}
-            instance={instance}
-            canReadSensitive={canReadSensitive}
-            hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
-            decisionContext={{
-                documentLabel: item.objectTitle,
-                amountLabel: primaryAmount?.value,
-                currentNodeLabel: instance?.currentNodeName,
-                impactSummary,
-            }}
-            onDecisionApplied={(view) =>
-                onDecisionApplied?.(view, item.workItemId)
-            }
-        />
-    ) : item.workItemType === "FULFILLMENT_OPERATION" ? (
-        <WorkspaceFulfillmentProcessAction
-            item={item}
-            grantedPermissions={grantedPermissions}
-            onTaskCompleted={(id) => onTaskCompleted?.(id)}
-        />
-    ) : null
+    const actions =
+        reworkTask && canReadSensitive ? (
+            <WorkspaceApprovalReworkActions
+                item={reworkTask}
+                onTaskCompleted={onTaskCompleted}
+            />
+        ) : approvalTask && !trackingTask ? (
+            <ApprovalActionBar
+                presentation="workspace"
+                showInlineOpinion={!purchaseApproval}
+                id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
+                allowedActions={item.allowedActions}
+                recoveryOptions={recoveryQuery.data?.actions ?? []}
+                workItemId={item.workItemId}
+                expectedTaskVersion={item.taskVersion}
+                instance={instance}
+                canReadSensitive={canReadSensitive}
+                hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
+                decisionContext={{
+                    documentLabel: item.objectTitle,
+                    amountLabel: primaryAmount?.value,
+                    currentNodeLabel: instance?.currentNodeName,
+                    impactSummary,
+                }}
+                onDecisionApplied={(view) =>
+                    onDecisionApplied?.(view, item.workItemId)
+                }
+            />
+        ) : item.workItemType === "FULFILLMENT_OPERATION" ? (
+            <WorkspaceFulfillmentProcessAction
+                item={item}
+                grantedPermissions={grantedPermissions}
+                onTaskCompleted={(id) => onTaskCompleted?.(id)}
+            />
+        ) : null
     const canOpenDocument = Boolean(
         !approvalDocument &&
         documentHref &&
@@ -724,12 +724,20 @@ function WorkspaceDocumentTaskDetail({
                         <p className="break-all text-sm text-muted-foreground">
                             {stripDocumentNumberPrefix(item.stableNumber)}
                         </p>
-                        {salesApproval && fullPage ? (
+                        {salesApproval &&
+                        fullPage &&
+                        (reworkTask ||
+                            ["RUNNING", "BLOCKED"].includes(
+                                instance?.status ?? "",
+                            )) ? (
                             <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                                 <p>
-                                    当前审批人：
+                                    {reworkTask
+                                        ? "当前处理人："
+                                        : "当前审批人："}
                                     <span className="text-foreground">
-                                        {instance?.currentAssigneeName ||
+                                        {reworkTask?.ownerUserLabel ||
+                                            instance?.currentAssigneeName ||
                                             item.ownerUserLabel ||
                                             "—"}
                                     </span>
@@ -812,6 +820,14 @@ function WorkspaceDocumentTaskDetail({
             footer={actions}
             aria-label="当前任务"
         >
+            {item.approval?.status === "REJECTED" && (
+                <WorkspaceRejectionNotice
+                    item={item}
+                    actionable={Boolean(
+                        reworkTask?.allowedActions.includes("PROCESS"),
+                    )}
+                />
+            )}
             <div className="@container/delivery-brief flex w-full min-w-0 flex-col">
                 {item.documentSummaryResolved &&
                 !item.summarySections?.length &&

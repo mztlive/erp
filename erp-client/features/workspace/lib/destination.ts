@@ -1,46 +1,5 @@
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
-import { hasPermission } from "@/lib/permissions"
-import { workspaceQueueHref } from "@/lib/workspace-detail-href"
-
 import { buildHandlerHref } from "./handler-destination"
-
-/** 驳回审批提供原销售单编辑入口；保存与重提资格由目标页按当前单据重验。 */
-export function buildSalesOrderReworkHref(
-    item: WorkspaceWorkItem,
-    grantedPermissions: readonly string[],
-    returnTo: string | null,
-): string | null {
-    if (
-        !["APPROVAL_INSTANCE", "DOCUMENT_APPROVAL"].includes(
-            item.workItemType,
-        ) ||
-        !["sales_order", "voucher_sales_order"].includes(
-            item.businessObjectType,
-        ) ||
-        item.approval?.status !== "REJECTED" ||
-        ![
-            "sales_order:detail",
-            "sales_order:update",
-            "sales_order:submit",
-        ].every((permission) => hasPermission(grantedPermissions, permission))
-    )
-        return null
-
-    const href = buildDocumentHref({ ...item, handlerKey: "approval_rework" })
-    if (!href) return null
-    const [path, query] = href.split("?", 2)
-    const params = new URLSearchParams(query)
-    params.set(
-        "returnTo",
-        workspaceQueueHref(
-            returnTo,
-            item.workItemType === "APPROVAL_INSTANCE"
-                ? "/workspace/approvals"
-                : "/workspace/tasks",
-        ),
-    )
-    return `${path}?${params.toString()}`
-}
 
 /**
  * 非审批任务跳转目标工作面的地址。审批决定在本页提交，不跳第二套待办页。

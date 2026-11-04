@@ -109,6 +109,7 @@ export function RequestDetailContent({
     approval,
     embedded,
     showHistory = true,
+    submissionVersion,
     workItemId,
 }: {
     request: PaymentRequest
@@ -116,6 +117,7 @@ export function RequestDetailContent({
     approval: ReactNode
     embedded: boolean
     showHistory?: boolean
+    submissionVersion?: number
     workItemId?: string
 }) {
     const fullPage = useWorkspaceTaskPage()
@@ -181,12 +183,16 @@ export function RequestDetailContent({
                 >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs text-muted-foreground">
-                            当前付款情况
+                            {submissionVersion
+                                ? `第 ${submissionVersion} 次提交时的付款情况`
+                                : "当前付款情况"}
                         </span>
-                        <StatusBadge
-                            label={requestStatusLabel[request.status]}
-                            tone={requestStatusTone[request.status]}
-                        />
+                        {!submissionVersion && (
+                            <StatusBadge
+                                label={requestStatusLabel[request.status]}
+                                tone={requestStatusTone[request.status]}
+                            />
+                        )}
                     </div>
                     <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
                         {(
@@ -285,6 +291,7 @@ export function RequestDetailContent({
                     <RequestMaterials
                         request={request}
                         workItemId={workItemId}
+                        submissionVersion={submissionVersion}
                     />
                 </ObjectSectionTabsPanel>
                 {showHistory && (

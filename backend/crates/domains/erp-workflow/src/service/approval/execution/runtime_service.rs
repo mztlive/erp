@@ -28,8 +28,8 @@ use bpm::model::{ApprovalCommandReceipt, ApprovalProcessInstance};
 use mongodb::Database;
 use persistence_core::Executor;
 pub use query::{
-    RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListPage, RuntimeInstanceListQuery,
-    RuntimeRecoveryOptionsView,
+    RuntimeInstanceDetail, RuntimeInstanceListCursor, RuntimeInstanceListItem, RuntimeInstanceListPage,
+    RuntimeInstanceListQuery, RuntimeRecoveryOptionsView,
 };
 use serde::{Deserialize, Serialize};
 pub use upgrade::UpgradeBindingCommand;
@@ -574,6 +574,22 @@ mod tests {
         assert_eq!(item.started_at, Some(10));
         assert_eq!(item.current_node_name.as_deref(), Some("仓储复核"));
         assert_eq!(item.current_assignee_name.as_deref(), Some("仓库1"));
+    }
+
+    #[test]
+    fn instance_detail_preserves_http_fields_with_optional_rework_reference() {
+        let (subject, _) = runtime_responsibility_fixture();
+        let instance = RuntimeInstanceListItem::from_read_subject(&subject).unwrap();
+        for task in [None, Some("approval-rework:inst-1".to_owned())] {
+            let detail =
+                super::RuntimeInstanceDetail { instance: instance.clone(), rework_task_id: task.clone() };
+            let body = serde_json::to_value(&detail).unwrap();
+            assert_eq!(body["instance_id"], "inst-1");
+            assert_eq!(body["document_id"], "adj-1");
+            assert_eq!(body["subject_version"], 1);
+            assert_eq!(body["rework_task_id"], serde_json::to_value(task).unwrap());
+            assert!(body.get("instance").is_none());
+        }
     }
 
     #[test]

@@ -7,12 +7,13 @@ import { getStartedApprovalUnreadCount } from "@/features/approval-workflow/api"
 import { useNotificationFeed } from "@/features/notifications/hooks/queries"
 import { hasPermission } from "@/lib/permissions"
 import type { AccountProfile } from "@/features/auth/api"
-import { getWorkItem } from "@/features/work-items/api"
-import { mapWorkspaceWorkItem } from "../api/dashboard"
 import { fetchWorkspaceDashboard } from "@/features/workspace/api/dashboard"
 import type { TodayWorkspaceQuery } from "@/features/workspace/types"
 import { queryKeyRoots } from "@/lib/query-key-roots"
-import { fetchWorkspaceApprovalDetail } from "../api/approval-detail"
+import {
+    fetchWorkspaceApprovalDetail,
+    fetchWorkspaceTaskDetail,
+} from "../api/approval-detail"
 
 const workspaceHomeKeys = {
     all: queryKeyRoots.workspaceHome,
@@ -66,10 +67,18 @@ export function useWorkspaceApprovalDetailQuery(
         ],
         queryFn: () => {
             if (!instanceId) throw new Error("审批信息暂不可用")
-            return fetchWorkspaceApprovalDetail(instanceId)
+            return fetchWorkspaceApprovalDetail(instanceId, {
+                canReadRework: hasPermission(
+                    profile?.permissions,
+                    "work_item:read",
+                ),
+            })
         },
         enabled: Boolean(instanceId && profile),
         retry: false,
+        staleTime: 0,
+        refetchOnMount: "always",
+        meta: { roleWorkbench: true },
     })
 }
 
@@ -92,13 +101,13 @@ export function useWorkspaceTaskDetailQuery(
         ],
         queryFn: async () => {
             if (!workItemId || !profile) throw new Error("任务信息暂不可用")
-            return mapWorkspaceWorkItem(
-                await getWorkItem(workItemId),
-                "Asia/Shanghai",
-            )
+            return fetchWorkspaceTaskDetail(workItemId)
         },
         enabled: enabled && Boolean(workItemId && profile),
         retry: false,
+        staleTime: 0,
+        refetchOnMount: "always",
+        meta: { roleWorkbench: true },
     })
 }
 

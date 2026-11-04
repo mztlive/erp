@@ -74,7 +74,8 @@ function WorkspaceDetailContent({
         profile.data,
     )
     const detail = approval ? approvalQuery : taskQuery
-    useWorkspaceDetailDocumentTitle(detail.data)
+    useWorkspaceDetailDocumentTitle(detail.data?.item)
+    const reworkTask = detail.data?.reworkTask
     const queueState = parseWorkspaceSearchParams(
         workspaceQueueParams(
             returnTo.split("?")[0],
@@ -195,7 +196,9 @@ function WorkspaceDetailContent({
                 />
             )}
             <WorkspaceProcessingLayout
-                item={detail.data}
+                item={detail.data.item}
+                reworkTask={reworkTask}
+                allowAutoNext={!approval}
                 autoNext={autoNext}
                 onAutoNextChange={setAutoNext}
                 onBack={back}
@@ -203,7 +206,8 @@ function WorkspaceDetailContent({
             >
                 <WorkspaceTaskDetail
                     key={id}
-                    item={detail.data}
+                    item={detail.data.item}
+                    reworkTask={reworkTask}
                     grantedPermissions={profile.data?.permissions ?? []}
                     onDecisionApplied={(result, completedId) =>
                         complete(completedId, result.nextOpenTask?.workItemId)

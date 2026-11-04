@@ -144,6 +144,7 @@ type RequestDto = {
     total_amount: string
     last_reason?: string | null
     lines: RequestLineDto[]
+    approval_instance_id?: string | null
     approval?: DocumentApprovalViewDto | null
     allowed_actions?: string[]
     purchase_previews?: PurchasePreviewDto[]
@@ -250,6 +251,7 @@ function mapRequest(dto: RequestDto): PaymentRequest {
         attachment_ids: dto.data.attachment_ids,
         attachments: dto.attachments ?? [],
         approval: dto.approval,
+        approval_instance_id: dto.approval_instance_id,
         allowed_actions: dto.allowed_actions ?? [],
         payments: dto.payments ?? [],
         credit_uses: dto.credit_uses ?? [],

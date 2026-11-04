@@ -44,8 +44,11 @@ export function WorkspacePurchaseApprovalStatus({
             )}
             <span className="text-xs text-muted-foreground">
                 {[
-                    displayActorName(instance?.currentAssigneeName) ||
-                        item.ownerUserLabel,
+                    !instance ||
+                    ["RUNNING", "BLOCKED"].includes(instance.status)
+                        ? displayActorName(instance?.currentAssigneeName) ||
+                          item.ownerUserLabel
+                        : null,
                     instance ? displayRound(instance.currentRoundNo) : null,
                 ]
                     .filter(Boolean)

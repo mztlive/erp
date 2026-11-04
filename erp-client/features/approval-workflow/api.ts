@@ -121,12 +121,15 @@ export const listApprovalInstances = async (
 }
 
 /** 按实例 ID 独立读取审批状态，授权由实例接口校验。 */
-export const getApprovalInstance = async (instanceId: string) =>
-    mapInstanceListItemDto(
-        await apiGet<ApprovalInstanceListItemDto>(
-            `/admin/approval-instances/${encodeURIComponent(instanceId)}`,
-        ),
-    )
+export const getApprovalInstance = async (instanceId: string) => {
+    const dto = await apiGet<
+        ApprovalInstanceListItemDto & { rework_task_id?: string | null }
+    >(`/admin/approval-instances/${encodeURIComponent(instanceId)}`)
+    return {
+        ...mapInstanceListItemDto(dto),
+        reworkTaskId: dto.rework_task_id ?? undefined,
+    }
+}
 
 /** 导航提醒只统计有未读进展的审批单。 */
 export const getStartedApprovalUnreadCount = async (): Promise<number> => {

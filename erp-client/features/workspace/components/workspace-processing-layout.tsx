@@ -17,25 +17,27 @@ import { WorkspaceMoney } from "./workspace-money"
 /** 所有审批、执行与只读跟踪入口共用完整办理页，动作仍由各业务模块提供。 */
 export function WorkspaceProcessingLayout({
     item,
+    reworkTask,
     children,
     autoNext,
+    allowAutoNext,
     onAutoNextChange,
     onBack,
     backLabel,
 }: {
     item: WorkspaceWorkItem
+    reworkTask?: WorkspaceWorkItem
     children: ReactNode
     autoNext: boolean
+    allowAutoNext: boolean
     onAutoNextChange: (value: boolean) => void
     onBack: () => void
     backLabel: string
 }) {
-    const rework = item.workItemType === "APPROVAL_REWORK"
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
     const approval = item.approval
-    const purchaseApproval = !rework && isPurchaseApprovalTask(item)
+    const purchaseApproval = isPurchaseApprovalTask(item)
     const salesApproval =
-        !rework &&
         ["sales_order", "voucher_sales_order"].includes(
             item.businessObjectType,
         ) &&
@@ -49,7 +51,7 @@ export function WorkspaceProcessingLayout({
     const payment = item.businessObjectType === "purchase_payment_request"
     const paymentArrangement =
         item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
-    const actionable = item.allowedActions.some((action) =>
+    const actionable = (reworkTask ?? item).allowedActions.some((action) =>
         ["PROCESS", "APPROVE", "REJECT"].includes(action),
     )
     return (
@@ -63,8 +65,7 @@ export function WorkspaceProcessingLayout({
             }
             summary={
                 <>
-                    {rework ||
-                    payment ||
+                    {payment ||
                     paymentArrangement ||
                     purchaseApproval ? undefined : (
                         <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
@@ -79,10 +80,24 @@ export function WorkspaceProcessingLayout({
                                 />
                             )}
                             <Fact
-                                label={approval ? "当前审批人" : "当前处理人"}
+                                label={
+                                    reworkTask || !approval
+                                        ? "当前处理人"
+                                        : ["RUNNING", "BLOCKED"].includes(
+                                                approval.status,
+                                            )
+                                          ? "当前审批人"
+                                          : "审批状态"
+                                }
                                 value={
-                                    approval?.currentAssigneeLabel ||
-                                    item.ownerUserLabel
+                                    reworkTask?.ownerUserLabel ||
+                                    (approval &&
+                                    !["RUNNING", "BLOCKED"].includes(
+                                        approval.status,
+                                    )
+                                        ? item.statusLabel
+                                        : approval?.currentAssigneeLabel ||
+                                          item.ownerUserLabel)
                                 }
                             />
                             <Fact
@@ -99,7 +114,7 @@ export function WorkspaceProcessingLayout({
             }
             aside={
                 <>
-                    {approval && !rework ? (
+                    {approval ? (
                         <WorkspaceApprovalProgress
                             vertical
                             instance={{
@@ -150,20 +165,22 @@ export function WorkspaceProcessingLayout({
                             </dl>
                         </section>
                     )}
-                    {!rework &&
-                        (item.nextActionHint ||
-                            item.impactSummary ||
-                            item.actionBlockers.length > 0) && (
-                            <section className="space-y-4 border-t border-border/60 pt-5 text-sm leading-6">
-                                <h3 className="font-medium">处理说明</h3>
-                                <WorkspaceTaskInstructions item={item} />
-                            </section>
-                        )}
+                    {(item.nextActionHint ||
+                        item.impactSummary ||
+                        item.actionBlockers.length > 0) && (
+                        <section className="space-y-4 border-t border-border/60 pt-5 text-sm leading-6">
+                            <h3 className="font-medium">处理说明</h3>
+                            <WorkspaceTaskInstructions item={item} />
+                        </section>
+                    )}
                 </>
             }
             footerLeading={
                 <>
-                    {actionable && item.workItemType !== "APPROVAL_INSTANCE" ? (
+                    {allowAutoNext &&
+                    actionable &&
+                    (reworkTask ||
+                        item.workItemType !== "APPROVAL_INSTANCE") ? (
                         <label
                             htmlFor="workspace-processing-auto-next"
                             className="mr-auto flex items-center gap-2 text-xs text-muted-foreground"
@@ -186,7 +203,7 @@ export function WorkspaceProcessingLayout({
                                 : "当前任务资料"}
                         </span>
                     )}
-                    {purchaseApproval && actionable && (
+                    {purchaseApproval && actionable && !reworkTask && (
                         <span className="text-xs text-muted-foreground">
                             本次操作审批整张采购单
                         </span>

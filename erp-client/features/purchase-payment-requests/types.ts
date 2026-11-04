@@ -76,6 +76,7 @@ export type RequestAttachment = {
     content_type?: string
 }
 export type PaymentRequest = {
+    approval_instance_id?: string | null
     id: string
     request_no: string
     version: number
@@ -199,6 +200,8 @@ export type PurchaseSnapshot = {
 }
 
 export type PaymentTaskContext = {
+    subjectVersion?: string
+    approvalProcessInstanceId?: string
     workItemId: string
     taskVersion: string
     workItemType: string
