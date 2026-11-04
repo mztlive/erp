@@ -136,7 +136,7 @@ export function WorkspaceTabBar({
     return (
         <div
             data-slot="workspace-tab-bar"
-            className="flex h-topbar shrink-0 items-center gap-2 border-b border-border bg-card px-workspace-inline md:px-page-inline min-[75rem]:px-page-inline-lg"
+            className="flex h-13 shrink-0 items-center gap-2 bg-sidebar px-workspace-inline md:px-page-inline min-[75rem]:px-page-inline-lg"
         >
             <div
                 ref={strip}
@@ -156,10 +156,10 @@ export function WorkspaceTabBar({
                             <div
                                 key={tab.id}
                                 className={cn(
-                                    "group/workspace-tab relative flex h-8 max-w-72 shrink-0 items-center rounded-md motion-safe:transition-colors",
+                                    "group/workspace-tab relative flex h-8 max-w-60 shrink-0 items-center rounded-md border motion-safe:transition-colors",
                                     selected
-                                        ? "bg-muted text-foreground"
-                                        : "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                                        ? "border-transparent bg-card text-foreground shadow-xs"
+                                        : "border-border/70 text-foreground/75 hover:border-border hover:bg-card/70 hover:text-foreground",
                                 )}
                             >
                                 <button
@@ -171,7 +171,7 @@ export function WorkspaceTabBar({
                                     tabIndex={selected ? 0 : -1}
                                     title={`${tab.title}${tab.dirty ? "（输入已修改）" : ""}`}
                                     className={cn(
-                                        "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1 pl-2.5 text-body-compact outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+                                        "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1 pl-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
                                         selected && "font-medium",
                                     )}
                                     onClick={() => onSelect(tab)}
@@ -184,7 +184,7 @@ export function WorkspaceTabBar({
                                             "size-3.5 shrink-0",
                                             selected
                                                 ? "text-foreground/75"
-                                                : "text-muted-foreground/75",
+                                                : "text-muted-foreground",
                                         )}
                                         aria-hidden="true"
                                     />

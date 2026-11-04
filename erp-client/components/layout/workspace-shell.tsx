@@ -4,10 +4,8 @@ import * as React from "react"
 import { Building2Icon } from "lucide-react"
 
 import { ErpAppShell } from "@/components/business"
-import {
-    WorkspaceSidebarAccount,
-    WorkspaceSidebarNav,
-} from "@/components/layout/workspace-sidebar-nav"
+import { WorkspaceSidebarNav } from "@/components/layout/workspace-sidebar-nav"
+import { WorkspaceTopNav } from "@/components/layout/workspace-top-nav"
 import { NavDeliveryOverlay } from "@/components/layout/nav-delivery-overlay"
 import { isWorkspaceFrame } from "@/lib/workspace-tabs"
 import { WorkspaceFrame } from "./workspace-frame"
@@ -48,8 +46,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                     showSidebarRail={false}
                     sidebarHeader={<WorkspaceSidebarHeader />}
                     sidebarContent={<WorkspaceSidebarNav />}
-                    sidebarFooter={<WorkspaceSidebarAccount />}
-                    topbar={tabbar}
+                    topbar={
+                        <>
+                            <WorkspaceTopNav />
+                            {tabbar}
+                        </>
+                    }
                 >
                     {panels}
                     <NavDeliveryOverlay />

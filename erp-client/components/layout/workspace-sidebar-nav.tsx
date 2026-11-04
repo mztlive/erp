@@ -2,20 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
-import { useQueryClient } from "@tanstack/react-query"
-import { ChevronsUpDownIcon, ListChecksIcon, LogOutIcon } from "lucide-react"
-
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { usePathname, useSearchParams } from "@/lib/navigation"
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -24,7 +11,6 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
 import { workspaceQueueView } from "@/lib/workspace-queue-routes"
 import { isNavItemActive } from "@/lib/nav-active"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -80,124 +66,6 @@ function badgeCountFor(
         case "warehouse-count":
             return undefined
     }
-}
-
-function displayInitial(
-    name: string | undefined,
-    account: string | undefined,
-): string {
-    const source = (name || account || "用").trim()
-    return source.slice(0, 1).toUpperCase() || "用"
-}
-
-export function WorkspaceSidebarAccount() {
-    const router = useRouter()
-    const queryClient = useQueryClient()
-    const profileQuery = useAccountProfileQuery()
-
-    const canViewBackgroundJobs = hasPermission(
-        profileQuery.data?.permissions,
-        "background_job:list",
-    )
-
-    const displayName =
-        profileQuery.data?.name || profileQuery.data?.account || "已登录"
-    const accountLabel = profileQuery.data?.account || "后台账号"
-
-    return (
-        <SidebarMenu>
-            {!profileQuery.isPending && !canViewBackgroundJobs && (
-                <SidebarMenuItem>
-                    <SidebarMenuButton
-                        id="workspace-sidebar-file-tasks"
-                        data-workspace-nav="account-data-transfers"
-                        render={<Link href="/account/data-transfers" />}
-                        tooltip="我的文件任务"
-                    >
-                        <ListChecksIcon aria-hidden="true" />
-                        <span>我的文件任务</span>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-            )}
-            <SidebarMenuItem>
-                <DropdownMenu>
-                    <DropdownMenuTrigger
-                        id="workspace-sidebar-account-trigger"
-                        render={
-                            <SidebarMenuButton
-                                size="lg"
-                                aria-label="账号菜单"
-                            />
-                        }
-                    >
-                        <Avatar size="sm" className="size-7 rounded-md">
-                            <AvatarFallback className="rounded-md bg-zinc-900 font-semibold text-zinc-100 text-xs dark:bg-zinc-100 dark:text-zinc-900">
-                                {displayInitial(
-                                    profileQuery.data?.name,
-                                    profileQuery.data?.account,
-                                )}
-                            </AvatarFallback>
-                        </Avatar>
-                        <span className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-                            <span className="truncate font-medium">
-                                {displayName}
-                            </span>
-                            <span className="truncate text-xs text-sidebar-foreground/70">
-                                {accountLabel}
-                            </span>
-                        </span>
-                        <ChevronsUpDownIcon
-                            className="ml-auto"
-                            aria-hidden="true"
-                        />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        side="top"
-                        align="start"
-                        className="min-w-56"
-                    >
-                        <DropdownMenuGroup>
-                            <DropdownMenuLabel>
-                                <div className="flex flex-col gap-0.5">
-                                    <span className="text-sm font-medium text-foreground">
-                                        {displayName}
-                                    </span>
-                                    <span className="text-xs font-normal text-muted-foreground">
-                                        {accountLabel}
-                                    </span>
-                                </div>
-                            </DropdownMenuLabel>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            id="workspace-sidebar-home-settings"
-                            onClick={() => router.push("/account/workbench")}
-                        >
-                            个人首页设置
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            id="workspace-sidebar-my-transfers"
-                            onClick={() =>
-                                router.push("/account/data-transfers")
-                            }
-                        >
-                            我的文件任务
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            id="workspace-sidebar-account-logout"
-                            variant="destructive"
-                            onClick={() =>
-                                logoutAndRedirect(router, queryClient)
-                            }
-                        >
-                            <LogOutIcon aria-hidden="true" />
-                            退出登录
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </SidebarMenuItem>
-        </SidebarMenu>
-    )
 }
 
 export function WorkspaceSidebarNav() {

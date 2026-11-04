@@ -19,12 +19,17 @@ import { QuantityValue } from "@/components/business"
 import { toast } from "@/components/ui/toast"
 import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import { SalesOrderCreateDueDateBatchBar } from "@/features/sales-orders/components/sales-order-create-due-date-batch-bar"
+import { SalesOrderCreatePriceBasisBatchMenu } from "./sales-order-create-price-basis-batch-menu"
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import { applyDueDateToLines } from "@/features/sales-orders/lib/sales-order-create-model"
 import { applySellablePicksToLines } from "@/features/sales-orders/lib/sales-order-create-sku-picks"
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
-import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
+import type {
+    SalesLineProcurementResponsibility,
+    SalesProcurementPriceBasis,
+} from "@/features/sales-orders/types"
+import { supplyReferencePrice } from "../lib/sales-procurement-price"
 
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
@@ -83,6 +88,38 @@ export function SalesOrderCreateLineItemsSection({
             })
         },
         [form],
+    )
+
+    const handleApplyPriceBasis = React.useCallback(
+        (basis: SalesProcurementPriceBasis) => {
+            if (
+                inquiryLocked ||
+                form.getFieldValue("nature") !== "physical_service"
+            )
+                return
+            const lines = form.getFieldValue("lineItems")
+            if (lines.length === 0) return
+            const next = lines.map((line) => ({
+                ...line,
+                procurementPriceBasis: basis,
+                procurementSupplyPrice: supplyReferencePrice(
+                    line.referencePrices,
+                    basis,
+                ),
+            }))
+            form.setFieldValue("lineItems", next)
+            const missingCount = next.filter(
+                (line) => !line.procurementSupplyPrice.trim(),
+            ).length
+            const label = basis === "BULK" ? "集采" : "一件代发"
+            toast.add({
+                title: "已批量设置取价方式",
+                description: `已将 ${next.length} 条明细设为${label}并更新供给单价。${missingCount > 0 ? `其中 ${missingCount} 条缺少对应参考价，请补填供给单价。` : ""}`,
+                type: "success",
+                timeout: missingCount > 0 ? 6000 : 3000,
+            })
+        },
+        [form, inquiryLocked],
     )
 
     return (
@@ -159,10 +196,18 @@ export function SalesOrderCreateLineItemsSection({
                                             添加商品
                                         </Button>
                                         {lines.length > 0 ? (
-                                            <SalesOrderCreateDueDateBatchBar
-                                                lineCount={lines.length}
-                                                onApply={handleApplyDueDate}
-                                            />
+                                            <>
+                                                <SalesOrderCreateDueDateBatchBar
+                                                    lineCount={lines.length}
+                                                    onApply={handleApplyDueDate}
+                                                />
+                                                <SalesOrderCreatePriceBasisBatchMenu
+                                                    lineCount={lines.length}
+                                                    onApply={
+                                                        handleApplyPriceBasis
+                                                    }
+                                                />
+                                            </>
                                         ) : null}
                                     </div>
                                 ) : null}
