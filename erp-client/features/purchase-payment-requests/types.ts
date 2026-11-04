@@ -58,11 +58,14 @@ export type PaymentCandidate = {
 }
 
 export type RequestLine = PaymentCandidate & {
+    purchase_items: PurchaseSnapshot["items"]
     requested_amount: string
     paid_amount: string
     closed_amount: string
     unpaid_amount: string
     current_open_amount?: string
+    current_total_amount?: string
+    current_settled_amount?: string
     current_reserved_amount?: string
     current_fulfillment?: string
     source_paid_amount: string
@@ -110,7 +113,31 @@ export type PaymentRequest = {
         created_at: number
     }[]
     payments: RequestPaymentRecord[]
+    review_lines?: PaymentReviewLine[]
     materials?: RequestMaterials
+}
+
+/** 当前采购范围内的核销与占用，不包含其他采购金额或回单权限。 */
+export type PaymentReviewLine = {
+    payable_account_id: string
+    due_dates: string[]
+    settlements: {
+        id: string
+        payment_id?: string | null
+        document_no?: string | null
+        method_label: string
+        occurred_at: number
+        amount: string
+        reversed_amount: string
+        effective_amount: string
+    }[]
+    other_requests: {
+        request_id: string
+        request_no: string
+        created_at: number
+        status: RequestStatus
+        amount: string
+    }[]
 }
 
 export type RequestPaymentRecord = {

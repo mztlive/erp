@@ -152,9 +152,12 @@ type RequestDto = {
     attachments?: RequestAttachment[]
     credit_uses?: PaymentRequest["credit_uses"]
     payments?: RequestPaymentRecord[]
+    review_lines?: PaymentRequest["review_lines"]
     current_lines?: {
         purchase_order_id: string
         current_open_total: string
+        current_gross_total: string
+        current_settled_total: string
         current_reserved_total: string
         receiving_progress: string
         source_changed: boolean
@@ -254,6 +257,7 @@ function mapRequest(dto: RequestDto): PaymentRequest {
         approval_instance_id: dto.approval_instance_id,
         allowed_actions: dto.allowed_actions ?? [],
         payments: dto.payments ?? [],
+        review_lines: dto.review_lines,
         credit_uses: dto.credit_uses ?? [],
         lines: dto.lines.map((line) => {
             const preview =
@@ -268,6 +272,15 @@ function mapRequest(dto: RequestDto): PaymentRequest {
                 purchase_order_id: line.purchase_order_id,
                 purchase_order_no: preview.purchase_no,
                 purchase_version: preview.revision_no,
+                purchase_items: preview.lines.map((item) => ({
+                    id: item.line_id,
+                    item_name: item.product_name || "费用",
+                    spec: item.specification ?? undefined,
+                    quantity: item.quantity ?? "1",
+                    unit: item.base_unit_code ?? undefined,
+                    unit_price: item.unit_cost_gross ?? item.gross_amount,
+                    amount: item.gross_amount,
+                })),
                 supplier_id: dto.supplier_id,
                 supplier_name: dto.supplier_name || preview.supplier_name,
                 our_company_id: dto.payer_party_id,
@@ -294,6 +307,8 @@ function mapRequest(dto: RequestDto): PaymentRequest {
                     moneyOptions,
                 ),
                 current_open_amount: current?.current_open_total,
+                current_total_amount: current?.current_gross_total,
+                current_settled_amount: current?.current_settled_total,
                 current_reserved_amount: current?.current_reserved_total,
                 current_fulfillment: current?.receiving_progress,
             }

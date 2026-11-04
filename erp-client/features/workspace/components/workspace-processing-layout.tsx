@@ -49,6 +49,8 @@ export function WorkspaceProcessingLayout({
             item.workItemType === "APPROVAL_INSTANCE" ||
             item.workItemType === "DOCUMENT_APPROVAL")
     const payment = item.businessObjectType === "purchase_payment_request"
+    const paymentReview =
+        payment && item.workItemType !== "SUPPLIER_PAYMENT_EXECUTION"
     const paymentArrangement =
         item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
     const actionable = (reworkTask ?? item).allowedActions.some((action) =>
@@ -56,7 +58,8 @@ export function WorkspaceProcessingLayout({
     )
     return (
         <WorkspaceTaskPageProvider
-            singleColumn={purchaseApproval || salesApproval}
+            singleColumn={purchaseApproval || salesApproval || paymentReview}
+            unframedBody={paymentReview}
             compact={paymentArrangement}
             fullWidth={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION" &&

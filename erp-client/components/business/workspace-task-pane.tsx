@@ -24,6 +24,7 @@ type WorkspaceTaskPageLayout = {
     compact?: boolean
     fullWidth?: boolean
     singleColumn?: boolean
+    unframedBody?: boolean
     summary?: ReactNode
     aside: ReactNode
     footerLeading?: ReactNode
@@ -181,6 +182,8 @@ export function WorkspaceTaskPane({
                                     "shrink-0 rounded-xl border border-border/60 bg-card shadow-xs",
                                 layout?.compact &&
                                     "mx-auto w-full max-w-7xl border-0 bg-transparent shadow-none",
+                                layout.unframedBody &&
+                                    "mx-auto w-full max-w-6xl border-0 bg-transparent shadow-none",
                             )}
                         >
                             <header
@@ -193,6 +196,8 @@ export function WorkspaceTaskPane({
                                     layout && "rounded-t-xl sm:px-6",
                                     layout?.compact &&
                                         "bg-transparent px-0 py-1 sm:px-0",
+                                    layout.unframedBody &&
+                                        "bg-transparent px-0 py-2 sm:px-0",
                                 )}
                             >
                                 {header}
@@ -235,6 +240,8 @@ export function WorkspaceTaskPane({
                                         ? "rounded-xl border border-border/60 bg-card shadow-xs"
                                         : "min-h-0 flex-1 overflow-auto",
                                     layout?.compact && "shadow-none",
+                                    layout.unframedBody &&
+                                        "border-0 bg-transparent shadow-none",
                                     "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto",
                                     layout.fullWidth &&
                                         "flex min-h-0 flex-1 flex-col overflow-hidden [&_[data-slot=page-scaffold]]:h-full",

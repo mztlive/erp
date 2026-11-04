@@ -35,6 +35,7 @@ export function RequestMaterials({
     submissionVersion,
     idPrefix = "ppr",
     summary = false,
+    concise = false,
     action,
 }: {
     request: PaymentRequest
@@ -42,6 +43,7 @@ export function RequestMaterials({
     submissionVersion?: number
     idPrefix?: string
     summary?: boolean
+    concise?: boolean
     action?: ReactNode
 }) {
     const query = usePaymentMaterialsQuery(
@@ -67,11 +69,11 @@ export function RequestMaterials({
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-base font-semibold">
-                    {summary ? "审核材料" : "采购、销售与审核材料"}
+                    {summary || concise ? "审核材料" : "采购、销售与审核材料"}
                 </h3>
                 {action}
             </div>
-            {!summary && (
+            {!summary && !concise && (
                 <p className="text-xs text-muted-foreground">
                     {request.status === "draft"
                         ? "以下为保存草稿时核对的生效来源；提交时将再次校验并冻结。"

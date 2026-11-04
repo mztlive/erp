@@ -10,6 +10,7 @@ use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrderRev
 use serde::Serialize;
 use serde_json::Value;
 
+use super::PaymentRequestReviewLine;
 use crate::finance::dto::DocumentApprovalView;
 
 /// 当前余额与履约事实独立于提交时快照返回。
@@ -54,6 +55,9 @@ pub struct PurchasePaymentRequestView {
     pub attachments: Vec<PaymentRequestAttachmentView>,
     pub payments: Vec<PaymentRequestPaymentView>,
     pub credit_uses: Vec<SupplierCreditUse>,
+    /// 仅详情与当前任务返回采购范围内的记录，列表不额外展开。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review_lines: Option<Vec<PaymentRequestReviewLine>>,
 }
 
 /// 本申请形成的实际付款与有效冲正金额，回单沿本申请资格读取。

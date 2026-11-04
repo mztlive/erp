@@ -70,6 +70,7 @@ impl PurchasePaymentRequestReadService {
                     }
                     let allowed_actions = this.allowed_actions(&actor, &request, executor).await?;
                     let mut view = this.view(request, executor).await?;
+                    view.review_lines = Some(this.review_lines(&view.request, executor).await?);
                     view.allowed_actions = allowed_actions;
                     Ok::<_, Error>(view)
                 })
@@ -104,6 +105,7 @@ impl PurchasePaymentRequestReadService {
                 Box::pin(async move {
                     let request = this.task_request(&actor_for_tx, &id, &expected, executor).await?;
                     let mut view = this.view(request, executor).await?;
+                    view.review_lines = Some(this.review_lines(&view.request, executor).await?);
                     if expected.work_item_type == WorkItemType::SupplierPaymentExecution
                         && expected.allowed_actions.contains(&WorkItemAllowedAction::Process)
                         && view.current_lines.iter().all(|line| !line.source_changed)
@@ -232,6 +234,7 @@ impl PurchasePaymentRequestReadService {
             attachments,
             payments,
             credit_uses,
+            review_lines: None,
         })
     }
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { getErrorMessage } from "@/lib/api"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
@@ -42,6 +43,7 @@ function CurrentPaymentTask({
     onDecisionApplied?: (view: ApprovalCommandView) => void
     onTaskCompleted?: () => void
 }) {
+    const fullPage = useWorkspaceTaskPage()
     const [completed, setCompleted] = useState(false)
     const scoped =
         item.workItemType !== "APPROVAL_INSTANCE" &&
@@ -85,7 +87,13 @@ function CurrentPaymentTask({
             </div>
         )
     return (
-        <div className="px-7 py-6">
+        <div
+            className={
+                fullPage && item.workItemType !== "SUPPLIER_PAYMENT_EXECUTION"
+                    ? undefined
+                    : "px-7 py-6"
+            }
+        >
             <RequestDetail
                 key={query.data.id}
                 request={query.data}
@@ -105,6 +113,7 @@ function CurrentPaymentTask({
 
 /** 历史审批复用付款申请明细，申请及审核材料均锁定本次提交版本。 */
 function PaymentSubmissionTask({ item }: { item: PaymentTaskContext }) {
+    const fullPage = useWorkspaceTaskPage()
     const version = Number(item.subjectVersion)
     const validVersion = Number.isSafeInteger(version) && version > 0
     const query = usePaymentSubmissionQuery(
@@ -150,7 +159,7 @@ function PaymentSubmissionTask({ item }: { item: PaymentTaskContext }) {
             </p>
         )
     return (
-        <div className="px-7 py-6">
+        <div className={fullPage ? undefined : "px-7 py-6"}>
             <RequestDetailContent
                 request={request}
                 embedded

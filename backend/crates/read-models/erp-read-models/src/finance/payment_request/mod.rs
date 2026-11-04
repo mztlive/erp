@@ -13,6 +13,8 @@ mod materials;
 mod payments;
 mod previews;
 mod query;
+mod review;
+mod review_dto;
 mod source;
 mod submissions;
 
@@ -25,6 +27,7 @@ use erp_identity::SharedRbacService;
 use erp_procurement::{PurchaseAccess, PurchaseDataScopePort};
 pub use materials::PaymentRequestMaterialReference;
 use mongodb::Database;
+pub use review_dto::*;
 pub use source::freeze_payment_request_source;
 
 use crate::finance::funds_scope::FundsAccess;

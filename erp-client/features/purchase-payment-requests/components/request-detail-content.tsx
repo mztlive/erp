@@ -20,6 +20,7 @@ import { RequestOrderDetails } from "./request-order-details"
 import { RequestMaterials } from "./request-materials"
 import { RequestPaymentHistory } from "./request-payment-history"
 import { RequestSubmissionHistory } from "./request-submission-history"
+import { RequestReviewContent } from "./request-review-content"
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
     return (
@@ -122,60 +123,23 @@ export function RequestDetailContent({
 }) {
     const fullPage = useWorkspaceTaskPage()
     const [section, setSection] = useState("details")
+    if (fullPage)
+        return (
+            <RequestReviewContent
+                request={request}
+                account={account}
+                approval={approval}
+                embedded={embedded}
+                showHistory={showHistory}
+                submissionVersion={submissionVersion}
+                workItemId={workItemId}
+            />
+        )
     const showClosed =
         request.status === "closed" ||
         compareDecimal(request.closed_amount, "0", 4) > 0
     return (
         <div className="@container/payment-detail min-w-0 space-y-5">
-            {fullPage && (
-                <WorkspaceTaskPageSlot slot="summary">
-                    <section
-                        aria-label="申请摘要"
-                        className="rounded-lg border border-border/60 bg-muted/15 p-4"
-                    >
-                        <dl className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-                            <div className="space-y-2">
-                                <dt className="text-xs text-muted-foreground">
-                                    申请金额
-                                </dt>
-                                <dd className="text-xl font-medium">
-                                    <MoneyValue value={request.total_amount} />
-                                </dd>
-                            </div>
-                            <div className="space-y-2">
-                                <dt className="text-xs text-muted-foreground">
-                                    申请人
-                                </dt>
-                                <dd className="text-sm">
-                                    {request.applicant_name}
-                                </dd>
-                            </div>
-                            <div className="space-y-2">
-                                <dt className="text-xs text-muted-foreground">
-                                    付款主体
-                                </dt>
-                                <dd className="text-sm">
-                                    {request.our_company_name}
-                                </dd>
-                            </div>
-                            <div className="space-y-2">
-                                <dt className="text-xs text-muted-foreground">
-                                    希望付款日
-                                </dt>
-                                <dd className="num text-sm">
-                                    {request.desired_payment_date}
-                                </dd>
-                            </div>
-                        </dl>
-                        <p className="mt-4 border-t border-border/60 pt-3 text-sm leading-6">
-                            <span className="text-muted-foreground">
-                                申请说明：
-                            </span>
-                            {request.description || "—"}
-                        </p>
-                    </section>
-                </WorkspaceTaskPageSlot>
-            )}
             <WorkspaceTaskPageSlot slot="aside">
                 <section
                     className="space-y-3 rounded-lg bg-muted/40 px-5 py-4"
