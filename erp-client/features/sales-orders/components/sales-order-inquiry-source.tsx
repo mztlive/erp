@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { ArrowUpRightIcon } from "lucide-react"
 
 export function SalesOrderInquirySource({
     source,
@@ -21,13 +22,19 @@ export function SalesOrderInquirySource({
             }
         >
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span>来源询价</span>
+                {!compact ? <span>来源询价</span> : null}
                 <Link
                     id="sales-order-inquiry-source"
-                    className="font-medium underline underline-offset-4"
+                    className="inline-flex items-center gap-1 font-medium underline underline-offset-4"
                     href={`/sales/inquiries/${encodeURIComponent(source.inquiry_id)}`}
                 >
-                    {compact ? "查看来源询价" : source.inquiry_no}
+                    {compact ? "来源询价" : source.inquiry_no}
+                    {compact ? (
+                        <ArrowUpRightIcon
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
+                    ) : null}
                 </Link>
                 <span>
                     需求第 {source.requirement_version} 版 · 第{" "}

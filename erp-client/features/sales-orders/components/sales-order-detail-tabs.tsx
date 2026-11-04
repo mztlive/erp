@@ -169,11 +169,6 @@ export function SalesOrderDetailTabs({
                 {navSection === "overview" ? (
                     <OverviewPanel
                         order={order}
-                        onOpenFulfillment={
-                            visibleNav.some((item) => item.id === "fulfillment")
-                                ? () => onSelectSection("fulfillment")
-                                : undefined
-                        }
                         related={
                             <section className="min-w-0 rounded-lg border border-border/70 p-4 md:p-5">
                                 <SalesTimeline

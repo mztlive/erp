@@ -1,12 +1,11 @@
 "use client"
 import { SalesOrderInquirySource } from "./sales-order-inquiry-source"
 
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import * as React from "react"
 
 import { SalesOrderSelectionSource } from "./sales-order-selection-source"
-import { MoneyValue, QuantityValue } from "@/components/business"
+import { MoneyValue } from "@/components/business"
 import {
     Table,
     TableBody,
@@ -30,11 +29,11 @@ function OverviewField({
     numeric?: boolean
 }) {
     return (
-        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-3">
-            <dt className="text-sm text-muted-foreground">{label}</dt>
+        <div className="min-w-0 space-y-1">
+            <dt className="text-xs leading-4 text-muted-foreground">{label}</dt>
             <dd
                 className={cn(
-                    "break-words text-sm leading-6",
+                    "break-words text-sm leading-5",
                     numeric && "num",
                 )}
             >
@@ -119,147 +118,63 @@ function CardLineItemsTable({ order }: { order: SalesOrderDetailView }) {
     )
 }
 
-/** 概览展示当前生效版本的商品摘要；完整交付明细在交付分区查看。 */
+/** 概览保留交易约定；实物服务明细统一在交付分区查看，卡券保留专用明细。 */
 export function OverviewPanel({
     order,
     related,
-    onOpenFulfillment,
 }: {
     order: SalesOrderDetailView
     related?: React.ReactNode
-    onOpenFulfillment?: () => void
 }) {
     const isCard = order.nature === "card_voucher"
     return (
         <div className="space-y-5">
-            <section
-                aria-labelledby="sales-order-lines-heading"
-                className="min-w-0 rounded-lg border border-border/70 p-4 md:p-5"
-            >
-                <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-                    <h2
-                        id="sales-order-lines-heading"
-                        className="text-lg font-semibold"
-                    >
-                        {isCard ? "卡券明细" : "销售摘要"}
-                        {order.currentRevisionNo != null ? (
-                            <span className="ml-3 text-xs font-normal text-muted-foreground">
-                                当前生效 v{order.currentRevisionNo}
-                            </span>
-                        ) : null}
-                    </h2>
-                    <div className="flex flex-wrap items-center gap-3">
+            {isCard ? (
+                <section
+                    aria-labelledby="sales-order-lines-heading"
+                    className="min-w-0 rounded-lg border border-border/70 p-4 md:p-5"
+                >
+                    <div className="mb-4 flex items-baseline justify-between gap-2">
+                        <h2
+                            id="sales-order-lines-heading"
+                            className="text-lg font-semibold"
+                        >
+                            卡券明细
+                        </h2>
                         <p className="text-xs text-muted-foreground">
                             共 {order.lineItems.length} 行
                         </p>
-                        {!isCard && onOpenFulfillment ? (
-                            <Button
-                                id="sales-order-overview-open-fulfillment"
-                                variant="outline"
-                                size="sm"
-                                onClick={onOpenFulfillment}
-                            >
-                                查看销售明细与交付
-                            </Button>
-                        ) : null}
                     </div>
-                </div>
-                {isCard ? (
                     <CardLineItemsTable order={order} />
-                ) : (
-                    <>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>商品 / 服务</TableHead>
-                                    <TableHead data-align="end">数量</TableHead>
-                                    <TableHead>交付期限</TableHead>
-                                    <TableHead data-align="end">
-                                        含税金额
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {order.lineItems.slice(0, 3).map((line) => (
-                                    <TableRow key={line.id}>
-                                        <TableCell className="min-w-40 whitespace-normal">
-                                            <span>{line.name}</span>
-                                            {line.isGift ? (
-                                                <Badge
-                                                    className="ml-2"
-                                                    variant="secondary"
-                                                >
-                                                    赠品
-                                                </Badge>
-                                            ) : null}
-                                            {line.sku &&
-                                            line.sku !== "无规格" ? (
-                                                <p className="mt-1 text-xs text-muted-foreground">
-                                                    {line.sku}
-                                                </p>
-                                            ) : null}
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <QuantityValue
-                                                value={line.quantity}
-                                                unit={line.unit}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            {line.dueDate || "未填写"}
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <MoneyValue
-                                                value={line.amountGross}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        {order.lineItems.length === 0 ? (
-                            <p className="py-4 text-sm text-muted-foreground">
-                                暂无销售明细
-                            </p>
-                        ) : null}
-                        {order.lineItems.length > 3 ? (
-                            <p className="mt-3 text-xs text-muted-foreground">
-                                已展示前 3 项，其余 {order.lineItems.length - 3}{" "}
-                                项请查看销售明细与交付。
-                            </p>
-                        ) : null}
-                    </>
-                )}
-                <div className="flex items-baseline justify-end gap-5 pt-5 text-sm">
-                    <span className="text-muted-foreground">合计（含税）</span>
-                    <MoneyValue
-                        value={order.amountGross}
-                        className="text-xl font-semibold"
-                    />
-                </div>
-            </section>
+                    <div className="flex items-baseline justify-end gap-5 pt-5 text-sm">
+                        <span className="text-muted-foreground">
+                            合计（含税）
+                        </span>
+                        <MoneyValue
+                            value={order.amountGross}
+                            className="text-xl font-semibold"
+                        />
+                    </div>
+                </section>
+            ) : null}
             <section
                 aria-labelledby="sales-order-transaction-heading"
-                className="rounded-lg border border-border/70 p-4 md:p-5"
+                className="@container/terms rounded-lg border border-border/70 p-4"
             >
                 <h2
                     id="sales-order-transaction-heading"
-                    className="mb-5 text-lg font-semibold"
+                    className="mb-4 text-sm font-semibold"
                 >
                     交易约定
                 </h2>
-                <dl className="grid gap-x-8 gap-y-4 2xl:grid-cols-2">
-                    <OverviewField
-                        label="关联合同"
-                        value={order.contractRevisionLabel || "无合同"}
-                    />
+                <dl className="grid gap-x-6 gap-y-4 @lg/terms:grid-cols-2 @4xl/terms:grid-cols-3">
                     <OverviewField
                         label="结算主体"
                         value={order.settlementEntity || "—"}
                     />
                     <OverviewField
-                        label="福利场景"
-                        value={welfareScenarioLabel(order.welfareScene) || "—"}
+                        label="关联合同"
+                        value={order.contractRevisionLabel || "无合同"}
                     />
                     <OverviewField
                         label="付款条件"
@@ -275,23 +190,17 @@ export function OverviewPanel({
                         numeric
                     />
                     <OverviewField
+                        label="福利场景"
+                        value={welfareScenarioLabel(order.welfareScene) || "—"}
+                    />
+                    <OverviewField
                         label="客户联系人"
                         value={order.customerContact ?? "—"}
                     />
                     <OverviewField
-                        label={
-                            isCard ? "履约期限（到期交付）" : "客户承诺期限摘要"
-                        }
+                        label={isCard ? "履约期限" : "承诺交期"}
                         value={order.fulfillmentDeadline || "—"}
                         numeric
-                    />
-                    <OverviewField
-                        label="当前销售版本"
-                        value={
-                            order.currentRevisionNo == null
-                                ? "尚未生效"
-                                : `v${order.currentRevisionNo}`
-                        }
                     />
                     {isCard ? (
                         <OverviewField
@@ -301,7 +210,7 @@ export function OverviewPanel({
                         />
                     ) : null}
                     {order.remark?.trim() ? (
-                        <div className="2xl:col-span-2">
+                        <div className="col-span-full border-t border-border/70 pt-3">
                             <OverviewField
                                 label="内部说明"
                                 value={
@@ -312,14 +221,29 @@ export function OverviewPanel({
                             />
                         </div>
                     ) : null}
+                    {order.inquirySource || order.selectionSource ? (
+                        <div className="col-span-full flex flex-wrap items-baseline gap-x-4 gap-y-2 border-t border-border/70 pt-3">
+                            <dt className="text-xs text-muted-foreground">
+                                业务来源
+                            </dt>
+                            <dd className="min-w-0 space-y-2">
+                                {order.inquirySource ? (
+                                    <SalesOrderInquirySource
+                                        source={order.inquirySource}
+                                        compact
+                                    />
+                                ) : null}
+                                {order.selectionSource ? (
+                                    <SalesOrderSelectionSource
+                                        source={order.selectionSource}
+                                        compact
+                                    />
+                                ) : null}
+                            </dd>
+                        </div>
+                    ) : null}
                 </dl>
             </section>
-            {order.inquirySource && (
-                <SalesOrderInquirySource source={order.inquirySource} compact />
-            )}
-            {order.selectionSource && (
-                <SalesOrderSelectionSource source={order.selectionSource} />
-            )}
             {related}
         </div>
     )
