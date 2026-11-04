@@ -127,8 +127,8 @@ export function SalesOrdersListFilterPanel({
         </ListWorkspaceFilterField>
     )
     return (
-        <div className="space-y-5">
-            <fieldset className="min-w-0 space-y-3">
+        <div className="space-y-4">
+            <fieldset className="min-w-0 space-y-2">
                 <legend className="mb-1 text-sm font-medium">基本条件</legend>
                 <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     {renderEnum({
@@ -167,7 +167,7 @@ export function SalesOrdersListFilterPanel({
                     </ListWorkspaceFilterField>
                 </div>
             </fieldset>
-            <fieldset className="min-w-0 space-y-3">
+            <fieldset className="min-w-0 space-y-2">
                 <legend className="mb-1 text-sm font-medium">组织与关联</legend>
                 <OrganizationUnitFilter
                     id="sales-orders-list-filter-org"

@@ -98,7 +98,7 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
     return (
         <MetricStrip
             columns={4}
-            className="items-end py-4"
+            className="items-end py-3"
             aria-label="销售单金额摘要"
         >
             <MetricItem

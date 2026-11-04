@@ -267,7 +267,10 @@ function SalesOrderDetailContent({
     }
 
     return (
-        <PageScaffold density="compact" className="min-h-0 overflow-hidden">
+        <PageScaffold
+            density="compact"
+            className="sales-order-detail-page min-h-0 overflow-hidden"
+        >
             {order.loadWarnings?.map((warning) => (
                 <BusinessFailureState
                     key={warning}

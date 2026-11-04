@@ -147,7 +147,7 @@ export function ListWorkspaceFilterBar({
     morePanelAriaLabel?: string
     /** 浮动筛选按页面启用，保留其余列表的既有展开形式。 */
     morePresentation?: "inline" | "popover"
-    moreSize?: "compact" | "wide"
+    moreSize?: "compact" | "wide" | "medium"
     commonFilters?: React.ReactNode
     /** 常用条件置于搜索之后、查询按钮之前；不影响默认的次行布局。 */
     primaryFilters?: React.ReactNode

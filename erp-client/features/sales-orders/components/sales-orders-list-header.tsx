@@ -30,7 +30,6 @@ export function SalesOrdersListHeader(props: {
         <>
             <header className={styles.header}>
                 <div>
-                    <p className={styles.eyebrow}>销售</p>
                     <h1 className={styles.title}>销售单</h1>
                     <p className={styles.description}>
                         查看销售单、履约进度与成交金额。

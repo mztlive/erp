@@ -133,6 +133,7 @@ export function SalesOrderDetailTabs({
             listLabel="销售单分区"
             listClassName="border-border/70"
             sidebar={group === "timeline" ? undefined : sidebar}
+            className="sales-order-detail-sections"
             scrollMode="panels"
             scrollResetKey={navSection}
             beforeContent={beforeContent}

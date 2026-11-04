@@ -1,13 +1,11 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
-import { Noto_Sans } from "next/font/google"
+import "@fontsource-variable/noto-sans-sc"
 import "./globals.css"
 import { cn } from "@/lib/utils"
 import { QueryProvider } from "@/components/providers/query-provider"
 import { AuthSessionProvider } from "@/components/providers/auth-session-provider"
 import { Toaster } from "@/components/ui/toast"
-
-const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" })
 
 export const metadata: Metadata = {
     title: {
@@ -25,12 +23,7 @@ export default function RootLayout({
     return (
         <html
             lang="zh-CN"
-            className={cn(
-                "h-full",
-                "antialiased",
-                "font-sans",
-                notoSans.variable,
-            )}
+            className={cn("h-full", "antialiased", "font-sans")}
             suppressHydrationWarning
         >
             <body className="min-h-full flex flex-col">

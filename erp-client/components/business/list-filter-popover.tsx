@@ -38,7 +38,7 @@ export function ListFilterPopover({
     open: boolean
     onOpenChange: (open: boolean) => void
     count: number
-    size?: "compact" | "wide"
+    size?: "compact" | "wide" | "medium"
     onApply: () => void
     onReset?: () => void
     resetId?: string
@@ -92,7 +92,11 @@ export function ListFilterPopover({
                     // 打开使用淡入缩放；关闭立即隐藏，避免 iframe 隐藏中断退场动画。
                     // 保持字段挂载，取消或切换 Tab 后仍保留未应用的筛选草稿。
                     "max-h-[min(44rem,var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0 data-open:duration-200 data-closed:hidden data-closed:animate-none motion-reduce:animate-none",
-                    size === "compact" ? "w-80" : "w-[36rem]",
+                    size === "compact"
+                        ? "w-80"
+                        : size === "medium"
+                          ? "w-[34rem] max-h-[min(38rem,var(--available-height))]"
+                          : "w-[36rem]",
                 )}
             >
                 <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">

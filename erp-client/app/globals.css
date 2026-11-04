@@ -46,7 +46,7 @@
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --font-sans:
-        var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont,
+        "Noto Sans SC Variable", system-ui, -apple-system, BlinkMacSystemFont,
         "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB",
         "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
     --font-mono:
@@ -568,5 +568,74 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow: auto;
+    }
+}
+
+/* 销售单桌面密度：留出订单阅读空间，不缩放整页或改变其他列表。 */
+.sales-orders-list-page {
+    padding-block: 1rem;
+}
+
+.sales-orders-list-page > header {
+    padding-bottom: 0.75rem;
+}
+
+.sales-orders-list-page > header h1 {
+    font-size: 1.5rem;
+    line-height: 2rem;
+}
+
+.sales-orders-list-page [data-slot="list-workspace-toolbar"] {
+    padding-block: 0.625rem;
+}
+
+.sales-orders-list-page [data-slot="list-workspace-views"] button {
+    min-height: 2.5rem;
+    font-size: 0.875rem;
+}
+
+.sales-orders-list-page [data-slot="input-group"],
+.sales-orders-list-page [data-slot="button"],
+.sales-orders-list-page [role="combobox"] {
+    font-size: 0.875rem;
+}
+
+.sales-orders-list-page [data-slot="table-cell"] {
+    padding-block: 0.625rem;
+}
+
+.sales-order-detail-page {
+    padding-block: 1rem;
+}
+
+/* 工作页位于 iframe 内；按实际工作页高度切换，宽屏矮窗口也必须可读。 */
+@media (max-height: 860px) {
+    .sales-order-detail-page {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        display: block;
+    }
+
+    .sales-order-detail-page > * + * {
+        margin-top: 0.75rem;
+    }
+
+    .sales-order-detail-sections {
+        overflow: visible;
+        flex: none;
+    }
+
+    .sales-order-detail-sections [role="tablist"] {
+        position: sticky;
+        top: 0;
+    }
+
+    .sales-order-detail-sections [id$="-body-scroll"],
+    .sales-order-detail-sections [id$="-content-scroll"],
+    .sales-order-detail-sections [id$="-sidebar-scroll"] {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+        grid-template-rows: auto;
     }
 }

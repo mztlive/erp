@@ -134,6 +134,7 @@ export function SalesOrdersListFilterBar({
                     />
                 </>
             }
+            moreSize="medium"
             morePanel={
                 <SalesOrdersListFilterPanel
                     draft={f.filterDraft}

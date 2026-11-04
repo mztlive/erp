@@ -132,7 +132,10 @@ export function SalesOrdersListPage() {
     )
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
+        <PageScaffold
+            density="compact"
+            className={`${styles.page} sales-orders-list-page`}
+        >
             <SalesOrdersListHeader
                 isError={ordersQuery.isError}
                 isFetching={ordersQuery.isFetching}
