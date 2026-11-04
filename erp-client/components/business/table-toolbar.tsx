@@ -121,7 +121,7 @@ export function TableToolbar({
         <div
             data-slot="table-toolbar"
             className={cn(
-                "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5 text-[13px] [&:not(:has([data-table-toolbar-content]:not(:empty)))]:hidden",
+                "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-table-toolbar-block text-[13px] [&:not(:has([data-table-toolbar-content]:not(:empty)))]:hidden",
                 "[&_[data-slot=button]]:h-8 [&_[data-slot=button]]:text-[13px] [&_[data-slot=button]]:shadow-none",
                 className,
             )}

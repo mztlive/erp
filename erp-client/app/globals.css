@@ -152,9 +152,13 @@
     --color-row-selected: var(--row-selected);
     --color-row-striped: var(--row-striped);
     --color-grid: var(--grid);
+}
 
+/* 尺寸保留为运行时变量，供高度断点覆盖；不能放入 @theme inline 固化成字面值。 */
+@theme {
     /* 应用壳尺寸 —— 对应 erp-ui-design 2.2 */
     --spacing-topbar: 3rem; /* 顶部全局栏 48px */
+    --spacing-workspace-topbar: 3.5rem;
     --spacing-control-xs: 1.5rem; /* 24px 极小控件 */
     --spacing-control-sm: 2rem; /* 32px 紧凑控件 / 输入框内图标按钮 */
     --spacing-control: 2.25rem; /* 36px 默认控件 / 输入框 */
@@ -163,6 +167,8 @@
     --spacing-page-inline-lg: 2rem; /* 32px 桌面内容区内边距 */
     --spacing-page-block: 1.25rem; /* 20px 内容区纵向边距 */
     --spacing-page-block-lg: 1.5rem; /* 24px 桌面内容区纵向边距 */
+    --spacing-page-gap: 1.5rem;
+    --spacing-page-gap-compact: 1rem;
     --spacing-workspace-inline: 1rem; /* 列表工作面窄窗口边距 */
     --spacing-workspace-block-start-lg: 1.25rem; /* 列表页签栏下方页头间距 20px */
     --spacing-workspace-header-block-end: 1.875rem;
@@ -175,6 +181,8 @@
     --spacing-row-comfortable: 4rem; /* 舒适密度 / 双行单元格 64px */
     --spacing-table-header: 2.75rem; /* 列表表头 44px */
     --spacing-table-header-block: 0.5rem; /* 表头纵向留白 8px */
+    --spacing-table-toolbar-block: 0.625rem;
+    --spacing-table-pagination-block: 1rem;
     --spacing-object-tab: 2.75rem; /* 对象中心分区导航 44px */
     --spacing-table-cell-inline: 1rem; /* 表格单元格横向留白 */
     --spacing-table-cell-block: 0.25rem; /* 高密度单元格纵向留白 */
@@ -204,6 +212,17 @@
     --spacing-detail: 48rem; /* 右侧半屏详情抽屉 768px；读完主事实 */
     --spacing-shell: 90rem; /* 基准工作宽度 1440px */
 
+    --spacing-overlay-padding: 1.5rem;
+    --spacing-overlay-gap: 1.5rem;
+    --spacing-sheet-inline: 1.75rem;
+    --spacing-sheet-start: 2.5rem;
+    --spacing-sheet-end: 1.5rem;
+    --spacing-sheet-footer: 1rem;
+    --spacing-filter-block: 0.75rem;
+    --spacing-filter-body: 1rem;
+    --spacing-filter-max: 44rem;
+    --spacing-filter-medium-max: 38rem;
+
     /* 页面角色字号；业务组件只消费这些角色或 Tailwind 标准字号。 */
     --text-2xs: 0.625rem; /* 10px */
     --text-tiny: 0.6875rem; /* 11px */
@@ -217,7 +236,9 @@
     --text-value-hero--line-height: 3rem;
     --text-login-title: 1.75rem; /* 28px */
     --text-login-title--line-height: 2.25rem;
+}
 
+@theme inline {
     /* 比例协调的圆角阶梯体系 */
     --radius-xs: 0.125rem; /* 2px */
     --radius-sm: 0.25rem; /* 4px - 状态点/极小标记 */
@@ -571,37 +592,57 @@
     }
 }
 
-/* 销售单桌面密度：留出订单阅读空间，不缩放整页或改变其他列表。 */
-.sales-orders-list-page {
-    padding-block: 1rem;
+/* 桌面密度按当前文档的可用高度切换，iframe 内自动扣除外层页签。
+ * 收紧留白与控件高度；不修改根字号，不缩放整页，不压缩手机触控区域。 */
+@media (min-width: 48rem) and (max-height: 960px) {
+    :root {
+        --spacing-topbar: 2.75rem;
+        --spacing-workspace-topbar: 3rem;
+        --spacing-control: 2rem;
+        --spacing-control-lg: 2.25rem;
+        --spacing-page-inline: 1.25rem;
+        --spacing-page-inline-lg: 1.5rem;
+        --spacing-page-block: 1rem;
+        --spacing-page-block-lg: 1rem;
+        --spacing-page-gap: 1rem;
+        --spacing-page-gap-compact: 0.75rem;
+        --spacing-workspace-block-start-lg: 1rem;
+        --spacing-workspace-header-block-end: 0.75rem;
+        --spacing-workspace-toolbar-block: 0.625rem;
+        --spacing-workspace-view: 2.5rem;
+        --spacing-workspace-view-gap: 1.25rem;
+        --spacing-row-comfortable: 3.5rem;
+        --spacing-table-header: 2.5rem;
+        --spacing-table-cell-block-comfortable: 0.5rem;
+        --spacing-table-toolbar-block: 0.5rem;
+        --spacing-table-pagination-block: 0.75rem;
+        --spacing-overlay-padding: 1.25rem;
+        --spacing-overlay-gap: 1rem;
+        --spacing-sheet-inline: 1.25rem;
+        --spacing-sheet-start: 2rem;
+        --spacing-sheet-end: 1rem;
+        --spacing-sheet-footer: 0.75rem;
+        --spacing-filter-block: 0.5rem;
+        --spacing-filter-body: 0.75rem;
+        --spacing-filter-max: 32rem;
+        --spacing-filter-medium-max: 32rem;
+        --text-page-title: 1.5rem;
+        --text-page-title--line-height: 2rem;
+    }
 }
 
-.sales-orders-list-page > header {
-    padding-bottom: 0.75rem;
-}
-
-.sales-orders-list-page > header h1 {
-    font-size: 1.5rem;
-    line-height: 2rem;
-}
-
-.sales-orders-list-page [data-slot="list-workspace-toolbar"] {
-    padding-block: 0.625rem;
-}
-
-.sales-orders-list-page [data-slot="list-workspace-views"] button {
-    min-height: 2.5rem;
-    font-size: 0.875rem;
-}
-
-.sales-orders-list-page [data-slot="input-group"],
-.sales-orders-list-page [data-slot="button"],
-.sales-orders-list-page [role="combobox"] {
-    font-size: 0.875rem;
-}
-
-.sales-orders-list-page [data-slot="table-cell"] {
-    padding-block: 0.625rem;
+@media (min-width: 48rem) and (max-height: 720px) {
+    :root {
+        --spacing-page-block: 0.75rem;
+        --spacing-page-block-lg: 0.75rem;
+        --spacing-workspace-block-start-lg: 0.75rem;
+        --spacing-workspace-header-block-end: 0.5rem;
+        --spacing-workspace-toolbar-block: 0.5rem;
+        --spacing-row-comfortable: 3.25rem;
+        --spacing-overlay-padding: 1rem;
+        --spacing-filter-max: 28rem;
+        --spacing-filter-medium-max: 28rem;
+    }
 }
 
 .sales-order-detail-page {

@@ -88,18 +88,24 @@ export function ListFilterPopover({
                 aria-label={label}
                 align="end"
                 sideOffset={8}
+                collisionPadding={8}
+                collisionAvoidance={{
+                    side: "flip",
+                    align: "shift",
+                    fallbackAxisSide: "none",
+                }}
                 className={cn(
                     // 打开使用淡入缩放；关闭立即隐藏，避免 iframe 隐藏中断退场动画。
                     // 保持字段挂载，取消或切换 Tab 后仍保留未应用的筛选草稿。
-                    "max-h-[min(44rem,var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0 data-open:duration-200 data-closed:hidden data-closed:animate-none motion-reduce:animate-none",
+                    "max-h-[min(var(--spacing-filter-max),calc(100dvh-2rem),var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0 data-open:duration-200 data-closed:hidden data-closed:animate-none motion-reduce:animate-none",
                     size === "compact"
                         ? "w-80"
                         : size === "medium"
-                          ? "w-[34rem] max-h-[min(38rem,var(--available-height))]"
+                          ? "w-[34rem] max-h-[min(var(--spacing-filter-medium-max),calc(100dvh-2rem),var(--available-height))]"
                           : "w-[36rem]",
                 )}
             >
-                <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
+                <div className="flex shrink-0 items-center justify-between border-b px-4 py-filter-block">
                     <PopoverTitle className="text-sm font-semibold">
                         {listFilterText.more}
                     </PopoverTitle>
@@ -123,10 +129,10 @@ export function ListFilterPopover({
                         onApply()
                     }}
                 >
-                    <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
+                    <div className="min-h-0 overflow-y-auto overscroll-contain p-filter-body">
                         {children}
                     </div>
-                    <div className="flex shrink-0 items-center gap-2 border-t bg-popover px-4 py-3">
+                    <div className="flex shrink-0 items-center gap-2 border-t bg-popover px-4 py-filter-block">
                         {onReset && (
                             <Button
                                 id={resetId ?? `${idPrefix}-reset-more`}

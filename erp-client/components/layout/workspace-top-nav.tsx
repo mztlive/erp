@@ -18,7 +18,7 @@ export function WorkspaceTopNav({
     return (
         <header
             data-slot="workspace-top-nav"
-            className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b border-border bg-card px-workspace-inline md:gap-3 md:px-page-inline min-[75rem]:px-page-inline-lg"
+            className="flex h-workspace-topbar min-w-0 shrink-0 items-center gap-2 border-b border-border bg-card px-workspace-inline md:gap-3 md:px-page-inline min-[75rem]:px-page-inline-lg"
         >
             <SidebarTrigger
                 id="workspace-topbar-navigation-trigger"
