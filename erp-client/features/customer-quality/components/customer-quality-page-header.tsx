@@ -73,31 +73,35 @@ export function CustomerQualityPageHeader({
                         ) : null}
                         {refreshing ? "刷新中" : "刷新"}
                     </LoadingButton>
-                    <GuardedBusinessAction
-                        id="customers-quality-export"
-                        loading={exportPending}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                            !canExport || filteredTotal === 0 || exportPending
-                        }
-                        reason={
-                            !canExport
-                                ? "当前角色无导出权限"
-                                : filteredTotal === 0
-                                  ? "当前没有客户结果可导出"
-                                  : exportPending
-                                    ? "导出任务进行中"
-                                    : undefined
-                        }
-                        onClick={() => void onExport()}
-                    >
-                        {!exportPending ? (
-                            <DownloadIcon className="size-4" aria-hidden />
-                        ) : null}
-                        {exportPending ? "导出中…" : "导出"}
-                    </GuardedBusinessAction>
+                    {canExport && (
+                        <GuardedBusinessAction
+                            id="customers-quality-export"
+                            loading={exportPending}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                                !canExport ||
+                                filteredTotal === 0 ||
+                                exportPending
+                            }
+                            reason={
+                                !canExport
+                                    ? "当前角色无导出权限"
+                                    : filteredTotal === 0
+                                      ? "当前没有客户结果可导出"
+                                      : exportPending
+                                        ? "导出任务进行中"
+                                        : undefined
+                            }
+                            onClick={() => void onExport()}
+                        >
+                            {!exportPending ? (
+                                <DownloadIcon className="size-4" aria-hidden />
+                            ) : null}
+                            {exportPending ? "导出中…" : "导出"}
+                        </GuardedBusinessAction>
+                    )}
                 </div>
             </div>
         </ListWorkspaceHeader>

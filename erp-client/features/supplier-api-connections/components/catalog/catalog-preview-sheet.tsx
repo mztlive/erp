@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { useState } from "react"
 import Link from "next/link"
 import { ArrowUpRightIcon, ImageOffIcon } from "lucide-react"
@@ -141,12 +143,20 @@ export function CatalogPreviewSheet({
             footer={
                 <>
                     {blocker ? (
-                        <p
-                            id="supplier-catalog-preview-selection-blocker"
-                            className="w-full text-xs text-muted-foreground"
+                        <PermissionGuard
+                            permission={[
+                                "supplier_api_connection:catalog_sync",
+                                "supplier_offering:create",
+                                "supplier_offering_cost:detail",
+                            ]}
                         >
-                            {blocker}
-                        </p>
+                            <p
+                                id="supplier-catalog-preview-selection-blocker"
+                                className="w-full text-xs text-muted-foreground"
+                            >
+                                {blocker}
+                            </p>
+                        </PermissionGuard>
                     ) : null}
                     <Button
                         id="supplier-catalog-preview-footer-close"
@@ -172,28 +182,36 @@ export function CatalogPreviewSheet({
                             />
                         </Button>
                     ) : null}
-                    <LoadingButton
-                        id="supplier-catalog-preview-select"
-                        variant={selected ? "outline" : "default"}
-                        disabled={Boolean(blocker) || choice.busy}
-                        loading={choice.saving}
-                        aria-describedby={
-                            blocker
-                                ? "supplier-catalog-preview-selection-blocker"
-                                : undefined
-                        }
-                        onClick={() =>
-                            choice.change(
-                                {
-                                    ...choice.rowSelection,
-                                    [item.id]: !selected,
-                                },
-                                [item],
-                            )
-                        }
+                    <PermissionGuard
+                        permission={[
+                            "supplier_api_connection:catalog_sync",
+                            "supplier_offering:create",
+                            "supplier_offering_cost:detail",
+                        ]}
                     >
-                        {selected ? "取消选择" : "加入本次选择"}
-                    </LoadingButton>
+                        <LoadingButton
+                            id="supplier-catalog-preview-select"
+                            variant={selected ? "outline" : "default"}
+                            disabled={Boolean(blocker) || choice.busy}
+                            loading={choice.saving}
+                            aria-describedby={
+                                blocker
+                                    ? "supplier-catalog-preview-selection-blocker"
+                                    : undefined
+                            }
+                            onClick={() =>
+                                choice.change(
+                                    {
+                                        ...choice.rowSelection,
+                                        [item.id]: !selected,
+                                    },
+                                    [item],
+                                )
+                            }
+                        >
+                            {selected ? "取消选择" : "加入本次选择"}
+                        </LoadingButton>
+                    </PermissionGuard>
                 </>
             }
         >

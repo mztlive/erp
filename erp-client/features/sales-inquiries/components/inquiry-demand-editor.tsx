@@ -656,36 +656,38 @@ function DemandEditorContent({
                                 取消修改
                             </Button>
                         )}
-                        <Button
-                            id={
-                                revision
-                                    ? "sales-inquiry-revision-submit"
-                                    : "sales-inquiry-save-demand"
-                            }
-                            type="submit"
-                            variant={footerActions ? "outline" : "default"}
-                            disabled={
-                                busy ||
-                                !canSave ||
-                                Boolean(
-                                    revision &&
-                                    inquiry &&
-                                    (inquiry.version !== editVersion ||
-                                        ![
-                                            "awaiting_sales",
-                                            "confirmed",
-                                        ].includes(inquiry.status)),
-                                )
-                            }
-                        >
-                            {command.isPending
-                                ? "正在提交…"
-                                : revision
-                                  ? "提交修改并重新询价"
-                                  : inquiry
-                                    ? "保存需求"
-                                    : "创建询价草稿"}
-                        </Button>
+                        {canSave && (
+                            <Button
+                                id={
+                                    revision
+                                        ? "sales-inquiry-revision-submit"
+                                        : "sales-inquiry-save-demand"
+                                }
+                                type="submit"
+                                variant={footerActions ? "outline" : "default"}
+                                disabled={
+                                    busy ||
+                                    !canSave ||
+                                    Boolean(
+                                        revision &&
+                                        inquiry &&
+                                        (inquiry.version !== editVersion ||
+                                            ![
+                                                "awaiting_sales",
+                                                "confirmed",
+                                            ].includes(inquiry.status)),
+                                    )
+                                }
+                            >
+                                {command.isPending
+                                    ? "正在提交…"
+                                    : revision
+                                      ? "提交修改并重新询价"
+                                      : inquiry
+                                        ? "保存需求"
+                                        : "创建询价草稿"}
+                            </Button>
+                        )}
                         {footerActions}
                     </div>
                 </div>

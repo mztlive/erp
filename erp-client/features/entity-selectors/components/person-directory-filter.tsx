@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 
 import { Button } from "@/components/ui/button"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
@@ -67,6 +69,11 @@ export function PersonDirectoryFilter({
     orgUnitIds = [],
     includeDescendants = false,
 }: PersonDirectoryFilterProps) {
+    const account = useAccountProfileQuery()
+    const canRead = hasPermission(
+        account.data?.permissions,
+        `${category}_person:list`,
+    )
     const search = useSearchInput()
     const ids = selectedIds(value)
     const [pageCount, setPageCount] = React.useState(1)
@@ -78,14 +85,17 @@ export function PersonDirectoryFilter({
         includeDescendants: orgUnitIds.length > 0 && includeDescendants,
     })
     const effectivePageCount = pageKey === filterKey ? pageCount : 1
-    const list = usePersonDirectoryList({
-        category,
-        q: search.input,
-        orgUnitIds,
-        includeDescendants,
-        pageCount: effectivePageCount,
-    })
-    const selected = usePersonDirectorySelected(category, ids)
+    const list = usePersonDirectoryList(
+        {
+            category,
+            q: search.input,
+            orgUnitIds,
+            includeDescendants,
+            pageCount: effectivePageCount,
+        },
+        canRead,
+    )
+    const selected = usePersonDirectorySelected(category, ids, canRead)
     const pages =
         list.isError || list.isFetching ? [] : (list.data?.pages ?? [])
     const names = new Map<string, string>()
@@ -128,6 +138,8 @@ export function PersonDirectoryFilter({
           : list.isFetching
             ? "正在加载人员"
             : "没有符合条件的人员"
+
+    if (!canRead) return null
 
     return (
         <div className={hideLabel ? "min-w-0" : "min-w-0 space-y-1.5"}>

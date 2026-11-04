@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { BanIcon, SaveIcon } from "lucide-react"
 
 import {
@@ -80,37 +82,45 @@ export function SupplierEditorDocumentHeader({
             }
             secondaryActions={
                 !isCreate && data ? (
-                    <Button
-                        id="master-data-supplier-document-header-disable"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!canDisable}
-                        title={disableBlocker?.message}
-                        onClick={onDisable}
-                    >
-                        <BanIcon data-icon="inline-start" aria-hidden />
-                        {masterDataCopy.actionDisable}
-                    </Button>
+                    <PermissionGuard permission={"supplier:delete"}>
+                        <Button
+                            id="master-data-supplier-document-header-disable"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!canDisable}
+                            title={disableBlocker?.message}
+                            onClick={onDisable}
+                        >
+                            <BanIcon data-icon="inline-start" aria-hidden />
+                            {masterDataCopy.actionDisable}
+                        </Button>
+                    </PermissionGuard>
                 ) : null
             }
             primaryAction={
                 showSave ? (
-                    <LoadingButton
-                        id="master-data-supplier-document-header-submit"
-                        type="submit"
-                        form={formId}
-                        size="sm"
-                        loading={pending}
-                        disabled={!canEdit || pending}
+                    <PermissionGuard
+                        permission={
+                            isCreate ? "supplier:create" : "supplier:update"
+                        }
                     >
-                        <SaveIcon data-icon="inline-start" aria-hidden />
-                        {pending
-                            ? "提交中…"
-                            : isCreate
-                              ? masterDataCopy.createSubmit
-                              : masterDataCopy.reviseSubmit}
-                    </LoadingButton>
+                        <LoadingButton
+                            id="master-data-supplier-document-header-submit"
+                            type="submit"
+                            form={formId}
+                            size="sm"
+                            loading={pending}
+                            disabled={!canEdit || pending}
+                        >
+                            <SaveIcon data-icon="inline-start" aria-hidden />
+                            {pending
+                                ? "提交中…"
+                                : isCreate
+                                  ? masterDataCopy.createSubmit
+                                  : masterDataCopy.reviseSubmit}
+                        </LoadingButton>
+                    </PermissionGuard>
                 ) : null
             }
         />

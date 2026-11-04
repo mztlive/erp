@@ -116,7 +116,7 @@ export function PurchaseOrdersListToolbar({
                             )}
                         </SelectContent>
                     </Select>
-                    <div className="w-56 max-w-full min-w-0">
+                    <div className="empty:hidden w-56 max-w-full min-w-0">
                         <PersonDirectoryFilter
                             id="procurement-orders-list-owner"
                             category="procurement"

@@ -137,7 +137,7 @@ export function BatchResultSummary({
                         <RefreshCwIcon aria-hidden />
                         刷新结果
                     </Button>
-                    {actionable > 0 && !running ? (
+                    {actionable > 0 && !running && canWrite ? (
                         <Button
                             id="supplier-catalog-batch-open-recovery"
                             variant={counts.unknown > 0 ? "outline" : "default"}
@@ -151,7 +151,7 @@ export function BatchResultSummary({
                             />
                         </Button>
                     ) : null}
-                    {counts.unknown > 0 ? (
+                    {counts.unknown > 0 && canWrite ? (
                         <Button
                             id="supplier-catalog-batch-result-reconcile"
                             disabled={busy || !canWrite}

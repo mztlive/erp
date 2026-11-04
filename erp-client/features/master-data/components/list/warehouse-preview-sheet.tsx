@@ -98,20 +98,22 @@ export function WarehousePreviewSheet({
                                     : "当前账号没有仓库更新权限"
                             }
                         >
-                            <Button
-                                id={`master-data-warehouse-preview-${previewIdSegment}-revise-handlers`}
-                                type="button"
-                                variant="outline"
-                                disabled={
-                                    !canMaintainHandlers ||
-                                    !previewRow.allowedActions.includes(
-                                        "MAINTAIN_FULFILLMENT_HANDLERS",
-                                    )
-                                }
-                                onClick={() => onRevise(previewRow)}
-                            >
-                                配置收发责任
-                            </Button>
+                            {canMaintainHandlers && (
+                                <Button
+                                    id={`master-data-warehouse-preview-${previewIdSegment}-revise-handlers`}
+                                    type="button"
+                                    variant="outline"
+                                    disabled={
+                                        !canMaintainHandlers ||
+                                        !previewRow.allowedActions.includes(
+                                            "MAINTAIN_FULFILLMENT_HANDLERS",
+                                        )
+                                    }
+                                    onClick={() => onRevise(previewRow)}
+                                >
+                                    配置收发责任
+                                </Button>
+                            )}
                         </DisabledActionHint>
                         <DisabledActionHint
                             message={

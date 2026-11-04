@@ -84,15 +84,15 @@ export function OrganizationUnitFilter({
     }, [selected, units])
     const message = profile.isPending
         ? "正在加载组织权限…"
-        : !canRead
-          ? "当前账号无组织查询权限"
-          : query.isError
-            ? "组织加载失败，请重试"
-            : query.isPending
-              ? "正在加载组织…"
-              : query.data?.emptyReason === "no_scope"
-                ? "当前账号无可选组织范围"
-                : undefined
+        : query.isError
+          ? "组织加载失败，请重试"
+          : query.isPending
+            ? "正在加载组织…"
+            : query.data?.emptyReason === "no_scope"
+              ? "当前账号无可选组织范围"
+              : undefined
+
+    if (!canRead) return null
 
     return (
         <div className="min-w-0 space-y-1.5">

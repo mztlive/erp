@@ -890,18 +890,20 @@ function InquiryFeesContent({
                                         {actionFailure}
                                     </p>
                                 ) : null}
-                                <Button
-                                    id="inquiry-fees-allocation-preview"
-                                    type="submit"
-                                    disabled={
-                                        locked ||
-                                        !canAllocate ||
-                                        sourceLoading ||
-                                        Boolean(actionFailure)
-                                    }
-                                >
-                                    预览费用归属
-                                </Button>
+                                {canAllocate && (
+                                    <Button
+                                        id="inquiry-fees-allocation-preview"
+                                        type="submit"
+                                        disabled={
+                                            locked ||
+                                            !canAllocate ||
+                                            sourceLoading ||
+                                            Boolean(actionFailure)
+                                        }
+                                    >
+                                        预览费用归属
+                                    </Button>
+                                )}
                             </form>
                         </DialogContent>
                     </Dialog>
@@ -1191,29 +1193,27 @@ function InquiryFeesContent({
                                             。{selectedAllocation.reason}
                                         </p>
                                     ) : null}
-                                    {!canCreateExpense ? (
-                                        <p className="text-sm text-muted-foreground">
-                                            当前账号没有创建费用采购的权限，请由有权限的采购同事办理。
-                                        </p>
-                                    ) : !allocationRows.length ? (
+                                    {!canCreateExpense ? null : !allocationRows.length ? (
                                         <p className="text-sm text-muted-foreground">
                                             请先由销售明确费用归属和分摊金额。
                                         </p>
                                     ) : null}
-                                    <Button
-                                        id="inquiry-fees-expense-preview"
-                                        type="submit"
-                                        disabled={
-                                            locked ||
-                                            !canCreateExpense ||
-                                            sourceLoading ||
-                                            !allocationRows.some(
-                                                (row) => !row.reason,
-                                            )
-                                        }
-                                    >
-                                        预览费用采购
-                                    </Button>
+                                    {canCreateExpense && (
+                                        <Button
+                                            id="inquiry-fees-expense-preview"
+                                            type="submit"
+                                            disabled={
+                                                locked ||
+                                                !canCreateExpense ||
+                                                sourceLoading ||
+                                                !allocationRows.some(
+                                                    (row) => !row.reason,
+                                                )
+                                            }
+                                        >
+                                            预览费用采购
+                                        </Button>
+                                    )}
                                 </form>
                             </DialogContent>
                         </Dialog>

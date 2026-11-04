@@ -111,9 +111,7 @@ export function SalesOrderCustomerFinancePanel({
             >
                 查看
             </Button>
-        ) : (
-            <span className="text-xs text-muted-foreground">无详情权限</span>
-        )
+        ) : null
     }
     const rowAmount = (
         allocations: Parameters<typeof amountAllocatedToTargets>[0],

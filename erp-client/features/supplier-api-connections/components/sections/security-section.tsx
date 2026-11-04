@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { KeyRoundIcon } from "lucide-react"
 
 import { surfaceInsetClassName } from "@/components/business"
@@ -58,16 +60,22 @@ export function SecuritySection({
                             visible={conn.safeReferences.endpoint.visible}
                         />
                         {canBindEndpoint || endpointBlocker ? (
-                            <Button
-                                id="supplier-api-connections-security-bind-endpoint"
-                                type="button"
-                                size="sm"
-                                disabled={!canBindEndpoint}
-                                title={endpointBlocker?.message}
-                                onClick={onBindEndpoint}
+                            <PermissionGuard
+                                permission={
+                                    "supplier_api_connection:bind_endpoint_reference"
+                                }
                             >
-                                绑定/轮换地址
-                            </Button>
+                                <Button
+                                    id="supplier-api-connections-security-bind-endpoint"
+                                    type="button"
+                                    size="sm"
+                                    disabled={!canBindEndpoint}
+                                    title={endpointBlocker?.message}
+                                    onClick={onBindEndpoint}
+                                >
+                                    绑定/轮换地址
+                                </Button>
+                            </PermissionGuard>
                         ) : null}
                     </CardContent>
                 </Card>
@@ -88,16 +96,22 @@ export function SecuritySection({
                             visible={conn.safeReferences.credential.visible}
                         />
                         {canBindCredential || credentialBlocker ? (
-                            <Button
-                                id="supplier-api-connections-security-bind-credential"
-                                type="button"
-                                size="sm"
-                                disabled={!canBindCredential}
-                                title={credentialBlocker?.message}
-                                onClick={onBind}
+                            <PermissionGuard
+                                permission={
+                                    "supplier_api_connection:manage_credential_reference"
+                                }
                             >
-                                绑定/轮换引用
-                            </Button>
+                                <Button
+                                    id="supplier-api-connections-security-bind-credential"
+                                    type="button"
+                                    size="sm"
+                                    disabled={!canBindCredential}
+                                    title={credentialBlocker?.message}
+                                    onClick={onBind}
+                                >
+                                    绑定/轮换引用
+                                </Button>
+                            </PermissionGuard>
                         ) : null}
                     </CardContent>
                 </Card>

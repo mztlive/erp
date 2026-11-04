@@ -115,6 +115,8 @@ export function CatalogBrowser({
             : !canAdopt
               ? "当前账号没有选品入库权限，请联系管理员。"
               : undefined)
+    const canSelect =
+        canAdopt && canReadCost && query.data?.can_read_cost !== false
     const canConfigure =
         !selectionBlocker &&
         canAdopt &&
@@ -270,7 +272,8 @@ export function CatalogBrowser({
                                         ? "已入库"
                                         : "已匹配，待入库"}
                             </p>
-                            {row.original.requires_identity_review ? (
+                            {row.original.requires_identity_review &&
+                            canReview ? (
                                 <Button
                                     id={`supplier-catalog-identity-${toAutomationIdSegment(row.original.id)}`}
                                     variant="outline"
@@ -300,29 +303,33 @@ export function CatalogBrowser({
                 id: "actions",
                 header: "操作",
                 enableHiding: false,
-                cell: ({ row }) => (
-                    <LoadingButton
-                        id={`supplier-catalog-adopt-${toAutomationIdSegment(row.original.id)}`}
-                        size="sm"
-                        variant="outline"
-                        aria-describedby={
-                            selectionBlocker
-                                ? "supplier-catalog-adoption-blocker"
-                                : undefined
-                        }
-                        loading={choice.configuring}
-                        disabled={
-                            !canConfigure || choice.busy || choice.preparing
-                        }
-                        onClick={() => void choice.configure([row.original.id])}
-                    >
-                        配置入库
-                    </LoadingButton>
-                ),
+                cell: ({ row }) =>
+                    canSelect ? (
+                        <LoadingButton
+                            id={`supplier-catalog-adopt-${toAutomationIdSegment(row.original.id)}`}
+                            size="sm"
+                            variant="outline"
+                            aria-describedby={
+                                selectionBlocker
+                                    ? "supplier-catalog-adoption-blocker"
+                                    : undefined
+                            }
+                            loading={choice.configuring}
+                            disabled={
+                                !canConfigure || choice.busy || choice.preparing
+                            }
+                            onClick={() =>
+                                void choice.configure([row.original.id])
+                            }
+                        >
+                            配置入库
+                        </LoadingButton>
+                    ) : null,
             },
         ],
         [
             canConfigure,
+            canSelect,
             selectionBlocker,
             canReadCost,
             canReview,
@@ -347,9 +354,11 @@ export function CatalogBrowser({
                     role="alert"
                     className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-soft p-4 text-sm text-warning-soft-foreground"
                 >
-                    <p id="supplier-catalog-adoption-blocker">
-                        {selectionBlocker}
-                    </p>
+                    {canSelect && (
+                        <p id="supplier-catalog-adoption-blocker">
+                            {selectionBlocker}
+                        </p>
+                    )}
                     <Button
                         id="supplier-catalog-adoption-settings"
                         variant="outline"
@@ -419,7 +428,7 @@ export function CatalogBrowser({
                                 {choice.selectedIds.length} 个 SKU
                             </span>
                         ) : null}
-                        {!choice.frozen && query.data?.total ? (
+                        {!choice.frozen && query.data?.total && canSelect ? (
                             <LoadingButton
                                 id="supplier-catalog-batch-select-filtered"
                                 variant="outline"
@@ -468,25 +477,27 @@ export function CatalogBrowser({
                     </div>
                 }
                 tableActions={
-                    <LoadingButton
-                        aria-describedby={
-                            selectionBlocker
-                                ? "supplier-catalog-adoption-blocker"
-                                : undefined
-                        }
-                        id="supplier-catalog-batch-configure"
-                        disabled={
-                            !canConfigure ||
-                            choice.preparing ||
-                            !choice.selectedIds.length ||
-                            choice.needsReload ||
-                            choice.busy
-                        }
-                        loading={choice.configuring}
-                        onClick={() => void choice.configure()}
-                    >
-                        配置入库（{choice.selectedIds.length}）
-                    </LoadingButton>
+                    canSelect ? (
+                        <LoadingButton
+                            aria-describedby={
+                                selectionBlocker
+                                    ? "supplier-catalog-adoption-blocker"
+                                    : undefined
+                            }
+                            id="supplier-catalog-batch-configure"
+                            disabled={
+                                !canConfigure ||
+                                choice.preparing ||
+                                !choice.selectedIds.length ||
+                                choice.needsReload ||
+                                choice.busy
+                            }
+                            loading={choice.configuring}
+                            onClick={() => void choice.configure()}
+                        >
+                            配置入库（{choice.selectedIds.length}）
+                        </LoadingButton>
+                    ) : null
                 }
                 table={
                     <DataTable

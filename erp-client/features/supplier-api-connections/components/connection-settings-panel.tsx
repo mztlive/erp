@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 import { PlugZapIcon, ShoppingCartIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -120,35 +122,49 @@ export function ConnectionSettingsPanel({
                                     : "已暂停向供应商发送新的采购订单。"}
                             </p>
                         </div>
-                        <LoadingButton
-                            id={`supplier-api-connection-${segment}-auto-order-toggle`}
-                            loading={enable.isPending || disable.isPending}
-                            disabled={!canChange || pending}
-                            onClick={() =>
-                                void run("order", () =>
-                                    enabled
-                                        ? disable.mutateAsync({
-                                              connectionId: conn.connectionId,
-                                              expectedVersion: conn.version,
-                                              reasonCode: "PAUSE_NEW_ORDERS",
-                                              idempotencyKey:
-                                                  newIdempotencyKey("disable"),
-                                          })
-                                        : enable.mutateAsync({
-                                              connectionId: conn.connectionId,
-                                              expectedVersion: conn.version,
-                                              idempotencyKey:
-                                                  newIdempotencyKey("enable"),
-                                          }),
-                                )
-                            }
+                        <PermissionGuard
+                            permission={[
+                                "supplier_api_connection:command",
+                                `supplier_api_connection:${enabled ? "disable" : "enable"}`,
+                            ]}
                         >
-                            {enable.isPending
-                                ? "正在检查连接并开启…"
-                                : enabled
-                                  ? "关闭自动下单"
-                                  : "允许自动下单"}
-                        </LoadingButton>
+                            <LoadingButton
+                                id={`supplier-api-connection-${segment}-auto-order-toggle`}
+                                loading={enable.isPending || disable.isPending}
+                                disabled={!canChange || pending}
+                                onClick={() =>
+                                    void run("order", () =>
+                                        enabled
+                                            ? disable.mutateAsync({
+                                                  connectionId:
+                                                      conn.connectionId,
+                                                  expectedVersion: conn.version,
+                                                  reasonCode:
+                                                      "PAUSE_NEW_ORDERS",
+                                                  idempotencyKey:
+                                                      newIdempotencyKey(
+                                                          "disable",
+                                                      ),
+                                              })
+                                            : enable.mutateAsync({
+                                                  connectionId:
+                                                      conn.connectionId,
+                                                  expectedVersion: conn.version,
+                                                  idempotencyKey:
+                                                      newIdempotencyKey(
+                                                          "enable",
+                                                      ),
+                                              }),
+                                    )
+                                }
+                            >
+                                {enable.isPending
+                                    ? "正在检查连接并开启…"
+                                    : enabled
+                                      ? "关闭自动下单"
+                                      : "允许自动下单"}
+                            </LoadingButton>
+                        </PermissionGuard>
                     </div>
                     <p className="text-sm leading-6 text-muted-foreground">
                         开启前自动验证连接，采购审批与执行条件仍须满足。
@@ -156,12 +172,19 @@ export function ConnectionSettingsPanel({
                     </p>
                     {messageTarget === "order" ? feedback : null}
                     {!canChange ? (
-                        <p className="text-sm text-muted-foreground">
-                            {blocker?.message ??
-                                (!canCreateOrders && !enabled
-                                    ? "当前接口未具备采购下单能力，请联系管理员核验配置和接入条件。"
-                                    : "当前账号没有修改自动下单设置的权限。")}
-                        </p>
+                        <PermissionGuard
+                            permission={[
+                                "supplier_api_connection:command",
+                                `supplier_api_connection:${enabled ? "disable" : "enable"}`,
+                            ]}
+                        >
+                            <p className="text-sm text-muted-foreground">
+                                {blocker?.message ??
+                                    (!canCreateOrders && !enabled
+                                        ? "当前接口未具备采购下单能力，请联系管理员核验配置和接入条件。"
+                                        : "当前账号没有修改自动下单设置的权限。")}
+                            </p>
+                        </PermissionGuard>
                     ) : null}
                 </section>
                 {conn.connectorType?.toLowerCase() === "jd_vop" ? (
@@ -184,36 +207,50 @@ export function ConnectionSettingsPanel({
                                 验证供应商接口访问权限，不会创建订单。
                             </p>
                         </div>
-                        <LoadingButton
-                            id={`supplier-api-connection-${segment}-run-health`}
-                            variant="outline"
-                            loading={test.isPending}
-                            disabled={
-                                !conn.allowedActions.includes(
-                                    "RUN_HEALTH_CHECK",
-                                ) || pending
-                            }
-                            onClick={() =>
-                                void run("test", () =>
-                                    test.mutateAsync({
-                                        connectionId: conn.connectionId,
-                                        expectedVersion: conn.version,
-                                        checkType: "AUTHENTICATION",
-                                        idempotencyKey:
-                                            newIdempotencyKey("health"),
-                                    }),
-                                )
-                            }
+                        <PermissionGuard
+                            permission={[
+                                "supplier_api_connection:command",
+                                "supplier_api_connection:health_check",
+                            ]}
                         >
-                            {test.isPending ? "正在提交…" : "测试连接"}
-                        </LoadingButton>
+                            <LoadingButton
+                                id={`supplier-api-connection-${segment}-run-health`}
+                                variant="outline"
+                                loading={test.isPending}
+                                disabled={
+                                    !conn.allowedActions.includes(
+                                        "RUN_HEALTH_CHECK",
+                                    ) || pending
+                                }
+                                onClick={() =>
+                                    void run("test", () =>
+                                        test.mutateAsync({
+                                            connectionId: conn.connectionId,
+                                            expectedVersion: conn.version,
+                                            checkType: "AUTHENTICATION",
+                                            idempotencyKey:
+                                                newIdempotencyKey("health"),
+                                        }),
+                                    )
+                                }
+                            >
+                                {test.isPending ? "正在提交…" : "测试连接"}
+                            </LoadingButton>
+                        </PermissionGuard>
                     </div>
                     {messageTarget === "test" ? feedback : null}
                     {!conn.allowedActions.includes("RUN_HEALTH_CHECK") ? (
-                        <p className="text-sm text-muted-foreground">
-                            {testBlocker?.message ??
-                                "当前账号没有测试连接的权限。"}
-                        </p>
+                        <PermissionGuard
+                            permission={[
+                                "supplier_api_connection:command",
+                                "supplier_api_connection:health_check",
+                            ]}
+                        >
+                            <p className="text-sm text-muted-foreground">
+                                {testBlocker?.message ??
+                                    "当前账号没有测试连接的权限。"}
+                            </p>
+                        </PermissionGuard>
                     ) : null}
                     <HealthRecords
                         records={conn.healthRecords}

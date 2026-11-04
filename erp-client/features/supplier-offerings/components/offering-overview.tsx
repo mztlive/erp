@@ -31,7 +31,7 @@ import {
 } from "../types"
 import { capabilityLabel, OfferingField } from "./offering-terms"
 
-const NO_COST = "当前账号无权查看采购成本"
+const NO_COST = "无权限"
 
 /** 供给资料页顶部：两种供给价、税率和当前可供，先回答「多少钱、现在能不能供」。 */
 export function OfferingSummary({

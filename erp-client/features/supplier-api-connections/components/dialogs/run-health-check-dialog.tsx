@@ -50,21 +50,23 @@ export function RunHealthCheckDialog({
                     >
                         取消
                     </Button>
-                    <LoadingButton
-                        id="supplier-api-connections-health-check-confirm"
-                        loading={pending}
-                        type="button"
-                        disabled={!canRunHealth || pending}
-                        onClick={() => void onSubmit()}
-                    >
-                        {!pending && (
-                            <RefreshCwIcon
-                                className="size-4"
-                                aria-hidden="true"
-                            />
-                        )}
-                        {pending ? "执行中…" : "确认执行"}
-                    </LoadingButton>
+                    {canRunHealth && (
+                        <LoadingButton
+                            id="supplier-api-connections-health-check-confirm"
+                            loading={pending}
+                            type="button"
+                            disabled={!canRunHealth || pending}
+                            onClick={() => void onSubmit()}
+                        >
+                            {!pending && (
+                                <RefreshCwIcon
+                                    className="size-4"
+                                    aria-hidden="true"
+                                />
+                            )}
+                            {pending ? "执行中…" : "确认执行"}
+                        </LoadingButton>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

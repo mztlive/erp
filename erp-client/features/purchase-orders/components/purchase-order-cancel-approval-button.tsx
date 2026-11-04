@@ -86,28 +86,35 @@ export function PurchaseOrderCancelApprovalButton({
 
     return (
         <>
-            <Button
-                id={`procurement-orders-detail-cancel-approval-trigger-${order.identity.purchaseOrderId}`}
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!gate.enabled}
-                title={gate.reason}
-                onClick={() => {
-                    pendingCommand.current = null
-                    setUncertain(false)
-                    setReason(
-                        reviseRejected ? "按驳回意见修改原单后重新提交" : "",
-                    )
-                    setConfirmError(null)
-                    setIdempotencyKey(
-                        `purchase-cancel-approval:${order.identity.purchaseOrderId}:${crypto.randomUUID()}`,
-                    )
-                    setOpen(true)
-                }}
-            >
-                {reviseRejected ? "修改原单" : "撤回审批"}
-            </Button>
+            {hasPermission(
+                profileQuery.data?.permissions,
+                "purchase_order:cancel_approval",
+            ) && (
+                <Button
+                    id={`procurement-orders-detail-cancel-approval-trigger-${order.identity.purchaseOrderId}`}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!gate.enabled}
+                    title={gate.reason}
+                    onClick={() => {
+                        pendingCommand.current = null
+                        setUncertain(false)
+                        setReason(
+                            reviseRejected
+                                ? "按驳回意见修改原单后重新提交"
+                                : "",
+                        )
+                        setConfirmError(null)
+                        setIdempotencyKey(
+                            `purchase-cancel-approval:${order.identity.purchaseOrderId}:${crypto.randomUUID()}`,
+                        )
+                        setOpen(true)
+                    }}
+                >
+                    {reviseRejected ? "修改原单" : "撤回审批"}
+                </Button>
+            )}
             <AlertDialog
                 open={open}
                 onOpenChange={(next) => {

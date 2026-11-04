@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { hasPermission } from "@/lib/permissions"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { useCancelSalesOrderApprovalMutation } from "@/features/sales-orders/hooks/queries"
@@ -85,28 +86,35 @@ export function SalesOrderCancelApprovalButton({
 
     return (
         <>
-            <Button
-                id="sales-orders-detail-cancel-approval-trigger"
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!gate.enabled}
-                title={gate.reason}
-                onClick={() => {
-                    pendingCommand.current = null
-                    setUncertain(false)
-                    setReason(
-                        reviseRejected ? "按驳回意见修改原单后重新提交" : "",
-                    )
-                    setConfirmError(null)
-                    setIdempotencyKey(
-                        `sales-cancel-approval:${order.id}:${crypto.randomUUID()}`,
-                    )
-                    setOpen(true)
-                }}
-            >
-                {reviseRejected ? "修改原单" : "撤回审批"}
-            </Button>
+            {hasPermission(
+                permissions.granted,
+                "sales_order:cancel_approval",
+            ) && (
+                <Button
+                    id="sales-orders-detail-cancel-approval-trigger"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!gate.enabled}
+                    title={gate.reason}
+                    onClick={() => {
+                        pendingCommand.current = null
+                        setUncertain(false)
+                        setReason(
+                            reviseRejected
+                                ? "按驳回意见修改原单后重新提交"
+                                : "",
+                        )
+                        setConfirmError(null)
+                        setIdempotencyKey(
+                            `sales-cancel-approval:${order.id}:${crypto.randomUUID()}`,
+                        )
+                        setOpen(true)
+                    }}
+                >
+                    {reviseRejected ? "修改原单" : "撤回审批"}
+                </Button>
+            )}
             <AlertDialog
                 open={open}
                 onOpenChange={(next) => {

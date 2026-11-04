@@ -59,6 +59,7 @@ export function SupplierAccountsHeader({
                         onClick: onRefresh,
                     },
                     {
+                        hidden: !data?.canRegisterInvoice,
                         actionKey: "register-invoice",
                         id: "supplier-payables-header-register-invoice",
                         label: "登记进项发票",

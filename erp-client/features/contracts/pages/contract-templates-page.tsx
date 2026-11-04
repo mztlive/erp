@@ -229,23 +229,24 @@ export function ContractTemplatesPage() {
             header: "操作",
             meta: { align: "end" },
             enableHiding: false,
-            cell: ({ row }) => (
-                <Button
-                    id={`contract-application-download-${toAutomationIdSegment(row.original.id)}`}
-                    size="sm"
-                    variant="outline"
-                    disabled={!canDownload || mutations.download.isPending}
-                    onClick={() =>
-                        download({
-                            id: row.original.id,
-                            filename: `${row.original.contract_no}.docx`,
-                        })
-                    }
-                >
-                    <DownloadIcon data-icon="inline-start" />
-                    下载 Word / 打印
-                </Button>
-            ),
+            cell: ({ row }) =>
+                canDownload ? (
+                    <Button
+                        id={`contract-application-download-${toAutomationIdSegment(row.original.id)}`}
+                        size="sm"
+                        variant="outline"
+                        disabled={!canDownload || mutations.download.isPending}
+                        onClick={() =>
+                            download({
+                                id: row.original.id,
+                                filename: `${row.original.contract_no}.docx`,
+                            })
+                        }
+                    >
+                        <DownloadIcon data-icon="inline-start" />
+                        下载 Word / 打印
+                    </Button>
+                ) : null,
         },
     ]
     const query = view === "templates" ? templates : applications

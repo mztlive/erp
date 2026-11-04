@@ -368,7 +368,7 @@ export function SupplierScopePage() {
                         morePanelAriaLabel="供应商往来范围更多筛选条件"
                         onResetMore={urlState.resetMoreFilters}
                         primaryFilters={
-                            <div className="w-56 max-w-full min-w-0">
+                            <div className="empty:hidden w-56 max-w-full min-w-0">
                                 <PersonDirectoryFilter
                                     id={`${toolbarPrefix}-procurement-owner`}
                                     category="procurement"

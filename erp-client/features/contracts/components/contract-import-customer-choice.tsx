@@ -106,44 +106,45 @@ export function ContractImportCustomerChoice({
                     {[
                         { value: "existing", label: "选择已有客户" },
                         { value: "create", label: "按合同信息建档" },
-                    ].map((option) => (
-                        <FieldLabel
-                            key={option.value}
-                            htmlFor={`contract-import-customer-mode-${option.value}`}
-                            className={cn(
-                                "flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2.5 font-medium has-focus-visible:ring-2 has-focus-visible:ring-ring",
-                                mode === option.value && "bg-muted/60",
-                                (disabled ||
-                                    (option.value === "create" &&
-                                        !canCreate)) &&
-                                    "cursor-not-allowed opacity-50",
-                            )}
-                        >
-                            <RadioGroupItem
-                                id={`contract-import-customer-mode-${option.value}`}
-                                value={option.value}
-                                nativeButton
-                                render={
-                                    <button
-                                        type="button"
-                                        aria-label={option.label}
-                                    />
-                                }
-                                disabled={
-                                    disabled ||
-                                    (option.value === "create" && !canCreate)
-                                }
-                            />
-                            {option.label}
-                        </FieldLabel>
-                    ))}
+                    ]
+                        .filter(
+                            (option) => option.value !== "create" || canCreate,
+                        )
+                        .map((option) => (
+                            <FieldLabel
+                                key={option.value}
+                                htmlFor={`contract-import-customer-mode-${option.value}`}
+                                className={cn(
+                                    "flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2.5 font-medium has-focus-visible:ring-2 has-focus-visible:ring-ring",
+                                    mode === option.value && "bg-muted/60",
+                                    (disabled ||
+                                        (option.value === "create" &&
+                                            !canCreate)) &&
+                                        "cursor-not-allowed opacity-50",
+                                )}
+                            >
+                                <RadioGroupItem
+                                    id={`contract-import-customer-mode-${option.value}`}
+                                    value={option.value}
+                                    nativeButton
+                                    render={
+                                        <button
+                                            type="button"
+                                            aria-label={option.label}
+                                        />
+                                    }
+                                    disabled={
+                                        disabled ||
+                                        (option.value === "create" &&
+                                            !canCreate)
+                                    }
+                                />
+                                {option.label}
+                            </FieldLabel>
+                        ))}
                 </RadioGroup>
             ) : null}
-            {!expectedCustomerId && !createOnly && !canCreate ? (
-                <p className="text-xs text-muted-foreground">
-                    你没有创建客户的权限，请选择已有客户或联系有权限的同事建档。
-                </p>
-            ) : null}
+
             {!expectedCustomerId &&
             mode === "existing" &&
             candidates.length > 0 ? (

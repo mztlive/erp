@@ -125,7 +125,7 @@ export function ReceivableScopeToolbar({
             morePanelAriaLabel="客户往来范围更多筛选条件"
             onResetMore={resetMoreFilters}
             primaryFilters={
-                <div className="w-56 max-w-full min-w-0">
+                <div className="empty:hidden w-56 max-w-full min-w-0">
                     <PersonDirectoryFilter
                         id={`${prefix}-sales-owner`}
                         category="sales"

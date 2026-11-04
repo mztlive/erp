@@ -73,6 +73,8 @@ function PageActions({
     className,
     ...props
 }: PageActionsProps) {
+    const visibleActions = actions.filter((action) => !action.hidden)
+    if (visibleActions.length === 0) return null
     const baseId = idPrefix ?? id ?? "page-actions"
     return (
         <div
@@ -83,7 +85,7 @@ function PageActions({
             className={cn("flex flex-wrap items-center gap-2", className)}
             {...props}
         >
-            {actions.map((action) => {
+            {visibleActions.map((action) => {
                 const {
                     actionKey,
                     label,

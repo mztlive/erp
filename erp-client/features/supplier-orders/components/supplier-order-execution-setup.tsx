@@ -110,11 +110,7 @@ export function SupplierOrderExecutionSetup({
                                 完善接口配送资料
                             </Button>
                         ) : null}
-                        {editable && !canEdit ? (
-                            <p className="text-xs">
-                                补充资料需要供应商订单提交权限。
-                            </p>
-                        ) : null}
+
                         <Button
                             id={`${prefix}-refresh`}
                             type="button"
@@ -125,7 +121,7 @@ export function SupplierOrderExecutionSetup({
                         >
                             刷新执行状态
                         </Button>
-                        {setup?.result_query_available ? (
+                        {setup?.result_query_available && canEdit ? (
                             <Button
                                 id={`${prefix}-query-original`}
                                 type="button"
@@ -148,11 +144,7 @@ export function SupplierOrderExecutionSetup({
                             </Button>
                         ) : null}
                     </div>
-                    {setup?.result_query_available && !canEdit ? (
-                        <p className="mt-2 text-xs">
-                            请求查询原执行结果需要供应商订单提交权限。
-                        </p>
-                    ) : null}
+
                     {unknown ? (
                         <p className="mt-2 text-xs">
                             原请求可能已送达，暂未查到或尚未确认不代表可以重新发送。

@@ -80,6 +80,7 @@ export function LedgerHeader({
                             onClick: onRefresh,
                         },
                         {
+                            hidden: !canExport,
                             actionKey: "export",
                             id: "inventory-ledger-export",
                             label: isExporting ? "导出中…" : "导出",

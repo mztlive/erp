@@ -117,18 +117,22 @@ export function FulfillmentSection({
                         </p>
                     ) : null}
                     <div className="flex gap-2 pt-1">
-                        <LoadingButton
-                            id="supplier-order-center-fulfillment-reveal"
-                            loading={revealPending}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!canReveal || revealPending}
-                            onClick={onReveal}
-                        >
-                            {!revealPending && <EyeIcon className="size-3.5" />}
-                            {revealPending ? "揭示中…" : "短时揭示"}
-                        </LoadingButton>
+                        {canReveal && (
+                            <LoadingButton
+                                id="supplier-order-center-fulfillment-reveal"
+                                loading={revealPending}
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!canReveal || revealPending}
+                                onClick={onReveal}
+                            >
+                                {!revealPending && (
+                                    <EyeIcon className="size-3.5" />
+                                )}
+                                {revealPending ? "揭示中…" : "短时揭示"}
+                            </LoadingButton>
+                        )}
                         {address.revealed ? (
                             <Button
                                 id="supplier-order-center-fulfillment-hide"

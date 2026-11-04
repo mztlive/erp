@@ -25,6 +25,8 @@ export function DirectoryFilterControl({
     onRetry: () => void
     children: React.ReactNode
 }) {
+    if (unavailable) return null
+
     return (
         <div className={cn("min-w-0", className)}>
             {children}

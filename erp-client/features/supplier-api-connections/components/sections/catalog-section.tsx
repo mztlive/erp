@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import type { ReactNode } from "react"
 import type { UseQueryResult } from "@tanstack/react-query"
 import { useQueryClient } from "@tanstack/react-query"
@@ -116,19 +118,23 @@ export function CatalogSection({
                     <HistoryIcon data-icon="inline-start" aria-hidden="true" />
                     同步记录
                 </SheetTrigger>
-                <LoadingButton
-                    id="supplier-api-connections-catalog-sync"
-                    loading={syncing}
-                    disabled={!canSync || syncing}
-                    title={syncBlocker}
-                    onClick={() => void onSync().catch(() => undefined)}
+                <PermissionGuard
+                    permission={"supplier_api_connection:catalog_sync"}
                 >
-                    <RefreshCwIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
-                    {syncLabel}
-                </LoadingButton>
+                    <LoadingButton
+                        id="supplier-api-connections-catalog-sync"
+                        loading={syncing}
+                        disabled={!canSync || syncing}
+                        title={syncBlocker}
+                        onClick={() => void onSync().catch(() => undefined)}
+                    >
+                        <RefreshCwIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {syncLabel}
+                    </LoadingButton>
+                </PermissionGuard>
             </ListWorkspaceHeader>
             <ConnectionPageNav
                 connectionId={conn.connectionId}
@@ -165,9 +171,13 @@ export function CatalogSection({
                         <CatalogSyncRecords data={query.data} />
                     ) : null}
                     {syncBlocker ? (
-                        <p className="mt-4 text-xs text-muted-foreground">
-                            {syncBlocker}
-                        </p>
+                        <PermissionGuard
+                            permission={"supplier_api_connection:catalog_sync"}
+                        >
+                            <p className="mt-4 text-xs text-muted-foreground">
+                                {syncBlocker}
+                            </p>
+                        </PermissionGuard>
                     ) : null}
                 </div>
                 <SheetFooter>
@@ -223,23 +233,29 @@ export function CatalogSection({
                             action={
                                 <>
                                     <div className="flex flex-wrap justify-center gap-2">
-                                        <LoadingButton
-                                            id="supplier-catalog-empty-sync"
-                                            loading={syncing}
-                                            disabled={!canSync || syncing}
-                                            aria-describedby={
-                                                syncBlocker
-                                                    ? "supplier-catalog-empty-sync-blocker"
-                                                    : undefined
-                                            }
-                                            onClick={() =>
-                                                void onSync().catch(
-                                                    () => undefined,
-                                                )
+                                        <PermissionGuard
+                                            permission={
+                                                "supplier_api_connection:catalog_sync"
                                             }
                                         >
-                                            {syncLabel}
-                                        </LoadingButton>
+                                            <LoadingButton
+                                                id="supplier-catalog-empty-sync"
+                                                loading={syncing}
+                                                disabled={!canSync || syncing}
+                                                aria-describedby={
+                                                    syncBlocker
+                                                        ? "supplier-catalog-empty-sync-blocker"
+                                                        : undefined
+                                                }
+                                                onClick={() =>
+                                                    void onSync().catch(
+                                                        () => undefined,
+                                                    )
+                                                }
+                                            >
+                                                {syncLabel}
+                                            </LoadingButton>
+                                        </PermissionGuard>
                                         {!syncing ? (
                                             <Button
                                                 id="supplier-catalog-empty-settings"
@@ -253,12 +269,18 @@ export function CatalogSection({
                                         ) : null}
                                     </div>
                                     {syncBlocker ? (
-                                        <p
-                                            id="supplier-catalog-empty-sync-blocker"
-                                            className="text-sm text-muted-foreground"
+                                        <PermissionGuard
+                                            permission={
+                                                "supplier_api_connection:catalog_sync"
+                                            }
                                         >
-                                            {syncBlocker}
-                                        </p>
+                                            <p
+                                                id="supplier-catalog-empty-sync-blocker"
+                                                className="text-sm text-muted-foreground"
+                                            >
+                                                {syncBlocker}
+                                            </p>
+                                        </PermissionGuard>
                                     ) : null}
                                 </>
                             }

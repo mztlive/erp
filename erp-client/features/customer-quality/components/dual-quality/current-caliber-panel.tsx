@@ -166,23 +166,25 @@ export function CurrentCaliberPanel({
                         patchDual={patchDual}
                     />
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <LoadingButton
-                            id="customers-quality-dual-current-export"
-                            type="button"
-                            loading={exportMutation.isPending}
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                                !data.canExport ||
-                                data.rows.total === 0 ||
-                                exportMutation.isPending
-                            }
-                            onClick={() => void handleExport()}
-                        >
-                            {exportMutation.isPending
-                                ? "导出中…"
-                                : "导出当前口径 CSV"}
-                        </LoadingButton>
+                        {data.canExport && (
+                            <LoadingButton
+                                id="customers-quality-dual-current-export"
+                                type="button"
+                                loading={exportMutation.isPending}
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    !data.canExport ||
+                                    data.rows.total === 0 ||
+                                    exportMutation.isPending
+                                }
+                                onClick={() => void handleExport()}
+                            >
+                                {exportMutation.isPending
+                                    ? "导出中…"
+                                    : "导出当前口径 CSV"}
+                            </LoadingButton>
+                        )}
                         {exportError ? (
                             <span className="min-w-0 break-all text-body-compact text-destructive">
                                 {exportError}

@@ -142,7 +142,7 @@ export function AllocationSessionPanel({
         else void form.validateAllFields("submit")
     }
     const FormRoot = isReceipt ? "form" : "div"
-    const submitAction = (
+    const submitAction = canOperate ? (
         <LoadingButton
             id="customer-receivables-session-submit"
             size="default"
@@ -164,7 +164,7 @@ export function AllocationSessionPanel({
                   ? "提交回款审批"
                   : "确认登记并核销"}
         </LoadingButton>
-    )
+    ) : null
     const actions = (
         <>
             {saveAction}
@@ -315,21 +315,23 @@ export function AllocationSessionPanel({
                             className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
                         >
                             <span>已移除 {removedLine.line.label}</span>
-                            <Button
-                                id="customer-receivables-session-undo-remove"
-                                type="button"
-                                variant="link"
-                                size="sm"
-                                onClick={undoRemoveLine}
-                                disabled={
-                                    locked ||
-                                    !canOperate ||
-                                    saveMutation.isPending ||
-                                    postMutation.isPending
-                                }
-                            >
-                                撤销
-                            </Button>
+                            {canOperate && (
+                                <Button
+                                    id="customer-receivables-session-undo-remove"
+                                    type="button"
+                                    variant="link"
+                                    size="sm"
+                                    onClick={undoRemoveLine}
+                                    disabled={
+                                        locked ||
+                                        !canOperate ||
+                                        saveMutation.isPending ||
+                                        postMutation.isPending
+                                    }
+                                >
+                                    撤销
+                                </Button>
+                            )}
                         </div>
                     ) : null}
                     {isReceipt ? (

@@ -255,21 +255,23 @@ export function MaintainSourceButton({
 
     return (
         <>
-            <Button
-                id="procurement-orders-detail-source-update-maintain"
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={disabledReason != null}
-                title={disabledReason}
-                onClick={() => {
-                    setReason("")
-                    setError(null)
-                    setOpen(true)
-                }}
-            >
-                {label}
-            </Button>
+            {allowed && (
+                <Button
+                    id="procurement-orders-detail-source-update-maintain"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={disabledReason != null}
+                    title={disabledReason}
+                    onClick={() => {
+                        setReason("")
+                        setError(null)
+                        setOpen(true)
+                    }}
+                >
+                    {label}
+                </Button>
+            )}
             <AlertDialog
                 open={open}
                 onOpenChange={(next) => {

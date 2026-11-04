@@ -320,21 +320,26 @@ export function AccountsPage() {
                         />
                         角色与权限
                     </Button>
-                    <Button
-                        id="governance-admin-accounts-create"
-                        type="button"
-                        size="sm"
-                        disabled={
-                            !hasPermission(
-                                profileQuery.data?.permissions,
-                                "admin:create",
-                            ) || !assignableRolesQuery.isSuccess
-                        }
-                        onClick={() => setCreating(true)}
-                    >
-                        <PlusIcon className="size-3.5" aria-hidden="true" />
-                        新建账号
-                    </Button>
+                    {hasPermission(
+                        profileQuery.data?.permissions,
+                        "admin:create",
+                    ) && (
+                        <Button
+                            id="governance-admin-accounts-create"
+                            type="button"
+                            size="sm"
+                            disabled={
+                                !hasPermission(
+                                    profileQuery.data?.permissions,
+                                    "admin:create",
+                                ) || !assignableRolesQuery.isSuccess
+                            }
+                            onClick={() => setCreating(true)}
+                        >
+                            <PlusIcon className="size-3.5" aria-hidden="true" />
+                            新建账号
+                        </Button>
+                    )}
                 </div>
             </ListWorkspaceHeader>
 

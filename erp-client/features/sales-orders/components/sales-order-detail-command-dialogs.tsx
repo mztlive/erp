@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { ChevronDownIcon, FilePenLineIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,28 +48,30 @@ export function SalesOrderDetailSecondaryActions({
     return (
         <div className="flex flex-wrap items-center gap-2">
             {showChangeAction ? (
-                <Button
-                    id="sales-orders-detail-start-change"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                        (!startChangeGate.enabled && !canContinue) ||
-                        changePending
-                    }
-                    title={canContinue ? undefined : startChangeGate.reason}
-                    onClick={onOpenChangeConfirm}
-                >
-                    <FilePenLineIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
-                    {changePending
-                        ? "正在打开改单…"
-                        : canContinue
-                          ? "继续改单"
-                          : "发起改单"}
-                </Button>
+                <PermissionGuard permission={"sales_change_order:create"}>
+                    <Button
+                        id="sales-orders-detail-start-change"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                            (!startChangeGate.enabled && !canContinue) ||
+                            changePending
+                        }
+                        title={canContinue ? undefined : startChangeGate.reason}
+                        onClick={onOpenChangeConfirm}
+                    >
+                        <FilePenLineIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {changePending
+                            ? "正在打开改单…"
+                            : canContinue
+                              ? "继续改单"
+                              : "发起改单"}
+                    </Button>
+                </PermissionGuard>
             ) : null}
             <Popover>
                 <PopoverTrigger

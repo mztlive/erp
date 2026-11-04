@@ -39,7 +39,7 @@ export function VoucherCategoryStatusButton({
     const disabling = row.lifecycleStatus === "ENABLED"
     const action = disabling ? "停用" : "启用"
     const ActionIcon = disabling ? CirclePauseIcon : CirclePlayIcon
-    return (
+    return canUpdate ? (
         <Button
             id={`master-data-voucher-category-${surface}-${toAutomationIdSegment(row.stableId)}-status`}
             type="button"
@@ -55,7 +55,7 @@ export function VoucherCategoryStatusButton({
             <ActionIcon data-icon="inline-start" aria-hidden />
             {action}
         </Button>
-    )
+    ) : null
 }
 
 /** 启停确认仅追加新版本，不改变既有单据和历史描述。 */
@@ -168,18 +168,25 @@ export function VoucherCategoryStatusDialog({
                     >
                         取消
                     </Button>
-                    <LoadingButton
-                        id={`${prefix}-confirm`}
-                        variant={disabling ? "destructive" : "default"}
-                        loading={mutation.isPending}
-                        disabled={!canUpdate || mutation.isPending || conflict}
-                        onClick={() => void submit()}
-                    >
-                        {!mutation.isPending ? (
-                            <ActionIcon data-icon="inline-start" aria-hidden />
-                        ) : null}
-                        {mutation.isPending ? "提交中…" : `确认${action}`}
-                    </LoadingButton>
+                    {canUpdate && (
+                        <LoadingButton
+                            id={`${prefix}-confirm`}
+                            variant={disabling ? "destructive" : "default"}
+                            loading={mutation.isPending}
+                            disabled={
+                                !canUpdate || mutation.isPending || conflict
+                            }
+                            onClick={() => void submit()}
+                        >
+                            {!mutation.isPending ? (
+                                <ActionIcon
+                                    data-icon="inline-start"
+                                    aria-hidden
+                                />
+                            ) : null}
+                            {mutation.isPending ? "提交中…" : `确认${action}`}
+                        </LoadingButton>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

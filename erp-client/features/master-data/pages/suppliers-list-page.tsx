@@ -91,6 +91,7 @@ export function SuppliersListPage() {
                     label: "导入",
                     icon: UploadIcon,
                     variant: "outline",
+                    hidden: !state.canCreate,
                     disabled: !state.canCreate,
                     title: !state.canCreate
                         ? state.createBlockedReason
@@ -114,6 +115,7 @@ export function SuppliersListPage() {
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     icon: PlusIcon,
+                    hidden: !state.canCreate,
                     disabled: !state.canCreate,
                     title: !state.canCreate
                         ? state.createBlockedReason

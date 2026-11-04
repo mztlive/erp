@@ -48,13 +48,15 @@ export function SupplierDepositsPage() {
                 title="供应商预存款"
                 description="按付款主体、供应商及资金账号管理已核实到账的余额。"
             >
-                <Button
-                    id="supplier-deposits-create"
-                    disabled={!canCreate}
-                    onClick={() => setCreateOpen(true)}
-                >
-                    新增账户
-                </Button>
+                {canCreate && (
+                    <Button
+                        id="supplier-deposits-create"
+                        disabled={!canCreate}
+                        onClick={() => setCreateOpen(true)}
+                    >
+                        新增账户
+                    </Button>
+                )}
             </ListWorkspaceHeader>
             {profile.isPending ? (
                 <div aria-busy className="h-36 animate-pulse bg-muted" />

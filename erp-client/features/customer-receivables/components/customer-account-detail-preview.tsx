@@ -200,7 +200,7 @@ export function CustomerAccountDetailPreview({
                                 <ArrowUpRightIcon data-icon="inline-end" />
                             </Button>
                         ) : null}
-                        {data.receivable ? (
+                        {data.receivable && canStartSession("receipt") ? (
                             <LoadingButton
                                 id="customer-receivables-preview-receivable-register-receipt"
                                 type="button"
@@ -242,7 +242,7 @@ export function CustomerAccountDetailPreview({
                         ) : null}
                         {data.receipt?.allowedActions.includes(
                             "CONTINUE_ALLOCATE",
-                        ) ? (
+                        ) && canStartSession("receipt") ? (
                             <LoadingButton
                                 id="customer-receivables-preview-receipt-continue-allocate"
                                 type="button"
@@ -270,7 +270,8 @@ export function CustomerAccountDetailPreview({
                         {showCorrectionActions &&
                         data.receipt?.allowedActions.includes(
                             "REVERSE_RECEIPT",
-                        ) ? (
+                        ) &&
+                        canRequestReverse("receipt_reverse") ? (
                             <Button
                                 id="customer-receivables-preview-receipt-reverse"
                                 type="button"
@@ -294,7 +295,8 @@ export function CustomerAccountDetailPreview({
                             </Button>
                         ) : null}
                         {showCorrectionActions &&
-                        data.receipt?.allowedActions.includes("REFUND") ? (
+                        data.receipt?.allowedActions.includes("REFUND") &&
+                        canRequestReverse("refund") ? (
                             <Button
                                 id="customer-receivables-preview-receipt-refund"
                                 type="button"
@@ -319,7 +321,7 @@ export function CustomerAccountDetailPreview({
                         ) : null}
                         {data.invoice?.allowedActions.includes(
                             "CONTINUE_ALLOCATE",
-                        ) ? (
+                        ) && canStartSession("invoice") ? (
                             <LoadingButton
                                 id="customer-receivables-preview-invoice-continue-allocate"
                                 type="button"
@@ -351,7 +353,8 @@ export function CustomerAccountDetailPreview({
                         data.refund.approval?.allowedActions.includes(
                             "SUBMIT",
                         ) &&
-                        onRequestRefundSubmit ? (
+                        onRequestRefundSubmit &&
+                        canSubmitRefund ? (
                             <Button
                                 id="customer-receivables-preview-refund-submit"
                                 type="button"
@@ -374,7 +377,8 @@ export function CustomerAccountDetailPreview({
                         data.reversal.approval?.allowedActions.includes(
                             "SUBMIT",
                         ) &&
-                        onRequestReversalSubmit ? (
+                        onRequestReversalSubmit &&
+                        canSubmitReversal ? (
                             <Button
                                 id="customer-receivables-preview-reversal-submit"
                                 type="button"
@@ -392,7 +396,8 @@ export function CustomerAccountDetailPreview({
                         {showCorrectionActions &&
                         data.invoice?.allowedActions.includes(
                             "ISSUE_RED_INVOICE",
-                        ) ? (
+                        ) &&
+                        canRequestReverse("red_invoice") ? (
                             <Button
                                 id="customer-receivables-preview-invoice-red"
                                 type="button"

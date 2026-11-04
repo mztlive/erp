@@ -62,49 +62,55 @@ export function JdVopAuthorizationSection({
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <LoadingButton
-                        id={`${prefix}-refresh`}
-                        type="button"
-                        variant="outline"
-                        loading={query.isFetching}
-                        disabled={!canRead || disabled || query.isFetching}
-                        onClick={refresh}
-                    >
-                        刷新授权状态
-                    </LoadingButton>
-                    <Button
-                        id={`${prefix}-configure-tokens`}
-                        type="button"
-                        variant="outline"
-                        disabled={
-                            !canAuthorize ||
-                            !status?.can_configure_tokens ||
-                            query.isError ||
-                            query.isFetching ||
-                            query.unconfirmed ||
-                            disabled
-                        }
-                        onClick={() => setTokensOpen(true)}
-                    >
-                        配置令牌
-                    </Button>
-                    <Button
-                        id={`${prefix}-authorize`}
-                        type="button"
-                        disabled={
-                            !canAuthorize ||
-                            !status?.can_authorize ||
-                            query.isError ||
-                            query.isFetching ||
-                            query.unconfirmed ||
-                            disabled
-                        }
-                        onClick={() => setOpen(true)}
-                    >
-                        {status?.state === "missing"
-                            ? "授权京东账号"
-                            : "重新授权"}
-                    </Button>
+                    {canRead && (
+                        <LoadingButton
+                            id={`${prefix}-refresh`}
+                            type="button"
+                            variant="outline"
+                            loading={query.isFetching}
+                            disabled={!canRead || disabled || query.isFetching}
+                            onClick={refresh}
+                        >
+                            刷新授权状态
+                        </LoadingButton>
+                    )}
+                    {canAuthorize && (
+                        <Button
+                            id={`${prefix}-configure-tokens`}
+                            type="button"
+                            variant="outline"
+                            disabled={
+                                !canAuthorize ||
+                                !status?.can_configure_tokens ||
+                                query.isError ||
+                                query.isFetching ||
+                                query.unconfirmed ||
+                                disabled
+                            }
+                            onClick={() => setTokensOpen(true)}
+                        >
+                            配置令牌
+                        </Button>
+                    )}
+                    {canAuthorize && (
+                        <Button
+                            id={`${prefix}-authorize`}
+                            type="button"
+                            disabled={
+                                !canAuthorize ||
+                                !status?.can_authorize ||
+                                query.isError ||
+                                query.isFetching ||
+                                query.unconfirmed ||
+                                disabled
+                            }
+                            onClick={() => setOpen(true)}
+                        >
+                            {status?.state === "missing"
+                                ? "授权京东账号"
+                                : "重新授权"}
+                        </Button>
+                    )}
                 </div>
             </div>
             {!canRead ? (
@@ -181,11 +187,7 @@ export function JdVopAuthorizationSection({
                     分钟。可离开页面后回来查看。
                 </p>
             ) : null}
-            {!canAuthorize ? (
-                <p className="text-sm text-muted-foreground">
-                    当前账号没有办理京东授权的权限，请联系管理员。
-                </p>
-            ) : null}
+
             {tokensOpen && status ? (
                 <JdVopTokenDialog
                     connectionId={connectionId}

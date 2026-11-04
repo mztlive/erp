@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 import type { PaginationState } from "@tanstack/react-table"
 import { PlusIcon, RefreshCwIcon } from "lucide-react"
@@ -115,21 +117,30 @@ export function ConnectionList({
                         />
                         刷新
                     </Button>
-                    <GuardedBusinessAction
-                        id="supplier-api-connections-list-create"
-                        type="button"
-                        size="sm"
-                        disabled={!data?.hasModulePermission}
-                        reason={
-                            data?.hasModulePermission
-                                ? undefined
-                                : "当前账号无模块权限"
-                        }
-                        onClick={() => setCreateOpen(true)}
-                    >
-                        <PlusIcon className="size-3.5" aria-hidden="true" />
-                        新建连接
-                    </GuardedBusinessAction>
+                    {Boolean(data?.hasModulePermission) && (
+                        <PermissionGuard
+                            permission={"supplier_api_connection:create"}
+                        >
+                            <GuardedBusinessAction
+                                id="supplier-api-connections-list-create"
+                                type="button"
+                                size="sm"
+                                disabled={!data?.hasModulePermission}
+                                reason={
+                                    data?.hasModulePermission
+                                        ? undefined
+                                        : "当前账号无模块权限"
+                                }
+                                onClick={() => setCreateOpen(true)}
+                            >
+                                <PlusIcon
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                                新建连接
+                            </GuardedBusinessAction>
+                        </PermissionGuard>
+                    )}
                 </div>
             </ListWorkspaceHeader>
 

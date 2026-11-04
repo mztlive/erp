@@ -185,29 +185,31 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                         </p>
                     )}
                 </div>
-                <Button
-                    id="sales-selection-detail-access-password"
-                    variant="outline"
-                    size="sm"
-                    disabled={
-                        pending ||
-                        !canMaintain ||
-                        Boolean(passwordDisabledReason)
-                    }
-                    title={
-                        !canMaintain
-                            ? "当前账号无权维护选品册密码"
-                            : passwordDisabledReason
-                    }
-                    aria-describedby={
-                        passwordDisabledReason
-                            ? "sales-selection-detail-access-password-wait"
-                            : undefined
-                    }
-                    onClick={() => setPasswordEditing(true)}
-                >
-                    {detail.access_password_set ? "修改密码" : "设置密码"}
-                </Button>
+                {canMaintain && (
+                    <Button
+                        id="sales-selection-detail-access-password"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                            pending ||
+                            !canMaintain ||
+                            Boolean(passwordDisabledReason)
+                        }
+                        title={
+                            !canMaintain
+                                ? "当前账号无权维护选品册密码"
+                                : passwordDisabledReason
+                        }
+                        aria-describedby={
+                            passwordDisabledReason
+                                ? "sales-selection-detail-access-password-wait"
+                                : undefined
+                        }
+                        onClick={() => setPasswordEditing(true)}
+                    >
+                        {detail.access_password_set ? "修改密码" : "设置密码"}
+                    </Button>
+                )}
             </section>
             <AccessPasswordDialog
                 open={passwordEditing && canMaintain}

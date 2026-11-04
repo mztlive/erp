@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 
 import { MultiOptionCombobox, OptionCombobox } from "@/components/business"
@@ -271,34 +273,36 @@ export function SettlementListToolbar({
             }
             morePanel={
                 <div className="space-y-5">
-                    <fieldset className="min-w-0 space-y-3">
-                        <legend className="mb-1 text-sm font-medium">
-                            人员
-                        </legend>
-                        <div className="grid min-w-0 gap-3">
-                            <PersonDirectoryFilter
-                                id={`${prefix}-filter-owner`}
-                                label="对账负责人"
-                                value={ownerUserIdsDraft}
-                                onChange={setOwnerUserIdsDraft}
-                                category="business"
-                            />
-                            <PersonDirectoryFilter
-                                id={`${prefix}-filter-operator`}
-                                label="差异处理人"
-                                value={operatorUserIdsDraft}
-                                onChange={setOperatorUserIdsDraft}
-                                category="business"
-                            />
-                            <PersonDirectoryFilter
-                                id={`${prefix}-filter-handler`}
-                                label="当前复核人"
-                                value={handlerUserIdsDraft}
-                                onChange={setHandlerUserIdsDraft}
-                                category="business"
-                            />
-                        </div>
-                    </fieldset>
+                    <PermissionGuard permission={"business_person:list"}>
+                        <fieldset className="min-w-0 space-y-3">
+                            <legend className="mb-1 text-sm font-medium">
+                                人员
+                            </legend>
+                            <div className="grid min-w-0 gap-3">
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-filter-owner`}
+                                    label="对账负责人"
+                                    value={ownerUserIdsDraft}
+                                    onChange={setOwnerUserIdsDraft}
+                                    category="business"
+                                />
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-filter-operator`}
+                                    label="差异处理人"
+                                    value={operatorUserIdsDraft}
+                                    onChange={setOperatorUserIdsDraft}
+                                    category="business"
+                                />
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-filter-handler`}
+                                    label="当前复核人"
+                                    value={handlerUserIdsDraft}
+                                    onChange={setHandlerUserIdsDraft}
+                                    category="business"
+                                />
+                            </div>
+                        </fieldset>
+                    </PermissionGuard>
                     <fieldset className="min-w-0 border-t pt-4">
                         <legend className="sr-only">业务组织</legend>
                         <OrganizationUnitFilter

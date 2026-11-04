@@ -74,7 +74,7 @@ export function OfferingTerms({
                 </div>
                 {!canViewCosts ? (
                     <p className="mt-3 text-xs text-muted-foreground">
-                        当前账号无权查看采购成本、税率和费用。
+                        采购成本、税费：无权限
                     </p>
                 ) : null}
                 <dl className="mt-4 space-y-3">

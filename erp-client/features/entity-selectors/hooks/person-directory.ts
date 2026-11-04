@@ -48,9 +48,13 @@ export function personDirectorySelectedKey(
 }
 
 /** 同一查询条件下连续读取已请求的页，后续页携带第一页的目录版本。 */
-export function usePersonDirectoryList(filters: PersonDirectoryFilters) {
+export function usePersonDirectoryList(
+    filters: PersonDirectoryFilters,
+    enabled = true,
+) {
     return useQuery({
         queryKey: personDirectoryListKey(filters),
+        enabled,
         queryFn: async (): Promise<{
             pages: PersonDirectoryPage[]
             scopeVersion: string
@@ -97,12 +101,13 @@ export function usePersonDirectoryList(filters: PersonDirectoryFilters) {
 export function usePersonDirectorySelected(
     category: PersonDirectoryCategory,
     ids: readonly string[],
+    enabled = true,
 ) {
     const selectedIds = [...ids].sort()
     return useQuery({
         queryKey: personDirectorySelectedKey(category, selectedIds),
         queryFn: () => fetchSelectedPeople(category, selectedIds),
-        enabled: selectedIds.length > 0,
+        enabled: enabled && selectedIds.length > 0,
         staleTime: 0,
         placeholderData: undefined,
     })

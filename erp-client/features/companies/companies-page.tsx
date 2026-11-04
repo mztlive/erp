@@ -105,6 +105,7 @@ export const CompaniesPage = () => {
                         moreLabel={`${row.original.legal_name} 更多操作`}
                         actions={[
                             {
+                                hidden: !canUpdate,
                                 id: `company-edit-${segment}`,
                                 label: "编辑",
                                 icon: PencilIcon,
@@ -112,6 +113,7 @@ export const CompaniesPage = () => {
                                 onClick: () => setEditing(row.original),
                             },
                             {
+                                hidden: !canUpdate,
                                 id: `company-status-${segment}`,
                                 icon:
                                     row.original.status === "active"
@@ -142,6 +144,7 @@ export const CompaniesPage = () => {
                     <PageActions
                         actions={[
                             {
+                                hidden: !canCreate,
                                 id: "companies-create",
                                 actionKey: "create",
                                 label: "新建公司主体",

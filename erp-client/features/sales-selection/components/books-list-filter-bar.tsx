@@ -303,7 +303,7 @@ export function BooksListFilterBar({
                         }
                         placeholder="全部"
                     />
-                    <div className="w-56 min-w-0 max-w-full">
+                    <div className="empty:hidden w-56 min-w-0 max-w-full">
                         <PersonDirectoryFilter
                             id={`${prefix}-owner`}
                             category="sales"

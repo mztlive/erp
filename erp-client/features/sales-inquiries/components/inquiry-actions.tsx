@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 import { FilePenLineIcon, UserRoundCogIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
@@ -257,54 +259,67 @@ export function InquiryActions({
                 ? ["close"]
                 : []
     const renderButton = (item: InquiryAction) => (
-        <Button
+        <PermissionGuard
             key={item}
-            id={`sales-inquiry-action-${item}`}
-            type="button"
-            variant={
-                ["close", "reassign", "supplement", "reinquire"].includes(item)
-                    ? "outline"
-                    : "default"
-            }
-            disabled={
-                disabled ||
-                (feedbackDirty && item !== "publish") ||
-                (item === "publish" && !beforePublish) ||
-                isSubmitting ||
-                ((item === "accept" || item === "reinquire") &&
-                    feedbackRound != null &&
-                    feedbackRound !== inquiry.feedback_round) ||
-                command.isPending ||
-                command.unresolved ||
-                !command.ready ||
-                (procurement && !task) ||
-                !hasPermission(
-                    permissions,
-                    `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item === "renew" ? "publish" : item}`,
-                )
-            }
-            title={
-                disabled || (feedbackDirty && item !== "publish")
-                    ? (disabledReason ?? "请先保存当前修改后再操作")
-                    : (item === "accept" || item === "reinquire") &&
-                        feedbackRound != null &&
-                        feedbackRound !== inquiry.feedback_round
-                      ? "请切回最新一轮反馈后再操作"
-                      : undefined
-            }
-            onClick={() => {
-                setAction(item)
-                setError(null)
-            }}
+            permission={`${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item === "renew" ? "publish" : item}`}
         >
-            {item === "supplement" && (
-                <FilePenLineIcon aria-hidden="true" data-icon="inline-start" />
-            )}
-            {item === "reassign" && (
-                <UserRoundCogIcon aria-hidden="true" data-icon="inline-start" />
-            )}
-            {ACTION_LABEL[item]}
-        </Button>
+            <Button
+                key={item}
+                id={`sales-inquiry-action-${item}`}
+                type="button"
+                variant={
+                    ["close", "reassign", "supplement", "reinquire"].includes(
+                        item,
+                    )
+                        ? "outline"
+                        : "default"
+                }
+                disabled={
+                    disabled ||
+                    (feedbackDirty && item !== "publish") ||
+                    (item === "publish" && !beforePublish) ||
+                    isSubmitting ||
+                    ((item === "accept" || item === "reinquire") &&
+                        feedbackRound != null &&
+                        feedbackRound !== inquiry.feedback_round) ||
+                    command.isPending ||
+                    command.unresolved ||
+                    !command.ready ||
+                    (procurement && !task) ||
+                    !hasPermission(
+                        permissions,
+                        `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item === "renew" ? "publish" : item}`,
+                    )
+                }
+                title={
+                    disabled || (feedbackDirty && item !== "publish")
+                        ? (disabledReason ?? "请先保存当前修改后再操作")
+                        : (item === "accept" || item === "reinquire") &&
+                            feedbackRound != null &&
+                            feedbackRound !== inquiry.feedback_round
+                          ? "请切回最新一轮反馈后再操作"
+                          : undefined
+                }
+                onClick={() => {
+                    setAction(item)
+                    setError(null)
+                }}
+            >
+                {item === "supplement" && (
+                    <FilePenLineIcon
+                        aria-hidden="true"
+                        data-icon="inline-start"
+                    />
+                )}
+                {item === "reassign" && (
+                    <UserRoundCogIcon
+                        aria-hidden="true"
+                        data-icon="inline-start"
+                    />
+                )}
+                {ACTION_LABEL[item]}
+            </Button>
+        </PermissionGuard>
     )
     return (
         <div

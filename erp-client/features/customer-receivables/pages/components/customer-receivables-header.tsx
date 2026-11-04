@@ -54,6 +54,7 @@ export function CustomerReceivablesHeader({
         <PageActions
             actions={[
                 {
+                    hidden: !canExport,
                     actionKey: "export",
                     id: embedded
                         ? "customer-receivables-header-embedded-export"
@@ -68,6 +69,7 @@ export function CustomerReceivablesHeader({
                     onClick: onExport,
                 },
                 {
+                    hidden: !canRegisterInvoice,
                     actionKey: "register-invoice",
                     id: embedded
                         ? "customer-receivables-header-embedded-register-invoice"
@@ -84,6 +86,7 @@ export function CustomerReceivablesHeader({
                     onClick: onRegisterInvoice,
                 },
                 {
+                    hidden: !canRegisterReceipt,
                     actionKey: "register-receipt",
                     id: embedded
                         ? "customer-receivables-header-embedded-register-receipt"

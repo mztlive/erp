@@ -182,6 +182,7 @@ export function CategoryTreePage() {
                             actionKey: "create-root",
                             label: "新建分类",
                             icon: PlusIcon,
+                            hidden: !state.canCreate,
                             disabled: !state.canCreate,
                             title: !state.canCreate
                                 ? state.createBlockedReason

@@ -253,21 +253,23 @@ export function PortalReviewMappingBatch({
                             "采用前将重新读取本申请，核对原稿、申请状态及全部字典版本。"}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                        <Button
-                            id={`${prefix}-adopt`}
-                            type="button"
-                            variant="outline"
-                            disabled={
-                                !canPrepare ||
-                                !canReadDetails ||
-                                saving ||
-                                !saved.plan ||
-                                !!saved.issue
-                            }
-                            onClick={() => void adopt()}
-                        >
-                            采用为本申请确认的映射
-                        </Button>
+                        {canReadDetails && (
+                            <Button
+                                id={`${prefix}-adopt`}
+                                type="button"
+                                variant="outline"
+                                disabled={
+                                    !canPrepare ||
+                                    !canReadDetails ||
+                                    saving ||
+                                    !saved.plan ||
+                                    !!saved.issue
+                                }
+                                onClick={() => void adopt()}
+                            >
+                                采用为本申请确认的映射
+                            </Button>
+                        )}
                         <Button
                             id={`${prefix}-discard`}
                             type="button"
@@ -353,18 +355,22 @@ export function PortalReviewMappingBatch({
                     当前账号没有申请列表资格，可逐张完成当前审核任务。
                 </p>
             )}
-            <Button
-                id={`${prefix}-load`}
-                type="button"
-                variant="outline"
-                disabled={!canPrepare || !canList || !canReadDetails || saving}
-                onClick={() => {
-                    setOpened(true)
-                    if (opened) void applications.refetch()
-                }}
-            >
-                读取同供应商待审核申请
-            </Button>
+            {canList && canReadDetails && (
+                <Button
+                    id={`${prefix}-load`}
+                    type="button"
+                    variant="outline"
+                    disabled={
+                        !canPrepare || !canList || !canReadDetails || saving
+                    }
+                    onClick={() => {
+                        setOpened(true)
+                        if (opened) void applications.refetch()
+                    }}
+                >
+                    读取同供应商待审核申请
+                </Button>
+            )}
             {opened && canList && canReadDetails && (
                 <>
                     <PortalError

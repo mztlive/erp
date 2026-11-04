@@ -131,7 +131,7 @@ export function ContractsTablePanel({
                                 }
                                 placeholder="全部"
                             />
-                            <div className="w-56 max-w-full">
+                            <div className="empty:hidden w-56 max-w-full">
                                 <PersonDirectoryFilter
                                     id="card-contracts-list-filter-owner"
                                     label="当前跟进负责人"

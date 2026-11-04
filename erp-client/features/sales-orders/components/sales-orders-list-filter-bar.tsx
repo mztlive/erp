@@ -95,11 +95,11 @@ export function SalesOrdersListFilterBar({
             onResetMore={f.resetMoreFilters}
             primaryFilters={
                 <>
-                    <div className="w-44 max-w-full">
-                        {hasPermission(
-                            account.data?.permissions,
-                            "sales_person:list",
-                        ) ? (
+                    {hasPermission(
+                        account.data?.permissions,
+                        "sales_person:list",
+                    ) && (
+                        <div className="w-44 max-w-full">
                             <PersonDirectoryFilter
                                 id="sales-orders-list-owner"
                                 category="sales"
@@ -119,12 +119,8 @@ export function SalesOrdersListFilterBar({
                                     f.filterDraft.includeDescendants
                                 }
                             />
-                        ) : (
-                            <span className="text-sm text-muted-foreground">
-                                负责销售：无权查询人员目录
-                            </span>
-                        )}
-                    </div>
+                        </div>
+                    )}
                     <OptionCombobox
                         id="sales-orders-list-filter-commercial-status"
                         className="w-48 max-w-full"

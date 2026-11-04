@@ -279,41 +279,49 @@ export function CreateDraftDialog({
                                                 disabled: !canCopyOther,
                                                 suffix: "other",
                                             },
-                                        ].map((option) => (
-                                            <Label
-                                                key={option.value}
-                                                htmlFor={`${id}-draft-source-${option.suffix}`}
-                                                className="flex items-center gap-3 rounded-lg border border-border p-3 font-normal has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-accent/40"
-                                            >
-                                                <RadioGroupItem
-                                                    id={`${id}-draft-source-${option.suffix}`}
-                                                    value={option.value}
-                                                    disabled={
-                                                        option.disabled ||
-                                                        pending ||
-                                                        Boolean(createdDraft)
-                                                    }
-                                                    nativeButton
-                                                    render={
-                                                        <button
-                                                            type="button"
-                                                            aria-label={
-                                                                option.label
-                                                            }
-                                                        />
-                                                    }
-                                                />
-                                                <option.icon className="size-4 shrink-0 text-muted-foreground" />
-                                                <span className="space-y-1">
-                                                    <span className="block text-sm font-medium">
-                                                        {option.label}
+                                        ]
+                                            .filter(
+                                                (option) =>
+                                                    option.value !== "OTHER" ||
+                                                    canCopyOther,
+                                            )
+                                            .map((option) => (
+                                                <Label
+                                                    key={option.value}
+                                                    htmlFor={`${id}-draft-source-${option.suffix}`}
+                                                    className="flex items-center gap-3 rounded-lg border border-border p-3 font-normal has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-accent/40"
+                                                >
+                                                    <RadioGroupItem
+                                                        id={`${id}-draft-source-${option.suffix}`}
+                                                        value={option.value}
+                                                        disabled={
+                                                            option.disabled ||
+                                                            pending ||
+                                                            Boolean(
+                                                                createdDraft,
+                                                            )
+                                                        }
+                                                        nativeButton
+                                                        render={
+                                                            <button
+                                                                type="button"
+                                                                aria-label={
+                                                                    option.label
+                                                                }
+                                                            />
+                                                        }
+                                                    />
+                                                    <option.icon className="size-4 shrink-0 text-muted-foreground" />
+                                                    <span className="space-y-1">
+                                                        <span className="block text-sm font-medium">
+                                                            {option.label}
+                                                        </span>
+                                                        <span className="block text-xs text-muted-foreground">
+                                                            {option.description}
+                                                        </span>
                                                     </span>
-                                                    <span className="block text-xs text-muted-foreground">
-                                                        {option.description}
-                                                    </span>
-                                                </span>
-                                            </Label>
-                                        ))}
+                                                </Label>
+                                            ))}
                                     </RadioGroup>
                                 </div>
                             )}

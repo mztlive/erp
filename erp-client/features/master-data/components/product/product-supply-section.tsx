@@ -42,7 +42,7 @@ import {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasPermission } from "@/lib/permissions"
 
-const NO_COST = "当前账号无权查看采购成本"
+const NO_COST = "无权限"
 
 /** 有效供给关系：启用且已有条款版本，不代表供应商当前可供。 */
 function isActive(offering: SupplierOfferingView): boolean {

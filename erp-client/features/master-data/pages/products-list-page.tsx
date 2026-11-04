@@ -168,6 +168,7 @@ export function ProductsListPage() {
                     label: "导入",
                     icon: UploadIcon,
                     variant: "outline",
+                    hidden: !state.canCreate,
                     disabled: !state.canCreate,
                     title: !state.canCreate
                         ? state.createBlockedReason
@@ -191,6 +192,7 @@ export function ProductsListPage() {
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     icon: PlusIcon,
+                    hidden: !state.canCreate,
                     disabled: !state.canCreate,
                     title: !state.canCreate
                         ? state.createBlockedReason

@@ -274,7 +274,7 @@ export function InvoiceRequestScopePage() {
                         morePanelAriaLabel="开票申请范围更多筛选条件"
                         onResetMore={urlState.resetMoreFilters}
                         primaryFilters={
-                            <div className="w-56 max-w-full min-w-0">
+                            <div className="empty:hidden w-56 max-w-full min-w-0">
                                 <PersonDirectoryFilter
                                     id={`${toolbarPrefix}-sales-owner`}
                                     category="sales"

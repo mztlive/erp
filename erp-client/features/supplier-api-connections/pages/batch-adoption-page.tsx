@@ -732,7 +732,7 @@ function BatchWorkspace({
                     >
                         重新读取批次
                     </Button>
-                    {draftInterrupted ? (
+                    {draftInterrupted && canWrite ? (
                         <Button
                             id="supplier-catalog-batch-resume-draft"
                             type="button"

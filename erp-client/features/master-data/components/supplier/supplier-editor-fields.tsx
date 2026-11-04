@@ -115,16 +115,18 @@ export function SensitiveEditableField({
                     <code className="num rounded-md bg-muted px-2 py-1.5 text-sm">
                         {maskedValue || "****"}
                     </code>
-                    <Button
-                        id={`${id}-reveal`}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!canReveal}
-                        onClick={() => void reveal()}
-                    >
-                        短时查看
-                    </Button>
+                    {canReveal && (
+                        <Button
+                            id={`${id}-reveal`}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!canReveal}
+                            onClick={() => void reveal()}
+                        >
+                            短时查看
+                        </Button>
+                    )}
                 </div>
                 {revealError ? (
                     <p className="text-xs text-destructive" role="alert">

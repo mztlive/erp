@@ -602,20 +602,22 @@ function DictionaryCreateForm({
                                 >
                                     重试本次创建
                                 </Button>
-                                <Button
-                                    id={`${prefix}-recover`}
-                                    type="button"
-                                    disabled={
-                                        !canRead ||
-                                        mutation.isPending ||
-                                        recoveryPending
-                                    }
-                                    onClick={() => void recover()}
-                                >
-                                    {recoveryPending
-                                        ? "核对中…"
-                                        : "核对已创建记录"}
-                                </Button>
+                                {canRead && (
+                                    <Button
+                                        id={`${prefix}-recover`}
+                                        type="button"
+                                        disabled={
+                                            !canRead ||
+                                            mutation.isPending ||
+                                            recoveryPending
+                                        }
+                                        onClick={() => void recover()}
+                                    >
+                                        {recoveryPending
+                                            ? "核对中…"
+                                            : "核对已创建记录"}
+                                    </Button>
+                                )}
                             </>
                         ) : (
                             <form.AppForm>

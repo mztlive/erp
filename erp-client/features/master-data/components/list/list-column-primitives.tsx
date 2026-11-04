@@ -270,6 +270,7 @@ export function warehouseActionsColumn({
                             id: `master-data-warehouse-row-${segment}-handlers`,
                             label: "配置收发责任",
                             icon: UserRoundCogIcon,
+                            hidden: !canMaintainHandlers,
                             disabled: !allowed,
                             disabledReason: message,
                             onClick: () => {

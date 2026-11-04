@@ -147,22 +147,24 @@ export function PaymentRequestsPage({
                     <RefreshCwIcon />
                     刷新
                 </Button>
-                <Button
-                    id="purchase-payment-requests-create"
-                    disabled={!canCreate}
-                    title={
-                        !canCreate
-                            ? "当前账号需要采购付款申请的创建和提交权限"
-                            : undefined
-                    }
-                    onClick={() => {
-                        setInitialPayableAccountIds([])
-                        setCreateOpen(true)
-                    }}
-                >
-                    <PlusIcon />
-                    新建付款申请
-                </Button>
+                {canCreate && (
+                    <Button
+                        id="purchase-payment-requests-create"
+                        disabled={!canCreate}
+                        title={
+                            !canCreate
+                                ? "当前账号需要采购付款申请的创建和提交权限"
+                                : undefined
+                        }
+                        onClick={() => {
+                            setInitialPayableAccountIds([])
+                            setCreateOpen(true)
+                        }}
+                    >
+                        <PlusIcon />
+                        新建付款申请
+                    </Button>
+                )}
             </ListWorkspaceHeader>
             {view === "available" ? (
                 <PaymentCandidatesList

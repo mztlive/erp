@@ -73,6 +73,7 @@ export function UnitOfMeasuresListPage() {
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     icon: PlusIcon,
+                    hidden: !state.canCreate,
                     disabled: !state.canCreate,
                     title: !state.canCreate
                         ? state.createBlockedReason

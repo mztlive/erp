@@ -257,11 +257,7 @@ export function AccountProfileOverview({
                                     />
                                     修改密码
                                 </Button>
-                            ) : (
-                                <span className="text-xs text-muted-foreground">
-                                    无修改权限
-                                </span>
-                            )}
+                            ) : null}
                         </div>
                     </section>
                 </div>

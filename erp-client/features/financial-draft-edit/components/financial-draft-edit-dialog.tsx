@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
@@ -717,47 +719,53 @@ function FinancialDraftForm({
                     >
                         {([formCanSubmit, submitting]) => (
                             <>
-                                <LoadingButton
-                                    id={`${id}-save`}
-                                    type="button"
-                                    variant="outline"
-                                    disabled={
-                                        !canSave ||
-                                        !formCanSubmit ||
-                                        pending ||
-                                        submitting ||
-                                        Boolean(unknown)
-                                    }
-                                    loading={
-                                        submitting && !submitAfterSave.current
-                                    }
-                                    onClick={() => {
-                                        submitAfterSave.current = false
-                                        void form.handleSubmit()
-                                    }}
-                                >
-                                    保存修改
-                                </LoadingButton>
-                                <LoadingButton
-                                    id={`${id}-submit`}
-                                    type="submit"
-                                    disabled={
-                                        !canSubmit ||
-                                        !rework.valid ||
-                                        !formCanSubmit ||
-                                        pending ||
-                                        submitting ||
-                                        Boolean(unknown)
-                                    }
-                                    loading={
-                                        submitting && submitAfterSave.current
-                                    }
-                                    onClick={() => {
-                                        submitAfterSave.current = true
-                                    }}
-                                >
-                                    保存并提交审批
-                                </LoadingButton>
+                                <PermissionGuard permission={`${kind}:submit`}>
+                                    <LoadingButton
+                                        id={`${id}-save`}
+                                        type="button"
+                                        variant="outline"
+                                        disabled={
+                                            !canSave ||
+                                            !formCanSubmit ||
+                                            pending ||
+                                            submitting ||
+                                            Boolean(unknown)
+                                        }
+                                        loading={
+                                            submitting &&
+                                            !submitAfterSave.current
+                                        }
+                                        onClick={() => {
+                                            submitAfterSave.current = false
+                                            void form.handleSubmit()
+                                        }}
+                                    >
+                                        保存修改
+                                    </LoadingButton>
+                                </PermissionGuard>
+                                <PermissionGuard permission={`${kind}:submit`}>
+                                    <LoadingButton
+                                        id={`${id}-submit`}
+                                        type="submit"
+                                        disabled={
+                                            !canSubmit ||
+                                            !rework.valid ||
+                                            !formCanSubmit ||
+                                            pending ||
+                                            submitting ||
+                                            Boolean(unknown)
+                                        }
+                                        loading={
+                                            submitting &&
+                                            submitAfterSave.current
+                                        }
+                                        onClick={() => {
+                                            submitAfterSave.current = true
+                                        }}
+                                    >
+                                        保存并提交审批
+                                    </LoadingButton>
+                                </PermissionGuard>
                             </>
                         )}
                     </form.Subscribe>

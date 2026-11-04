@@ -314,50 +314,53 @@ export function CatalogFilterForm({
                     </Field>
                 )}
             </form.AppField>
-            <Field>
-                <FieldLabel htmlFor="supplier-catalog-price_min">
-                    接口采购报价（元，含上下边界）
-                </FieldLabel>
-                <div className="flex min-w-0 items-start gap-2">
-                    {(["price_min", "price_max"] as const).map((name) => (
-                        <form.AppField key={name} name={name}>
-                            {(field) => (
-                                <div className="min-w-0 flex-1">
-                                    <Input
-                                        id={`supplier-catalog-${name}`}
-                                        aria-label={
-                                            name === "price_min"
-                                                ? "最低采购报价"
-                                                : "最高采购报价"
-                                        }
-                                        inputMode="decimal"
-                                        disabled={!canReadCost}
-                                        value={field.state.value}
-                                        onChange={(event) =>
-                                            field.handleChange(
-                                                event.target.value,
-                                            )
-                                        }
-                                        aria-invalid={
-                                            field.state.meta.errors.length > 0
-                                        }
-                                        placeholder={
-                                            canReadCost
-                                                ? name === "price_min"
-                                                    ? "最低，不限"
-                                                    : "最高，不限"
-                                                : "无查看权限"
-                                        }
-                                    />
-                                    <FieldError
-                                        errors={field.state.meta.errors}
-                                    />
-                                </div>
-                            )}
-                        </form.AppField>
-                    ))}
-                </div>
-            </Field>
+            {canReadCost && (
+                <Field>
+                    <FieldLabel htmlFor="supplier-catalog-price_min">
+                        接口采购报价（元，含上下边界）
+                    </FieldLabel>
+                    <div className="flex min-w-0 items-start gap-2">
+                        {(["price_min", "price_max"] as const).map((name) => (
+                            <form.AppField key={name} name={name}>
+                                {(field) => (
+                                    <div className="min-w-0 flex-1">
+                                        <Input
+                                            id={`supplier-catalog-${name}`}
+                                            aria-label={
+                                                name === "price_min"
+                                                    ? "最低采购报价"
+                                                    : "最高采购报价"
+                                            }
+                                            inputMode="decimal"
+                                            disabled={!canReadCost}
+                                            value={field.state.value}
+                                            onChange={(event) =>
+                                                field.handleChange(
+                                                    event.target.value,
+                                                )
+                                            }
+                                            aria-invalid={
+                                                field.state.meta.errors.length >
+                                                0
+                                            }
+                                            placeholder={
+                                                canReadCost
+                                                    ? name === "price_min"
+                                                        ? "最低，不限"
+                                                        : "最高，不限"
+                                                    : "无查看权限"
+                                            }
+                                        />
+                                        <FieldError
+                                            errors={field.state.meta.errors}
+                                        />
+                                    </div>
+                                )}
+                            </form.AppField>
+                        ))}
+                    </div>
+                </Field>
+            )}
             {(["availability", "selection_status"] as const).map((name) => {
                 const choices =
                     name === "availability"

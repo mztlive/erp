@@ -92,70 +92,72 @@ export function PaymentCandidatesList({
                 />
             }
             selectionBar={
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">
-                        共 {total} 张 · 已选 {selection.ids.length} 张
-                    </span>
-                    <Button
-                        id="purchase-payment-candidates-select-all"
-                        variant="ghost"
-                        size="sm"
-                        disabled={
-                            !canCreate ||
-                            !total ||
-                            selection.busy ||
-                            query.isFetching ||
-                            query.isError
-                        }
-                        onClick={() => void selection.select("all")}
-                    >
-                        全选筛选结果
-                    </Button>
-                    <Button
-                        id="purchase-payment-candidates-clear"
-                        variant="ghost"
-                        size="sm"
-                        disabled={!selection.ids.length || selection.busy}
-                        onClick={() => {
-                            selection.setSelection({})
-                            selection.cancelPending()
-                        }}
-                    >
-                        清空
-                    </Button>
-                    <Button
-                        id="purchase-payment-candidates-apply"
-                        size="sm"
-                        disabled={
-                            !canCreate ||
-                            !selection.ids.length ||
-                            selection.busy ||
-                            query.isFetching ||
-                            query.isError
-                        }
-                        title={
-                            !canCreate
-                                ? "当前账号需要采购付款申请的创建和提交权限"
-                                : undefined
-                        }
-                        onClick={() => void selection.select("apply")}
-                    >
-                        发起申请
-                        {selection.busy
-                            ? "（正在核对…）"
-                            : selection.ids.length
-                              ? `（${selection.ids.length}）`
-                              : ""}
-                    </Button>
-                    {selection.error && (
-                        <p
-                            role="alert"
-                            className="w-full text-sm text-destructive"
+                canCreate ? (
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">
+                            共 {total} 张 · 已选 {selection.ids.length} 张
+                        </span>
+                        <Button
+                            id="purchase-payment-candidates-select-all"
+                            variant="ghost"
+                            size="sm"
+                            disabled={
+                                !canCreate ||
+                                !total ||
+                                selection.busy ||
+                                query.isFetching ||
+                                query.isError
+                            }
+                            onClick={() => void selection.select("all")}
                         >
-                            {selection.error}
-                        </p>
-                    )}
-                </div>
+                            全选筛选结果
+                        </Button>
+                        <Button
+                            id="purchase-payment-candidates-clear"
+                            variant="ghost"
+                            size="sm"
+                            disabled={!selection.ids.length || selection.busy}
+                            onClick={() => {
+                                selection.setSelection({})
+                                selection.cancelPending()
+                            }}
+                        >
+                            清空
+                        </Button>
+                        <Button
+                            id="purchase-payment-candidates-apply"
+                            size="sm"
+                            disabled={
+                                !canCreate ||
+                                !selection.ids.length ||
+                                selection.busy ||
+                                query.isFetching ||
+                                query.isError
+                            }
+                            title={
+                                !canCreate
+                                    ? "当前账号需要采购付款申请的创建和提交权限"
+                                    : undefined
+                            }
+                            onClick={() => void selection.select("apply")}
+                        >
+                            发起申请
+                            {selection.busy
+                                ? "（正在核对…）"
+                                : selection.ids.length
+                                  ? `（${selection.ids.length}）`
+                                  : ""}
+                        </Button>
+                        {selection.error && (
+                            <p
+                                role="alert"
+                                className="w-full text-sm text-destructive"
+                            >
+                                {selection.error}
+                            </p>
+                        )}
+                    </div>
+                ) : null
             }
             table={
                 <DataTable

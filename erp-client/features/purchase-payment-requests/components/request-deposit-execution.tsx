@@ -34,18 +34,20 @@ export function RequestDepositExecution({
         <section className="space-y-4 rounded-lg bg-muted/40 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-medium">供应商预存款执行</h3>
-                <Button
-                    id="ppr-deposit-execute"
-                    disabled={
-                        !canExecute ||
-                        !executable ||
-                        mutation.isPending ||
-                        mutation.isSuccess
-                    }
-                    onClick={() => setConfirmOpen(true)}
-                >
-                    {unknown ? "查询原余额执行结果" : "执行本申请余额占用"}
-                </Button>
+                {canExecute && (
+                    <Button
+                        id="ppr-deposit-execute"
+                        disabled={
+                            !canExecute ||
+                            !executable ||
+                            mutation.isPending ||
+                            mutation.isSuccess
+                        }
+                        onClick={() => setConfirmOpen(true)}
+                    >
+                        {unknown ? "查询原余额执行结果" : "执行本申请余额占用"}
+                    </Button>
+                )}
             </div>
             <p className="text-sm text-muted-foreground">
                 使用本申请批准的同主体、同供应商预存款账户。系统按原采购执行组及批准预算办理专属占用；占用不计入已付，真实扣款核实后才更新核销和任务进度。

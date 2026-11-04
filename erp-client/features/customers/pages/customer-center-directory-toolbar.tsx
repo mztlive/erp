@@ -117,7 +117,7 @@ export function CustomerCenterDirectoryToolbar({
             onResetMore={resetMoreFilters}
             primaryFilters={
                 <>
-                    <div className="w-56 min-w-0 max-w-full">
+                    <div className="empty:hidden w-56 min-w-0 max-w-full">
                         <PersonDirectoryFilter
                             id="customers-directory-owner"
                             category="sales"

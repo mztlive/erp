@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import Image from "next/image"
 import { DetailPageHeader } from "@/components/business/detail-page-header"
 
@@ -59,18 +61,20 @@ export function ProductDetailHeader({
             }}
             secondaryActions={
                 !isCreate && data ? (
-                    <Button
-                        id="master-data-product-detail-header-disable"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!canDisable || pending}
-                        title={disableBlocker?.message}
-                        onClick={() => setDisableOpen(true)}
-                    >
-                        <BanIcon data-icon="inline-start" aria-hidden />
-                        {masterDataCopy.actionDisable}
-                    </Button>
+                    <PermissionGuard permission={"product:update"}>
+                        <Button
+                            id="master-data-product-detail-header-disable"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!canDisable || pending}
+                            title={disableBlocker?.message}
+                            onClick={() => setDisableOpen(true)}
+                        >
+                            <BanIcon data-icon="inline-start" aria-hidden />
+                            {masterDataCopy.actionDisable}
+                        </Button>
+                    </PermissionGuard>
                 ) : null
             }
             media={
@@ -138,21 +142,27 @@ export function ProductDetailHeader({
                             取消修改
                         </Button>
                     ) : null}
-                    <LoadingButton
-                        id="master-data-product-detail-header-submit"
-                        loading={pending}
-                        type="button"
-                        size="sm"
-                        disabled={!canRevise || pending}
-                        onClick={onSave}
+                    <PermissionGuard
+                        permission={
+                            isCreate ? "product:create" : "product:update"
+                        }
                     >
-                        <SaveIcon data-icon="inline-start" aria-hidden />
-                        {pending
-                            ? "提交中…"
-                            : isCreate
-                              ? "创建商品"
-                              : "保存更新"}
-                    </LoadingButton>
+                        <LoadingButton
+                            id="master-data-product-detail-header-submit"
+                            loading={pending}
+                            type="button"
+                            size="sm"
+                            disabled={!canRevise || pending}
+                            onClick={onSave}
+                        >
+                            <SaveIcon data-icon="inline-start" aria-hidden />
+                            {pending
+                                ? "提交中…"
+                                : isCreate
+                                  ? "创建商品"
+                                  : "保存更新"}
+                        </LoadingButton>
+                    </PermissionGuard>
                 </>
             }
         />
