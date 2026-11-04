@@ -174,7 +174,10 @@ export function OverviewPanel({
                     />
                     <OverviewField
                         label="关联合同"
-                        value={order.contractRevisionLabel || "无合同"}
+                        value={
+                            order.contractRevisionLabel ||
+                            (order.contractId ? "合同资料暂不可查看" : "无合同")
+                        }
                     />
                     <OverviewField
                         label="付款条件"
@@ -195,7 +198,16 @@ export function OverviewPanel({
                     />
                     <OverviewField
                         label="客户联系人"
-                        value={order.customerContact ?? "—"}
+                        value={
+                            order.customerContact ??
+                            (order.loadWarnings?.some((warning) =>
+                                ["客户资料", "客户联系人"].includes(
+                                    warning.source,
+                                ),
+                            )
+                                ? "暂不可查看"
+                                : "—")
+                        }
                     />
                     <OverviewField
                         label={isCard ? "履约期限" : "承诺交期"}

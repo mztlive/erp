@@ -18,7 +18,6 @@ import { OrganizationUnitFilter } from "@/features/organization/components/organ
 import { ListSearchField } from "@/components/business/list-search-field"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { PageScaffold } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { QuickPreviewSheet } from "@/components/business"
@@ -310,15 +309,6 @@ export function SupplierScopePage() {
                         </ul>
                     </div>
                 </div>
-            ) : null}
-
-            {listQuery.isError && data ? (
-                <Alert variant="destructive">
-                    <AlertTitle>刷新失败，当前显示的是上次成功数据</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(listQuery.error, "请稍后重试。")}
-                    </AlertDescription>
-                </Alert>
             ) : null}
 
             <BusinessTableFrame

@@ -18,7 +18,7 @@ import {
     type LucideIcon,
 } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -32,7 +32,7 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import type { StatusTone } from "@/components/ui/status-badge"
 import {
     Tooltip,
     TooltipContent,
@@ -349,8 +349,8 @@ function BusinessFailureState({
         error === undefined ? undefined : getErrorPresentation(error)
     const resolvedKind = presentation?.kind ?? kind ?? "system"
     const preset = failureStatePresets[resolvedKind]
-    const Icon = preset.icon
     const resolvedErrorCode = errorCode ?? presentation?.code
+    const TechnicalContainer = idPrefix || id ? "details" : "div"
 
     const retryId = idPrefix
         ? `${idPrefix}-retry`
@@ -372,53 +372,78 @@ function BusinessFailureState({
         ) : null)
 
     return (
-        <Alert
+        <section
+            role="status"
             data-slot="business-failure-state"
             data-kind={resolvedKind}
-            variant={preset.variant}
-            className={className}
+            className={cn(
+                "space-y-2 rounded-lg border border-border p-4 text-sm",
+                className,
+            )}
         >
-            <Icon aria-hidden="true" />
-            <AlertTitle className="flex flex-wrap items-center gap-2">
+            <div className="font-medium">
                 <span>{title ?? presentation?.title ?? preset.title}</span>
-                <StatusBadge tone={preset.tone} label={preset.label} />
-            </AlertTitle>
-            <AlertDescription>
+            </div>
+            <div className="text-muted-foreground">
                 <div className="flex flex-col gap-3">
                     <p>
-                        {presentation?.description ??
+                        {(presentation?.kind === "permission"
+                            ? "当前账号无权查看此内容。"
+                            : presentation?.description) ??
                             description ??
                             preset.description}
                     </p>
                     {resolvedErrorCode ||
                     presentation?.requestId ||
                     nextResponsible ? (
-                        <dl className="grid gap-1 text-xs">
-                            {resolvedErrorCode ? (
-                                <div className="flex flex-wrap gap-1">
-                                    <dt className="font-medium">错误编号：</dt>
-                                    <dd className="num font-mono">
-                                        {resolvedErrorCode}
-                                    </dd>
-                                </div>
-                            ) : null}
-                            {presentation?.requestId ? (
-                                <div className="flex flex-wrap gap-1">
-                                    <dt className="font-medium">请求编号：</dt>
-                                    <dd className="num font-mono">
-                                        {presentation.requestId}
-                                    </dd>
-                                </div>
-                            ) : null}
-                            {nextResponsible ? (
-                                <div className="flex flex-wrap gap-1">
-                                    <dt className="font-medium">
-                                        下一责任人：
-                                    </dt>
-                                    <dd>{nextResponsible}</dd>
-                                </div>
-                            ) : null}
-                        </dl>
+                        <TechnicalContainer>
+                            {idPrefix || id ? (
+                                <summary
+                                    id={
+                                        idPrefix
+                                            ? `${idPrefix}-technical`
+                                            : id
+                                              ? `${id}-technical`
+                                              : undefined
+                                    }
+                                    className="cursor-pointer text-xs"
+                                >
+                                    技术详情
+                                </summary>
+                            ) : (
+                                <p className="text-xs">技术详情</p>
+                            )}
+                            <dl className="mt-2 grid gap-1 text-xs">
+                                {resolvedErrorCode ? (
+                                    <div className="flex flex-wrap gap-1">
+                                        <dt className="font-medium">
+                                            错误编号：
+                                        </dt>
+                                        <dd className="num font-mono">
+                                            {resolvedErrorCode}
+                                        </dd>
+                                    </div>
+                                ) : null}
+                                {presentation?.requestId ? (
+                                    <div className="flex flex-wrap gap-1">
+                                        <dt className="font-medium">
+                                            请求编号：
+                                        </dt>
+                                        <dd className="num font-mono">
+                                            {presentation.requestId}
+                                        </dd>
+                                    </div>
+                                ) : null}
+                                {nextResponsible ? (
+                                    <div className="flex flex-wrap gap-1">
+                                        <dt className="font-medium">
+                                            下一责任人：
+                                        </dt>
+                                        <dd>{nextResponsible}</dd>
+                                    </div>
+                                ) : null}
+                            </dl>
+                        </TechnicalContainer>
                     ) : null}
                     {presentation?.fieldErrors ? (
                         <ul className="list-disc space-y-1 pl-5">
@@ -438,8 +463,8 @@ function BusinessFailureState({
                         </div>
                     ) : null}
                 </div>
-            </AlertDescription>
-        </Alert>
+            </div>
+        </section>
     )
 }
 

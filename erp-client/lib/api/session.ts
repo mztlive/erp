@@ -44,6 +44,16 @@ export const setToken = (
  * 清除登录 token（登出或 401 失效时调用）。
  */
 export const clearToken = (session: ApiSession = "admin"): void => {
+    if (session === "admin") {
+        window.erpSystemFeedback?.clear()
+        if (window.parent !== window) {
+            try {
+                window.parent.erpSystemFeedback?.clear()
+            } catch {
+                /* 非同源页面不共享状态。 */
+            }
+        }
+    }
     if (session !== "none") localStorage.removeItem(TOKEN_STORAGE_KEYS[session])
 }
 

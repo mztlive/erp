@@ -69,14 +69,15 @@ export function SalesOrdersListTable(props: {
         [downloadingContractId, downloadContract],
     )
 
-    const errorState = isError ? (
-        <BusinessFailureState
-            id="sales-orders-list-retry"
-            title="销售单列表加载失败"
-            error={error}
-            onRetry={onRetry}
-        />
-    ) : undefined
+    const errorState =
+        isError && items.length === 0 ? (
+            <BusinessFailureState
+                id="sales-orders-list-retry"
+                title="销售单列表加载失败"
+                error={error}
+                onRetry={onRetry}
+            />
+        ) : undefined
     const noScope = props.noScope === true
     const emptyState =
         !loading && items.length === 0 ? (

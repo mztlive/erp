@@ -1,3 +1,4 @@
+import { hasPermission } from "@/lib/permissions"
 /**
  * W05 销售单详情与附属信息查询（queryFn 纯函数）。
  *
@@ -6,7 +7,7 @@
  */
 
 import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
-import { getErrorMessage, type ApiError } from "@/lib/api/errors"
+import { getErrorPresentation, type ApiError } from "@/lib/api/errors"
 import {
     PERMISSION_VERSION,
     type BackendContractDetail,
@@ -100,7 +101,7 @@ async function loadDetailExtras(
 
 async function loadCustomerDisplay(
     customerId: string,
-    warnings: string[],
+    warnings: NonNullable<SalesOrderDetailView["loadWarnings"]>,
 ): Promise<{
     customerName?: string
     customerContact?: string
@@ -119,7 +120,10 @@ async function loadCustomerDisplay(
                 sort_dir: "desc",
             },
         ).catch((error: unknown) => {
-            warnings.push(`客户联系人读取失败：${getErrorMessage(error)}`)
+            warnings.push({
+                source: "客户联系人",
+                failure: getErrorPresentation(error),
+            })
             return null
         })
         const contact =
@@ -131,7 +135,10 @@ async function loadCustomerDisplay(
             customerContact: contact?.contact_name,
         }
     } catch (error) {
-        warnings.push(`客户资料读取失败：${getErrorMessage(error)}`)
+        warnings.push({
+            source: "客户资料",
+            failure: getErrorPresentation(error),
+        })
         return {}
     }
 }
@@ -139,7 +146,7 @@ async function loadCustomerDisplay(
 async function loadContractDisplay(
     contractId: string | null | undefined,
     contractRevisionId: string | null | undefined,
-    warnings: string[],
+    warnings: NonNullable<SalesOrderDetailView["loadWarnings"]>,
 ): Promise<{
     contractNumber?: string
     contractRevisionLabel?: string
@@ -163,7 +170,10 @@ async function loadContractDisplay(
             customerName: revision?.customer_name,
         }
     } catch (error) {
-        warnings.push(`合同资料读取失败：${getErrorMessage(error)}`)
+        warnings.push({
+            source: "合同资料",
+            failure: getErrorPresentation(error),
+        })
         return {}
     }
 }
@@ -171,6 +181,7 @@ async function loadContractDisplay(
 export async function fetchSalesOrderDetail(
     id: string,
     changeOrderScopeVersion?: string,
+    permissions?: readonly string[],
 ): Promise<SalesOrderDetailView | null> {
     let detail: BackendSalesOrderDetail
     try {
@@ -183,10 +194,36 @@ export async function fetchSalesOrderDetail(
         throw err
     }
 
-    const loadWarnings: string[] = []
+    const loadWarnings: NonNullable<SalesOrderDetailView["loadWarnings"]> = []
+    const canReadCustomer =
+        permissions === undefined ||
+        hasPermission(permissions, "customer:detail")
+    const canReadAcceptance =
+        permissions === undefined ||
+        hasPermission(permissions, "customer_acceptance:list")
+    for (const [allowed, source] of [
+        [canReadCustomer, "客户资料"],
+        [canReadAcceptance, "验收摘要"],
+    ] as const) {
+        if (!allowed)
+            loadWarnings.push({
+                source,
+                failure: {
+                    kind: "permission",
+                    title: "无权查看",
+                    description: "当前账号无权查看此关联资料。",
+                    retryable: false,
+                },
+            })
+    }
     const commercialSource = pickSalesOrderCommercialSource(detail)
     const [customerDisplay, contractDisplay, extras] = await Promise.all([
-        loadCustomerDisplay(detail.customer_id, loadWarnings),
+        canReadCustomer
+            ? loadCustomerDisplay(detail.customer_id, loadWarnings)
+            : Promise.resolve({
+                  customerName: commercialSource?.customer_name ?? undefined,
+                  customerContact: undefined,
+              }),
         loadContractDisplay(
             detail.contract_id,
             commercialSource?.contract_revision_id,
@@ -213,44 +250,50 @@ export async function fetchSalesOrderDetail(
 
     // 最近验收摘要（可选）
     let acceptance: SalesOrderDetailView["acceptance"] = null
-    try {
-        const accPage = await apiGet<
-            PageView<{
-                id: string
-                acceptance_no: string
-                sales_order_id: string
-                accepted_at: number
-                result: string
-                status: string
-                version: number
-                created_at: number
-            }>
-        >("/admin/customer-acceptances", {
-            sales_order_id: id,
-            status: "POSTED",
-            page: 1,
-            page_size: 1,
-            sort_by: "accepted_at",
-            sort_dir: "desc",
-        })
-        const latest = accPage.items[0]
-        if (latest) {
-            acceptance = {
-                acceptedQuantity: "",
-                note: latest.result,
-                reference: latest.acceptance_no,
-                postedAt: formatInstant(latest.accepted_at),
+    if (canReadAcceptance)
+        try {
+            const accPage = await apiGet<
+                PageView<{
+                    id: string
+                    acceptance_no: string
+                    sales_order_id: string
+                    accepted_at: number
+                    result: string
+                    status: string
+                    version: number
+                    created_at: number
+                }>
+            >("/admin/customer-acceptances", {
+                sales_order_id: id,
+                status: "POSTED",
+                page: 1,
+                page_size: 1,
+                sort_by: "accepted_at",
+                sort_dir: "desc",
+            })
+            const latest = accPage.items[0]
+            if (latest) {
+                acceptance = {
+                    acceptedQuantity: "",
+                    note: latest.result,
+                    reference: latest.acceptance_no,
+                    postedAt: formatInstant(latest.accepted_at),
+                }
             }
+        } catch (error) {
+            loadWarnings.push({
+                source: "验收摘要",
+                failure: getErrorPresentation(error),
+            })
         }
-    } catch (error) {
-        loadWarnings.push(`验收摘要读取失败：${getErrorMessage(error)}`)
-    }
 
     const queriedAt = formatIsoNow()
     return {
         ...order,
         currentWork: detail.current_work,
-        loadWarnings: loadWarnings.sort(),
+        loadWarnings: loadWarnings.sort((a, b) =>
+            a.source.localeCompare(b.source),
+        ),
         inquirySource: detail.inquiry_source,
         selectionSource: detail.selection_source,
         customerId: detail.customer_id,

@@ -1,6 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { SystemFeedbackPanel } from "./system-feedback-panel"
 
 import { InboxPopover } from "@/features/notifications/components/inbox-popover"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -29,6 +30,7 @@ export function WorkspaceTopNav({
                 className="flex min-w-0 shrink-0 items-center gap-2"
             >
                 {actions}
+                <SystemFeedbackPanel />
                 <InboxPopover />
                 <WorkspaceAccountMenu />
             </nav>

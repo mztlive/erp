@@ -1,5 +1,8 @@
 "use client"
 
+import { accountProfileKeys } from "@/features/auth/hooks/queries"
+import { fetchAccountProfile } from "@/features/auth/api"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
@@ -95,7 +98,11 @@ export function useSalesOrderDetailQuery(
     return useQuery({
         queryKey: salesOrderKeys.detail(salesOrderId),
         refetchOnMount: refreshOnMount ? "always" : true,
-        queryFn: () => {
+        queryFn: async () => {
+            const account = await client.ensureQueryData({
+                queryKey: accountProfileKeys.current(),
+                queryFn: fetchAccountProfile,
+            })
             const previous = client.getQueryData<
                 | import("@/features/sales-orders/api/contracts").SalesOrderDetailView
                 | null
@@ -103,6 +110,7 @@ export function useSalesOrderDetailQuery(
             return fetchSalesOrderDetail(
                 salesOrderId,
                 previous?.changeOrderScopeVersion,
+                account.permissions,
             )
         },
         enabled: Boolean(salesOrderId),

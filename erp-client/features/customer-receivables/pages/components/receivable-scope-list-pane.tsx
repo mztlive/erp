@@ -9,7 +9,6 @@ import {
     DataTable,
 } from "@/components/business"
 import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -29,7 +28,6 @@ import {
 import { ReceivableScopeToolbar } from "@/features/customer-receivables/pages/components/receivable-scope-toolbar"
 import { VIEW_LABEL } from "@/features/customer-receivables/types"
 import type { useReceivableScopeUrlState } from "@/features/customer-receivables/pages/hooks/use-receivable-scope-url-state"
-import { getErrorMessage } from "@/lib/api/errors"
 
 const SCOPE_VIEWS = ["receivable", "receipt", "sales_invoice"] as const
 
@@ -199,15 +197,6 @@ export function ReceivableScopeListPane({
                     onClearFilters={urlState.clearFilters}
                     clearId="customer-receivables-scope-banner-clear-filters"
                 />
-            ) : null}
-
-            {isError && data ? (
-                <Alert variant="destructive">
-                    <AlertTitle>刷新失败，当前显示的是上次成功数据</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(error, "请稍后重试。")}
-                    </AlertDescription>
-                </Alert>
             ) : null}
 
             <BusinessTableFrame

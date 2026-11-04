@@ -1,5 +1,8 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+
 import type { Dispatch, SetStateAction } from "react"
 import { OptionCombobox } from "@/components/business"
 import { DateRangePicker } from "@/components/ui/date-picker"
@@ -126,6 +129,7 @@ export function SalesOrdersListFilterPanel({
             />
         </ListWorkspaceFilterField>
     )
+    const account = useAccountProfileQuery()
     return (
         <div className="space-y-4">
             <fieldset className="min-w-0 space-y-2">
@@ -189,40 +193,58 @@ export function SalesOrdersListFilterPanel({
                         htmlFor="sales-orders-list-filter-customer"
                         label="客户"
                     >
-                        <CustomerSearchCombobox
-                            id="sales-orders-list-filter-customer"
-                            purpose="filter"
-                            value={draft.customerId || undefined}
-                            onValueChange={(customerId) =>
-                                onDraftChange((current) => ({
-                                    ...current,
-                                    customerId: customerId ?? "",
-                                    contractId:
-                                        customerId === current.customerId
-                                            ? current.contractId
-                                            : "",
-                                }))
-                            }
-                            placeholder="全部客户"
-                        />
+                        {hasPermission(
+                            account.data?.permissions,
+                            "customer:list",
+                        ) ? (
+                            <CustomerSearchCombobox
+                                id="sales-orders-list-filter-customer"
+                                purpose="filter"
+                                value={draft.customerId || undefined}
+                                onValueChange={(customerId) =>
+                                    onDraftChange((current) => ({
+                                        ...current,
+                                        customerId: customerId ?? "",
+                                        contractId:
+                                            customerId === current.customerId
+                                                ? current.contractId
+                                                : "",
+                                    }))
+                                }
+                                placeholder="全部客户"
+                            />
+                        ) : (
+                            <span className="text-sm text-muted-foreground">
+                                无权查询客户列表
+                            </span>
+                        )}
                     </ListWorkspaceFilterField>
                     <ListWorkspaceFilterField
                         htmlFor="sales-orders-list-filter-contract"
                         label="合同"
                     >
-                        <ContractSearchCombobox
-                            id="sales-orders-list-filter-contract"
-                            purpose="filter"
-                            customerId={draft.customerId || undefined}
-                            value={draft.contractId || undefined}
-                            onValueChange={(contractId) =>
-                                onDraftChange((current) => ({
-                                    ...current,
-                                    contractId: contractId ?? "",
-                                }))
-                            }
-                            placeholder="全部合同"
-                        />
+                        {hasPermission(
+                            account.data?.permissions,
+                            "contract:list",
+                        ) ? (
+                            <ContractSearchCombobox
+                                id="sales-orders-list-filter-contract"
+                                purpose="filter"
+                                customerId={draft.customerId || undefined}
+                                value={draft.contractId || undefined}
+                                onValueChange={(contractId) =>
+                                    onDraftChange((current) => ({
+                                        ...current,
+                                        contractId: contractId ?? "",
+                                    }))
+                                }
+                                placeholder="全部合同"
+                            />
+                        ) : (
+                            <span className="text-sm text-muted-foreground">
+                                无权查询合同列表
+                            </span>
+                        )}
                     </ListWorkspaceFilterField>
                 </div>
             </fieldset>

@@ -9,7 +9,7 @@ import {
 } from "@/features/auth/api"
 import { isAuthenticated } from "@/lib/api/session"
 
-const accountProfileKeys = {
+export const accountProfileKeys = {
     all: ["account", "profile"] as const,
     current: () => [...accountProfileKeys.all, "current"] as const,
 }

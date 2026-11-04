@@ -1,5 +1,7 @@
 "use client"
 
+import { feedbackStore } from "@/lib/system-feedback"
+
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import {
@@ -298,6 +300,8 @@ export function WorkspaceTabs({
             next = [newTab(new URL("/workspace", window.location.origin))]
         // A closed last tab must not reuse its iframe and retain the closed document.
         for (const id of ids) {
+            const source = frames.current.get(id)?.contentWindow
+            if (source) feedbackStore().forgetSource(source)
             frames.current.delete(id)
             pendingRefresh.current.delete(id)
         }

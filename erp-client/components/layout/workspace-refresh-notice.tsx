@@ -6,9 +6,8 @@ import {
     onlineManager,
     useQueryClient,
 } from "@tanstack/react-query"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import { getErrorPresentation } from "@/lib/api/errors"
+import { reportProblem, resolveProblem } from "@/lib/system-feedback"
+import { createApiError } from "@/lib/api/errors"
 import { workspaceFormState } from "@/lib/workspace-form-guard"
 import { workspaceHost } from "@/lib/workspace-tabs"
 
@@ -20,7 +19,7 @@ type RefreshState =
 function useWorkspaceRefresh() {
     const queryClient = useQueryClient()
     const [state, setState] = useState<RefreshState>({ status: "idle" })
-    const retry = useRef<() => void>(() => {})
+    const retry = useRef<() => Promise<void>>(async () => {})
 
     useEffect(() => {
         let receivedRevision = 0
@@ -65,7 +64,11 @@ function useWorkspaceRefresh() {
                             query.state.fetchStatus === "paused",
                     }).length > 0
                 )
-                    throw new Error("网络连接暂不可用，请恢复连接后重试。")
+                    throw createApiError({
+                        kind: "Network",
+                        message: "网络连接暂不可用，请恢复连接后重试。",
+                        retryable: true,
+                    })
                 if (disposed) return
                 appliedRevision = revision
                 if (pending) workspaceHost()?.refreshed(window, revision)
@@ -97,7 +100,7 @@ function useWorkspaceRefresh() {
             void queryClient.invalidateQueries({ refetchType: "none" })
             void refresh()
         }
-        retry.current = () => void refresh(true)
+        retry.current = () => refresh(true)
         const unsubscribeMutation = queryClient
             .getMutationCache()
             .subscribe((event) => {
@@ -116,7 +119,7 @@ function useWorkspaceRefresh() {
         visibility()
         return () => {
             disposed = true
-            retry.current = () => {}
+            retry.current = async () => {}
             unsubscribeMutation()
             unsubscribeOnline()
             document.removeEventListener("visibilitychange", visibility)
@@ -127,51 +130,28 @@ function useWorkspaceRefresh() {
         }
     }, [queryClient])
 
-    return { state, retry: () => retry.current() }
+    return { state, retry }
 }
 
-/** 保留原页面数据，提示延后刷新及失败原因；重试只读取数据，不重复提交业务动作。 */
+/** 刷新不占据页面顶部；失败统一进入系统提示，保留已有内容与输入。 */
 export function WorkspaceRefreshNotice() {
     const { state, retry } = useWorkspaceRefresh()
-    if (state.status === "idle") return null
-    const failure =
-        state.status === "error" ? getErrorPresentation(state.error) : undefined
-    return (
-        <div className="shrink-0 px-3 pt-3">
-            <Alert variant={failure ? "warning" : "info"}>
-                <AlertTitle>
-                    {failure
-                        ? "页面数据刷新失败"
-                        : state.status === "deferred"
-                          ? "相关数据已更新"
-                          : "正在更新页面数据…"}
-                </AlertTitle>
-                <AlertDescription>
-                    {failure ? (
-                        <div className="flex flex-wrap items-center gap-3">
-                            <span>
-                                {failure.description}{" "}
-                                当前显示的数据可能不是最新结果。
-                                {failure.code && ` 错误码：${failure.code}`}
-                                {failure.requestId &&
-                                    ` 请求编号：${failure.requestId}`}
-                            </span>
-                            <Button
-                                id="workspace-frame-refresh-retry"
-                                variant="outline"
-                                size="sm"
-                                onClick={retry}
-                            >
-                                重试刷新
-                            </Button>
-                        </div>
-                    ) : state.status === "deferred" ? (
-                        "为保留当前输入，将在保存、取消编辑或提交结束后自动刷新。"
-                    ) : (
-                        "更新完成前保留当前页面内容。"
-                    )}
-                </AlertDescription>
-            </Alert>
-        </div>
-    )
+    useEffect(() => {
+        if (state.status === "error") {
+            // 请求错误已由 QueryCache 汇总；这里只补充断网等非请求错误。
+            if (
+                state.error instanceof Error &&
+                state.error.message === "网络连接暂不可用，请恢复连接后重试。"
+            ) {
+                reportProblem("workspace-refresh", state.error, {
+                    title: "页面数据尚未刷新",
+                    description: "网络连接暂不可用，当前显示上次加载的结果。",
+                    retry: async () => {
+                        await retry.current()
+                    },
+                })
+            }
+        } else if (state.status === "idle") resolveProblem("workspace-refresh")
+    }, [state, retry])
+    return null
 }

@@ -1,5 +1,8 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 
 import { OptionCombobox } from "@/components/business"
@@ -58,6 +61,7 @@ export function SalesOrdersListFilterBar({
         MORE_CHIP_KEYS.includes(key),
     ).length
 
+    const account = useAccountProfileQuery()
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
@@ -92,25 +96,34 @@ export function SalesOrdersListFilterBar({
             primaryFilters={
                 <>
                     <div className="w-44 max-w-full">
-                        <PersonDirectoryFilter
-                            id="sales-orders-list-owner"
-                            category="sales"
-                            label="负责销售"
-                            hideLabel
-                            value={f.filterDraft.ownerUserIds}
-                            onChange={(ownerUserIds) =>
-                                f.setFilterDraft((draft) => ({
-                                    ...draft,
-                                    ownerUserIds,
-                                }))
-                            }
-                            orgUnitIds={selectedOrgUnitIds(
-                                f.filterDraft.orgUnitIds,
-                            )}
-                            includeDescendants={
-                                f.filterDraft.includeDescendants
-                            }
-                        />
+                        {hasPermission(
+                            account.data?.permissions,
+                            "sales_person:list",
+                        ) ? (
+                            <PersonDirectoryFilter
+                                id="sales-orders-list-owner"
+                                category="sales"
+                                label="负责销售"
+                                hideLabel
+                                value={f.filterDraft.ownerUserIds}
+                                onChange={(ownerUserIds) =>
+                                    f.setFilterDraft((draft) => ({
+                                        ...draft,
+                                        ownerUserIds,
+                                    }))
+                                }
+                                orgUnitIds={selectedOrgUnitIds(
+                                    f.filterDraft.orgUnitIds,
+                                )}
+                                includeDescendants={
+                                    f.filterDraft.includeDescendants
+                                }
+                            />
+                        ) : (
+                            <span className="text-sm text-muted-foreground">
+                                负责销售：无权查询人员目录
+                            </span>
+                        )}
                     </div>
                     <OptionCombobox
                         id="sales-orders-list-filter-commercial-status"

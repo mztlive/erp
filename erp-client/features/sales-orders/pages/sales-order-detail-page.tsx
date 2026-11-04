@@ -1,5 +1,7 @@
 "use client"
 
+import { SalesOrderRelatedProblems } from "../components/sales-order-related-problems"
+
 import * as React from "react"
 import { SalesChangeOrderEditDialog } from "../components/sales-change-order-edit-dialog"
 import type { SalesChangeOrderSummary } from "../types"
@@ -204,7 +206,7 @@ function SalesOrderDetailContent({
         )
     }
 
-    if (query.isError) {
+    if (query.isError && !query.data) {
         return (
             <PageScaffold>
                 <PageHeader title="销售单" />
@@ -271,13 +273,10 @@ function SalesOrderDetailContent({
             density="compact"
             className="sales-order-detail-page min-h-0 overflow-hidden"
         >
-            {order.loadWarnings?.map((warning) => (
-                <BusinessFailureState
-                    key={warning}
-                    title="部分关联资料未能读取"
-                    description={warning}
-                />
-            ))}
+            <SalesOrderRelatedProblems
+                order={order}
+                onRetry={() => query.refetch({ throwOnError: true })}
+            />
             <div className="shrink-0">
                 <SalesOrderIdentityHeader
                     back={{

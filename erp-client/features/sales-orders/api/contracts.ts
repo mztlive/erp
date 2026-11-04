@@ -13,7 +13,10 @@ import type {
 export type SalesOrderDetailView = SalesOrderListItem & {
     currentWork?: BackendSalesOrderCurrentWork[]
     inquirySource?: import("./inquiry-basis").InquirySalesSourceSnapshot | null
-    loadWarnings?: string[]
+    loadWarnings?: Array<{
+        source: string
+        failure: import("@/lib/api/errors").ErrorPresentation
+    }>
     selectionSource?: import("./selection-basis").SalesSelectionSource | null
     /** 详情内原地登记票款时使用的经营客户与结算主体稳定身份。 */
     customerId?: string
