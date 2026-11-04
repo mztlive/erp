@@ -697,6 +697,30 @@
   },
   {
     "method": "GET",
+    "path": "/approval-instances/started-unread-count",
+    "handler": "approval_instance::progress::count",
+    "code": "approval_instance:read",
+    "group": "审批实例",
+    "group_desc": "审批运行、决定、恢复与取消",
+    "description": "查询本人发起审批的未读进展数量",
+    "guards": [
+      "approval_instance:read"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/approval-instances/{id}/progress-read",
+    "handler": "approval_instance::progress::mark_read",
+    "code": "approval_instance:read",
+    "group": "审批实例",
+    "group_desc": "审批运行、决定、恢复与取消",
+    "description": "确认本人发起审批的已查看进展",
+    "guards": [
+      "approval_instance:read"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/approval-processes/catalog",
     "handler": "approval_process::definition_catalog",
     "code": "approval_process:read",
