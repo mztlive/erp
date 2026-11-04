@@ -19,11 +19,6 @@ import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { cn } from "@/lib/utils"
 import { SalesOrderDeliverySummary } from "./sales-order-delivery-summary"
-import {
-    DeliveryLineStatus,
-    DeliveryProgressNotice,
-    type DeliveryProgressQuery,
-} from "./sales-order-delivery-overview"
 
 function OverviewField({
     label,
@@ -49,52 +44,24 @@ function OverviewField({
     )
 }
 
-export function LineItemsTable({
-    order,
-    deliveryQuery,
-    canReadDelivery = false,
-}: {
-    order: SalesOrderDetailView
-    deliveryQuery?: DeliveryProgressQuery
-    canReadDelivery?: boolean
-}) {
-    const isCard = order.nature === "card_voucher"
-    const showDelivery =
-        isCard &&
-        order.lineItems.some((line) => line.deliveryAllocations?.length)
-    const progressByLine = new Map(
-        canReadDelivery &&
-            order.currentRevisionNo != null &&
-            !deliveryQuery?.isError
-            ? deliveryQuery?.data?.lines.map((line) => [
-                  line.salesOrderLineId,
-                  line,
-              ])
-            : [],
+/** 卡券明细保留面值、配赠、卡形态及交付地址。 */
+function CardLineItemsTable({ order }: { order: SalesOrderDetailView }) {
+    const showDelivery = order.lineItems.some(
+        (line) => line.deliveryAllocations?.length,
     )
     return (
         <div className="overflow-hidden rounded-lg border-b border-border">
-            <Table
-                data-density="comfortable"
-                className={isCard ? "min-w-[54rem]" : "min-w-[44rem]"}
-            >
+            <Table data-density="comfortable" className="min-w-[54rem]">
                 <TableHeader>
                     <TableRow>
                         <TableHead>项目</TableHead>
                         {showDelivery ? <TableHead>交付地址</TableHead> : null}
                         <TableHead data-align="end">数量 / 单位</TableHead>
                         <TableHead data-align="end">含税单价</TableHead>
-                        {isCard ? (
-                            <>
-                                <TableHead data-align="end">面值</TableHead>
-                                <TableHead data-align="end">配赠</TableHead>
-                                <TableHead>卡形态</TableHead>
-                            </>
-                        ) : (
-                            <TableHead>期望交付日</TableHead>
-                        )}
+                        <TableHead data-align="end">面值</TableHead>
+                        <TableHead data-align="end">配赠</TableHead>
+                        <TableHead>卡形态</TableHead>
                         <TableHead data-align="end">含税小计</TableHead>
-                        {!isCard ? <TableHead>交付状态</TableHead> : null}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -112,9 +79,6 @@ export function LineItemsTable({
                                         {line.sku}
                                     </div>
                                 ) : null}
-                                {!isCard ? (
-                                    <SalesOrderDeliverySummary line={line} />
-                                ) : null}
                             </TableCell>
                             {showDelivery ? (
                                 <TableCell className="min-w-44 whitespace-normal">
@@ -129,59 +93,24 @@ export function LineItemsTable({
                                     display="exact"
                                     value={line.unitPriceGross}
                                 />
-                                {!isCard && line.procurementSupplyPrice ? (
-                                    <div className="mt-1 text-xs text-muted-foreground">
-                                        采购供给价{" "}
-                                        <MoneyValue
-                                            value={line.procurementSupplyPrice}
-                                        />
-                                    </div>
-                                ) : null}
                             </TableCell>
-                            {isCard ? (
-                                <>
-                                    <TableCell data-align="end">
-                                        {line.faceValue ? (
-                                            <MoneyValue
-                                                display="exact"
-                                                value={line.faceValue}
-                                            />
-                                        ) : (
-                                            "—"
-                                        )}
-                                    </TableCell>
-                                    <TableCell data-align="end">
-                                        {line.giftRate
-                                            ? `${line.giftRate}%`
-                                            : "—"}
-                                    </TableCell>
-                                    <TableCell>
-                                        {line.cardForm || "—"}
-                                    </TableCell>
-                                </>
-                            ) : (
-                                <TableCell className="text-muted-foreground">
-                                    {line.dueDate || "—"}
-                                </TableCell>
-                            )}
+                            <TableCell data-align="end">
+                                {line.faceValue ? (
+                                    <MoneyValue
+                                        display="exact"
+                                        value={line.faceValue}
+                                    />
+                                ) : (
+                                    "—"
+                                )}
+                            </TableCell>
+                            <TableCell data-align="end">
+                                {line.giftRate ? `${line.giftRate}%` : "—"}
+                            </TableCell>
+                            <TableCell>{line.cardForm || "—"}</TableCell>
                             <TableCell data-align="end">
                                 <MoneyValue value={line.amountGross} />
                             </TableCell>
-                            {!isCard ? (
-                                <TableCell>
-                                    {order.currentRevisionNo == null ? (
-                                        <span className="text-xs text-muted-foreground">
-                                            尚未生效
-                                        </span>
-                                    ) : (
-                                        <DeliveryLineStatus
-                                            progress={progressByLine.get(
-                                                line.id,
-                                            )}
-                                        />
-                                    )}
-                                </TableCell>
-                            ) : null}
                         </TableRow>
                     ))}
                 </TableBody>
@@ -190,18 +119,14 @@ export function LineItemsTable({
     )
 }
 
-/** 概览以唯一商品表汇总成交与交付状态，交易约定独立展示。 */
+/** 概览展示销售摘要和交易约定；实物服务明细统一在交付分区查看。 */
 export function OverviewPanel({
     order,
     related,
-    deliveryQuery,
-    canReadDelivery,
     onOpenFulfillment,
 }: {
     order: SalesOrderDetailView
     related?: React.ReactNode
-    deliveryQuery: DeliveryProgressQuery
-    canReadDelivery: boolean
     onOpenFulfillment?: () => void
 }) {
     const isCard = order.nature === "card_voucher"
@@ -216,7 +141,7 @@ export function OverviewPanel({
                         id="sales-order-lines-heading"
                         className="text-lg font-semibold"
                     >
-                        {isCard ? "卡券明细" : "销售明细"}
+                        {isCard ? "卡券明细" : "销售摘要"}
                     </h2>
                     <div className="flex flex-wrap items-center gap-3">
                         <p className="text-xs text-muted-foreground">
@@ -229,25 +154,12 @@ export function OverviewPanel({
                                 size="sm"
                                 onClick={onOpenFulfillment}
                             >
-                                查看采购与交付
+                                查看销售明细与交付
                             </Button>
                         ) : null}
                     </div>
                 </div>
-                {!isCard ? (
-                    <div className="mb-4">
-                        <DeliveryProgressNotice
-                            order={order}
-                            query={deliveryQuery}
-                            canRead={canReadDelivery}
-                        />
-                    </div>
-                ) : null}
-                <LineItemsTable
-                    order={order}
-                    deliveryQuery={deliveryQuery}
-                    canReadDelivery={canReadDelivery}
-                />
+                {isCard ? <CardLineItemsTable order={order} /> : null}
                 <div className="flex items-baseline justify-end gap-5 pt-5 text-sm">
                     <span className="text-muted-foreground">合计（含税）</span>
                     <MoneyValue

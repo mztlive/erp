@@ -330,7 +330,7 @@ export function navItemsFor(
         {
             id: "overview",
             label: "概览",
-            hint: "约定、明细和下一步",
+            hint: "销售摘要、交易约定和近期动态",
             show: true,
         },
         {
@@ -347,8 +347,11 @@ export function navItemsFor(
         },
         {
             id: "fulfillment",
-            label: "采购",
-            hint: "本单已创建的采购单",
+            label: order.nature === "card_voucher" ? "履约" : "销售明细与交付",
+            hint:
+                order.nature === "card_voucher"
+                    ? "卡券履约情况"
+                    : "销售明细、交付与验收进度",
             show: true,
         },
         {

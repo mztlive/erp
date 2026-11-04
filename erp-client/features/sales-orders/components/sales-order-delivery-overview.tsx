@@ -1,6 +1,10 @@
 "use client"
 
-import { BusinessFailureState, QuantityValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    MoneyValue,
+    QuantityValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -15,6 +19,7 @@ import type { SalesOrderDetailView } from "../api/sales-orders"
 import type { useSalesOrderDeliveryProgressQuery } from "../hooks/queries"
 import type { AcceptanceLineProgress } from "../lib/acceptance-model"
 import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
+import { SalesOrderDeliverySummary } from "./sales-order-delivery-summary"
 
 export type DeliveryProgressQuery = ReturnType<
     typeof useSalesOrderDeliveryProgressQuery
@@ -31,7 +36,7 @@ export function SalesOrderDeliveryOverview({
     canRead: boolean
 }) {
     const lines = new Map(
-        query.isError
+        !canRead || order.currentRevisionNo == null || query.isError
             ? []
             : query.data?.lines.map((line) => [line.salesOrderLineId, line]),
     )
@@ -45,7 +50,7 @@ export function SalesOrderDeliveryOverview({
                     id="sales-order-delivery-overview-heading"
                     className="text-lg font-semibold"
                 >
-                    商品与交付
+                    销售明细与交付
                 </h2>
                 <span className="text-xs text-muted-foreground">
                     共 {order.lineItems.length} 项
@@ -60,11 +65,13 @@ export function SalesOrderDeliveryOverview({
                 canRead={canRead}
             />
             <div className="min-w-0 overflow-x-auto">
-                <Table className="min-w-[44rem]">
+                <Table data-density="comfortable" className="min-w-[60rem]">
                     <TableHeader>
                         <TableRow>
                             <TableHead>商品</TableHead>
                             <TableHead data-align="end">销售数量</TableHead>
+                            <TableHead data-align="end">含税单价</TableHead>
+                            <TableHead data-align="end">含税小计</TableHead>
                             <TableHead data-align="end">已交付</TableHead>
                             <TableHead data-align="end">未交付</TableHead>
                             <TableHead data-align="end">已验收</TableHead>
@@ -93,12 +100,34 @@ export function SalesOrderDeliveryOverview({
                                                 {line.sku}
                                             </p>
                                         ) : null}
+                                        <SalesOrderDeliverySummary
+                                            line={line}
+                                        />
                                     </TableCell>
                                     <TableCell data-align="end">
                                         <QuantityValue
                                             value={line.quantity}
                                             unit={line.unit}
                                         />
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <MoneyValue
+                                            display="exact"
+                                            value={line.unitPriceGross}
+                                        />
+                                        {line.procurementSupplyPrice ? (
+                                            <div className="mt-1 text-xs text-muted-foreground">
+                                                采购供给价{" "}
+                                                <MoneyValue
+                                                    value={
+                                                        line.procurementSupplyPrice
+                                                    }
+                                                />
+                                            </div>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <MoneyValue value={line.amountGross} />
                                     </TableCell>
                                     <TableCell data-align="end">
                                         {progress ? (
@@ -145,9 +174,15 @@ export function SalesOrderDeliveryOverview({
                                         {line.dueDate || "—"}
                                     </TableCell>
                                     <TableCell>
-                                        <DeliveryLineStatus
-                                            progress={progress}
-                                        />
+                                        {order.currentRevisionNo == null ? (
+                                            <span className="text-xs text-muted-foreground">
+                                                尚未生效
+                                            </span>
+                                        ) : (
+                                            <DeliveryLineStatus
+                                                progress={progress}
+                                            />
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             )
@@ -155,12 +190,19 @@ export function SalesOrderDeliveryOverview({
                     </TableBody>
                 </Table>
             </div>
+            <div className="flex items-baseline justify-end gap-5 text-sm">
+                <span className="text-muted-foreground">合计（含税）</span>
+                <MoneyValue
+                    value={order.amountGross}
+                    className="text-xl font-semibold"
+                />
+            </div>
         </section>
     )
 }
 
-/** 概览与履约分区共用同一交付状态口径。 */
-export function DeliveryLineStatus({
+/** 销售行按交付与验收数量展示状态，缺失进度保持待确认。 */
+function DeliveryLineStatus({
     progress,
 }: {
     progress?: AcceptanceLineProgress
@@ -206,7 +248,7 @@ export function DeliveryLineStatus({
 }
 
 /** 交付数据不可用时说明原因，不以零数量或完成状态替代。 */
-export function DeliveryProgressNotice({
+function DeliveryProgressNotice({
     order,
     query,
     canRead,
@@ -217,14 +259,7 @@ export function DeliveryProgressNotice({
 }) {
     return (
         <>
-            {query.isError ? (
-                <BusinessFailureState
-                    id="sales-order-delivery-overview-failure"
-                    title="交付进度读取失败"
-                    error={query.error}
-                    onRetry={() => void query.refetch()}
-                />
-            ) : order.currentRevisionNo == null ? (
+            {order.currentRevisionNo == null ? (
                 <p className="text-sm text-muted-foreground">
                     销售单生效后显示交付与验收进度。
                 </p>
@@ -232,6 +267,13 @@ export function DeliveryProgressNotice({
                 <p className="text-sm text-muted-foreground">
                     当前无法读取交付进度；商品约定仍可查阅。
                 </p>
+            ) : query.isError ? (
+                <BusinessFailureState
+                    id="sales-order-delivery-overview-failure"
+                    title="交付进度读取失败"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
             ) : query.isPending ? (
                 <p role="status" className="text-sm text-muted-foreground">
                     正在读取交付进度…

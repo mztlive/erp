@@ -158,7 +158,7 @@ export function SalesOrderDetailTabs({
                                 onClick={() => onSelectSection(item.id)}
                             >
                                 {item.id === "fulfillment"
-                                    ? "采购与交付"
+                                    ? "销售明细与交付"
                                     : item.id === "acceptance"
                                       ? "客户验收"
                                       : item.label}
@@ -169,10 +169,6 @@ export function SalesOrderDetailTabs({
                 {navSection === "overview" ? (
                     <OverviewPanel
                         order={order}
-                        deliveryQuery={deliveryQuery}
-                        canReadDelivery={
-                            canReadDelivery && order.currentRevisionNo != null
-                        }
                         onOpenFulfillment={
                             visibleNav.some((item) => item.id === "fulfillment")
                                 ? () => onSelectSection("fulfillment")
