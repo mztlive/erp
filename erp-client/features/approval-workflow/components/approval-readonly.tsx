@@ -7,6 +7,7 @@ import { BusinessFailureState } from "@/components/business"
 import { DefinitionBindingCard } from "./definition-binding-card"
 import { ExecutionHistory } from "./execution-history"
 import { RuntimeSummary } from "./runtime-summary"
+import { isBlockedStatus } from "../display"
 import { useApprovalHistoryInfiniteQuery } from "../queries"
 import type { DocumentApprovalView } from "../types"
 
@@ -15,10 +16,13 @@ export function ApprovalReadonly({
     approval,
     id,
     className,
+    presentation = "detail",
 }: {
     approval?: DocumentApprovalView
     id: string
     className?: string
+    /** 外层已有审批记录标题时，只展示时间轴；受阻说明仍保留。 */
+    presentation?: "detail" | "history"
 }) {
     const instanceId = approval?.instance?.id
     const history = useApprovalHistoryInfiniteQuery(
@@ -30,7 +34,10 @@ export function ApprovalReadonly({
     return (
         <div className={cn("space-y-4", className)}>
             {approval.instance ? (
-                <RuntimeSummary instance={approval.instance} compact />
+                presentation === "detail" ||
+                isBlockedStatus(approval.instance.status) ? (
+                    <RuntimeSummary instance={approval.instance} compact />
+                ) : null
             ) : (
                 <DefinitionBindingCard
                     definition={approval.definition}
@@ -62,6 +69,7 @@ export function ApprovalReadonly({
                         : undefined
                 }
                 compact
+                presentation={presentation === "history" ? "timeline" : "card"}
             />
             {instanceId && (
                 <ApprovalCopyHistory

@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from "react"
 import { ChevronDownIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { workspaceTaskSurfacePadClassName } from "@/components/business"
+import { cn } from "@/lib/utils"
 import type { PaymentRequest } from "../types"
 import { RequestMaterials } from "./request-materials"
 import { RequestReviewSummary } from "./request-review-summary"
@@ -31,12 +33,17 @@ export function RequestReviewContent({
     const [historyOpen, setHistoryOpen] = useState(false)
     const bank = request.execution_method.type === "bank_transfer"
     return (
-        <div className="@container/payment-review mx-auto w-full max-w-6xl space-y-5">
+        <div className="@container/payment-review min-w-0">
             <RequestReviewSummary
                 request={request}
                 submissionVersion={submissionVersion}
             />
-            <div className="space-y-8 rounded-xl border border-border/60 bg-card p-6 sm:p-8">
+            <div
+                className={cn(
+                    workspaceTaskSurfacePadClassName,
+                    "space-y-4 border-b border-grid py-4",
+                )}
+            >
                 <RequestReviewOrders request={request} />
                 <RequestReviewHistory
                     request={request}
@@ -46,12 +53,15 @@ export function RequestReviewContent({
             </div>
             <section
                 aria-label="收款与材料"
-                className="space-y-8 rounded-xl border border-border/60 bg-card p-6 sm:p-8"
+                className={cn(
+                    workspaceTaskSurfacePadClassName,
+                    "space-y-4 py-4",
+                )}
             >
-                <h2 className="text-lg font-semibold">
+                <h2 className="text-sm font-semibold">
                     {bank ? "收款与材料" : "预存款与材料"}
                 </h2>
-                <dl className="grid gap-x-10 gap-y-5 text-sm @min-[780px]/payment-review:grid-cols-2">
+                <dl className="grid gap-x-8 gap-y-3 text-sm @min-[640px]/payment-review:grid-cols-2 @min-[1100px]/payment-review:grid-cols-3">
                     <Info label="付款主体">{request.our_company_name}</Info>
                     {bank ? (
                         <>
@@ -132,7 +142,7 @@ export function RequestReviewContent({
 
 function Info({ label, children }: { label: string; children: ReactNode }) {
     return (
-        <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-4">
+        <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-3">
             <dt className="text-muted-foreground">{label}</dt>
             <dd className="min-w-0 whitespace-pre-wrap break-words">
                 {children}

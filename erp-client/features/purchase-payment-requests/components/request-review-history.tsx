@@ -2,13 +2,21 @@
 
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { getErrorMessage } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { useRequestDownloadMutation } from "../hooks/queries"
-import { requestStatusLabel } from "../lib/display"
+import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
 
 export function RequestReviewHistory({
@@ -23,8 +31,11 @@ export function RequestReviewHistory({
     const download = useRequestDownloadMutation()
     const reviews = request.review_lines
     return (
-        <section aria-label="采购付款记录" className="space-y-6 border-t pt-8">
-            <h2 className="text-lg font-semibold">付款记录</h2>
+        <section
+            aria-label="采购付款记录"
+            className="space-y-3 border-t border-grid pt-4"
+        >
+            <h2 className="text-sm font-semibold">付款记录</h2>
             {submissionVersion != null ? (
                 <p className="text-sm text-muted-foreground">
                     当前为第 {submissionVersion}{" "}
@@ -44,23 +55,39 @@ export function RequestReviewHistory({
                     return (
                         <div
                             key={review.payable_account_id}
-                            className="space-y-6"
+                            className="space-y-2"
                         >
                             {reviews.length > 1 && (
                                 <p className="num text-sm font-medium">
                                     {line?.purchase_order_no ?? "关联采购单"}
                                 </p>
                             )}
-                            <div className="space-y-3">
-                                <h3 className="text-sm font-medium text-muted-foreground">
-                                    已付款 / 核销
-                                </h3>
-                                {review.settlements.length === 0 ? (
-                                    <p className="py-2 text-sm text-muted-foreground">
-                                        暂无付款核销记录
-                                    </p>
-                                ) : (
-                                    <ul className="divide-y">
+                            {review.settlements.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    暂无付款核销记录
+                                </p>
+                            ) : (
+                                <Table
+                                    aria-label={`${line?.purchase_order_no ?? "采购单"}付款核销记录`}
+                                    className="min-w-[680px] [--table-cell-block:0.5rem] [--table-cell-inline:0.75rem]"
+                                >
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>
+                                                付款 / 核销时间
+                                            </TableHead>
+                                            <TableHead>单号</TableHead>
+                                            <TableHead>方式</TableHead>
+                                            <TableHead>状态</TableHead>
+                                            <TableHead data-align="end">
+                                                有效金额
+                                            </TableHead>
+                                            <TableHead data-align="end">
+                                                回单
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
                                         {review.settlements.map((row) => {
                                             const receipt =
                                                 request.payments.find(
@@ -74,33 +101,66 @@ export function RequestReviewHistory({
                                                     "0",
                                                     4,
                                                 ) > 0
+                                            const fullyReversed =
+                                                compareDecimal(
+                                                    row.effective_amount,
+                                                    "0",
+                                                    4,
+                                                ) === 0
                                             return (
-                                                <li
-                                                    key={row.id}
-                                                    className="flex flex-wrap items-center gap-x-6 gap-y-3 py-4 text-sm"
-                                                >
-                                                    <span className="num text-muted-foreground">
+                                                <TableRow key={row.id}>
+                                                    <TableCell className="num text-muted-foreground">
                                                         {formatDateTime(
                                                             new Date(
                                                                 row.occurred_at *
                                                                     1000,
                                                             ).toISOString(),
                                                         )}
-                                                    </span>
-                                                    <div className="min-w-0 flex-1 space-y-1">
-                                                        <p className="break-all">
-                                                            {row.document_no ||
-                                                                row.method_label}
+                                                    </TableCell>
+                                                    <TableCell className="num whitespace-normal break-all">
+                                                        {row.document_no || "—"}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {row.method_label}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <StatusBadge
+                                                            tone={
+                                                                fullyReversed
+                                                                    ? "void"
+                                                                    : reversed
+                                                                      ? "warning"
+                                                                      : "success"
+                                                            }
+                                                            label={
+                                                                fullyReversed
+                                                                    ? "已冲正"
+                                                                    : reversed
+                                                                      ? "部分冲正"
+                                                                      : row.method_label ===
+                                                                          "银行付款"
+                                                                        ? "已付款"
+                                                                        : "已核销"
+                                                            }
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell data-align="end">
+                                                        <p className="font-medium">
+                                                            <MoneyValue
+                                                                value={
+                                                                    row.effective_amount
+                                                                }
+                                                            />
                                                         </p>
                                                         {reversed && (
-                                                            <p className="text-xs text-muted-foreground">
+                                                            <p className="mt-1 text-xs text-muted-foreground">
                                                                 原核销{" "}
                                                                 <MoneyValue
                                                                     value={
                                                                         row.amount
                                                                     }
-                                                                />{" "}
-                                                                · 已冲正{" "}
+                                                                />
+                                                                {" · "}已冲正{" "}
                                                                 <MoneyValue
                                                                     value={
                                                                         row.reversed_amount
@@ -108,100 +168,115 @@ export function RequestReviewHistory({
                                                                 />
                                                             </p>
                                                         )}
-                                                    </div>
-                                                    <Badge variant="secondary">
-                                                        {compareDecimal(
-                                                            row.effective_amount,
-                                                            "0",
-                                                            4,
-                                                        ) === 0
-                                                            ? "已冲正"
-                                                            : reversed
-                                                              ? "部分冲正"
-                                                              : row.method_label ===
-                                                                  "银行付款"
-                                                                ? "已付款"
-                                                                : row.method_label}
-                                                    </Badge>
-                                                    <span className="min-w-24 text-right">
-                                                        <MoneyValue
-                                                            value={
-                                                                row.effective_amount
-                                                            }
-                                                        />
-                                                    </span>
-                                                    {receipt && (
-                                                        <Button
-                                                            id={`ppr-review-${toAutomationIdSegment(review.payable_account_id)}-${toAutomationIdSegment(row.id)}-receipt`}
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            disabled={
-                                                                download.isPending
-                                                            }
-                                                            onClick={() =>
-                                                                download.mutate(
-                                                                    {
-                                                                        requestId:
-                                                                            request.id,
-                                                                        attachment:
-                                                                            receipt,
-                                                                        workItemId,
-                                                                    },
-                                                                )
-                                                            }
-                                                        >
-                                                            下载回单
-                                                        </Button>
-                                                    )}
-                                                </li>
+                                                    </TableCell>
+                                                    <TableCell data-align="end">
+                                                        {receipt ? (
+                                                            <Button
+                                                                id={`ppr-review-${toAutomationIdSegment(review.payable_account_id)}-${toAutomationIdSegment(row.id)}-receipt`}
+                                                                variant="outline"
+                                                                size="sm"
+                                                                disabled={
+                                                                    download.isPending
+                                                                }
+                                                                onClick={() =>
+                                                                    download.mutate(
+                                                                        {
+                                                                            requestId:
+                                                                                request.id,
+                                                                            attachment:
+                                                                                receipt,
+                                                                            workItemId,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            >
+                                                                下载回单
+                                                            </Button>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">
+                                                                —
+                                                            </span>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
                                             )
                                         })}
-                                    </ul>
-                                )}
-                            </div>
-                            <div className="space-y-3">
-                                <h3 className="text-sm font-medium text-muted-foreground">
-                                    其他申请
-                                </h3>
-                                {review.other_requests.length === 0 ? (
-                                    <p className="py-2 text-sm text-muted-foreground">
-                                        无其他申请占用
-                                    </p>
-                                ) : (
-                                    <ul className="divide-y">
-                                        {review.other_requests.map((row) => (
-                                            <li
-                                                key={row.request_id}
-                                                className="flex flex-wrap items-center gap-x-6 gap-y-3 py-4 text-sm"
-                                            >
-                                                <span className="num text-muted-foreground">
-                                                    {formatDateTime(
-                                                        new Date(
-                                                            row.created_at *
-                                                                1000,
-                                                        ).toISOString(),
-                                                    )}
-                                                </span>
-                                                <span className="min-w-0 flex-1 break-all">
-                                                    {row.request_no}
-                                                </span>
-                                                <Badge variant="secondary">
-                                                    {
-                                                        requestStatusLabel[
-                                                            row.status
-                                                        ]
-                                                    }
-                                                </Badge>
-                                                <span className="min-w-24 text-right">
-                                                    <MoneyValue
-                                                        value={row.amount}
-                                                    />
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
+                                    </TableBody>
+                                </Table>
+                            )}
+                            {review.other_requests.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    无其他申请占用
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    <h3 className="text-sm font-medium">
+                                        其他申请{" "}
+                                        <span className="text-xs font-normal text-muted-foreground">
+                                            {review.other_requests.length} 笔
+                                        </span>
+                                    </h3>
+                                    <Table
+                                        aria-label={`${line?.purchase_order_no ?? "采购单"}其他付款申请`}
+                                        className="min-w-[560px] [--table-cell-block:0.5rem] [--table-cell-inline:0.75rem]"
+                                    >
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>申请时间</TableHead>
+                                                <TableHead>申请单号</TableHead>
+                                                <TableHead>状态</TableHead>
+                                                <TableHead data-align="end">
+                                                    申请金额
+                                                </TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {review.other_requests.map(
+                                                (row) => (
+                                                    <TableRow
+                                                        key={row.request_id}
+                                                    >
+                                                        <TableCell className="num text-muted-foreground">
+                                                            {formatDateTime(
+                                                                new Date(
+                                                                    row.created_at *
+                                                                        1000,
+                                                                ).toISOString(),
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="num whitespace-normal break-all">
+                                                            {row.request_no}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <StatusBadge
+                                                                tone={
+                                                                    requestStatusTone[
+                                                                        row
+                                                                            .status
+                                                                    ]
+                                                                }
+                                                                label={
+                                                                    requestStatusLabel[
+                                                                        row
+                                                                            .status
+                                                                    ]
+                                                                }
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell data-align="end">
+                                                            <MoneyValue
+                                                                value={
+                                                                    row.amount
+                                                                }
+                                                            />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ),
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
                         </div>
                     )
                 })

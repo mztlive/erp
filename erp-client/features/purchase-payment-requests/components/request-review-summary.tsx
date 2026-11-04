@@ -1,7 +1,11 @@
 "use client"
 
-import { MoneyValue } from "@/components/business"
+import {
+    MoneyValue,
+    workspaceTaskSurfacePadClassName,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import {
     paymentReviewBasis,
@@ -39,43 +43,49 @@ export function RequestReviewSummary({
     return (
         <section
             aria-label="付款申请与金额依据"
-            className="space-y-8 rounded-xl border border-border/60 bg-card p-6 sm:p-8"
+            className={cn(
+                workspaceTaskSurfacePadClassName,
+                "space-y-4 border-b border-grid bg-info-soft/30 py-4",
+            )}
         >
-            <div className="flex flex-wrap items-start justify-between gap-6">
-                <div className="min-w-0 flex-1 space-y-3">
-                    <h2 className="text-xl font-semibold leading-snug sm:text-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                    <h2 className="text-base font-semibold leading-snug wrap-anywhere">
                         {purchaseSummary(request.lines)}
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm wrap-anywhere">
+                        {request.supplier_name}
+                    </p>
+                    <p className="num text-xs text-muted-foreground break-all">
                         {request.lines.length === 1
                             ? request.lines[0].purchase_order_no
                             : `共 ${request.lines.length} 张采购单`}
                     </p>
                 </div>
-                <div className="space-y-2 sm:border-l sm:pl-8">
+                <div className="min-w-0 space-y-1 @min-[640px]/payment-review:border-l @min-[640px]/payment-review:border-grid @min-[640px]/payment-review:pl-6">
                     <p className="text-sm text-muted-foreground">本次申请</p>
-                    <p className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                    <p className="text-2xl font-semibold tracking-tight">
                         <MoneyValue value={request.total_amount} />
                     </p>
                 </div>
             </div>
-            <div className="space-y-4">
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+            <div className="space-y-2">
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 @min-[640px]/payment-review:grid-cols-4">
                     {[
                         ["采购总额", basis.total],
                         ["有效已付", basis.paid],
                         ["其他申请占用", basis.reserved],
                         ["本次可申请", basis.available],
                     ].map(([label, value]) => (
-                        <div key={label} className="space-y-2">
-                            <dt className="text-sm text-muted-foreground">
+                        <div key={label} className="min-w-0 space-y-1">
+                            <dt className="text-xs text-muted-foreground">
                                 {label}
                             </dt>
                             <dd
                                 className={
                                     label === "本次可申请"
-                                        ? "text-xl font-semibold"
-                                        : "text-lg"
+                                        ? "text-base font-semibold"
+                                        : "text-base"
                                 }
                             >
                                 <MoneyValue value={value} />
@@ -93,33 +103,28 @@ export function RequestReviewSummary({
                             : "提交时的金额依据"}
                 </p>
             </div>
-            <div className="space-y-4 border-t pt-5 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-grid pt-3 text-sm">
+                <p>
+                    <span className="text-muted-foreground">付款条件 </span>
+                    {terms.length === 1 ? terms[0] : "见各采购单"}
+                </p>
+                <p>
+                    <span className="text-muted-foreground">希望付款日 </span>
+                    <span className="num">{request.desired_payment_date}</span>
+                </p>
+                {dates.length > 0 && (
                     <p>
-                        {terms.length === 1 ? terms[0] : "付款条件见各采购单"}
-                    </p>
-                    {dates.length > 0 && (
-                        <p className="num text-muted-foreground">
-                            应付日期{" "}
+                        <span className="text-muted-foreground">应付日期 </span>
+                        <span className="num">
                             {dates.length === 1
                                 ? dates[0]
                                 : `${dates[0]} 至 ${dates[dates.length - 1]}`}
-                        </p>
-                    )}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p>
-                        <span className="text-muted-foreground">
-                            希望付款日{" "}
-                        </span>
-                        <span className="num">
-                            {request.desired_payment_date}
                         </span>
                     </p>
-                    {progress.length === 1 && (
-                        <Badge variant="secondary">{progress[0]}</Badge>
-                    )}
-                </div>
+                )}
+                {progress.length === 1 && (
+                    <Badge variant="secondary">{progress[0]}</Badge>
+                )}
             </div>
             {request.lines.some((line) => line.source_changed) && (
                 <p
@@ -135,7 +140,7 @@ export function RequestReviewSummary({
                 </p>
             )}
             {(closed || compareDecimal(request.paid_amount, "0", 4) > 0) && (
-                <div className="flex flex-wrap gap-x-6 gap-y-2 border-t pt-4 text-sm">
+                <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-grid pt-3 text-sm">
                     <span>
                         本申请已付 <MoneyValue value={request.paid_amount} />
                     </span>

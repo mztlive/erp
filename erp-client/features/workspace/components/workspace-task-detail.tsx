@@ -142,6 +142,7 @@ function WorkspaceTaskSurface({
     grantedPermissions = [],
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
+    const fullPage = useWorkspaceTaskPage()
     if (
         item.workItemType === "SALES_INQUIRY_PROCESSING" &&
         item.handlerKey === "sales_inquiry_processing" &&
@@ -170,7 +171,12 @@ function WorkspaceTaskSurface({
                 header={
                     <WorkspaceTaskIdentityHeader
                         item={item}
-                        title={item.counterpartyName || "付款申请"}
+                        title={
+                            !fullPage ||
+                            item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
+                                ? item.counterpartyName || "付款申请"
+                                : "付款申请审批"
+                        }
                         badges={
                             item.workItemType === "APPROVAL_INSTANCE" ? (
                                 <StatusBadge
@@ -191,9 +197,12 @@ function WorkspaceTaskSurface({
                                 >
                                     {item.stableNumber}
                                 </span>
-                                {item.workItemType === "DOCUMENT_APPROVAL" && (
-                                    <span>待 {item.ownerUserLabel} 审核</span>
-                                )}
+                                {item.workItemType === "DOCUMENT_APPROVAL" &&
+                                    item.status === "OPEN" && (
+                                        <span>
+                                            当前审批人：{item.ownerUserLabel}
+                                        </span>
+                                    )}
                                 {item.workItemType === "APPROVAL_INSTANCE" &&
                                     ["RUNNING", "BLOCKED"].includes(
                                         item.approval?.status ?? "",

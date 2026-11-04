@@ -17,9 +17,9 @@ import type { PaymentRequest } from "../types"
 export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
     const multiple = request.lines.length > 1
     return (
-        <section aria-label="采购明细" className="space-y-6">
+        <section aria-label="采购明细" className="space-y-3">
             <div className="flex items-center justify-between gap-4">
-                <h2 className="text-lg font-semibold">采购明细</h2>
+                <h2 className="text-sm font-semibold">采购明细</h2>
                 <span className="text-sm text-muted-foreground">
                     {request.lines.reduce(
                         (count, line) => count + line.purchase_items.length,
@@ -28,7 +28,7 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
                     项
                 </span>
             </div>
-            <div className="space-y-8">
+            <div className="space-y-4">
                 {request.lines.map((line) => (
                     <article
                         key={line.payable_account_id}
@@ -73,7 +73,7 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
                             </div>
                         )}
                         {line.purchase_items.length > 0 ? (
-                            <Table className="[--table-cell-block:1rem] [--table-cell-inline:0.75rem]">
+                            <Table className="[--table-cell-block:0.5rem] [--table-cell-inline:0.75rem]">
                                 <TableHeader className="bg-transparent">
                                     <TableRow className="hover:bg-transparent">
                                         <TableHead className="w-[46%]">

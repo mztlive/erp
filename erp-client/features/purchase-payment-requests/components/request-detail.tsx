@@ -135,17 +135,11 @@ export function RequestDetail({
                 }
                 approval={
                     approval ? (
-                        <section
-                            aria-label="付款申请财务审核"
-                            className="space-y-4 border-t pt-5"
-                        >
-                            <h3 className="font-medium">财务审核</h3>
-                            <ApprovalReadonly
-                                approval={approval}
-                                id="ppr-approval-readonly"
-                                className="space-y-6 [&>[data-slot=card][data-size]]:px-0 [&>[data-slot=card][data-size]]:py-0 [&>[data-slot=card][data-size]>[data-slot=card-header]]:mx-0 [&>[data-slot=card][data-size]>[data-slot=card-header]]:px-0 [&>[data-slot=card][data-size]>[data-slot=card-header]]:pb-3 [&>[data-slot=card][data-size]>[data-slot=card-content]]:px-0 [&>[data-slot=card][data-size]>[data-slot=card-content]]:pb-4"
-                            />
-                        </section>
+                        <ApprovalReadonly
+                            approval={approval}
+                            id="ppr-approval-readonly"
+                            presentation="history"
+                        />
                     ) : null
                 }
             />

@@ -59,7 +59,6 @@ export function WorkspaceProcessingLayout({
     return (
         <WorkspaceTaskPageProvider
             singleColumn={purchaseApproval || salesApproval || paymentReview}
-            unframedBody={paymentReview}
             compact={paymentArrangement}
             fullWidth={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
