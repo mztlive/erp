@@ -95,7 +95,8 @@ export function useSalesOrderDetailUrlState({
         (returnPath === "/workspace" ||
             returnPath === "/workspace/tasks" ||
             returnPath === "/workspace/approvals" ||
-            returnPath === "/workspace/history")
+            returnPath === "/workspace/history" ||
+            /^\/workspace\/tasks\/[^/]+$/.test(returnPath ?? ""))
     const fromQueue =
         Boolean(returnTo) &&
         (fromWorkspace === "W07" ||

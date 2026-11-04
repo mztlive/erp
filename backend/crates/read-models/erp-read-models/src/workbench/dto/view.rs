@@ -107,6 +107,9 @@ pub struct WorkItemView {
     pub route_context: Option<WorkItemRouteContext>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_node_execution_id: Option<String>,
+    /// 驳回任务详情绑定的原审批实例；不从当前业务审批推断。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_process_instance_id: Option<String>,
     /// 由审批节点执行和有界实例投影补齐的判断上下文。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_context: Option<WorkItemApprovalContextView>,
@@ -234,6 +237,7 @@ impl WorkItemView {
             route_context: route.route_context,
             approval_node_execution_id: inner.approval_node_execution_id,
             approval_context: None,
+            approval_process_instance_id: fields.rework_instance_id,
             status: inner.status,
             assignment_source: inner.assignment_source,
             owner_role_label: role_label(&inner.owner_role),
@@ -319,6 +323,8 @@ pub(crate) struct WorkItemFields {
     pub search_matches: Vec<String>,
     pub search_lines: Vec<String>,
     inner: erp_workflow::dto::work_item::WorkItemFields,
+    /// 仅完整任务详情提供固定驳回实例关联，列表行不得猜测。
+    rework_instance_id: Option<String>,
     pub brief_source: Option<super::super::brief::ObjectBriefSource>,
     pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
     /// 供给任务的冻结销售行，仅用于服务端收窄任务简报。
@@ -340,10 +346,18 @@ impl DerefMut for WorkItemFields {
 }
 
 impl From<WorkItem> for WorkItemFields {
+    /// 从完整任务保留驳回实例关联；其他任务不产生实例读取入口。
     fn from(item: WorkItem) -> Self {
         let procurement_scope_ids = item.responsibility_scope_ids().to_vec();
+        let rework_instance_id = item
+            .responsibility_key()
+            .filter(|_| item.work_item_type == WorkItemType::ApprovalRework)
+            .and_then(|key| key.strip_prefix("approval_rework:"))
+            .filter(|id| !id.trim().is_empty())
+            .map(str::to_owned);
         Self {
             inner: item.into(),
+            rework_instance_id,
             brief_source: None,
             delivery_lines: Vec::new(),
             procurement_scope_ids,
@@ -355,9 +369,11 @@ impl From<WorkItem> for WorkItemFields {
 }
 
 impl From<erp_workflow::WorkItemRow> for WorkItemFields {
+    /// 列表行不携带责任键，实例关联由独立任务详情提供。
     fn from(item: erp_workflow::WorkItemRow) -> Self {
         Self {
             inner: item.into(),
+            rework_instance_id: None,
             search: Default::default(),
             search_matches: Vec::new(),
             search_lines: Vec::new(),

@@ -30,10 +30,12 @@ export function WorkspaceProcessingLayout({
     onBack: () => void
     backLabel: string
 }) {
+    const rework = item.workItemType === "APPROVAL_REWORK"
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
     const approval = item.approval
-    const purchaseApproval = isPurchaseApprovalTask(item)
+    const purchaseApproval = !rework && isPurchaseApprovalTask(item)
     const salesApproval =
+        !rework &&
         ["sales_order", "voucher_sales_order"].includes(
             item.businessObjectType,
         ) &&
@@ -61,7 +63,8 @@ export function WorkspaceProcessingLayout({
             }
             summary={
                 <>
-                    {payment ||
+                    {rework ||
+                    payment ||
                     paymentArrangement ||
                     purchaseApproval ? undefined : (
                         <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
@@ -96,7 +99,7 @@ export function WorkspaceProcessingLayout({
             }
             aside={
                 <>
-                    {approval ? (
+                    {approval && !rework ? (
                         <WorkspaceApprovalProgress
                             vertical
                             instance={{
@@ -147,14 +150,15 @@ export function WorkspaceProcessingLayout({
                             </dl>
                         </section>
                     )}
-                    {(item.nextActionHint ||
-                        item.impactSummary ||
-                        item.actionBlockers.length > 0) && (
-                        <section className="space-y-4 border-t border-border/60 pt-5 text-sm leading-6">
-                            <h3 className="font-medium">处理说明</h3>
-                            <WorkspaceTaskInstructions item={item} />
-                        </section>
-                    )}
+                    {!rework &&
+                        (item.nextActionHint ||
+                            item.impactSummary ||
+                            item.actionBlockers.length > 0) && (
+                            <section className="space-y-4 border-t border-border/60 pt-5 text-sm leading-6">
+                                <h3 className="font-medium">处理说明</h3>
+                                <WorkspaceTaskInstructions item={item} />
+                            </section>
+                        )}
                 </>
             }
             footerLeading={

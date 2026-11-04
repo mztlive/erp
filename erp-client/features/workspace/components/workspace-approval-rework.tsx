@@ -8,9 +8,9 @@ import { useAppForm } from "@/components/form"
 import {
     FormalActionConfirmDialog,
     WorkspaceTaskPane,
+    WorkspaceTaskFooter,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAbandonApprovalReworkMutation } from "@/features/work-items/queries"
 import {
     FormalCommandKeyLedger,
@@ -18,9 +18,13 @@ import {
 } from "@/lib/formal-command"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { buildHandlerHref } from "../lib/handler-destination"
+import {
+    buildHandlerHref,
+    buildReworkDocumentHref,
+} from "../lib/handler-destination"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
+import { WorkspaceReworkMaterials } from "./workspace-rework-materials"
 
 /** 驳回归提交人处理；打开原单修改重提，或明确放弃当前办理。 */
 export function WorkspaceApprovalRework({
@@ -40,6 +44,7 @@ export function WorkspaceApprovalRework({
         ...item,
         approvalInstanceId: item.approvalProcessInstanceId,
     })
+    const documentHref = buildReworkDocumentHref(item)
     const form = useAppForm({
         defaultValues: { reason: "" },
         validators: {
@@ -93,42 +98,50 @@ export function WorkspaceApprovalRework({
     return (
         <WorkspaceTaskPane
             header={
-                <WorkspaceTaskIdentityHeader item={item} title="驳回待处理" />
+                <WorkspaceTaskIdentityHeader item={item} title="驳回待处理">
+                    {documentHref && item.allowedActions.includes("VIEW") && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={mutation.isPending || unknown}
+                            render={
+                                <Link
+                                    id={`${id}-view-document`}
+                                    href={documentHref}
+                                />
+                            }
+                        >
+                            查看当前原单
+                        </Button>
+                    )}
+                </WorkspaceTaskIdentityHeader>
             }
         >
             <div className="space-y-5 p-6">
-                <Alert variant="destructive">
-                    <AlertTitle>本次审批已驳回</AlertTitle>
-                    <AlertDescription>
-                        {item.approval?.lastRejectReason ||
-                            item.reasonLabel ||
-                            "请核对驳回意见后处理原单。"}
-                    </AlertDescription>
-                </Alert>
-                <p className="text-sm text-muted-foreground">
-                    本次审批已结束。可修改原单，也可按原内容填写说明后重新提交；重新提交将从第一个节点完整审批。
-                </p>
-                <div className="flex flex-wrap gap-3">
-                    {href && item.allowedActions.includes("PROCESS") ? (
-                        <Button
-                            disabled={mutation.isPending || unknown}
-                            render={<Link id={`${id}-edit`} href={href} />}
-                        >
-                            修改或重新提交
-                        </Button>
-                    ) : null}
-                    {item.status === "OPEN" &&
-                    item.allowedActions.includes("ABANDON_REWORK") ? (
-                        <Button
-                            id={`${id}-abandon`}
-                            variant="outline"
-                            disabled={mutation.isPending || unknown}
-                            onClick={() => setAbandonOpen(!abandonOpen)}
-                        >
-                            放弃本次办理
-                        </Button>
-                    ) : null}
-                </div>
+                <WorkspaceReworkMaterials item={item} />
+                <WorkspaceTaskFooter>
+                    <div className="flex flex-wrap gap-3">
+                        {href && item.allowedActions.includes("PROCESS") ? (
+                            <Button
+                                disabled={mutation.isPending || unknown}
+                                render={<Link id={`${id}-edit`} href={href} />}
+                            >
+                                修改或重新提交
+                            </Button>
+                        ) : null}
+                        {item.status === "OPEN" &&
+                        item.allowedActions.includes("ABANDON_REWORK") ? (
+                            <Button
+                                id={`${id}-abandon`}
+                                variant="outline"
+                                disabled={mutation.isPending || unknown}
+                                onClick={() => setAbandonOpen(!abandonOpen)}
+                            >
+                                放弃本次办理
+                            </Button>
+                        ) : null}
+                    </div>
+                </WorkspaceTaskFooter>
                 <FormalActionConfirmDialog
                     idPrefix={`${id}-confirm-abandon`}
                     open={abandonOpen}

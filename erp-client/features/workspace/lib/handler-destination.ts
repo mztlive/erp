@@ -346,6 +346,10 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
         params.delete("workItemId")
         params.delete("currentWorkItemId")
         params.delete("queueContextId")
+        params.set(
+            "returnTo",
+            buildWorkspaceDetailHref("tasks", item.workItemId),
+        )
         if (
             type === "sales_order" ||
             type === "voucher_sales_order" ||
@@ -516,4 +520,18 @@ const REWORK_WORKSPACES: Readonly<Record<string, HandlerWorkspaceId>> = {
     purchase_payment_request: "W12",
     supplier_refund: "W12",
     payment_reversal: "W12",
+}
+
+/** 查看驳回原单时保留任务返回地址，不附带强制编辑参数。 */
+export function buildReworkDocumentHref(
+    item: HandlerNavigationInput,
+): string | null {
+    if (item.handlerKey !== "approval_rework") return null
+    const href = buildHandlerHref(item)
+    if (!href) return null
+    const [path, query] = href.split("?", 2)
+    const params = new URLSearchParams(query)
+    params.delete("mode")
+    params.delete("editChange")
+    return withParams(path, params)
 }

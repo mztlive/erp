@@ -310,6 +310,7 @@ mod tests {
             route_context: None,
             approval_node_execution_id: None,
             approval_context: None,
+            approval_process_instance_id: None,
             status: WorkItemStatus::Open,
             assignment_source: AssignmentSource::SystemRule,
             owner_role: "role-procurement".to_string(),

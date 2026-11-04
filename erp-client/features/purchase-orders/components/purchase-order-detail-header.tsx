@@ -79,7 +79,9 @@ export function PurchaseOrderDetailHeader({
     const returnPath = internalReturn?.split("?")[0]
     const workspaceReturn =
         searchParams.get("from") === "workspace" &&
-        (returnPath === "/workspace" || returnPath === "/workspace/tasks")
+        (returnPath === "/workspace" ||
+            returnPath === "/workspace/tasks" ||
+            /^\/workspace\/tasks\/[^/]+$/.test(returnPath ?? ""))
             ? internalReturn
             : null
     const paymentRequestReturn = internalReturn?.startsWith(

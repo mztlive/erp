@@ -542,6 +542,7 @@ mod tests {
             approval_node_execution_id: (work_item_type == WorkItemType::DocumentApproval)
                 .then(|| "node-id".to_string()),
             approval_context: None,
+            approval_process_instance_id: None,
             status: WorkItemStatus::Open,
             assignment_source: AssignmentSource::SystemRule,
             owner_role: "finance".to_string(),

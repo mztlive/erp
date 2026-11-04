@@ -228,3 +228,60 @@ fn retired_funds_review_has_no_handler() {
         assert!(handler_route(kind, "receivable_account", "role-finance").is_err());
     }
 }
+
+/// 驳回任务详情保留精确旧实例与提交版本，关闭后仍能定位原资料。
+#[test]
+fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+    use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemData};
+
+    let mut item = WorkItem::new_with_responsibility_key(
+        WorkItemId::new("rework-task"),
+        WorkItemData {
+            work_item_type: WorkItemType::ApprovalRework,
+            business_object_type: "sales_order".into(),
+            business_object_id: "original-order".into(),
+            subject_version: "3".into(),
+            owner_role: "approval_submitter".into(),
+            owner_organization_id: "org".into(),
+            owner_user_id: "submitter".into(),
+            assignment_source: AssignmentSource::SystemRule,
+            priority: WorkItemPriority::Normal,
+            due_at: None,
+            reason_code: Some("APPROVAL_REJECTED".into()),
+            impact_summary: None,
+        },
+        "approval_rework:rejected-instance",
+    )
+    .unwrap();
+    for closed in [false, true] {
+        if closed {
+            item.abandon_approval_rework("submitter", "停止办理", Instant::from_unix_secs(1_700_000_000))
+                .unwrap();
+        }
+        let view = WorkItemView::from_fields(item.clone().into(), "queue".into()).unwrap();
+        assert_eq!(view.approval_process_instance_id.as_deref(), Some("rejected-instance"));
+        assert_eq!(view.subject_version, "3");
+        assert_eq!(view.business_object_id, "original-order");
+        assert_eq!(view.approval_node_execution_id, None);
+    }
+    let row: erp_workflow::WorkItemRow =
+        serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
+    let list = WorkItemView::from_fields(row.into(), "queue".into()).unwrap();
+    assert!(list.approval_process_instance_id.is_none());
+    assert!(serde_json::to_value(list).unwrap().get("approval_process_instance_id").is_none());
+
+    for invalid_key in ["other:instance", "approval_rework:", "approval_rework:   "] {
+        let mut invalid = serde_json::to_value(&item).unwrap();
+        invalid["responsibility_key"] = serde_json::json!(invalid_key);
+        let invalid: WorkItem = serde_json::from_value(invalid).unwrap();
+        let view = WorkItemView::from_fields(invalid.into(), "queue".into()).unwrap();
+        assert!(view.approval_process_instance_id.is_none());
+    }
+    // 同样格式的键不能把普通任务升级成审批资料读取入口。
+    item.work_item_type = WorkItemType::BusinessException;
+    item.business_object_type = "integration_error_task".into();
+    let view = WorkItemView::from_fields(item.into(), "queue".into()).unwrap();
+    assert!(view.approval_process_instance_id.is_none());
+}
