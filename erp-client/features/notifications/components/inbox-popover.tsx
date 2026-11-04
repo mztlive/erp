@@ -48,7 +48,20 @@ export function InboxPopover() {
     }
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover
+            open={open}
+            onOpenChange={(nextOpen, details) => {
+                if (
+                    !nextOpen &&
+                    (details.reason === "focus-out" ||
+                        details.reason === "outside-press")
+                ) {
+                    details.cancel()
+                    return
+                }
+                setOpen(nextOpen)
+            }}
+        >
             <PopoverTrigger
                 render={
                     <Button
