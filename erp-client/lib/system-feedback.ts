@@ -11,6 +11,7 @@ export type SystemProblem = {
     title: string
     description: string
     technical: string
+    fingerprint: string
     fields: string[]
     kind: ErrorPresentation["kind"]
     source: Window | null
@@ -25,6 +26,7 @@ type FeedbackStore = {
     resolve: (key: string) => void
     clear: () => void
     forgetSource: (source: Window) => void
+    operationKey: (error: unknown, preferred?: string) => string
     open: (open: boolean) => void
     notify?: (problems: SystemProblem[]) => void
 }
@@ -35,10 +37,29 @@ declare global {
 }
 export const emptyFeedback: FeedbackState = { problems: [], open: false }
 
+/** 请求异常按对象身份去重；序号标识本次会话中的操作，不包含提交参数。 */
+function createOperationKey(): FeedbackStore["operationKey"] {
+    let sequence = 0
+    const keys = new WeakMap<object, string>()
+    return (error, preferred) => {
+        const object =
+            typeof error === "object" && error !== null ? error : undefined
+        const existing = object && keys.get(object)
+        if (existing) return existing
+        const key = preferred ?? `operation:${++sequence}`
+        if (object) keys.set(object, key)
+        return key
+    }
+}
+
 /** 同源工作页共用宿主内存；不将错误、单据内容或重试闭包写入持久存储。 */
 export function feedbackStore(): FeedbackStore {
     const owner = isWorkspaceFrame() ? window.parent : window
-    if (owner.erpSystemFeedback) return owner.erpSystemFeedback
+    if (owner.erpSystemFeedback) {
+        // 热更新期间保留现有会话提示，同时补齐新加入的能力。
+        owner.erpSystemFeedback.operationKey ??= createOperationKey()
+        return owner.erpSystemFeedback
+    }
     let state: FeedbackState = emptyFeedback
     const listeners = new Set<() => void>()
     let pending: SystemProblem[] = []
@@ -68,7 +89,7 @@ export function feedbackStore(): FeedbackStore {
             emit()
             if (
                 notify &&
-                (!previous || previous.description !== problem.description)
+                (!previous || previous.fingerprint !== problem.fingerprint)
             ) {
                 pending.push(problem)
                 if (!timer)
@@ -116,6 +137,7 @@ export function feedbackStore(): FeedbackStore {
             state = emptyFeedback
             emit()
         },
+        operationKey: createOperationKey(),
         open: (open) => {
             state = { ...state, open }
             emit()
@@ -167,6 +189,12 @@ export function reportProblem(
                     ? "当前账号无权查看这部分资料，其他已加载内容仍可使用。"
                     : failure.description),
             fields: fieldErrorMessages(failure.fieldErrors),
+            fingerprint: JSON.stringify([
+                failure.kind,
+                failure.code,
+                failure.description,
+                failure.fieldErrors,
+            ]),
             technical: [
                 failure.description,
                 failure.code && `错误码：${failure.code}`,
@@ -176,7 +204,10 @@ export function reportProblem(
                 .join("\n"),
             kind: failure.kind,
             source: window,
-            retry: failure.retryable ? options.retry : undefined,
+            retry:
+                !options.operation && failure.retryable
+                    ? options.retry
+                    : undefined,
             operation: options.operation,
         },
         options.notify !== false &&
@@ -185,7 +216,32 @@ export function reportProblem(
                 window.frameElement?.getAttribute("data-workspace-active") ===
                     "true"),
     )
+    return problemKey(key)
 }
+
+/** 同一次异常在请求层和业务层共用记录；不同操作即使错误码相同也不互相覆盖。 */
+export function reportOperationProblem(
+    error: unknown,
+    options: { key?: string; title?: string; description?: string } = {},
+) {
+    const failure = getErrorPresentation(error)
+    return reportProblem(
+        feedbackStore().operationKey(error, options.key),
+        error,
+        {
+            operation: true,
+            title: options.title ?? "操作未完成",
+            description:
+                options.description ??
+                (failure.kind === "system"
+                    ? "暂未确认操作结果，请回到来源页面核对；当前输入已保留。"
+                    : failure.kind === "permission"
+                      ? "当前账号无权执行此操作，请联系管理员确认权限。"
+                      : failure.description),
+        },
+    )
+}
+
 export function resolveProblem(key: string) {
     feedbackStore().resolve(problemKey(key))
 }

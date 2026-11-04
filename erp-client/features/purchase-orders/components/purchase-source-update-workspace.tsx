@@ -149,12 +149,9 @@ export function PurchaseSourceUpdateWorkspace({
                 </span>
             </div>
             {query.isError ? (
-                <Alert variant="warning">
-                    <AlertTitle>最新采购情况读取失败</AlertTitle>
-                    <AlertDescription>
-                        当前保留上次内容和已输入的修改，请刷新后再处理。
-                    </AlertDescription>
-                </Alert>
+                <p role="status" className="text-sm text-muted-foreground">
+                    当前显示上次加载的采购情况，修改内容已保留。
+                </p>
             ) : null}
             {needsUpdate ? <PurchaseSourceUpdateContext order={order} /> : null}
             {!update ? (

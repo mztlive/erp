@@ -1,5 +1,7 @@
 "use client"
 
+import { reportOperationProblem } from "@/lib/system-feedback"
+
 import * as React from "react"
 import type { PaginationState } from "@tanstack/react-table"
 
@@ -363,8 +365,9 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
 
     const handleExport = () => {
         if (exportBlocked) {
-            setActionError(
+            reportOperationProblem(
                 exportBlocker?.message ?? "导出策略未配置，导出已禁用。",
+                { key: "access-export-blocked", title: "暂不能导出" },
             )
             return
         }

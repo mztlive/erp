@@ -147,9 +147,6 @@ export function ActualProfitLossPage() {
                             <DataStatusAlerts
                                 data={page.data}
                                 refreshFailed={page.refreshFailed}
-                                exportFailed={page.exportFailed}
-                                viewError={page.viewQuery.error}
-                                isViewError={page.viewQuery.isError}
                                 exportJob={page.exportJob}
                                 onCloseExportJob={() => page.setExportJob(null)}
                             />

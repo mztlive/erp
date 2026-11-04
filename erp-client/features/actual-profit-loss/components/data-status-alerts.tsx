@@ -1,7 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
-import { getErrorMessage } from "@/lib/api/errors"
+import { SystemFeedback } from "@/components/business/system-feedback"
 import type {
     ProfitLossExport,
     ProfitLossView,
@@ -10,70 +10,41 @@ import type {
 export function DataStatusAlerts({
     data,
     refreshFailed,
-    exportFailed,
-    viewError,
-    isViewError,
     exportJob,
     onCloseExportJob,
 }: {
     data: ProfitLossView
     refreshFailed: string | null
-    exportFailed: string | null
-    viewError: unknown
-    isViewError: boolean
     exportJob: ProfitLossExport | null
     onCloseExportJob: () => void
 }) {
     return (
         <>
+            <SystemFeedback
+                problemId="profit-loss-background-refresh"
+                error={
+                    data.freshness.state === "failed"
+                        ? "数据更新失败，请联系管理员排查后台任务。"
+                        : null
+                }
+                title="经营数据尚未更新"
+                description="已保留上次成功结果，业务记录未被修改。请稍后刷新或联系管理员。"
+            />
             {data.freshness.state === "stale" || refreshFailed ? (
-                <Alert variant="warning">
-                    <AlertTitle>
-                        {refreshFailed ? "刷新失败" : "数据陈旧"}
-                    </AlertTitle>
-                    <AlertDescription>
-                        {refreshFailed
-                            ? refreshFailed
-                            : `数据更新于 ${formatDateTime(data.freshness.projectedAt, "full")}，来源已于 ${formatDateTime(data.freshness.sourceWatermark, "full")} 更新。`}
-                    </AlertDescription>
-                </Alert>
+                <p role="status" className="text-sm text-muted-foreground">
+                    当前显示上次成功结果，更新于{" "}
+                    {formatDateTime(data.freshness.projectedAt, "full")}。
+                </p>
             ) : null}
-
             {data.freshness.state === "rebuilding" ? (
-                <Alert>
-                    <AlertTitle>数据更新中</AlertTitle>
-                    <AlertDescription>
-                        更新中，已保留上次成功结果；导出将标注旧数据时间。
-                    </AlertDescription>
-                </Alert>
+                <p role="status" className="text-sm text-muted-foreground">
+                    数据更新中，已保留上次成功结果；导出将标注数据时间。
+                </p>
             ) : null}
-
             {data.freshness.state === "failed" ? (
-                <Alert variant="destructive">
-                    <AlertTitle>数据更新失败</AlertTitle>
-                    <AlertDescription>
-                        经营记录未被修改；展示上次成功数据并标记失败。请联系管理员排查后台任务。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {isViewError ? (
-                <Alert variant="destructive">
-                    <AlertTitle>数据更新失败</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(
-                            viewError,
-                            "已保留上次成功结果，未覆盖业务数据。请重试或调整筛选。",
-                        )}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {exportFailed ? (
-                <Alert variant="destructive">
-                    <AlertTitle>导出失败</AlertTitle>
-                    <AlertDescription>{exportFailed}</AlertDescription>
-                </Alert>
+                <p role="status" className="text-sm text-muted-foreground">
+                    当前显示上次成功结果，最新数据暂不可用。
+                </p>
             ) : null}
 
             {data.correctionPendingNotice ? (

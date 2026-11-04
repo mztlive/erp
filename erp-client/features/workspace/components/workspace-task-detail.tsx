@@ -853,9 +853,11 @@ function WorkspaceDocumentTaskDetail({
                     <div
                         className={cn(workspaceTaskSurfacePadClassName, "mt-4")}
                     >
-                        <Alert variant="destructive">
-                            <AlertTitle>单据补充信息读取失败</AlertTitle>
-                            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                        <div
+                            role="status"
+                            className="text-sm text-muted-foreground"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
                                 <span>
                                     {facts
                                         ? "已保留当前可见内容；部分最新信息可能暂未显示。"
@@ -870,8 +872,8 @@ function WorkspaceDocumentTaskDetail({
                                 >
                                     重试
                                 </Button>
-                            </AlertDescription>
-                        </Alert>
+                            </div>
+                        </div>
                     </div>
                 ) : null}
 

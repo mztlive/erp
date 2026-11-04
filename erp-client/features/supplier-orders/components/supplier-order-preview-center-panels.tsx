@@ -1,5 +1,7 @@
 "use client"
 
+import { SystemFeedback } from "@/components/business/system-feedback"
+
 import Link from "next/link"
 import { useRouter } from "@/lib/navigation"
 import { TriangleAlertIcon } from "lucide-react"
@@ -145,14 +147,16 @@ export function StatusAlertsPanel({
                 <AlertTitle>供应商接口履约</AlertTitle>
                 <AlertDescription>{order.executionNotice}</AlertDescription>
             </Alert>
+            <SystemFeedback
+                problemId={`supplier-order-tracking-${order.id}`}
+                error={trackingError}
+                title="供应商履约跟踪暂未完成"
+                description="当前订单和物流状态保留最近已确认的结果，请刷新执行状态或联系管理员。"
+            />
             {trackingError ? (
-                <Alert variant="warning">
-                    <AlertTitle>供应商履约跟踪暂未完成</AlertTitle>
-                    <AlertDescription>
-                        {trackingError}
-                        。当前订单和物流状态保留最近已确认的结果，请刷新执行状态或按异常原因处理。
-                    </AlertDescription>
-                </Alert>
+                <p role="status" className="text-sm text-muted-foreground">
+                    当前显示最近已确认的订单和物流状态。
+                </p>
             ) : null}
 
             {isResultUnknown ? (

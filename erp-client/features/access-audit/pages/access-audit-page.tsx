@@ -1,6 +1,6 @@
 "use client"
 
-import { DownloadIcon, PlusIcon, TriangleAlertIcon } from "lucide-react"
+import { DownloadIcon, PlusIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -12,7 +12,6 @@ import {
     ListWorkspaceHeader,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
@@ -133,14 +132,6 @@ export function AccessAuditPage() {
 
             {data ? (
                 <PolicyBanner policies={data.governancePolicies} view={view} />
-            ) : null}
-
-            {page.actionError ? (
-                <Alert variant="destructive">
-                    <TriangleAlertIcon aria-hidden="true" />
-                    <AlertTitle>操作提示</AlertTitle>
-                    <AlertDescription>{page.actionError}</AlertDescription>
-                </Alert>
             ) : null}
 
             {page.lastResult ? (

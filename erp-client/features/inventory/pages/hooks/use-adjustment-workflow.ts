@@ -1,5 +1,7 @@
 "use client"
 
+import { reportOperationProblem } from "@/lib/system-feedback"
+
 import * as React from "react"
 
 import type { ResultState } from "@/components/business/feedback"
@@ -133,10 +135,14 @@ export function useAdjustmentWorkflow({
     const startAdjustment = React.useCallback(
         async (row: StockBalanceRow) => {
             if (!row.allowedActions.includes("CREATE_ADJUSTMENT")) {
-                setActionError(
+                reportOperationProblem(
                     row.actionBlockers.find(
                         (b) => b.action === "CREATE_ADJUSTMENT",
                     )?.message ?? "当前不允许发起库存调整",
+                    {
+                        key: "inventory-adjustment-blocked",
+                        title: "暂不能发起库存调整",
+                    },
                 )
                 return
             }
@@ -274,6 +280,10 @@ export function useAdjustmentWorkflow({
         idempotencyRef.current = null
         setPendingPayload(null)
         setLastResult(null)
+        reportOperationProblem(result.message, {
+            key: "inventory-adjustment-result",
+            title: "库存调整未完成",
+        })
         if (
             result.code === "VERSION_CONFLICT" &&
             result.latestLockVersion != null
@@ -324,6 +334,10 @@ export function useAdjustmentWorkflow({
             idempotencyRef.current = null
             setPendingPayload(null)
             setLastResult(null)
+            reportOperationProblem(r.message, {
+                key: "inventory-adjustment-result",
+                title: "库存调整未完成",
+            })
             setActionError(r.message)
         }
     }, [

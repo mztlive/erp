@@ -1,5 +1,7 @@
 "use client"
 
+import { reportOperationProblem } from "@/lib/system-feedback"
+
 import * as React from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ROLE_WORKBENCHES } from "@/lib/role-workbenches"
@@ -13,7 +15,6 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
-import { getErrorMessage } from "@/lib/api/errors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError } from "@/components/ui/field"
@@ -192,7 +193,6 @@ function RoleForm({
     const { createRole, updateRole, isCreating, isUpdating } =
         useRoleMutations()
     const [savedMessage, setSavedMessage] = React.useState<string | null>(null)
-    const [submitError, setSubmitError] = React.useState<string | null>(null)
     const [editingName, setEditingName] = React.useState(role === null)
     const [review, setReview] = React.useState<PermissionReviewMode | null>(
         null,
@@ -216,7 +216,6 @@ function RoleForm({
         } satisfies RoleFormValues,
         validators: { onChange: roleFormSchema },
         onSubmit: async ({ value }) => {
-            setSubmitError(null)
             const permissions = [...new Set(value.permissions)]
             try {
                 if (role)
@@ -248,7 +247,7 @@ function RoleForm({
                     "角色操作权限已保存，对使用此角色的人员生效。每个人的数据范围请到人员资料中设置。",
                 )
             } catch (error) {
-                setSubmitError(getErrorMessage(error, "操作失败，请重试。"))
+                reportOperationProblem(error, { title: "角色未保存" })
             }
         },
     })
@@ -485,16 +484,6 @@ function RoleForm({
                         </Field>
                     )}
                 </form.AppField>
-                {submitError && (
-                    <Alert
-                        variant="destructive"
-                        role="alert"
-                        className="my-2 shrink-0"
-                    >
-                        <AlertTitle>保存失败</AlertTitle>
-                        <AlertDescription>{submitError}</AlertDescription>
-                    </Alert>
-                )}
                 <form.Subscribe selector={(state) => state.values}>
                     {(values) => {
                         const { added, removed } = diffPermissions(

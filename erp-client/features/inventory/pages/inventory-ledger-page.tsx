@@ -9,7 +9,7 @@ import * as React from "react"
 
 import { PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InventoryBalancePreview } from "@/features/inventory/components/inventory-balance-preview"
 import { useInventoryColumns } from "@/features/inventory/hooks/use-inventory-columns"
 import {
@@ -435,15 +435,6 @@ export function InventoryLedgerPage() {
 
             {exportJob ? (
                 <ExportJobProgress job={exportJob} onClose={closeExport} />
-            ) : null}
-
-            {adjustment.actionError ? (
-                <Alert variant="destructive">
-                    <AlertTitle>操作未完成</AlertTitle>
-                    <AlertDescription>
-                        {adjustment.actionError}
-                    </AlertDescription>
-                </Alert>
             ) : null}
 
             {data ? <LedgerMetricStrip metrics={data.metrics} /> : null}

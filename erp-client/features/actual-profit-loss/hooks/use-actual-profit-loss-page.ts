@@ -1,4 +1,6 @@
 "use client"
+
+import { reportOperationProblem } from "@/lib/system-feedback"
 import { useHistoricalDirectory } from "@/lib/historical-directory"
 
 import * as React from "react"
@@ -72,7 +74,6 @@ export function useActualProfitLossPage() {
     const [exportJob, setExportJob] = React.useState<ProfitLossExport | null>(
         null,
     )
-    const [exportFailed, setExportFailed] = React.useState<string | null>(null)
     const [refreshFailed, setRefreshFailed] = React.useState<string | null>(
         null,
     )
@@ -239,7 +240,6 @@ export function useActualProfitLossPage() {
     async function handleExport() {
         if (!data || !urlState.query || !urlState.analysisReady) return
         if (!data.fieldPermissions.canExport) return
-        setExportFailed(null)
         try {
             const job = await exportMutation.mutateAsync({
                 query: { ...urlState.query, scopeVersion: data.scopeVersion },
@@ -257,9 +257,7 @@ export function useActualProfitLossPage() {
             anchor.click()
             URL.revokeObjectURL(url)
         } catch (error) {
-            setExportFailed(
-                getErrorMessage(error, "未能生成导出文件，请稍后重试。"),
-            )
+            reportOperationProblem(error, { title: "导出未完成" })
         }
     }
 
@@ -282,7 +280,6 @@ export function useActualProfitLossPage() {
         setSelectedCostEntryId,
         exportJob,
         setExportJob,
-        exportFailed,
         refreshFailed,
         refreshing,
         handleRefresh,

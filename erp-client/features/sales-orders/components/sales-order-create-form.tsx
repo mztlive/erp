@@ -702,7 +702,6 @@ export function SalesOrderCreateForm({
                 <SalesOrderInquirySource source={inquirySource} />
             )}
             <SalesOrderCreateAlerts
-                profileError={profileQuery.error ?? null}
                 formalFailure={submission.formalFailure}
                 createError={submission.createMutation.error ?? null}
                 draftSaved={submission.draftSaved}

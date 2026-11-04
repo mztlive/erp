@@ -7,16 +7,15 @@ import { subtractFixed } from "@/lib/fixed-decimal"
 import type { InvoiceRequest } from "@/features/invoice-requests/api"
 
 import {
+    BusinessFailureState,
     MoneyValue,
     WorkspaceTaskPane,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { WorkspaceInvoiceUpload } from "./workspace-invoice-upload"
 import { useCustomerAccountsDetailQuery } from "@/features/customer-receivables/hooks/queries"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
-import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
@@ -131,27 +130,12 @@ export function WorkspaceInvoiceTask({
             ) : receivableQuery.isPending ? (
                 <InvoiceSessionSkeleton />
             ) : receivableQuery.isError ? (
-                <Alert variant="destructive">
-                    <AlertTitle>销售应收资料读取失败</AlertTitle>
-                    <AlertDescription className="flex flex-col gap-3">
-                        <span>
-                            {getErrorMessage(
-                                receivableQuery.error,
-                                "请刷新后重试",
-                            )}
-                        </span>
-                        <Button
-                            id={`workspace-invoice-receivable-retry-${toAutomationIdSegment(item.workItemId)}`}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="self-start"
-                            onClick={() => void receivableQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    </AlertDescription>
-                </Alert>
+                <BusinessFailureState
+                    idPrefix={`workspace-invoice-receivable-${toAutomationIdSegment(item.workItemId)}`}
+                    title="销售应收资料暂不可查看"
+                    error={receivableQuery.error}
+                    onRetry={() => void receivableQuery.refetch()}
+                />
             ) : !identityOk || !receivable || !descriptor ? (
                 <Alert variant="destructive">
                     <AlertTitle>待办关联的销售应收不匹配</AlertTitle>
@@ -170,19 +154,12 @@ export function WorkspaceInvoiceTask({
             ) : requestQuery.isPending ? (
                 <InvoiceSessionSkeleton />
             ) : requestQuery.isError ? (
-                <Alert variant="destructive">
-                    <AlertTitle>开票申请读取失败</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(requestQuery.error, "请刷新后重试")}
-                        <Button
-                            id="workspace-invoice-request-retry"
-                            variant="outline"
-                            onClick={() => void requestQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    </AlertDescription>
-                </Alert>
+                <BusinessFailureState
+                    idPrefix={`workspace-invoice-request-${toAutomationIdSegment(item.workItemId)}`}
+                    title="开票申请暂不可查看"
+                    error={requestQuery.error}
+                    onRetry={() => void requestQuery.refetch()}
+                />
             ) : approvedRequest?.status === "completed" ? (
                 <Alert>
                     <AlertTitle>本次申请已全部开票</AlertTitle>

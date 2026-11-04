@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 import { useRouter, useSearchParams } from "@/lib/navigation"
-import { DownloadIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react"
+import { DownloadIcon, ShieldCheckIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -16,7 +16,6 @@ import {
     ListWorkspaceViews,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
@@ -193,14 +192,6 @@ function IdentityAuditPage({ views }: { views: ReactNode }) {
 
             {data ? (
                 <PolicyBanner policies={data.governancePolicies} view="audit" />
-            ) : null}
-
-            {page.actionError ? (
-                <Alert variant="destructive">
-                    <TriangleAlertIcon aria-hidden="true" />
-                    <AlertTitle>操作提示</AlertTitle>
-                    <AlertDescription>{page.actionError}</AlertDescription>
-                </Alert>
             ) : null}
 
             {page.lastResult ? (

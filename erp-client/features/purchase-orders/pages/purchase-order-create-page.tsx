@@ -1,5 +1,7 @@
 "use client"
 
+import { SystemFeedback } from "@/components/business/system-feedback"
+
 import { SourcingOptionsRefreshContext } from "@/features/purchase-orders/components/create-sourcing/options-refresh-context"
 
 import * as React from "react"
@@ -127,6 +129,7 @@ export function PurchaseOrderCreatePage({
         title: string
     } | null>(null)
     const [actionError, setActionError] = React.useState<{
+        error?: unknown
         title: string
         description: string
     } | null>(null)
@@ -206,6 +209,7 @@ export function PurchaseOrderCreatePage({
             })
         } catch (error) {
             setActionError({
+                error,
                 title: "供给分配结果待核对",
                 description: getErrorMessage(
                     error,
@@ -986,17 +990,13 @@ export function PurchaseOrderCreatePage({
                     }
                 >
                     {pendingRecovery}
-                    {actionError ? (
-                        <Alert
-                            variant="destructive"
-                            className={embedded ? "mx-5 my-5" : undefined}
-                        >
-                            <AlertTitle>{actionError.title}</AlertTitle>
-                            <AlertDescription>
-                                {actionError.description}
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
+                    <SystemFeedback
+                        problemId="purchase-allocation"
+                        operation
+                        error={actionError?.error ?? actionError?.description}
+                        title={actionError?.title ?? "供给分配未完成"}
+                        description={actionError?.description}
+                    />
 
                     {workspace.length === 0 ? (
                         <BusinessEmptyState

@@ -1,25 +1,23 @@
 "use client"
 
 import * as React from "react"
-import { CircleAlertIcon } from "lucide-react"
 
-import { getErrorMessage } from "@/lib/api/errors"
-import { errorMessage } from "@/features/sales-orders/lib/sales-order-create-model"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { SystemFeedback } from "@/components/business/system-feedback"
 import { toast } from "@/components/ui/toast"
 
 export type SalesOrderCreateAlertsProps = {
-    /** 当前登录用户信息查询错误；为 null 表示未出错。 */
-    profileError: Error | null
     /** 提交命令失败或结果待确认时的提示。 */
-    formalFailure: { unknown: boolean; description: string } | null
+    formalFailure: {
+        error: unknown
+        unknown: boolean
+        description: string
+    } | null
     /** 新建销售单 mutation 错误；为 null 表示未出错。 */
     createError: Error | null
     draftSaved: { documentNumber: string; savedAt: Date } | null
 }
 
 export function SalesOrderCreateAlerts({
-    profileError,
     formalFailure,
     createError,
     draftSaved,
@@ -42,43 +40,14 @@ export function SalesOrderCreateAlerts({
     }, [draftSaved])
 
     return (
-        <>
-            {profileError ? (
-                <Alert variant="destructive">
-                    <CircleAlertIcon aria-hidden="true" />
-                    <AlertTitle>当前用户信息加载失败</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(
-                            profileError,
-                            "无法获取当前登录用户，请刷新后重试。",
-                        )}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {formalFailure ? (
-                <Alert
-                    variant={formalFailure.unknown ? "warning" : "destructive"}
-                >
-                    <CircleAlertIcon aria-hidden="true" />
-                    <AlertTitle>
-                        {formalFailure.unknown
-                            ? "处理结果待确认"
-                            : "操作未完成"}
-                    </AlertTitle>
-                    <AlertDescription>
-                        {formalFailure.description}
-                    </AlertDescription>
-                </Alert>
-            ) : createError ? (
-                <Alert variant="destructive">
-                    <CircleAlertIcon aria-hidden="true" />
-                    <AlertTitle>销售单未创建</AlertTitle>
-                    <AlertDescription>
-                        {errorMessage(createError)}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-        </>
+        <SystemFeedback
+            problemId="sales-order-create"
+            operation
+            error={formalFailure?.error ?? createError}
+            title={
+                formalFailure?.unknown ? "处理结果待确认" : "销售单操作未完成"
+            }
+            description={formalFailure?.description}
+        />
     )
 }

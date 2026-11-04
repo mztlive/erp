@@ -42,6 +42,7 @@ type DraftIdentity = {
 }
 
 type FormalFailure = {
+    error: unknown
     unknown: boolean
     description: string
 }
@@ -181,6 +182,7 @@ export function useSalesOrderCreateSubmission({
                 const settlement = classifyFormalCommandError(error)
                 commandLedger.settle("submit-existing", settlement)
                 setFormalFailure({
+                    error,
                     unknown: settlement === "unknown",
                     description:
                         settlement === "unknown"
@@ -231,6 +233,7 @@ export function useSalesOrderCreateSubmission({
             const settlement = classifyFormalCommandError(error)
             commandLedger.settle("create", settlement)
             setFormalFailure({
+                error,
                 unknown: settlement === "unknown",
                 description:
                     settlement === "unknown"

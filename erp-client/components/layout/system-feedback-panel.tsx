@@ -30,8 +30,9 @@ export function SystemFeedbackPanel() {
     const [all, setAll] = useState(false)
     useEffect(() => {
         const store = feedbackStore()
-        store.notify = (batch) =>
-            toast.add({
+        const batches = new Map<string, string[]>()
+        store.notify = (batch) => {
+            const id = toast.add({
                 title:
                     batch.length === 1
                         ? batch[0].title
@@ -42,6 +43,9 @@ export function SystemFeedbackPanel() {
                         : "请查看影响范围和处理方式，当前页面已保留。",
                 type: "error",
                 timeout: 6000,
+                onClose: () => {
+                    batches.delete(id)
+                },
                 actionProps: {
                     children: "查看详情",
                     onClick: () => {
@@ -50,7 +54,23 @@ export function SystemFeedbackPanel() {
                     },
                 },
             })
+            batches.set(
+                id,
+                batch.map((problem) => problem.key),
+            )
+        }
+        const unsubscribe = store.subscribe(() => {
+            const problems = store.get().problems
+            for (const [id, keys] of batches) {
+                if (!problems.some((problem) => keys.includes(problem.key))) {
+                    batches.delete(id)
+                    toast.close(id)
+                }
+            }
+        })
         return () => {
+            unsubscribe()
+            for (const id of batches.keys()) toast.close(id)
             store.notify = undefined
         }
     }, [])

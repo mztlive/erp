@@ -1,10 +1,11 @@
 "use client"
 
+import { reportOperationProblem } from "@/lib/system-feedback"
+
 import * as React from "react"
 import { BellIcon, PlusIcon } from "lucide-react"
 import { DraftSaveIndicator } from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { CopyRuleEditor } from "./copy-rule-editor"
@@ -141,6 +142,7 @@ export function DefinitionEditor({
                     timeout: 4000,
                 })
             } catch (error) {
+                reportOperationProblem(error, { title: "审批流程未保存" })
                 setSubmitError(definitionErrorMessage(error))
                 setSaveState("failed")
             }
@@ -228,12 +230,6 @@ export function DefinitionEditor({
                     )}
                 </form.Subscribe>
                 <div className="space-y-4 p-4 sm:p-6">
-                    {submitError && (
-                        <Alert variant="destructive">
-                            <AlertTitle>保存失败</AlertTitle>
-                            <AlertDescription>{submitError}</AlertDescription>
-                        </Alert>
-                    )}
                     <form.Subscribe
                         selector={(state) =>
                             [

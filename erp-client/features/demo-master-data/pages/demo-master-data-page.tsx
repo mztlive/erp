@@ -1,5 +1,7 @@
 "use client"
 
+import { BusinessFailureState } from "@/components/business"
+
 import * as React from "react"
 
 import { PageScaffold } from "@/components/business"
@@ -18,7 +20,6 @@ import {
     useRemoveDemoMasterDataMutation,
 } from "@/features/demo-master-data/hooks/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 
 const COUNT_ROWS: ReadonlyArray<readonly [keyof DemoCounts, string]> = [
@@ -104,13 +105,13 @@ export function DemoMasterDataPage() {
                 ) : null}
             </ListWorkspaceHeader>
 
-            {statusQuery.isError ? (
-                <Alert variant="destructive" role="alert">
-                    <AlertTitle>没能读到演示主数据</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(statusQuery.error, "请稍后重试。")}
-                    </AlertDescription>
-                </Alert>
+            {statusQuery.isError && !statusQuery.data ? (
+                <BusinessFailureState
+                    idPrefix="demo-master-data-status"
+                    error={statusQuery.error}
+                    title="演示主数据暂不可查看"
+                    onRetry={() => void statusQuery.refetch()}
+                />
             ) : null}
 
             {statusQuery.data && !statusQuery.data.enabled ? (
@@ -142,22 +143,6 @@ export function DemoMasterDataPage() {
                 </dl>
             ) : null}
 
-            {apply.error ? (
-                <Alert variant="destructive" role="alert">
-                    <AlertTitle>生成未完成</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(apply.error, "请稍后重试。")}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            {remove.error ? (
-                <Alert variant="destructive" role="alert">
-                    <AlertTitle>未能确认清空结果</AlertTitle>
-                    <AlertDescription>
-                        {getErrorMessage(remove.error, "请稍后重试。")}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
             {apply.data && apply.data.length > 0 ? (
                 <Alert>
                     <AlertTitle>生成说明</AlertTitle>
