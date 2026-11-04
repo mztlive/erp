@@ -55,11 +55,12 @@ export function WorkspaceTabBar({
 }) {
     const strip = React.useRef<HTMLDivElement>(null)
     const track = React.useRef<HTMLDivElement>(null)
-    const activeTitle = tabs.find((tab) => tab.id === active)?.title
+    const activeTab = tabs.find((tab) => tab.id === active)
     const [scroll, setScroll] = React.useState({
         left: false,
         right: false,
         overflow: false,
+        width: 0,
     })
     const measure = React.useCallback(() => {
         const node = strip.current
@@ -68,11 +69,13 @@ export function WorkspaceTabBar({
             left: node.scrollLeft > 1,
             right: node.scrollLeft + node.clientWidth < node.scrollWidth - 1,
             overflow: node.scrollWidth > node.clientWidth + 1,
+            width: node.clientWidth,
         }
         setScroll((previous) =>
             previous.left === next.left &&
             previous.right === next.right &&
-            previous.overflow === next.overflow
+            previous.overflow === next.overflow &&
+            previous.width === next.width
                 ? previous
                 : next,
         )
@@ -100,7 +103,14 @@ export function WorkspaceTabBar({
         else if (bounds.right > viewport.right)
             container.scrollLeft += bounds.right - viewport.right
         measure()
-    }, [active, activeTitle, tabs.length, scroll.overflow, measure])
+    }, [
+        active,
+        activeTab?.title,
+        activeTab?.dirty,
+        tabs.length,
+        scroll.width,
+        measure,
+    ])
 
     const moveFocus = (event: React.KeyboardEvent, index: number) => {
         const next =
@@ -136,18 +146,18 @@ export function WorkspaceTabBar({
     return (
         <div
             data-slot="workspace-tab-bar"
-            className="flex h-13 shrink-0 items-center gap-2 bg-sidebar px-workspace-inline md:px-page-inline min-[75rem]:px-page-inline-lg"
+            className="group/workspace-tabs flex h-full min-w-0 flex-1 items-center gap-1"
         >
             <div
                 ref={strip}
                 onScroll={measure}
-                className="h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="@container h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 <div
                     ref={track}
                     role="tablist"
                     aria-label="已打开的工作页"
-                    className="flex h-full w-max min-w-full items-center gap-1.5"
+                    className="flex h-full w-max min-w-full items-center gap-1"
                 >
                     {tabs.map((tab, index) => {
                         const selected = tab.id === active
@@ -156,10 +166,10 @@ export function WorkspaceTabBar({
                             <div
                                 key={tab.id}
                                 className={cn(
-                                    "group/workspace-tab relative flex h-8 max-w-60 shrink-0 items-center rounded-md border motion-safe:transition-colors",
+                                    "group/workspace-tab relative flex h-9 max-w-[min(15rem,100cqi)] shrink-0 items-center rounded-md motion-safe:transition-colors",
                                     selected
-                                        ? "border-transparent bg-card text-foreground shadow-xs"
-                                        : "border-border/70 text-foreground/75 hover:border-border hover:bg-card/70 hover:text-foreground",
+                                        ? "bg-muted text-foreground"
+                                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                                 )}
                             >
                                 <button
@@ -171,7 +181,7 @@ export function WorkspaceTabBar({
                                     tabIndex={selected ? 0 : -1}
                                     title={`${tab.title}${tab.dirty ? "（输入已修改）" : ""}`}
                                     className={cn(
-                                        "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1 pl-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+                                        "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1 pl-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
                                         selected && "font-medium",
                                     )}
                                     onClick={() => onSelect(tab)}
@@ -191,14 +201,14 @@ export function WorkspaceTabBar({
                                     <span className="truncate">
                                         {tab.title}
                                     </span>
-                                </button>
-                                <span className="relative mr-1 flex size-control-xs shrink-0 items-center justify-center">
                                     {tab.dirty ? (
                                         <span
-                                            className="pointer-events-none size-1.5 rounded-full bg-warning motion-safe:transition-opacity group-hover/workspace-tab:opacity-0 group-focus-within/workspace-tab:opacity-0 [@media(hover:none)]:hidden"
+                                            className="size-1.5 shrink-0 rounded-full bg-warning"
                                             aria-label="输入已修改"
                                         />
                                     ) : null}
+                                </button>
+                                <span className="relative mr-1 flex size-control-xs shrink-0 items-center justify-center">
                                     <button
                                         id={`workspace-tab-close-${tab.id}`}
                                         type="button"
@@ -211,11 +221,9 @@ export function WorkspaceTabBar({
                                         }
                                         className={cn(
                                             "absolute inset-0 flex items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-foreground/8 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:transition-opacity",
-                                            tab.dirty
-                                                ? "pointer-events-none opacity-0 group-hover/workspace-tab:pointer-events-auto group-hover/workspace-tab:opacity-70 group-focus-within/workspace-tab:pointer-events-auto group-focus-within/workspace-tab:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-70"
-                                                : selected
-                                                  ? "opacity-70"
-                                                  : "opacity-0 group-hover/workspace-tab:opacity-70 group-focus-within/workspace-tab:opacity-70 [@media(hover:none)]:opacity-70",
+                                            selected
+                                                ? "opacity-70"
+                                                : "opacity-0 group-hover/workspace-tab:opacity-70 group-focus-within/workspace-tab:opacity-70 [@media(hover:none)]:opacity-70",
                                         )}
                                         onClick={() => onClose([tab.id])}
                                     >
@@ -230,7 +238,7 @@ export function WorkspaceTabBar({
                     })}
                 </div>
             </div>
-            <div className="flex shrink-0 items-center gap-0.5 pl-2">
+            <div className="flex shrink-0 items-center gap-0.5">
                 {scroll.overflow ? (
                     <>
                         <Button
@@ -240,7 +248,7 @@ export function WorkspaceTabBar({
                             aria-label="向左滚动页签"
                             title="向左滚动页签"
                             disabled={!scroll.left}
-                            className="text-muted-foreground"
+                            className="hidden text-muted-foreground sm:inline-flex"
                             onClick={() => scrollBy(-1)}
                         >
                             <ChevronLeftIcon className="size-3.5" />
@@ -252,7 +260,7 @@ export function WorkspaceTabBar({
                             aria-label="向右滚动页签"
                             title="向右滚动页签"
                             disabled={!scroll.right}
-                            className="text-muted-foreground"
+                            className="hidden text-muted-foreground sm:inline-flex"
                             onClick={() => scrollBy(1)}
                         >
                             <ChevronRightIcon className="size-3.5" />
@@ -265,15 +273,18 @@ export function WorkspaceTabBar({
                         render={
                             <Button
                                 variant="ghost"
-                                size="sm"
-                                className="gap-2 text-muted-foreground"
+                                size="icon-sm"
+                                className={cn(
+                                    "text-muted-foreground",
+                                    !scroll.overflow &&
+                                        "opacity-0 group-hover/workspace-tabs:opacity-100 group-focus-within/workspace-tabs:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100 [@media(hover:none)]:opacity-100",
+                                )}
                                 aria-label={`页签操作，已打开 ${tabs.length} 个页面`}
                                 title="查看已打开的页面"
                             />
                         }
                     >
                         <PanelsTopLeftIcon className="size-3.5" />
-                        <span className="num text-xs">{tabs.length}</span>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                         align="end"

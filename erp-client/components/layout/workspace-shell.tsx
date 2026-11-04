@@ -46,12 +46,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                     showSidebarRail={false}
                     sidebarHeader={<WorkspaceSidebarHeader />}
                     sidebarContent={<WorkspaceSidebarNav />}
-                    topbar={
-                        <>
-                            <WorkspaceTopNav />
-                            {tabbar}
-                        </>
-                    }
+                    topbar={<WorkspaceTopNav tabs={tabbar} />}
                 >
                     {panels}
                     <NavDeliveryOverlay />
