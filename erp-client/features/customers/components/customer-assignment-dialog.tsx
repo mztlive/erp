@@ -19,8 +19,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { useApplyCustomerAssignmentMutation } from "@/features/customers/hooks/queries"
 import {
     customerAssignmentDefaults,
@@ -206,58 +204,25 @@ export function CustomerAssignmentDialog({
                             <form.AppField
                                 name="effectiveFrom"
                                 children={(field) => (
-                                    <div className="space-y-2">
-                                        <Label htmlFor="customer-assignment-from">
-                                            生效日期
-                                            <RequiredMark />
-                                        </Label>
-                                        <Input
-                                            id="customer-assignment-from"
-                                            type="date"
-                                            value={field.state.value}
-                                            onBlur={field.handleBlur}
-                                            onChange={(event) =>
-                                                field.handleChange(
-                                                    event.target.value,
-                                                )
-                                            }
-                                        />
-                                    </div>
+                                    <field.DateField
+                                        id="customer-assignment-from"
+                                        label="生效日期"
+                                        required
+                                        clearable={false}
+                                        disabled={mutation.isPending}
+                                    />
                                 )}
                             />
                         ) : null}
                         <form.AppField
                             name="effectiveTo"
-                            children={(field) => {
-                                const invalid =
-                                    field.state.meta.isTouched &&
-                                    !field.state.meta.isValid
-                                return (
-                                    <Field data-invalid={invalid || undefined}>
-                                        <FieldLabel htmlFor="customer-assignment-to">
-                                            结束日期（可选）
-                                        </FieldLabel>
-                                        <Input
-                                            id="customer-assignment-to"
-                                            type="date"
-                                            value={field.state.value}
-                                            onBlur={field.handleBlur}
-                                            onChange={(event) =>
-                                                field.handleChange(
-                                                    event.target.value,
-                                                )
-                                            }
-                                        />
-                                        {invalid ? (
-                                            <FieldError
-                                                errors={toFieldErrors(
-                                                    field.state.meta.errors,
-                                                )}
-                                            />
-                                        ) : null}
-                                    </Field>
-                                )
-                            }}
+                            children={(field) => (
+                                <field.DateField
+                                    id="customer-assignment-to"
+                                    label="结束日期（可选）"
+                                    disabled={mutation.isPending}
+                                />
+                            )}
                         />
                     </div>
                     <form.AppField

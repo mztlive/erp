@@ -18,7 +18,7 @@ use crate::entity::sales_order::{
     SalesContentHash, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision,
     SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine,
     SalesOrderSubmissionLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyData,
-    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, WorkingPurpose,
+    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, SalesPricingMode, WorkingPurpose,
 };
 use crate::{Error, Result};
 
@@ -150,7 +150,9 @@ fn build_working_copy_line_datas(
             spec_snapshot: line.spec_snapshot.clone(),
             unit_snapshot: line.unit_snapshot.clone(),
             goods: line.goods.clone().map(|mut goods| {
-                goods.pricing_mode = Default::default();
+                if goods.pricing_mode == SalesPricingMode::Auto {
+                    goods.pricing_mode = SalesPricingMode::Manual;
+                }
                 goods
             }),
             voucher: line.voucher.clone(),
@@ -441,16 +443,19 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ContractRevisionId, PartyRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
-        SalesOrderRevisionLineId,
+        SalesOrderRevisionLineId, SalesOrderWorkingCopyId,
     };
     use erp_core::money::{Amount, Rate};
 
-    use super::{build_stable_lines, build_working_copy_line_datas, revision_line_summary, revision_view};
+    use super::{
+        build_stable_lines, build_working_copy_line_datas, build_working_copy_lines, revision_line_summary,
+        revision_view,
+    };
     use crate::Error;
     use crate::dto::sales_order::SalesOrderDraftLineRequest;
     use crate::entity::sales_order::{
         HeaderSnapshotData, LineType, RevisionSource, SalesOrderRevision, SalesOrderRevisionData,
-        SalesOrderRevisionLine, SalesOrderRevisionLineData,
+        SalesOrderRevisionLine, SalesOrderRevisionLineData, SalesPricingMode,
     };
 
     fn amt(value: &str) -> Amount {
@@ -561,23 +566,66 @@ mod tests {
         assert!(build_working_copy_line_datas(&stable, &[]).unwrap().is_empty());
     }
 
-    /// 缺失身份按请求顺序报告首个错误，错误文本保持原合同。
-    #[test]
-    fn entered_price_is_preserved_and_legacy_auto_mode_becomes_manual() {
+    /// 构造带成交模式和采购供给价的实物草稿行，覆盖映射后的金额校验。
+    fn priced_draft_line(mode: &str, price: &str) -> SalesOrderDraftLineRequest {
         let mut line = draft_line(1);
         line.goods = Some(
             serde_json::from_value(serde_json::json!({
                 "sku_id":"sku-1", "sku_revision_id":"sku-rev-1", "welfare_scenario":null,
                 "fulfillment_due_at":1800000000, "quantity":"3",
-                "base_unit_code":"件", "unit_price_gross":"37.12", "pricing_mode":"AUTO"
+                "base_unit_code":"件", "unit_price_gross":price, "pricing_mode":mode,
+                "procurement_supply_price_gross":"13.72"
             }))
             .unwrap(),
         );
-        let stable = build_stable_lines(&SalesOrderId::new("order-1"), std::slice::from_ref(&line)).unwrap();
-        let rows = build_working_copy_line_datas(&stable, &[line]).unwrap();
-        let goods = rows[0].goods.as_ref().unwrap();
-        assert_eq!(goods.unit_price_gross.to_string(), "37.12");
-        assert!(goods.pricing_mode.is_manual());
+        line
+    }
+
+    /// 赠品保持零价及供给成本；普通成交价保留，旧自动模式转为手工模式。
+    #[test]
+    fn working_copy_mapping_preserves_gifts_and_entered_prices() {
+        for (mode, price, expected_mode, gross) in [
+            ("GIFT", "0", SalesPricingMode::Gift, "0"),
+            ("MANUAL", "37.12", SalesPricingMode::Manual, "111.36"),
+            ("AUTO", "37.12", SalesPricingMode::Manual, "111.36"),
+        ] {
+            let line = priced_draft_line(mode, price);
+            let order_id = SalesOrderId::new("order-1");
+            let stable = build_stable_lines(&order_id, std::slice::from_ref(&line)).unwrap();
+            let rows = build_working_copy_lines(
+                &order_id,
+                &SalesOrderWorkingCopyId::new("copy-1"),
+                &stable,
+                &[line],
+            )
+            .unwrap();
+            assert_eq!(rows[0].pricing_mode, expected_mode);
+            assert_eq!(rows[0].unit_price_gross, Some(price.parse().unwrap()));
+            assert_eq!(rows[0].gross_amount, amt(gross));
+            assert_eq!(rows[0].procurement_supply_price_gross, Some("13.72".parse().unwrap()));
+        }
+    }
+
+    /// 映射不能放宽成交规则：非赠品零价及赠品非零价仍须拒绝。
+    #[test]
+    fn working_copy_mapping_rejects_price_mode_mismatches() {
+        for (mode, price, message) in [
+            ("GIFT", "1", "赠品明细的含税成交单价必须为 0"),
+            ("MANUAL", "0", "含税成交单价必须大于 0；随单赠送的商品请标记为赠品"),
+            ("AUTO", "0", "含税成交单价必须大于 0；随单赠送的商品请标记为赠品"),
+        ] {
+            let line = priced_draft_line(mode, price);
+            let order_id = SalesOrderId::new("order-1");
+            let stable = build_stable_lines(&order_id, std::slice::from_ref(&line)).unwrap();
+            let error = build_working_copy_lines(
+                &order_id,
+                &SalesOrderWorkingCopyId::new("copy-1"),
+                &stable,
+                &[line],
+            )
+            .unwrap_err();
+            assert_eq!(error.to_string(), message);
+        }
     }
 
     #[test]
