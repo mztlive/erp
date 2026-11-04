@@ -28,7 +28,10 @@ export function PurchaseOrderCorrespondence({
     order: PurchaseOrderCenterView
 }) {
     const [open, setOpen] = useState(false)
-    const paper = usePurchasePaper(order.identity.purchaseOrderId)
+    const paper = usePurchasePaper(
+        order.identity.purchaseOrderId,
+        order.header.supplierSnapshot,
+    )
     const profile = useAccountProfileQuery()
     const canSend = hasPermission(
         profile.data?.permissions,
@@ -47,22 +50,11 @@ export function PurchaseOrderCorrespondence({
                 disabled={paper.isPending}
                 onClick={async () => {
                     try {
-                        const file = await paper.mutateAsync()
-                        const url = URL.createObjectURL(
-                            new Blob([file.html], {
-                                type: "text/html;charset=utf-8",
-                            }),
-                        )
-                        const anchor = document.createElement("a")
-                        anchor.id = "purchase-order-paper-file"
-                        anchor.href = url
-                        anchor.download = file.filename
-                        anchor.click()
-                        URL.revokeObjectURL(url)
+                        await paper.mutateAsync()
                         toast.add({
                             title: "采购单已下载",
                             description:
-                                "打开文件即可打印，也可在打印窗口另存为 PDF。",
+                                "已保存为 PNG 图片，文件名为供应商名称。",
                             type: "success",
                         })
                     } catch (error) {

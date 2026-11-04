@@ -1,6 +1,6 @@
 import { flushSync } from "react-dom"
 import { createRoot } from "react-dom/client"
-import { getFontEmbedCSS, toBlob } from "html-to-image"
+import { getFontEmbedCSS } from "html-to-image"
 import JSZip from "jszip"
 
 import { PurchaseOrderPreviewPaper } from "../components/purchase-order-create-preview-paper"
@@ -9,17 +9,11 @@ import type {
     SourcingSalesOrder,
 } from "./purchase-order-create-model"
 
-function fileNamePart(value: string): string {
-    return (
-        Array.from(value, (character) =>
-            character.charCodeAt(0) < 32 ? "_" : character,
-        )
-            .join("")
-            .replace(/[\\/:*?"<>|]/g, "_")
-            .trim()
-            .slice(0, 80) || "采购单"
-    )
-}
+import {
+    downloadPurchasePaperFile,
+    purchasePaperFileNamePart,
+    renderPurchasePaperImage,
+} from "./purchase-paper-image"
 
 /** 按预览顺序逐张渲染完整纸张，全部成功后一次下载，避免产生不完整文件包。 */
 export async function downloadPurchasePreviewImages(
@@ -62,35 +56,20 @@ export async function downloadPurchasePreviewImages(
             )
             if (!paper) throw new Error("采购单图片未生成")
             fontEmbedCSS ??= await getFontEmbedCSS(paper)
-            const blob = await toBlob(paper, {
-                width: Math.max(paper.offsetWidth, paper.scrollWidth),
-                height: Math.max(paper.offsetHeight, paper.scrollHeight),
-                pixelRatio: 2,
-                backgroundColor: getComputedStyle(paper).backgroundColor,
-                fontEmbedCSS,
-            })
-            if (!blob || blob.size === 0) throw new Error("采购单图片未生成")
+            const blob = await renderPurchasePaperImage(paper, fontEmbedCSS)
             const sequence = String(index + 1).padStart(2, "0")
             zip.file(
-                `${sequence}-${fileNamePart(preview.supplierName)}-采购单预览.png`,
+                `${sequence}-${purchasePaperFileNamePart(preview.supplierName)}-采购单预览.png`,
                 blob,
             )
             onProgress(index + 1)
         }
 
         const archive = await zip.generateAsync({ type: "blob" })
-        const url = URL.createObjectURL(archive)
-        const anchor = document.createElement("a")
-        anchor.href = url
-        anchor.download = `${fileNamePart(sourceOrder?.salesOrderNo ?? "供给分配")}-采购单预览图片.zip`
-        document.body.appendChild(anchor)
-        try {
-            anchor.click()
-        } finally {
-            anchor.remove()
-            // 给浏览器留出读取文件的时间，再释放对象 URL。
-            window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-        }
+        downloadPurchasePaperFile(
+            archive,
+            `${purchasePaperFileNamePart(sourceOrder?.salesOrderNo ?? "供给分配")}-采购单预览图片.zip`,
+        )
     } finally {
         root.unmount()
         host.remove()

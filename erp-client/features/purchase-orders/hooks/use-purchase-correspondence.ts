@@ -6,9 +6,14 @@ import {
     fetchPurchaseEmails,
 } from "../api/purchase-correspondence"
 
-export function usePurchasePaper(id: string) {
+export function usePurchasePaper(id: string, supplierName: string) {
     return useMutation({
-        mutationFn: () => fetchPurchasePaper(id),
+        mutationFn: async () => {
+            const file = await fetchPurchasePaper(id)
+            const { downloadPurchasePaperImage } =
+                await import("../lib/download-purchase-paper-image")
+            await downloadPurchasePaperImage(file.html, supplierName)
+        },
         retry: false,
     })
 }
