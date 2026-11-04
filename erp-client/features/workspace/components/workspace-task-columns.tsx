@@ -109,7 +109,38 @@ function columnTitle(label: string, Icon: LucideIcon) {
     )
 }
 
-/** 单一采购审批使用专属表头；混合范围明确保留事项类型及指标口径。 */
+/** 待办将对象、摘要和处理口径合并展示，不丢失异常提示或未知金额。 */
+function TaskOverview({ row }: { row: QueueTaskRow }) {
+    return (
+        <div className="min-w-0 space-y-1.5 py-1 whitespace-normal">
+            <div className="line-clamp-2" title={row.presentation.title}>
+                {row.presentation.title}
+            </div>
+            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+                <span
+                    className={cn(
+                        "line-clamp-2 max-w-96 whitespace-normal",
+                        row.presentation.attention &&
+                            "text-warning-soft-foreground",
+                    )}
+                    title={row.presentation.summary}
+                >
+                    {row.summaryPreview || "—"}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span title={row.content.metric.detail}>
+                    {row.content.metric.label}{" "}
+                    <WorkspaceMoney
+                        value={row.content.metric.value}
+                        display="exact"
+                    />
+                </span>
+            </div>
+        </div>
+    )
+}
+
+/** 待办采用五列摘要布局；审批跟踪和处理记录保留各自的独立指标列。 */
 export function workspaceTaskColumns({
     selectedTypes,
     tracking,
@@ -127,19 +158,24 @@ export function workspaceTaskColumns({
     const mixed =
         selectedTypes.length !== 1 ||
         selectedTypes[0] === "task:DOCUMENT_APPROVAL"
-    return [
+    const compact = !tracking && !history
+    const numberLabel = purchase ? "采购单号" : compact ? "事项" : "单号 / 事项"
+    const partyLabel = compact
+        ? purchase
+            ? "供应商与摘要"
+            : "往来方与摘要"
+        : purchase
+          ? "供应商"
+          : "往来方 / 对象"
+    const columns: ColumnDef<QueueTaskRow, unknown>[] = [
         {
             id: "number",
-            header: () =>
-                columnTitle(
-                    purchase ? "采购单号" : "单号 / 事项",
-                    FileTextIcon,
-                ),
+            header: () => columnTitle(numberLabel, FileTextIcon),
             enableHiding: false,
             enableSorting: false,
             meta: {
                 width: "reference",
-                label: purchase ? "采购单号" : "单号 / 事项",
+                label: numberLabel,
             },
             cell: ({ row: { original: row } }) => {
                 const rework =
@@ -186,24 +222,23 @@ export function workspaceTaskColumns({
         },
         {
             id: "counterparty",
-            header: () =>
-                columnTitle(
-                    purchase ? "供应商" : "往来方 / 对象",
-                    Building2Icon,
-                ),
+            header: () => columnTitle(partyLabel, Building2Icon),
             enableSorting: false,
             meta: {
-                width: "reference",
-                label: purchase ? "供应商" : "往来方 / 对象",
+                width: compact ? "flex" : "reference",
+                label: partyLabel,
             },
-            cell: ({ row: { original: row } }) => (
-                <div
-                    className="max-w-72 truncate"
-                    title={row.presentation.title}
-                >
-                    {row.presentation.title}
-                </div>
-            ),
+            cell: ({ row: { original: row } }) =>
+                compact ? (
+                    <TaskOverview row={row} />
+                ) : (
+                    <div
+                        className="max-w-72 truncate"
+                        title={row.presentation.title}
+                    >
+                        {row.presentation.title}
+                    </div>
+                ),
         },
         {
             id: "source",
@@ -371,4 +406,9 @@ export function workspaceTaskColumns({
             ),
         },
     ]
+    return compact
+        ? columns.filter(
+              (column) => column.id !== "summary" && column.id !== "metric",
+          )
+        : columns
 }

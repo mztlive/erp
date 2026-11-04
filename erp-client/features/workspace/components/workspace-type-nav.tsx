@@ -1,16 +1,15 @@
 "use client"
 
-import { LayoutGridIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ListWorkspaceViews } from "@/components/business/list-workspace"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     WorkspaceSearchOption,
     WorkspaceSearchOptions,
 } from "@/lib/workspace-search"
 import type { WorkspaceUrlState } from "../lib/url-state"
-import { queueTypeIcon, queueTypeLabel } from "../lib/queue-presentation"
+import { queueTypeLabel } from "../lib/queue-presentation"
 
-/** 全部事项类型直接铺开，宽度不足时换行，保留常用类型在前的顺序。 */
+/** 事项类型复用列表页的下划线导航；窄窗口可横向滚动到全部类型。 */
 export function WorkspaceTypeNav({
     state,
     options,
@@ -33,51 +32,25 @@ export function WorkspaceTypeNav({
             (option) => !types.some((type) => type.value === option.value),
         ),
     ].filter((option) => option.value !== "task:DOCUMENT_APPROVAL")
-    const typeButton = (type: WorkspaceSearchOption) => {
-        const Icon = queueTypeIcon(type.value)
-        const active = selected.includes(type.value)
-        return (
-            <Button
-                key={type.value}
-                id={`workspace-type-${toAutomationIdSegment(type.value)}`}
-                size="sm"
-                variant={active ? "default" : "outline"}
-                aria-pressed={active}
-                className="h-9 gap-2 px-3"
-                onClick={() => onChange([type.value])}
-            >
-                <Icon aria-hidden="true" className="size-4" />
-                {queueTypeLabel(type)}
-                {counts[type.value] !== undefined && (
-                    <span className="num opacity-70">{counts[type.value]}</span>
-                )}
-            </Button>
-        )
-    }
     return (
-        <nav
-            aria-label="事项类型"
-            className="border-b border-border/60 px-5 py-4"
-        >
-            <div className="flex flex-wrap items-center gap-2">
-                <Button
-                    id="workspace-type-all"
-                    size="sm"
-                    className="h-9 gap-2 px-3"
-                    variant={!selected.length ? "default" : "outline"}
-                    aria-pressed={!selected.length}
-                    onClick={() => onChange([])}
-                >
-                    <LayoutGridIcon aria-hidden="true" />
-                    全部事项
-                    {counts["types-all"] !== undefined && (
-                        <span className="num opacity-70">
-                            {counts["types-all"]}
-                        </span>
-                    )}
-                </Button>
-                {visible.map(typeButton)}
-            </div>
-        </nav>
+        <ListWorkspaceViews
+            ariaLabel="事项类型"
+            items={[
+                {
+                    id: "workspace-type-all",
+                    label: "全部",
+                    count: counts["types-all"],
+                    active: !selected.length,
+                    onClick: () => onChange([]),
+                },
+                ...visible.map((type) => ({
+                    id: `workspace-type-${toAutomationIdSegment(type.value)}`,
+                    label: queueTypeLabel(type),
+                    count: counts[type.value],
+                    active: selected.includes(type.value),
+                    onClick: () => onChange([type.value]),
+                })),
+            ]}
+        />
     )
 }

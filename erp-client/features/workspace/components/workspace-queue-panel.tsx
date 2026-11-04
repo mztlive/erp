@@ -16,10 +16,7 @@ import type { useWorkspaceHome } from "../hooks/use-workspace-home"
 import type { TodayWorkspaceView, WorkspaceWorkItem } from "../types"
 import { hasPermission } from "@/lib/permissions"
 import { WorkspaceSortMenu } from "./workspace-sort-menu"
-import {
-    TableToolbar,
-    TableToolbarScope,
-} from "@/components/business/table-toolbar"
+import { ListWorkSurface } from "@/components/business/list-workspace"
 import { WorkspaceTypeNav } from "./workspace-type-nav"
 import { useWorkspaceQueueCounts } from "../hooks/use-workspace-queue-counts"
 import { queueQuickTypes, queueTypeLabel } from "../lib/queue-presentation"
@@ -131,147 +128,140 @@ function WorkspaceQueueContent({
           ? "已选事项"
           : "全部事项"
     return (
-        <div className="flex min-h-128 min-w-0 flex-1 flex-col gap-3">
-            <section
-                aria-label="我的事项"
-                className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-card"
-            >
-                <TableToolbarScope>
-                    <WorkspaceTypeNav
+        <ListWorkSurface
+            ariaLabel="我的事项"
+            className="min-h-128"
+            tableClassName="flex min-w-0 flex-col"
+            views={
+                <WorkspaceTypeNav
+                    state={urlState}
+                    options={options}
+                    types={types}
+                    counts={counts.counts}
+                    onChange={(item_types) =>
+                        applyFilters(urlState.query ?? "", {
+                            ...filters,
+                            item_types,
+                        })
+                    }
+                />
+            }
+            toolbar={
+                <section aria-label="队列查询条件">
+                    <WorkspaceSearchPanel
                         state={urlState}
                         options={options}
-                        types={types}
-                        counts={counts.counts}
-                        onChange={(item_types) =>
-                            applyFilters(urlState.query ?? "", {
-                                ...filters,
-                                item_types,
-                            })
-                        }
+                        loading={refreshing}
+                        failed={dashboardQuery.isError}
+                        onApply={applyFilters}
+                        onReset={clearFilters}
+                        onScopeChange={home.onMetricClick}
                     />
-                    <section
-                        aria-label="队列查询条件"
-                        className="shrink-0 border-b border-border/60 px-4 py-3"
-                    >
-                        <WorkspaceSearchPanel
-                            state={urlState}
-                            options={options}
-                            loading={refreshing}
-                            failed={dashboardQuery.isError}
-                            onApply={applyFilters}
-                            onReset={clearFilters}
-                            onScopeChange={home.onMetricClick}
-                        />
-                    </section>
-                    <TableToolbar
-                        isFrameToolbar
-                        className="shrink-0 px-4"
-                        actions={
-                            !started && (
-                                <WorkspaceSortMenu
-                                    value={urlState.sort}
-                                    onValueChange={onSortChange}
-                                />
-                            )
+                </section>
+            }
+            tableActions={
+                !started && (
+                    <WorkspaceSortMenu
+                        value={urlState.sort}
+                        onValueChange={onSortChange}
+                    />
+                )
+            }
+            selectionBar={
+                <div className="flex flex-wrap items-center gap-3">
+                    <h2
+                        id="workspace-queue-heading"
+                        tabIndex={-1}
+                        className={
+                            !started && !history
+                                ? "sr-only"
+                                : "text-sm font-medium"
                         }
                     >
-                        <div className="flex flex-wrap items-center gap-3">
-                            <h2
-                                id="workspace-queue-heading"
-                                tabIndex={-1}
-                                className="text-sm font-medium"
-                            >
-                                {title}
-                                <span
-                                    role="status"
-                                    className="ml-2 text-xs font-normal text-muted-foreground"
-                                >
-                                    {refreshing
-                                        ? "更新中…"
-                                        : `共 ${view.total} 项`}
-                                </span>
-                            </h2>
-                            {!started && !history && (
-                                <div
-                                    aria-label="待办期限快捷筛选"
-                                    className="flex flex-wrap items-center gap-1"
-                                >
-                                    {(
-                                        [undefined, "overdue", "today"] as const
-                                    ).map((due) => (
-                                        <Button
-                                            key={due ?? "all"}
-                                            id={`workspace-queue-due-${due ?? "all"}`}
-                                            size="sm"
-                                            variant={
-                                                filters.due === due
-                                                    ? "secondary"
-                                                    : "ghost"
-                                            }
-                                            aria-pressed={filters.due === due}
-                                            onClick={() =>
-                                                applyFilters(
-                                                    urlState.query ?? "",
-                                                    {
-                                                        ...filters,
-                                                        due,
-                                                        ...(due
-                                                            ? {
-                                                                  date_field:
-                                                                      undefined,
-                                                                  date_from:
-                                                                      undefined,
-                                                                  date_to:
-                                                                      undefined,
-                                                                  undated:
-                                                                      undefined,
-                                                              }
-                                                            : {}),
-                                                    },
-                                                )
+                        {title}
+                        <span
+                            role="status"
+                            className="ml-2 text-xs font-normal text-muted-foreground"
+                        >
+                            {refreshing ? "更新中…" : `共 ${view.total} 项`}
+                        </span>
+                    </h2>
+                    {!started && !history && (
+                        <div
+                            aria-label="待办期限快捷筛选"
+                            className="flex flex-wrap items-center gap-1"
+                        >
+                            {([undefined, "overdue", "today"] as const).map(
+                                (due) => (
+                                    <Button
+                                        key={due ?? "all"}
+                                        id={`workspace-queue-due-${due ?? "all"}`}
+                                        size="sm"
+                                        variant={
+                                            filters.due === due
+                                                ? "secondary"
+                                                : "ghost"
+                                        }
+                                        aria-pressed={filters.due === due}
+                                        onClick={() =>
+                                            applyFilters(urlState.query ?? "", {
+                                                ...filters,
+                                                due,
+                                                ...(due
+                                                    ? {
+                                                          date_field: undefined,
+                                                          date_from: undefined,
+                                                          date_to: undefined,
+                                                          undated: undefined,
+                                                      }
+                                                    : {}),
+                                            })
+                                        }
+                                    >
+                                        {due === "overdue" ? (
+                                            <ClockAlertIcon aria-hidden="true" />
+                                        ) : due === "today" ? (
+                                            <CalendarClockIcon aria-hidden="true" />
+                                        ) : (
+                                            <ListFilterIcon aria-hidden="true" />
+                                        )}
+                                        {due === "overdue"
+                                            ? "已超期"
+                                            : due === "today"
+                                              ? "今日到期"
+                                              : "全部"}
+                                        <span
+                                            className={
+                                                due === "overdue" &&
+                                                (counts.counts.overdue ?? 0) > 0
+                                                    ? "num text-destructive"
+                                                    : "num"
                                             }
                                         >
-                                            {due === "overdue" ? (
-                                                <ClockAlertIcon aria-hidden="true" />
-                                            ) : due === "today" ? (
-                                                <CalendarClockIcon aria-hidden="true" />
-                                            ) : (
-                                                <ListFilterIcon aria-hidden="true" />
-                                            )}
-                                            {due === "overdue"
-                                                ? "已超期"
-                                                : due === "today"
-                                                  ? "今日到期"
-                                                  : "全部"}
-                                            <span
-                                                className={
-                                                    due === "overdue"
-                                                        ? "num text-destructive"
-                                                        : "num"
-                                                }
-                                            >
-                                                {counts.counts[
-                                                    due ?? "due-all"
-                                                ] ?? "—"}
-                                            </span>
-                                        </Button>
-                                    ))}
-                                </div>
-                            )}
-                            {counts.failed && (
-                                <Button
-                                    id="workspace-queue-count-retry"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={counts.retry}
-                                >
-                                    数量加载失败，重试
-                                </Button>
+                                            {counts.counts[due ?? "due-all"] ??
+                                                "—"}
+                                        </span>
+                                    </Button>
+                                ),
                             )}
                         </div>
-                    </TableToolbar>
+                    )}
+                    {counts.failed && (
+                        <Button
+                            id="workspace-queue-count-retry"
+                            variant="ghost"
+                            size="sm"
+                            onClick={counts.retry}
+                        >
+                            数量加载失败，重试
+                        </Button>
+                    )}
+                </div>
+            }
+            table={
+                <>
                     {dashboardQuery.isError && (
-                        <div className="shrink-0 px-4 py-3">
+                        <div className="shrink-0 py-3">
                             <BusinessFailureState
                                 error={dashboardQuery.error}
                                 title="工作台更新失败"
@@ -315,8 +305,8 @@ function WorkspaceQueueContent({
                             }
                         />
                     </section>
-                </TableToolbarScope>
-            </section>
-        </div>
+                </>
+            }
+        />
     )
 }
