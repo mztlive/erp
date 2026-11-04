@@ -1,7 +1,12 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { FileTextIcon, RefreshCwIcon } from "lucide-react"
+import {
+    CheckCircle2Icon,
+    ChevronRightIcon,
+    FileTextIcon,
+    RefreshCwIcon,
+} from "lucide-react"
 import {
     BusinessFailureState,
     MoneyValue,
@@ -15,6 +20,7 @@ import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-app
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayBusinessText } from "@/lib/display-name"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import { useInvoiceApprovalReview } from "../hooks/use-invoice-review"
 import type {
@@ -61,27 +67,34 @@ export function WorkspaceInvoiceApproval({
         <>
             <section className={sectionClass} aria-label="当前票款核对">
                 <header className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                        <h3 className="text-sm font-semibold">当前票款核对</h3>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {review.data
-                                ? `核对时间 ${new Date(review.data.read_at * 1000).toLocaleString("zh-CN")}`
-                                : "按本次申请绑定的应收核对"}
-                        </p>
+                    <h3 className="text-base font-semibold">当前票款核对</h3>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {review.data && (
+                            <time
+                                dateTime={new Date(
+                                    review.data.read_at * 1000,
+                                ).toISOString()}
+                            >
+                                核对于{" "}
+                                {new Date(
+                                    review.data.read_at * 1000,
+                                ).toLocaleString("zh-CN")}
+                            </time>
+                        )}
+                        <Button
+                            id={`${prefix}-refresh`}
+                            size="sm"
+                            variant="ghost"
+                            disabled={review.isFetching}
+                            onClick={() => {
+                                void review.refetch()
+                                void materials.refetch()
+                            }}
+                        >
+                            <RefreshCwIcon aria-hidden="true" />
+                            刷新票款
+                        </Button>
                     </div>
-                    <Button
-                        id={`${prefix}-refresh`}
-                        size="sm"
-                        variant="ghost"
-                        disabled={review.isFetching}
-                        onClick={() => {
-                            void review.refetch()
-                            void materials.refetch()
-                        }}
-                    >
-                        <RefreshCwIcon aria-hidden="true" />
-                        刷新票款
-                    </Button>
                 </header>
                 {review.isPending ? (
                     <Loading>正在读取开票额度与回款…</Loading>
@@ -93,7 +106,11 @@ export function WorkspaceInvoiceApproval({
                         onRetry={() => void review.refetch()}
                     />
                 ) : (
-                    <CurrentReview data={review.data} />
+                    <CurrentReview
+                        key={instanceId}
+                        data={review.data}
+                        idPrefix={prefix}
+                    />
                 )}
             </section>
             <details
@@ -230,123 +247,242 @@ export function WorkspaceInvoiceApproval({
     )
 }
 
-function CurrentReview({ data }: { data: InvoiceApprovalReview }) {
+function CurrentReview({
+    data,
+    idPrefix,
+}: {
+    data: InvoiceApprovalReview
+    idPrefix: string
+}) {
+    const hasShortage = compareDecimal(data.amounts.shortage, "0", 2) > 0
+    const hasOtherReservations =
+        compareDecimal(data.amounts.other_pending, "0", 2) > 0 ||
+        compareDecimal(data.amounts.other_approved, "0", 2) > 0
+    const hasCurrentReservation =
+        compareDecimal(data.amounts.current_reserved, "0", 2) > 0
     const amounts = [
-        ["本笔应收", data.gross_total],
         ["可开票总额", data.invoiceable_total],
-        ["已实际开票（净额）", data.invoiced_total],
         ["本次申请占用", data.amounts.current_reserved],
-        ["其他审批中占用", data.amounts.other_pending],
-        ["其他已批准待开票", data.amounts.other_approved],
-        ["剩余可申请", data.amounts.available],
-        ["超占差额", data.amounts.shortage],
+        ["扣除本次后可再申请", data.amounts.available],
     ]
     return (
         <>
-            {data.warnings.length > 0 && (
-                <Alert variant="destructive">
-                    <AlertTitle>审批前请核对</AlertTitle>
-                    <AlertDescription>
-                        <ul className="list-disc space-y-1 pl-4">
-                            {data.warnings.map((text) => (
-                                <li key={text}>{text}</li>
-                            ))}
-                        </ul>
-                    </AlertDescription>
-                </Alert>
-            )}
-            <p className="break-words text-xs text-muted-foreground">
+            <p className="break-words text-sm text-muted-foreground">
                 {data.account_label}
             </p>
-            <dl className="grid grid-cols-2 gap-x-5 gap-y-3 @min-[640px]/document:grid-cols-4">
+            {(data.warnings.length > 0 || hasShortage) && (
+                <Alert variant="destructive">
+                    <AlertTitle>
+                        {hasShortage ? (
+                            <>
+                                当前开票占用超出额度{" "}
+                                <MoneyValue value={data.amounts.shortage} />
+                            </>
+                        ) : (
+                            "审批前请核对"
+                        )}
+                    </AlertTitle>
+                    {data.warnings.length > 0 && (
+                        <AlertDescription>
+                            <ul className="list-disc space-y-1 pl-4">
+                                {data.warnings.map((text) => (
+                                    <li key={text}>{text}</li>
+                                ))}
+                            </ul>
+                        </AlertDescription>
+                    )}
+                </Alert>
+            )}
+            {!hasShortage && (
+                <Alert
+                    variant={data.warnings.length ? "default" : "success"}
+                    className="rounded-lg"
+                >
+                    <CheckCircle2Icon aria-hidden="true" />
+                    <AlertTitle>本次申请未超出开票额度</AlertTitle>
+                </Alert>
+            )}
+            <dl className="grid gap-4 py-2 @min-[480px]/document:grid-cols-3 @min-[480px]/document:gap-0 @min-[480px]/document:divide-x @min-[480px]/document:divide-grid">
                 {amounts.map(([label, value]) => (
-                    <div key={label} className="min-w-0">
-                        <dt className="text-xs text-muted-foreground">
+                    <div
+                        key={label}
+                        className="min-w-0 @min-[480px]/document:px-5 @min-[480px]/document:first:pl-0 @min-[480px]/document:last:pr-0"
+                    >
+                        <dt className="text-sm text-muted-foreground">
                             {label}
                         </dt>
-                        <dd className="mt-1 break-words text-base font-medium">
+                        <dd className="mt-2 break-words text-2xl font-semibold tabular-nums">
                             <MoneyValue value={value} />
                         </dd>
                     </div>
                 ))}
             </dl>
-            <p className="text-xs leading-5 text-muted-foreground">
-                剩余可申请已扣除本次及其他申请的有效占用；已批准申请仅占用尚未开票部分。
-            </p>
-            <dl className="grid grid-cols-2 gap-x-5 gap-y-3 border-t border-grid pt-3 @min-[640px]/document:grid-cols-4">
-                <Fact label="本笔已核销回款">
-                    <MoneyValue value={data.settled_total} />
-                </Fact>
-                <Fact label="本笔未收">
-                    <MoneyValue value={data.open_total} />
-                </Fact>
-                <Fact label="销售状态">{data.sales_status}</Fact>
-                <Fact label="履约进度">{data.fulfillment_status}</Fact>
-                <Fact label="负责销售">{data.sales_owner || "未记录"}</Fact>
-            </dl>
-            <p className="text-xs text-muted-foreground">
-                仅统计已核销至本笔应收的回款；未回款或未履约不自动代表不能开票。
-            </p>
+            <details id={`${idPrefix}-amounts`} className="group/amounts">
+                <summary
+                    id={`${idPrefix}-amounts-toggle`}
+                    className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded-sm py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+                >
+                    <span className="text-muted-foreground">
+                        {hasOtherReservations
+                            ? "有其他申请占用额度"
+                            : hasCurrentReservation
+                              ? "仅本次申请占用"
+                              : "暂无申请占用额度"}
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <span className="group-open/amounts:hidden">
+                            查看额度明细
+                        </span>
+                        <span className="hidden group-open/amounts:inline">
+                            收起额度明细
+                        </span>
+                        <ChevronRightIcon
+                            aria-hidden="true"
+                            className="size-4 transition-transform group-open/amounts:rotate-90"
+                        />
+                    </span>
+                </summary>
+                <div className="space-y-3 pt-3">
+                    <dl className="grid grid-cols-2 gap-x-5 gap-y-3 @min-[640px]/document:grid-cols-4">
+                        <Fact label="本笔应收">
+                            <MoneyValue value={data.gross_total} />
+                        </Fact>
+                        <Fact label="已实际开票（净额）">
+                            <MoneyValue value={data.invoiced_total} />
+                        </Fact>
+                        <Fact label="其他审批中占用">
+                            <MoneyValue value={data.amounts.other_pending} />
+                        </Fact>
+                        <Fact label="其他已批准待开票">
+                            <MoneyValue value={data.amounts.other_approved} />
+                        </Fact>
+                    </dl>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        可再申请金额已扣除本次及其他申请的有效占用；已批准申请仅占用尚未开票部分。
+                    </p>
+                    <details
+                        id={`${idPrefix}-related`}
+                        className="border-t border-grid pt-3"
+                    >
+                        <summary
+                            id={`${idPrefix}-related-toggle`}
+                            className="cursor-pointer text-sm font-medium"
+                        >
+                            占用额度的开票申请（{data.request_count}）
+                        </summary>
+                        <ul className="mt-2 divide-y divide-grid text-sm">
+                            {data.requests.map((row) => (
+                                <li
+                                    key={row.request_no}
+                                    className="flex flex-wrap items-start justify-between gap-2 py-2"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="break-all">
+                                            {row.is_current
+                                                ? "本次申请"
+                                                : row.request_no}
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {row.status} ·{" "}
+                                            {new Date(
+                                                row.created_at * 1000,
+                                            ).toLocaleDateString("zh-CN")}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p>
+                                            申请{" "}
+                                            <MoneyValue value={row.amount} />
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            已开{" "}
+                                            <MoneyValue
+                                                value={row.invoiced_amount}
+                                            />
+                                        </p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                        {data.request_count > data.requests.length && (
+                            <p className="text-xs text-muted-foreground">
+                                仅展示最近 {data.requests.length}{" "}
+                                条；上方占用金额包含全部有效申请。
+                            </p>
+                        )}
+                    </details>
+                    <RecordList
+                        id={`${idPrefix}-invoices`}
+                        title="已开发票记录"
+                        count={data.records.invoice_count}
+                        rows={data.records.invoices}
+                    />
+                </div>
+            </details>
             <details
-                id={`invoice-review-related-${toAutomationIdSegment(data.account_label)}`}
-                className="border-t border-grid pt-3"
+                id={`${idPrefix}-collection`}
+                className="group/collection border-t border-grid pt-3"
             >
                 <summary
-                    id={`invoice-review-related-toggle-${toAutomationIdSegment(data.account_label)}`}
-                    className="cursor-pointer text-sm font-medium"
+                    id={`${idPrefix}-collection-toggle`}
+                    className="flex cursor-pointer list-none flex-wrap items-center gap-x-5 gap-y-2 rounded-sm py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
                 >
-                    占用额度的开票申请（{data.request_count}）
+                    <span className="self-start text-sm font-semibold leading-6">
+                        回款与履约
+                    </span>
+                    <span className="min-w-0 flex-1 basis-48 text-sm leading-6">
+                        <span className="flex flex-wrap items-center gap-x-2">
+                            <span>
+                                本笔未回款{" "}
+                                <MoneyValue value={data.open_total} />
+                            </span>
+                            <span
+                                className="text-muted-foreground"
+                                aria-hidden="true"
+                            >
+                                ·
+                            </span>
+                            <span>履约：{data.fulfillment_status}</span>
+                        </span>
+                        <span className="mt-1 block text-muted-foreground">
+                            按合同约定核对开票时点。
+                        </span>
+                    </span>
+                    <span className="ml-auto flex items-center gap-1 text-sm">
+                        <span className="group-open/collection:hidden">
+                            查看详情
+                        </span>
+                        <span className="hidden group-open/collection:inline">
+                            收起详情
+                        </span>
+                        <ChevronRightIcon
+                            aria-hidden="true"
+                            className="size-4 transition-transform group-open/collection:rotate-90"
+                        />
+                    </span>
                 </summary>
-                <ul className="mt-2 divide-y divide-grid text-sm">
-                    {data.requests.map((row) => (
-                        <li
-                            key={row.request_no}
-                            className="flex flex-wrap items-start justify-between gap-2 py-2"
-                        >
-                            <div className="min-w-0">
-                                <p className="break-all">
-                                    {row.is_current
-                                        ? "本次申请"
-                                        : row.request_no}
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    {row.status} ·{" "}
-                                    {new Date(
-                                        row.created_at * 1000,
-                                    ).toLocaleDateString("zh-CN")}
-                                </p>
-                            </div>
-                            <div className="text-right">
-                                <p>
-                                    申请 <MoneyValue value={row.amount} />
-                                </p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    已开{" "}
-                                    <MoneyValue value={row.invoiced_amount} />
-                                </p>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-                {data.request_count > data.requests.length && (
-                    <p className="text-xs text-muted-foreground">
-                        仅展示最近 {data.requests.length}{" "}
-                        条；上方占用金额包含全部有效申请。
+                <div className="space-y-3 pt-4">
+                    <dl className="grid grid-cols-2 gap-x-5 gap-y-3 @min-[640px]/document:grid-cols-4">
+                        <Fact label="本笔已核销回款">
+                            <MoneyValue value={data.settled_total} />
+                        </Fact>
+                        <Fact label="销售状态">{data.sales_status}</Fact>
+                        <Fact label="履约进度">{data.fulfillment_status}</Fact>
+                        <Fact label="负责销售">
+                            {data.sales_owner || "未记录"}
+                        </Fact>
+                    </dl>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                        仅统计已核销至本笔应收的回款；未回款或未履约不自动代表不能开票。
                     </p>
-                )}
+                    <RecordList
+                        id={`${idPrefix}-receipts`}
+                        title="相关回款记录"
+                        count={data.records.receipt_count}
+                        rows={data.records.receipts}
+                    />
+                </div>
             </details>
-            <RecordList
-                id={`invoice-review-receipts-${toAutomationIdSegment(data.account_label)}`}
-                title="相关回款记录"
-                count={data.records.receipt_count}
-                rows={data.records.receipts}
-            />
-            <RecordList
-                id={`invoice-review-invoices-${toAutomationIdSegment(data.account_label)}`}
-                title="已开发票记录"
-                count={data.records.invoice_count}
-                rows={data.records.invoices}
-            />
         </>
     )
 }

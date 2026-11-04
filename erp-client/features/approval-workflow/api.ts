@@ -128,6 +128,29 @@ export const getApprovalInstance = async (instanceId: string) =>
         ),
     )
 
+/** 导航提醒只统计有未读进展的审批单。 */
+export const getStartedApprovalUnreadCount = async (): Promise<number> => {
+    const result = await apiGet<{ unread_count: number }>(
+        "/admin/approval-instances/started-unread-count",
+    )
+    return result.unread_count
+}
+
+/** 显式确认已展示版本；后续进展由服务端保留未读。 */
+export const markApprovalProgressRead = ({
+    instanceId,
+    observedVersion,
+}: {
+    instanceId: string
+    observedVersion: string
+}): Promise<void> =>
+    apiPost(
+        `/admin/approval-instances/${encodeURIComponent(instanceId)}/progress-read`,
+        {
+            observed_instance_version: observedVersion,
+        },
+    )
+
 /**
  * 按轮次与执行序号读取完整历史。
  */
@@ -138,6 +161,7 @@ export const listApprovalHistory = async (
     nextCursor?: string
     hasMore: boolean
     route?: ApprovalRoute
+    observedInstanceVersion?: string
 }> => {
     const page = await apiGet<ApprovalHistoryPageDto>(
         `/admin/approval-instances/${encodeURIComponent(params.instanceId)}/history`,
@@ -152,6 +176,7 @@ export const listApprovalHistory = async (
         nextCursor: page.next_cursor ?? undefined,
         hasMore: page.has_more,
         route: page.route ? mapApprovalRouteDto(page.route) : undefined,
+        observedInstanceVersion: page.observed_instance_version ?? undefined,
     }
 }
 

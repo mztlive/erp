@@ -169,7 +169,8 @@ pub(super) async fn persist_sales_change_cancel(
                     )
                     .await
                     .map_err(crate::Error::from)?;
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, actor.id(), executor)
+                    .await?;
                 approvals.persist_cancel_copies(&db, &writes, executor).await?;
                 erp_sales::service::sales_review::persist_cancelled_change(&db, &mut change_order, executor)
                     .await?;

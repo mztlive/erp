@@ -29,6 +29,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .merge(material_routes(rbac))
         .merge(copy_routes(rbac))
         .merge(query_routes(rbac))
+        .merge(progress_routes(rbac))
         .merge(command_routes(rbac))
 }
 
@@ -160,4 +161,25 @@ fn copy_routes(rbac: &SharedRbacService) -> Router<HttpState> {
             permissions::approval_instance::COPIES_HISTORY,
         ),
     )
+}
+
+/// 发起人个人提醒复用实例读取权限，并在服务层校验本人身份。
+fn progress_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/approval-instances/started-unread-count",
+            with_permission(
+                get(approval_instance::progress::count),
+                rbac,
+                permissions::approval_instance::STARTED_UNREAD_COUNT,
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/progress-read",
+            with_permission(
+                post(approval_instance::progress::mark_read),
+                rbac,
+                permissions::approval_instance::PROGRESS_READ,
+            ),
+        )
 }

@@ -195,6 +195,7 @@ async fn apply_cancel_writes(
         .persist_cancelled_runtime_after_receipt(
             &input.writes.instance,
             &input.writes.updated_executions,
+            input.actor.id(),
             executor,
         )
         .await?;

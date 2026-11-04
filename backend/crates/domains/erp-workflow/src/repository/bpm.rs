@@ -276,6 +276,7 @@ mod definition_query;
 mod execution_query;
 mod instance_graph;
 mod instance_query;
+mod progress;
 mod projection;
 mod route_query;
 mod runtime_write;

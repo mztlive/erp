@@ -7,6 +7,7 @@ mod decision_apply;
 mod materials;
 mod notifications;
 pub use materials::{ApprovalMaterialView, ApprovalMaterialsView};
+mod progress;
 mod query;
 mod query_contract;
 mod read_auth;

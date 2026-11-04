@@ -155,7 +155,8 @@ pub(super) async fn persist_sales_order_cancel(
         .with_transaction(move |executor| {
             Box::pin(async move {
                 access.revalidate(&order.base.id, expected_order_version, executor).await?;
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, &actor_id, executor)
+                    .await?;
                 approvals.persist_cancel_copies(&db, &writes, executor).await?;
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                     .persist_order(&mut order, executor)

@@ -6,6 +6,8 @@
 
 业务组件以本目录导出为准；选择器约定见下文「可搜索 Combobox 约定」。共享码表（付款条件、单位、承运方等）见 `lib/business-options.ts`。
 
+部门树人员选择使用 `PersonPickerDialog`；单选、多选、数据范围及回填规则见 [人员选择弹窗接入合同](./person-picker-dialog.md)。
+
 ## 分层边界
 
 | 层                    | 负责                                                                   | 不负责                                   |

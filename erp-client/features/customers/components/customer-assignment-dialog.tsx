@@ -7,7 +7,7 @@ import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { useSelector } from "@tanstack/react-form"
 
-import { OwnerCombobox } from "@/components/business"
+import { CustomerAssignmentPersonPicker } from "@/features/customers/components/customer-assignment-person-picker"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -24,7 +24,6 @@ import {
     customerAssignmentDefaults,
     customerAssignmentSchema,
 } from "@/features/customers/lib/customer-assignment-form"
-import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import { getErrorMessage } from "@/lib/api/errors"
 
 /** 从统一 API 错误中提取服务端业务消息。 */
@@ -48,7 +47,6 @@ export function CustomerAssignmentDialog({
     >()
     const mutation = useApplyCustomerAssignmentMutation()
     const resetMutation = mutation.reset
-    const owners = useOwnerOptionsQuery()
 
     const form = useAppForm({
         defaultValues: customerAssignmentDefaults(),
@@ -168,27 +166,26 @@ export function CustomerAssignmentDialog({
                                     !field.state.meta.isValid
                                 return (
                                     <Field data-invalid={invalid || undefined}>
-                                        <FieldLabel>
+                                        <FieldLabel htmlFor="customers-assignment-dialog-owner">
                                             销售人员
                                             <RequiredMark />
                                         </FieldLabel>
-                                        <OwnerCombobox
+                                        <CustomerAssignmentPersonPicker
                                             id="customers-assignment-dialog-owner"
-                                            owners={owners.data ?? []}
-                                            onRefresh={() =>
-                                                owners.refetch({
-                                                    throwOnError: true,
-                                                })
-                                            }
-                                            value={
-                                                field.state.value || undefined
-                                            }
-                                            onValueChange={(value) =>
-                                                field.handleChange(value ?? "")
+                                            value={field.state.value}
+                                            onChange={field.handleChange}
+                                            onBlur={field.handleBlur}
+                                            disabled={mutation.isPending}
+                                            invalid={invalid}
+                                            describedBy={
+                                                invalid
+                                                    ? "customers-assignment-owner-error"
+                                                    : undefined
                                             }
                                         />
                                         {invalid ? (
                                             <FieldError
+                                                id="customers-assignment-owner-error"
                                                 errors={toFieldErrors(
                                                     field.state.meta.errors,
                                                 )}

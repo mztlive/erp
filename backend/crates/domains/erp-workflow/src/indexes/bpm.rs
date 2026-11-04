@@ -130,6 +130,10 @@ fn instance_indexes() -> Vec<IndexModel> {
             "idx_approval_process_instances_started_by",
             doc! { "started_by": 1, "started_at": -1, "id": -1 },
         ),
+        named_index(
+            "idx_approval_process_instances_started_unread",
+            doc! { "started_by": 1, "initiator_unread": 1, "deleted_at": 1 },
+        ),
         named_index("idx_approval_process_instances_updated", doc! { "updated_at": -1, "id": -1 }),
         named_index(
             "idx_approval_process_instances_status_updated",

@@ -413,6 +413,7 @@ pub(super) async fn persist_purchase_order_cancel(
                 }
                 execute_cancel_steps(
                     &mut CancelPosting {
+                        actor_id: &actor_id,
                         approval: ports.approval.as_ref(),
                         db: &db,
                         writes: &writes,
@@ -467,6 +468,8 @@ async fn execute_cancel_steps(steps: &mut impl CancelSteps, executor: &mut dyn E
 
 /// 撤回写入步骤所需的同一组事实。
 pub(super) struct CancelPosting<'a> {
+    /// 实际撤回人，用于发起人进展提醒。
+    pub(super) actor_id: &'a str,
     pub(super) approval: &'a dyn ApprovalRuntimePort,
     /// 业务数据库。
     pub(super) db: &'a Database,
@@ -485,8 +488,14 @@ impl CancelSteps for CancelPosting<'_> {
     async fn apply(&mut self, step: CancelStep, executor: &mut dyn Executor) -> Result<()> {
         match step {
             CancelStep::Runtime => {
-                claim_and_persist_document_cancel_runtime(self.db, self.writes, self.closed_tasks, executor)
-                    .await?
+                claim_and_persist_document_cancel_runtime(
+                    self.db,
+                    self.writes,
+                    self.closed_tasks,
+                    self.actor_id,
+                    executor,
+                )
+                .await?
             },
             CancelStep::Order => {
                 erp_procurement::service::purchase_order::cancel_approval::persist_cancelled_order(

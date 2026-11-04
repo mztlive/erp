@@ -9,6 +9,7 @@ pub mod copies;
 pub mod error;
 pub mod http;
 pub mod materials;
+pub mod progress;
 
 use application_core::AuditActor;
 use axum::Extension;

@@ -562,7 +562,12 @@ async fn persist_cancel_operation(
         .execute(adapter_spec_of(source.document_type)?.cancel_action, &context, actor, executor)
         .await?;
     db.bpm_workflow()
-        .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, executor)
+        .persist_cancelled_runtime_after_receipt(
+            &writes.instance,
+            &writes.updated_executions,
+            actor.id(),
+            executor,
+        )
         .await?;
     db.approval_cancellation_facts().create(&fact, executor).await?;
     persist_copies(db, rbac, &writes.instance, &writes.events, executor).await?;

@@ -8,6 +8,8 @@ import {
     type Query,
 } from "@tanstack/react-query"
 
+import { useApprovalProgressRead } from "./hooks/use-progress-read"
+
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
@@ -117,8 +119,8 @@ const invalidateApprovalCaches = async (
 export const useApprovalHistoryInfiniteQuery = (
     params: Omit<ApprovalHistoryParams, "cursor">,
     enabled = true,
-) =>
-    useInfiniteQuery({
+) => {
+    const query = useInfiniteQuery({
         queryKey: approvalKeys.history(params.instanceId, params.order),
         queryFn: ({ pageParam }) =>
             listApprovalHistory({
@@ -129,6 +131,15 @@ export const useApprovalHistoryInfiniteQuery = (
         getNextPageParam: (lastPage) => lastPage.nextCursor,
         enabled: enabled && params.instanceId.trim().length > 0,
     })
+    useApprovalProgressRead(
+        params.instanceId,
+        enabled && query.isSuccess
+            ? query.data.pages.findLast((page) => page.observedInstanceVersion)
+                  ?.observedInstanceVersion
+            : undefined,
+    )
+    return query
+}
 
 /**
  * 查询当前 blocker 的恢复选项。无实例时不请求。

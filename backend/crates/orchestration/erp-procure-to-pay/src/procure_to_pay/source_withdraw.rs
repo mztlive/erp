@@ -106,6 +106,7 @@ impl SalesChangeWithdrawal<'_> {
             purchase.base.id.clone(),
         )?;
         let mut posting = CancelPosting {
+            actor_id: self.actor.id(),
             approval: self.approval,
             db,
             writes: &writes,

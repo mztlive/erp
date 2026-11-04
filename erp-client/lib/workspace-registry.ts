@@ -79,7 +79,7 @@ export type WorkspaceId =
 /** 侧栏角标键：由 Shell 映射到对应工作面的实时计数，无数据时隐藏。 */
 export type WorkspaceNavBadgeKey =
     | "todo-count"
-    | "approval-started-count"
+    | "approval-started-unread-count"
     | "copy-unread-count"
     | "background-job-active-count"
     | "delivery-count"
@@ -497,7 +497,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     href: "/workspace/approvals",
                     label: "我发起的审批",
                     icon: SendIcon,
-                    badge: "approval-started-count",
+                    badge: "approval-started-unread-count",
                     requiredPermissions: ["approval_instance:read"],
                 },
                 {

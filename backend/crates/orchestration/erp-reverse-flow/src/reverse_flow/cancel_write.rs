@@ -64,6 +64,7 @@ impl CancelWritePort for MongoCancelWrite<'_> {
                 &writes.instance,
                 &writes.updated_executions,
                 &writes.receipt,
+                &self.actor_id,
                 executor,
             )
             .await?;

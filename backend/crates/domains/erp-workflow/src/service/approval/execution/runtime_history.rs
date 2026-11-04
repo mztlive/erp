@@ -2,8 +2,8 @@
 //!
 //! HTTP 历史接口与单据详情 `recent_history` 共用同一映射，禁止再复用列表行形状。
 
-use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
+use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use serde::{Deserialize, Serialize};
 
 use super::runtime_route::RuntimeApprovalRoute;
@@ -68,6 +68,9 @@ impl RuntimeHistoryItem {
 /// 执行历史分页。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeHistoryPage {
+    /// 发起人已展示的实例版本；仅包含最新进展的页面提供，供客户端显式确认已读。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_instance_version: Option<String>,
     /// 当前页，按请求指定的 `execution_no` 方向排序。
     pub items: Vec<RuntimeHistoryItem>,
     /// 下一页游标，值为本页最后一条 `execution_no`。
@@ -77,6 +80,30 @@ pub struct RuntimeHistoryPage {
     /// 销售审批首页携带当前轮次完整链条；其它类型及后续分页省略。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route: Option<RuntimeApprovalRoute>,
+}
+
+impl RuntimeHistoryPage {
+    /// 仅向发起人提供本页已展示的最新进展版本。
+    /// # 参数
+    /// 实例快照、登录账号、历史游标与排序方向。
+    /// # 返回
+    /// 无；旧记录页和非发起人不获得确认版本。
+    /// # 错误
+    /// 无。
+    pub(crate) fn observe_progress(
+        &mut self,
+        instance: &ApprovalProcessInstance,
+        actor_id: &str,
+        after_execution_no: Option<u32>,
+        order: ExecutionHistoryOrder,
+    ) {
+        let contains_latest = match order {
+            ExecutionHistoryOrder::Desc => after_execution_no.is_none(),
+            ExecutionHistoryOrder::Asc => !self.has_more,
+        };
+        self.observed_instance_version = (instance.started_by.as_str() == actor_id && contains_latest)
+            .then(|| instance.base.version.to_string());
+    }
 }
 
 /// 将节点执行映射为历史项。不得按 `node_key` 去重。
@@ -124,7 +151,7 @@ pub fn history_page_from(mut items: Vec<RuntimeHistoryItem>, limit: u32) -> Runt
         items.truncate(limit as usize);
     }
     let next_cursor = has_more.then(|| items.last().map(|item| item.execution_no.to_string())).flatten();
-    RuntimeHistoryPage { items, next_cursor, has_more, route: None }
+    RuntimeHistoryPage { items, next_cursor, has_more, route: None, observed_instance_version: None }
 }
 
 /// 从已排序历史中取最近一次驳回原因。
@@ -162,13 +189,45 @@ fn optional_text(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+    use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::ApprovalExecutionAssignmentSource;
-    use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
+    use bpm::model::{
+        ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, NewProcessInstance, ParticipantId,
+        ProcessKind, SubjectRef, Timestamp,
+    };
 
     use super::{
-        RuntimeHistoryItem, history_item_from_execution, history_page_from, latest_rejection_reason,
+        ExecutionHistoryOrder, RuntimeHistoryItem, history_item_from_execution, history_page_from,
+        latest_rejection_reason,
     };
+
+    #[test]
+    fn read_confirmation_requires_latest_page_and_initiator() {
+        let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("i"),
+            process_definition_id: ApprovalProcessDefinitionId::new("d"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "a").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("starter").unwrap(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
+        .unwrap();
+        for (actor, order, cursor, has_more, expected) in [
+            ("starter", ExecutionHistoryOrder::Desc, None, true, true),
+            ("starter", ExecutionHistoryOrder::Desc, Some(3), false, false),
+            ("starter", ExecutionHistoryOrder::Asc, None, true, false),
+            ("starter", ExecutionHistoryOrder::Asc, Some(3), false, true),
+            ("starter", ExecutionHistoryOrder::Asc, None, false, true),
+            ("other", ExecutionHistoryOrder::Desc, None, false, false),
+        ] {
+            let mut page = history_page_from(vec![history_item(1, "ACTIVE", None)], 20);
+            page.has_more = has_more;
+            page.observe_progress(&instance, actor, cursor, order);
+            assert_eq!(page.observed_instance_version, expected.then(|| instance.base.version.to_string()));
+        }
+    }
 
     fn active_execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {

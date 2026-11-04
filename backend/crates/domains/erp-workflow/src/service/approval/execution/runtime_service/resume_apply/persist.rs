@@ -107,6 +107,7 @@ async fn advance_resume_instance(
                 prepared.expected_instance_version,
                 &expected_execution_id,
                 &prepared.list_projection,
+                &prepared.actor_id,
                 executor,
             )
             .await?,

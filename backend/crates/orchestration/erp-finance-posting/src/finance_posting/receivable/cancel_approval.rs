@@ -144,7 +144,8 @@ pub(crate) async fn persist_customer_receipt_cancel(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, &actor_id, executor)
+                    .await?;
                 rbac.runtime.persist_cancel_copies(&db, &writes, executor).await?;
                 db.customer_receipts().update(&mut receipt, executor).await?;
                 persist_log(&db, &audit, executor).await?;

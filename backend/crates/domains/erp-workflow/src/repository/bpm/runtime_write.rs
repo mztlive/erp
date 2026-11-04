@@ -12,6 +12,7 @@ use super::{
     ASSIGNEES, ApprovalInstanceListProjection, BpmWorkflowRepository, CasReplaceSpec, CasWriteOutcome,
     EXECUTIONS, INSTANCES, RECEIPTS, i64_version, merge_documents,
 };
+use crate::entity::approval_progress::ApprovalProgress;
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 在命令收据已先行仲裁后写入启动实例、审批人绑定和首个执行。
@@ -93,6 +94,7 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// * `updated_executions` - 已随实例取消结束的当前执行集合
     /// * `receipt` - 本次取消命令收据
     /// * `executor` - 调用方事务执行器
+    /// * `actor_id` - 本次实际操作人；本人操作不产生新的未读提醒。
     ///
     /// # 返回
     /// 全部 BPM 运行事实写入成功时返回 `Ok(())`。
@@ -104,9 +106,11 @@ impl<'a> BpmWorkflowRepository<'a> {
         instance: &ApprovalProcessInstance,
         updated_executions: &[ApprovalNodeExecution],
         receipt: &ApprovalCommandReceipt,
+        actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.persist_cancelled_runtime_after_receipt(instance, updated_executions, executor).await?;
+        self.persist_cancelled_runtime_after_receipt(instance, updated_executions, actor_id, executor)
+            .await?;
         self.insert_command_receipt(receipt, executor).await
     }
 
@@ -121,6 +125,7 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// * `instance` - 已进入 `CANCELLED` 的实例快照。
     /// * `updated_executions` - 已随实例取消结束的当前执行；至少一条。
     /// * `executor` - 调用方执行器；本方法不写收据、不创建事务。
+    /// * `actor_id` - 本次实际操作人；本人操作不产生新的未读提醒。
     ///
     /// # 返回
     /// 实例与全部当前执行的 CAS 都已应用时无返回值。
@@ -131,6 +136,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         &self,
         instance: &ApprovalProcessInstance,
         updated_executions: &[ApprovalNodeExecution],
+        actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let current =
@@ -143,6 +149,7 @@ impl<'a> BpmWorkflowRepository<'a> {
                 expected_instance_version,
                 &current_id,
                 &cancelled_instance_projection(instance),
+                actor_id,
                 executor,
             )
             .await?,
@@ -164,6 +171,7 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// * `expected_current_execution_id` - 必须仍是当前节点执行。
     /// * `list_projection` - 与实例一并写入的列表投影。
     /// * `executor` - 数据访问执行器。
+    /// * `actor_id` - 本次实际操作人；本人操作不产生新的未读提醒。
     ///
     /// # 返回
     /// 返回应用、缺失、版本冲突或状态变化的 CAS 分类。
@@ -176,6 +184,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         expected_instance_version: u64,
         expected_current_execution_id: &ApprovalNodeExecutionId,
         list_projection: &ApprovalInstanceListProjection,
+        actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<CasWriteOutcome<ApprovalProcessInstance>> {
         let filter = instance_advance_filter(
@@ -183,13 +192,21 @@ impl<'a> BpmWorkflowRepository<'a> {
             expected_instance_version,
             expected_current_execution_id,
         )?;
+        let mut projection = serialize_to_document(list_projection)?;
+        if let Some(progress) = ApprovalProgress::changed(
+            instance.started_by.as_str(),
+            actor_id,
+            expected_instance_version.checked_add(1).ok_or(Error::EntityMetadataOutOfRange("version"))?,
+        ) {
+            merge_documents(&mut projection, serialize_to_document(&progress)?);
+        }
         self.cas_replace(
             CasReplaceSpec {
                 collection: INSTANCES,
                 filter,
                 entity: instance,
                 expected_version: expected_instance_version,
-                extra_set: Some(serialize_to_document(list_projection)?),
+                extra_set: Some(projection),
             },
             |current| {
                 matches!(

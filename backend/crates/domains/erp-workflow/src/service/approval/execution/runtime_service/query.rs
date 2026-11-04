@@ -219,6 +219,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         if after_execution_no.is_none() {
             page.route = self.sales_approval_route(&subject).await?;
         }
+        page.observe_progress(&subject.instance, actor.id(), after_execution_no, order);
         Ok(page)
     }
 

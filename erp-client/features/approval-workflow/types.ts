@@ -219,6 +219,7 @@ export type ApprovalHistoryItemDto = Readonly<{
 
 /** 历史分页。 */
 export type ApprovalHistoryPageDto = Readonly<{
+    observed_instance_version?: string | null
     items: readonly ApprovalHistoryItemDto[]
     next_cursor?: string | null
     has_more: boolean

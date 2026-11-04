@@ -35,6 +35,14 @@ pub const INSTANCE_LIST: PermissionDef = PermissionDef {
     description: "按固定 view 查询审批实例",
 };
 
+/// 查询本人发起审批的未读进展数量。
+pub const STARTED_UNREAD_COUNT: PermissionDef =
+    INSTANCE_LIST.described(groups::APPROVAL_INSTANCE, "查询本人发起审批的未读进展数量");
+
+/// 确认本人发起审批的已查看进展。
+pub const PROGRESS_READ: PermissionDef =
+    INSTANCE_LIST.described(groups::APPROVAL_INSTANCE, "确认本人发起审批的已查看进展");
+
 /// 查询审批实例详情。
 pub const INSTANCE_DETAIL: PermissionDef =
     INSTANCE_LIST.described(groups::APPROVAL_INSTANCE, "查询审批实例详情");
@@ -81,6 +89,8 @@ pub const ENTRIES: &[(&str, PermissionDef)] = &[
     ("MATERIALS_DOWNLOAD", MATERIALS_DOWNLOAD),
     ("SUBMIT_DECISION", SUBMIT_DECISION),
     ("INSTANCE_LIST", INSTANCE_LIST),
+    ("STARTED_UNREAD_COUNT", STARTED_UNREAD_COUNT),
+    ("PROGRESS_READ", PROGRESS_READ),
     ("INSTANCE_DETAIL", INSTANCE_DETAIL),
     ("INSTANCE_HISTORY", INSTANCE_HISTORY),
     ("RECOVERY_OPTIONS", RECOVERY_OPTIONS),

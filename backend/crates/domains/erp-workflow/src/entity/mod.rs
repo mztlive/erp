@@ -7,3 +7,4 @@ pub mod work_item;
 pub mod work_item_command;
 
 pub mod approval_copy;
+pub mod approval_progress;

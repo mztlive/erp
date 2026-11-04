@@ -69,6 +69,7 @@ impl ReceivableProcess {
                         &db,
                         &prepared.writes,
                         &prepared.closed,
+                        actor.id(),
                         executor,
                     )
                     .await?;

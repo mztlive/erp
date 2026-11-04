@@ -7,6 +7,7 @@ import { useMutation } from "@tanstack/react-query"
 import { downloadFileAsset } from "@/features/file-assets/api"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
+import Link from "next/link"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
@@ -56,7 +57,10 @@ import {
 } from "../api/work-item-meta"
 import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts"
 import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
-import { buildDocumentHref } from "../lib/destination"
+import {
+    buildDocumentHref,
+    buildSalesOrderReworkHref,
+} from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
 import {
     isApprovalWorkbenchTask,
@@ -544,6 +548,13 @@ function WorkspaceDocumentTaskDetail({
     )
     const pathname = usePathname()
     const searchParams = useSearchParams()
+    const reworkHref = canReadSensitive
+        ? buildSalesOrderReworkHref(
+              item,
+              grantedPermissions,
+              searchParams.get("returnTo"),
+          )
+        : null
     const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
     const [paper, setPaper] = useState<WorkspacePaperTarget | null>(null)
     useEffect(() => {
@@ -600,36 +611,43 @@ function WorkspaceDocumentTaskDetail({
         item.workItemType === "FULFILLMENT_OPERATION" &&
         item.businessObjectType === "delivery" &&
         item.deliveryLines !== undefined
-    const actions =
-        approvalTask && !trackingTask ? (
-            <ApprovalActionBar
-                presentation="workspace"
-                showInlineOpinion={!purchaseApproval}
-                id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
-                allowedActions={item.allowedActions}
-                recoveryOptions={recoveryQuery.data?.actions ?? []}
-                workItemId={item.workItemId}
-                expectedTaskVersion={item.taskVersion}
-                instance={instance}
-                canReadSensitive={canReadSensitive}
-                hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
-                decisionContext={{
-                    documentLabel: item.objectTitle,
-                    amountLabel: primaryAmount?.value,
-                    currentNodeLabel: instance?.currentNodeName,
-                    impactSummary,
-                }}
-                onDecisionApplied={(view) =>
-                    onDecisionApplied?.(view, item.workItemId)
-                }
-            />
-        ) : item.workItemType === "FULFILLMENT_OPERATION" ? (
-            <WorkspaceFulfillmentProcessAction
-                item={item}
-                grantedPermissions={grantedPermissions}
-                onTaskCompleted={(id) => onTaskCompleted?.(id)}
-            />
-        ) : null
+    const actions = reworkHref ? (
+        <Button
+            id={`workspace-sales-order-rework-${toAutomationIdSegment(item.workItemId)}`}
+            render={<Link href={reworkHref} />}
+        >
+            修改并重新提交
+            <ArrowUpRightIcon aria-hidden="true" />
+        </Button>
+    ) : approvalTask && !trackingTask ? (
+        <ApprovalActionBar
+            presentation="workspace"
+            showInlineOpinion={!purchaseApproval}
+            id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
+            allowedActions={item.allowedActions}
+            recoveryOptions={recoveryQuery.data?.actions ?? []}
+            workItemId={item.workItemId}
+            expectedTaskVersion={item.taskVersion}
+            instance={instance}
+            canReadSensitive={canReadSensitive}
+            hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
+            decisionContext={{
+                documentLabel: item.objectTitle,
+                amountLabel: primaryAmount?.value,
+                currentNodeLabel: instance?.currentNodeName,
+                impactSummary,
+            }}
+            onDecisionApplied={(view) =>
+                onDecisionApplied?.(view, item.workItemId)
+            }
+        />
+    ) : item.workItemType === "FULFILLMENT_OPERATION" ? (
+        <WorkspaceFulfillmentProcessAction
+            item={item}
+            grantedPermissions={grantedPermissions}
+            onTaskCompleted={(id) => onTaskCompleted?.(id)}
+        />
+    ) : null
     const canOpenDocument = Boolean(
         !approvalDocument &&
         documentHref &&

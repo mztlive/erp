@@ -66,7 +66,8 @@ impl PurchasePaymentRequestProcess {
                     ensure_version(&request, req.expected_version)?;
                     ensure_creator(&request, &actor)?;
                     require_sources(&db, &rbac, &request, &actor, "withdraw", executor).await?;
-                    claim_and_persist_document_cancel_runtime(&db, &writes, &closed, executor).await?;
+                    claim_and_persist_document_cancel_runtime(&db, &writes, &closed, actor.id(), executor)
+                        .await?;
                     rbac.runtime.persist_cancel_copies(&db, &writes, executor).await?;
                     release_remaining(&db, &request, actor.id(), executor).await?;
                     request.withdraw(&req.reason)?;

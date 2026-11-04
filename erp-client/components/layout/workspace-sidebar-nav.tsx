@@ -64,7 +64,7 @@ function badgeCountFor(
     switch (key) {
         case "background-job-active-count":
             return counts.backgroundJobs
-        case "approval-started-count":
+        case "approval-started-unread-count":
             return counts.started
         case "copy-unread-count":
             return counts.copied
@@ -362,7 +362,7 @@ export function WorkspaceSidebarNav() {
                                     item.badge === "todo-count"
                                         ? navigationCounts.inbox
                                         : item.badge ===
-                                            "approval-started-count"
+                                            "approval-started-unread-count"
                                           ? navigationCounts.started
                                           : item.badge === "copy-unread-count"
                                             ? copyCountQuery
@@ -383,8 +383,8 @@ export function WorkspaceSidebarNav() {
                                     item.badge === "copy-unread-count"
                                         ? `${badgeCount} 条未读抄送`
                                         : item.badge ===
-                                            "approval-started-count"
-                                          ? `${badgeCount} 条我发起的审批`
+                                            "approval-started-unread-count"
+                                          ? `${badgeCount} 条审批有新进展待查看`
                                           : item.badge ===
                                               "inquiry-feedback-count"
                                             ? `${badgeCount} 张询价单有新反馈待处理`

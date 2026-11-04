@@ -51,6 +51,7 @@ struct ResumeRuntime {
 
 /// 跨越事务提交边界的恢复计划及冻结元数据。
 pub(super) struct PreparedResume {
+    pub(super) actor_id: String,
     pub(super) writes: PlannedWrites,
     pub(super) new_task_ids: Vec<String>,
     pub(super) list_projection: ApprovalInstanceListProjection,
@@ -308,6 +309,7 @@ fn finish_prepared_resume(
         Some(format!("execution={}", runtime.current.base.id)),
     )?;
     Ok(PreparedResume {
+        actor_id: actor.id().to_owned(),
         writes,
         new_task_ids,
         list_projection,

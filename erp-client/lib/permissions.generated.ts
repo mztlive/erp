@@ -691,6 +691,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/started-unread-count",
+                description: "查询本人发起审批的未读进展数量",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-instances/{id}/progress-read",
+                description: "确认本人发起审批的已查看进展",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/stock-adjustments/{id}/cancel-approval",
                 description: "撤回库存调整审批",

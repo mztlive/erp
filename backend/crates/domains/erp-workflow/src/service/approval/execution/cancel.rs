@@ -345,6 +345,7 @@ pub async fn replay_committed_document_cancel(
 /// * `db` - 工作流数据库。
 /// * `writes` - 已规划的取消写入。
 /// * `closed_tasks` - 随取消关闭的任务。
+/// * `actor_id` - 实际撤回人，用于判断是否提醒发起人。
 /// * `executor` - 调用方事务执行器。
 ///
 /// # 返回
@@ -356,6 +357,7 @@ pub async fn claim_and_persist_document_cancel_runtime(
     db: &Database,
     writes: &PlannedWrites,
     closed_tasks: &[WorkItem],
+    actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if writes.receipt.command_kind != ApprovalCommandKind::CancelApproval
@@ -371,7 +373,12 @@ pub async fn claim_and_persist_document_cancel_runtime(
         .await
         .map_err(map_receipt_first_write_error)?;
     db.bpm_workflow()
-        .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, executor)
+        .persist_cancelled_runtime_after_receipt(
+            &writes.instance,
+            &writes.updated_executions,
+            actor_id,
+            executor,
+        )
         .await?;
     db.work_items().persist_cancelled_approval_tasks(closed_tasks, executor).await?;
     Ok(())

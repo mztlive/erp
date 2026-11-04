@@ -121,6 +121,7 @@ async fn persist_decision_runtime_facts(
                 input.expected_instance_version,
                 &expected_current_execution_id,
                 input.list_projection,
+                input.actor_id,
                 executor,
             )
             .await?,

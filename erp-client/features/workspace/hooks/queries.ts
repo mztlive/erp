@@ -2,6 +2,8 @@
 
 import { useQueries, useQuery } from "@tanstack/react-query"
 
+import { getStartedApprovalUnreadCount } from "@/features/approval-workflow/api"
+
 import { fetchQueueCount } from "../api/queue-count"
 import { hasPermission } from "@/lib/permissions"
 import type { AccountProfile } from "@/features/auth/api"
@@ -117,7 +119,7 @@ export function useWorkspaceInboxCountQuery(enabled = true) {
 
 export { workspaceHomeKeys }
 
-/** 菜单计数不受页面筛选影响；按账号和权限版本隔离，并随办理成功失效。 */
+/** 菜单按账号隔离：待我处理取待办数，我发起的审批只取未读进展数。 */
 export function useWorkspaceNavigationCounts(profile?: AccountProfile) {
     const views = ["inbox", "started"] as const
     const queries = useQueries({
@@ -125,14 +127,17 @@ export function useWorkspaceNavigationCounts(profile?: AccountProfile) {
             queryKey: [
                 ...workspaceHomeKeys.all,
                 "navigation-count",
-                view,
+                view === "started" ? "started-unread" : view,
                 profile?.userid,
                 profile?.policy_version,
                 profile?.organization_version,
                 profile?.role_ids,
                 profile?.permissions,
             ],
-            queryFn: () => fetchQueueCount(view, undefined, {}),
+            queryFn: () =>
+                view === "started"
+                    ? getStartedApprovalUnreadCount()
+                    : fetchQueueCount(view, undefined, {}),
             enabled:
                 Boolean(profile) &&
                 hasPermission(

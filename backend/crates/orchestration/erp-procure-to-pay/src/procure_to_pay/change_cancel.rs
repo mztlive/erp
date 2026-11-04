@@ -301,6 +301,7 @@ async fn persist_cancel_runtime(
                 expected_instance_version,
                 &expected_execution_id,
                 &cancel_list_projection(now),
+                actor_id,
                 executor,
             )
             .await?,
