@@ -4,50 +4,53 @@ digraph resourceAuthorization {
   edge [fontname="PingFang SC", fontsize=11, color="#67788d", arrowsize=0.75];
 
   subgraph clusterSources {
-    label="一、授权来源：产生授权，不直接放行";
+    label="一、业务事实：维护归属，触发额外数据授权";
     fontsize=16; fontcolor="#355984"; color="#c9dbef"; style="rounded";
-    scope [label="组织与岗位政策\n公司 / 部门 / 本人负责"];
-    business [label="业务事件\n创建 / 交接 / 分配 / 关闭"];
-    bpm [label="BPM 与工作流\n有效节点 / 实际分配 / 执行代次"];
-    sharing [label="受控共享与会话\n人工共享 / 外部访问 / 服务作业"];
-    {rank=same; scope; business; bpm; sharing;}
+    scope [label="个人数据配置与组织\n指定公司 / 部门 / 单资源；内建 root 例外"];
+    business [label="业务事件\n创建 / 所有权移交 / 任务原子转派"];
+    bpm [label="BPM 与工作流\n创建任务 / 变更负责人 / 维护状态"];
+    governance [label="治理与受限身份\n管理员来源终止 / 外部会话 / 服务作业"];
+    {rank=same; scope; business; bpm; governance;}
   }
-  policy [label="自动授权策略\n接收人资格 + 明确资源清单 + 动作 + 期限 + 撤销规则", fillcolor="#edf4ff", color="#6e9bd2"];
+  policy [label="额外数据授权策略\n审批来源完整保留，移交不中断读取\n非审批完成或转派：任务及材料固定快照\n归属本身不生成授权；独立审批授权不扣减", fillcolor="#edf4ff", color="#6e9bd2"];
   outbox [label="业务事务\n业务事实 + 任务状态 + 业务审计 + Outbox 事件", fillcolor="#edf4ff", color="#6e9bd2"];
   worker [label="独立授权处理器\n可靠消费 / 重试 / 按资源、来源、策略重算", fillcolor="#edf4ff", color="#6e9bd2"];
-  facts [label="事实查询 Port\n当前责任 / 分配代次 / 固定材料版本 / 终止事实"];
-  scope -> outbox; business -> outbox; bpm -> outbox; sharing -> outbox;
+  facts [label="事实查询 Port\n当前所有者 / 固定部门 / 当前与历史分配\n材料版本 / 管理员终止版本"];
+  scope -> outbox; business -> outbox; bpm -> outbox; governance -> outbox;
   outbox -> worker [label="提交后至少一次投递"];
   worker -> facts [label="读取当前事实"];
   facts -> policy;
   worker -> policy [label="匹配当前生效策略"];
-  grants [label="有效数据授权\n部门 / 公司 / 指定资源选择器\n多来源叠加；无人员范围上限；独立撤销", fillcolor="#eaf6f1", color="#60a58a"];
+  grants [label="额外数据授权\n部门 / 公司 / 指定资源选择器\n多来源叠加；无人员范围上限；独立撤销", fillcolor="#eaf6f1", color="#60a58a"];
   policy -> grants [label="独立授权事务：差异 + 审计 + 处理进度\n幂等 / 版本防倒退 / 批次整体发布"];
 
   subgraph clusterAccess {
     label="二、统一判定：全部访问入口共用";
     fontsize=16; fontcolor="#355984"; color="#c9dbef"; style="rounded";
     request [label="管理列表 / 工作台 / 详情\nAPI / 文件 / 导出 / 后台命令"];
-    identity [label="身份与强制边界\n身份有效 / 强制禁用 / 当前资格"];
-    capability [label="功能权限\n有效角色权限合并计算"];
-    dataCheck [label="资源动作授权\n是否能对这个资源做这个动作"];
-    decision [label="统一授权结果\n身份边界 AND 功能权限 AND 数据授权", fillcolor="#e9f2ff", color="#557fb1", penwidth=2];
+    identity [label="身份与强制边界\n账号状态 / 会话有效 / 当前功能资格"];
+    capability [label="功能权限\n普通角色仅提供功能；有效角色取并集"];
+    dataCheck [label="数据访问依据\n当前归属 OR 有效资源授权\nOR 登记的单据至任务基本信息查看"];
+    decision [label="统一授权结果\n身份边界 AND 功能权限 AND 数据访问依据", fillcolor="#e9f2ff", color="#557fb1", penwidth=2];
     {rank=same; identity; capability; dataCheck;}
     request -> identity; request -> capability; request -> dataCheck;
     identity -> decision; capability -> decision; dataCheck -> decision;
   }
+  own [label="自身归属（无需授权记录）\n业务对象：当前所有者\n本人任务：当前实际负责人", fillcolor="#fff8e9", color="#c8aa68"];
+  outbox -> own [label="业务提交即生效", color="#b28d40"];
+  own -> dataCheck [label="当前归属事实"];
   grants -> dataCheck [label="有效授权与授权版本"];
   grants -> request [style=invis];
 
   subgraph clusterUse {
     label="三、使用授权结果：业务规则继续生效";
     fontsize=16; fontcolor="#355984"; color="#c9dbef"; style="rounded";
-    query [label="查询\n授权约束 + 用户筛选 → 分页 / 汇总\n待办的分配与状态仅作业务筛选"];
+    query [label="查询\n归属范围 ∪ 授权范围 → 筛选 / 分页 / 汇总\n我的待办仅本人当前任务；监督查看另列"];
     command [label="执行\n业务状态 / 金额 / 版本 / 职责分离\n当前分配代次 / 流程迁移"];
-    material [label="输出\n完整对象或登记材料视图\n附件预览 / 下载分别授权"];
+    material [label="输出\n完整对象或登记材料视图\n附件动作独立；成本毛利用功能控制\n导出按读取范围；下载重验"];
     {rank=same; query; command; material;}
   }
   decision -> query; decision -> command; decision -> material;
-  audit [label="全程可解释、可重算、可撤销、可审计\n谁因哪个来源，在何版本对哪个资源具有何种动作", fillcolor="#fff8e9", color="#c8aa68"];
+  audit [label="全程可解释、可重算、可撤销、可审计\n多来源并集；审批来源可整体终止且不得自动恢复", fillcolor="#fff8e9", color="#c8aa68"];
   query -> audit; command -> audit; material -> audit;
 }
