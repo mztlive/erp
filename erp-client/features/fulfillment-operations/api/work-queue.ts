@@ -172,9 +172,9 @@ export function fulfillmentQueueItemToOperation(
             effectivePaidAmount: row.gate_effective_paid_amount,
             message:
                 row.gate_state === "SATISFIED"
-                    ? "作业先决条件已满足"
+                    ? "预付条件已满足"
                     : row.gate_state === "BLOCKED"
-                      ? "作业先决条件尚未满足"
+                      ? "预付待完成，不影响确认实际履约"
                       : "",
         },
     } as const

@@ -19,7 +19,7 @@ use validator::Validate;
 
 use super::FulfillmentProcess;
 use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost};
-use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
+use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable};
 use super::task::FulfillmentIdentityFactory;
 use crate::{Error, Result};
 
@@ -42,7 +42,7 @@ impl FulfillmentProcess {
     /// 返回已确认交付事实，不携带审批绑定。
     ///
     /// # 错误
-    /// 版本、数量、凭证、采购资格或先款门槛无效时回滚整个事务。
+    /// 版本、数量、凭证、采购资格无效时回滚整个事务。
     pub async fn confirm_electronic_delivery(
         &self,
         id: &str,
@@ -126,7 +126,7 @@ async fn confirm(
     Ok(record)
 }
 
-/// 采购单须可履约、过先款门槛，且分配仍指向本销售明细。
+/// 采购单须可履约，且分配仍指向本销售明细；付款不阻止登记交付。
 async fn purchase_context(
     db: &Database,
     record: &ElectronicDelivery,
@@ -138,7 +138,6 @@ async fn purchase_context(
         .await?
         .ok_or_else(|| Error::NotFound("来源采购单不存在".into()))?;
     ensure_po_fulfillable(&order)?;
-    ensure_prepay_gate(db, executor, &order).await?;
     ensure_allocation_valid(
         db,
         executor,

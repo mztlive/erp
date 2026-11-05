@@ -32,15 +32,14 @@ export function FulfillmentGateStatus({
     showPaymentAction = true,
     presentation = "badge",
 }: FulfillmentGateStatusProps) {
-    const isShip = operation.operationType === "WAREHOUSE_SHIP"
     if (operation.gate.state === "NOT_APPLICABLE") {
         return (
             <BusinessStatusBadge
                 context="list"
                 id={id}
                 tone="neutral"
-                label={isShip ? "发货条件：无先款要求" : "无先款要求"}
-                description={operation.gate.message}
+                label="无预付要求"
+                description="付款与履约分别处理"
             />
         )
     }
@@ -49,14 +48,11 @@ export function FulfillmentGateStatus({
         <PrepaymentGate
             id={id}
             presentation={presentation}
-            copy={prepaymentGateCopy(
-                isShip,
-                operation.operationType === "SUPPLIER_DIRECT",
-            )}
+            copy={prepaymentGateCopy()}
             condition={{
                 kind: "amount",
                 required: operation.gate.requiredAmount ?? "—",
-                description: operation.gate.message,
+                description: "付款不阻止履约确认",
             }}
             allocated={operation.gate.effectivePaidAmount ?? "—"}
             gap={

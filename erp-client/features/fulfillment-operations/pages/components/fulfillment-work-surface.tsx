@@ -46,7 +46,6 @@ import { displayText } from "@/features/fulfillment-operations/lib/readable-labe
 import { displayName } from "@/lib/display-name"
 import { sourceContextFields } from "@/features/fulfillment-operations/pages/lib/presentation"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { gateBlockedMessage } from "../../lib/validation"
 import { FulfillmentPaymentNotice } from "./fulfillment-payment-notice"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
 import { FulfillmentDeliveryDialogSurface } from "./fulfillment-delivery-dialog-surface"
@@ -126,7 +125,7 @@ export function FulfillmentWorkSurface({
     onToggleShortcuts,
 }: FulfillmentWorkSurfaceProps) {
     const { deliveryRef, locateIssue } = useFulfillmentFieldLocation()
-    const paymentBlocked =
+    const paymentPending =
         operation.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP"
     const addressPacking =
         (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") &&
@@ -236,7 +235,7 @@ export function FulfillmentWorkSurface({
                     showProcessNext={false}
                     processDisabled={formalPending || !canPost}
                     statusExtras={
-                        !paymentBlocked ? (
+                        !paymentPending ? (
                             <FulfillmentGateStatus
                                 operation={operation}
                                 currentUrl={currentUrl}
@@ -275,7 +274,7 @@ export function FulfillmentWorkSurface({
                 size="sm"
                 className={
                     singleOperation && addressPacking
-                        ? "border-0 bg-transparent shadow-none"
+                        ? "border-0 bg-transparent py-0 shadow-none"
                         : singleOperation
                           ? undefined
                           : surfacePanelClassName
@@ -315,11 +314,20 @@ export function FulfillmentWorkSurface({
                 <CardContent
                     className={
                         singleOperation && addressPacking
-                            ? "space-y-5 px-0"
+                            ? "space-y-3 px-0"
                             : "space-y-5"
                     }
                 >
-                    {singleOperation ? (
+                    {singleOperation && addressPacking && (
+                        <h3
+                            ref={headingRef}
+                            tabIndex={-1}
+                            className="sr-only outline-none"
+                        >
+                            发货明细与物流
+                        </h3>
+                    )}
+                    {singleOperation && !addressPacking ? (
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <h3
                                 ref={headingRef}
@@ -336,7 +344,7 @@ export function FulfillmentWorkSurface({
                                           operation.operationType
                                       ]}
                             </h3>
-                            {!paymentBlocked ? (
+                            {!paymentPending ? (
                                 <FulfillmentGateStatus
                                     operation={operation}
                                     currentUrl={currentUrl}
@@ -352,12 +360,19 @@ export function FulfillmentWorkSurface({
                             currentUrl={currentUrl}
                         />
                     </WorkspaceTaskPageSlot>
-                    {paymentBlocked ? (
+                    {singleOperation && addressPacking && !paymentPending && (
                         <WorkspaceTaskPageSlot slot="summary">
-                            <FulfillmentPaymentNotice
+                            <FulfillmentGateStatus
                                 operation={operation}
-                                canSaveDraft={canExecute && supportsSave}
+                                currentUrl={currentUrl}
+                                snapshotUpdatedAt={snapshotUpdatedAt}
+                                showPaymentAction={false}
                             />
+                        </WorkspaceTaskPageSlot>
+                    )}
+                    {paymentPending ? (
+                        <WorkspaceTaskPageSlot slot="summary">
+                            <FulfillmentPaymentNotice operation={operation} />
                         </WorkspaceTaskPageSlot>
                     ) : null}
 
@@ -484,13 +499,9 @@ function FulfillmentExecuteActions({
     onSave: () => void
     onConfirm: () => void
 }) {
-    const paymentBlocked =
-        operation.gate.state === "BLOCKED" &&
-        operation.operationType !== "WAREHOUSE_SHIP"
-    const blockedMessage = paymentBlocked
-        ? gateBlockedMessage(operation)
-        : operation.actionBlockers.find((item) => item.action === "POST")
-              ?.message || "请先处理页面中的提示后再确认"
+    const blockedMessage =
+        operation.actionBlockers.find((item) => item.action === "POST")
+            ?.message || "请先处理页面中的提示后再确认"
     return (
         <div className="flex flex-wrap items-center justify-end gap-2">
             {!canPost && blockedMessage ? (
@@ -529,7 +540,7 @@ function FulfillmentExecuteActions({
                 <LoadingButton
                     id="fulfillment-operations-work-surface-save"
                     type="button"
-                    variant={paymentBlocked ? "default" : "secondary"}
+                    variant="secondary"
                     className="rounded-lg shadow-none"
                     disabled={formalPending || !dirty}
                     loading={savePending}
@@ -630,7 +641,7 @@ function FulfillmentSourceContext({
     if (fields.length === 0) return null
     return (
         <section aria-label="来源单据">
-            <dl className="my-3 flex flex-wrap gap-x-8 gap-y-3">
+            <dl className="my-3 grid gap-x-8 gap-y-2 border-t border-border/50 pt-3 xl:grid-cols-2">
                 {fields.map((field) => {
                     const purchaseLink =
                         field.label === "采购单" &&
@@ -645,17 +656,17 @@ function FulfillmentSourceContext({
                     return (
                         <div
                             key={field.label}
-                            className="min-w-0 max-w-full flex-[1_1_auto]"
+                            className="flex min-w-0 items-baseline gap-3"
                         >
-                            <dt className="text-xs text-muted-foreground">
+                            <dt className="shrink-0 text-xs text-muted-foreground">
                                 {field.label}
                             </dt>
                             <dd
                                 title={isDocument ? field.value : undefined}
                                 className={
                                     isDocument
-                                        ? "mt-1 truncate text-sm font-medium"
-                                        : "mt-1 break-words text-sm font-medium"
+                                        ? "min-w-0 truncate text-sm font-medium"
+                                        : "min-w-0 break-words text-sm font-medium"
                                 }
                             >
                                 {href ? (

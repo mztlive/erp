@@ -243,7 +243,7 @@ function Fact({ label, value }: { label: string; value?: string }) {
     )
 }
 
-/** 只读取当前执行者的实际付款条件，不把任务待处理状态推断成可发货。 */
+/** 展示付款提醒与实际操作限制；付款不足不阻止确认发货。 */
 export function WorkspaceDeliveryGate({ item }: { item: WorkspaceWorkItem }) {
     const descriptor = workspaceFulfillmentDescriptor(item)
     const query = useFulfillmentQueueQuery({
@@ -267,23 +267,22 @@ export function WorkspaceDeliveryGate({ item }: { item: WorkspaceWorkItem }) {
             ? subtractFixed(required, paid, { maxScale: 2, outputScale: 2 })
             : null
     const message = query.isPending ? (
-        "正在核对发货条件…"
+        "正在读取付款情况…"
     ) : query.isError || !operation ? (
-        "发货条件暂不可用，请刷新后核对"
+        "付款情况暂不可用，请刷新后核对"
+    ) : blocker ? (
+        blocker.message
     ) : blocked && gap ? (
         <span>
             尚需预付 <MoneyValue value={gap} />
-            ，暂不能确认发货
+            ，不影响确认实际发货
         </span>
     ) : blocked ? (
-        "先款条件未满足，暂不能确认发货"
+        "预付待完成，不影响确认实际发货"
+    ) : operation.gate.state === "NOT_APPLICABLE" ? (
+        "当前无预付要求，请按实际发货情况登记"
     ) : (
-        (blocker?.message ??
-        (operation.gate.state === "NOT_APPLICABLE"
-            ? "按约定可先发货，当前无需预付；提交时将再次核对发货条件"
-            : descriptor?.role === "procurement"
-              ? "预付条件已满足，可登记发货；提交时将再次核对发货条件"
-              : "可登记发货，提交时将再次核对发货条件"))
+        "预付条件已满足，请按实际发货情况登记"
     )
     return (
         <div

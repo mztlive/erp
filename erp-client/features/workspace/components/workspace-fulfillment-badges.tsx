@@ -45,7 +45,7 @@ export function WorkspaceFulfillmentBadges({
     )
 }
 
-/** 只有服务端明确放行且无提交阻断时才显示可发货；读取失败不沿用旧结果。 */
+/** 按任务状态与提交限制显示处理资格；付款状态仅作提醒。 */
 function FulfillmentGateBadge({
     item,
     descriptor,
@@ -59,15 +59,11 @@ function FulfillmentGateBadge({
     )
         ? "发货"
         : "履约"
-    if (!gate) {
-        return <StatusBadge label={`${action}条件待核对`} tone="neutral" />
-    }
     const blocker = item.actionBlockers.find(
         (entry) => entry.action === "PROCESS" || entry.action === "POST",
     )
     const blocked = isBlockedWorkItem(item) || Boolean(blocker)
-    const allowed =
-        !blocked && (gate === "SATISFIED" || gate === "NOT_APPLICABLE")
+    const allowed = !blocked
     return (
         <StatusBadge
             label={allowed ? `可${action}` : `暂不可${action}`}
@@ -77,10 +73,10 @@ function FulfillmentGateBadge({
                 (blocked
                     ? "当前任务受阻，请打开事项核对原因"
                     : gate === "BLOCKED"
-                      ? "先款条件未满足，请完成付款后刷新核对"
+                      ? "预付待完成，不影响确认实际履约"
                       : gate === "NOT_APPLICABLE"
-                        ? "按约定无需预付，提交时将再次核对条件"
-                        : "付款条件已满足，提交时将再次核对条件")
+                        ? "当前无预付要求，提交时核对来源与数量"
+                        : "提交时核对来源与数量")
             }
         />
     )

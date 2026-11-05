@@ -6,15 +6,21 @@ import type { PaymentCandidate } from "../types"
 
 export function RequestDraftOrderNumber({
     candidate,
+    compact = false,
 }: {
     candidate: PaymentCandidate
+    compact?: boolean
 }) {
     const [result, setResult] = useState("")
     return (
         <div className="mt-1 min-w-0">
             <div className="flex min-w-0 items-center gap-1">
                 <span
-                    className="num min-w-0 truncate text-xs text-muted-foreground"
+                    className={
+                        compact
+                            ? "num min-w-0 max-w-48 truncate text-xs text-muted-foreground"
+                            : "num min-w-0 truncate text-xs text-muted-foreground"
+                    }
                     title={candidate.purchase_order_no}
                 >
                     {candidate.purchase_order_no}
@@ -42,7 +48,14 @@ export function RequestDraftOrderNumber({
                     {result === "已复制采购单号" ? <CheckIcon /> : <CopyIcon />}
                 </Button>
             </div>
-            <span role="status" className="text-xs text-muted-foreground">
+            <span
+                role="status"
+                className={
+                    compact && !result
+                        ? "sr-only"
+                        : "text-xs text-muted-foreground"
+                }
+            >
                 {result}
             </span>
         </div>

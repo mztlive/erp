@@ -20,7 +20,7 @@ use validator::Validate;
 use super::FulfillmentProcess;
 use super::customer_acceptance::task::{CustomerAcceptanceTaskReason, ensure_customer_acceptance_task};
 use super::delivery_tracking::ensure_tracking_sources;
-use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
+use super::purchase_context::ensure_po_fulfillable;
 use super::task::{FulfillmentIdentityFactory, FulfillmentTaskObject, complete_fulfillment_task};
 use crate::{Error, Result};
 
@@ -29,8 +29,8 @@ impl FulfillmentProcess {
     ///
     /// 仓发在同一事务内：校验预占归属（预占必须属于本销售明细且数量充足）、
     /// 消耗预占（含预占流水）、追加库存减少流水、更新库存余额、迁移发货单
-    /// 状态、写审计。供应商直发不写自有库存流水，只做 `PREPAY` 门槛校验
-    /// （§8.1.5）后迁移状态。重复过账由状态守卫（仅草稿）与流水唯一索引双重
+    /// 状态、写审计。供应商直发不写自有库存流水，校验采购单可履约后迁移状态。
+    /// 未付款不阻止登记实际履约。重复过账由状态守卫（仅草稿）与流水唯一索引双重
     /// 防护。
     ///
     /// # 参数
@@ -290,7 +290,6 @@ impl DeliveryPosting<'_> {
             .await?
             .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
         ensure_po_fulfillable(&po)?;
-        ensure_prepay_gate(self.db, executor, &po).await?;
         Ok(())
     }
 }
@@ -347,7 +346,7 @@ mod tests {
         );
     }
 
-    /// 供应商直发只执行采购门槛，不调用任何自有库存行步骤。
+    /// 供应商直发只校验采购可履约状态，不调用任何自有库存行步骤。
     #[tokio::test]
     async fn supplier_direct_posting_checks_purchase_before_delivery_without_stock() {
         let mut executor = TestExecutor { _identity: 1 };

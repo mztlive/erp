@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/collapsible"
 import { Field } from "@/components/ui/field"
 import { formatCurrencyFixed } from "@/lib/fixed-decimal"
+import { cn } from "@/lib/utils"
+import { RequestDraftBankAccount } from "./request-draft-bank-account"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DraftForm } from "../hooks/use-draft-form"
 import { requestAmountError, type DraftGroup } from "../lib/draft"
@@ -68,6 +70,20 @@ export function RequestDraftGroup({
         )
     const fieldId = (suffix: string) =>
         index === 0 ? `ppr-create-${suffix}` : `${id}-${suffix}`
+    const dateField = (
+        <form.AppField name={`groups[${index}].date`}>
+            {(field) => (
+                <field.DateField
+                    id={fieldId("desired-payment-date")}
+                    label="希望付款日"
+                    className="min-w-0 gap-2"
+                    clearable={!fixedOrder}
+                    inputClassName={fixedOrder ? "h-10 w-full" : undefined}
+                    required
+                />
+            )}
+        </form.AppField>
+    )
     return (
         <section
             id={`${id}-panel`}
@@ -75,22 +91,47 @@ export function RequestDraftGroup({
             aria-labelledby={`${id}-title`}
             className="min-w-0"
         >
-            <header className="space-y-2 border-b pb-5">
-                <p className="text-xs text-muted-foreground">
-                    {fixedOrder
-                        ? "当前采购单付款申请"
-                        : `申请 ${index + 1} · ${rows.length} 张采购单`}
-                </p>
+            <header
+                className={cn(
+                    "space-y-2",
+                    fixedOrder ? "rounded-lg bg-muted/40 p-4" : "border-b pb-5",
+                )}
+            >
+                {!fixedOrder && (
+                    <p className="text-xs text-muted-foreground">
+                        {`申请 ${index + 1} · ${rows.length} 张采购单`}
+                    </p>
+                )}
                 <h3
                     id={`${id}-title`}
                     tabIndex={-1}
-                    className="break-words text-lg font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className={cn(
+                        "break-words font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        fixedOrder ? "text-base" : "text-lg",
+                    )}
                 >
                     {first.supplier_name}
                 </h3>
                 <p className="text-sm text-muted-foreground">
                     付款主体：{first.our_company_name}
                 </p>
+                {fixedOrder &&
+                    rows.map((candidate) => (
+                        <div
+                            key={candidate.payable_account_id}
+                            className="border-t pt-3"
+                        >
+                            {candidate.purchase_summary && (
+                                <p className="text-sm font-medium">
+                                    {candidate.purchase_summary}
+                                </p>
+                            )}
+                            <RequestDraftOrderNumber
+                                candidate={candidate}
+                                compact
+                            />
+                        </div>
+                    ))}
             </header>
             {issues.length > 0 && (
                 <div className="mt-4 rounded-md bg-warning-soft px-3 py-2 text-xs leading-relaxed text-warning-soft-foreground">
@@ -107,122 +148,91 @@ export function RequestDraftGroup({
                     {rows.map((candidate) => (
                         <div
                             key={candidate.payable_account_id}
-                            className="grid gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_11rem]"
+                            className={cn(
+                                "grid gap-4 py-5",
+                                fixedOrder
+                                    ? "sm:grid-cols-2"
+                                    : "sm:grid-cols-[minmax(0,1fr)_11rem]",
+                            )}
                         >
-                            <div className="min-w-0">
-                                <p className="font-medium">
-                                    {candidate.purchase_summary ||
-                                        candidate.purchase_order_no}
-                                </p>
-                                {candidate.purchase_summary && (
-                                    <RequestDraftOrderNumber
+                            {!fixedOrder && (
+                                <div className="min-w-0">
+                                    <p className="font-medium">
+                                        {candidate.purchase_summary ||
+                                            candidate.purchase_order_no}
+                                    </p>
+                                    {candidate.purchase_summary && (
+                                        <RequestDraftOrderNumber
+                                            candidate={candidate}
+                                        />
+                                    )}
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                        <span>
+                                            可申请{" "}
+                                            <MoneyValue
+                                                value={
+                                                    candidate.available_amount
+                                                }
+                                            />
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            {candidate.payment_term_name}
+                                        </span>
+                                    </div>
+                                    <RequestDraftPaymentBasis
                                         candidate={candidate}
                                     />
-                                )}
-                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                                    <span>
-                                        可申请{" "}
-                                        <MoneyValue
-                                            value={candidate.available_amount}
-                                        />
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                        {candidate.payment_term_name}
-                                    </span>
-                                </div>
-                                <Collapsible className="mt-1">
-                                    <CollapsibleTrigger
-                                        id={`ppr-basis-${toAutomationIdSegment(candidate.payable_account_id)}`}
-                                        className="group inline-flex items-center gap-1 py-1 text-xs text-muted-foreground hover:text-foreground"
-                                    >
-                                        付款依据
-                                        <ChevronDownIcon className="size-3 group-data-[panel-open]:rotate-180" />
-                                    </CollapsibleTrigger>
-                                    <CollapsibleContent>
-                                        <p className="num mt-1 break-all text-xs text-muted-foreground">
-                                            采购单号：
-                                            {candidate.purchase_order_no}
-                                        </p>
-                                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                            <span>
-                                                采购总额{" "}
-                                                <MoneyValue
-                                                    value={
-                                                        candidate.total_amount
-                                                    }
-                                                />
-                                            </span>
-                                            <span>
-                                                已付{" "}
-                                                <MoneyValue
-                                                    value={
-                                                        candidate.paid_amount
-                                                    }
-                                                />
-                                            </span>
-                                            <span>
-                                                申请中{" "}
-                                                <MoneyValue
-                                                    value={
-                                                        candidate.reserved_amount
-                                                    }
-                                                />
-                                            </span>
-                                        </div>
-                                        {candidate.prepayment_gap != null && (
-                                            <p className="mt-2 text-xs text-muted-foreground">
-                                                预付款尚差{" "}
-                                                <MoneyValue
-                                                    value={
-                                                        candidate.prepayment_gap
-                                                    }
-                                                />
-                                                ，请结合申请中金额核对。
-                                            </p>
+                                    {!editing &&
+                                        !fixedOrder &&
+                                        rows.length > 1 && (
+                                            <Button
+                                                id={`ppr-split-${toAutomationIdSegment(candidate.payable_account_id)}`}
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="mt-1 h-7 px-0 text-xs text-muted-foreground"
+                                                onClick={() => {
+                                                    const current =
+                                                        form.state.values.groups
+                                                    const splitKey = `${group.key}:${candidate.payable_account_id}`
+                                                    form.setFieldValue(
+                                                        "groups",
+                                                        [
+                                                            ...current.map(
+                                                                (item) =>
+                                                                    item.key ===
+                                                                    group.key
+                                                                        ? {
+                                                                              ...item,
+                                                                              ids: item.ids.filter(
+                                                                                  (
+                                                                                      key,
+                                                                                  ) =>
+                                                                                      key !==
+                                                                                      candidate.payable_account_id,
+                                                                              ),
+                                                                          }
+                                                                        : item,
+                                                            ),
+                                                            {
+                                                                ...group,
+                                                                key: splitKey,
+                                                                ids: [
+                                                                    candidate.payable_account_id,
+                                                                ],
+                                                                files: [],
+                                                            },
+                                                        ],
+                                                    )
+                                                    onSplit(splitKey)
+                                                }}
+                                            >
+                                                <SplitIcon className="size-3" />
+                                                单独申请 / 使用其他账户
+                                            </Button>
                                         )}
-                                    </CollapsibleContent>
-                                </Collapsible>
-                                {!editing && !fixedOrder && rows.length > 1 && (
-                                    <Button
-                                        id={`ppr-split-${toAutomationIdSegment(candidate.payable_account_id)}`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        className="mt-1 h-7 px-0 text-xs text-muted-foreground"
-                                        onClick={() => {
-                                            const current =
-                                                form.state.values.groups
-                                            const splitKey = `${group.key}:${candidate.payable_account_id}`
-                                            form.setFieldValue("groups", [
-                                                ...current.map((item) =>
-                                                    item.key === group.key
-                                                        ? {
-                                                              ...item,
-                                                              ids: item.ids.filter(
-                                                                  (key) =>
-                                                                      key !==
-                                                                      candidate.payable_account_id,
-                                                              ),
-                                                          }
-                                                        : item,
-                                                ),
-                                                {
-                                                    ...group,
-                                                    key: splitKey,
-                                                    ids: [
-                                                        candidate.payable_account_id,
-                                                    ],
-                                                    files: [],
-                                                },
-                                            ])
-                                            onSplit(splitKey)
-                                        }}
-                                    >
-                                        <SplitIcon className="size-3" />
-                                        单独申请 / 使用其他账户
-                                    </Button>
-                                )}
-                            </div>
+                                </div>
+                            )}
                             <form.AppField
                                 name={`amounts.${candidate.payable_account_id}`}
                                 validators={{
@@ -240,7 +250,17 @@ export function RequestDraftGroup({
                             >
                                 {(field) => (
                                     <field.TextField
-                                        money
+                                        money={!fixedOrder}
+                                        className={
+                                            fixedOrder
+                                                ? "min-w-0 gap-2"
+                                                : undefined
+                                        }
+                                        inputClassName={
+                                            fixedOrder
+                                                ? "h-10 text-lg font-medium md:text-lg"
+                                                : undefined
+                                        }
                                         id={`ppr-create-line-${toAutomationIdSegment(candidate.payable_account_id)}`}
                                         label="本次申请金额"
                                         required
@@ -253,17 +273,35 @@ export function RequestDraftGroup({
                                             field.state.meta.isTouched &&
                                             !field.state.meta.isValid
                                                 ? undefined
-                                                : `最多 ${formatCurrencyFixed(candidate.available_amount, { maxScale: 2, minimumFractionDigits: 2 })}`
+                                                : fixedOrder
+                                                  ? `可申请 ${formatCurrencyFixed(candidate.available_amount, { maxScale: 2, minimumFractionDigits: 2 })} · ${candidate.payment_term_name}`
+                                                  : `最多 ${formatCurrencyFixed(candidate.available_amount, { maxScale: 2, minimumFractionDigits: 2 })}`
                                         }
                                         placeholder="填写本次金额"
                                     />
                                 )}
                             </form.AppField>
+                            {fixedOrder && rows.length === 1 && dateField}
+                            {fixedOrder && (
+                                <div className="sm:col-span-2 -mt-2">
+                                    <RequestDraftPaymentBasis
+                                        candidate={candidate}
+                                    />
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
-                <div className="space-y-5 border-t pt-5">
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_13rem]">
+                <div
+                    className={cn("space-y-5", !fixedOrder && "border-t pt-5")}
+                >
+                    <div
+                        className={cn(
+                            "grid gap-4",
+                            (!fixedOrder || rows.length > 1) &&
+                                "xl:grid-cols-[minmax(0,1fr)_13rem]",
+                        )}
+                    >
                         <div className="space-y-4">
                             <form.AppField
                                 name={`groups[${index}].executionMethod`}
@@ -272,6 +310,14 @@ export function RequestDraftGroup({
                                     <field.SelectField
                                         id={fieldId("execution-method")}
                                         label="付款方式"
+                                        className={
+                                            fixedOrder
+                                                ? "gap-2 sm:max-w-xs"
+                                                : undefined
+                                        }
+                                        inputClassName={
+                                            fixedOrder ? "h-10" : undefined
+                                        }
                                         required
                                         allowClear={false}
                                         options={[
@@ -329,6 +375,16 @@ export function RequestDraftGroup({
                                                 />
                                             )}
                                         </form.AppField>
+                                    ) : fixedOrder ? (
+                                        <RequestDraftBankAccount
+                                            form={form}
+                                            index={index}
+                                            id={fieldId("account")}
+                                            accounts={first.bank_accounts}
+                                            onRefreshCandidates={
+                                                onRefreshCandidates
+                                            }
+                                        />
                                     ) : (
                                         <form.AppField
                                             name={`groups[${index}].account`}
@@ -356,16 +412,7 @@ export function RequestDraftGroup({
                                 }
                             </form.Subscribe>
                         </div>
-                        <form.AppField name={`groups[${index}].date`}>
-                            {(field) => (
-                                <field.DateField
-                                    id={fieldId("desired-payment-date")}
-                                    label="希望付款日"
-                                    className="min-w-0 gap-2"
-                                    required
-                                />
-                            )}
-                        </form.AppField>
+                        {(!fixedOrder || rows.length > 1) && dateField}
                     </div>
                     {group.executionMethod === "bank_transfer" &&
                         !first.bank_accounts.length && (
@@ -388,7 +435,9 @@ export function RequestDraftGroup({
                                         : "说明本组采购单的付款安排及依据"
                                 }
                                 className="gap-2"
-                                textareaClassName="min-h-20"
+                                textareaClassName={
+                                    fixedOrder ? "min-h-16" : "min-h-20"
+                                }
                                 rows={2}
                             />
                         )}
@@ -444,5 +493,47 @@ export function RequestDraftGroup({
                 </div>
             </div>
         </section>
+    )
+}
+
+function RequestDraftPaymentBasis({
+    candidate,
+}: {
+    candidate: PaymentCandidate
+}) {
+    return (
+        <Collapsible className="mt-1">
+            <CollapsibleTrigger
+                id={`ppr-basis-${toAutomationIdSegment(candidate.payable_account_id)}`}
+                className="group inline-flex items-center gap-1 py-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+                付款依据
+                <ChevronDownIcon className="size-3 group-data-[panel-open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+                <p className="num mt-1 break-all text-xs text-muted-foreground">
+                    采购单号：
+                    {candidate.purchase_order_no}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                        采购总额 <MoneyValue value={candidate.total_amount} />
+                    </span>
+                    <span>
+                        已付 <MoneyValue value={candidate.paid_amount} />
+                    </span>
+                    <span>
+                        申请中 <MoneyValue value={candidate.reserved_amount} />
+                    </span>
+                </div>
+                {candidate.prepayment_gap != null && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        预付款尚差{" "}
+                        <MoneyValue value={candidate.prepayment_gap} />
+                        ，请结合申请中金额核对。
+                    </p>
+                )}
+            </CollapsibleContent>
+        </Collapsible>
     )
 }

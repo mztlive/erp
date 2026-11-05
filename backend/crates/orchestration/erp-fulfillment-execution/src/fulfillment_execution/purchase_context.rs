@@ -42,11 +42,11 @@ pub fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
     .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
-/// 校验 `PREPAY` 采购履约门槛（§8.1.5）。
+/// 校验供应商 API 下单前的 `PREPAY` 资金条件；履约事实确认不得调用。
 ///
 /// 按采购单当前生效版本的付款条件快照判定是否先款后货；门槛开启时重算
 /// 有效已过账付款净核销金额（D19：应付子账 → 分录 → 付款核销分配，`APPLY −
-/// REVERSE` 净额），达到冻结的金额或比例门槛才允许过账。
+/// REVERSE` 净额），达到冻结的金额或比例门槛才允许供应商 API 下单。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -236,14 +236,15 @@ mod tests {
 
     use erp_core::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PurchaseOrder, PurchaseOrderData, PurchaseType,
+        FulfillmentResponsibility, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseType,
     };
 
     use super::ensure_po_fulfillable;
 
+    /// 采购履约资格独立于预付条款；未生效及终态仍拒绝履约。
     #[test]
-    fn po_fulfillable_guards_status() {
-        let po = PurchaseOrder::new(
+    fn po_fulfillable_guards_status_with_prepayment_terms() {
+        let mut po = PurchaseOrder::new(
             PurchaseOrderId::new("po-1"),
             PurchaseOrderData {
                 business_org_unit_id: "org-procurement".to_string(),
@@ -253,7 +254,7 @@ mod tests {
                 creation_basis_id: "basis-1".to_string(),
                 supplier_id: SupplierAccountId::new("sup-1"),
                 purchase_type: PurchaseType::Physical,
-                payment_term_code: "NET-30".to_string(),
+                payment_term_code: "PREPAY_100".to_string(),
                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
                 owner_user_id: "buyer-1".to_string(),
                 target_warehouse_id: Some(erp_core::ids::WarehouseId::new("wh-1")),
@@ -262,6 +263,20 @@ mod tests {
             resolve_procurement_payment_term,
         )
         .unwrap();
-        assert!(ensure_po_fulfillable(&po).is_err(), "草稿不可履约");
+        for status in [PurchaseOrderStatus::Effective, PurchaseOrderStatus::PartiallyExecuted] {
+            po.stable.status = status;
+            assert!(ensure_po_fulfillable(&po).is_ok(), "预付条款不限制生效采购履约");
+        }
+        for status in [
+            PurchaseOrderStatus::Draft,
+            PurchaseOrderStatus::InApproval,
+            PurchaseOrderStatus::PendingFinanceReview,
+            PurchaseOrderStatus::Rejected,
+            PurchaseOrderStatus::Completed,
+            PurchaseOrderStatus::Voided,
+        ] {
+            po.stable.status = status;
+            assert!(ensure_po_fulfillable(&po).is_err(), "{status:?} 不可履约");
+        }
     }
 }

@@ -23,7 +23,7 @@ use validator::Validate;
 
 use super::FulfillmentProcess;
 use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost};
-use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
+use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable};
 use super::service_confirm_audit::{SERVICE_CONFIRM_ACTION, confirmed_service_content};
 use super::service_crypto::{ServiceCryptoAdapter, evidence_metadata};
 use super::task::FulfillmentIdentityFactory;
@@ -354,7 +354,6 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
             .await?
             .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
         ensure_po_fulfillable(&po)?;
-        ensure_prepay_gate(self.db, executor, &po).await?;
         Ok(po)
     }
 

@@ -79,12 +79,13 @@ export function WorkspaceProcessingLayout({
                         <dl
                             className={
                                 fulfillment
-                                    ? "flex flex-wrap gap-x-8 gap-y-3"
+                                    ? "flex flex-wrap items-center gap-x-7 gap-y-2"
                                     : "flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4"
                             }
                         >
                             {item.amountSummary && (
                                 <Fact
+                                    inline={fulfillment}
                                     label={item.amountSummary.label}
                                     value={
                                         <WorkspaceMoney
@@ -94,6 +95,7 @@ export function WorkspaceProcessingLayout({
                                 />
                             )}
                             <Fact
+                                inline={fulfillment}
                                 label={
                                     reworkTask || !approval
                                         ? "当前处理人"
@@ -115,33 +117,50 @@ export function WorkspaceProcessingLayout({
                                 }
                             />
                             <Fact
+                                inline={fulfillment}
                                 label="任务类型"
                                 value={item.workItemTypeLabel}
                             />
                             {fulfillment && (
                                 <Fact
+                                    inline={fulfillment}
                                     label="进入时间"
                                     value={item.enteredAtLabel}
                                 />
                             )}
                             <Fact
+                                inline={fulfillment}
                                 label="截止时间"
                                 value={item.dueAtLabel || "未设截止时间"}
                             />
                         </dl>
                     )}
                     {fulfillment && (
-                        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                            <p>
-                                办理指引：
-                                {item.nextActionHint ||
-                                    "按收货地址核对商品、数量与物流后，确认本次发货。"}
-                            </p>
-                            {item.impactSummary && <p>{item.impactSummary}</p>}
-                            {item.actionBlockers.map((blocker) => (
-                                <p key={blocker.message}>{blocker.message}</p>
-                            ))}
-                        </div>
+                        <details
+                            open={item.actionBlockers.length > 0}
+                            className="mt-2 text-sm text-muted-foreground"
+                        >
+                            <summary
+                                id="workspace-fulfillment-instructions-toggle"
+                                className="w-fit cursor-pointer text-xs"
+                            >
+                                办理说明
+                            </summary>
+                            <div className="mt-2 space-y-1 border-l-2 border-border pl-3 leading-6">
+                                <p>
+                                    {item.nextActionHint ||
+                                        "按收货地址核对商品、数量与物流后，确认本次发货。"}
+                                </p>
+                                {item.impactSummary && (
+                                    <p>{item.impactSummary}</p>
+                                )}
+                                {item.actionBlockers.map((blocker) => (
+                                    <p key={blocker.message}>
+                                        {blocker.message}
+                                    </p>
+                                ))}
+                            </div>
+                        </details>
                     )}
                 </>
             }
@@ -258,10 +277,24 @@ export function WorkspaceProcessingLayout({
     )
 }
 
-function Fact({ label, value }: { label: string; value: ReactNode }) {
+function Fact({
+    label,
+    value,
+    inline = false,
+}: {
+    label: string
+    value: ReactNode
+    inline?: boolean
+}) {
     return (
-        <div className="min-w-[9rem] flex-1 space-y-1.5">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
+        <div
+            className={
+                inline
+                    ? "flex min-w-0 items-baseline gap-2"
+                    : "min-w-[9rem] flex-1 space-y-1.5"
+            }
+        >
+            <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
             <dd className="break-words text-sm font-medium leading-6">
                 {value || "—"}
             </dd>

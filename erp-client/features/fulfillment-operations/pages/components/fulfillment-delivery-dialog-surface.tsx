@@ -62,7 +62,7 @@ export function FulfillmentDeliveryDialogSurface({
     actions: ReactNode
 }) {
     const { deliveryRef, locateIssue } = useFulfillmentFieldLocation()
-    const blocked =
+    const paymentPending =
         draft.type === "SUPPLIER_DIRECT" && operation.gate.state === "BLOCKED"
     const fields = [
         {
@@ -80,7 +80,7 @@ export function FulfillmentDeliveryDialogSurface({
         },
         { label: "责任人", value: responsibleLabel || "责任人未提供" },
     ]
-    const fieldIssues = validationIssues.filter((issue) => issue.id !== "gate")
+    const fieldIssues = validationIssues
     const purchaseNo =
         displayText(
             operation.source.purchaseNo,
@@ -90,10 +90,7 @@ export function FulfillmentDeliveryDialogSurface({
         .size
     const blocker =
         readOnlyNote ||
-        (blocked
-            ? "先款条件未满足，暂不能确认发货"
-            : operation.actionBlockers.find((item) => item.action === "POST")
-                  ?.message)
+        operation.actionBlockers.find((item) => item.action === "POST")?.message
 
     return (
         <div className="space-y-4 px-5 py-4">
@@ -115,12 +112,12 @@ export function FulfillmentDeliveryDialogSurface({
                     </div>
                 ))}
             </dl>
-            {blocked ? (
+            {paymentPending ? (
                 <Collapsible>
                     <Alert variant="warning">
                         <CircleAlertIcon aria-hidden="true" />
                         <AlertTitle className="flex flex-wrap items-center justify-between gap-2">
-                            <span>先款条件未满足，暂不能确认发货</span>
+                            <span>预付待完成，不影响确认实际发货</span>
                             <CollapsibleTrigger
                                 id="prepayment-gate"
                                 render={
@@ -131,7 +128,7 @@ export function FulfillmentDeliveryDialogSurface({
                                     />
                                 }
                             >
-                                查看条件
+                                查看付款情况
                                 <ChevronDownIcon data-icon="inline-end" />
                             </CollapsibleTrigger>
                         </AlertTitle>

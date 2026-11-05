@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useStore } from "@tanstack/react-form"
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import {
     Dialog,
     DialogContent,
@@ -59,7 +60,7 @@ export function RequestDraftDialog({
                 className={cn(
                     "flex flex-col gap-0 overflow-clip p-0",
                     fixedPurchaseOrderId
-                        ? "max-h-[75dvh] sm:max-w-4xl"
+                        ? "max-h-[min(85dvh,calc(100dvh-2rem))] sm:max-w-[46rem]"
                         : "max-h-[94dvh] sm:max-w-6xl",
                 )}
             >
@@ -164,8 +165,13 @@ function RequestDraftForm({
         purchaseOrderId,
         request,
         (rows) => {
-            setSaved(rows)
             onLockChange(false)
+            if (fixedOrder && !request) {
+                toast.add({ title: "付款申请已提交", type: "success" })
+                onClose()
+                return
+            }
+            setSaved(rows)
         },
         initialPayableAccountIds,
     )
@@ -278,7 +284,9 @@ function RequestDraftForm({
             noValidate
             className={cn(
                 "flex min-h-0 flex-col overflow-hidden",
-                fixedOrder ? "h-[75dvh]" : "h-[94dvh]",
+                fixedOrder
+                    ? "max-h-[min(85dvh,calc(100dvh-2rem))]"
+                    : "h-[94dvh]",
             )}
             onSubmit={(event) => {
                 event.preventDefault()
@@ -298,7 +306,9 @@ function RequestDraftForm({
             }}
         >
             <DialogHeader className="shrink-0 border-b px-6 py-4 pr-16">
-                <DialogTitle>
+                <DialogTitle
+                    className={fixedOrder ? "text-xl font-semibold" : undefined}
+                >
                     {request
                         ? "修改付款申请"
                         : step === 1
@@ -307,7 +317,9 @@ function RequestDraftForm({
                             ? "申请采购付款"
                             : "批量申请付款"}
                 </DialogTitle>
-                <DialogDescription>
+                <DialogDescription
+                    className={fixedOrder ? "sr-only" : undefined}
+                >
                     {step === 1
                         ? "支持跨供应商选择采购单，下一步按付款关系分别生成申请。"
                         : request
@@ -423,7 +435,9 @@ function RequestDraftForm({
                                             <p className="text-xs text-muted-foreground">
                                                 {step === 1
                                                     ? `已选 ${values.selectedIds.length} 张采购单`
-                                                    : "已填申请金额合计"}
+                                                    : fixedOrder
+                                                      ? "申请金额"
+                                                      : "已填申请金额合计"}
                                             </p>
                                             {step === 2 && (
                                                 <MoneyValue
@@ -439,26 +453,46 @@ function RequestDraftForm({
                                                                 ),
                                                         ),
                                                     )}
-                                                    size="section"
+                                                    size={
+                                                        fixedOrder
+                                                            ? "inherit"
+                                                            : "section"
+                                                    }
+                                                    display={
+                                                        fixedOrder
+                                                            ? "exact"
+                                                            : "full"
+                                                    }
+                                                    className={
+                                                        fixedOrder
+                                                            ? "text-lg font-semibold"
+                                                            : undefined
+                                                    }
                                                 />
                                             )}
                                         </div>
-                                        {step === 2 && (
-                                            <p
-                                                role="status"
-                                                className="mt-1 text-xs text-muted-foreground"
-                                            >
-                                                {!groups.length
-                                                    ? fixedOrder
-                                                        ? "当前采购单暂无可申请付款的来源"
-                                                        : "请返回上一步选择采购单"
-                                                    : issues.size
-                                                      ? `${groups.length} 份申请中，${issues.size} 份待补充`
-                                                      : request
-                                                        ? "填写完整，保存后需提交财务审核"
-                                                        : `共 ${groups.length} 份申请，已填完整`}
-                                            </p>
-                                        )}
+                                        {step === 2 &&
+                                            (!fixedOrder ||
+                                                !groups.length ||
+                                                issues.size > 0 ||
+                                                request) && (
+                                                <p
+                                                    role="status"
+                                                    className="mt-1 text-xs text-muted-foreground"
+                                                >
+                                                    {!groups.length
+                                                        ? fixedOrder
+                                                            ? "当前采购单暂无可申请付款的来源"
+                                                            : "请返回上一步选择采购单"
+                                                        : issues.size
+                                                          ? fixedOrder
+                                                              ? "请补充必填信息"
+                                                              : `${groups.length} 份申请中，${issues.size} 份待补充`
+                                                          : request
+                                                            ? "填写完整，保存后需提交财务审核"
+                                                            : `共 ${groups.length} 份申请，已填完整`}
+                                                </p>
+                                            )}
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                         <Button
@@ -518,7 +552,9 @@ function RequestDraftForm({
                                                     : unknown
                                                       ? "查询本次提交结果"
                                                       : issues.size
-                                                        ? `继续填写（剩 ${issues.size} 份）`
+                                                        ? fixedOrder
+                                                            ? "继续填写"
+                                                            : `继续填写（剩 ${issues.size} 份）`
                                                         : request
                                                           ? "保存申请草稿"
                                                           : fixedOrder

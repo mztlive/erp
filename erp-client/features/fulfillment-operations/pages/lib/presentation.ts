@@ -16,7 +16,7 @@ export function responsibilityStatus(
     operation: FulfillmentOperation | undefined,
     canExecute: boolean,
 ): ResponsibilityStatus {
-    return operation?.gate.state === "BLOCKED"
+    return operation?.actionBlockers.some((item) => item.action === "POST")
         ? "blocked"
         : canExecute
           ? "assigned_to_me"
@@ -29,7 +29,7 @@ export function responsibilityStatusLabel(
 ): string {
     return !canExecute
         ? "只能查看"
-        : operation?.gate.state === "BLOCKED"
+        : operation?.actionBlockers.some((item) => item.action === "POST")
           ? "处理受阻"
           : "当前岗位可处理"
 }

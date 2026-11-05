@@ -127,7 +127,10 @@ export function useSaveRequestMutation() {
             id?: string
             version?: number
         }) => saveRequest(input.data, input.id, input.version),
-        onSuccess: invalidate,
+        onSuccess: () => {
+            // 保存已成功，关联列表的后台刷新不延长表单提交状态。
+            void invalidate()
+        },
     })
 }
 export function useRequestCommandMutation() {
@@ -188,7 +191,10 @@ export function useSubmitRequestBatchMutation() {
     const invalidate = useInvalidate()
     return useMutation({
         mutationFn: submitRequestBatch,
-        onSuccess: invalidate,
+        onSuccess: () => {
+            // 提交回执立即交给表单；不能等待列表刷新后才结束提交。
+            void invalidate()
+        },
     })
 }
 

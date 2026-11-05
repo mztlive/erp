@@ -63,10 +63,10 @@ function quantityTotal(values: readonly string[]): string {
 }
 
 /** 先款未满足时直接给出差额，避免只看到“条件未满足”却不知道还差多少。 */
-export function gateBlockedMessage(operation: FulfillmentOperation): string {
+export function paymentReminder(operation: FulfillmentOperation): string {
     const { requiredAmount, effectivePaidAmount } = operation.gate
     if (!requiredAmount || effectivePaidAmount == null) {
-        return operation.gate.message
+        return "采购付款尚待核对，不影响确认实际履约"
     }
     try {
         const gap = clampZeroFixed(
@@ -76,10 +76,10 @@ export function gateBlockedMessage(operation: FulfillmentOperation): string {
             }),
             { maxScale: 2, outputScale: 2 },
         )
-        if (gap === "0.00") return operation.gate.message
-        return `还差 ${formatCurrencyFixed(gap, { maxScale: 2, minimumFractionDigits: 2 })}，实际付款满足条件后方可确认履约`
+        if (gap === "0.00") return "采购付款尚待核对，不影响确认实际履约"
+        return `还差 ${formatCurrencyFixed(gap, { maxScale: 2, minimumFractionDigits: 2 })}，不影响确认实际履约`
     } catch {
-        return operation.gate.message
+        return "采购付款尚待核对，不影响确认实际履约"
     }
 }
 
@@ -136,14 +136,6 @@ export function clientValidation(
             message: "这条草稿和当前单据对不上",
         })
         return issues
-    }
-    if (operation.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP") {
-        issues.push({
-            id: "gate",
-            label: "先款条件",
-            message: gateBlockedMessage(operation),
-            targetId: "prepayment-gate",
-        })
     }
 
     if (

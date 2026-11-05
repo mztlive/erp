@@ -34,13 +34,13 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::FulfillmentProcess;
-use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
+use super::purchase_context::{ensure_po_fulfillable, load_po_current_revision};
 use super::task::FulfillmentIdentityFactory;
 use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
     ///
-    /// 在同一事务内：校验采购单可履约与 `PREPAY` 门槛（§8.1.5）、校验累计
+    /// 在同一事务内：校验采购单可履约（付款不阻止收货）、校验累计
     /// 有效收货不超当前有效采购数量、写入库行对应的库存增加流水、更新/创建
     /// 库存余额、沿采购销售分配自动建立销售预占（含预占流水）、推进采购履约
     /// 进度、迁移入库单状态、写审计。重复过账由状态守卫（仅草稿）与流水唯一
@@ -143,7 +143,6 @@ async fn load_purchase_posting_facts(
         .await?
         .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
     ensure_po_fulfillable(&po)?;
-    ensure_prepay_gate(db, executor, &po).await?;
     let revision = load_po_current_revision(db, executor, &po).await?;
     let revision_lines = db
         .purchase_order_revision_lines()

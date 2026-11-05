@@ -7,16 +7,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import { gateBlockedMessage } from "../../lib/validation"
-import { OPERATION_ACTION_LABEL, type FulfillmentOperation } from "../../types"
+import { paymentReminder } from "../../lib/validation"
+import type { FulfillmentOperation } from "../../types"
 
 /** 先展示实际付款缺口；跳转只读采购票款资料，不直接新建付款申请。 */
 export function FulfillmentPaymentNotice({
     operation,
-    canSaveDraft,
 }: {
     operation: FulfillmentOperation
-    canSaveDraft: boolean
 }) {
     const profile = useAccountProfileQuery()
     const purchaseOrderId = operation.source.purchaseOrderId
@@ -27,55 +25,50 @@ export function FulfillmentPaymentNotice({
     return (
         <Alert id="prepayment-gate" variant="warning">
             <CircleAlertIcon aria-hidden="true" />
-            <AlertTitle>
-                待满足付款条件 · 暂不可
-                {OPERATION_ACTION_LABEL[operation.operationType]}
-            </AlertTitle>
-            <AlertDescription className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <p className="font-medium">{gateBlockedMessage(operation)}</p>
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-                    {operation.gate.requiredAmount != null ? (
-                        <span>
-                            履约前需付{" "}
-                            <MoneyValue value={operation.gate.requiredAmount} />
-                        </span>
-                    ) : null}
-                    {operation.gate.effectivePaidAmount != null ? (
-                        <span>
-                            有效已付{" "}
-                            <MoneyValue
-                                value={operation.gate.effectivePaidAmount}
-                            />
-                        </span>
-                    ) : null}
-                </div>
-                <div className="flex w-full flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs">
-                        付款申请或审批通过不代表已支付。
-                        {canSaveDraft
-                            ? "可以先填写并保存草稿，付款条件满足后再确认。"
-                            : null}
-                    </p>
-                    {canViewPayment ? (
-                        <Button
-                            id="fulfillment-operations-gate-view-payment"
-                            variant="outline"
-                            size="sm"
-                            render={
-                                <Link
-                                    href={`/procurement/orders/${encodeURIComponent(purchaseOrderId)}?section=payable`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-3">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                    <AlertTitle>{paymentReminder(operation)}</AlertTitle>
+                    <AlertDescription className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+                        {operation.gate.requiredAmount != null && (
+                            <span>
+                                约定预付{" "}
+                                <MoneyValue
+                                    value={operation.gate.requiredAmount}
                                 />
-                            }
-                        >
-                            查看采购付款
-                            <ArrowUpRightIcon data-icon="inline-end" />
-                            <span className="sr-only">（在新标签页打开）</span>
-                        </Button>
-                    ) : null}
+                            </span>
+                        )}
+                        {operation.gate.effectivePaidAmount != null && (
+                            <span>
+                                有效已付{" "}
+                                <MoneyValue
+                                    value={operation.gate.effectivePaidAmount}
+                                />
+                            </span>
+                        )}
+                        <span>
+                            付款审批通过不代表已支付。请按实际发货或交付情况确认履约。
+                        </span>
+                    </AlertDescription>
                 </div>
-            </AlertDescription>
+                {canViewPayment && (
+                    <Button
+                        id="fulfillment-operations-gate-view-payment"
+                        variant="outline"
+                        size="sm"
+                        render={
+                            <Link
+                                href={`/procurement/orders/${encodeURIComponent(purchaseOrderId)}?section=payable`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            />
+                        }
+                    >
+                        查看采购付款
+                        <ArrowUpRightIcon data-icon="inline-end" />
+                        <span className="sr-only">（在新标签页打开）</span>
+                    </Button>
+                )}
+            </div>
         </Alert>
     )
 }

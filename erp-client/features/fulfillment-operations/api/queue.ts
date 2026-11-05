@@ -70,8 +70,8 @@ function filterSummary(filters: FulfillmentQueueFilters): string {
     ]
     if (filters.due === "overdue") parts.push("已超期")
     else if (filters.due === "today") parts.push("今日到期")
-    if (filters.gate === "blocked") parts.push("先款未到")
-    if (filters.gate === "satisfied") parts.push("货款已到")
+    if (filters.gate === "blocked") parts.push("预付待完成")
+    if (filters.gate === "satisfied") parts.push("预付已满足")
     if (filters.warehouseId) {
         parts.push("指定仓库")
     }

@@ -1,53 +1,26 @@
 /**
- * W01 履约作业面的先款条件徽章文案口径。
- * 仓发与其余作业共用判定，仅措辞不同；面向一线作业角色整体口语化。
+ * 履约作业面的采购付款提示文案。
  */
 
 import type { PrepaymentGateCopy } from "@/components/business/domain"
 
-const SHIP_GATE_COPY: PrepaymentGateCopy = {
-    title: "发货条件",
-    description: "只认已经到账并核销过的货款，付款申请和附件不算。",
-    allowedBadge: "可以发货",
-    blockedBadge: "暂时不能发货",
-    amountTerm: "至少要付",
-    ratioTerm: "至少要付比例",
-    allocatedTerm: "已经付了",
-    gapTerm: "还差",
-    updatedTerm: "算到什么时候",
-    allowedTitle: "货款已到，可以发货",
-    blockedTitle: "先款未到，暂时不能发货",
-    allowedBody: "货款已经够了，这一单可以继续。",
-    blockedBody: "差额补齐之前，仓发单据暂时不能确认发货。",
-}
-
-const RECEIVE_GATE_COPY: PrepaymentGateCopy = {
-    title: "先款条件",
-    description: "只认已经到账并核销过的货款，付款申请和附件不算。",
-    allowedBadge: "可以收货",
-    blockedBadge: "暂时不能收货",
-    amountTerm: "至少要付",
-    ratioTerm: "至少要付比例",
-    allocatedTerm: "已经付了",
-    gapTerm: "还差",
-    updatedTerm: "算到什么时候",
-    allowedTitle: "货款已到，可以收货",
-    blockedTitle: "先款未到，暂时不能收货",
-    allowedBody: "货款已经够了，这一单可以继续。",
-    blockedBody: "差额补齐之前，入库、直发、电子交付和服务都确认不了。",
-}
-
-export function prepaymentGateCopy(
-    isWarehouseShip: boolean,
-    isSupplierDirect = false,
-): PrepaymentGateCopy {
-    if (isSupplierDirect)
-        return {
-            ...SHIP_GATE_COPY,
-            title: "先款条件",
-            blockedBody: "差额补齐之前，暂时不能确认供应商直发。",
-        }
-    return isWarehouseShip ? SHIP_GATE_COPY : RECEIVE_GATE_COPY
+/** 付款信息仅作提醒，不作为履约确认资格。 */
+export function prepaymentGateCopy(): PrepaymentGateCopy {
+    return {
+        title: "采购付款",
+        description: "付款申请和审批通过不代表已支付；付款不阻止履约确认。",
+        allowedBadge: "预付已满足",
+        blockedBadge: "预付待完成",
+        amountTerm: "约定预付",
+        ratioTerm: "约定预付比例",
+        allocatedTerm: "有效已付",
+        gapTerm: "还差",
+        updatedTerm: "更新时间",
+        allowedTitle: "预付条件已满足",
+        blockedTitle: "预付待完成，不影响确认实际履约",
+        allowedBody: "请按实际发货或交付情况确认履约。",
+        blockedBody: "供应商支持先发货时，可先确认实际履约，再按约定办理付款。",
+    }
 }
 
 export function paymentRegistrationHref(
