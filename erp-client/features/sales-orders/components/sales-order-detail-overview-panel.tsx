@@ -1,4 +1,5 @@
 "use client"
+import { ArrangementSummary } from "@/features/delivery-arrangements/components/arrangement-summary"
 import { SalesOrderInquirySource } from "./sales-order-inquiry-source"
 
 import { Badge } from "@/components/ui/badge"
@@ -256,6 +257,11 @@ export function OverviewPanel({
                     ) : null}
                 </dl>
             </section>
+            {order.currentRevisionNo &&
+            !isCard &&
+            !["已关闭", "已作废"].includes(order.primaryStatus.label) ? (
+                <ArrangementSummary salesOrderId={order.id} />
+            ) : null}
             {related}
         </div>
     )

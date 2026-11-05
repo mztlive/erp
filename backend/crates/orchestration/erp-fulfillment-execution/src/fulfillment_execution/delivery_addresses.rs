@@ -106,10 +106,15 @@ pub(super) async fn address_source(
     if external_delivery(db, delivery, executor).await? {
         return Ok(None);
     }
+    if let Some(snapshot) =
+        super::address_arrangement::planned_source(db, codec, key, delivery, &version, executor).await?
+    {
+        return Ok(Some(snapshot));
+    }
     collect_destinations(db, key, revision, version, lines, executor).await
 }
 
-async fn source_context(
+pub(super) async fn source_context(
     db: &Database,
     delivery: &Delivery,
     executor: &mut dyn Executor,
@@ -234,7 +239,22 @@ fn append_destinations(
     }
     let total = PackingItem::total(rows.iter().map(|row| row.3))?;
     // 历史部分草稿没有地址消费凭据时不猜测剩余属于哪个地址。
-    if rows.is_empty() || total != line.quantity {
+    if rows.is_empty() {
+        destinations
+            .entry("pending-address".into())
+            .or_insert_with(|| DeliveryDestination {
+                key: "pending-address".into(),
+                recipient: String::new(),
+                phone: String::new(),
+                address: String::new(),
+                pending_address: true,
+                items: vec![],
+            })
+            .items
+            .push(PackingItem { delivery_line_id: line.base.id.clone(), quantity: line.quantity });
+        return Ok(true);
+    }
+    if total != line.quantity {
         return Ok(false);
     }
     for (recipient, phone, address, quantity) in rows {
@@ -242,6 +262,7 @@ fn append_destinations(
             .map_err(|_| Error::Internal("收件资料无法规范化".into()))?;
         let id = Delivery::address_snapshot_fingerprint(&identity, key);
         let destination = destinations.entry(id.clone()).or_insert_with(|| DeliveryDestination {
+            pending_address: false,
             key: id,
             recipient: recipient.into(),
             phone: phone.into(),

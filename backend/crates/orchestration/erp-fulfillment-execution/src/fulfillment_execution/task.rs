@@ -212,7 +212,10 @@ pub async fn complete_fulfillment_task(
 }
 
 /// 校验开放任务与强类型履约对象冻结的责任身份完全一致。
-fn ensure_task_matches_frozen_identity(task: &WorkItem, object: &FulfillmentTaskObject<'_>) -> Result<()> {
+pub(super) fn ensure_task_matches_frozen_identity(
+    task: &WorkItem,
+    object: &FulfillmentTaskObject<'_>,
+) -> Result<()> {
     let identity = object.frozen_identity()?;
     ensure_frozen_identity_fields(
         task,
@@ -246,7 +249,7 @@ fn ensure_frozen_identity_fields(
 }
 
 /// 开放履约任务必须恰好一条；缺失或重复都失败关闭。
-async fn load_single_open_task(
+pub(super) async fn load_single_open_task(
     db: &mongodb::Database,
     business_object_type: &str,
     business_object_id: &str,

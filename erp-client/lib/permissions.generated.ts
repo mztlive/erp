@@ -1046,6 +1046,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/sales-orders/{id}/delivery-arrangements",
+                description: "查询销售单详情",
+                permission: {
+                    resource: "sales_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sales-orders/{id}/delivery-arrangements",
+                description: "补充或调整收货安排",
+                permission: {
+                    resource: "sales_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/sales-orders/{id}/timeline",
                 description: "查询销售单详情",
                 permission: {
@@ -4747,6 +4767,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         name: "履约",
         description: "采购入库、发货、交付、服务与客户验收管理",
         permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/deliveries/{id}/delivery-arrangements",
+                description: "更新发货单",
+                permission: {
+                    resource: "delivery",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/deliveries/{id}/delivery-arrangements",
+                description: "更新发货单",
+                permission: {
+                    resource: "delivery",
+                    action: "update",
+                },
+            },
             {
                 module: "admin",
                 method: "GET",

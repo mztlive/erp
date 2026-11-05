@@ -22,9 +22,43 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
+///
+/// # 错误
+/// 无；业务错误由各处理器返回。
 pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
     Router::new()
+        .merge(address_arrangement_routes(rbac))
+        .merge(purchase_receipt_routes(rbac))
+        .merge(delivery_routes(rbac))
+        .merge(electronic_routes(rbac))
+        .merge(service_routes(rbac))
+        .merge(acceptance_query_routes(rbac))
+        .merge(acceptance_command_routes(rbac))
         .merge(acceptance_evidence_routes(rbac))
+}
+
+fn address_arrangement_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/deliveries/{id}/delivery-arrangements",
+            with_permission(
+                get(fulfillment::address_arrangement::delivery_get),
+                rbac,
+                permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
+            ),
+        )
+        .route(
+            "/deliveries/{id}/delivery-arrangements",
+            with_permission(
+                put(fulfillment::address_arrangement::delivery_save),
+                rbac,
+                permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
+            ),
+        )
+}
+
+fn purchase_receipt_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/purchase-receipts",
             with_permission(
@@ -65,6 +99,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
             ),
         )
+}
+
+fn delivery_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/deliveries",
             with_permission(
@@ -105,6 +143,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::fulfillment::DELIVERY_DELIVERY_POST,
             ),
         )
+}
+
+fn electronic_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/electronic-deliveries",
             with_permission(
@@ -137,6 +179,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
             ),
         )
+}
+
+fn service_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/service-fulfillments",
             with_permission(
@@ -172,6 +218,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
             ),
         )
+}
+
+fn acceptance_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/customer-acceptances",
             with_permission(
@@ -196,6 +246,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_ELIGIBLE,
             ),
         )
+}
+
+fn acceptance_command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/customer-acceptances/commit",
             with_permission(

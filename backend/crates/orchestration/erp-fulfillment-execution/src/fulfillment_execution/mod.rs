@@ -31,6 +31,7 @@ use task::FulfillmentIdentityFactory;
 use crate::workflow::FulfillmentWorkflow;
 
 /// 保留入口提供的密钥、编解码器和对象读取能力，持有完整履约根事务。
+#[derive(Clone)]
 pub struct FulfillmentProcess {
     workflow: Arc<dyn FulfillmentWorkflow>,
     pub(super) db: Database,
@@ -101,3 +102,5 @@ impl FulfillmentProcess {
         FulfillmentService::new(self.db.clone())
     }
 }
+
+pub mod address_arrangement;

@@ -402,6 +402,23 @@ mod ordinary_factory_tests {
         assert_eq!(attempt.command_id.as_deref(), Some("command"));
     }
     #[test]
+    fn delivery_arrangement_audit_records_sales_target_without_private_address() {
+        let log = actor()
+            .resource_log("sales_order.delivery_arrangement", "sales_order", "sales-1".into())
+            .unwrap();
+        let prepared = prepare_business_log(&log).unwrap();
+        assert!(prepared.success);
+        assert_eq!(prepared.resource_id.as_deref(), Some("sales-1"));
+        assert!(prepared.message.as_deref().unwrap().contains("更新收货安排"));
+        assert!(prepared.structured_event.as_ref().unwrap().facts.is_empty());
+        assert!(
+            actor()
+                .resource_log("sales_order.delivery_arrangement", "delivery", "delivery-1".into())
+                .is_err()
+        );
+    }
+
+    #[test]
     fn unknown_factory_and_mismatched_structured_identity_fail_closed() {
         assert!(actor().resource_log("customer.update:customer", "customer", "customer".into()).is_err());
         assert!(actor().resource_log("customer.update", "supplier", "customer".into()).is_err());

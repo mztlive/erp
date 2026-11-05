@@ -45,3 +45,5 @@ fn process(state: &HttpState) -> FulfillmentProcess {
     )
     .with_object_read(state.application().approval_object_read())
 }
+
+pub mod address_arrangement;

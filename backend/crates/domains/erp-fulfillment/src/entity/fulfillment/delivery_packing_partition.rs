@@ -218,6 +218,30 @@ mod tests {
         );
     }
     #[test]
+    fn missing_address_remains_in_follow_up_without_blocking_known_address() {
+        let (mut source, original, mut packing) = fixture();
+        source.destinations[1].pending_address = true;
+        source.destinations[1].recipient.clear();
+        source.destinations[1].phone.clear();
+        source.destinations[1].address.clear();
+        for item in &mut packing.dispatch[1].items {
+            item.quantity = "0".parse().unwrap();
+        }
+        packing.packages.pop();
+        let mut next = 0;
+        let (shipped, remaining, current, rest, _) = packing
+            .partition(&header("delivery"), &header("rest"), &original, &source, || {
+                next += 1;
+                format!("line-{next}")
+            })
+            .unwrap();
+        assert!(!shipped.is_empty());
+        assert!(!remaining.is_empty());
+        assert!(current.destinations.iter().all(|row| !row.pending_address));
+        assert!(rest.destinations[0].pending_address);
+        assert_eq!(rest.destinations[0].items.len(), 2);
+    }
+    #[test]
     fn remainder_can_be_fully_dispatched_without_reusing_first_address() {
         use crate::entity::fulfillment::{DeliveryDispatch, DeliveryPackage};
         let (source, original, mut packing) = fixture();

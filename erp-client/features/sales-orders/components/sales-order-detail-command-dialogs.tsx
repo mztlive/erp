@@ -1,5 +1,6 @@
 "use client"
 
+import { ArrangementButton } from "@/features/delivery-arrangements/components/arrangement-button"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import { ChevronDownIcon, FilePenLineIcon } from "lucide-react"
@@ -47,6 +48,17 @@ export function SalesOrderDetailSecondaryActions({
 
     return (
         <div className="flex flex-wrap items-center gap-2">
+            {order.currentRevisionNo &&
+            order.nature !== "card_voucher" &&
+            !["已关闭", "已作废"].includes(order.primaryStatus.label) ? (
+                <PermissionGuard permission="sales_order:update">
+                    <ArrangementButton
+                        scope="sales-orders"
+                        objectId={order.id}
+                        label="收货安排"
+                    />
+                </PermissionGuard>
+            ) : null}
             {showChangeAction ? (
                 <PermissionGuard permission={"sales_change_order:create"}>
                     <Button

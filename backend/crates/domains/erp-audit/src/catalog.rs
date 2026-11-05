@@ -306,6 +306,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("sales_order.bind_contract", "sales_order", "绑定销售合同"),
     action("sales_order.cancel_approval", "sales_order", "撤回审批销售单"),
     action("sales_order.create", "sales_order", "创建销售单"),
+    action("sales_order.delivery_arrangement", "sales_order", "更新收货安排"),
     action("sales_order.formalize", "sales_order", "确认生效销售单"),
     action("sales_order.handover", "sales_order", "交接销售责任"),
     action("sales_order.save_draft", "sales_order", "保存草稿销售单"),

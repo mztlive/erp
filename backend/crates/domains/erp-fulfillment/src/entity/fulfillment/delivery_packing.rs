@@ -40,6 +40,8 @@ pub struct DeliveryDestination {
     pub phone: String,
     pub address: String,
     pub items: Vec<PackingItem>,
+    #[serde(default)]
+    pub pending_address: bool,
 }
 impl std::fmt::Debug for DeliveryDestination {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -120,6 +122,15 @@ impl DeliveryPacking {
         {
             return Err(Error::from("包裹收货地址不属于本次任务"));
         }
+        for destination in source.destinations.iter().filter(|row| row.pending_address) {
+            if self.packages.iter().any(|row| row.destination_key == destination.key)
+                || dispatched
+                    .iter()
+                    .any(|((key, _), quantity)| key == &destination.key && *quantity > Decimal::ZERO)
+            {
+                return Err(Error::from("待补地址的商品本次不能发货，请补齐地址或将本次数量设为0"));
+            }
+        }
         let packed = package_quantities(&self.packages, &dispatched, posting)?;
         for (key, quantity) in &dispatched {
             if posting && packed.get(key).copied().unwrap_or_default() != *quantity {
@@ -185,6 +196,24 @@ impl DeliveryPacking {
 }
 
 impl DeliveryAddressSnapshot {
+    /// 比较地址分配与来源版本，忽略展示排序。
+    /// # 参数
+    /// `other` 为新计算的可信快照。
+    /// # 返回
+    /// 地址、商品数量及来源版本相同返回 true。
+    /// # 错误
+    /// 不返回错误。
+    pub fn same_arrangement(&self, other: &Self) -> bool {
+        fn sorted(mut value: DeliveryAddressSnapshot) -> DeliveryAddressSnapshot {
+            value.destinations.sort_by(|left, right| left.key.cmp(&right.key));
+            for row in &mut value.destinations {
+                row.items.sort_by(|left, right| left.delivery_line_id.cmp(&right.delivery_line_id));
+            }
+            value
+        }
+        sorted(self.clone()) == sorted(other.clone())
+    }
+
     fn ensure_lines(&self, lines: &[DeliveryLine]) -> Result<()> {
         let mut totals = BTreeMap::new();
         let mut keys = HashSet::new();
@@ -302,6 +331,7 @@ pub(super) mod tests {
             source_version: "sales:purchase".into(),
             destinations: vec![
                 DeliveryDestination {
+                    pending_address: false,
                     key: "a".into(),
                     recipient: "甲".into(),
                     phone: "13800000001".into(),
@@ -309,6 +339,7 @@ pub(super) mod tests {
                     items: vec![item("l1", "2"), item("l2", "1")],
                 },
                 DeliveryDestination {
+                    pending_address: false,
                     key: "b".into(),
                     recipient: "乙".into(),
                     phone: "13800000002".into(),

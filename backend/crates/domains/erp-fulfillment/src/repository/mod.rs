@@ -16,3 +16,6 @@ pub use fulfillment::{
 
 #[cfg(test)]
 mod serialization_contract;
+
+mod address_arrangement;
+pub use address_arrangement::AddressArrangementExt;

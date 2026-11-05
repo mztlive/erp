@@ -13,6 +13,7 @@ export type DeliveryDestination = {
     phone: string
     address: string
     items: PackingItem[]
+    pending_address?: boolean
 }
 export type DeliveryAddressSnapshot = {
     source_version: string
@@ -39,7 +40,10 @@ export function initialPacking(
         source_version: source.source_version,
         dispatch: source.destinations.map((row) => ({
             destination_key: row.key,
-            items: row.items.map((item) => ({ ...item })),
+            items: row.items.map((item) => ({
+                ...item,
+                quantity: row.pending_address ? "0" : item.quantity,
+            })),
         })),
         packages: [],
     }
@@ -116,6 +120,20 @@ export function packingIssues(
         }
         let positive = false
         for (const row of packing.dispatch) {
+            const destination = source.destinations.find(
+                (value) => value.key === row.destination_key,
+            )
+            if (
+                destination?.pending_address &&
+                (row.items.some(
+                    (item) => compareDecimal(item.quantity, "0", 6) > 0,
+                ) ||
+                    packing.packages.some(
+                        (parcel) =>
+                            parcel.destination_key === row.destination_key,
+                    ))
+            )
+                add("待补地址的商品本次不能发货，请补齐地址或将本次数量设为0")
             for (const item of row.items) {
                 const limit =
                     source.destinations

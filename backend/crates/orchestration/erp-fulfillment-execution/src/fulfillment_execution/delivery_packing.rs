@@ -47,6 +47,7 @@ impl PackingContext {
             }
             return Ok(None);
         };
+        guard_sources(db, delivery, executor).await?;
         let source = address_source(db, &self.codec, &self.key, delivery, lines, executor)
             .await?
             .ok_or_else(|| Error::ValidationError("缺少可核对的收货分配，请先补充来源交付安排".into()))?;

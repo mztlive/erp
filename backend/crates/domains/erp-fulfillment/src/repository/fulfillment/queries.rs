@@ -26,6 +26,27 @@ use crate::entity::fulfillment::{
 use crate::repository::extensions::FulfillmentExt;
 
 impl FulfillmentRepository<'_> {
+    /// 按销售单读取全部未删除发货单，稳定排序供地址数量分配。
+    /// # 参数
+    /// `sales_order_id` 为销售单，`executor` 为同一事务执行器。
+    /// # 返回
+    /// 返回发货表头。
+    /// # 错误
+    /// 数据库读取失败时返回错误。
+    pub async fn deliveries_for_arrangement(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Delivery>> {
+        mongo_ops::find_many(
+            &self.db.collection::<Delivery>(<Database as FulfillmentExt>::DELIVERIES),
+            doc! { "sales_order_id": sales_order_id.to_string(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            FindOptions::builder().sort(doc! { "id": 1 }).build(),
+            executor,
+        )
+        .await
+    }
+
     /// 查询销售单下可进入客户验收的发货单。
     ///
     /// # 参数

@@ -7,6 +7,7 @@ use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
+use crate::http::handler::fulfillment::address_arrangement;
 use crate::http::handler::sales_order;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
@@ -21,6 +22,18 @@ use crate::permissions;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
     Router::new()
+        .route(
+            "/sales-orders/{id}/delivery-arrangements",
+            with_permission(get(address_arrangement::sales_get), rbac, permissions::sales_order::DETAIL),
+        )
+        .route(
+            "/sales-orders/{id}/delivery-arrangements",
+            with_permission(
+                put(address_arrangement::sales_save),
+                rbac,
+                permissions::sales_order::DELIVERY_ARRANGEMENT,
+            ),
+        )
         .merge(evidence_contract_routes(rbac))
         .merge(read_create_routes(rbac))
         .merge(lifecycle_routes(rbac))

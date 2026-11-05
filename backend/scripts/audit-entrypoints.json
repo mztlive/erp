@@ -7441,6 +7441,22 @@
       },
       "location_count": 1,
       "reason": "用例 void_statement 通过 .resource_log 构造作废审计，在自身事务内先更新结算单，再通过 persist_log 写入审计，两者沿同一 Executor 执行；命令重放直接返回原结果，不新增审计。本登记不证明真实回滚或并发结果。"
+    },
+    {
+      "path": "crates/orchestration/erp-fulfillment-execution/src/fulfillment_execution/address_arrangement/write.rs",
+      "function": "persist_record",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "收货安排、未发任务快照、任务版本、销售写锁和加密历史使用同一 Executor；该步骤在根事务内写成功审计，禁止记录收件资料明文。静态登记不替代真实回滚和并发验收。"
     }
   ]
 }

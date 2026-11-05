@@ -8,6 +8,10 @@ import {
     type Ref,
 } from "react"
 import { ChevronDownIcon, MapPinIcon, PlusIcon, PencilIcon } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { ArrangementButton } from "@/features/delivery-arrangements/components/arrangement-button"
+import { getDeliveryPackingDetail } from "../../api/packing"
+import { fulfillmentKeys } from "../../hooks/queries"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -67,6 +71,7 @@ export function FulfillmentPackingForm({
     disabled?: boolean
     ref?: Ref<FulfillmentDeliveryFormHandle>
 }) {
+    const queryClient = useQueryClient()
     const [search, setSearch] = useState("")
     const [onlyMissing, setOnlyMissing] = useState(false)
     const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
@@ -140,6 +145,33 @@ export function FulfillmentPackingForm({
             className="min-w-0 space-y-3 outline-none"
             aria-label="按地址登记发货包裹"
         >
+            <div className="flex justify-end">
+                <ArrangementButton
+                    scope="deliveries"
+                    objectId={operation.operationId}
+                    disabled={disabled}
+                    label={
+                        source.destinations.some((row) => row.pending_address)
+                            ? "补充收货地址"
+                            : "调整收货安排"
+                    }
+                    hasUnsavedChanges={
+                        JSON.stringify(draft) !==
+                        JSON.stringify(operation.draft)
+                    }
+                    onSaved={async () => {
+                        const fresh = await queryClient.fetchQuery({
+                            queryKey: fulfillmentKeys.packing(
+                                operation.operationId,
+                            ),
+                            queryFn: () =>
+                                getDeliveryPackingDetail(operation.operationId),
+                            staleTime: 0,
+                        })
+                        onChange(fresh.operation.draft)
+                    }}
+                />
+            </div>
             <form.Subscribe selector={(state) => state.values}>
                 {(values) => {
                     const ready = (key: string) =>
@@ -171,7 +203,13 @@ export function FulfillmentPackingForm({
                                             发货明细与物流
                                         </h3>
                                         <span className="text-sm text-muted-foreground">
-                                            共 {source.destinations.length}{" "}
+                                            共{" "}
+                                            {
+                                                source.destinations.filter(
+                                                    (row) =>
+                                                        !row.pending_address,
+                                                ).length
+                                            }{" "}
                                             个收货地址 ·{" "}
                                             {
                                                 new Set(
@@ -230,6 +268,42 @@ export function FulfillmentPackingForm({
                                 </p>
                             )}
                             {visible.map((destination) => {
+                                if (destination.pending_address)
+                                    return (
+                                        <section
+                                            key={destination.key}
+                                            className="space-y-3 rounded-xl border border-dashed bg-muted/20 p-4"
+                                        >
+                                            <div>
+                                                <h3 className="font-medium">
+                                                    待补收货地址
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground">
+                                                    以下商品本次暂不发货。补齐地址后可登记包裹，其他商品可以先发。
+                                                </p>
+                                            </div>
+                                            {destination.items.map((item) => (
+                                                <div
+                                                    key={item.delivery_line_id}
+                                                    className="flex justify-between gap-4 text-sm"
+                                                >
+                                                    <span>
+                                                        {itemName(
+                                                            item.delivery_line_id,
+                                                        )}
+                                                    </span>
+                                                    <span>
+                                                        {packingQuantity(
+                                                            item.quantity,
+                                                        )}{" "}
+                                                        {unit(
+                                                            item.delivery_line_id,
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </section>
+                                    )
                                 const segment = toAutomationIdSegment(
                                     destination.key,
                                 )

@@ -3,3 +3,5 @@
 pub mod command_receipt;
 pub mod facts;
 pub mod fulfillment;
+
+pub mod address_arrangement;

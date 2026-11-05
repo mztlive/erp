@@ -15,5 +15,8 @@ mod fulfillment;
 /// 索引冲突或 MongoDB 操作失败时返回错误。
 pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     fulfillment::ensure(db).await?;
-    command_receipt::ensure(db).await
+    command_receipt::ensure(db).await?;
+    address_arrangement::ensure(db).await
 }
+
+mod address_arrangement;
