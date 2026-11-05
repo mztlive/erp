@@ -55,6 +55,7 @@ export type AcceptanceLineProgress = {
     acceptedQuantity: string
     pendingQuantity: string
     pendingFacts: AcceptanceEligibleFact[]
+    fulfillmentFacts?: AcceptanceEligibleFact[]
     stuckKind: AcceptanceStuckKind
     stuckLabel: string
 }
@@ -440,6 +441,7 @@ export function buildLineProgress(
         itemSnapshot: group.itemSnapshot,
         unitCode: group.unitCode,
         requiredQuantity: required,
+        fulfillmentFacts: group.fulfillmentFacts,
         deliveredQuantity: delivered,
         acceptedQuantity: accepted,
         pendingQuantity: pending,

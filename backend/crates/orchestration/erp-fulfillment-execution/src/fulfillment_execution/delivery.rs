@@ -90,6 +90,15 @@ impl FulfillmentProcess {
         req: UpdateDeliveryRequest,
         actor: &AuditActor,
     ) -> Result<DeliveryView> {
+        if req.packing.is_some() && req.tracking_entries.is_some() {
+            return Err(Error::ValidationError("地址包裹与旧物流字段不能同时提交".into()));
+        }
+        let packing_context = super::delivery_packing::PackingContext {
+            codec: self.sensitive_data.clone(),
+            key: self.fingerprint_key.clone(),
+            input: req.packing.clone(),
+            legacy_tracking: req.tracking_entries.is_some(),
+        };
         let audit = actor.clone().resource_log("delivery.update", "delivery", id.to_string())?;
         let db = self.db.clone();
         let task_identity = self.task_identity.clone();
@@ -100,7 +109,12 @@ impl FulfillmentProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let service = erp_fulfillment::service::FulfillmentService::new(db.clone());
-                    let (mut delivery, lines) = service.prepare_delivery_update(&id, req, executor).await?;
+                    let (mut delivery, lines) =
+                        service.prepare_delivery_update(&id, req.clone(), executor).await?;
+                    if delivery.packing.is_some() && req.tracking_entries.is_some() {
+                        return Err(Error::ConflictError("请刷新后使用地址包裹登记".into()));
+                    }
+                    packing_context.apply(&db, &mut delivery, &lines, false, executor).await?;
                     super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor)
                         .await?;
                     erp_fulfillment::service::FulfillmentService::new(db.clone())

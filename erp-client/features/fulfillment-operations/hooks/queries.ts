@@ -1,6 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { getDeliveryPackingDetail } from "../api/packing"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
 import {
@@ -13,6 +14,7 @@ import {
 
 export const fulfillmentKeys = {
     all: queryKeyRoots.fulfillmentOperations,
+    packing: (id: string) => [...fulfillmentKeys.all, "packing", id] as const,
     queue: (filters: FulfillmentQueueFilters) =>
         [...fulfillmentKeys.all, "queue", filters] as const,
 }
@@ -71,5 +73,14 @@ export function useResolveUnknownFulfillmentMutation() {
                 })
             }
         },
+    })
+}
+
+/** 复用履约资源键，保存和确认后自动失效地址包裹详情。 */
+export function useDeliveryPackingQuery(id: string, enabled: boolean) {
+    return useQuery({
+        queryKey: fulfillmentKeys.packing(id),
+        queryFn: () => getDeliveryPackingDetail(id),
+        enabled,
     })
 }

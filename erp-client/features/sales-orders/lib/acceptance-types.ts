@@ -17,6 +17,7 @@ export type AcceptanceStatus = "DRAFT" | "POSTED" | "REVERSED"
 type AllocationDirection = "APPLY" | "REVERSE"
 
 export type AcceptanceEligibleFact = {
+    deliveryId?: string
     fulfillmentLineId: string
     fulfillmentFactType: FulfillmentFactType
     fulfillmentNo: string

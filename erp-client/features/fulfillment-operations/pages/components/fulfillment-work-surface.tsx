@@ -128,6 +128,9 @@ export function FulfillmentWorkSurface({
     const { deliveryRef, locateIssue } = useFulfillmentFieldLocation()
     const paymentBlocked =
         operation.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP"
+    const addressPacking =
+        (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") &&
+        !!draft.packing
     const fieldIssues = validationIssues.filter((issue) => issue.id !== "gate")
     const purchaseNo = displayText(
         operation.source.purchaseNo,
@@ -270,7 +273,13 @@ export function FulfillmentWorkSurface({
 
             <Card
                 size="sm"
-                className={singleOperation ? undefined : surfacePanelClassName}
+                className={
+                    singleOperation && addressPacking
+                        ? "border-0 bg-transparent shadow-none"
+                        : singleOperation
+                          ? undefined
+                          : surfacePanelClassName
+                }
             >
                 {singleOperation ? null : (
                     <CardHeader className="border-b border-grid">
@@ -303,13 +312,23 @@ export function FulfillmentWorkSurface({
                         </div>
                     </CardHeader>
                 )}
-                <CardContent className="space-y-5">
+                <CardContent
+                    className={
+                        singleOperation && addressPacking
+                            ? "space-y-5 px-0"
+                            : "space-y-5"
+                    }
+                >
                     {singleOperation ? (
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <h3
                                 ref={headingRef}
                                 tabIndex={-1}
-                                className="text-base font-semibold outline-none"
+                                className={
+                                    addressPacking
+                                        ? "sr-only outline-none"
+                                        : "text-base font-semibold outline-none"
+                                }
                             >
                                 {operation.operationType === "SUPPLIER_DIRECT"
                                     ? "确认供应商直发"
@@ -327,18 +346,20 @@ export function FulfillmentWorkSurface({
                             ) : null}
                         </div>
                     ) : null}
+                    <WorkspaceTaskPageSlot slot="summary">
+                        <FulfillmentSourceContext
+                            operation={operation}
+                            currentUrl={currentUrl}
+                        />
+                    </WorkspaceTaskPageSlot>
                     {paymentBlocked ? (
-                        <WorkspaceTaskPageSlot slot="aside">
+                        <WorkspaceTaskPageSlot slot="summary">
                             <FulfillmentPaymentNotice
                                 operation={operation}
                                 canSaveDraft={canExecute && supportsSave}
                             />
                         </WorkspaceTaskPageSlot>
                     ) : null}
-                    <FulfillmentSourceContext
-                        operation={operation}
-                        currentUrl={currentUrl}
-                    />
 
                     <FulfillmentDraftForm
                         deliveryRef={deliveryRef}
@@ -609,7 +630,7 @@ function FulfillmentSourceContext({
     if (fields.length === 0) return null
     return (
         <section aria-label="来源单据">
-            <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-lg bg-muted/20 px-4 py-3">
+            <dl className="my-3 flex flex-wrap gap-x-8 gap-y-3">
                 {fields.map((field) => {
                     const purchaseLink =
                         field.label === "采购单" &&

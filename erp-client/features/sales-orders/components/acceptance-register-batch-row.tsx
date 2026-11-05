@@ -1,5 +1,7 @@
 "use client"
 
+import { DeliveryPackingDetails } from "@/features/fulfillment-operations/components/delivery-packing-details"
+
 import { RequiredMark } from "@/components/ui/required-mark"
 
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -91,6 +93,13 @@ export function AcceptanceRegisterBatchRow({
                 </p>
             </div>
 
+            {fact.deliveryId && (
+                <DeliveryPackingDetails
+                    deliveryId={fact.deliveryId}
+                    fulfillmentLineId={fact.fulfillmentLineId}
+                    idPrefix={`acceptance-${segmentId}`}
+                />
+            )}
             <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                 <Checkbox
                     id={`sales-orders-acceptance-batch-${segmentId}-include`}

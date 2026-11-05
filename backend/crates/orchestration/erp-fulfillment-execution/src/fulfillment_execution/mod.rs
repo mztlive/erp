@@ -5,6 +5,8 @@ mod delivery;
 mod delivery_posting;
 pub mod direct_delivery_draft;
 pub use delivery_posting::post_observed_supplier_delivery;
+mod delivery_addresses;
+mod delivery_packing;
 mod delivery_tracking;
 mod electronic_confirm;
 mod electronic_delivery;

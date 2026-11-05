@@ -1,3 +1,5 @@
+import { compareDecimal } from "@/lib/fixed-decimal"
+import { packingSum } from "../lib/delivery-packing"
 /**
  * W09 履约单据处理 · 正式单据确认后的结果投影。
  * 确认命令见 ./commands；这里只把后端单据转成给界面展示的正式结果。
@@ -79,6 +81,18 @@ export function formalFromDelivery(
 ): FulfillmentFormalOutcome {
     const posted = stripDeliveryApprovalField(delivery)
     const isWh = draft.type === "WAREHOUSE_SHIP"
+    const partial =
+        draft.packing &&
+        compareDecimal(
+            packingSum(
+                draft.packing.dispatch.flatMap((row) =>
+                    row.items.map((item) => item.quantity),
+                ),
+            ),
+            packingSum(draft.lines.map((line) => line.quantity)),
+            6,
+        ) < 0
+    const remainingNote = partial ? "未发数量已保留为后续履约任务。" : ""
     return {
         kind: "POSTED",
         operationId,
@@ -93,11 +107,14 @@ export function formalFromDelivery(
         inventoryDelta: [],
         reservationDelta: [],
         remainingByLine: [],
+        remainingSummary: partial
+            ? "有未发数量，已生成后续履约任务，可在任务队列继续处理。"
+            : undefined,
         // CustomerAcceptance 为 NO_APPROVAL：只交接销售验收，不投影审批区。
         acceptanceRequired: true,
         acceptanceNextStep: isWh
-            ? "仓发记录已确认。物流签收不等于客户验收；请销售在客户验收登记。"
-            : "供应商直发记录已确认，不影响自有库存。请销售在客户验收登记（物流签收≠验收）。",
+            ? `${remainingNote}仓发记录已确认。物流签收不等于客户验收；请销售在客户验收登记。`
+            : `${remainingNote}供应商直发记录已确认，不影响自有库存。请销售在客户验收登记（物流签收≠验收）。`,
         inventoryImpactSummary: isWh
             ? "发货单已确认；库存与留货影响以库存台账为准。"
             : "供应商直发不影响自有库存。",

@@ -73,9 +73,13 @@ export async function saveFulfillmentOperation(
                 `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
                 {
                     version: input.expectedDocumentVersion,
-                    tracking_entries: trackingEntriesToDto(
-                        draft.trackingEntries,
-                    ),
+                    ...(draft.packing
+                        ? { packing: draft.packing }
+                        : {
+                              tracking_entries: trackingEntriesToDto(
+                                  draft.trackingEntries,
+                              ),
+                          }),
                 },
             ),
         )
@@ -132,9 +136,13 @@ export async function postFulfillmentOperation(
                     `/admin/deliveries/${encodeURIComponent(input.operationId)}/post`,
                     {
                         version: input.expectedDocumentVersion,
-                        tracking_entries: trackingEntriesToDto(
-                            draft.trackingEntries,
-                        ),
+                        ...(draft.packing
+                            ? { packing: draft.packing }
+                            : {
+                                  tracking_entries: trackingEntriesToDto(
+                                      draft.trackingEntries,
+                                  ),
+                              }),
                     },
                 ),
             )
@@ -394,6 +402,9 @@ export async function resolveUnknownFulfillmentResult(
                             inventoryDelta: [],
                             reservationDelta: [],
                             remainingByLine: [],
+                            remainingSummary: d.packing
+                                ? "本次发货已确认；未发数量请在履约任务队列核对并继续处理。"
+                                : undefined,
                             acceptanceRequired: true,
                             acceptanceNextStep: "",
                             inventoryImpactSummary: "",

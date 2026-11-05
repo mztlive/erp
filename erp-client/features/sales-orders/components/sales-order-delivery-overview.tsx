@@ -1,5 +1,8 @@
 "use client"
 
+import { DeliveryPackingDetails } from "@/features/fulfillment-operations/components/delivery-packing-details"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 import {
     BusinessFailureState,
     MoneyValue,
@@ -103,6 +106,31 @@ export function SalesOrderDeliveryOverview({
                                         <SalesOrderDeliverySummary
                                             line={line}
                                         />
+                                        {(progress?.fulfillmentFacts ?? [])
+                                            .filter((fact) => fact.deliveryId)
+                                            .map((fact) => (
+                                                <div
+                                                    key={fact.fulfillmentLineId}
+                                                    className="mt-2"
+                                                >
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {fact.fulfillmentNo} ·{" "}
+                                                        {
+                                                            fact.netSuccessfulQuantity
+                                                        }{" "}
+                                                        {fact.unitCode}
+                                                    </p>
+                                                    <DeliveryPackingDetails
+                                                        deliveryId={
+                                                            fact.deliveryId!
+                                                        }
+                                                        fulfillmentLineId={
+                                                            fact.fulfillmentLineId
+                                                        }
+                                                        idPrefix={`sales-delivery-${toAutomationIdSegment(fact.fulfillmentLineId)}`}
+                                                    />
+                                                </div>
+                                            ))}
                                     </TableCell>
                                     <TableCell data-align="end">
                                         <QuantityValue

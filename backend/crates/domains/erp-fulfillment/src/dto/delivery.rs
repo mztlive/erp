@@ -58,6 +58,8 @@ pub struct UpdateDeliveryRequest {
     pub version: u64,
     /// 完整包裹明细关联；缺省不修改，空数组清空。
     pub tracking_entries: Option<Vec<DeliveryTrackingEntry>>,
+    /// 按地址登记的完整发货草稿；与旧物流字段不得同时提交。
+    pub packing: Option<crate::entity::fulfillment::DeliveryPacking>,
 }
 
 /// 保存发货最终草稿并过账的原子命令。
@@ -69,6 +71,8 @@ pub struct PostDeliveryRequest {
     pub version: u64,
     /// 最终完整包裹明细关联；缺省保持原值，空数组清空。
     pub tracking_entries: Option<Vec<DeliveryTrackingEntry>>,
+    /// 按地址登记的完整发货草稿；与旧物流字段不得同时提交。
+    pub packing: Option<crate::entity::fulfillment::DeliveryPacking>,
 }
 
 /// 发货行视图。
@@ -118,10 +122,16 @@ pub struct DeliveryView {
 /// 发货单详情视图（表头 + 行）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DeliveryDetailView {
+    /// 手工任务不能证明地址数量归属时的确认阻断原因。
+    pub packing_unavailable_reason: Option<String>,
     /// 表头。
     pub delivery: DeliveryView,
     /// 发货行。
     pub lines: Vec<DeliveryLineView>,
+    /// 授权详情中的地址分配；历史无凭据时不推断。
+    pub address_snapshot: Option<crate::entity::fulfillment::DeliveryAddressSnapshot>,
+    /// 草稿或正式包裹。
+    pub packing: Option<crate::entity::fulfillment::DeliveryPacking>,
 }
 
 /// 发货单列表查询参数。
