@@ -1,5 +1,7 @@
 "use client"
 
+import { DeliveryPackingDetails } from "../../components/delivery-packing-details"
+
 import Link from "next/link"
 import { ArrowRightIcon } from "lucide-react"
 
@@ -52,123 +54,136 @@ export function FulfillmentResultPanel({
     if (!lastResult) return null
 
     return (
-        <FormalActionResult
-            status={
-                lastResult.status === "failed" ? "blocked" : lastResult.status
-            }
-            title={lastResult.title}
-            description={
-                lastResult.outcome?.kind === "POSTED" &&
-                lastResult.outcome.acceptanceRequired ? (
-                    <span className="block space-y-1">
-                        <span className="block">{lastResult.description}</span>
-                        <span className="block text-muted-foreground">
-                            {NOT_ACCEPTANCE_NOTICE}
-                        </span>
-                    </span>
-                ) : (
-                    lastResult.description
-                )
-            }
-            reference={lastResult.reference}
-            facts={
-                lastResult.outcome
-                    ? buildPostedFacts(lastResult.outcome)
-                    : undefined
-            }
-            actions={
-                <div className="flex flex-wrap gap-2">
-                    {lastResult.status === "unknown" ? (
-                        <LoadingButton
-                            id="fulfillment-operations-result-resolve-unknown"
-                            type="button"
-                            size="sm"
-                            disabled={resolvePending || retryPending}
-                            loading={resolvePending}
-                            onClick={() => void onResolveUnknown()}
-                        >
-                            {resolvePending ? "查询中…" : "查询最终结果"}
-                        </LoadingButton>
-                    ) : null}
-                    {lastResult.status === "unknown" && onRetryUnknown ? (
-                        <LoadingButton
-                            id="fulfillment-operations-result-retry-unknown"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={resolvePending || retryPending}
-                            loading={retryPending}
-                            onClick={onRetryUnknown}
-                        >
-                            使用本次操作重试
-                        </LoadingButton>
-                    ) : null}
-                    {lastResult.outcome?.kind === "POSTED" &&
-                    lastResult.outcome.operationType === "RECEIPT" &&
-                    lastResult.outcome.salesOrderId &&
-                    onContinueWarehouseShip ? (
-                        <Button
-                            id="fulfillment-operations-result-continue-warehouse-ship"
-                            type="button"
-                            size="sm"
-                            onClick={() =>
-                                onContinueWarehouseShip(
-                                    lastResult.outcome!.salesOrderId,
-                                )
-                            }
-                        >
-                            本单待仓发
-                            <ArrowRightIcon data-icon="inline-end" />
-                        </Button>
-                    ) : null}
-                    {lastResult.outcome?.kind === "POSTED" &&
+        <>
+            <FormalActionResult
+                status={
+                    lastResult.status === "failed"
+                        ? "blocked"
+                        : lastResult.status
+                }
+                title={lastResult.title}
+                description={
+                    lastResult.outcome?.kind === "POSTED" &&
                     lastResult.outcome.acceptanceRequired ? (
-                        onOpenAcceptance ? (
-                            <Button
-                                id="fulfillment-operations-result-open-acceptance"
+                        <span className="block space-y-1">
+                            <span className="block">
+                                {lastResult.description}
+                            </span>
+                            <span className="block text-muted-foreground">
+                                {NOT_ACCEPTANCE_NOTICE}
+                            </span>
+                        </span>
+                    ) : (
+                        lastResult.description
+                    )
+                }
+                reference={lastResult.reference}
+                facts={
+                    lastResult.outcome
+                        ? buildPostedFacts(lastResult.outcome)
+                        : undefined
+                }
+                actions={
+                    <div className="flex flex-wrap gap-2">
+                        {lastResult.status === "unknown" ? (
+                            <LoadingButton
+                                id="fulfillment-operations-result-resolve-unknown"
                                 type="button"
                                 size="sm"
-                                variant="outline"
-                                onClick={onOpenAcceptance}
+                                disabled={resolvePending || retryPending}
+                                loading={resolvePending}
+                                onClick={() => void onResolveUnknown()}
                             >
-                                去登记客户验收
-                                <ArrowRightIcon data-icon="inline-end" />
-                            </Button>
-                        ) : (
-                            <Button
-                                id="fulfillment-operations-result-go-acceptance"
+                                {resolvePending ? "查询中…" : "查询最终结果"}
+                            </LoadingButton>
+                        ) : null}
+                        {lastResult.status === "unknown" && onRetryUnknown ? (
+                            <LoadingButton
+                                id="fulfillment-operations-result-retry-unknown"
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                render={
-                                    <Link
-                                        href={acceptanceHref(
-                                            lastResult.outcome.salesOrderId,
-                                            currentUrl,
-                                        )}
-                                    />
+                                disabled={resolvePending || retryPending}
+                                loading={retryPending}
+                                onClick={onRetryUnknown}
+                            >
+                                使用本次操作重试
+                            </LoadingButton>
+                        ) : null}
+                        {lastResult.outcome?.kind === "POSTED" &&
+                        lastResult.outcome.operationType === "RECEIPT" &&
+                        lastResult.outcome.salesOrderId &&
+                        onContinueWarehouseShip ? (
+                            <Button
+                                id="fulfillment-operations-result-continue-warehouse-ship"
+                                type="button"
+                                size="sm"
+                                onClick={() =>
+                                    onContinueWarehouseShip(
+                                        lastResult.outcome!.salesOrderId,
+                                    )
                                 }
                             >
-                                去登记客户验收
+                                本单待仓发
                                 <ArrowRightIcon data-icon="inline-end" />
                             </Button>
-                        )
-                    ) : null}
-                    {!showNext ||
-                    lastResult.stayOnItem === false ||
-                    lastResult.status === "blocked" ||
-                    lastResult.status === "unknown" ? null : (
-                        <Button
-                            id="fulfillment-operations-result-next"
-                            type="button"
-                            size="sm"
-                            onClick={onNext}
-                        >
-                            下一条
-                        </Button>
-                    )}
-                </div>
-            }
-        />
+                        ) : null}
+                        {lastResult.outcome?.kind === "POSTED" &&
+                        lastResult.outcome.acceptanceRequired ? (
+                            onOpenAcceptance ? (
+                                <Button
+                                    id="fulfillment-operations-result-open-acceptance"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={onOpenAcceptance}
+                                >
+                                    去登记客户验收
+                                    <ArrowRightIcon data-icon="inline-end" />
+                                </Button>
+                            ) : (
+                                <Button
+                                    id="fulfillment-operations-result-go-acceptance"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    render={
+                                        <Link
+                                            href={acceptanceHref(
+                                                lastResult.outcome.salesOrderId,
+                                                currentUrl,
+                                            )}
+                                        />
+                                    }
+                                >
+                                    去登记客户验收
+                                    <ArrowRightIcon data-icon="inline-end" />
+                                </Button>
+                            )
+                        ) : null}
+                        {!showNext ||
+                        lastResult.stayOnItem === false ||
+                        lastResult.status === "blocked" ||
+                        lastResult.status === "unknown" ? null : (
+                            <Button
+                                id="fulfillment-operations-result-next"
+                                type="button"
+                                size="sm"
+                                onClick={onNext}
+                            >
+                                下一条
+                            </Button>
+                        )}
+                    </div>
+                }
+            />
+            {lastResult.outcome?.kind === "POSTED" &&
+                lastResult.outcome.factType === "DELIVERY" && (
+                    <DeliveryPackingDetails
+                        deliveryId={lastResult.outcome.factId}
+                        idPrefix="fulfillment-result"
+                    />
+                )}
+        </>
     )
 }

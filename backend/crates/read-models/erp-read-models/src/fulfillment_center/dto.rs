@@ -42,6 +42,8 @@ pub struct EligibleFulfillmentFactView {
     pub eligible_quantity: Quantity,
     /// 仅属于本销售明细的物流条目，逐条保留承运方。
     pub tracking_entries: Vec<DeliveryTrackingEntry>,
+    /// 发货详情入口；其他履约事实为空。
+    pub delivery_id: Option<String>,
 }
 
 /// 验收销售明细分组视图（W06 销售行 + 可验收事实）。

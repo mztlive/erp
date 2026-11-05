@@ -31,7 +31,7 @@ export function FulfillmentPaymentNotice({
                 待满足付款条件 · 暂不可
                 {OPERATION_ACTION_LABEL[operation.operationType]}
             </AlertTitle>
-            <AlertDescription className="space-y-3">
+            <AlertDescription className="flex flex-wrap items-center gap-x-5 gap-y-2">
                 <p className="font-medium">{gateBlockedMessage(operation)}</p>
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
                     {operation.gate.requiredAmount != null ? (
@@ -49,7 +49,7 @@ export function FulfillmentPaymentNotice({
                         </span>
                     ) : null}
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex w-full flex-wrap items-center justify-between gap-3">
                     <p className="text-xs">
                         付款申请或审批通过不代表已支付。
                         {canSaveDraft

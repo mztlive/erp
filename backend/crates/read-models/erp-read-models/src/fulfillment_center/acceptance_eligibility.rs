@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use erp_core::ids::{DeliveryId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId};
 use erp_fulfillment::entity::fulfillment::{
-    AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, Delivery, DeliveryLine,
-    DeliveryTrackingEntry, ElectronicDelivery, FulfillmentFactType, ServiceFulfillment,
+    AcceptanceFactEligibility, AcceptanceFulfillmentAllocation, AcceptanceLineEligibility, Delivery,
+    DeliveryLine, DeliveryTrackingEntry, ElectronicDelivery, FulfillmentFactType, ServiceFulfillment,
 };
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_sales::repository::SalesOrderExt;
@@ -283,74 +283,24 @@ fn build_eligibility_views(
             ),
         );
     }
-    let delivery_line_by_id: HashMap<&str, &DeliveryLine> =
-        sources.delivery_lines.iter().map(|line| (line.base.id.as_str(), line)).collect();
-    let delivery_by_id: HashMap<&str, &Delivery> =
-        sources.deliveries.iter().map(|delivery| (delivery.base.id.as_str(), delivery)).collect();
-    let electronic_by_id: HashMap<&str, &ElectronicDelivery> =
-        sources.electronic.iter().map(|record| (record.base.id.as_str(), record)).collect();
-    let service_by_id: HashMap<&str, &ServiceFulfillment> =
-        sources.service.iter().map(|record| (record.base.id.as_str(), record)).collect();
     let mut groups: Vec<AcceptanceSalesLineGroupView> = Vec::with_capacity(lines.len());
     for line in lines {
         let (line_no, item_snapshot, unit_code) =
             meta_by_line.get(&line.sales_order_line_id).cloned().unwrap_or_default();
-        let mut fact_views = Vec::with_capacity(line.facts.len());
-        for fact in &line.facts {
-            if let Some(delivery_line) = delivery_line_by_id.get(fact.fulfillment_line_id.as_str()) {
-                let delivery = delivery_by_id.get(delivery_line.delivery_id.as_ref());
-                fact_views.push(EligibleFulfillmentFactView {
-                    fulfillment_line_id: fact.fulfillment_line_id.clone(),
-                    fulfillment_fact_type: FulfillmentFactType::Delivery,
-                    delivery_type: delivery.map(|delivery| delivery.delivery_type),
-                    fulfillment_no: delivery.map(|delivery| delivery.delivery_no.clone()).unwrap_or_default(),
-                    sales_order_line_id: line.sales_order_line_id.clone(),
-                    line_no: delivery_line.line_no,
-                    item_snapshot: item_snapshot.clone(),
-                    unit_code: unit_code.clone(),
-                    occurred_at: delivery
-                        .and_then(|delivery| delivery.shipped_at)
-                        .map(|instant| instant.unix_secs())
-                        .unwrap_or_default(),
-                    net_successful_quantity: delivery_line.quantity,
-                    net_accepted_allocated_quantity: fact.net_accepted_quantity,
-                    eligible_quantity: fact.eligible_quantity,
-                    tracking_entries: delivery_tracking_entries(delivery.copied(), &line.sales_order_line_id),
-                });
-            } else if let Some(record) = electronic_by_id.get(fact.fulfillment_line_id.as_str()) {
-                fact_views.push(EligibleFulfillmentFactView {
-                    fulfillment_line_id: fact.fulfillment_line_id.clone(),
-                    fulfillment_fact_type: FulfillmentFactType::ElectronicDelivery,
-                    delivery_type: None,
-                    fulfillment_no: record.fulfillment_no.clone(),
-                    sales_order_line_id: line.sales_order_line_id.clone(),
-                    line_no,
-                    item_snapshot: item_snapshot.clone(),
-                    unit_code: unit_code.clone(),
-                    occurred_at: record.fact.occurred_at.unix_secs(),
-                    net_successful_quantity: record.quantity,
-                    net_accepted_allocated_quantity: fact.net_accepted_quantity,
-                    eligible_quantity: fact.eligible_quantity,
-                    tracking_entries: Vec::new(),
-                });
-            } else if let Some(record) = service_by_id.get(fact.fulfillment_line_id.as_str()) {
-                fact_views.push(EligibleFulfillmentFactView {
-                    fulfillment_line_id: fact.fulfillment_line_id.clone(),
-                    fulfillment_fact_type: FulfillmentFactType::ServiceFulfillment,
-                    delivery_type: None,
-                    fulfillment_no: record.fulfillment_no.clone(),
-                    sales_order_line_id: line.sales_order_line_id.clone(),
-                    line_no,
-                    item_snapshot: item_snapshot.clone(),
-                    unit_code: unit_code.clone(),
-                    occurred_at: record.fact.occurred_at.unix_secs(),
-                    net_successful_quantity: record.quantity,
-                    net_accepted_allocated_quantity: fact.net_accepted_quantity,
-                    eligible_quantity: fact.eligible_quantity,
-                    tracking_entries: Vec::new(),
-                });
-            }
-        }
+        let meta = (line_no, item_snapshot.clone(), unit_code.clone());
+        let fact_views = line
+            .facts
+            .iter()
+            .filter_map(|fact| {
+                if let Some(delivery_line) =
+                    sources.delivery_lines.iter().find(|row| row.base.id == fact.fulfillment_line_id)
+                {
+                    Some(delivery_fact_view(sources, delivery_line, fact, &meta))
+                } else {
+                    non_delivery_fact_view(sources, line, fact, &meta)
+                }
+            })
+            .collect();
         groups.push(AcceptanceSalesLineGroupView {
             sales_order_line_id: line.sales_order_line_id.clone(),
             line_no,
@@ -365,7 +315,95 @@ fn build_eligibility_views(
     groups
 }
 
+/// 保持事实行身份；同商品发往不同地址时只附上该行包裹。
+fn delivery_fact_view(
+    sources: &EligibilityGroupSources<'_>,
+    line: &DeliveryLine,
+    fact: &AcceptanceFactEligibility,
+    meta: &(u32, String, Option<String>),
+) -> EligibleFulfillmentFactView {
+    let delivery = sources.deliveries.iter().find(|row| row.base.id == line.delivery_id.as_ref());
+    EligibleFulfillmentFactView {
+        fulfillment_line_id: fact.fulfillment_line_id.clone(),
+        fulfillment_fact_type: FulfillmentFactType::Delivery,
+        delivery_type: delivery.map(|row| row.delivery_type),
+        fulfillment_no: delivery.map(|row| row.delivery_no.clone()).unwrap_or_default(),
+        sales_order_line_id: line.sales_order_line_id.to_string(),
+        line_no: line.line_no,
+        item_snapshot: meta.1.clone(),
+        unit_code: meta.2.clone(),
+        occurred_at: delivery.and_then(|row| row.shipped_at).map(|time| time.unix_secs()).unwrap_or_default(),
+        net_successful_quantity: line.quantity,
+        net_accepted_allocated_quantity: fact.net_accepted_quantity,
+        eligible_quantity: fact.eligible_quantity,
+        tracking_entries: exact_delivery_tracking(delivery, line),
+        delivery_id: Some(line.delivery_id.to_string()),
+    }
+}
+
+/// 电子交付和服务事实保持原资格规则，不附加实体物流。
+fn non_delivery_fact_view(
+    sources: &EligibilityGroupSources<'_>,
+    line: &AcceptanceLineEligibility,
+    fact: &AcceptanceFactEligibility,
+    meta: &(u32, String, Option<String>),
+) -> Option<EligibleFulfillmentFactView> {
+    let (kind, number, time, quantity) =
+        if let Some(record) = sources.electronic.iter().find(|row| row.base.id == fact.fulfillment_line_id) {
+            (
+                FulfillmentFactType::ElectronicDelivery,
+                &record.fulfillment_no,
+                record.fact.occurred_at,
+                record.quantity,
+            )
+        } else {
+            let record = sources.service.iter().find(|row| row.base.id == fact.fulfillment_line_id)?;
+            (
+                FulfillmentFactType::ServiceFulfillment,
+                &record.fulfillment_no,
+                record.fact.occurred_at,
+                record.quantity,
+            )
+        };
+    Some(EligibleFulfillmentFactView {
+        fulfillment_line_id: fact.fulfillment_line_id.clone(),
+        fulfillment_fact_type: kind,
+        delivery_type: None,
+        fulfillment_no: number.clone(),
+        sales_order_line_id: line.sales_order_line_id.clone(),
+        line_no: meta.0,
+        item_snapshot: meta.1.clone(),
+        unit_code: meta.2.clone(),
+        occurred_at: time.unix_secs(),
+        net_successful_quantity: quantity,
+        net_accepted_allocated_quantity: fact.net_accepted_quantity,
+        eligible_quantity: fact.eligible_quantity,
+        tracking_entries: Vec::new(),
+        delivery_id: None,
+    })
+}
+
 /// 只投影当前销售稳定明细的物流条目，不跨明细推断或去重。
+/// 新发货事实按真实发货行过滤包裹，旧事实保留已记录的销售行物流。
+fn exact_delivery_tracking(delivery: Option<&Delivery>, line: &DeliveryLine) -> Vec<DeliveryTrackingEntry> {
+    let Some(delivery) = delivery else {
+        return Vec::new();
+    };
+    let Some(packing) = &delivery.packing else {
+        return delivery_tracking_entries(Some(delivery), line.sales_order_line_id.as_ref());
+    };
+    packing
+        .packages
+        .iter()
+        .filter(|package| package.items.iter().any(|item| item.delivery_line_id == line.base.id))
+        .map(|package| DeliveryTrackingEntry {
+            sales_order_line_id: line.sales_order_line_id.clone(),
+            tracking_no: package.tracking_no.clone(),
+            carrier: Some(package.carrier.clone()),
+        })
+        .collect()
+}
+
 fn delivery_tracking_entries(
     delivery: Option<&Delivery>,
     sales_order_line_id: &str,
@@ -410,7 +448,8 @@ mod acceptance_eligibility_rule_source_tests {
     };
 
     use super::{
-        EligibilityGroupSources, build_eligibility_views, build_line_eligibilities, delivery_tracking_entries,
+        EligibilityGroupSources, build_eligibility_views, build_line_eligibilities,
+        delivery_tracking_entries, exact_delivery_tracking,
     };
 
     /// 构造销售版本公共行（实物服务行）。
@@ -737,6 +776,46 @@ mod acceptance_eligibility_rule_source_tests {
         let progress = AcceptanceProgress::derive(&lines).unwrap();
         assert_eq!(progress.progress, FulfillmentProgress::PartiallyFulfilled);
         assert!(progress.has_remaining_eligible);
+    }
+
+    /// 同一销售商品分到不同地址后，验收不得看到另一地址的包裹。
+    #[test]
+    fn acceptance_tracking_is_scoped_to_actual_delivery_line() {
+        use erp_fulfillment::entity::fulfillment::{DeliveryPackage, DeliveryPacking, PackingItem};
+        let mut record = delivery("dlv-1", "DLV-1");
+        record.packing = Some(DeliveryPacking {
+            source_version: "version".into(),
+            dispatch: vec![],
+            packages: [("address-a", "line-a", "SF-A"), ("address-b", "line-b", "SF-B")]
+                .into_iter()
+                .map(|(address, line, number)| DeliveryPackage {
+                    id: number.into(),
+                    destination_key: address.into(),
+                    carrier: "顺丰".into(),
+                    tracking_no: number.into(),
+                    items: vec![PackingItem {
+                        delivery_line_id: line.into(),
+                        quantity: "1".parse().unwrap(),
+                    }],
+                })
+                .collect(),
+        });
+        let line_a = delivery_line("line-a", "dlv-1", 1, "same-sales-line", "1");
+        let line_b = delivery_line("line-b", "dlv-1", 2, "same-sales-line", "1");
+        assert_eq!(
+            exact_delivery_tracking(Some(&record), &line_a)
+                .iter()
+                .map(|entry| entry.tracking_no.as_str())
+                .collect::<Vec<_>>(),
+            vec!["SF-A"]
+        );
+        assert_eq!(
+            exact_delivery_tracking(Some(&record), &line_b)
+                .iter()
+                .map(|entry| entry.tracking_no.as_str())
+                .collect::<Vec<_>>(),
+            vec!["SF-B"]
+        );
     }
 
     /// 已确认但失败的线下服务履约不得影响派生进度与剩余可验收：工作台与过账

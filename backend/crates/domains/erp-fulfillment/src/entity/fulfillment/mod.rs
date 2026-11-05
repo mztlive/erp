@@ -23,7 +23,13 @@ pub mod customer_acceptance;
 pub mod customer_acceptance_line_batch;
 pub mod delivery;
 pub mod delivery_line_batch;
+pub mod delivery_packing;
+mod delivery_packing_partition;
 mod delivery_partition;
+pub use delivery_packing::{
+    DeliveryAddressSnapshot, DeliveryDestination, DeliveryDispatch, DeliveryPackage, DeliveryPacking,
+    PackingItem,
+};
 pub mod delivery_tracking;
 pub mod electronic_delivery;
 pub mod electronic_delivery_draft;

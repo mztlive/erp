@@ -1,5 +1,6 @@
 "use client"
 
+import { FulfillmentPackingForm } from "./fulfillment-packing-form"
 import { useImperativeHandle, useState, type Ref } from "react"
 import {
     TableToolbar,
@@ -48,7 +49,30 @@ type DeliveryFormProps = {
 
 /** 换任务时清空选择和未提交输入；同一任务内的折叠、筛选不卸载录入表单。 */
 export function FulfillmentDeliveryForm(props: DeliveryFormProps) {
-    return <DeliveryForm key={props.operation.operationId} {...props} />
+    if (props.draft.packing && props.draft.addressSnapshot) {
+        return (
+            <FulfillmentPackingForm
+                key={props.operation.operationId}
+                {...props}
+                packing={props.draft.packing}
+                source={props.draft.addressSnapshot}
+            />
+        )
+    }
+    return (
+        <div className="space-y-4">
+            {props.draft.packingUnavailableReason && (
+                <p
+                    id="fulfillment-packing-source"
+                    tabIndex={-1}
+                    className="rounded-lg border p-4 text-sm"
+                >
+                    {props.draft.packingUnavailableReason}
+                </p>
+            )}
+            <DeliveryForm key={props.operation.operationId} {...props} />
+        </div>
+    )
 }
 
 function DeliveryForm({

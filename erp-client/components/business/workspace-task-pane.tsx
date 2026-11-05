@@ -24,6 +24,7 @@ type WorkspaceTaskPageLayout = {
     compact?: boolean
     fullWidth?: boolean
     singleColumn?: boolean
+    summaryInHeader?: boolean
     unframedBody?: boolean
     summary?: ReactNode
     aside: ReactNode
@@ -205,7 +206,8 @@ export function WorkspaceTaskPane({
                             {headerSupplement}
                             {layout &&
                                 !layout.fullWidth &&
-                                !layout.singleColumn && (
+                                (!layout.singleColumn ||
+                                    layout.summaryInHeader) && (
                                     <div
                                         className={cn(
                                             "px-5 pb-5 sm:px-6",

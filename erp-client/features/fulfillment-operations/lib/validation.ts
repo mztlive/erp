@@ -1,3 +1,4 @@
+import { packingIssues } from "./delivery-packing"
 /**
  * W09 提交前的客户端校验与确认说明。
  * 页面检查只用于提前拦截明显错误；最终以服务端复核为准。
@@ -117,6 +118,17 @@ export function clientValidation(
     draft: FulfillmentDraft,
 ): ValidationIssue[] {
     const issues: ValidationIssue[] = []
+    if (
+        (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") &&
+        draft.packingUnavailableReason
+    ) {
+        issues.push({
+            id: "packing-source",
+            label: "收货分配",
+            message: draft.packingUnavailableReason,
+            targetId: "fulfillment-packing-source",
+        })
+    }
     if (draft.type !== operation.operationType) {
         issues.push({
             id: "type-mismatch",
@@ -134,6 +146,16 @@ export function clientValidation(
         })
     }
 
+    if (
+        (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") &&
+        draft.packing &&
+        draft.addressSnapshot
+    ) {
+        return [
+            ...issues,
+            ...packingIssues(draft.packing, draft.addressSnapshot),
+        ]
+    }
     if (draft.type === "RECEIPT") {
         draft.lines.forEach((line, i) => {
             const segment = toAutomationIdSegment(line.purchaseRevisionLineId)
@@ -469,9 +491,11 @@ export function buildPostedFacts(outcome: FulfillmentFormalOutcome) {
     facts.push({
         label: "还剩多少没处理",
         value:
+            outcome.remainingSummary ||
             outcome.remainingByLine
                 .map((l) => `${l.itemName} ${l.quantity}`)
-                .join("；") || "0",
+                .join("；") ||
+            "0",
     })
     facts.push({
         label: "接下来",
@@ -485,6 +509,15 @@ export function buildPostedFacts(outcome: FulfillmentFormalOutcome) {
  */
 export function confirmDescription(draft: FulfillmentDraft): string {
     const suffix = "确认后不能改。"
+    if (
+        (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") &&
+        draft.packing
+    ) {
+        const addresses = draft.packing.dispatch.filter((row) =>
+            row.items.some((item) => isPositiveQuantity(item.quantity)),
+        ).length
+        return `本次向 ${addresses} 个地址发出 ${draft.packing.packages.length} 个包裹，数量以各地址的本次发货明细为准。未发数量保留为后续任务。${draft.type === "WAREHOUSE_SHIP" ? "仅扣减本次发货库存及留货。" : "不影响自有库存。"}${suffix}`
+    }
     if (draft.type === "RECEIPT") {
         const qual = quantityTotal(
             draft.lines.map((line) => line.qualifiedQuantity),

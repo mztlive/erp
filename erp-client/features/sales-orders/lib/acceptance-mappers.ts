@@ -19,6 +19,7 @@ import { compareDecimal } from "@/lib/fixed-decimal"
 // ─── 后端形状 ────────────────────────────────────────────────────────────────
 
 export type BackendEligibleFact = {
+    delivery_id?: string | null
     fulfillment_line_id: string
     fulfillment_fact_type: string
     /** 发货类型（仓发/直发区分；仅发货事实携带） */
@@ -166,6 +167,7 @@ export function mapEligibleFact(
         f.delivery_type,
     )
     return {
+        deliveryId: f.delivery_id ?? undefined,
         fulfillmentLineId: f.fulfillment_line_id,
         fulfillmentFactType,
         fulfillmentNo:

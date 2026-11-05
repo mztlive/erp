@@ -99,6 +99,9 @@ impl FulfillmentService {
             .delivery_lines_by_delivery_ids(&[delivery.base.id.clone().into()], &mut NoTransaction)
             .await?;
         Ok(DeliveryDetailView {
+            packing_unavailable_reason: None,
+            packing: delivery.packing.clone(),
+            address_snapshot: None,
             delivery: delivery.into(),
             lines: lines.into_iter().map(Into::into).collect(),
         })

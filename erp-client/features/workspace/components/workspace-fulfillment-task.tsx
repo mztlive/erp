@@ -124,14 +124,7 @@ export function WorkspaceFulfillmentTask({
                     <WorkspaceTaskIdentityHeader
                         item={item}
                         title={fulfillmentTaskTitle(item, controller.operation)}
-                        subtitle={[
-                            `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
-                            displayText(
-                                controller.operation?.source.customerLabel,
-                            ),
-                        ]
-                            .filter(Boolean)
-                            .join(" · ")}
+                        subtitle={null}
                     >
                         <WorkspaceFulfillmentReassignAction
                             item={item}

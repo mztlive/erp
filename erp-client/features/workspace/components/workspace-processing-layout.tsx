@@ -58,7 +58,13 @@ export function WorkspaceProcessingLayout({
     )
     return (
         <WorkspaceTaskPageProvider
-            singleColumn={purchaseApproval || salesApproval || paymentReview}
+            singleColumn={
+                fulfillment ||
+                purchaseApproval ||
+                salesApproval ||
+                paymentReview
+            }
+            summaryInHeader={fulfillment}
             compact={paymentArrangement}
             fullWidth={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
@@ -70,7 +76,13 @@ export function WorkspaceProcessingLayout({
                     {payment ||
                     paymentArrangement ||
                     purchaseApproval ? undefined : (
-                        <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
+                        <dl
+                            className={
+                                fulfillment
+                                    ? "flex flex-wrap gap-x-8 gap-y-3"
+                                    : "flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4"
+                            }
+                        >
                             {item.amountSummary && (
                                 <Fact
                                     label={item.amountSummary.label}
@@ -106,11 +118,30 @@ export function WorkspaceProcessingLayout({
                                 label="任务类型"
                                 value={item.workItemTypeLabel}
                             />
+                            {fulfillment && (
+                                <Fact
+                                    label="进入时间"
+                                    value={item.enteredAtLabel}
+                                />
+                            )}
                             <Fact
                                 label="截止时间"
                                 value={item.dueAtLabel || "未设截止时间"}
                             />
                         </dl>
+                    )}
+                    {fulfillment && (
+                        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                            <p>
+                                办理指引：
+                                {item.nextActionHint ||
+                                    "按收货地址核对商品、数量与物流后，确认本次发货。"}
+                            </p>
+                            {item.impactSummary && <p>{item.impactSummary}</p>}
+                            {item.actionBlockers.map((blocker) => (
+                                <p key={blocker.message}>{blocker.message}</p>
+                            ))}
+                        </div>
                     )}
                 </>
             }

@@ -252,6 +252,12 @@ pub struct Delivery {
     /// 每个包裹的明细关联；缺省为空，不推断历史物流对应明细。
     #[serde(default)]
     pub tracking_entries: Vec<DeliveryTrackingEntry>,
+    /// 按地址登记的发货草稿及正式包裹；旧记录缺省为空。
+    #[serde(default)]
+    pub packing: Option<super::DeliveryPacking>,
+    /// 加密的收货分配快照，仅授权详情解密。
+    #[serde(default)]
+    pub packing_addresses_encrypted: Option<String>,
     /// 发货时间。
     pub shipped_at: Option<Instant>,
     /// 履约地址加密值。
@@ -291,6 +297,8 @@ impl PartialEq for Delivery {
             && self.warehouse_id == other.warehouse_id
             && self.status == other.status
             && self.tracking_entries == other.tracking_entries
+            && self.packing == other.packing
+            && self.packing_addresses_encrypted == other.packing_addresses_encrypted
             && self.shipped_at == other.shipped_at
             && self.address_snapshot_encrypted == other.address_snapshot_encrypted
             && self.address_snapshot_fingerprint == other.address_snapshot_fingerprint
@@ -366,6 +374,8 @@ impl Delivery {
             warehouse_id: data.warehouse_id,
             status: DeliveryState::Draft,
             tracking_entries,
+            packing: None,
+            packing_addresses_encrypted: None,
             shipped_at: None,
             address_snapshot_encrypted,
             address_snapshot_fingerprint,

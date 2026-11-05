@@ -202,6 +202,10 @@ export type FulfillmentDraft =
           type: "WAREHOUSE_SHIP"
           warehouseId: string
           warehouseLabel: string
+          packingUnavailableReason?: string
+          legacyTrackingNeedsAllocation?: boolean
+          addressSnapshot?: import("./lib/delivery-packing").DeliveryAddressSnapshot
+          packing?: import("./lib/delivery-packing").DeliveryPacking
           trackingEntries?: DeliveryTrackingEntry[]
           pendingTrackingLineIds?: string[]
           pendingBatchTrackingInput?: boolean
@@ -213,6 +217,10 @@ export type FulfillmentDraft =
       }
     | {
           type: "SUPPLIER_DIRECT"
+          packingUnavailableReason?: string
+          legacyTrackingNeedsAllocation?: boolean
+          addressSnapshot?: import("./lib/delivery-packing").DeliveryAddressSnapshot
+          packing?: import("./lib/delivery-packing").DeliveryPacking
           trackingEntries?: DeliveryTrackingEntry[]
           pendingTrackingLineIds?: string[]
           pendingBatchTrackingInput?: boolean
@@ -362,6 +370,7 @@ export type FulfillmentFormalOutcome = Readonly<{
     operationType: FulfillmentOperationType
     inventoryDelta: readonly InventoryDelta[]
     reservationDelta: readonly ReservationDelta[]
+    remainingSummary?: string
     remainingByLine: readonly {
         salesOrderLineId: string
         itemName: string

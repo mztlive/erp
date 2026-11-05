@@ -76,7 +76,12 @@ export type BackendDeliveryLine = {
 
 /** Delivery 为 NO_APPROVAL：详情不得嵌入审批区。 */
 export type BackendDeliveryDetail = {
+    packing_unavailable_reason?: string | null
     delivery: BackendDelivery
+    address_snapshot?:
+        | import("../lib/delivery-packing").DeliveryAddressSnapshot
+        | null
+    packing?: import("../lib/delivery-packing").DeliveryPacking | null
     lines: BackendDeliveryLine[]
 }
 

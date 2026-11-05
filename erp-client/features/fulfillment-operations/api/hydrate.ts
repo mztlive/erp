@@ -19,6 +19,7 @@ import {
     type BackendDeliveryDetail,
     type BackendPurchaseReceiptDetail,
 } from "./documents"
+import { initialPacking } from "../lib/delivery-packing"
 import { enrichOperationDisplay } from "./hydrate-source"
 
 function applyPurchaseReceiptDetail(
@@ -89,6 +90,16 @@ function applyDeliveryDetail(
             lines,
             draft: {
                 type: "WAREHOUSE_SHIP",
+                packingUnavailableReason:
+                    detail.packing_unavailable_reason ?? undefined,
+                legacyTrackingNeedsAllocation:
+                    !detail.packing && !!delivery.tracking_entries?.length,
+                addressSnapshot: detail.address_snapshot ?? undefined,
+                packing:
+                    detail.packing ??
+                    (detail.address_snapshot
+                        ? initialPacking(detail.address_snapshot)
+                        : undefined),
                 warehouseId: delivery.warehouse_id ?? "",
                 warehouseLabel: "",
                 trackingEntries: trackingEntriesFromDto(
@@ -109,6 +120,16 @@ function applyDeliveryDetail(
         lines,
         draft: {
             type: "SUPPLIER_DIRECT",
+            packingUnavailableReason:
+                detail.packing_unavailable_reason ?? undefined,
+            legacyTrackingNeedsAllocation:
+                !detail.packing && !!delivery.tracking_entries?.length,
+            addressSnapshot: detail.address_snapshot ?? undefined,
+            packing:
+                detail.packing ??
+                (detail.address_snapshot
+                    ? initialPacking(detail.address_snapshot)
+                    : undefined),
             trackingEntries: trackingEntriesFromDto(delivery.tracking_entries),
             lines: detail.lines.map((line) => ({
                 salesOrderLineId: line.sales_order_line_id,

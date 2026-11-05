@@ -60,6 +60,15 @@ impl FulfillmentProcess {
         req.validate()?;
         let delivery_id = DeliveryId::new(id.to_string());
         let expected_version = req.version;
+        if req.packing.is_some() && req.tracking_entries.is_some() {
+            return Err(Error::ValidationError("地址包裹与旧物流字段不能同时提交".into()));
+        }
+        let packing_context = super::delivery_packing::PackingContext {
+            codec: self.sensitive_data.clone(),
+            key: self.fingerprint_key.clone(),
+            input: req.packing.clone(),
+            legacy_tracking: req.tracking_entries.is_some(),
+        };
         let tracking_entries = req.tracking_entries;
         let actor = actor.clone();
         let db = self.db.clone();
@@ -68,7 +77,7 @@ impl FulfillmentProcess {
         let posted = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (delivery, lines) = FulfillmentService::new(db.clone())
+                    let (mut delivery, mut lines) = FulfillmentService::new(db.clone())
                         .prepare_delivery_posting(
                             &delivery_id,
                             expected_version,
@@ -76,7 +85,9 @@ impl FulfillmentProcess {
                             executor,
                         )
                         .await?;
-                    ensure_tracking_sources(&db, &delivery, &lines, executor).await?;
+                    lines = packing_context
+                        .prepare_posting(&db, &task_identity, &mut delivery, lines, executor)
+                        .await?;
                     let occurred_at = Instant::now();
                     let delivery_type = delivery.delivery_type;
                     let line_count = lines.len();

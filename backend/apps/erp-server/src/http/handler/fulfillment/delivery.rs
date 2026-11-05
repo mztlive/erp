@@ -49,7 +49,7 @@ pub async fn delivery_detail(
     State(state): State<HttpState>,
     Path(id): Path<String>,
 ) -> Result<DeliveryDetailView> {
-    let view = service(&state).delivery_detail(&id).await?;
+    let view = process(&state).delivery_packing_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

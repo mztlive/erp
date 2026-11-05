@@ -1,5 +1,7 @@
 "use client"
 
+import { DeliveryPackingDetails } from "@/features/fulfillment-operations/components/delivery-packing-details"
+
 import Link from "next/link"
 import { CircleAlertIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
@@ -90,6 +92,14 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     />
                 </dl>
             </section>
+            {item.businessObjectType === "delivery" && (
+                <div className={sectionClass}>
+                    <DeliveryPackingDetails
+                        deliveryId={item.businessObjectId}
+                        idPrefix={`workspace-${identity}`}
+                    />
+                </div>
+            )}
             <section className={sectionClass} aria-label="收货信息">
                 <h4 className="text-sm font-semibold">收货信息</h4>
                 <p className="mt-2 text-sm text-muted-foreground">
