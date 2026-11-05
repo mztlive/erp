@@ -90,7 +90,7 @@
 <path fill="#eaf6f1" stroke="#60a58a" stroke-width="1.3" d="M657.21,-662.68C657.21,-662.68 398.79,-662.68 398.79,-662.68 392.79,-662.68 386.79,-656.68 386.79,-650.68 386.79,-650.68 386.79,-596.65 386.79,-596.65 386.79,-590.65 392.79,-584.65 398.79,-584.65 398.79,-584.65 657.21,-584.65 657.21,-584.65 663.21,-584.65 669.21,-590.65 669.21,-596.65 669.21,-596.65 669.21,-650.68 669.21,-650.68 669.21,-656.68 663.21,-662.68 657.21,-662.68"/>
 <text xml:space="preserve" text-anchor="middle" x="528" y="-640.74" font-family="PingFang SC" font-size="14.00">有效数据授权</text>
 <text xml:space="preserve" text-anchor="middle" x="528" y="-620.49" font-family="PingFang SC" font-size="14.00">部门 / 公司 / 指定资源选择器</text>
-<text xml:space="preserve" text-anchor="middle" x="528" y="-600.24" font-family="PingFang SC" font-size="14.00">按同一资源和动作求并集；来源独立撤销</text>
+<text xml:space="preserve" text-anchor="middle" x="528" y="-600.24" font-family="PingFang SC" font-size="14.00">多来源叠加；无人员范围上限；独立撤销</text>
 </g>
 <!-- policy&#45;&gt;grants -->
 <g id="edge5" class="edge">
@@ -126,7 +126,7 @@
 <title>identity</title>
 <path fill="#f7f9fc" stroke="#c9d3e0" stroke-width="1.3" d="M296.08,-411.62C296.08,-411.62 135.92,-411.62 135.92,-411.62 129.92,-411.62 123.92,-405.62 123.92,-399.62 123.92,-399.62 123.92,-365.84 123.92,-365.84 123.92,-359.84 129.91,-353.84 135.91,-353.84 135.91,-353.84 296.08,-353.84 296.08,-353.84 302.08,-353.84 308.08,-359.84 308.08,-365.84 308.08,-365.84 308.08,-399.62 308.08,-399.62 308.08,-405.62 302.08,-411.62 296.08,-411.62"/>
 <text xml:space="preserve" text-anchor="middle" x="216" y="-389.68" font-family="PingFang SC" font-size="14.00">身份与强制边界</text>
-<text xml:space="preserve" text-anchor="middle" x="216" y="-369.43" font-family="PingFang SC" font-size="14.00">账号有效 / 租户公司准入</text>
+<text xml:space="preserve" text-anchor="middle" x="216" y="-369.43" font-family="PingFang SC" font-size="14.00">身份有效 / 强制禁用校验</text>
 </g>
 <!-- request&#45;&gt;identity -->
 <g id="edge6" class="edge">
@@ -139,7 +139,7 @@
 <title>capability</title>
 <path fill="#f7f9fc" stroke="#c9d3e0" stroke-width="1.3" d="M486.21,-411.62C486.21,-411.62 341.79,-411.62 341.79,-411.62 335.79,-411.62 329.79,-405.62 329.79,-399.62 329.79,-399.62 329.79,-365.84 329.79,-365.84 329.79,-359.84 335.79,-353.84 341.79,-353.84 341.79,-353.84 486.21,-353.84 486.21,-353.84 492.21,-353.84 498.21,-359.84 498.21,-365.84 498.21,-365.84 498.21,-399.62 498.21,-399.62 498.21,-405.62 492.21,-411.62 486.21,-411.62"/>
 <text xml:space="preserve" text-anchor="middle" x="414" y="-389.68" font-family="PingFang SC" font-size="14.00">功能权限</text>
-<text xml:space="preserve" text-anchor="middle" x="414" y="-369.43" font-family="PingFang SC" font-size="14.00">是否具备此项操作能力</text>
+<text xml:space="preserve" text-anchor="middle" x="414" y="-369.43" font-family="PingFang SC" font-size="14.00">有效角色权限合并计算</text>
 </g>
 <!-- request&#45;&gt;capability -->
 <g id="edge7" class="edge">
