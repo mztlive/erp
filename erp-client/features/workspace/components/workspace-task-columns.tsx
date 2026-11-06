@@ -69,10 +69,21 @@ export function queueTaskRow(item: WorkspaceWorkItem) {
 }
 export type QueueTaskRow = ReturnType<typeof queueTaskRow>
 
-/** 只显示任务截止时间；商品交期留在摘要，已完成事项不再标为超期。 */
+/** 只显示任务截止时间；商品交期留在摘要，已完成事项不再标为超期。无截止时间时显示接收时间，避免空折号。 */
 function TaskDeadline({ item }: { item: WorkspaceWorkItem }) {
-    if (!item.dueAt || Number.isNaN(new Date(item.dueAt).getTime()))
+    if (!item.dueAt || Number.isNaN(new Date(item.dueAt).getTime())) {
+        if (item.enteredAtLabel && item.enteredAtLabel !== "—") {
+            return (
+                <span
+                    className="text-xs text-muted-foreground whitespace-nowrap"
+                    title={`进入待办时间：${item.enteredAtLabel}`}
+                >
+                    {item.enteredAtLabel}
+                </span>
+            )
+        }
         return <span className="text-muted-foreground">—</span>
+    }
     const date = new Date(item.dueAt)
     const label = new Intl.DateTimeFormat("zh-CN", {
         timeZone: "Asia/Shanghai",
@@ -87,7 +98,7 @@ function TaskDeadline({ item }: { item: WorkspaceWorkItem }) {
         <time
             dateTime={item.dueAt}
             title={`待办截止：${label}`}
-            className="num"
+            className="num text-xs whitespace-nowrap"
         >
             {urgent ? (
                 <StatusBadge
@@ -112,42 +123,25 @@ function columnTitle(label: string, Icon: LucideIcon) {
     )
 }
 
-/** 待办将对象、摘要和处理口径合并展示，不丢失异常提示或未知金额。 */
-function TaskOverview({
-    row,
-    showAmount = true,
-}: {
-    row: QueueTaskRow
-    showAmount?: boolean
-}) {
+/** 待办展示对象与摘要，金额独立为指标列，保持主次层次分明。 */
+function TaskOverview({ row }: { row: QueueTaskRow }) {
     return (
-        <div className="min-w-0 space-y-1.5 py-1 whitespace-normal">
-            <div className="line-clamp-2" title={row.presentation.title}>
+        <div className="min-w-0 space-y-1 py-1 whitespace-normal">
+            <div
+                className="line-clamp-1 text-sm font-medium text-foreground"
+                title={row.presentation.title}
+            >
                 {row.presentation.title}
             </div>
-            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-                <span
-                    className={cn(
-                        "line-clamp-2 max-w-96 whitespace-normal",
-                        row.presentation.attention &&
-                            "text-warning-soft-foreground",
-                    )}
-                    title={row.presentation.summary}
-                >
-                    {row.summaryPreview || "—"}
-                </span>
-                {showAmount && (
-                    <>
-                        <span aria-hidden="true">·</span>
-                        <span title={row.content.metric.detail}>
-                            {row.content.metric.label}{" "}
-                            <WorkspaceMoney
-                                value={row.content.metric.value}
-                                display="exact"
-                            />
-                        </span>
-                    </>
+            <div
+                className={cn(
+                    "line-clamp-1 text-xs text-muted-foreground",
+                    row.presentation.attention &&
+                        "text-warning-soft-foreground font-medium",
                 )}
+                title={row.presentation.summary}
+            >
+                {row.summaryPreview || "—"}
             </div>
         </div>
     )
@@ -171,11 +165,8 @@ export function workspaceTaskColumns({
     const payment =
         selectedTypes.length === 1 &&
         selectedTypes[0] === "task:SUPPLIER_PAYMENT_EXECUTION"
-    const mixed =
-        selectedTypes.length !== 1 ||
-        selectedTypes[0] === "task:DOCUMENT_APPROVAL"
     const compact = !tracking && !history
-    const numberLabel = purchase ? "采购单号" : compact ? "事项" : "单号 / 事项"
+    const numberLabel = purchase ? "采购单号" : "单号 / 事项"
     const partyLabel = compact
         ? purchase
             ? "供应商与摘要"
@@ -202,33 +193,37 @@ export function workspaceTaskColumns({
                         ? `approval:${row.item.businessObjectType}`
                         : `task:${row.item.workItemType}`,
                 )
+                const hasSearchMatches = Boolean(row.item.searchMatches?.length)
                 return (
-                    <div className="flex items-center gap-3 py-1">
-                        <Icon
-                            className="size-4 shrink-0 text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                        <div className="min-w-0 space-y-1.5">
+                    <div className="flex items-center gap-2.5 py-1">
+                        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground">
+                            <Icon
+                                className="size-4 shrink-0"
+                                aria-hidden="true"
+                            />
+                        </div>
+                        <div className="min-w-0 space-y-0.5">
                             <div
-                                className="num max-w-64 truncate font-medium"
+                                className="num max-w-56 truncate text-sm font-medium text-foreground whitespace-nowrap"
                                 title={row.presentation.number}
                             >
                                 {row.presentation.number}
                             </div>
-                            {rework && (
+                            {rework ? (
                                 <StatusBadge
                                     label={row.presentation.typeLabel}
                                     tone="destructive"
                                 />
-                            )}
-                            {((mixed && !rework) ||
-                                row.item.searchMatches?.length) && (
+                            ) : hasSearchMatches ? (
                                 <div
-                                    className="max-w-64 truncate text-xs text-muted-foreground"
+                                    className="max-w-56 truncate text-xs text-muted-foreground"
                                     title={row.item.searchMatches?.join("；")}
                                 >
-                                    {row.item.searchMatches?.[0] ||
-                                        row.presentation.typeLabel}
+                                    {row.item.searchMatches?.[0]}
+                                </div>
+                            ) : (
+                                <div className="max-w-56 truncate text-xs text-muted-foreground">
+                                    {row.presentation.typeLabel}
                                 </div>
                             )}
                         </div>
@@ -246,10 +241,10 @@ export function workspaceTaskColumns({
             },
             cell: ({ row: { original: row } }) =>
                 compact ? (
-                    <TaskOverview row={row} showAmount={!payment} />
+                    <TaskOverview row={row} />
                 ) : (
                     <div
-                        className="max-w-72 truncate"
+                        className="max-w-72 truncate text-sm font-medium text-foreground"
                         title={row.presentation.title}
                     >
                         {row.presentation.title}
@@ -309,10 +304,10 @@ export function workspaceTaskColumns({
             },
             cell: ({ row: { original: row } }) => (
                 <div
-                    className="space-y-1 whitespace-normal"
+                    className="space-y-0.5 whitespace-nowrap text-right"
                     title={row.content.metric.detail}
                 >
-                    <div className="font-medium">
+                    <div className="num text-sm font-semibold tabular-nums text-foreground">
                         <WorkspaceMoney
                             value={row.content.metric.value}
                             display="exact"
@@ -372,9 +367,15 @@ export function workspaceTaskColumns({
                                 }
                             />
                         ) : (
-                            <div className="line-clamp-2 text-body-compact">
-                                {node || item.statusLabel}
-                            </div>
+                            <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/70 px-2 py-0.5 text-xs font-medium text-foreground">
+                                <span
+                                    className="size-1.5 shrink-0 rounded-full bg-primary/70"
+                                    aria-hidden="true"
+                                />
+                                <span className="max-w-40 truncate">
+                                    {node || item.statusLabel}
+                                </span>
+                            </span>
                         )}
                         {tracking && !closed && node && (
                             <div className="line-clamp-2 text-xs text-muted-foreground">
@@ -403,23 +404,31 @@ export function workspaceTaskColumns({
                 row: {
                     original: { item, presentation, processable },
                 },
-            }) => (
-                <Button
-                    id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
-                    data-testid={
-                        item.workItemType === "PROCUREMENT_ORDER_CREATION"
-                            ? `work-item-procurement-order-creation-${item.workItemId}`
-                            : undefined
-                    }
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onSelect(item)}
-                    aria-label={`${!tracking && !history && processable ? "处理" : "查看"}${presentation.number}`}
-                >
-                    {!tracking && !history && processable ? "处理" : "查看"}
-                    <ChevronRightIcon aria-hidden="true" />
-                </Button>
-            ),
+            }) => {
+                const canProcess = !tracking && !history && processable
+                return (
+                    <Button
+                        id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
+                        data-testid={
+                            item.workItemType === "PROCUREMENT_ORDER_CREATION"
+                                ? `work-item-procurement-order-creation-${item.workItemId}`
+                                : undefined
+                        }
+                        variant={canProcess ? "outline" : "ghost"}
+                        size="sm"
+                        className={
+                            canProcess
+                                ? "h-7 px-2.5 text-xs font-medium border-border/80 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+                                : undefined
+                        }
+                        onClick={() => onSelect(item)}
+                        aria-label={`${canProcess ? "处理" : "查看"}${presentation.number}`}
+                    >
+                        {canProcess ? "处理" : "查看"}
+                        <ChevronRightIcon aria-hidden="true" />
+                    </Button>
+                )
+            },
         },
     ]
     if (payment)
@@ -465,7 +474,9 @@ export function workspaceTaskColumns({
         )
     return compact
         ? columns.filter(
-              (column) => column.id !== "summary" && column.id !== "metric",
+              (column) =>
+                  column.id !== "summary" &&
+                  (!payment || column.id !== "metric"),
           )
         : columns
 }
