@@ -9,12 +9,11 @@ import {
     type Ref,
 } from "react"
 import {
-    ChevronDownIcon,
-    ChevronLeftIcon,
     ChevronRightIcon,
-    MapPinIcon,
     PlusIcon,
     PencilIcon,
+    SearchIcon,
+    Trash2Icon,
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { ArrangementButton } from "@/features/delivery-arrangements/components/arrangement-button"
@@ -24,7 +23,6 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FulfillmentAddressList } from "./fulfillment-address-list"
-import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import {
     Table,
@@ -82,8 +80,11 @@ export function FulfillmentPackingForm({
     const queryClient = useQueryClient()
     const [search, setSearch] = useState("")
     const [onlyMissing, setOnlyMissing] = useState(false)
+    const [productSearch, setProductSearch] = useState({
+        address: "",
+        query: "",
+    })
     const [activeAddress, setActiveAddress] = useState<string | null>(null)
-    const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
     const [editing, setEditing] = useState<Set<string>>(() => new Set())
     const [splitting, setSplitting] = useState<string | null>(null)
     const following = useRef(new Set<string>())
@@ -170,16 +171,17 @@ export function FulfillmentPackingForm({
     const selectedOrder = source.destinations.findIndex(
         (row) => row.key === selectedDestination?.key,
     )
-    const previousAddress = visible
-        .filter((row) => source.destinations.indexOf(row) < selectedOrder)
-        .at(-1)
-    const nextAddress =
-        visible.find(
+    const nextAddress = [
+        ...visible.filter(
             (row) => source.destinations.indexOf(row) > selectedOrder,
-        ) ??
-        (onlyMissing
-            ? visible.find((row) => row.key !== selectedDestination?.key)
-            : undefined)
+        ),
+        ...visible.filter(
+            (row) => source.destinations.indexOf(row) < selectedOrder,
+        ),
+    ].find((row) => {
+        const state = addressStates.get(row.key)
+        return state && !state.ready && !state.skipped
+    })
     const multipleAddresses = source.destinations.length > 1
     // 只为当前地址展示待填写包裹；切换地址不写草稿，已录入包裹始终保留。
     const formPacking = useMemo(() => {
@@ -240,7 +242,7 @@ export function FulfillmentPackingForm({
             if (!targetId.startsWith("fulfillment-packing")) return false
             setSearch("")
             setOnlyMissing(false)
-            setCollapsed(new Set())
+            setProductSearch({ address: "", query: "" })
             const targetPackage = form.state.values.packages.find((row) =>
                 targetId.startsWith(
                     `fulfillment-packing-package-${toAutomationIdSegment(row.id)}-`,
@@ -315,7 +317,7 @@ export function FulfillmentPackingForm({
             return "请填写有效数量，最多6位小数"
         }
     }
-    const toggle = (key: string, setter: typeof setCollapsed) =>
+    const toggle = (key: string, setter: typeof setEditing) =>
         setter((current) => {
             const next = new Set(current)
             if (next.has(key)) next.delete(key)
@@ -330,7 +332,7 @@ export function FulfillmentPackingForm({
             label={
                 source.destinations.some((row) => row.pending_address)
                     ? "补充收货地址"
-                    : "调整收货安排"
+                    : "调整地址"
             }
             hasUnsavedChanges={
                 JSON.stringify(draft) !== JSON.stringify(operation.draft)
@@ -355,47 +357,8 @@ export function FulfillmentPackingForm({
         >
             <form.Subscribe selector={(state) => state.values}>
                 {(values) => {
-                    const ready = (key: string) =>
-                        addressStates.get(key)?.ready ?? false
-                    const skipped = (key: string) =>
-                        addressStates.get(key)?.skipped ?? false
                     return (
                         <>
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                                <div className="space-y-1.5">
-                                    <div className="flex flex-wrap items-baseline gap-4">
-                                        <h3 className="text-lg font-semibold">
-                                            发货明细与物流
-                                        </h3>
-                                        <span className="text-sm text-muted-foreground">
-                                            共{" "}
-                                            {
-                                                source.destinations.filter(
-                                                    (row) =>
-                                                        !row.pending_address,
-                                                ).length
-                                            }{" "}
-                                            个收货地址 ·{" "}
-                                            {
-                                                new Set(
-                                                    operation.lines.map(
-                                                        (line) =>
-                                                            line.salesOrderLineId,
-                                                    ),
-                                                ).size
-                                            }{" "}
-                                            种商品
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        核对本次数量后填写物流，未发数量留待下次处理。
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-3">
-                                    {source.destinations.length !== 1 &&
-                                        arrangementAction}
-                                </div>
-                            </div>
                             {draft.legacyTrackingNeedsAllocation && (
                                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-lg bg-muted/30 px-3 py-2 text-xs">
                                     <p>
@@ -414,7 +377,7 @@ export function FulfillmentPackingForm({
                             <div
                                 className={
                                     multipleAddresses
-                                        ? "grid min-w-0 gap-5 border-t border-border pt-4 lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]"
+                                        ? "grid min-w-0 items-start gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]"
                                         : "min-w-0"
                                 }
                             >
@@ -444,54 +407,12 @@ export function FulfillmentPackingForm({
                                 )}
                                 <div
                                     id="fulfillment-packing-address-detail"
-                                    className="min-w-0"
+                                    className={
+                                        multipleAddresses
+                                            ? "min-w-0 lg:border-l lg:border-border/60 lg:pl-6"
+                                            : "min-w-0"
+                                    }
                                 >
-                                    {multipleAddresses &&
-                                        selectedDestination && (
-                                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                                <p className="text-xs text-muted-foreground">
-                                                    当前地址 {selectedOrder + 1}{" "}
-                                                    /{" "}
-                                                    {source.destinations.length}
-                                                </p>
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        id="fulfillment-packing-previous-address"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        disabled={
-                                                            !previousAddress
-                                                        }
-                                                        onClick={() =>
-                                                            previousAddress &&
-                                                            setActiveAddress(
-                                                                previousAddress.key,
-                                                            )
-                                                        }
-                                                    >
-                                                        <ChevronLeftIcon />
-                                                        上一地址
-                                                    </Button>
-                                                    <Button
-                                                        id="fulfillment-packing-next-address"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        disabled={!nextAddress}
-                                                        onClick={() =>
-                                                            nextAddress &&
-                                                            setActiveAddress(
-                                                                nextAddress.key,
-                                                            )
-                                                        }
-                                                    >
-                                                        {onlyMissing
-                                                            ? "下一待办"
-                                                            : "下一地址"}
-                                                        <ChevronRightIcon />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        )}
                                     {!selectedDestination && (
                                         <p className="py-12 text-center text-sm text-muted-foreground">
                                             没有符合条件的收货地址
@@ -512,9 +433,7 @@ export function FulfillmentPackingForm({
                                                             <h3 className="font-medium">
                                                                 待补收货地址
                                                             </h3>
-                                                            {source.destinations
-                                                                .length === 1 &&
-                                                                arrangementAction}
+                                                            {arrangementAction}
                                                         </div>
                                                         <p className="text-sm text-muted-foreground">
                                                             以下商品本次暂不发货。补齐地址后可登记包裹，其他商品可以先发。
@@ -565,6 +484,26 @@ export function FulfillmentPackingForm({
                                                     parcel.destination_key ===
                                                     destination.key,
                                             )
+                                        const query =
+                                            destination.items.length > 5 &&
+                                            productSearch.address ===
+                                                destination.key
+                                                ? productSearch.query
+                                                : ""
+                                        const matchesProduct = (id: string) =>
+                                            itemName(id)
+                                                .toLocaleLowerCase()
+                                                .includes(
+                                                    query
+                                                        .trim()
+                                                        .toLocaleLowerCase(),
+                                                )
+                                        const matchedItems =
+                                            destination.items.filter((item) =>
+                                                matchesProduct(
+                                                    item.delivery_line_id,
+                                                ),
+                                            )
                                         const showAllocation =
                                             parcels.length > 1 ||
                                             (parcels.length === 1 &&
@@ -573,13 +512,10 @@ export function FulfillmentPackingForm({
                                                     destination.key,
                                                 )) ||
                                             !!draft.legacyTrackingNeedsAllocation
-                                        const isCollapsed =
-                                            !multipleAddresses &&
-                                            collapsed.has(destination.key)
                                         return (
                                             <section
                                                 key={destination.key}
-                                                className="min-w-0 border-t border-border"
+                                                className="min-w-0"
                                                 aria-label={`${destination.recipient}的发货明细`}
                                                 onFocusCapture={() =>
                                                     setActiveAddress(
@@ -587,262 +523,64 @@ export function FulfillmentPackingForm({
                                                     )
                                                 }
                                             >
-                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-                                                    <MapPinIcon
-                                                        className="size-4 text-muted-foreground"
-                                                        aria-hidden="true"
-                                                    />
-                                                    <span className="font-semibold">
-                                                        {destination.recipient}
-                                                    </span>
-                                                    <span className="text-sm">
-                                                        {destination.phone}
-                                                    </span>
-                                                    <span className="min-w-0 flex-1 break-words text-sm">
-                                                        {destination.address}
-                                                    </span>
-                                                    {source.destinations
-                                                        .length === 1 &&
-                                                        arrangementAction}
-                                                    <Badge
-                                                        variant={
-                                                            ready(
-                                                                destination.key,
-                                                            )
-                                                                ? "teal"
-                                                                : "outline"
-                                                        }
-                                                    >
-                                                        {skipped(
-                                                            destination.key,
-                                                        )
-                                                            ? "本次不发货"
-                                                            : ready(
-                                                                    destination.key,
-                                                                )
-                                                              ? "物流已填写"
-                                                              : "待填写物流"}
-                                                    </Badge>
-                                                    {!multipleAddresses && (
-                                                        <Button
-                                                            id={`fulfillment-packing-address-${segment}-toggle`}
-                                                            size="icon-sm"
-                                                            variant="ghost"
-                                                            aria-label={
-                                                                isCollapsed
-                                                                    ? "展开收货地址"
-                                                                    : "收起收货地址"
-                                                            }
-                                                            aria-expanded={
-                                                                !isCollapsed
-                                                            }
-                                                            onClick={() =>
-                                                                toggle(
-                                                                    destination.key,
-                                                                    setCollapsed,
-                                                                )
-                                                            }
-                                                        >
-                                                            <ChevronDownIcon
-                                                                className={
-                                                                    isCollapsed
-                                                                        ? ""
-                                                                        : "rotate-180"
+                                                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                                                            <h3 className="text-lg font-semibold">
+                                                                {
+                                                                    destination.recipient
                                                                 }
-                                                            />
-                                                        </Button>
-                                                    )}
+                                                            </h3>
+                                                            <span className="text-sm">
+                                                                {
+                                                                    destination.phone
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                        <p className="mt-1.5 break-words text-sm text-muted-foreground">
+                                                            {
+                                                                destination.address
+                                                            }
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        {arrangementAction}
+                                                        {multipleAddresses && (
+                                                            <>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    地址{" "}
+                                                                    {selectedOrder +
+                                                                        1}
+                                                                    /
+                                                                    {
+                                                                        source
+                                                                            .destinations
+                                                                            .length
+                                                                    }
+                                                                </span>
+                                                                <Button
+                                                                    id="fulfillment-packing-next-address"
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    disabled={
+                                                                        !nextAddress
+                                                                    }
+                                                                    onClick={() =>
+                                                                        nextAddress &&
+                                                                        setActiveAddress(
+                                                                            nextAddress.key,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    下一未完成{" "}
+                                                                    <ChevronRightIcon />
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div
-                                                    hidden={isCollapsed}
-                                                    className="min-w-0 space-y-4 pb-3"
-                                                >
-                                                    <Table
-                                                        className={
-                                                            showAllocation
-                                                                ? "min-w-[48rem] table-fixed"
-                                                                : "min-w-[34rem] table-fixed"
-                                                        }
-                                                    >
-                                                        <colgroup>
-                                                            <col />
-                                                            <col className="w-32 sm:w-40" />
-                                                            <col className="w-36 sm:w-44" />
-                                                            {showAllocation && (
-                                                                <col className="w-44 sm:w-56" />
-                                                            )}
-                                                        </colgroup>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>
-                                                                    商品
-                                                                </TableHead>
-                                                                <TableHead>
-                                                                    应发数量
-                                                                </TableHead>
-                                                                <TableHead>
-                                                                    本次发货
-                                                                </TableHead>
-                                                                {showAllocation && (
-                                                                    <TableHead>
-                                                                        包裹分配
-                                                                    </TableHead>
-                                                                )}
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {destination.items.map(
-                                                                (item) => {
-                                                                    const itemIndex =
-                                                                        values.dispatch[
-                                                                            dispatchIndex
-                                                                        ]?.items.findIndex(
-                                                                            (
-                                                                                value,
-                                                                            ) =>
-                                                                                value.delivery_line_id ===
-                                                                                item.delivery_line_id,
-                                                                        ) ?? -1
-                                                                    const itemSegment =
-                                                                        toAutomationIdSegment(
-                                                                            item.delivery_line_id,
-                                                                        )
-                                                                    const assigned =
-                                                                        parcels.filter(
-                                                                            ({
-                                                                                parcel,
-                                                                            }) =>
-                                                                                parcel.items.some(
-                                                                                    (
-                                                                                        value,
-                                                                                    ) =>
-                                                                                        value.delivery_line_id ===
-                                                                                        item.delivery_line_id,
-                                                                                ),
-                                                                        )
-                                                                    return (
-                                                                        <TableRow
-                                                                            key={
-                                                                                item.delivery_line_id
-                                                                            }
-                                                                        >
-                                                                            <TableCell className="whitespace-normal break-words font-medium">
-                                                                                {itemName(
-                                                                                    item.delivery_line_id,
-                                                                                )}
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                {compactFixed(
-                                                                                    item.quantity,
-                                                                                )}{" "}
-                                                                                {unit(
-                                                                                    item.delivery_line_id,
-                                                                                )}
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                {dispatchIndex >=
-                                                                                    0 &&
-                                                                                    itemIndex >=
-                                                                                        0 && (
-                                                                                        <form.Field
-                                                                                            name={`dispatch[${dispatchIndex}].items[${itemIndex}].quantity`}
-                                                                                        >
-                                                                                            {(
-                                                                                                field,
-                                                                                            ) => (
-                                                                                                <Input
-                                                                                                    id={`fulfillment-packing-${segment}-${itemSegment}-quantity`}
-                                                                                                    aria-label={`${destination.recipient} ${itemName(item.delivery_line_id)}本次发货数量`}
-                                                                                                    inputMode="decimal"
-                                                                                                    value={
-                                                                                                        field
-                                                                                                            .state
-                                                                                                            .value
-                                                                                                    }
-                                                                                                    onFocus={() => {
-                                                                                                        if (
-                                                                                                            automaticPackage(
-                                                                                                                values,
-                                                                                                                destination.key,
-                                                                                                            )
-                                                                                                        )
-                                                                                                            following.current.add(
-                                                                                                                destination.key,
-                                                                                                            )
-                                                                                                    }}
-                                                                                                    onChange={(
-                                                                                                        event,
-                                                                                                    ) =>
-                                                                                                        apply(
-                                                                                                            changeDispatch(
-                                                                                                                values,
-                                                                                                                destination.key,
-                                                                                                                item.delivery_line_id,
-                                                                                                                event
-                                                                                                                    .target
-                                                                                                                    .value,
-                                                                                                                following.current.has(
-                                                                                                                    destination.key,
-                                                                                                                ) ||
-                                                                                                                    automaticPackage(
-                                                                                                                        values,
-                                                                                                                        destination.key,
-                                                                                                                    ),
-                                                                                                            ),
-                                                                                                        )
-                                                                                                    }
-                                                                                                    disabled={
-                                                                                                        disabled
-                                                                                                    }
-                                                                                                    className="h-8 w-24"
-                                                                                                />
-                                                                                            )}
-                                                                                        </form.Field>
-                                                                                    )}
-                                                                            </TableCell>
-                                                                            {showAllocation && (
-                                                                                <TableCell className="whitespace-normal text-sm">
-                                                                                    {assigned.length ? (
-                                                                                        assigned
-                                                                                            .map(
-                                                                                                ({
-                                                                                                    index,
-                                                                                                }) =>
-                                                                                                    `包裹 ${index + 1}`,
-                                                                                            )
-                                                                                            .join(
-                                                                                                "、",
-                                                                                            )
-                                                                                    ) : (
-                                                                                        <span className="text-muted-foreground">
-                                                                                            未分配
-                                                                                        </span>
-                                                                                    )}
-                                                                                    {balanceNote(
-                                                                                        values,
-                                                                                        destination.key,
-                                                                                        item.delivery_line_id,
-                                                                                    ) && (
-                                                                                        <p className="mt-1 text-xs text-warning-soft-foreground">
-                                                                                            {balanceNote(
-                                                                                                values,
-                                                                                                destination.key,
-                                                                                                item.delivery_line_id,
-                                                                                            )}{" "}
-                                                                                            {unit(
-                                                                                                item.delivery_line_id,
-                                                                                            )}
-                                                                                            ，请调整包裹
-                                                                                        </p>
-                                                                                    )}
-                                                                                </TableCell>
-                                                                            )}
-                                                                        </TableRow>
-                                                                    )
-                                                                },
-                                                            )}
-                                                        </TableBody>
-                                                    </Table>
+                                                <div className="min-w-0">
                                                     {parcels.map(
                                                         ({ parcel, index }) => {
                                                             const prefix = `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}`
@@ -871,13 +609,13 @@ export function FulfillmentPackingForm({
                                                                     tabIndex={
                                                                         -1
                                                                     }
-                                                                    className="space-y-3 border-t border-border/60 pt-4 outline-none"
+                                                                    className="space-y-3 py-4 outline-none"
                                                                 >
                                                                     <div className="flex flex-wrap items-center gap-3">
                                                                         <span className="text-sm font-medium">
                                                                             {parcels.length ===
                                                                             1
-                                                                                ? "发货物流"
+                                                                                ? "物流"
                                                                                 : `包裹 ${index + 1}`}
                                                                         </span>
                                                                         <form.AppField
@@ -897,7 +635,7 @@ export function FulfillmentPackingForm({
                                                                                     disabled={
                                                                                         disabled
                                                                                     }
-                                                                                    className="w-40"
+                                                                                    className="w-full sm:w-44"
                                                                                 />
                                                                             )}
                                                                         </form.AppField>
@@ -928,7 +666,7 @@ export function FulfillmentPackingForm({
                                                                                     disabled={
                                                                                         disabled
                                                                                     }
-                                                                                    className="w-full sm:w-64"
+                                                                                    className="w-full sm:min-w-48 sm:flex-1"
                                                                                 />
                                                                             )}
                                                                         </form.Field>
@@ -1013,7 +751,9 @@ export function FulfillmentPackingForm({
                                                                             ) && (
                                                                                 <Button
                                                                                     id={`${prefix}-remove`}
-                                                                                    size="sm"
+                                                                                    aria-label={`移除包裹 ${index + 1}`}
+                                                                                    title={`移除包裹 ${index + 1}`}
+                                                                                    size="icon-sm"
                                                                                     variant="ghost"
                                                                                     disabled={
                                                                                         disabled
@@ -1054,13 +794,13 @@ export function FulfillmentPackingForm({
                                                                                         )
                                                                                     }}
                                                                                 >
-                                                                                    移除
+                                                                                    <Trash2Icon />
                                                                                 </Button>
                                                                             )}
                                                                         </div>
                                                                     </div>
                                                                     {editingItems ? (
-                                                                        <div className="space-y-2 border-t pt-2">
+                                                                        <div className="max-h-80 space-y-3 overflow-y-auto overscroll-contain border-t pt-2">
                                                                             <p className="text-xs text-muted-foreground">
                                                                                 填写分到本包裹的数量，填0表示不放入。其他包裹的数量保持不变。
                                                                             </p>
@@ -1193,35 +933,52 @@ export function FulfillmentPackingForm({
                                                                             )}
                                                                         </div>
                                                                     ) : showAllocation ? (
-                                                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                                                            <span>
-                                                                                包含：
+                                                                        <details className="text-xs text-muted-foreground">
+                                                                            <summary
+                                                                                id={`${prefix}-contents`}
+                                                                                className="cursor-pointer"
+                                                                            >
+                                                                                {
+                                                                                    parcel
+                                                                                        .items
+                                                                                        .length
+                                                                                }{" "}
+                                                                                种商品
+                                                                            </summary>
+                                                                            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto overscroll-contain">
                                                                                 {parcel
                                                                                     .items
-                                                                                    .length
-                                                                                    ? parcel.items
-                                                                                          .map(
-                                                                                              (
-                                                                                                  item,
-                                                                                              ) =>
-                                                                                                  `${itemName(item.delivery_line_id)} × ${packingQuantity(item.quantity)} ${unit(item.delivery_line_id)}`,
-                                                                                          )
-                                                                                          .join(
-                                                                                              " · ",
-                                                                                          )
-                                                                                    : "尚未分配商品，请调整商品或移除此包裹"}
-                                                                            </span>
-                                                                            {automatic && (
-                                                                                <span>
-                                                                                    一个包裹发出，数量随本次发货自动更新
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <p className="text-xs text-muted-foreground">
-                                                                            本次商品合并为一个包裹；需要分开发出时，可拆分包裹。
-                                                                        </p>
-                                                                    )}
+                                                                                    .length ? (
+                                                                                    parcel.items.map(
+                                                                                        (
+                                                                                            item,
+                                                                                        ) => (
+                                                                                            <p
+                                                                                                key={
+                                                                                                    item.delivery_line_id
+                                                                                                }
+                                                                                            >
+                                                                                                {itemName(
+                                                                                                    item.delivery_line_id,
+                                                                                                )}{" "}
+                                                                                                ×{" "}
+                                                                                                {packingQuantity(
+                                                                                                    item.quantity,
+                                                                                                )}{" "}
+                                                                                                {unit(
+                                                                                                    item.delivery_line_id,
+                                                                                                )}
+                                                                                            </p>
+                                                                                        ),
+                                                                                    )
+                                                                                ) : (
+                                                                                    <p>
+                                                                                        尚未分配商品，请调整商品或移除此包裹
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                        </details>
+                                                                    ) : null}
                                                                     {!automatic &&
                                                                         parcels.length ===
                                                                             1 && (
@@ -1404,6 +1161,255 @@ export function FulfillmentPackingForm({
                                                             </div>
                                                         )
                                                     })()}
+                                                    <div className="min-w-0 border-t border-border">
+                                                        <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+                                                            <h4 className="text-sm font-semibold">
+                                                                商品 ·{" "}
+                                                                {
+                                                                    destination
+                                                                        .items
+                                                                        .length
+                                                                }
+                                                            </h4>
+                                                            {destination.items
+                                                                .length > 5 && (
+                                                                <div className="relative w-full sm:w-52">
+                                                                    <SearchIcon
+                                                                        aria-hidden="true"
+                                                                        className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                                                                    />
+                                                                    <Input
+                                                                        id={`fulfillment-packing-${segment}-product-search`}
+                                                                        aria-label="搜索当前地址的商品"
+                                                                        placeholder="搜索商品"
+                                                                        className="pl-8"
+                                                                        value={
+                                                                            query
+                                                                        }
+                                                                        onChange={(
+                                                                            event,
+                                                                        ) =>
+                                                                            setProductSearch(
+                                                                                {
+                                                                                    address:
+                                                                                        destination.key,
+                                                                                    query: event
+                                                                                        .target
+                                                                                        .value,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="[&_[data-slot=table-container]]:max-h-[28rem] [&_[data-slot=table-container]]:overflow-auto [&_[data-slot=table-container]]:overscroll-contain">
+                                                            <Table
+                                                                className={
+                                                                    showAllocation
+                                                                        ? "min-w-[48rem] table-fixed"
+                                                                        : "min-w-[34rem] table-fixed"
+                                                                }
+                                                            >
+                                                                <colgroup>
+                                                                    <col />
+                                                                    <col className="w-32 sm:w-40" />
+                                                                    <col className="w-36 sm:w-44" />
+                                                                    {showAllocation && (
+                                                                        <col className="w-44 sm:w-56" />
+                                                                    )}
+                                                                </colgroup>
+                                                                <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10">
+                                                                    <TableRow>
+                                                                        <TableHead>
+                                                                            商品
+                                                                        </TableHead>
+                                                                        <TableHead>
+                                                                            待发
+                                                                        </TableHead>
+                                                                        <TableHead>
+                                                                            本次发货
+                                                                        </TableHead>
+                                                                        {showAllocation && (
+                                                                            <TableHead>
+                                                                                包裹分配
+                                                                            </TableHead>
+                                                                        )}
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {destination.items.map(
+                                                                        (
+                                                                            item,
+                                                                        ) => {
+                                                                            const itemIndex =
+                                                                                values.dispatch[
+                                                                                    dispatchIndex
+                                                                                ]?.items.findIndex(
+                                                                                    (
+                                                                                        value,
+                                                                                    ) =>
+                                                                                        value.delivery_line_id ===
+                                                                                        item.delivery_line_id,
+                                                                                ) ??
+                                                                                -1
+                                                                            const itemSegment =
+                                                                                toAutomationIdSegment(
+                                                                                    item.delivery_line_id,
+                                                                                )
+                                                                            const assigned =
+                                                                                parcels.filter(
+                                                                                    ({
+                                                                                        parcel,
+                                                                                    }) =>
+                                                                                        parcel.items.some(
+                                                                                            (
+                                                                                                value,
+                                                                                            ) =>
+                                                                                                value.delivery_line_id ===
+                                                                                                item.delivery_line_id,
+                                                                                        ),
+                                                                                )
+                                                                            return (
+                                                                                <TableRow
+                                                                                    hidden={
+                                                                                        !matchesProduct(
+                                                                                            item.delivery_line_id,
+                                                                                        )
+                                                                                    }
+                                                                                    key={
+                                                                                        item.delivery_line_id
+                                                                                    }
+                                                                                >
+                                                                                    <TableCell className="whitespace-normal break-words font-medium">
+                                                                                        {itemName(
+                                                                                            item.delivery_line_id,
+                                                                                        )}
+                                                                                    </TableCell>
+                                                                                    <TableCell>
+                                                                                        {compactFixed(
+                                                                                            item.quantity,
+                                                                                        )}{" "}
+                                                                                        {unit(
+                                                                                            item.delivery_line_id,
+                                                                                        )}
+                                                                                    </TableCell>
+                                                                                    <TableCell>
+                                                                                        {dispatchIndex >=
+                                                                                            0 &&
+                                                                                            itemIndex >=
+                                                                                                0 && (
+                                                                                                <form.Field
+                                                                                                    name={`dispatch[${dispatchIndex}].items[${itemIndex}].quantity`}
+                                                                                                >
+                                                                                                    {(
+                                                                                                        field,
+                                                                                                    ) => (
+                                                                                                        <Input
+                                                                                                            id={`fulfillment-packing-${segment}-${itemSegment}-quantity`}
+                                                                                                            aria-label={`${destination.recipient} ${itemName(item.delivery_line_id)}本次发货数量`}
+                                                                                                            inputMode="decimal"
+                                                                                                            value={
+                                                                                                                field
+                                                                                                                    .state
+                                                                                                                    .value
+                                                                                                            }
+                                                                                                            onFocus={() => {
+                                                                                                                if (
+                                                                                                                    automaticPackage(
+                                                                                                                        values,
+                                                                                                                        destination.key,
+                                                                                                                    )
+                                                                                                                )
+                                                                                                                    following.current.add(
+                                                                                                                        destination.key,
+                                                                                                                    )
+                                                                                                            }}
+                                                                                                            onChange={(
+                                                                                                                event,
+                                                                                                            ) =>
+                                                                                                                apply(
+                                                                                                                    changeDispatch(
+                                                                                                                        values,
+                                                                                                                        destination.key,
+                                                                                                                        item.delivery_line_id,
+                                                                                                                        event
+                                                                                                                            .target
+                                                                                                                            .value,
+                                                                                                                        following.current.has(
+                                                                                                                            destination.key,
+                                                                                                                        ) ||
+                                                                                                                            automaticPackage(
+                                                                                                                                values,
+                                                                                                                                destination.key,
+                                                                                                                            ),
+                                                                                                                    ),
+                                                                                                                )
+                                                                                                            }
+                                                                                                            disabled={
+                                                                                                                disabled
+                                                                                                            }
+                                                                                                            className="h-8 w-24"
+                                                                                                        />
+                                                                                                    )}
+                                                                                                </form.Field>
+                                                                                            )}
+                                                                                    </TableCell>
+                                                                                    {showAllocation && (
+                                                                                        <TableCell className="whitespace-normal text-sm">
+                                                                                            {assigned.length ? (
+                                                                                                assigned
+                                                                                                    .map(
+                                                                                                        ({
+                                                                                                            index,
+                                                                                                        }) =>
+                                                                                                            `包裹 ${index + 1}`,
+                                                                                                    )
+                                                                                                    .join(
+                                                                                                        "、",
+                                                                                                    )
+                                                                                            ) : (
+                                                                                                <span className="text-muted-foreground">
+                                                                                                    未分配
+                                                                                                </span>
+                                                                                            )}
+                                                                                            {balanceNote(
+                                                                                                values,
+                                                                                                destination.key,
+                                                                                                item.delivery_line_id,
+                                                                                            ) && (
+                                                                                                <p className="mt-1 text-xs text-warning-soft-foreground">
+                                                                                                    {balanceNote(
+                                                                                                        values,
+                                                                                                        destination.key,
+                                                                                                        item.delivery_line_id,
+                                                                                                    )}{" "}
+                                                                                                    {unit(
+                                                                                                        item.delivery_line_id,
+                                                                                                    )}
+                                                                                                    ，请调整包裹
+                                                                                                </p>
+                                                                                            )}
+                                                                                        </TableCell>
+                                                                                    )}
+                                                                                </TableRow>
+                                                                            )
+                                                                        },
+                                                                    )}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                        {!matchedItems.length && (
+                                                            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                                                                没有匹配的商品，请更换搜索词。
+                                                            </p>
+                                                        )}
+                                                        <div className="border-t border-border/60 py-2 text-xs text-muted-foreground">
+                                                            {query.trim()
+                                                                ? `${matchedItems.length} / ${destination.items.length} 种商品`
+                                                                : `共 ${destination.items.length} 种商品`}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </section>
                                         )

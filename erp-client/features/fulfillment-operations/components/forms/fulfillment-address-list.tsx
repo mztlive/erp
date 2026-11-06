@@ -1,7 +1,14 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { CheckIcon, MapPinIcon, SearchIcon } from "lucide-react"
+import {
+    CheckIcon,
+    CircleIcon,
+    CircleAlertIcon,
+    MinusIcon,
+    MapPinIcon,
+    SearchIcon,
+} from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
@@ -54,18 +61,15 @@ export function FulfillmentAddressList({
             list.scrollTop += item.bottom - bounds.bottom
     }, [selectedKey])
     return (
-        <aside
-            aria-label="收货地址导航"
-            className="min-w-0 rounded-lg border border-border/70 bg-muted/15"
-        >
-            <div className="space-y-3 border-b border-border/60 p-3">
+        <aside aria-label="收货地址导航" className="min-w-0 self-start">
+            <div className="space-y-3 pb-3">
                 <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="font-medium">
-                        收货地址{" "}
+                        收货地址 ·{" "}
                         <span className="text-muted-foreground">{total}</span>
                     </span>
                     <span className="text-xs text-muted-foreground">
-                        已填写 {completed} / {total}
+                        已填 {completed}/{total}
                     </span>
                 </div>
                 <div className="relative">
@@ -76,7 +80,7 @@ export function FulfillmentAddressList({
                     <Input
                         id="fulfillment-packing-search"
                         aria-label="搜索收货人、电话、地址或商品"
-                        placeholder="收货人、电话、地址或商品"
+                        placeholder="搜索地址"
                         value={search}
                         onChange={(event) => onSearch(event.target.value)}
                         className="pl-8"
@@ -91,12 +95,12 @@ export function FulfillmentAddressList({
                         checked={onlyMissing}
                         onCheckedChange={onOnlyMissing}
                     />
-                    只看未完成
+                    未完成
                 </Label>
             </div>
             <div
                 ref={listRef}
-                className="relative max-h-52 overflow-y-auto overscroll-contain p-1.5 lg:max-h-[30rem]"
+                className="relative max-h-52 overflow-y-auto overscroll-contain lg:max-h-[34rem]"
             >
                 {destinations.map((destination) => {
                     const status = states.get(destination.key)!
@@ -148,43 +152,38 @@ export function FulfillmentAddressList({
                                     : -1
                             }
                             aria-current={selected ? "true" : undefined}
+                            aria-label={`${destination.recipient || "待补收货地址"}，${destination.address || "地址待补充"}，${status.label}`}
+                            title={`${destination.recipient} ${destination.phone} ${destination.address} · ${status.label}`}
                             aria-controls="fulfillment-packing-address-detail"
                             onClick={() => onSelect(destination.key)}
                             className={cn(
-                                "mb-1 block w-full rounded-md border border-transparent px-3 py-2.5 text-left transition-colors outline-none last:mb-0 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring",
+                                "flex h-9 w-full items-center gap-2 rounded-md px-2 text-left transition-colors outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                                 selected &&
-                                    "border-primary/20 bg-primary/5 hover:bg-primary/5",
+                                    "bg-muted font-medium hover:bg-muted",
                             )}
                         >
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="truncate text-sm font-medium">
+                            <span className="min-w-0 flex-1 truncate text-sm">
+                                <span>
                                     {destination.recipient || "待补收货地址"}
                                 </span>
-                                <span
-                                    className={cn(
-                                        "flex shrink-0 items-center gap-1 text-xs",
-                                        status.ready
-                                            ? "text-primary"
-                                            : "text-muted-foreground",
-                                    )}
-                                >
-                                    {status.ready && (
-                                        <CheckIcon
-                                            aria-hidden="true"
-                                            className="size-3"
-                                        />
-                                    )}
-                                    {status.label}
-                                </span>
-                            </div>
-                            {destination.phone && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    {destination.phone}
-                                </p>
-                            )}
-                            <p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-muted-foreground">
-                                {destination.address || "补齐地址后可登记发货"}
-                            </p>
+                                {destination.address && (
+                                    <span className="font-normal text-muted-foreground">
+                                        {" · "}
+                                        {destination.address}
+                                    </span>
+                                )}
+                            </span>
+                            <span className="shrink-0" aria-hidden="true">
+                                {status.ready ? (
+                                    <CheckIcon className="size-4 text-success" />
+                                ) : destination.pending_address ? (
+                                    <CircleAlertIcon className="size-4 text-warning-soft-foreground" />
+                                ) : status.skipped ? (
+                                    <MinusIcon className="size-4 text-muted-foreground" />
+                                ) : (
+                                    <CircleIcon className="size-3.5 text-muted-foreground" />
+                                )}
+                            </span>
                         </button>
                     )
                 })}

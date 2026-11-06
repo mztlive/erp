@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +41,11 @@ export function FulfillmentPackageSplit({
     onApply: (packing: DeliveryPacking) => void
     onClose: () => void
 }) {
+    const [search, setSearch] = useState("")
+    const matches = (id: string) =>
+        itemName(id)
+            .toLocaleLowerCase()
+            .includes(search.trim().toLocaleLowerCase())
     const error = (items: PackingItem[]) => {
         try {
             splitPackage(packing, parcel.id, items, "preview")
@@ -99,7 +105,18 @@ export function FulfillmentPackageSplit({
                     <form.Subscribe selector={(state) => state.values}>
                         {(values) => (
                             <>
-                                <div className="space-y-3">
+                                {parcel.items.length > 5 && (
+                                    <Input
+                                        id={`${prefix}-search`}
+                                        aria-label="搜索要拆分的商品"
+                                        placeholder="搜索要拆分的商品"
+                                        value={search}
+                                        onChange={(event) =>
+                                            setSearch(event.target.value)
+                                        }
+                                    />
+                                )}
+                                <div className="max-h-[45vh] space-y-3 overflow-y-auto overscroll-contain pr-2">
                                     {values.items.map((item, index) => {
                                         const id = `${prefix}-${toAutomationIdSegment(item.delivery_line_id)}`
                                         const original =
@@ -111,6 +128,11 @@ export function FulfillmentPackageSplit({
                                         return (
                                             <div
                                                 key={item.delivery_line_id}
+                                                hidden={
+                                                    !matches(
+                                                        item.delivery_line_id,
+                                                    )
+                                                }
                                                 className="space-y-1.5"
                                             >
                                                 <Label htmlFor={id}>
@@ -164,6 +186,19 @@ export function FulfillmentPackageSplit({
                                         )
                                     })}
                                 </div>
+                                {!values.items.some((item) =>
+                                    matches(item.delivery_line_id),
+                                ) && (
+                                    <p className="text-sm text-muted-foreground">
+                                        没有匹配的商品，请更换搜索词。
+                                    </p>
+                                )}
+                                {parcel.items.length > 5 && (
+                                    <p className="text-xs text-muted-foreground">
+                                        共 {parcel.items.length}{" "}
+                                        种商品；搜索不清空已填数量，确认时一并拆出。
+                                    </p>
+                                )}
                                 <p
                                     role="status"
                                     className="text-xs text-muted-foreground"
