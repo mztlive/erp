@@ -1,7 +1,6 @@
 "use client"
 
 import { MoneyValue } from "@/components/business"
-import { TableToolbar } from "@/components/business/table-toolbar"
 import { MoneyInput } from "@/components/form/money-input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -52,50 +51,49 @@ export function InvoiceAllocationTable({
     return (
         <section
             id="alloc-pool"
-            className="min-w-0 space-y-3"
+            className="min-w-0 space-y-4"
             aria-labelledby="invoice-allocation-title"
         >
-            <div className="space-y-1">
-                <h2
-                    id="invoice-allocation-title"
-                    className="text-base font-semibold"
-                >
-                    核销明细
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                    选择当前供应商对应的采购单或结算单。
-                    {policyBlocksAuto
-                        ? "当前需手动选择单据并填写核销金额。"
-                        : null}
-                </p>
-                {splitTax ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <h2
+                            id="invoice-allocation-title"
+                            tabIndex={-1}
+                            className="text-sm font-semibold text-foreground"
+                        >
+                            核销明细
+                        </h2>
+                        <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            共 {pool.length} 笔 · 已选 {selected.size} 笔
+                        </span>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                        请按发票实际内容填写各笔分配税额，合计须与票面税额一致。
+                        选择当前供应商对应的采购单或结算单
+                        {policyBlocksAuto
+                            ? " · 当前需手动选择单据并填写核销金额"
+                            : null}
                     </p>
+                    {splitTax ? (
+                        <p className="text-xs text-warning">
+                            请按发票实际内容填写各笔分配税额，合计须与票面税额一致。
+                        </p>
+                    ) : null}
+                </div>
+                {selected.size > 0 ? (
+                    <Button
+                        id="invoice-allocation-clear-selection"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isSubmitting}
+                        onClick={state.clearSelection}
+                    >
+                        清空选择
+                    </Button>
                 ) : null}
             </div>
-            <div className="overflow-hidden rounded-lg border border-border">
-                <TableToolbar
-                    className="px-4"
-                    actions={
-                        selected.size > 0 ? (
-                            <Button
-                                id="invoice-allocation-clear-selection"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={isSubmitting}
-                                onClick={state.clearSelection}
-                            >
-                                清空选择
-                            </Button>
-                        ) : null
-                    }
-                >
-                    <span className="text-muted-foreground">
-                        共 {pool.length} 笔 · 已选 {selected.size} 笔
-                    </span>
-                </TableToolbar>
+            <div className="overflow-x-auto border-y border-border">
                 <Table>
                     <TableHeader>
                         <TableRow>

@@ -1,11 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useRef } from "react"
-import { ArrowLeftIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    PageActions,
     PageHeader,
     PageScaffold,
 } from "@/components/business"
@@ -153,38 +151,14 @@ function InvoiceRegistrationSession({
         if (host) host.closeCurrent(isWorkspaceFrame() ? window : null, href)
         else router.push(href)
     }
-    const header = (
-        <PageHeader
-            title={
-                state.session?.existingInvoiceId
-                    ? "继续核销进项发票"
-                    : "登记进项发票"
-            }
-            description="填写发票信息，选择对应的应付单据"
-            actions={
-                <PageActions
-                    actions={[
-                        {
-                            actionKey: "back",
-                            id: "supplier-payables-session-page-back",
-                            label: "返回列表",
-                            icon: ArrowLeftIcon,
-                            variant: "outline",
-                            disabled:
-                                state.isSubmitting ||
-                                state.result?.status === "unknown",
-                            onClick: () => close(),
-                        },
-                    ]}
-                />
-            }
-        />
-    )
+
     return (
         <PageScaffold density="compact" className="gap-6">
-            {header}
             {state.sessionQuery.isPending ? (
-                <div className="h-72 animate-pulse rounded-lg bg-muted" />
+                <div className="flex flex-col gap-4">
+                    <div className="h-10 w-64 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-96 animate-pulse rounded-lg bg-muted" />
+                </div>
             ) : state.sessionQuery.isError ||
               state.session?.supplierLoadError ? (
                 <BusinessFailureState

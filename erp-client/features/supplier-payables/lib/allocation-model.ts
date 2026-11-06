@@ -81,6 +81,7 @@ export const invoiceSchema = z
                     "请选择有效的发票文件",
                 ),
             )
+            .min(1, "请上传发票文件")
             .superRefine((files, context) => {
                 const message = invoiceFilesError(files)
                 if (message) context.addIssue({ code: "custom", message })

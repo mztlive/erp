@@ -5,7 +5,7 @@ import { toFieldErrors } from "@/components/form"
 import { MoneyValue } from "@/components/business"
 import type { AllocationSessionState } from "@/features/supplier-payables/hooks/use-allocation-session"
 
-/** 票面信息按三列排列；已有发票只读，不允许修改原票。 */
+/** 票面信息：在左侧分栏展示；已有发票只读，不允许修改原票。 */
 export function InvoiceRegistrationFields({
     state,
 }: {
@@ -14,14 +14,15 @@ export function InvoiceRegistrationFields({
     const { invoiceForm: form, session, isSubmitting } = state
     return (
         <section
-            className="space-y-4 border-b border-border pb-6"
+            className="space-y-4"
             aria-labelledby="invoice-registration-fields-title"
         >
             <h2
                 id="invoice-registration-fields-title"
-                className="text-base font-semibold"
+                tabIndex={-1}
+                className="sr-only"
             >
-                发票信息
+                填写发票信息
             </h2>
             {session?.existingInvoiceId ? (
                 <div className="space-y-2 text-sm">
@@ -35,7 +36,7 @@ export function InvoiceRegistrationFields({
                     </p>
                 </div>
             ) : (
-                <div className="grid items-start gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-col gap-4">
                     <form.AppField name="invoiceNo">
                         {(field) => (
                             <field.TextField
@@ -81,47 +82,60 @@ export function InvoiceRegistrationFields({
                             />
                         )}
                     </form.AppField>
-                    <form.AppField name="netAmount">
-                        {(field) => (
-                            <field.TextField
-                                id="supplier-payables-allocation-form-net-amount"
-                                label="不含税金额（元）"
-                                placeholder="0.00"
-                                inputMode="decimal"
-                                required
-                                disabled={isSubmitting}
-                            />
-                        )}
-                    </form.AppField>
-                    <form.AppField name="taxAmount">
-                        {(field) => (
-                            <field.TextField
-                                id="supplier-payables-allocation-form-tax-amount"
-                                label="税额（元）"
-                                placeholder="0.00"
-                                inputMode="decimal"
-                                required
-                                disabled={isSubmitting}
-                            />
-                        )}
-                    </form.AppField>
+                    <div className="grid grid-cols-2 gap-3">
+                        <form.AppField name="netAmount">
+                            {(field) => (
+                                <field.TextField
+                                    id="supplier-payables-allocation-form-net-amount"
+                                    label="不含税金额（元）"
+                                    placeholder="0.00"
+                                    inputMode="decimal"
+                                    required
+                                    disabled={isSubmitting}
+                                />
+                            )}
+                        </form.AppField>
+                        <form.AppField name="taxAmount">
+                            {(field) => (
+                                <field.TextField
+                                    id="supplier-payables-allocation-form-tax-amount"
+                                    label="税额（元）"
+                                    placeholder="0.00"
+                                    inputMode="decimal"
+                                    required
+                                    disabled={isSubmitting}
+                                />
+                            )}
+                        </form.AppField>
+                    </div>
                 </div>
             )}
             {!session?.existingInvoiceId ? (
-                <form.AppField name="invoiceFiles">
+                <form.AppField
+                    name="invoiceFiles"
+                    validators={{
+                        onChange: ({ value }) => {
+                            if (value.length === 0) {
+                                return "请上传发票文件"
+                            }
+                            return undefined
+                        },
+                    }}
+                >
                     {(field) => (
                         <InvoiceFilesField
                             idPrefix="supplier-payables-invoice-files"
-                            label="发票文件（可选）"
+                            label="发票文件"
+                            required
                             density="compact"
                             files={field.state.value}
                             disabled={isSubmitting}
                             errors={
-                                field.state.meta.isTouched
+                                field.state.meta.isTouched ||
+                                field.form.state.isSubmitted
                                     ? toFieldErrors(field.state.meta.errors)
                                     : []
                             }
-                            description="文件随登记一并保存，可在进项发票详情下载。本机草稿不保存文件，刷新后请重新选择。"
                             onChange={(files) => {
                                 field.handleChange(files)
                                 field.handleBlur()
