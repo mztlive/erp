@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
     DialogContent,
@@ -117,9 +118,12 @@ export function SourcingProductAdjustDialog({
                 ? bodyRef.current?.querySelector<HTMLElement>(
                       '[aria-invalid="true"], [role="alert"]',
                   )
-                : document.getElementById(
+                : (document.getElementById(
                       `procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-quantity`,
-                  )
+                  ) ??
+                  document.getElementById(
+                      `sourcing-delivery-${toAutomationIdSegment(rowKey)}-add`,
+                  ))
             if (!target || !bodyRef.current?.contains(target)) return
             target.scrollIntoView({ block: "nearest", inline: "nearest" })
             target.focus({ preventScroll: true })
@@ -204,7 +208,7 @@ export function SourcingProductAdjustDialog({
             }}
         >
             <DialogContent
-                className="flex h-[min(46rem,calc(100dvh-3rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(76rem,calc(100vw-2rem))]"
+                className="flex h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[calc(100vw-3rem)] sm:max-w-none"
                 closeButtonId="sourcing-product-adjust-close"
                 finalFocus={() =>
                     (returnFocusId
@@ -245,28 +249,15 @@ export function SourcingProductAdjustDialog({
                             </DialogDescription>
                         </DialogHeader>
                         <SourcingAllocationSummary row={row} />
-                        <div className="grid min-h-0 flex-1 grid-rows-[minmax(8rem,0.8fr)_minmax(0,1.2fr)] lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:grid-rows-1">
+                        <div className="grid min-h-0 flex-1 grid-rows-[minmax(7rem,0.35fr)_minmax(0,1fr)] lg:grid-cols-[minmax(18rem,0.3fr)_minmax(0,0.7fr)] lg:grid-rows-1">
                             <section
                                 className="flex min-h-0 min-w-0 flex-col border-b border-border lg:border-r lg:border-b-0"
                                 aria-label="供给来源列表"
                             >
-                                <h3 className="shrink-0 px-5 pt-4 pb-2 text-sm font-medium">
-                                    供给来源 · {row.allocations.length}
-                                </h3>
-                                <div
-                                    ref={listRef}
-                                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-                                >
-                                    <SourcingSourceList
-                                        form={props.form}
-                                        row={row}
-                                        activeRowKey={activeRowKey}
-                                        onSelect={setSelectedRowKey}
-                                        onRemove={removeSource}
-                                        errors={errors}
-                                    />
-                                </div>
-                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3">
+                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-5 py-4">
+                                    <h3 className="text-sm font-medium">
+                                        供给来源 · {row.allocations.length}
+                                    </h3>
                                     <Button
                                         id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split`}
                                         type="button"
@@ -279,10 +270,23 @@ export function SourcingProductAdjustDialog({
                                         <PlusIcon />
                                         添加来源
                                     </Button>
-                                    <span className="text-xs text-muted-foreground">
-                                        {addDisabledReason ||
-                                            "点击来源行进行调整"}
-                                    </span>
+                                    {addDisabledReason ? (
+                                        <p className="w-full text-xs text-muted-foreground">
+                                            {addDisabledReason}
+                                        </p>
+                                    ) : null}
+                                </div>
+                                <div
+                                    ref={listRef}
+                                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                                >
+                                    <SourcingSourceList
+                                        row={row}
+                                        activeRowKey={activeRowKey}
+                                        onSelect={setSelectedRowKey}
+                                        onRemove={removeSource}
+                                        errors={errors}
+                                    />
                                 </div>
                             </section>
                             <section
@@ -290,10 +294,39 @@ export function SourcingProductAdjustDialog({
                                 className="flex min-h-0 min-w-0 flex-col"
                                 aria-label="当前来源编辑"
                             >
-                                <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 px-4 pt-2">
+                                <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 px-4 pt-2 lg:px-6">
                                     <h3 className="text-sm font-medium">
                                         编辑当前来源
                                     </h3>
+                                    {active && row.allocations.length > 1 ? (
+                                        <props.form.AppField
+                                            name={`lines[${active.index}].selected`}
+                                        >
+                                            {(field) => (
+                                                <label
+                                                    className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+                                                    htmlFor={`procurement-orders-create-row-${toAutomationIdSegment(active.line.rowKey)}-select`}
+                                                >
+                                                    <Checkbox
+                                                        id={`procurement-orders-create-row-${toAutomationIdSegment(active.line.rowKey)}-select`}
+                                                        checked={
+                                                            field.state
+                                                                .value === true
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            field.handleChange(
+                                                                checked ===
+                                                                    true,
+                                                            )
+                                                        }
+                                                    />
+                                                    本次使用此来源
+                                                </label>
+                                            )}
+                                        </props.form.AppField>
+                                    ) : null}
                                 </div>
                                 <div
                                     id="sourcing-product-adjust-body"

@@ -1,5 +1,9 @@
 import { QuantityValue } from "@/components/business"
-import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
+import {
+    compactFixed,
+    compareDecimal,
+    subtractFixed,
+} from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 
@@ -10,18 +14,20 @@ export function SourcingAllocationSummary({ row }: { row: SourcingEditorRow }) {
     try {
         excess =
             compareDecimal(row.quantity, row.product.remainingQuantity, 6) > 0
-        remaining = subtractFixed(
-            excess ? row.quantity : row.product.remainingQuantity,
-            excess ? row.product.remainingQuantity : row.quantity,
-            { maxScale: 6, outputScale: 6 },
+        remaining = compactFixed(
+            subtractFixed(
+                excess ? row.quantity : row.product.remainingQuantity,
+                excess ? row.product.remainingQuantity : row.quantity,
+                { maxScale: 6, outputScale: 6 },
+            ),
         )
     } catch {
         // 未完成数量输入时不把剩余需求伪装成零。
     }
     return (
-        <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 border-b border-border px-5 py-4 sm:grid-cols-4">
+        <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-2 border-b border-border px-5 py-3 sm:grid-cols-4">
             <div>
-                <dt className="text-xs text-muted-foreground">需求数量</dt>
+                <dt className="text-xs text-muted-foreground">需求</dt>
                 <dd className="mt-1 text-lg font-medium">
                     <QuantityValue
                         value={row.product.remainingQuantity}
@@ -30,7 +36,7 @@ export function SourcingAllocationSummary({ row }: { row: SourcingEditorRow }) {
                 </dd>
             </div>
             <div>
-                <dt className="text-xs text-muted-foreground">已分配数量</dt>
+                <dt className="text-xs text-muted-foreground">已分配</dt>
                 <dd className="mt-1 text-lg font-medium">
                     <QuantityValue
                         value={row.quantity}
@@ -45,7 +51,7 @@ export function SourcingAllocationSummary({ row }: { row: SourcingEditorRow }) {
                         !excess && "text-muted-foreground",
                     )}
                 >
-                    {excess ? "超出需求" : "剩余数量"}
+                    {excess ? "超出需求" : "待分配"}
                 </dt>
                 <dd className="mt-1 text-lg font-medium">
                     <QuantityValue value={remaining} unit={row.product.unit} />

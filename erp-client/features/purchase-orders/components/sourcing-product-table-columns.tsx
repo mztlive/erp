@@ -101,6 +101,8 @@ export function sourcingProductColumns({
                 row.product.salesPrices ? (
                     <SalesLinePriceComparison
                         prices={row.product.salesPrices}
+                        compact
+                        unit={row.product.unit}
                     />
                 ) : (
                     "—"

@@ -28,15 +28,18 @@ export function SalesLinePriceComparison({
               ? "一件代发"
               : null
     if (compact) {
+        const hasWarningChange = change != null
+        const isUnchanged = adjustment === "unchanged"
+
         return (
-            <div className="min-w-48 space-y-1.5 whitespace-normal text-xs">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="min-w-44 space-y-1 whitespace-normal text-xs">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <MoneyValue
                         display="exact"
                         value={prices.procurement_supply_price_gross}
                         className="text-sm font-semibold"
                     />
-                    {change && (
+                    {hasWarningChange ? (
                         <Badge variant="warning" className="text-xs">
                             {adjustment === "increased" ? "调高" : "调低"}
                             <span className="inline-flex items-baseline">
@@ -45,46 +48,57 @@ export function SalesLinePriceComparison({
                                     value={change}
                                     className="[&_[data-slot=money-value-number]]:text-inherit"
                                 />
-                                /{unit || "单位"}
+                                {unit ? `/${unit}` : ""}
                             </span>
                         </Badge>
-                    )}
-                </div>
-                <div className="flex flex-wrap items-baseline gap-x-1 text-muted-foreground">
-                    {adjustment === "unchanged" ? (
-                        <span>{basis ? `${basis} · ` : ""}未调整</span>
                     ) : (
-                        <>
-                            {known ? (
-                                <span>
-                                    原价{" "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={original}
-                                        className="font-normal [&_[data-slot=money-value-number]]:text-inherit"
-                                    />
-                                </span>
-                            ) : (
-                                <span>原价无法追溯，无法判断调价</span>
-                            )}
-                            {basis && <span>· {basis}</span>}
-                        </>
+                        <span className="text-muted-foreground">
+                            {isUnchanged ? (
+                                <>{basis ? `${basis} · ` : ""}未调整</>
+                            ) : !known ? (
+                                <>{basis ? `${basis} · ` : ""}原底价无法追溯</>
+                            ) : null}
+                        </span>
                     )}
                 </div>
-                {showSalesPrice && (
-                    <p className="text-muted-foreground">
-                        含税销售价{" "}
-                        <MoneyValue
-                            display="exact"
-                            value={prices.unit_price_gross}
-                        />
-                    </p>
+                {(!isUnchanged && known) || showSalesPrice ? (
+                    <div className="flex flex-wrap items-baseline gap-x-1.5 text-muted-foreground">
+                        {!isUnchanged && known ? (
+                            <span>
+                                原底价{" "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={original}
+                                    className="font-normal [&_[data-slot=money-value-number]]:text-inherit"
+                                />
+                                {basis ? ` · ${basis}` : ""}
+                            </span>
+                        ) : null}
+                        {!isUnchanged && known && showSalesPrice ? (
+                            <span>·</span>
+                        ) : null}
+                        {showSalesPrice ? (
+                            <span>
+                                含税售价{" "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={prices.unit_price_gross}
+                                    className="font-normal [&_[data-slot=money-value-number]]:text-inherit"
+                                />
+                            </span>
+                        ) : null}
+                    </div>
+                ) : null}
+                {(hasWarningChange ? warnings.slice(1) : warnings).map(
+                    (warning) => (
+                        <p
+                            key={warning}
+                            className="text-warning-soft-foreground"
+                        >
+                            {warning}
+                        </p>
+                    ),
                 )}
-                {(change ? warnings.slice(1) : warnings).map((warning) => (
-                    <p key={warning} className="text-warning-soft-foreground">
-                        {warning}
-                    </p>
-                ))}
             </div>
         )
     }

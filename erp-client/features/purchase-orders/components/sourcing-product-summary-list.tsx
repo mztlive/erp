@@ -122,6 +122,8 @@ export function SourcingProductSummaryList({
                                     <div className="px-4 pt-2">
                                         <SalesLinePriceComparison
                                             prices={row.product.salesPrices}
+                                            compact
+                                            unit={row.product.unit}
                                         />
                                     </div>
                                 ) : null}

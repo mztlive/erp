@@ -1,28 +1,24 @@
 "use client"
 
-import { MoneyValue, QuantityValue } from "@/components/business"
+import { QuantityValue } from "@/components/business"
 import { Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { findSourcingOption } from "../lib/purchase-order-create-model"
 import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
-import type { SourcingEditorProps } from "./create-sourcing/types"
+import { sourcingDeliveryAllocations } from "../lib/sourcing/delivery"
+import { usesAddressQuantity } from "../lib/sourcing/delivery-editor"
 
-const columns =
-    "grid grid-cols-[minmax(0,1fr)_4.5rem_4rem_5.5rem] items-center gap-2"
-
-/** 勾选决定提交范围；整行按钮只切换编辑对象，所有来源摘要持续可比较。 */
+/** 来源列表只显示身份与分配摘要；参与范围在当前来源编辑区调整。 */
 export function SourcingSourceList({
-    form,
     row,
     activeRowKey,
     onSelect,
     onRemove,
     errors,
-}: Pick<SourcingEditorProps, "form"> & {
+}: {
     row: SourcingEditorRow
     activeRowKey?: string
     onSelect: (rowKey: string) => void
@@ -31,18 +27,8 @@ export function SourcingSourceList({
 }) {
     return (
         <div className="min-w-0">
-            <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-l-2 border-l-transparent bg-background px-3 py-2 text-xs text-muted-foreground">
-                <span className="w-8 shrink-0 text-center">使用</span>
-                <div className={cn(columns, "min-w-0 flex-1 px-2")}>
-                    <span>供给来源</span>
-                    <span className="text-right">含税单价</span>
-                    <span className="text-right">分配数量</span>
-                    <span className="text-right">预计交付</span>
-                </div>
-                <span className="w-16 shrink-0 text-center">操作</span>
-            </div>
             <ul className="divide-y divide-border/60">
-                {row.allocations.map(({ line, index }) => {
+                {row.allocations.map(({ line }) => {
                     const option = findSourcingOption(row.product, line.basisId)
                     const name =
                         option?.sourceType === "EXISTING_STOCK"
@@ -58,29 +44,10 @@ export function SourcingSourceList({
                         <li
                             key={line.rowKey}
                             className={cn(
-                                "flex items-center gap-2 border-l-2 border-l-transparent px-3",
+                                "flex items-center gap-1 border-l-2 border-l-transparent pr-2 pl-3",
                                 active && "border-l-foreground bg-muted/50",
                             )}
                         >
-                            <div className="flex w-8 shrink-0 justify-center">
-                                <form.AppField
-                                    name={`lines[${index}].selected`}
-                                >
-                                    {(field) => (
-                                        <Checkbox
-                                            id={`procurement-orders-create-row-${toAutomationIdSegment(line.rowKey)}-select`}
-                                            checked={field.state.value === true}
-                                            onCheckedChange={(checked) =>
-                                                field.handleChange(
-                                                    checked === true,
-                                                )
-                                            }
-                                            aria-label={`本次使用 ${name} · ${route}`}
-                                            data-testid={`purchase-sourcing-selected-${line.rowKey}`}
-                                        />
-                                    )}
-                                </form.AppField>
-                            </div>
                             <button
                                 id={`${id}-edit`}
                                 type="button"
@@ -89,12 +56,11 @@ export function SourcingSourceList({
                                 aria-label={`编辑 ${name} · ${route}，分配数量 ${line.quantity || "待填写"}${row.product.unit}${hasError ? "，待调整" : ""}`}
                                 onClick={() => onSelect(line.rowKey)}
                                 className={cn(
-                                    columns,
-                                    "min-w-0 flex-1 cursor-pointer rounded-sm px-2 py-3 text-left text-sm outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
+                                    "flex min-w-0 flex-1 cursor-pointer flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-sm px-2 py-4 text-left text-sm outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
                                     !line.selected && "text-muted-foreground",
                                 )}
                             >
-                                <span className="min-w-0">
+                                <span className="min-w-0 flex-1 basis-44">
                                     <span
                                         className="block truncate font-medium"
                                         title={name}
@@ -111,42 +77,36 @@ export function SourcingSourceList({
                                         </span>
                                     ) : null}
                                 </span>
-                                <span className="text-right text-xs">
-                                    {option?.sourceType === "EXISTING_STOCK" ? (
-                                        "库存核算"
-                                    ) : option ? (
-                                        <MoneyValue
-                                            value={option.unitCostGross}
-                                            display="exact"
-                                        />
-                                    ) : (
-                                        "—"
-                                    )}
-                                </span>
-                                <span className="text-right">
+                                <span className="shrink-0 text-right text-sm">
                                     {line.quantity ? (
                                         <QuantityValue
                                             value={line.quantity}
-                                            unit={null}
+                                            unit={row.product.unit}
                                         />
                                     ) : (
-                                        <span className="text-xs text-muted-foreground">
-                                            待填写
-                                        </span>
+                                        "待填写"
                                     )}
-                                </span>
-                                <span className="num text-right text-xs">
-                                    {option?.sourceType === "EXISTING_STOCK"
-                                        ? "—"
-                                        : line.expectedDeliveryDate || "待填写"}
+                                    {usesAddressQuantity(row.product, line) ? (
+                                        <span className="text-xs text-muted-foreground">
+                                            {" "}
+                                            ·{" "}
+                                            {
+                                                sourcingDeliveryAllocations(
+                                                    row.product,
+                                                    line,
+                                                ).length
+                                            }{" "}
+                                            个地址
+                                        </span>
+                                    ) : null}
                                 </span>
                             </button>
                             <Button
                                 id={`procurement-orders-create-row-${toAutomationIdSegment(line.rowKey)}-split-remove`}
                                 type="button"
                                 variant="ghost"
-                                size="sm"
-                                className="w-16 px-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                size="icon-sm"
+                                className="shrink-0 text-muted-foreground hover:text-destructive"
                                 disabled={row.allocations.length <= 1}
                                 title={
                                     row.allocations.length <= 1
@@ -157,7 +117,6 @@ export function SourcingSourceList({
                                 onClick={() => onRemove(line.rowKey)}
                             >
                                 <Trash2Icon />
-                                移除
                             </Button>
                         </li>
                     )

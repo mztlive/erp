@@ -23,6 +23,8 @@ import {
 } from "./create-sourcing/sourcing-fields"
 import type { SourcingEditorProps } from "./create-sourcing/types"
 import { SourcingDeliveryEditor } from "./sourcing-delivery-plan"
+import { SourcingAddressEditor } from "./sourcing-address-editor"
+import { usesAddressQuantity } from "../lib/sourcing/delivery-editor"
 import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
 import { SourcingCompactFacts } from "./sourcing-compact-facts"
 import {
@@ -62,12 +64,15 @@ export function SourcingAllocationEditor({
     const needsWarehouse =
         option?.sourceType === "PURCHASE" &&
         option.fulfillmentResponsibility === "WAREHOUSE"
+    const addressDriven =
+        expandDeliverySummary && usesAddressQuantity(product, line)
     const id = `procurement-orders-create-row-${toAutomationIdSegment(line.rowKey)}`
     return (
         <div
             key={line.rowKey}
             className={cn(
-                "space-y-3 px-4 py-4",
+                "space-y-4 px-4 py-4",
+                expandDeliverySummary && "@min-[560px]/sourcing:px-6",
                 !line.selected && "bg-muted/20",
             )}
         >
@@ -109,88 +114,44 @@ export function SourcingAllocationEditor({
                     ) : null}
                 </div>
             ) : null}
-            <div className="min-w-0 space-y-1.5">
-                <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                        供给来源
-                        <RequiredMark />
-                    </p>
-                    <SourcingRecommendationHint
-                        id={`${id}-recommendation`}
-                        form={form}
-                        order={order}
-                        product={product}
-                        index={index}
-                    />
-                </div>
-                <SourcingOptionField
-                    form={form}
-                    order={order}
-                    index={index}
-                    rowKey={line.rowKey}
-                    product={product}
-                    showDeliverySummary={false}
-                />
-                {!condensed ? (
-                    <SourcingOptionFacts option={option} product={product} />
-                ) : null}
-            </div>
             <div
                 className={cn(
-                    "grid min-w-0 grid-cols-1 gap-3 @min-[420px]/sourcing:grid-cols-2",
-                    needsWarehouse &&
-                        (compact
-                            ? "@min-[560px]/sourcing:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1.1fr)]"
-                            : "@min-[680px]/sourcing:grid-cols-3"),
+                    addressDriven &&
+                        "grid min-w-0 grid-cols-1 items-start gap-4 @min-[640px]/sourcing:grid-cols-[minmax(0,1fr)_15rem]",
                 )}
             >
                 <div className="min-w-0 space-y-1.5">
-                    <p className="text-xs text-muted-foreground">
-                        本次分配数量（{product.unit}）<RequiredMark />
-                    </p>
-                    <form.AppField name={`lines[${index}].quantity`}>
-                        {(field) => (
-                            <field.TextField
-                                id={`${id}-quantity`}
-                                label={`本次分配数量，${product.itemName}`}
-                                required
-                                hideLabel
-                                type="number"
-                                inputMode="decimal"
-                                min="0"
-                                step={
-                                    sourcingQuantityStep(
-                                        product.quantityScale,
-                                    ) ?? "1"
-                                }
-                                inputClassName="num"
-                                testId={`purchase-sourcing-quantity-${line.rowKey}`}
-                            />
-                        )}
-                    </form.AppField>
-                </div>
-                {needsWarehouse ? (
-                    <div className="min-w-0 space-y-1.5">
+                    <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
                         <p className="text-xs text-muted-foreground">
-                            采购入库目标仓
+                            供给来源
                             <RequiredMark />
                         </p>
-                        <SourcingTargetWarehouseField
+                        <SourcingRecommendationHint
+                            id={`${id}-recommendation`}
                             form={form}
-                            index={index}
-                            rowKey={line.rowKey}
                             order={order}
-                            salesOrderLineId={line.salesOrderLineId}
-                        />
-                        <WarehouseDeliveryNote
-                            option={option}
-                            warehouseId={line.targetWarehouseId ?? ""}
+                            product={product}
+                            index={index}
                         />
                     </div>
-                ) : null}
-                {!isStock ? (
+                    <SourcingOptionField
+                        form={form}
+                        order={order}
+                        index={index}
+                        rowKey={line.rowKey}
+                        product={product}
+                        showDeliverySummary={false}
+                    />
+                    {!condensed ? (
+                        <SourcingOptionFacts
+                            option={option}
+                            product={product}
+                        />
+                    ) : null}
+                </div>
+                {addressDriven ? (
                     <div className="min-w-0 space-y-1.5">
-                        <p className="text-xs text-muted-foreground">
+                        <p className="flex min-h-6 items-center text-xs text-muted-foreground">
                             预计交付日
                             <RequiredMark />
                         </p>
@@ -200,11 +161,83 @@ export function SourcingAllocationEditor({
                             rowKey={line.rowKey}
                             order={order}
                             salesOrderLineId={line.salesOrderLineId}
-                            showDeadlineHint={!condensed}
+                            showDeadlineHint={false}
                         />
                     </div>
                 ) : null}
             </div>
+            {!addressDriven ? (
+                <div
+                    className={cn(
+                        "grid min-w-0 grid-cols-1 gap-3 @min-[420px]/sourcing:grid-cols-2",
+                        needsWarehouse &&
+                            (compact
+                                ? "@min-[560px]/sourcing:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1.1fr)]"
+                                : "@min-[680px]/sourcing:grid-cols-3"),
+                    )}
+                >
+                    <div className="min-w-0 space-y-1.5">
+                        <p className="text-xs text-muted-foreground">
+                            本次分配数量（{product.unit}）<RequiredMark />
+                        </p>
+                        <form.AppField name={`lines[${index}].quantity`}>
+                            {(field) => (
+                                <field.TextField
+                                    id={`${id}-quantity`}
+                                    label={`本次分配数量，${product.itemName}`}
+                                    required
+                                    hideLabel
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step={
+                                        sourcingQuantityStep(
+                                            product.quantityScale,
+                                        ) ?? "1"
+                                    }
+                                    inputClassName="num"
+                                    testId={`purchase-sourcing-quantity-${line.rowKey}`}
+                                />
+                            )}
+                        </form.AppField>
+                    </div>
+                    {needsWarehouse ? (
+                        <div className="min-w-0 space-y-1.5">
+                            <p className="text-xs text-muted-foreground">
+                                采购入库目标仓
+                                <RequiredMark />
+                            </p>
+                            <SourcingTargetWarehouseField
+                                form={form}
+                                index={index}
+                                rowKey={line.rowKey}
+                                order={order}
+                                salesOrderLineId={line.salesOrderLineId}
+                            />
+                            <WarehouseDeliveryNote
+                                option={option}
+                                warehouseId={line.targetWarehouseId ?? ""}
+                            />
+                        </div>
+                    ) : null}
+                    {!isStock ? (
+                        <div className="min-w-0 space-y-1.5">
+                            <p className="text-xs text-muted-foreground">
+                                预计交付日
+                                <RequiredMark />
+                            </p>
+                            <SourcingExpectedDeliveryField
+                                form={form}
+                                index={index}
+                                rowKey={line.rowKey}
+                                order={order}
+                                salesOrderLineId={line.salesOrderLineId}
+                                showDeadlineHint={!condensed}
+                            />
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
             {condensed ? (
                 <SourcingCompactFacts
                     key={line.basisId}
@@ -213,15 +246,24 @@ export function SourcingAllocationEditor({
                     product={product}
                 />
             ) : null}
-            <SourcingDeliveryEditor
-                form={form}
-                product={product}
-                line={line}
-                index={index}
-                showNotApplicable={false}
-                condensed={condensed}
-                expandSummary={expandDeliverySummary}
-            />
+            {addressDriven ? (
+                <SourcingAddressEditor
+                    form={form}
+                    product={product}
+                    line={line}
+                    index={index}
+                />
+            ) : (
+                <SourcingDeliveryEditor
+                    form={form}
+                    product={product}
+                    line={line}
+                    index={index}
+                    showNotApplicable={false}
+                    condensed={condensed}
+                    expandSummary={expandDeliverySummary}
+                />
+            )}
         </div>
     )
 }
