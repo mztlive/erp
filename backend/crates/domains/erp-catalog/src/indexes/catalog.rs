@@ -110,6 +110,7 @@ fn product_brand_indexes() -> Vec<IndexModel> {
         unique_index("uk_product_brands_id", doc! { "id": 1 }),
         unique_index("uk_product_brands_brand_code", doc! { "brand_code": 1 }),
         named_index("idx_product_brands_status", doc! { "status": 1 }),
+        named_index("idx_product_brands_name", doc! { "name": 1, "deleted_at": 1 }),
     ]
 }
 

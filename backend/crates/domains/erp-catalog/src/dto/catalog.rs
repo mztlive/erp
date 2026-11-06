@@ -9,7 +9,11 @@
 //! 候选（见域报告）。
 
 mod attribute;
+mod brand_import;
 mod brand_unit;
+pub use brand_import::{
+    BrandImportFailures, BrandImportJobRequest, BrandImportResult, BrandImportRow, BrandImportStatus,
+};
 mod category;
 mod common;
 mod import;

@@ -9,6 +9,24 @@ use crate::entity::catalog::{EnableStatus, Product, ProductBrand, ProductCategor
 /// 导入用品牌精确查找。
 #[allow(async_fn_in_trait)]
 pub trait ProductBrandRepositoryImportLookupExt {
+    /// 按重放身份、代码、精确名称依次查找品牌，不忽略停用记录。
+    /// # 参数
+    /// * `id` - 本次导入的稳定品牌身份
+    /// * `code` - 用户明确填写的代码；空代码不查
+    /// * `name` - 已规范化的品牌名称
+    /// * `executor` - 当前行事务执行器
+    /// # 返回
+    /// 既有记录；身份和代码查找包括软删除，名称查找仅限未删除记录。
+    /// # 错误
+    /// 数据库查询失败。
+    async fn find_import_match(
+        &self,
+        id: &str,
+        code: Option<&str>,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductBrand>>;
+
     /// 按品牌名称精确查找启用中的品牌。
     ///
     /// # 参数
@@ -45,6 +63,25 @@ pub trait ProductBrandRepositoryImportLookupExt {
 }
 
 impl ProductBrandRepositoryImportLookupExt for persistence_core::Repository<'_, ProductBrand> {
+    async fn find_import_match(
+        &self,
+        id: &str,
+        code: Option<&str>,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductBrand>> {
+        if let Some(brand) = self.find_by_id_including_deleted(id, executor).await? {
+            return Ok(Some(brand));
+        }
+        if let Some(code) = code
+            && let Some(brand) =
+                self.find_one_by_field_including_deleted("brand_code", code, executor).await?
+        {
+            return Ok(Some(brand));
+        }
+        self.find_one_by_field("name", name, executor).await
+    }
+
     async fn find_enabled_by_exact_name(
         &self,
         name: &str,

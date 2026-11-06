@@ -208,6 +208,25 @@ pub struct BackgroundJob {
 }
 
 impl BackgroundJob {
+    /// 判断逐行导入任务是否可开始或恢复，终态与仍在推进的任务不可抢占。
+    /// # 参数
+    /// * `at` - 当前时点
+    /// * `stale_seconds` - 未推进多久后允许恢复
+    /// # 返回
+    /// 尚未结束且等待执行或认领已过期的导入任务返回 true。
+    /// # 错误
+    /// 无。
+    pub fn can_resume_import(&self, at: Instant, stale_seconds: i64) -> bool {
+        stale_seconds > 0
+            && self.job_type == JobType::Import
+            && self.finished_at.is_none()
+            && (self.status == JobStatus::Pending
+                || (matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
+                    && self
+                        .last_progress_at
+                        .is_none_or(|last| at.unix_secs().saturating_sub(last.unix_secs()) >= stale_seconds)))
+    }
+
     /// 创建后台任务。
     ///
     /// 完成 job_no/requested_by/request_id 的校验与规范化（trim、非空、长度

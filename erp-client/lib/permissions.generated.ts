@@ -2478,6 +2478,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/product-brands/import/jobs",
+                description: "提交品牌导入任务",
+                permission: {
+                    resource: "product_brand",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-brands/import/jobs/{id}/failures",
+                description: "下载品牌导入待处理行",
+                permission: {
+                    resource: "product_brand",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/product-brands/with-assets",
                 description: "一次创建商品品牌及Logo",
                 permission: {

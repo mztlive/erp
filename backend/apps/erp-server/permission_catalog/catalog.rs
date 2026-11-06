@@ -75,6 +75,14 @@ pub const PRODUCT_BRAND_LIST: PermissionDef =
 pub const PRODUCT_BRAND_CREATE: PermissionDef =
     PermissionDef { code: "product_brand:create", group: groups::CATALOG, description: "创建商品品牌" };
 
+/// 批量导入品牌，复用品牌创建权限。
+pub const PRODUCT_BRAND_IMPORT: PermissionDef =
+    PRODUCT_BRAND_CREATE.described(groups::CATALOG, "提交品牌导入任务");
+
+/// 下载品牌导入任务待处理行，仍需原提交人及当前创建权限。
+pub const PRODUCT_BRAND_IMPORT_FAILURES: PermissionDef =
+    PRODUCT_BRAND_CREATE.described(groups::CATALOG, "下载品牌导入待处理行");
+
 /// 一次创建商品品牌及Logo。
 pub const PRODUCT_BRAND_CREATE_WITH_ASSETS: PermissionDef =
     PRODUCT_BRAND_CREATE.described(groups::CATALOG, "一次创建商品品牌及Logo");
@@ -282,6 +290,8 @@ pub const ENTRIES: &[(&str, PermissionDef)] = &[
     ("PRODUCT_CATEGORY_DELETE", PRODUCT_CATEGORY_DELETE),
     ("PRODUCT_BRAND_LIST", PRODUCT_BRAND_LIST),
     ("PRODUCT_BRAND_CREATE", PRODUCT_BRAND_CREATE),
+    ("PRODUCT_BRAND_IMPORT", PRODUCT_BRAND_IMPORT),
+    ("PRODUCT_BRAND_IMPORT_FAILURES", PRODUCT_BRAND_IMPORT_FAILURES),
     ("PRODUCT_BRAND_CREATE_WITH_ASSETS", PRODUCT_BRAND_CREATE_WITH_ASSETS),
     ("PRODUCT_BRAND_UPDATE", PRODUCT_BRAND_UPDATE),
     ("PRODUCT_BRAND_UPDATE_WITH_ASSETS", PRODUCT_BRAND_UPDATE_WITH_ASSETS),

@@ -162,7 +162,8 @@ export function BackgroundJobPreviewSheet({
                             </p>
                         )
                     ) : previewJob.domain_job_type === "PRODUCT_IMPORT" ||
-                      previewJob.domain_job_type === "SUPPLIER_IMPORT" ? (
+                      previewJob.domain_job_type === "SUPPLIER_IMPORT" ||
+                      previewJob.domain_job_type === "BRAND_IMPORT" ? (
                         <DirectImportResult
                             job={previewJob}
                             currentUserId={currentUserId}

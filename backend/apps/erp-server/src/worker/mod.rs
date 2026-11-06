@@ -9,7 +9,9 @@ use std::time::Duration;
 
 use axum::Router;
 use background_runtime::BackgroundRunner;
-use erp_data_import::background::{ProductImportTaskAdapter, SupplierImportTaskAdapter};
+use erp_data_import::background::{
+    BrandImportTaskAdapter, ProductImportTaskAdapter, SupplierImportTaskAdapter,
+};
 use erp_order_to_cash::background::SalesSelectionTaskAdapter;
 use erp_order_to_cash::sales_selection::SalesSelectionProcess;
 use erp_supplier_catalog::background::{
@@ -128,6 +130,7 @@ fn build_runner(state: &Application) -> Result<BackgroundRunner> {
     Ok(BackgroundRunner::new(Duration::from_secs(2))
         .register(ProductImportTaskAdapter::new(state.product_import_process()))
         .register(SupplierImportTaskAdapter::new(state.supplier_import_process()))
+        .register(BrandImportTaskAdapter::new(state.brand_import_process()))
         .register(SupplierCatalogAdoptionTaskAdapter::new(
             state.db(),
             state.supplier_catalog_adoption_process()?,

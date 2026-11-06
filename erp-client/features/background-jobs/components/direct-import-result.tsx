@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useQueryClient } from "@tanstack/react-query"
 import { ArrowUpRightIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
@@ -8,6 +9,7 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasPermission } from "@/lib/permissions"
 import type { BackgroundJobItemView, BackgroundJobView } from "../api"
+import { BrandImportFailures } from "./brand-import-failures"
 import { SupplierImportFailures } from "./supplier-import-failures"
 
 type DirectImportResultProps = {
@@ -22,7 +24,9 @@ export function DirectImportResult({
 }: DirectImportResultProps) {
     const account = useAccountProfileQuery()
     const supplier = job.domain_job_type === "SUPPLIER_IMPORT"
-    const resource = supplier ? "supplier" : "product"
+    const brand = job.domain_job_type === "BRAND_IMPORT"
+    const client = useQueryClient()
+    const resource = brand ? "product_brand" : supplier ? "supplier" : "product"
     const permissions = account.data?.permissions
     const canList = hasPermission(permissions, `${resource}:list`)
     const canImport = hasPermission(permissions, `${resource}:create`)
@@ -65,9 +69,11 @@ export function DirectImportResult({
             </dl>
             <div className="space-y-2 text-muted-foreground">
                 <p>
-                    {supplier
-                        ? "成功行已登记供应商资料。重复供应商按逐行说明跳过，已有资料不会重复创建。"
-                        : "商品新建、规格追加、图片补齐及供给处理的具体结果见逐行说明，成功行已经保存。"}
+                    {brand
+                        ? "成功行已建立品牌。已有品牌核对后跳过，原状态和 Logo 保持不变。"
+                        : supplier
+                          ? "成功行已登记供应商资料。重复供应商按逐行说明跳过，已有资料不会重复创建。"
+                          : "商品新建、规格追加、图片补齐及供给处理的具体结果见逐行说明，成功行已经保存。"}
                 </p>
                 {job.failed_count > 0 && (
                     <p>
@@ -83,9 +89,11 @@ export function DirectImportResult({
                 )}
                 {finished && needsAttention && (
                     <p>
-                        {supplier
-                            ? "下载待处理行，核对结果后修正文件，再到供应商列表导入。下载文件仅限原提交人，并重新检查当前权限。"
-                            : "请按逐行结果中的 Excel 行号核对原文件，只保留需要处理的行，修正后到商品列表重新导入。"}
+                        {brand
+                            ? "下载待处理行，修正后到品牌列表重新导入。仅原提交人且仍有品牌创建权限时可下载。"
+                            : supplier
+                              ? "下载待处理行，核对结果后修正文件，再到供应商列表导入。下载文件仅限原提交人，并重新检查当前权限。"
+                              : "请按逐行结果中的 Excel 行号核对原文件，只保留需要处理的行，修正后到商品列表重新导入。"}
                     </p>
                 )}
             </div>
@@ -94,21 +102,38 @@ export function DirectImportResult({
                 needsAttention &&
                 job.requested_by === currentUserId &&
                 canImport && <SupplierImportFailures jobId={job.id} />}
+            {brand &&
+                finished &&
+                needsAttention &&
+                job.requested_by === currentUserId &&
+                canImport && <BrandImportFailures jobId={job.id} />}
             {canList && (
                 <Button
                     id={`${id}-open-list`}
+                    onClick={() => {
+                        if (brand)
+                            void client.invalidateQueries({
+                                queryKey: ["master-data"],
+                            })
+                    }}
                     variant="outline"
                     render={
                         <Link
                             href={
-                                supplier
-                                    ? "/master-data/suppliers"
-                                    : "/master-data/products"
+                                brand
+                                    ? "/master-data/brands"
+                                    : supplier
+                                      ? "/master-data/suppliers"
+                                      : "/master-data/products"
                             }
                         />
                     }
                 >
-                    {supplier ? "前往供应商列表" : "前往商品列表"}
+                    {brand
+                        ? "前往品牌列表"
+                        : supplier
+                          ? "前往供应商列表"
+                          : "前往商品列表"}
                     <ArrowUpRightIcon data-icon="inline-end" aria-hidden />
                 </Button>
             )}
@@ -125,17 +150,24 @@ export function DirectImportItemIdentity({
     const account = useAccountProfileQuery()
     const name =
         item.object_type === "product_import_row" ||
-        item.object_type === "supplier_import_row"
+        item.object_type === "supplier_import_row" ||
+        item.object_type === "brand_import_row"
             ? item.object_id
             : null
     const type = item.result_object_type
-    const resource = type === "product" || type === "supplier" ? type : null
+    const resource =
+        type === "product" || type === "supplier" || type === "product_brand"
+            ? type
+            : null
     const canRead =
         resource &&
-        hasPermission(account.data?.permissions, `${resource}:detail`)
+        hasPermission(
+            account.data?.permissions,
+            `${resource}:${resource === "product_brand" ? "list" : "detail"}`,
+        )
     const href =
         resource && item.result_object_id
-            ? `/master-data/${resource === "product" ? "products" : "suppliers"}/${encodeURIComponent(item.result_object_id)}?section=overview`
+            ? `/master-data/${resource === "product_brand" ? "brands" : resource === "product" ? "products" : "suppliers"}/${encodeURIComponent(item.result_object_id)}?section=overview`
             : null
 
     return (
@@ -149,7 +181,11 @@ export function DirectImportItemIdentity({
                     className="mt-1 h-auto px-0"
                     render={<Link href={href} />}
                 >
-                    {resource === "product" ? "查看商品资料" : "查看供应商资料"}
+                    {resource === "product_brand"
+                        ? "查看品牌资料"
+                        : resource === "product"
+                          ? "查看商品资料"
+                          : "查看供应商资料"}
                     <ArrowUpRightIcon data-icon="inline-end" aria-hidden />
                 </Button>
             )}

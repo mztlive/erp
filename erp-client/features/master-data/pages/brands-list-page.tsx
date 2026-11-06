@@ -1,6 +1,12 @@
 "use client"
 
-import { DownloadIcon, PlusIcon } from "lucide-react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "@/components/ui/toast"
+import { launchNavDelivery } from "@/lib/nav-delivery"
+import type { BackgroundJobView } from "@/lib/background-jobs"
+import { BrandImportDialog } from "@/features/master-data/components/brand/brand-import-dialog"
+import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
 import { ListWorkSurface } from "@/components/business/list-workspace"
@@ -24,6 +30,24 @@ import {
 } from "@/features/master-data/lib/copy"
 
 export function BrandsListPage() {
+    const router = useRouter()
+    const onImportSubmitted = (job: BackgroundJobView, fileName: string) => {
+        launchNavDelivery(
+            "background-task",
+            document.getElementById("master-data-brands-list-import"),
+        )
+        toast.add({
+            title: "品牌导入任务已提交",
+            description: `「${fileName}」共 ${job.total_count} 行，可关闭页面，进度与结果在「后台任务」查看。`,
+            type: "success",
+            timeout: 6000,
+            actionProps: {
+                children: "查看任务",
+                onClick: () => router.push("/governance/background-jobs"),
+            },
+        })
+    }
+    const [importOpen, setImportOpen] = useState(false)
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useDictionaryListState({
@@ -68,6 +92,15 @@ export function BrandsListPage() {
                     loading: exportPending,
                     disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
+                },
+                {
+                    id: "master-data-brands-list-import",
+                    actionKey: "import",
+                    label: "批量导入",
+                    icon: UploadIcon,
+                    variant: "outline",
+                    hidden: !state.canCreate,
+                    onClick: () => setImportOpen(true),
                 },
                 {
                     id: "master-data-brands-list-create",
@@ -131,7 +164,7 @@ export function BrandsListPage() {
                         hasActiveFilters={hasActiveFilters}
                         onClearFilters={filters.clearAllFilters}
                         emptyTitle="还没有品牌资料"
-                        emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
+                        emptyDescription="点击「新建」创建品牌，或使用「批量导入」一次建立多个品牌。"
                         emptyAction={
                             state.canCreate ? (
                                 <Button
@@ -160,6 +193,12 @@ export function BrandsListPage() {
                 onRevise={state.setReviseTarget}
                 onDisable={state.setDisableTarget}
             />
+            {importOpen && (
+                <BrandImportDialog
+                    onClose={() => setImportOpen(false)}
+                    onSubmitted={onImportSubmitted}
+                />
+            )}
             <BrandCreateDialog
                 open={state.createOpen}
                 onOpenChange={state.setCreateOpen}

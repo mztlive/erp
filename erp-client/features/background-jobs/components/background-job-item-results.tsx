@@ -74,7 +74,9 @@ export function BackgroundJobItemResults({
                                     {previewJob.domain_job_type ===
                                         "PRODUCT_IMPORT" ||
                                     previewJob.domain_job_type ===
-                                        "SUPPLIER_IMPORT"
+                                        "SUPPLIER_IMPORT" ||
+                                    previewJob.domain_job_type ===
+                                        "BRAND_IMPORT"
                                         ? directImportItemResultLabel(item)
                                         : item.result_code === "outcome_unknown"
                                           ? "结果待核对"

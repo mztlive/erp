@@ -137,6 +137,8 @@ pub(super) fn cases() -> Vec<(&'static str, Permission)> {
         ("product_category:delete", permissions::catalog::PRODUCT_CATEGORY_DELETE.permission()),
         ("product_brand:list", permissions::catalog::PRODUCT_BRAND_LIST.permission()),
         ("product_brand:create", permissions::catalog::PRODUCT_BRAND_CREATE.permission()),
+        ("product_brand:create", permissions::catalog::PRODUCT_BRAND_IMPORT.permission()),
+        ("product_brand:create", permissions::catalog::PRODUCT_BRAND_IMPORT_FAILURES.permission()),
         ("product_brand:create", permissions::catalog::PRODUCT_BRAND_CREATE_WITH_ASSETS.permission()),
         ("product_brand:update", permissions::catalog::PRODUCT_BRAND_UPDATE.permission()),
         ("product_brand:update", permissions::catalog::PRODUCT_BRAND_UPDATE_WITH_ASSETS.permission()),

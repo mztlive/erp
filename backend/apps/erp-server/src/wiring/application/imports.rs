@@ -9,6 +9,23 @@ use super::{
 };
 
 impl Application {
+    /// 装配持久化品牌导入流程。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 供 HTTP 与 worker 共用的流程。
+    /// # 错误
+    /// 无；构造不执行 I/O。
+    pub fn brand_import_process(&self) -> erp_data_import::BrandImportProcess {
+        erp_data_import::BrandImportProcess::new(
+            self.db(),
+            self.catalog_service(),
+            self.rbac(),
+            self.storage().clone(),
+            self.sensitive_data(),
+        )
+    }
+
     /// 产品报价表异步导入流程。
     ///
     /// # 返回

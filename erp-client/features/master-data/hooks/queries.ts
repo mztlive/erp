@@ -8,6 +8,13 @@ import {
     useQueryClient,
 } from "@tanstack/react-query"
 
+import {
+    importBrands,
+    type BrandImportRow,
+} from "@/features/master-data/api/brand-import"
+
+import { backgroundJobKeys } from "@/lib/background-jobs"
+
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     createMasterDataObject,
@@ -279,6 +286,28 @@ export function useProductListingMutation() {
         }) => updateProductListingStatus(input.productId, input.listingStatus),
         onSuccess: async () => {
             await invalidateMasterDataCaches(queryClient)
+        },
+    })
+}
+
+/** 一次提交持久化后台任务，响应成功后即可关闭弹窗。 */
+export function useBrandImportMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({
+            requestId,
+            fileName,
+            rows,
+        }: {
+            requestId: string
+            fileName: string
+            rows: BrandImportRow[]
+        }) => importBrands(requestId, fileName, rows),
+        retry: false,
+        onSuccess: () => {
+            void queryClient.invalidateQueries({
+                queryKey: backgroundJobKeys.all,
+            })
         },
     })
 }

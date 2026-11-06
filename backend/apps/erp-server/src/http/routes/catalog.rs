@@ -124,6 +124,22 @@ fn product_brand_collection_routes(rbac: &SharedRbacService) -> Router<HttpState
             ),
         )
         .route(
+            "/product-brands/import/jobs",
+            with_permission(
+                post(catalog::brand_import::submit),
+                rbac,
+                permissions::catalog::PRODUCT_BRAND_IMPORT,
+            ),
+        )
+        .route(
+            "/product-brands/import/jobs/{id}/failures",
+            with_permission(
+                get(catalog::brand_import::failures),
+                rbac,
+                permissions::catalog::PRODUCT_BRAND_IMPORT_FAILURES,
+            ),
+        )
+        .route(
             "/product-brands/with-assets",
             with_permission(
                 upload::multipart_route(
