@@ -78,22 +78,35 @@ export function ReceiptSessionFields({
                     )}
                 />
             </div>
-            <form.AppField name="receiptFiles">
+            <form.AppField
+                name="receiptFiles"
+                validators={{
+                    onChange: ({ value }) => {
+                        if (
+                            value.length === 0 &&
+                            (!existing || (unsavedFileCount > 0 && !receiptId))
+                        ) {
+                            return "请上传回款凭证"
+                        }
+                        return undefined
+                    },
+                }}
+            >
                 {(field) => (
                     <InvoiceFilesField
                         idPrefix="customer-receivables-receipt-files"
-                        label="回款凭证（选填）"
+                        label="回款凭证"
+                        required
                         uploadLabel="上传回款凭证"
                         fileKind="回款凭证"
                         density="compact"
                         files={field.state.value}
                         disabled={locked}
                         errors={
-                            field.state.meta.isTouched
+                            field.state.meta.isTouched || field.form.state.isSubmitted
                                 ? toFieldErrors(field.state.meta.errors)
                                 : []
                         }
-                        description="保存草稿或提交审批时一并上传。仅暂存本页不会保存新选文件，刷新后需重新选择。"
                         onChange={(files) => {
                             field.handleChange(files)
                             field.handleBlur()

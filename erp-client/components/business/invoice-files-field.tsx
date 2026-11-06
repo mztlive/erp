@@ -1,5 +1,6 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
 import { fileUploadText } from "@/lib/ui-text"
 import { FileUpload } from "@/components/ui/file-upload"
 import {
@@ -25,7 +26,8 @@ export function InvoiceFilesField({
     fileKind = "发票附件",
     density = "default",
     idPrefix = "customer-receivables-session-invoice-files",
-    description = "登记成功后，销售单详情可下载已上传的发票。",
+    description = "",
+    required = false,
 }: {
     idPrefix?: string
     description?: string
@@ -37,12 +39,16 @@ export function InvoiceFilesField({
     onChange: (files: File[]) => void
     disabled: boolean
     errors: Array<{ message?: string } | undefined>
+    required?: boolean
 }) {
     const baseId = idPrefix
     const invalid = errors.length > 0
     return (
         <Field data-invalid={invalid || undefined}>
-            <FieldLabel htmlFor={`${baseId}-input`}>{label}</FieldLabel>
+            <FieldLabel htmlFor={`${baseId}-input`}>
+                {label}
+                {required ? <RequiredMark /> : null}
+            </FieldLabel>
             <FileUpload
                 selectedDescription={fileUploadText.pendingSubmit}
                 idPrefix={baseId}

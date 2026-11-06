@@ -141,7 +141,9 @@ export function AllocationSessionPanel({
     )
     const focusTarget = (targetId: string) => {
         requestAnimationFrame(() => {
-            const target = document.getElementById(targetId)
+            const target =
+                document.getElementById(targetId) ||
+                document.getElementById(targetId.replace("-select", "-input"))
             target?.scrollIntoView({ block: "center" })
             target?.focus({ preventScroll: true })
         })

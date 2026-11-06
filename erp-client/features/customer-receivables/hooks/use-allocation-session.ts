@@ -282,8 +282,13 @@ export function useAllocationSession({
     )
 
     const issues: ValidationIssue[] = []
+    const hasExistingReceiptFiles =
+        existing && (session.fact.receiptFileNames?.length ?? 0) > 0
     const invoiceFileError = isReceipt
-        ? invoiceFilesError(formValues.receiptFiles, "回款凭证")
+        ? invoiceFilesError(formValues.receiptFiles, "回款凭证") ||
+          (formValues.receiptFiles.length === 0 && !hasExistingReceiptFiles
+              ? "请上传回款凭证"
+              : undefined)
         : invoiceFilesError(formValues.invoiceFiles)
     if (invoiceFileError) {
         issues.push({
@@ -291,7 +296,7 @@ export function useAllocationSession({
             label: isReceipt ? "回款凭证" : "发票附件",
             message: invoiceFileError,
             targetId: isReceipt
-                ? "customer-receivables-receipt-files-input"
+                ? "customer-receivables-receipt-files-select"
                 : "customer-receivables-session-invoice-files-input",
         })
     }
