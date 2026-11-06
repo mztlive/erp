@@ -12,7 +12,7 @@ ERP 的生产、测试环境统一使用 `deploy/helm/erp` Chart，由根目录 
 | 管理端 | `https://erp.fushangyunfu.com` | `https://erp-test.fushangyunfu.com` |
 | API | `https://erp-api.fushangyunfu.com` | `https://erp-api-test.fushangyunfu.com` |
 | 环境 values | `helm/erp/environments/production.json` | `helm/erp/environments/test.json` |
-| 共享 CLB | `lb-gpk8k2ps` | `lb-gpk8k2ps` |
+| 环境内共享 CLB | `lb-gpk8k2ps` | `lb-qjqespvq` |
 | Nacos Namespace UUID | `8888c735-1d29-4765-ab7f-70100a888479` | `ccf7ec38-1d60-407e-bf2c-7c4654c481d0` |
 | Nacos Group / Data ID | `DEFAULT_GROUP / erp` | `DEFAULT_GROUP / erp` |
 | Nacos 只读账号 | `prod` | `test` |
@@ -34,7 +34,7 @@ Chart 不管理 Namespace、MongoDB、S3、应用配置 Secret、证书 Secret�
 3. 运维在应用命名空间创建或更新 `erp-api-config`，保留其他键并写入非空 `NACOS_USERNAME`、`NACOS_PASSWORD`。测试使用 `test`，生产使用 `prod`；禁止管理员或 Seata 账号。Chart 将两键映射到 `NACOS_CLIENT_USERNAME`、`NACOS_CLIENT_PASSWORD`。应用 Pod 必须能解析 `nacos.infra.svc.cluster.local` 并访问 `8848/TCP`、`9848/TCP`。两环境须使用不同数据库及凭据、JWT 密钥、S3 bucket 或受权限隔离的前缀，不得复制整份生产配置到测试。
 4. MongoDB 必须是副本集，成员地址必须从目标 Pod 可达。流水线不创建数据库、不清库、不执行种子或数据库迁移。
 5. 在各自命名空间准备证书 Secret，包含 `qcloud_cert_id`，并确认覆盖该环境的两个域名。Secret 不跨命名空间引用；相同名称不代表测试环境已经有证书。
-6. 将四个域名解析到共享 CLB，确认域名和路径未被其他应用占用。
+6. 将生产的两个域名解析到生产 CLB `lb-gpk8k2ps`，将测试的两个域名解析到测试 CLB `lb-qjqespvq`。两环境使用各自的 CLB，确认域名和路径未被其他应用占用。
 7. 配置 TKE 免密拉取，或在各自命名空间创建镜像拉取 Secret，并通过 Jenkins `IMAGE_PULL_SECRET` 指定名称。免密拉取若限定 ServiceAccount，须覆盖两个命名空间中的 `erp-api`、`erp-worker` 和 `erp-client`。
 
 使用腾讯云 `qcloud` Ingress、NodePort 和现有共享 CLB，不安装 ingress-nginx。共享模式必须在创建 Ingress 时启用；控制器须满足共享 CLB 的版本要求，至少 v2.10.0。已有非共享 Ingress 或绑定其他 CLB 的 Ingress 会阻断发布。不得通过删除线上 Ingress 强行通过检查。

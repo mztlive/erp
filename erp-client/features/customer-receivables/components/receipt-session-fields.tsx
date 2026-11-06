@@ -5,7 +5,7 @@ import { toFieldErrors } from "@/components/form"
 import { ReceiptFiles } from "./receipt-files"
 import type { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
 
-/** 回款登记的平面字段区；结算主体和已有回款信息保持只读。 */
+/** 回款登记第一步；切换步骤时保留表单和凭证。 */
 export function ReceiptSessionFields({
     form,
     existing,
@@ -22,15 +22,16 @@ export function ReceiptSessionFields({
     return (
         <section
             aria-labelledby="customer-receivables-session-fact-title"
-            className="space-y-4 border-b border-border pb-6"
+            className="max-w-4xl space-y-5"
         >
             <h2
                 id="customer-receivables-session-fact-title"
+                tabIndex={-1}
                 className="text-base font-semibold"
             >
-                到账信息
+                填写到账信息
             </h2>
-            <div className="grid items-start gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid items-start gap-x-6 gap-y-4 sm:grid-cols-2">
                 <form.AppField
                     name="amount"
                     children={(field) => (
@@ -80,8 +81,8 @@ export function ReceiptSessionFields({
                 {(field) => (
                     <InvoiceFilesField
                         idPrefix="customer-receivables-receipt-files"
-                        label="回款凭证（可选）"
-                        uploadLabel="添加回款凭证"
+                        label="回款凭证（选填）"
+                        uploadLabel="上传回款凭证"
                         fileKind="回款凭证"
                         density="compact"
                         files={field.state.value}

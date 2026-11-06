@@ -20,8 +20,8 @@ use super::media::{PreparedImage, WorkbookMedia, row_media_targets};
 use super::parse::ParsedProductSheet;
 use crate::{Error, Result};
 
-/// 行级清单版本号；版本 3 支持 16 列联合导入；版本 1、2 保留旧商品导入语义。
-const ROW_MANIFEST_VERSION: u32 = 3;
+/// 行级清单版本号；版本 4 增加公司参考价，版本 1–3 保留原列序和价格语义。
+const ROW_MANIFEST_VERSION: u32 = 4;
 /// 私有输入信封标识保持稳定；行列布局由清单自身版本区分。
 pub(super) const ROW_MANIFEST_INPUT_FORMAT: &str = "product_import_rows_v1";
 /// 行级清单对象键前缀。
@@ -220,13 +220,13 @@ pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> 
 /// * `request_id` - 任务当前的请求身份。
 ///
 /// # 返回
-/// 返回绑定同一请求的输入；旧版保留 13 列售价语义，新版保留 16 列供给语义。
+/// 返回绑定同一请求的输入，按原列数保留公司售价与供应商成本的独立语义。
 /// # 错误
 /// JSON 损坏、请求身份不符或版本不一致时拒绝该来源。
 pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowManifest> {
     let mut manifest: RowManifest =
         serde_json::from_slice(bytes).map_err(|_| Error::Internal("行清单损坏".to_string()))?;
-    if ![1, 2, ROW_MANIFEST_VERSION].contains(&manifest.version) || manifest.request_id != request_id {
+    if ![1, 2, 3, ROW_MANIFEST_VERSION].contains(&manifest.version) || manifest.request_id != request_id {
         return Err(Error::Internal("行清单版本不一致".to_string()));
     }
     if manifest.version == 1 {
@@ -445,6 +445,7 @@ mod tests {
         decode_row_manifest, manifest_object_key, manifest_payload, row_media_from_entry,
         upload_manifest_row,
     };
+    use crate::product_import::identity::normalize_import_row;
     use crate::{Error, Result};
 
     /// 构造真实 JSON 序列化达到指定字节数的清单，容量测试不截断合法 JSON。
@@ -484,7 +485,7 @@ mod tests {
         assert!(decode_row_manifest(&bytes, "req-1").is_ok());
         assert!(matches!(decode_row_manifest(&bytes, "req-2"), Err(Error::Internal(message))
             if message == "行清单版本不一致"));
-        let newer = serde_json::json!({"version":4,"request_id":"req-1","rows":[]});
+        let newer = serde_json::json!({"version":5,"request_id":"req-1","rows":[]});
         assert!(
             matches!(decode_row_manifest(&serde_json::to_vec(&newer).unwrap(), "req-1"), Err(Error::Internal(message))
             if message == "行清单版本不一致")
@@ -530,10 +531,43 @@ mod tests {
         .unwrap();
         let decoded = decode_row_manifest(&bytes, "req-old").unwrap();
         assert_eq!(decoded.rows[0].cells.len(), 13);
-        let row = crate::product_import::identity::normalize_import_row(2, &decoded.rows[0].cells).unwrap();
+        let row = normalize_import_row(2, &decoded.rows[0].cells).unwrap();
         assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
         assert_eq!(row.bulk_price.unwrap().to_string(), "38.00");
         assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "10");
+    }
+
+    /// 历史联合任务不把供应商成本当售价，新任务恢复三个公司参考价字段。
+    #[test]
+    fn joint_manifests_preserve_separate_price_columns() {
+        for (version, width) in [(3, 16), (ROW_MANIFEST_VERSION, 19)] {
+            let mut cells = vec![String::new(); width];
+            cells[6] = "小家电".into();
+            cells[7] = "绞肉机".into();
+            cells[9] = "70.1234".into();
+            cells[10] = "60.00".into();
+            cells[11] = "12".into();
+            if width == 19 {
+                cells[16] = "92.00".into();
+                cells[17] = "84.00".into();
+                cells[18] = "30".into();
+            }
+            let bytes = serde_json::to_vec(&RowManifest {
+                version,
+                request_id: "req-joint".into(),
+                rows: vec![RowManifestRow { row_number: 2, cells: cells.clone(), ..Default::default() }],
+            })
+            .unwrap();
+            let decoded = decode_row_manifest(&bytes, "req-joint").unwrap();
+            assert_eq!(decoded.rows[0].cells, cells);
+            let row = normalize_import_row(2, &decoded.rows[0].cells).unwrap();
+            assert_eq!(row.sales_price.map(|value| value.to_string()), (width == 19).then(|| "92.00".into()));
+            assert_eq!(row.bulk_price.map(|value| value.to_string()), (width == 19).then(|| "84.00".into()));
+            assert_eq!(
+                row.bulk_min_quantity.map(|value| value.to_string()),
+                (width == 19).then(|| "30".into())
+            );
+        }
     }
 
     fn sample_registration() -> erp_support::RegisterFileAssetRequest {

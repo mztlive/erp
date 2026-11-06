@@ -112,7 +112,12 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         stable_code("PRD", &[&name, specification.as_deref().unwrap_or(""), barcode.as_deref().unwrap_or("")])
     });
     let spec_entries = import_spec_entries(coded_spu, specification.as_deref(), barcode.as_deref(), &name);
-    let legacy_price = |index| if cells.len() == PRODUCT_IMPORT_HEADERS.len() { "" } else { cell(index) };
+    let price_column: Option<usize> = match cells.len() {
+        legacy::SUPPLY_COLUMNS => None,
+        len if len == PRODUCT_IMPORT_HEADERS.len() => Some(16),
+        _ => Some(9),
+    };
+    let price = |offset: usize| price_column.map_or("", |index| cell(index + offset));
     Ok(NormalizedImportRow {
         row_number,
         sku_no: format!("{product_no}-01"),
@@ -122,9 +127,9 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         brand_name: import_brand_name(cell(5)),
         category_name,
         barcode,
-        sales_price: parse_optional_amount(legacy_price(9), legacy::COMPACT_HEADERS[9])?,
-        bulk_price: parse_optional_amount(legacy_price(10), legacy::COMPACT_HEADERS[10])?,
-        bulk_min_quantity: parse_optional_quantity(legacy_price(11), legacy::COMPACT_HEADERS[11])?,
+        sales_price: parse_optional_amount(price(0), PRODUCT_IMPORT_HEADERS[16])?,
+        bulk_price: parse_optional_amount(price(1), PRODUCT_IMPORT_HEADERS[17])?,
+        bulk_min_quantity: parse_optional_quantity(price(2), PRODUCT_IMPORT_HEADERS[18])?,
         market_price: parse_optional_amount(cell(12), PRODUCT_IMPORT_HEADERS[12])?,
         coded_spu,
         spec_entries,
@@ -230,8 +235,44 @@ fn parse_optional_quantity(value: &str, column: &str) -> Result<Option<Quantity>
 
 #[cfg(test)]
 mod tests {
+    use erp_catalog::PRODUCT_IMPORT_HEADERS as JOINT_HEADERS;
+
     use super::{normalize_import_row, stable_code};
+    use crate::Error;
     use crate::product_import::legacy::COMPACT_HEADERS as PRODUCT_IMPORT_HEADERS;
+
+    /// 公司售价读取新列，供应商条款不得代填；可空字段保留未维护状态。
+    #[test]
+    fn joint_template_prices_are_optional_and_independent() {
+        let mut cells = vec![String::new(); JOINT_HEADERS.len()];
+        cells[6] = "小家电".into();
+        cells[7] = "九阳绞肉机".into();
+        cells[9] = "70.1234".into();
+        cells[10] = "60.00".into();
+        cells[11] = "12".into();
+        for blank in ["", "-", "无"] {
+            for cell in &mut cells[16..19] {
+                *cell = blank.into();
+            }
+            let row = normalize_import_row(2, &cells).unwrap();
+            assert!(row.sales_price.is_none());
+            assert!(row.bulk_price.is_none());
+            assert!(row.bulk_min_quantity.is_none());
+        }
+        cells[16] = "92".into();
+        cells[17] = "84".into();
+        cells[18] = "30.5".into();
+        let row = normalize_import_row(2, &cells).unwrap();
+        assert_eq!(row.sales_price.unwrap().to_string(), "92");
+        assert_eq!(row.bulk_price.unwrap().to_string(), "84");
+        assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "30.5");
+        for (index, value) in [(16, "bad"), (17, "1.001"), (18, "0"), (18, "-1"), (18, "1.0000001")] {
+            let mut invalid = cells.clone();
+            invalid[index] = value.into();
+            assert!(matches!(normalize_import_row(2, &invalid), Err(Error::ValidationError(message))
+                if message.contains(JOINT_HEADERS[index])));
+        }
+    }
 
     #[test]
     fn stable_code_is_deterministic() {

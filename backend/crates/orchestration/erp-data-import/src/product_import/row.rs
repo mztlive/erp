@@ -11,10 +11,10 @@ use erp_core::ids::{FileAssetId, ProductBrandId, ProductCategoryId, UnitOfMeasur
 use erp_master_data::product_create_with_assets;
 use persistence_core::NoTransaction;
 
-use super::ProductImportProcess;
 use super::identity::{NormalizedImportRow, normalize_import_row};
 use super::images::{RowMediaSource, resolve_row_media};
 use super::resolve::ImportDictionaryCache;
+use super::{ProductImportProcess, legacy};
 use crate::{Error, Result};
 
 /// 单行导入结果。
@@ -97,7 +97,7 @@ impl ProductImportProcess {
         actor: &AuditActor,
         cache: &mut ImportDictionaryCache,
     ) -> Result<RowImportOutcome> {
-        if cells.len() == PRODUCT_IMPORT_HEADERS.len() {
+        if cells.len() == PRODUCT_IMPORT_HEADERS.len() || cells.len() == legacy::SUPPLY_COLUMNS {
             return self.import_with_supply(row_number, cells, media_source, actor, cache).await;
         }
         let row = normalize_import_row(row_number, cells)?;

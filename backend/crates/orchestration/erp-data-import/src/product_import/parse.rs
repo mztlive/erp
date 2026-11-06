@@ -24,7 +24,9 @@ impl ParsedProductSheet {
     /// 新提交必须携带供给列；历史任务仍由解析器按旧布局恢复。
     pub(super) fn ensure_supply_template(&self) -> Result<()> {
         if self.rows.iter().any(|row| row.cells.len() != PRODUCT_IMPORT_HEADERS.len()) {
-            return Err(invalid("请使用包含供应商编号、供应商订货编码和进项税率的 16 列商品与供给导入模板"));
+            return Err(invalid(
+                "请使用包含代发价（含税）、集采价（含税）和集采起订量的 19 列商品与供给导入模板",
+            ));
         }
         Ok(())
     }
@@ -93,6 +95,16 @@ fn template_width(headers: &[String]) -> Result<usize> {
         if headers.iter().take(layout.len()).map(|cell| cell.trim()).eq(layout.iter().copied()) {
             return Ok(layout.len());
         }
+    }
+    // 历史联合文件只恢复供应商条款；新增售价列不得被当成附加列丢弃。
+    if headers
+        .iter()
+        .take(legacy::SUPPLY_COLUMNS)
+        .map(|cell| cell.trim())
+        .eq(PRODUCT_IMPORT_HEADERS[..legacy::SUPPLY_COLUMNS].iter().copied())
+        && headers.iter().skip(legacy::SUPPLY_COLUMNS).all(|cell| cell.trim().is_empty())
+    {
+        return Ok(legacy::SUPPLY_COLUMNS);
     }
     ensure_product_import_headers(headers).map_err(Error::from)?;
     Ok(PRODUCT_IMPORT_HEADERS.len())
@@ -187,9 +199,12 @@ fn invalid(message: &str) -> Error {
 mod tests {
     use erp_catalog::PRODUCT_IMPORT_HEADERS;
     use erp_catalog::entity::catalog::product_import::dispimg_id;
+    use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 
     use super::{parse_sheet_rows as parse_rows, product_cell};
     use crate::product_import::identity::normalize_import_row;
+    use crate::product_import::row::imported_product_request;
+    use crate::product_import::supply_input::SupplyImportInput;
     use crate::xlsx::{self, SheetLimits};
 
     fn parse_sheet_rows(xml: &str, shared: &[String]) -> crate::Result<Vec<super::ParsedProductRow>> {
@@ -411,6 +426,9 @@ mod tests {
             "SUP-001",
             "SUP-RICE-5",
             "13",
+            "92.00",
+            "84.00",
+            "30",
         ];
         let cells = values
             .iter()
@@ -426,34 +444,45 @@ mod tests {
         parsed.ensure_supply_template().unwrap();
         assert_eq!(parsed.rows[0].cells, values);
         let row = normalize_import_row(2, &parsed.rows[0].cells).unwrap();
-        assert!(row.sales_price.is_none());
-        assert!(row.bulk_price.is_none());
-        assert!(row.bulk_min_quantity.is_none());
+        assert_eq!(row.sales_price.unwrap().to_string(), "92.00");
+        assert_eq!(row.bulk_price.unwrap().to_string(), "84.00");
+        assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "30");
         assert_eq!(row.market_price.unwrap().to_string(), "49.00");
-        let supply = crate::product_import::supply_input::SupplyImportInput::from_cells(
-            &parsed.rows[0].cells,
-            "2026-10-26".parse().unwrap(),
-        )
-        .unwrap();
+        let supply =
+            SupplyImportInput::from_cells(&parsed.rows[0].cells, "2026-10-26".parse().unwrap()).unwrap();
         assert_eq!(supply.supplier_no, "SUP-001");
         assert_eq!(supply.supplier_sku_code, "SUP-RICE-5");
         assert_eq!(supply.terms.input_tax_rate, "0.13");
+        assert_eq!(supply.terms.dropship_supply_price_gross, "31.1234");
         assert_eq!(supply.terms.bulk_minimum_order_quantity.as_deref().unwrap(), "12");
+        let request = imported_product_request(
+            row,
+            UnitOfMeasureId::new("unit"),
+            ProductBrandId::new("brand"),
+            ProductCategoryId::new("category"),
+            None,
+            Vec::new(),
+        );
+        let sku = &request.skus[0];
+        assert_eq!(sku.sales_visible_price_gross.unwrap().to_string(), "92.00");
+        assert_eq!(sku.bulk_price_gross.unwrap().to_string(), "84.00");
+        assert_eq!(sku.bulk_min_quantity.unwrap().to_string(), "30");
     }
 
     /// 旧文件可恢复既有任务，但不能作为新的联合导入提交。
     #[test]
     fn historical_templates_are_recovery_only() {
-        for headers in [super::legacy::HEADERS, super::legacy::COMPACT_HEADERS] {
+        for headers in [super::legacy::HEADERS, super::legacy::COMPACT_HEADERS, &PRODUCT_IMPORT_HEADERS[..16]]
+        {
             let parsed = super::parse_product_quote_xlsx(&workbook_with_cells(
                 headers,
                 r#"<c r="A2" t="inlineStr"><is><t>old</t></is></c>"#,
                 None,
             ))
             .unwrap();
-            assert_eq!(parsed.rows[0].cells.len(), 13);
+            assert_eq!(parsed.rows[0].cells.len(), if headers.len() == 16 { 16 } else { 13 });
             assert!(
-                matches!(parsed.ensure_supply_template(), Err(crate::Error::ValidationError(message)) if message.contains("16 列"))
+                matches!(parsed.ensure_supply_template(), Err(crate::Error::ValidationError(message)) if message.contains("19 列"))
             );
         }
     }

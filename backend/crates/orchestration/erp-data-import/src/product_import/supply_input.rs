@@ -18,7 +18,7 @@ pub(super) struct SupplyImportInput {
 }
 
 impl SupplyImportInput {
-    /// 从 16 列模板读取采购条款；空起订量默认为 1，税率以百分数填写。
+    /// 从联合模板读取供应商采购条款；空起订量默认为 1，税率以百分数填写。
     pub(super) fn from_cells(cells: &[String], today: BusinessDate) -> Result<Self> {
         let cell = |index: usize| cells.get(index).map(|value| value.trim()).unwrap_or("");
         for (index, label) in [(13, "供应商编号"), (14, "供应商订货编码"), (15, "进项税率（%）")]

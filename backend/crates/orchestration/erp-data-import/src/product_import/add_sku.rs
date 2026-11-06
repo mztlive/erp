@@ -214,7 +214,10 @@ fn appended_sku_input(
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
+
     use entity_core::BaseModel;
+    use erp_catalog::PRODUCT_IMPORT_HEADERS as JOINT_HEADERS;
     use erp_catalog::entity::catalog::product::ProductData;
     use erp_catalog::entity::catalog::product_revision::ProductRevisionData;
     use erp_catalog::entity::catalog::{EnableStatus, ProductKind};
@@ -225,6 +228,24 @@ mod tests {
     use super::*;
     use crate::product_import::identity::normalize_import_row;
     use crate::product_import::legacy::COMPACT_HEADERS as PRODUCT_IMPORT_HEADERS;
+
+    /// 联合模板新增规格继承单位并写入公司价格，已有规格不被覆盖。
+    #[test]
+    fn joint_template_appends_company_prices() {
+        let (_, _, _, existing) = fixture();
+        let mut cells = vec![String::new(); JOINT_HEADERS.len()];
+        cells[6] = "小家电".into();
+        cells[7] = "绞肉机".into();
+        cells[16] = "92.00".into();
+        cells[17] = "84.00".into();
+        cells[18] = "30".into();
+        let row = normalize_import_row(2, &cells).unwrap();
+        let input = appended_sku_input(&row, slice::from_ref(&existing), None).unwrap();
+        assert_eq!(input.base_unit_id, existing.base_unit_id);
+        assert_eq!(input.sales_visible_price_gross.unwrap().to_string(), "92.00");
+        assert_eq!(input.bulk_price_gross.unwrap().to_string(), "84.00");
+        assert_eq!(input.bulk_min_quantity.unwrap().to_string(), "30");
+    }
 
     /// 构造带既有 SKU 身份和价格的追加请求输入。
     fn fixture() -> (Product, NormalizedImportRow, ProductRevision, ProductSkuInput) {

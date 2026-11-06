@@ -129,7 +129,12 @@ case "$tool" in
         elif [[ "$args" == *' get ingress '* ]]; then
             [[ "$CASE" != ingress-read-failure ]] || exit 1
             [[ "$CASE" != new-ingress ]] || exit 0
-            group=true; clb=lb-gpk8k2ps
+            group=true
+            case "$DEPLOY_ENV" in
+                test) clb=lb-qjqespvq ;;
+                production) clb=lb-gpk8k2ps ;;
+                *) exit 1 ;;
+            esac
             [[ "$CASE" != legacy-ingress ]] || group=false
             [[ "$CASE" != wrong-clb ]] || clb=lb-other
             jq -n --arg group "$group" --arg clb "$clb" '{metadata:{annotations:{

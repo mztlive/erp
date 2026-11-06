@@ -20,6 +20,7 @@ export function SessionHeader({
     showClose = true,
     submitted = false,
     closeDisabled = false,
+    temporarySaved = false,
 }: {
     session: AllocationSessionView
     isReceipt: boolean
@@ -29,6 +30,7 @@ export function SessionHeader({
     showClose?: boolean
     submitted?: boolean
     closeDisabled?: boolean
+    temporarySaved?: boolean
 }) {
     if (isReceipt) {
         const title = existing ? "编辑回款草稿" : "登记回款"
@@ -37,11 +39,10 @@ export function SessionHeader({
             tone: submitted ? ("warning" as const) : ("neutral" as const),
         }
         return (
-            <div className="space-y-6">
+            <div className="space-y-3">
                 {showClose ? (
                     <PageHeader
                         title={title}
-                        description="填写到账信息，选择对应的销售单应收"
                         status={status}
                         actions={
                             <PageActions
@@ -69,7 +70,7 @@ export function SessionHeader({
                         <StatusBadge {...status} />
                     </div>
                 )}
-                <div className="flex flex-wrap items-center gap-3 rounded-md bg-muted/40 px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                     <span className="text-muted-foreground">结算主体</span>
                     <LockKeyholeIcon
                         className="size-4 shrink-0 text-muted-foreground"
@@ -78,12 +79,18 @@ export function SessionHeader({
                     <span className="min-w-0 break-words font-medium">
                         {session.counterpartyPartyName}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                        已选定
-                    </span>
                     {session.existingFactNo ? (
                         <span className="num text-xs text-muted-foreground">
                             {session.existingFactNo}
+                        </span>
+                    ) : null}
+                    {temporarySaved && !submitted ? (
+                        <span
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                            title="已暂存本页，刷新可恢复填写内容；新选凭证需保存草稿后才会上传。"
+                        >
+                            本页已暂存
                         </span>
                     ) : null}
                     {draftSavedAt ? (

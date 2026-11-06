@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { MoneyValue, StickyTotalBar } from "@/components/business"
 import { compareAmounts, subtractAmounts } from "../lib/allocation-math"
 
-/** 与发票登记共用底部金额栏，窄窗口换行并保留全部操作。 */
+/** 回款登记第二步的金额核对栏，窄窗口保留全部操作。 */
 export function ReceiptSessionFooter({
     amount,
     allocated,
@@ -27,7 +27,6 @@ export function ReceiptSessionFooter({
     const overAllocated = compareAmounts(allocated, amount) > 0
     return (
         <StickyTotalBar
-            className="mt-auto"
             items={[
                 {
                     id: "receipt",
@@ -41,7 +40,7 @@ export function ReceiptSessionFooter({
                 },
                 {
                     id: "unallocated",
-                    label: overAllocated ? "超出回款金额" : "未核销",
+                    label: overAllocated ? "超出回款金额" : "剩余未核销",
                     value: (
                         <MoneyValue
                             className={
@@ -58,7 +57,7 @@ export function ReceiptSessionFooter({
             ]}
             note={
                 submitHint ??
-                `已关联 ${allocationCount} 笔应收 · ${submitted ? "已提交，核销进度以审批结果为准" : "审批通过后计入已收并完成核销"}`
+                `本次 ${allocationCount} 笔应收 · ${submitted ? "已提交，核销进度以审批结果为准" : "审批通过后计入已收并完成核销"}`
             }
             actions={actions}
         />

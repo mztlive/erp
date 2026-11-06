@@ -14,6 +14,7 @@ export function ReceiptAllocationSource({
     pending,
     failed,
     onRetry,
+    idPrefix = "customer-receivables-allocation-source",
 }: {
     target: AllocationTarget
     source?: AllocationSource
@@ -21,8 +22,9 @@ export function ReceiptAllocationSource({
     pending: boolean
     failed: boolean
     onRetry: () => void
+    idPrefix?: string
 }) {
-    const prefix = `customer-receivables-allocation-source-${toAutomationIdSegment(target.targetId)}`
+    const prefix = `${idPrefix}-${toAutomationIdSegment(target.targetId)}`
     const customerName = source?.customerName || target.customerName
     const entryLabel = target.label.startsWith(`${target.salesOrderNo} · `)
         ? target.label.slice(`${target.salesOrderNo} · `.length)
@@ -58,24 +60,15 @@ export function ReceiptAllocationSource({
                 </p>
             ) : null}
             {source ? (
-                <>
-                    <p
-                        className="text-xs leading-5 text-muted-foreground"
-                        title={source.products.join("；")}
-                    >
-                        {source.products.slice(0, 2).join("；") ||
-                            "商品摘要未提供"}
-                        {source.products.length > 2
-                            ? ` 等 ${source.products.length} 项`
-                            : ""}
-                    </p>
-                    <p className="text-xs leading-5 text-muted-foreground">
-                        负责销售：{source.ownerName || "未标注"}
-                        {source.contractNo
-                            ? ` · 合同 ${source.contractNo}`
-                            : ""}
-                    </p>
-                </>
+                <p
+                    className="text-xs leading-5 text-muted-foreground"
+                    title={source.products.join("；")}
+                >
+                    {source.products.length > 0
+                        ? `共 ${source.products.length} 项商品`
+                        : "商品摘要未提供"}
+                    {source.ownerName ? ` · 负责销售：${source.ownerName}` : ""}
+                </p>
             ) : canRead && pending ? (
                 <p className="text-xs text-muted-foreground">
                     正在读取商品与负责销售…

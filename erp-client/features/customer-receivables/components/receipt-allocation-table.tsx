@@ -1,22 +1,15 @@
 "use client"
 
-import { RequiredMark } from "@/components/ui/required-mark"
-
 import { useState } from "react"
-
+import { PlusIcon } from "lucide-react"
 import {
     MoneyValue,
     ValidationSummary,
     type ValidationIssue,
 } from "@/components/business"
-import { ListSearchField } from "@/components/business/list-search-field"
-import {
-    TableToolbar,
-    TableToolbarScope,
-} from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
-import { NativeCheckbox } from "@/components/ui/checkbox"
 import { MoneyInput } from "@/components/form/money-input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
     Table,
     TableBody,
@@ -29,13 +22,13 @@ import type {
     AllocationDraftLine,
     AllocationSessionView,
     AllocationTarget,
-} from "@/features/customer-receivables/types"
+} from "../types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { allocationSourceKey, useAllocationSources } from "../hooks/queries"
-import { compareAmounts } from "../lib/allocation-math"
 import { ReceiptAllocationSource } from "./receipt-allocation-source"
+import { ReceiptAllocationPicker } from "./receipt-allocation-picker"
 
-/** 回款应收勾选与金额编辑共用一张表，搜索不移除已选分配。 */
+/** 正文只编辑已选应收；候选搜索与批量选择放在添加弹窗中。 */
 export function ReceiptAllocationTable({
     session,
     allocations,
@@ -46,302 +39,227 @@ export function ReceiptAllocationTable({
     onRemove,
     onAmountChange,
     onFill,
+    onLocateIssue,
 }: {
     session: AllocationSessionView
     allocations: readonly AllocationDraftLine[]
     issues: readonly ValidationIssue[]
     disabled: boolean
     removalDisabled: boolean
-    onAdd: (target: AllocationTarget) => void
+    onAdd: (targets: readonly AllocationTarget[]) => void
     onRemove: (lineKey: string) => void
     onAmountChange: (lineKey: string, amount: string) => void
     onFill: (line: AllocationDraftLine) => void
+    onLocateIssue: (issue: ValidationIssue) => void
 }) {
-    const [search, setSearch] = useState("")
-    const keyword = search.trim().toLocaleLowerCase()
-    const lines = new Map(allocations.map((line) => [line.targetId, line]))
-    const { canRead, sources } = useAllocationSources(session.pool)
-    const visibleTargets = session.pool.filter((target) => {
-        const source = canRead
-            ? sources.get(allocationSourceKey(target))?.data
-            : undefined
-        return [
-            target.salesOrderNo,
-            target.label,
-            target.dueDate,
-            target.customerName,
-            source?.customerName,
-            source?.projectName,
-            source?.contractNo,
-            source?.ownerName,
-            ...(source?.products ?? []),
-        ]
-            .filter(Boolean)
-            .join(" ")
-            .toLocaleLowerCase()
-            .includes(keyword)
-    })
-
+    const [pickerOpen, setPickerOpen] = useState(false)
+    const targets = new Map(
+        session.pool.map((target) => [target.targetId, target]),
+    )
+    const selectedTargets = session.pool.filter((target) =>
+        allocations.some((line) => line.targetId === target.targetId),
+    )
+    const { canRead, sources } = useAllocationSources(selectedTargets)
     return (
         <section
             id="customer-receivables-session-allocations"
             aria-labelledby="customer-receivables-session-allocations-title"
             className="min-w-0 space-y-4"
         >
-            <h2
-                id="customer-receivables-session-allocations-title"
-                className="text-base font-semibold"
-            >
-                核销明细
-            </h2>
-            <TableToolbarScope>
-                <div className="min-w-0 space-y-4">
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <div className="min-w-0 max-w-lg flex-1 basis-64">
-                            <ListSearchField
-                                id="customer-receivables-session-allocation-search"
-                                value={search}
-                                onChange={setSearch}
-                                placeholder="搜索单号、客户、商品或销售"
-                                aria-label="搜索可关联的销售单应收"
-                            />
-                        </div>
-                        <TableToolbar className="py-0">
-                            <div
-                                className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground"
-                                role="status"
-                            >
-                                <span>共 {visibleTargets.length} 条</span>
-                                <span>
-                                    已选 {allocations.length} 笔
-                                    {keyword ? "（含搜索结果外）" : ""}
-                                </span>
-                            </div>
-                        </TableToolbar>
-                    </div>
-                    <Table data-density="comfortable" className="min-w-3xl">
-                        <caption className="sr-only">
-                            选择销售单应收并填写本次核销金额
-                        </caption>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead scope="col" className="w-12">
-                                    <span className="sr-only">选择应收</span>
-                                </TableHead>
-                                <TableHead scope="col">
-                                    销售单 / 应收项目
-                                </TableHead>
-                                <TableHead scope="col" data-align="end">
-                                    当前可核销金额
-                                </TableHead>
-                                <TableHead scope="col">到期日</TableHead>
-                                <TableHead scope="col" data-align="end">
-                                    本次核销金额
-                                    <RequiredMark />
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {visibleTargets.length === 0 ? (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={5}
-                                        className="text-center text-muted-foreground"
-                                    >
-                                        {session.pool.length === 0
-                                            ? "当前结算主体没有可关联的应收项目。"
-                                            : "没有符合搜索条件的应收；已选分配保持不变。"}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                    <h2
+                        id="customer-receivables-session-allocations-title"
+                        tabIndex={-1}
+                        className="text-base font-semibold"
+                    >
+                        核销应收
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        {allocations.length > 0
+                            ? `已添加 ${allocations.length} 笔应收，请核对本次核销金额。`
+                            : "添加本次要核销的应收，再填写核销金额。"}
+                    </p>
+                </div>
+                <Button
+                    id="customer-receivables-session-add-receivable"
+                    type="button"
+                    variant={allocations.length ? "outline" : "default"}
+                    disabled={disabled || removalDisabled}
+                    onClick={() => setPickerOpen(true)}
+                >
+                    <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                    添加应收
+                </Button>
+            </div>
+            {allocations.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+                    尚未添加应收。点击「添加应收」选择销售单，支持一次添加多笔。
+                </div>
+            ) : (
+                <Table className="min-w-3xl" data-density="comfortable">
+                    <caption className="sr-only">
+                        本次已选应收与核销金额
+                    </caption>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>销售单 / 应收项目</TableHead>
+                            <TableHead>到期日</TableHead>
+                            <TableHead data-align="end">可核销金额</TableHead>
+                            <TableHead data-align="end">
+                                本次核销金额
+                                <RequiredMark />
+                            </TableHead>
+                            <TableHead className="w-16">
+                                <span className="sr-only">操作</span>
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {allocations.map((line) => {
+                            const target = targets.get(line.targetId)
+                            const source = target
+                                ? sources.get(allocationSourceKey(target))
+                                : undefined
+                            const segment = toAutomationIdSegment(line.targetId)
+                            const amountId = `customer-receivables-session-allocation-${segment}-amount`
+                            const rowIssues = issues.filter(
+                                (issue) => issue.targetId === amountId,
+                            )
+                            const errorId = `${amountId}-error`
+                            return (
+                                <TableRow key={line.lineKey}>
+                                    <TableCell>
+                                        {target ? (
+                                            <ReceiptAllocationSource
+                                                target={target}
+                                                source={
+                                                    canRead
+                                                        ? source?.data
+                                                        : undefined
+                                                }
+                                                canRead={canRead}
+                                                pending={
+                                                    source?.isPending ?? false
+                                                }
+                                                failed={
+                                                    source?.isError ?? false
+                                                }
+                                                onRetry={() =>
+                                                    void source?.refetch()
+                                                }
+                                            />
+                                        ) : (
+                                            <div className="whitespace-normal">
+                                                <p className="font-medium">
+                                                    {line.salesOrderNo}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {line.label}
+                                                </p>
+                                            </div>
+                                        )}
                                     </TableCell>
-                                </TableRow>
-                            ) : (
-                                visibleTargets.map((target) => {
-                                    const source = sources.get(
-                                        allocationSourceKey(target),
-                                    )
-                                    const line = lines.get(target.targetId)
-                                    const segment = toAutomationIdSegment(
-                                        target.targetId,
-                                    )
-                                    const amountId = `customer-receivables-session-allocation-${segment}-amount`
-                                    const rowIssues = line
-                                        ? issues.filter(
-                                              (issue) =>
-                                                  issue.targetId === amountId,
-                                          )
-                                        : []
-                                    const errorId = `${amountId}-error`
-                                    return (
-                                        <TableRow
-                                            key={target.targetId}
-                                            data-state={
-                                                line ? "selected" : undefined
-                                            }
-                                        >
-                                            <TableCell>
-                                                <NativeCheckbox
-                                                    className="rounded-sm border-input bg-surface-control"
-                                                    id={`customer-receivables-session-allocation-${segment}-select`}
-                                                    aria-label={`关联 ${target.label}`}
-                                                    checked={Boolean(line)}
-                                                    disabled={
-                                                        disabled ||
-                                                        (!line &&
-                                                            compareAmounts(
-                                                                target.openAmount,
-                                                                "0",
-                                                            ) <= 0) ||
-                                                        (Boolean(line) &&
-                                                            removalDisabled)
+                                    <TableCell className="num">
+                                        {target?.dueDate || "—"}
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <MoneyValue value={line.openAmount} />
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <div className="ml-auto w-56 whitespace-normal">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <MoneyInput
+                                                    id={amountId}
+                                                    className="num min-w-0 text-right"
+                                                    inputMode="decimal"
+                                                    aria-label={`${line.label} 本次核销金额`}
+                                                    aria-invalid={
+                                                        rowIssues.length > 0 ||
+                                                        undefined
                                                     }
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) => {
-                                                        if (checked)
-                                                            onAdd(target)
-                                                        else if (line)
-                                                            onRemove(
-                                                                line.lineKey,
-                                                            )
-                                                    }}
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <ReceiptAllocationSource
-                                                    target={target}
-                                                    source={
-                                                        canRead
-                                                            ? source?.data
+                                                    aria-describedby={
+                                                        rowIssues.length
+                                                            ? errorId
                                                             : undefined
                                                     }
-                                                    canRead={canRead}
-                                                    pending={
-                                                        source?.isPending ??
-                                                        false
-                                                    }
-                                                    failed={
-                                                        source?.isError ?? false
-                                                    }
-                                                    onRetry={() =>
-                                                        void source?.refetch()
+                                                    value={line.amount}
+                                                    disabled={disabled}
+                                                    onChange={(event) =>
+                                                        onAmountChange(
+                                                            line.lineKey,
+                                                            event.target.value,
+                                                        )
                                                     }
                                                 />
-                                            </TableCell>
-                                            <TableCell data-align="end">
-                                                <MoneyValue
-                                                    value={target.openAmount}
-                                                />
-                                                {compareAmounts(
-                                                    target.openAmount,
-                                                    "0",
-                                                ) <= 0 ? (
-                                                    <div className="text-xs text-muted-foreground">
-                                                        暂无可核销余额
-                                                    </div>
-                                                ) : null}
-                                            </TableCell>
-                                            <TableCell className="num">
-                                                {target.dueDate || "—"}
-                                            </TableCell>
-                                            <TableCell data-align="end">
-                                                {line ? (
-                                                    <div className="ml-auto min-w-36 max-w-52 whitespace-normal">
-                                                        <div className="flex flex-wrap items-center justify-end gap-1">
-                                                            <MoneyInput
-                                                                id={amountId}
-                                                                className="num text-right"
-                                                                inputMode="decimal"
-                                                                aria-label={`${target.label} 本次核销金额`}
-                                                                aria-invalid={
-                                                                    rowIssues.length >
-                                                                        0 ||
-                                                                    undefined
-                                                                }
-                                                                aria-describedby={
-                                                                    rowIssues.length
-                                                                        ? errorId
-                                                                        : undefined
-                                                                }
-                                                                value={
-                                                                    line.amount
-                                                                }
-                                                                disabled={
-                                                                    disabled
-                                                                }
-                                                                onChange={(
-                                                                    event,
-                                                                ) =>
-                                                                    onAmountChange(
-                                                                        line.lineKey,
-                                                                        event
-                                                                            .target
-                                                                            .value,
-                                                                    )
-                                                                }
-                                                            />
-                                                            <Button
-                                                                id={`customer-receivables-session-allocation-${segment}-fill`}
-                                                                type="button"
-                                                                size="xs"
-                                                                variant="ghost"
-                                                                disabled={
-                                                                    disabled
-                                                                }
-                                                                onClick={() =>
-                                                                    onFill(line)
-                                                                }
-                                                            >
-                                                                填入剩余
-                                                            </Button>
-                                                        </div>
-                                                        {rowIssues.length >
-                                                        0 ? (
-                                                            <p
-                                                                id={errorId}
-                                                                className="mt-1 text-xs text-destructive"
-                                                            >
-                                                                {rowIssues
-                                                                    .map(
-                                                                        (
-                                                                            issue,
-                                                                        ) =>
-                                                                            issue.message,
-                                                                    )
-                                                                    .join("；")}
-                                                            </p>
-                                                        ) : null}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-muted-foreground">
-                                                        —
-                                                    </span>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    )
-                                })
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </TableToolbarScope>
+                                                <Button
+                                                    id={`customer-receivables-session-allocation-${segment}-fill`}
+                                                    type="button"
+                                                    size="xs"
+                                                    variant="ghost"
+                                                    disabled={disabled}
+                                                    title="按本单可核销金额与回款剩余可分配金额中的较小值填入"
+                                                    onClick={() => onFill(line)}
+                                                >
+                                                    自动填入
+                                                </Button>
+                                            </div>
+                                            {rowIssues.length > 0 ? (
+                                                <p
+                                                    id={errorId}
+                                                    className="mt-1 text-xs text-destructive"
+                                                >
+                                                    {rowIssues
+                                                        .map(
+                                                            (issue) =>
+                                                                issue.message,
+                                                        )
+                                                        .join("；")}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Button
+                                            id={`customer-receivables-session-allocation-${segment}-remove`}
+                                            type="button"
+                                            size="xs"
+                                            variant="ghost"
+                                            disabled={
+                                                disabled || removalDisabled
+                                            }
+                                            aria-label={`移除 ${line.label}`}
+                                            onClick={() =>
+                                                onRemove(line.lineKey)
+                                            }
+                                        >
+                                            移除
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
+            )}
             <p className="text-xs text-muted-foreground">
-                当前可核销金额已扣除已核销、应收冲减及待审批回款占用；允许保留未核销回款余额。
+                可核销金额已扣除已核销、应收冲减及待审批占用；剩余未核销回款可后续核销。
             </p>
             <ValidationSummary
                 id="customer-receivables-session-validation"
-                issues={issues.filter((issue) => issue.id !== "need-alloc")}
+                issues={issues}
                 title="提交前请处理"
-                onLocate={(issue) => {
-                    const targetId = issue.targetId
-                    if (!targetId) return
-                    setSearch("")
-                    requestAnimationFrame(() => {
-                        const target = document.getElementById(targetId)
-                        target?.scrollIntoView({ block: "center" })
-                        target?.focus({ preventScroll: true })
-                    })
-                }}
+                onLocate={onLocateIssue}
             />
+            {pickerOpen ? (
+                <ReceiptAllocationPicker
+                    session={session}
+                    allocations={allocations}
+                    disabled={disabled || removalDisabled}
+                    onAdd={onAdd}
+                    onClose={() => setPickerOpen(false)}
+                />
+            ) : null}
         </section>
     )
 }

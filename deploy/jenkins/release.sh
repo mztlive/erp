@@ -18,7 +18,7 @@ load_environment() {
     environment_values="$chart/environments/$DEPLOY_ENV.json"
     jq -e --arg environment "$DEPLOY_ENV" --arg namespace "$namespace" \
         '.environment == $environment and .namespace == $namespace' "$environment_values" >/dev/null
-    # 同一 CLB 下四个入口必须不同，缺失域名同样拒绝。
+    # 生产与测试使用各自的 CLB；四个入口域名必须不同，缺失域名同样拒绝。
     jq -es '[.[] | .ingress.apiHost, .ingress.webHost] |
         all(.[]; type == "string" and length > 0) and (unique | length == 4)' \
         "$chart/environments/test.json" "$chart/environments/production.json" >/dev/null

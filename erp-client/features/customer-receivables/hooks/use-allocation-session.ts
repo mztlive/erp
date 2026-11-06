@@ -331,18 +331,23 @@ export function useAllocationSession({
             targetId: "customer-receivables-session-received-at",
         })
     }
-    if (isReceipt && factAmountStr.trim()) {
+    if (isReceipt) {
+        let validAmount = false
         try {
-            normalizeFixed(factAmountStr, {
+            const amount = normalizeFixed(factAmountStr, {
                 maxScale: 2,
                 outputScale: 2,
                 allowNegative: false,
             })
+            validAmount = compareAmounts(amount, "0") > 0
         } catch {
+            // 未成形的金额输入由下面的到账校验提示处理。
+        }
+        if (!validAmount) {
             issues.push({
                 id: "receipt-amount",
                 label: existing ? "原单到账金额" : "到账金额",
-                message: "请填写有效的非负金额，最多保留两位小数。",
+                message: "请填写大于零的到账金额，最多保留两位小数。",
                 targetId: "customer-receivables-session-amount",
             })
         }
@@ -404,10 +409,12 @@ export function useAllocationSession({
     if (compareAmounts(proposedAllocated, factAmountStr) > 0) {
         issues.push({
             id: "over-fact",
-            label: "拟分配合计",
-            message: "拟分配合计超过记录金额",
+            label: isReceipt ? "本次核销" : "拟分配合计",
+            message: isReceipt
+                ? "本次核销合计超过到账金额，请减少核销金额。"
+                : "拟分配合计超过记录金额",
             targetId: isReceipt
-                ? "customer-receivables-session-amount"
+                ? "customer-receivables-session-allocations-title"
                 : undefined,
         })
     }
@@ -420,7 +427,7 @@ export function useAllocationSession({
             id: "need-alloc",
             label: "核销分配",
             message: "提交审批至少需要一条核销分配",
-            targetId: "customer-receivables-session-allocation-search",
+            targetId: "customer-receivables-session-add-receivable",
         })
     }
 
@@ -433,6 +440,14 @@ export function useAllocationSession({
         result?.status !== "unknown" &&
         !saveMutation.isPending &&
         !postMutation.isPending
+
+    const receiptFactIssues = isReceipt
+        ? issues.filter((issue) =>
+              ["receipt-date", "receipt-amount", "invoice-files"].includes(
+                  issue.id,
+              ),
+          )
+        : []
 
     function addFromPool(target: AllocationTarget) {
         if (allocations.some((a) => a.targetId === target.targetId)) return
@@ -465,6 +480,57 @@ export function useAllocationSession({
                 baselineVersion: target.baselineVersion,
             },
         ])
+    }
+
+    /** 批量加入时逐笔扣减剩余金额，取消选择弹窗不改变本次分配。 */
+    function addTargetsFromPool(targets: readonly AllocationTarget[]) {
+        if (
+            !canOperate ||
+            locked ||
+            saveMutation.isPending ||
+            postMutation.isPending
+        )
+            return
+        if (
+            targets.some(
+                (target) =>
+                    target.counterpartyPartyId !== session.counterpartyPartyId,
+            )
+        ) {
+            setActionError("跨主体目标不能分配，请选择同主体目标。")
+            return
+        }
+        setAllocations((prev) => {
+            const next = [...prev]
+            let remaining = subtractAmounts(
+                factAmountStr,
+                sumAmounts(prev.map((line) => line.amount)),
+                true,
+            )
+            for (const target of targets) {
+                if (
+                    next.some((line) => line.targetId === target.targetId) ||
+                    compareAmounts(target.openAmount, "0") <= 0
+                )
+                    continue
+                const fill =
+                    compareAmounts(remaining, "0") > 0
+                        ? money(minAmount(target.openAmount, remaining))
+                        : ""
+                next.push({
+                    lineKey: `line_${target.targetId}`,
+                    targetId: target.targetId,
+                    targetKind: target.targetKind,
+                    label: target.label,
+                    salesOrderNo: target.salesOrderNo,
+                    openAmount: target.openAmount,
+                    amount: fill,
+                    baselineVersion: target.baselineVersion,
+                })
+                remaining = subtractAmounts(remaining, fill, true)
+            }
+            return next
+        })
     }
 
     function updateAmount(lineKey: string, amount: string) {
@@ -759,11 +825,13 @@ export function useAllocationSession({
         removedLine,
         undoRemoveLine,
         issues,
+        receiptFactIssues,
         canSubmit,
         factAmountStr,
         proposedAllocated,
         proposedUnallocated,
         addFromPool,
+        addTargetsFromPool,
         updateAmount,
         removeLine,
         fillLineAmount,

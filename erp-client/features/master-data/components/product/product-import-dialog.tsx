@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useMutation } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { FileUpload } from "@/components/ui/file-upload"
@@ -16,6 +17,7 @@ import { getErrorMessage } from "@/lib/api/errors"
 import type { ProductImportJob } from "@/features/master-data/api/product-import"
 import { isDirectUploadCancelled } from "@/features/master-data/api/product-import"
 import { useSubmitProductImportMutation } from "@/features/master-data/hooks/use-product-import"
+import { downloadProductImportTemplate } from "@/features/master-data/lib/product-import-template"
 import {
     formatUploadMegabytes,
     MAX_PRODUCT_IMPORT_FILE_BYTES,
@@ -35,6 +37,7 @@ export function ProductImportDialog({
     const [legacyFallback, setLegacyFallback] = useState(false)
     const legacy = useSubmitProductImportMutation()
     const direct = useProductImportDirectUpload()
+    const template = useMutation({ mutationFn: downloadProductImportTemplate })
     const locked = legacy.isPending || direct.active
 
     const pick = (next?: File) => {
@@ -91,12 +94,31 @@ export function ProductImportDialog({
                 <DialogHeader>
                     <DialogTitle>导入商品</DialogTitle>
                     <DialogDescription>
-                        使用 16
+                        使用 19
                         列商品与供给导入模板的「对内」工作表。供应商须已录入；每行同时建立商品规格和供应商供给，失败时该行不写入。新供给默认可供数量为
-                        999，重复导入保留已有数量。供应商成本价不写入公司销售参考价；导入不创建库存。进度与结果在「后台任务」查看。
+                        999，重复导入保留已有数量。代发价、集采价、集采起订量对应商品编辑中的同名字段，单独填写；已有
+                        SKU
+                        保留原价格。导入不创建库存。进度与结果在「后台任务」查看。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
+                    <LoadingButton
+                        id="product-import-template"
+                        variant="outline"
+                        loading={template.isPending}
+                        disabled={locked || template.isPending}
+                        onClick={() => template.mutate()}
+                    >
+                        下载导入模板
+                    </LoadingButton>
+                    {template.error ? (
+                        <p role="alert" className="text-sm text-destructive">
+                            {getErrorMessage(
+                                template.error,
+                                "模板下载失败，请重试。",
+                            )}
+                        </p>
+                    ) : null}
                     <FileUpload
                         idPrefix="product-import-file"
                         inputId="product-import-file"

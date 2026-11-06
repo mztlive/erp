@@ -4,7 +4,7 @@
   "ingress": {
     "apiHost": "erp-api-test.fushangyunfu.com",
     "webHost": "erp-test.fushangyunfu.com",
-    "clbId": "lb-gpk8k2ps",
+    "clbId": "lb-qjqespvq",
     "tlsSecret": "fsytsl-wsk87cm7"
   },
   "api": {
