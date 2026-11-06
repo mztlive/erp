@@ -19,7 +19,10 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { displayName } from "@/lib/display-name"
-import { workspaceTaskPresentation } from "../lib/task-presentation"
+import {
+    workspaceTaskSection,
+    workspaceTaskPresentation,
+} from "../lib/task-presentation"
 import { workspaceTaskRightContent } from "../lib/task-right-content"
 import { findSourceSalesOrder } from "../lib/source-sales-order"
 import { isBlockedWorkItem } from "../lib/work-item"
@@ -110,7 +113,13 @@ function columnTitle(label: string, Icon: LucideIcon) {
 }
 
 /** 待办将对象、摘要和处理口径合并展示，不丢失异常提示或未知金额。 */
-function TaskOverview({ row }: { row: QueueTaskRow }) {
+function TaskOverview({
+    row,
+    showAmount = true,
+}: {
+    row: QueueTaskRow
+    showAmount?: boolean
+}) {
     return (
         <div className="min-w-0 space-y-1.5 py-1 whitespace-normal">
             <div className="line-clamp-2" title={row.presentation.title}>
@@ -127,20 +136,24 @@ function TaskOverview({ row }: { row: QueueTaskRow }) {
                 >
                     {row.summaryPreview || "—"}
                 </span>
-                <span aria-hidden="true">·</span>
-                <span title={row.content.metric.detail}>
-                    {row.content.metric.label}{" "}
-                    <WorkspaceMoney
-                        value={row.content.metric.value}
-                        display="exact"
-                    />
-                </span>
+                {showAmount && (
+                    <>
+                        <span aria-hidden="true">·</span>
+                        <span title={row.content.metric.detail}>
+                            {row.content.metric.label}{" "}
+                            <WorkspaceMoney
+                                value={row.content.metric.value}
+                                display="exact"
+                            />
+                        </span>
+                    </>
+                )}
             </div>
         </div>
     )
 }
 
-/** 待办采用五列摘要布局；审批跟踪和处理记录保留各自的独立指标列。 */
+/** 待办采用摘要布局，采购付款另列主体和金额；审批跟踪和处理记录保留独立指标。 */
 export function workspaceTaskColumns({
     selectedTypes,
     tracking,
@@ -155,6 +168,9 @@ export function workspaceTaskColumns({
     const purchase =
         selectedTypes.length === 1 &&
         selectedTypes[0] === "approval:purchase_order"
+    const payment =
+        selectedTypes.length === 1 &&
+        selectedTypes[0] === "task:SUPPLIER_PAYMENT_EXECUTION"
     const mixed =
         selectedTypes.length !== 1 ||
         selectedTypes[0] === "task:DOCUMENT_APPROVAL"
@@ -230,7 +246,7 @@ export function workspaceTaskColumns({
             },
             cell: ({ row: { original: row } }) =>
                 compact ? (
-                    <TaskOverview row={row} />
+                    <TaskOverview row={row} showAmount={!payment} />
                 ) : (
                     <div
                         className="max-w-72 truncate"
@@ -406,6 +422,47 @@ export function workspaceTaskColumns({
             ),
         },
     ]
+    if (payment)
+        columns.splice(
+            2,
+            0,
+            {
+                id: "payerCompany",
+                header: () => columnTitle("付款主体公司名称", Building2Icon),
+                enableSorting: false,
+                meta: { width: "reference", label: "付款主体公司名称" },
+                cell: ({ row }) => (
+                    <div className="min-w-40 max-w-72 whitespace-normal">
+                        {workspaceTaskSection(row.original.item, "我方付款主体")
+                            ?.value || "—"}
+                    </div>
+                ),
+            },
+            {
+                id: "paymentAmount",
+                header: () => columnTitle("付款金额", WalletCardsIcon),
+                enableSorting: false,
+                meta: {
+                    width: "amount",
+                    label: "付款金额",
+                    numeric: true,
+                    align: "end",
+                },
+                cell: ({ row }) => (
+                    <div title="当前剩余待付金额">
+                        <WorkspaceMoney
+                            value={
+                                workspaceTaskSection(
+                                    row.original.item,
+                                    "待付金额",
+                                )?.value || "—"
+                            }
+                            display="exact"
+                        />
+                    </div>
+                ),
+            },
+        )
     return compact
         ? columns.filter(
               (column) => column.id !== "summary" && column.id !== "metric",

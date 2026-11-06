@@ -212,6 +212,7 @@ impl SupplierImportRow {
             tax_no: None,
             clear_tax_profile: false,
             bank_account: self.bank_account(),
+            bank_routing_number: None,
             clear_bank_account: false,
             settlement_mode,
             reconciliation_cycle,

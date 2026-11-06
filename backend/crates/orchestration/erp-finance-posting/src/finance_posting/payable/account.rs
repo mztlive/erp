@@ -71,7 +71,14 @@ impl PayableProcess {
             recipient.base.id.clone(),
         )?;
         persist_log(&self.db, &audit, &mut NoTransaction).await?;
-        Ok(PaymentRecipientRevealView { bank_account_id: recipient.base.id, account_number })
+        Ok(PaymentRecipientRevealView {
+            bank_account_id: recipient.base.id,
+            account_number,
+            account_name: recipient.account_name,
+            bank_name: recipient.bank_name,
+            bank_branch_name: recipient.bank_branch_name,
+            bank_routing_number: recipient.bank_routing_number,
+        })
     }
     /// 建立应付往来子账与原始应付分录（跨集合事务写入）。
     ///

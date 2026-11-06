@@ -379,6 +379,7 @@ export const RESOURCE_FIELDS: Readonly<
             hint: masterDataCopy.supplierQualificationHint,
         },
         { key: "taxNo", label: masterDataCopy.fTaxNo, kind: "text" },
+        { key: "bankRoutingNumber", label: "联行号", kind: "text" },
         { key: "bankName", label: masterDataCopy.fBankName, kind: "text" },
         {
             key: "bankAccount",

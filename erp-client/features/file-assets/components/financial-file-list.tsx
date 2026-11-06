@@ -1,7 +1,8 @@
 "use client"
-import { DownloadIcon } from "lucide-react"
+import { DownloadIcon, FileTextIcon } from "lucide-react"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 import type { FinancialFile } from "../api/business-finance-files"
 
 export function FinancialFileList({
@@ -10,21 +11,37 @@ export function FinancialFileList({
     onDownload,
     pendingAssetId,
     showDocumentNumber = true,
+    density = "default",
 }: {
     files: FinancialFile[]
     idPrefix: string
     onDownload: (file: FinancialFile) => void
     showDocumentNumber?: boolean
     pendingAssetId?: string
+    density?: "default" | "compact"
 }) {
     return (
-        <ul className="divide-y divide-border/70">
+        <ul
+            className={cn(
+                "divide-y divide-border/70",
+                density === "compact" && "rounded-md bg-muted/40 px-3",
+            )}
+        >
             {files.map((file) => (
                 <li
                     key={`${file.document_id}:${file.file_asset_id}`}
-                    className="flex items-center justify-between gap-3 py-3"
+                    className={cn(
+                        "flex items-center justify-between gap-3 py-3",
+                        density === "compact" && "py-1.5",
+                    )}
                 >
-                    <div className="min-w-0">
+                    {density === "compact" ? (
+                        <FileTextIcon
+                            aria-hidden="true"
+                            className="size-4 shrink-0 text-muted-foreground"
+                        />
+                    ) : null}
+                    <div className="min-w-0 flex-1">
                         <p
                             className={
                                 showDocumentNumber
@@ -44,7 +61,9 @@ export function FinancialFileList({
                         id={`${idPrefix}-${toAutomationIdSegment(`${file.document_id}-${file.file_asset_id}`)}-download`}
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant={density === "compact" ? "ghost" : "outline"}
+                        className="shrink-0"
+                        aria-label={`下载 ${file.file_name}`}
                         loading={pendingAssetId === file.file_asset_id}
                         disabled={
                             pendingAssetId !== undefined &&

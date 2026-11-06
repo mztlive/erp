@@ -46,6 +46,9 @@ pub struct PartyBankAccountData {
     pub bank_name: String,
     /// 支行名称。
     pub bank_branch_name: Option<String>,
+    /// 银行联行号；历史资料未维护时为空。
+    #[serde(default)]
+    pub bank_routing_number: Option<String>,
     /// 账号（明文入参；敏感值，§4.5.5）。
     pub account_number: String,
     /// 生效开始日期。
@@ -92,6 +95,9 @@ pub struct PartyBankAccount {
     pub bank_name: String,
     /// 支行名称。
     pub bank_branch_name: Option<String>,
+    /// 银行联行号；历史资料未维护时为空。
+    #[serde(default)]
+    pub bank_routing_number: Option<String>,
     /// 账号密文（数据库加密列；P3 按密钥体系填充，P1 定义字段与校验）。
     pub account_number_ciphertext: String,
     /// 规范化账号的带密钥 HMAC 查询指纹（低熵值精确查询，禁止裸摘要）。
@@ -125,6 +131,7 @@ impl fmt::Debug for PartyBankAccount {
             .field("account_name", &self.account_name)
             .field("bank_name", &self.bank_name)
             .field("bank_branch_name", &self.bank_branch_name)
+            .field("bank_routing_number", &self.bank_routing_number)
             .field("account_number", &"[REDACTED]")
             .field("valid_from", &self.valid_from)
             .field("valid_to", &self.valid_to)
@@ -146,6 +153,7 @@ impl fmt::Debug for PartyBankAccountData {
             .field("account_name", &self.account_name)
             .field("bank_name", &self.bank_name)
             .field("bank_branch_name", &self.bank_branch_name)
+            .field("bank_routing_number", &self.bank_routing_number)
             .field("account_number", &"[REDACTED]")
             .field("valid_from", &self.valid_from)
             .field("valid_to", &self.valid_to)
@@ -225,6 +233,7 @@ impl PartyBankAccount {
             account_name,
             bank_name,
             bank_branch_name,
+            bank_routing_number: normalize_routing_number(data.bank_routing_number)?,
             account_number_ciphertext: String::new(),
             account_number_query_hmac: Self::account_number_fingerprint(&account_number, fingerprint_key),
             account_number_last4,
@@ -279,6 +288,21 @@ impl PartyBankAccount {
         if let Some(is_default) = update.is_default {
             self.is_default = is_default;
         }
+        self.updated_by = updated_by.into();
+        Ok(())
+    }
+
+    /// 维护账户联行号，不改变账户身份；保存后推进版本，付款任务须重新核验。
+    ///
+    /// # 参数
+    /// * `value` - 联行号，空白清空。
+    /// * `updated_by` - 当前维护人。
+    /// # 返回
+    /// 更新账户路由资料。
+    /// # 错误
+    /// 非十二位数字时拒绝。
+    pub fn set_routing_number(&mut self, value: Option<String>, updated_by: impl Into<String>) -> Result<()> {
+        self.bank_routing_number = normalize_routing_number(value)?;
         self.updated_by = updated_by.into();
         Ok(())
     }
@@ -348,6 +372,18 @@ impl PartyBankAccount {
     }
 }
 
+/// 联行号保留前导零，空白视为未维护；有效值必须为十二位数字。
+fn normalize_routing_number(value: Option<String>) -> Result<Option<String>> {
+    let value = value.map(|value| value.trim().to_owned()).filter(|value| !value.is_empty());
+    if value
+        .as_ref()
+        .is_some_and(|value| value.len() != 12 || !value.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return Err(Error::validation("bank_routing_number", "联行号必须为 12 位数字"));
+    }
+    Ok(value)
+}
+
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::BusinessDate;
@@ -366,12 +402,47 @@ mod tests {
             account_name: " 上海示例科技有限公司 ".to_string(),
             bank_name: " 招商银行 ".to_string(),
             bank_branch_name: Some(" 上海分行 ".to_string()),
+            bank_routing_number: None,
             account_number: " 6225-8802_1234 5678 ".to_string(),
             valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
             valid_to: Some(BusinessDate::from_ymd(2026, 12, 31).unwrap()),
             is_default: true,
             status: EffectiveRecordStatus::Active,
         }
+    }
+
+    #[test]
+    fn routing_number_preserves_leading_zeroes_and_rejects_invalid_changes() {
+        let mut data = bank_account_data();
+        data.bank_routing_number = Some(" 001234567890 ".into());
+        let mut account =
+            PartyBankAccount::new(PartyBankAccountId::new("bank"), data, KEY, "creator").unwrap();
+        assert_eq!(account.bank_routing_number.as_deref(), Some("001234567890"));
+        let fingerprint = account.account_number_query_hmac.clone();
+        for invalid in ["123", "12345678901A", "1234567890123", "１２３４５６７８９０１２"] {
+            assert!(account.set_routing_number(Some(invalid.into()), "editor").is_err());
+            assert_eq!(account.bank_routing_number.as_deref(), Some("001234567890"));
+            assert_eq!(account.updated_by, "creator");
+        }
+        account.set_routing_number(Some("123456789012".into()), "editor").unwrap();
+        assert_eq!(account.account_number_query_hmac, fingerprint);
+        assert_eq!(account.updated_by, "editor");
+        account.set_routing_number(Some(" ".into()), "editor").unwrap();
+        assert_eq!(account.bank_routing_number, None);
+    }
+
+    #[test]
+    fn legacy_bank_account_without_routing_number_remains_readable() {
+        let account =
+            PartyBankAccount::new(PartyBankAccountId::new("bank"), bank_account_data(), KEY, "creator")
+                .unwrap();
+        let mut json = serde_json::to_value(account).unwrap();
+        json.as_object_mut().unwrap().remove("bank_routing_number");
+        let account: PartyBankAccount = serde_json::from_value(json).unwrap();
+        assert_eq!(account.bank_routing_number, None);
+        let mut invalid = bank_account_data();
+        invalid.bank_routing_number = Some("invalid".into());
+        assert!(PartyBankAccount::new(PartyBankAccountId::new("bank"), invalid, KEY, "creator").is_err());
     }
 
     /// happy path：编号/户名去空白，账号移除分隔符后生成指纹，实体不含明文。

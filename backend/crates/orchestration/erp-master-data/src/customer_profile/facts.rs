@@ -188,6 +188,7 @@ impl CustomerProfileProcess {
                 account_name: input.account_name.clone(),
                 bank_name: input.bank_name.clone(),
                 bank_branch_name: input.bank_branch_name.clone(),
+                bank_routing_number: None,
                 account_number: account_number.clone(),
                 valid_from,
                 valid_to: None,

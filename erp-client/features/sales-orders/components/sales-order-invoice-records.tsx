@@ -50,6 +50,7 @@ export function SalesOrderInvoiceRecords({
                     : undefined
             }
             showDocumentNumber={false}
+            density="compact"
         />
     )
     const pending =
@@ -84,13 +85,13 @@ export function SalesOrderInvoiceRecords({
                     onRetry={() => void query.refetch()}
                 />
             ) : null}
-            <div className="divide-y divide-border/70">
+            <div className="space-y-3">
                 {records.map((row) => (
                     <article
                         key={row.invoiceId}
-                        className="py-4 first:pt-0 last:pb-0"
+                        className="space-y-3 rounded-lg border border-border/70 p-3"
                     >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h3 className="text-sm font-medium wrap-anywhere">
@@ -102,6 +103,7 @@ export function SalesOrderInvoiceRecords({
                                     <StatusBadge
                                         label={row.statusLabel}
                                         tone={row.statusTone}
+                                        appearance="text"
                                     />
                                 </div>
                                 {row.invoiceDate && row.invoiceDate !== "—" ? (
@@ -110,12 +112,12 @@ export function SalesOrderInvoiceRecords({
                                     </p>
                                 ) : null}
                             </div>
-                            <div className="flex items-center gap-4">
-                                <dl className="text-right">
+                            <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                                <dl className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1">
                                     <dt className="text-xs text-muted-foreground">
                                         本单开票金额
                                     </dt>
-                                    <dd className="mt-1 text-lg">
+                                    <dd className="num text-base font-semibold whitespace-nowrap">
                                         {rowAmount(row.allocations)}
                                     </dd>
                                 </dl>
@@ -125,14 +127,17 @@ export function SalesOrderInvoiceRecords({
                         {filesByInvoice.has(row.invoiceId) ? (
                             fileList(filesByInvoice.get(row.invoiceId)!)
                         ) : query.isSuccess ? (
-                            <p className="mt-3 text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 未上传发票文件
                             </p>
                         ) : null}
                     </article>
                 ))}
                 {remainingFiles.map(([id, files]) => (
-                    <article key={id} className="py-4 first:pt-0 last:pb-0">
+                    <article
+                        key={id}
+                        className="space-y-3 rounded-lg border border-border/70 p-3"
+                    >
                         <h3 className="text-sm font-medium wrap-anywhere">
                             {files[0]!.document_no || "发票附件"}
                         </h3>

@@ -213,6 +213,7 @@ export function buildResourceFields(
                 foodLicense: pickField(values, "foodLicense"),
                 legalPersonIdCard: pickField(values, "legalPersonIdCard"),
                 taxNo: pickField(values, "taxNo"),
+                bankRoutingNumber: pickField(values, "bankRoutingNumber"),
                 bankName: pickField(values, "bankName"),
                 bankAccount: pickField(values, "bankAccount"),
                 invoiceType: pickField(values, "invoiceType"),

@@ -402,6 +402,7 @@ mod tests {
                 account_name: "上海示例科技有限公司".to_string(),
                 bank_name: "招商银行".to_string(),
                 bank_branch_name: Some("上海分行".to_string()),
+                bank_routing_number: None,
                 account_number: "6225880212345678".to_string(),
                 valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
                 valid_to: None,

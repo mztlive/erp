@@ -107,7 +107,14 @@ async fn reveal(
         id.to_owned(),
     )?;
     persist_log(db, &audit, executor).await?;
-    Ok(PaymentRecipientRevealView { bank_account_id: account.base.id, account_number })
+    Ok(PaymentRecipientRevealView {
+        bank_account_id: account.base.id,
+        account_number,
+        account_name: account.account_name,
+        bank_name: account.bank_name,
+        bank_branch_name: account.bank_branch_name,
+        bank_routing_number: account.bank_routing_number,
+    })
 }
 
 async fn authorize_reveal_task(

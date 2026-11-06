@@ -301,6 +301,9 @@ impl SupplierProfileProcess {
         actor_id: &str,
     ) -> Result<Option<PartyBankAccount>> {
         let Some(input) = &req.bank_account else {
+            if req.bank_routing_number.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+                return Err(Error::ValidationError("请先维护默认收款银行账户".into()));
+            }
             return Ok(None);
         };
         let account_number = input.account_number.trim();
@@ -312,6 +315,7 @@ impl SupplierProfileProcess {
                 account_name: req.legal_name.clone(),
                 bank_name: input.bank_name.clone(),
                 bank_branch_name: None,
+                bank_routing_number: req.bank_routing_number.clone(),
                 account_number: account_number.to_string(),
                 valid_from: req.effective_from,
                 valid_to: None,

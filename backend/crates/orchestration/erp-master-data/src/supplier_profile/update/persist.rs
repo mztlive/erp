@@ -24,6 +24,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::bank_routing::BankRoutingChange;
 use crate::Result;
 
 /// 主体从属事实的追加式变更。
@@ -37,6 +38,7 @@ pub(super) struct PartyFactChanges {
     pub(super) new_tax_profile: Option<PartyTaxProfile>,
     pub(super) bank_accounts: Vec<PartyBankAccount>,
     pub(super) new_bank_account: Option<PartyBankAccount>,
+    pub(super) bank_routing: Option<BankRoutingChange>,
 }
 
 /// 能力当前集合变更及其不可变快照。
@@ -248,6 +250,9 @@ impl PartyFactChanges {
         }
         if let Some(item) = &self.new_tax_profile {
             db.party_tax_profiles().create(item, executor).await?;
+        }
+        if let Some(change) = self.bank_routing {
+            change.persist(db, executor).await?;
         }
         for item in &mut self.bank_accounts {
             db.party_bank_accounts().update(item, executor).await?;

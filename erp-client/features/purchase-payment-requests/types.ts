@@ -235,3 +235,13 @@ export type PaymentTaskContext = {
     businessObjectId: string
     allowedActions: readonly string[]
 }
+
+/** 当前任务经敏感权限及账户版本验证后的收款资料，仅在读取期间使用。 */
+export type RevealedPaymentRecipient = {
+    bank_account_id: string
+    account_name: string
+    account_number: string
+    bank_name: string
+    bank_branch_name: string | null
+    bank_routing_number: string | null
+}

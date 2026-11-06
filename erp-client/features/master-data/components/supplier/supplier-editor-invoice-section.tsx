@@ -70,6 +70,25 @@ export function SupplierEditorInvoiceSection({
                     />
                 </FieldShell>
                 <FieldShell>
+                    <Label htmlFor="master-data-supplier-bank-routing-number">
+                        联行号
+                    </Label>
+                    <Input
+                        id="master-data-supplier-bank-routing-number"
+                        value={values.bankRoutingNumber}
+                        onChange={(event) =>
+                            setFieldValue(
+                                "bankRoutingNumber",
+                                event.target.value,
+                            )
+                        }
+                        disabled={!canEdit}
+                        placeholder="12 位联行号（选填）"
+                        inputMode="numeric"
+                        maxLength={12}
+                    />
+                </FieldShell>
+                <FieldShell>
                     <SensitiveEditableField
                         label={masterDataCopy.fBankAccount}
                         id="master-data-supplier-invoice-bank-account"

@@ -234,11 +234,19 @@ pub struct RevealPaymentRecipientRequest {
 }
 
 /// 付款工作台短时揭示的完整收款账号。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, PartialEq, Eq)]
 pub struct PaymentRecipientRevealView {
+    /// 当前已核验账户户名。
+    pub account_name: String,
+    /// 开户银行名称。
+    pub bank_name: String,
+    /// 开户支行名称。
+    pub bank_branch_name: Option<String>,
+    /// 银行联行号；未维护时为空。
+    pub bank_routing_number: Option<String>,
     /// 收款银行账户事实行主键。
     pub bank_account_id: String,
-    /// 完整收款账号。只允许响应当前任务责任人，不得写入日志或持久化副本。
+    /// 完整收款账号。只允许响应当前任务责任人，不得写入服务端日志或缓存。
     pub account_number: String,
 }
 

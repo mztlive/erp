@@ -22,6 +22,9 @@ pub struct CreatePartyBankAccountRequest {
     pub bank_name: String,
     /// 支行名称。
     pub bank_branch_name: Option<String>,
+    /// 银行联行号；历史资料未维护时为空。
+    #[serde(default)]
+    pub bank_routing_number: Option<String>,
     /// 账号（明文入参；低熵敏感值 §4.5.5）。
     #[validate(custom(function = "non_blank", message = "账号不能为空"))]
     pub account_number: String,
@@ -66,6 +69,9 @@ pub struct PartyBankAccountView {
     pub account_number_masked: String,
     /// 支行名称。
     pub bank_branch_name: Option<String>,
+    /// 银行联行号；历史资料未维护时为空。
+    #[serde(default)]
+    pub bank_routing_number: Option<String>,
     /// 生效开始日期。
     pub valid_from: String,
     /// 生效结束日期。
@@ -91,6 +97,7 @@ impl From<PartyBankAccount> for PartyBankAccountView {
             bank_name: account.bank_name,
             account_number_masked: masked_last4(&account.account_number_last4),
             bank_branch_name: account.bank_branch_name,
+            bank_routing_number: account.bank_routing_number,
             valid_from: account.valid_from.to_string(),
             valid_to: account.valid_to.map(|date| date.to_string()),
             is_default: account.is_default,

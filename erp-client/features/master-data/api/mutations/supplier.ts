@@ -185,6 +185,7 @@ export async function createSupplier(
             clear_address: false,
             tax_no: fields.taxNo?.trim() || null,
             clear_tax_profile: false,
+            bank_routing_number: fields.bankRoutingNumber?.trim(),
             bank_account:
                 fields.bankName?.trim() && fields.bankAccount?.trim()
                     ? {
@@ -308,6 +309,7 @@ export async function updateSupplierRevision(
             clear_address: fields.clearAddress === true,
             tax_no: fields.taxNo?.trim() || null,
             clear_tax_profile: fields.clearTaxProfile === true,
+            bank_routing_number: fields.bankRoutingNumber?.trim(),
             bank_account:
                 fields.bankName?.trim() && fields.bankAccount?.trim()
                     ? {

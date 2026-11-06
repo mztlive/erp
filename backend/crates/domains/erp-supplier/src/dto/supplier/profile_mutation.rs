@@ -145,6 +145,9 @@ pub struct SaveSupplierProfileRequest {
     pub clear_tax_profile: bool,
     /// 默认银行账户；`None` 表示创建时不填、修订时保留。
     pub bank_account: Option<SupplierProfileBankAccountInput>,
+    /// 默认收款账户联行号；缺省不修改，空字符串清空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bank_routing_number: Option<String>,
     /// 修订时明确停用当前银行账户；不能与 `bank_account` 同时提交。
     #[serde(default)]
     pub clear_bank_account: bool,
@@ -448,6 +451,7 @@ mod tests {
                 bank_name: "中国银行".to_string(),
                 account_number: "6222000000000000".to_string(),
             }),
+            bank_routing_number: None,
             clear_bank_account: false,
             settlement_mode: SettlementMode::PayAfterUse,
             reconciliation_cycle: ReconciliationCycle::Monthly,
@@ -547,6 +551,7 @@ mod tests {
         let request = SaveSupplierProfileRequest {
             clear_contact: true,
             clear_address: true,
+            bank_routing_number: None,
             clear_bank_account: true,
             ..save_supplier_profile_request()
         };

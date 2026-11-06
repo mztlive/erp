@@ -17,6 +17,7 @@ import { subtractFixed, sumFixed } from "@/lib/fixed-decimal"
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     PaymentCandidate,
+    RevealedPaymentRecipient,
     PaymentExecutionMethod,
     PaymentDepositAccount,
     DepositAccountOption,
@@ -497,7 +498,7 @@ export async function downloadAttachment(
     anchor.click()
     URL.revokeObjectURL(url)
 }
-export async function revealAccount(
+export async function revealPaymentRecipient(
     request: PaymentRequest,
     task: { workItemId: string; taskVersion: string },
 ) {
@@ -506,7 +507,7 @@ export async function revealAccount(
         !request.payment_recipient
     )
         throw new Error("该申请使用供应商预存款，没有本次银行收款账号")
-    const result = await apiPost<{ account_number: string }>(
+    const result = await apiPost<RevealedPaymentRecipient>(
         `${ROOT}/${encodeURIComponent(request.id)}/reveal-account`,
         {
             work_item_id: task.workItemId,
@@ -516,7 +517,14 @@ export async function revealAccount(
             expected_bank_account_version: request.payment_recipient?.version,
         },
     )
-    return result.account_number
+    return result
+}
+
+export async function revealAccount(
+    request: PaymentRequest,
+    task: { workItemId: string; taskVersion: string },
+) {
+    return (await revealPaymentRecipient(request, task)).account_number
 }
 
 export type ExecuteRequestDepositCommand = {

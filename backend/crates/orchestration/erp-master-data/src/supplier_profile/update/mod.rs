@@ -23,7 +23,9 @@ use super::validation::resolve_supplier_file_references;
 use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult, party_change};
 use crate::{Error, Result};
 
+mod bank_routing;
 mod capabilities;
+use bank_routing::BankRoutingChange;
 mod persist;
 mod qualifications;
 use persist::*;
@@ -344,6 +346,12 @@ impl SupplierProfileProcess {
             party_change::disable_bank_accounts(&mut changes.bank_accounts, actor_id)
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_bank_account = self.create_bank_account(req, party_id, actor_id)?;
+        } else if let Some(value) = &req.bank_routing_number {
+            changes.bank_routing = Some(BankRoutingChange {
+                party_id: party_id.clone(),
+                value: value.clone(),
+                actor_id: actor_id.to_owned(),
+            });
         }
         Ok(changes)
     }

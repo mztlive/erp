@@ -361,6 +361,7 @@ export type PartyBankAccountDto = {
     account_name: string
     bank_name: string
     account_number_masked: string
+    bank_routing_number?: string | null
     bank_branch_name: string | null
     valid_from: string
     valid_to: string | null

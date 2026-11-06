@@ -196,6 +196,7 @@ impl BuiltinCompany {
                 account_name: self.legal_name.clone(),
                 bank_name: self.bank_name.clone(),
                 bank_branch_name: None,
+                bank_routing_number: None,
                 account_number: number.clone(),
                 valid_from: today,
                 valid_to: None,

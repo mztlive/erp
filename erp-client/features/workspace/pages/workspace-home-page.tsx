@@ -2,7 +2,7 @@
 
 import { usePathname } from "@/lib/navigation"
 import { WORKSPACE_QUEUE_ROUTES } from "@/lib/workspace-queue-routes"
-import { RefreshCwIcon } from "lucide-react"
+import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { BusinessFailureState, PageScaffold } from "@/components/business"
 import {
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { WorkspaceQueuePanel } from "../components/workspace-queue-panel"
 import { useWorkspaceHome } from "../hooks/use-workspace-home"
 import { deriveWorkItemsFreshness } from "../lib/freshness"
+import { usePaymentExport } from "../hooks/use-payment-export"
 import { RoleWorkbenchEntry } from "./role-workbench-entry"
 
 const QUEUE_DESCRIPTIONS = {
@@ -42,6 +43,12 @@ export function WorkspaceHomeView({
 }: {
     home: ReturnType<typeof useWorkspaceHome>
 }) {
+    const paymentExport = usePaymentExport()
+    const paymentQueue =
+        home.urlState.view === "inbox" &&
+        home.urlState.filters?.item_types?.length === 1 &&
+        home.urlState.filters.item_types[0] ===
+            "task:SUPPLIER_PAYMENT_EXECUTION"
     const freshness = home.view
         ? deriveWorkItemsFreshness(home.view.freshness, {
               refreshing: home.refreshing,
@@ -87,6 +94,23 @@ export function WorkspaceHomeView({
                     </div>
                 }
             >
+                {paymentQueue && (
+                    <Button
+                        id="workspace-payment-export"
+                        variant="outline"
+                        disabled={
+                            paymentExport.isPending ||
+                            home.refreshing ||
+                            home.dashboardQuery.isError ||
+                            !home.view?.total
+                        }
+                        onClick={() => paymentExport.mutate(home.urlState)}
+                        title="导出当前筛选下的全部待付款记录"
+                    >
+                        <DownloadIcon aria-hidden="true" />
+                        {paymentExport.isPending ? "正在导出…" : "导出 Excel"}
+                    </Button>
+                )}
                 <Button
                     id="workspace-home-refresh"
                     variant="outline"

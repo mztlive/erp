@@ -34,6 +34,7 @@ export type SupplierEditorFormValues = Readonly<{
     foodLicense: string
     legalPersonIdCard: string
     taxNo: string
+    bankRoutingNumber: string
     bankName: string
     bankAccount: string
     invoiceType: string
@@ -82,8 +83,15 @@ export function validateSupplierEditorFields(
     if (hasContactName !== hasContactPhone && !preservesStoredContact) {
         return "联系人姓名和联系电话必须同时填写；修改联系人姓名前请先短时查看联系电话"
     }
+    if (
+        values.bankRoutingNumber.trim() &&
+        !/^\d{12}$/.test(values.bankRoutingNumber.trim())
+    )
+        return "联行号必须为 12 位数字"
     const hasBankName = Boolean(values.bankName.trim())
     const hasBankAccount = Boolean(values.bankAccount.trim())
+    if (values.bankRoutingNumber.trim() && !hasBankName)
+        return "请先维护开户银行与银行账号"
     const preservesStoredBankAccount =
         hasBankName &&
         !hasBankAccount &&
@@ -168,6 +176,7 @@ export function hydrateSupplierEditor(
         foodLicense: fields.foodLicense ?? "",
         legalPersonIdCard: fields.legalPersonIdCard ?? "",
         taxNo: fields.taxNo ?? "",
+        bankRoutingNumber: fields.bankRoutingNumber ?? "",
         bankName: fields.bankName ?? "",
         bankAccount: fields.bankAccount ?? "",
         invoiceType: fields.invoiceType ?? "",
@@ -227,6 +236,7 @@ export function createSupplierEditorDefaults(
         foodLicense: "",
         legalPersonIdCard: "",
         taxNo: "",
+        bankRoutingNumber: "",
         bankName: "",
         bankAccount: "",
         invoiceType: "",

@@ -113,6 +113,7 @@ export type SupplierFields = Readonly<{
     qualificationCapabilityCodes?: Readonly<Record<string, readonly string[]>>
     taxNo?: string
     clearTaxProfile?: boolean
+    bankRoutingNumber?: string
     bankName?: string
     bankAccount?: string
     clearBankAccount?: boolean

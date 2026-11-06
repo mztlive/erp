@@ -131,6 +131,7 @@ fn request_brief(request: &PurchasePaymentRequest, submitter_name: Option<String
     push_section(&mut sections, "供应商", supplier_name(request).as_deref(), false);
     push_section(&mut sections, "我方付款主体", Some(&request.payer_party_name), false);
     push_section(&mut sections, "付款方式", Some(request.data.execution_method.label()), false);
+    push_section(&mut sections, "待付金额", Some(&format_yuan(&request.remaining())), true);
     push_section(&mut sections, "申请金额", Some(&format_yuan(&request.total_amount)), true);
     push_section(&mut sections, "希望付款日", Some(&request.data.desired_payment_date.to_string()), false);
     push_section(&mut sections, "申请说明", Some(&request.data.reason), false);
@@ -178,5 +179,58 @@ fn brief_line(line: &PurchasePaymentRequestLine) -> ApprovalBriefLine {
             format_yuan(&line.remaining())
         )),
         due_label: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::common::time::BusinessDate;
+    use erp_finance::entity::payable::{PaymentRequestLineData, PurchasePaymentRequestData};
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn payment_brief_uses_remaining_after_paid_and_closed_amounts() {
+        let mut request = PurchasePaymentRequest::new(
+            "request".into(),
+            PurchasePaymentRequestData {
+                supplier_id: "supplier".into(),
+                payee_bank_account_id: "bank".into(),
+                execution_method: Default::default(),
+                lines: vec![PaymentRequestLineData {
+                    payable_account_id: "account".into(),
+                    amount: "100.01".parse().unwrap(),
+                }],
+                desired_payment_date: BusinessDate::from_ymd(2026, 11, 6).unwrap(),
+                reason: "采购付款".into(),
+                attachment_ids: vec![],
+            },
+            "buyer",
+        )
+        .unwrap();
+        request.payer_party_name = "付款公司".into();
+        request.lines = vec![serde_json::from_value(json!({
+            "payable_account_id": "account", "purchase_order_id": "purchase", "purchase_revision_id": "revision",
+            "requested_amount": "100.01", "paid_amount": "30.01", "closed_amount": "20.00",
+            "gross_total": "100.01", "settled_total": "30.01", "open_total": "70.00", "other_reserved_total": "0",
+            "payment_terms": {}, "source_snapshot": {"purchase_preview": {}, "sales_sources": [], "allowed_attachment_ids": []}
+        })).unwrap()];
+        let brief = request_brief(&request, None);
+        let field = brief.extra_sections.iter().find(|field| field.label == "待付金额").unwrap();
+        assert_eq!(field.value, format_yuan(&"50.00".parse().unwrap()));
+        assert!(field.numeric);
+        assert!(
+            brief
+                .extra_sections
+                .iter()
+                .any(|field| field.label == "我方付款主体" && field.value == "付款公司")
+        );
+        request.lines[0].closed_amount = "70.00".parse().unwrap();
+        let brief = request_brief(&request, None);
+        assert_eq!(
+            brief.extra_sections.iter().find(|field| field.label == "待付金额").unwrap().value,
+            format_yuan(&"0".parse().unwrap())
+        );
     }
 }

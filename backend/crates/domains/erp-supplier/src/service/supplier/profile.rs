@@ -96,6 +96,7 @@ mod tests {
             tax_no: None,
             clear_tax_profile: false,
             bank_account: None,
+            bank_routing_number: None,
             clear_bank_account: false,
             settlement_mode: SettlementMode::Prepayment,
             reconciliation_cycle: ReconciliationCycle::Monthly,

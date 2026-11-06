@@ -186,6 +186,7 @@ export async function centerSupplier(
         fact("供应商法人身份证", qualFileNames("legal_person_id") || null),
         fact("税号", taxProfile?.tax_no),
         fact("开户银行", bank?.bank_name),
+        fact("联行号", bank?.bank_routing_number),
         // 银行账号明文不在列表契约中，无法回显
         fact("供应商评级", ratingLabel(rating?.rating)),
         fact(
@@ -244,6 +245,7 @@ export async function centerSupplier(
             value: taxProfile?.tax_no ?? "—",
         },
         { label: "开户银行", value: bank?.bank_name || "—" },
+        { label: "联行号", value: bank?.bank_routing_number || "—" },
     ]
 
     const timeline: RevisionTimelineEntry[] = profiles.map((p, index) => ({

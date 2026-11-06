@@ -111,6 +111,7 @@ impl PartyBankAccountService {
                 bank_name: row.bank_name,
                 account_number_masked: crate::dto::party::masked_last4(&row.account_number_last4),
                 bank_branch_name: row.bank_branch_name,
+                bank_routing_number: row.bank_routing_number,
                 valid_from: row.valid_from,
                 valid_to: row.valid_to,
                 is_default: row.is_default,
@@ -157,6 +158,7 @@ impl PartyBankAccountService {
                 account_name: req.account_name,
                 bank_name: req.bank_name,
                 bank_branch_name: req.bank_branch_name,
+                bank_routing_number: req.bank_routing_number,
                 account_number: req.account_number,
                 valid_from: req.valid_from,
                 valid_to: req.valid_to,
@@ -177,22 +179,15 @@ impl PartyBankAccountService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let account_for_tx = account;
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    if account_for_tx.is_default {
-                        clear_default_marks!(
-                            db,
-                            party_bank_accounts,
-                            account_for_tx.party_id,
-                            None,
-                            executor
-                        );
+                    if account.is_default {
+                        clear_default_marks!(db, party_bank_accounts, account.party_id, None, executor);
                     }
-                    db.party_bank_accounts().create(&account_for_tx, executor).await?;
+                    db.party_bank_accounts().create(&account, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<PartyBankAccount, crate::error::Error>(account_for_tx)
+                    Ok::<PartyBankAccount, crate::error::Error>(account)
                 })
             })
             .await?;
