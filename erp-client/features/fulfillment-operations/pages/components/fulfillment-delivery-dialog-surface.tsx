@@ -25,6 +25,7 @@ import { FulfillmentDeliveryForm } from "../../components/forms/fulfillment-deli
 import { displayText } from "../../lib/readable-label"
 import type { FulfillmentDraft, FulfillmentOperation } from "../../types"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
+import { shipmentSummary } from "../lib/presentation"
 
 type DeliveryDraft = Extract<
     FulfillmentDraft,
@@ -59,7 +60,7 @@ export function FulfillmentDeliveryDialogSurface({
     readOnlyNote?: string
     headingRef: Ref<HTMLHeadingElement>
     onDraftChange: (draft: FulfillmentDraft) => void
-    actions: ReactNode
+    actions: (locateIssue: (issue: ValidationIssue) => void) => ReactNode
 }) {
     const { deliveryRef, locateIssue } = useFulfillmentFieldLocation()
     const paymentPending =
@@ -218,13 +219,13 @@ export function FulfillmentDeliveryDialogSurface({
                 <div className="flex w-full flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0 flex-1 text-xs text-muted-foreground">
                         <p className="num">
-                            {itemCount} 项商品 ·{" "}
-                            {draft.trackingEntries?.length ?? 0} 条物流记录
+                            {shipmentSummary(operation, draft) ??
+                                `${itemCount} 项商品 · ${draft.trackingEntries?.length ?? 0} 条物流记录`}
                         </p>
                         {blocker ? <p className="mt-1">{blocker}</p> : null}
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                        {actions}
+                        {actions(locateIssue)}
                     </div>
                 </div>
             </WorkspaceTaskFooter>

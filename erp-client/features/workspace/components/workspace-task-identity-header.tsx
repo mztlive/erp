@@ -17,12 +17,14 @@ export function WorkspaceTaskIdentityHeader({
     title,
     subtitle,
     badges,
+    compact = false,
     children,
 }: {
     item: WorkspaceWorkItem
     title?: ReactNode
     subtitle?: ReactNode
     badges?: ReactNode
+    compact?: boolean
     children?: ReactNode
 }) {
     const blocked = isBlockedWorkItem(item)
@@ -34,9 +36,20 @@ export function WorkspaceTaskIdentityHeader({
 
     return (
         <>
-            <div className="flex min-w-0 flex-col gap-2">
+            <div
+                className={
+                    compact
+                        ? "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2"
+                        : "flex min-w-0 flex-col gap-2"
+                }
+            >
+                {compact && (
+                    <h2 className="break-words text-xl font-semibold tracking-tight">
+                        {title ?? item.objectTitle}
+                    </h2>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
-                    <WorkspaceDocumentBadge item={item} />
+                    {!compact && <WorkspaceDocumentBadge item={item} />}
                     {badges ?? (
                         <StatusBadge
                             label={item.statusLabel}
@@ -49,9 +62,11 @@ export function WorkspaceTaskIdentityHeader({
                         <StatusBadge label="已超期" tone="destructive" />
                     ) : null}
                 </div>
-                <h2 className="break-words text-xl font-medium tracking-tight">
-                    {title ?? item.objectTitle}
-                </h2>
+                {!compact && (
+                    <h2 className="break-words text-xl font-medium tracking-tight">
+                        {title ?? item.objectTitle}
+                    </h2>
+                )}
                 {resolvedSubtitle ? (
                     <div className="text-sm text-muted-foreground">
                         {resolvedSubtitle}

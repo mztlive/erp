@@ -3,6 +3,7 @@
 import {
     useEffect,
     useImperativeHandle,
+    useMemo,
     useRef,
     useState,
     type Ref,
@@ -78,29 +79,82 @@ export function FulfillmentPackingForm({
     const [editing, setEditing] = useState<Set<string>>(() => new Set())
     const [splitting, setSplitting] = useState<string | null>(null)
     const following = useRef(new Set<string>())
+    // 单地址先展示待填写的包裹；只有用户编辑后才通知外层保存草稿。
+    const formPacking = useMemo(() => {
+        const destination = source.destinations[0]
+        if (
+            source.destinations.length !== 1 ||
+            !destination ||
+            destination.pending_address ||
+            packing.packages.length ||
+            packing.source_version !== source.source_version ||
+            draft.legacyTrackingNeedsAllocation
+        )
+            return packing
+        try {
+            const items = dispatchItems(packing, destination.key)
+            if (!items.length) return packing
+            return {
+                ...packing,
+                packages: [
+                    {
+                        id: "initial-package",
+                        destination_key: destination.key,
+                        carrier: "",
+                        tracking_no: "",
+                        items,
+                    },
+                ],
+            }
+        } catch {
+            return packing
+        }
+    }, [packing, source, draft.legacyTrackingNeedsAllocation])
     const form = useAppForm({
-        defaultValues: packing,
+        defaultValues: formPacking,
         listeners: {
             onChange: ({ formApi }) =>
                 onChange({ ...draft, packing: formApi.state.values }),
         },
     })
     useEffect(() => {
-        if (JSON.stringify(form.state.values) !== JSON.stringify(packing)) {
+        if (JSON.stringify(form.state.values) !== JSON.stringify(formPacking)) {
             following.current.clear()
-            form.reset(packing)
+            setEditing(new Set())
+            setSplitting(null)
+            form.reset(formPacking)
         }
-    }, [form, packing])
+    }, [form, formPacking])
     useImperativeHandle(ref, () => ({
         locate(targetId) {
             if (!targetId.startsWith("fulfillment-packing")) return false
             setSearch("")
             setOnlyMissing(false)
             setCollapsed(new Set())
+            let focusId = targetId
+            const parcel = form.state.values.packages.find(
+                (row) =>
+                    targetId ===
+                    `fulfillment-packing-package-${toAutomationIdSegment(row.id)}-edit-items`,
+            )
+            if (parcel) {
+                setEditing((current) => new Set([...current, parcel.id]))
+                const item = source.destinations.find(
+                    (row) => row.key === parcel.destination_key,
+                )?.items[0]
+                if (item)
+                    focusId = `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}-item-${toAutomationIdSegment(item.delivery_line_id)}-quantity`
+            }
             requestAnimationFrame(() => {
-                const node = document.getElementById(targetId)
+                const node = document.getElementById(focusId)
                 node?.scrollIntoView({ block: "center" })
-                node?.focus()
+                const input = node?.matches("input, button, textarea, select")
+                    ? node
+                    : node?.querySelector<HTMLElement>(
+                          "input:not(:disabled), button:not(:disabled), textarea:not(:disabled), select:not(:disabled)",
+                      )
+                const focusTarget = input ?? node
+                focusTarget?.focus({ preventScroll: true })
             })
             return true
         },
@@ -138,6 +192,30 @@ export function FulfillmentPackingForm({
             else next.add(key)
             return next
         })
+    const arrangementAction = (
+        <ArrangementButton
+            scope="deliveries"
+            objectId={operation.operationId}
+            disabled={disabled}
+            label={
+                source.destinations.some((row) => row.pending_address)
+                    ? "补充收货地址"
+                    : "调整收货安排"
+            }
+            hasUnsavedChanges={
+                JSON.stringify(draft) !== JSON.stringify(operation.draft)
+            }
+            onSaved={async () => {
+                const fresh = await queryClient.fetchQuery({
+                    queryKey: fulfillmentKeys.packing(operation.operationId),
+                    queryFn: () =>
+                        getDeliveryPackingDetail(operation.operationId),
+                    staleTime: 0,
+                })
+                onChange(fresh.operation.draft)
+            }}
+        />
+    )
     return (
         <section
             id="fulfillment-packing-form"
@@ -145,33 +223,6 @@ export function FulfillmentPackingForm({
             className="min-w-0 space-y-3 outline-none"
             aria-label="按地址登记发货包裹"
         >
-            <div className="flex justify-end">
-                <ArrangementButton
-                    scope="deliveries"
-                    objectId={operation.operationId}
-                    disabled={disabled}
-                    label={
-                        source.destinations.some((row) => row.pending_address)
-                            ? "补充收货地址"
-                            : "调整收货安排"
-                    }
-                    hasUnsavedChanges={
-                        JSON.stringify(draft) !==
-                        JSON.stringify(operation.draft)
-                    }
-                    onSaved={async () => {
-                        const fresh = await queryClient.fetchQuery({
-                            queryKey: fulfillmentKeys.packing(
-                                operation.operationId,
-                            ),
-                            queryFn: () =>
-                                getDeliveryPackingDetail(operation.operationId),
-                            staleTime: 0,
-                        })
-                        onChange(fresh.operation.draft)
-                    }}
-                />
-            </div>
             <form.Subscribe selector={(state) => state.values}>
                 {(values) => {
                     const ready = (key: string) =>
@@ -187,12 +238,42 @@ export function FulfillmentPackingForm({
                             },
                             source,
                         ).length === 0
+                    const skipped = (key: string) => {
+                        if (
+                            values.packages.some(
+                                (row) => row.destination_key === key,
+                            )
+                        )
+                            return false
+                        const items = values.dispatch.find(
+                            (row) => row.destination_key === key,
+                        )?.items
+                        try {
+                            return (
+                                !!items?.length &&
+                                items.every(
+                                    (item) =>
+                                        compareDecimal(
+                                            item.quantity,
+                                            "0",
+                                            6,
+                                        ) === 0,
+                                )
+                            )
+                        } catch {
+                            return false
+                        }
+                    }
                     const visible = source.destinations.filter(
                         (row) =>
-                            (!onlyMissing || !ready(row.key)) &&
-                            `${row.recipient} ${row.address} ${row.items.map((item) => itemName(item.delivery_line_id)).join(" ")}`
-                                .toLocaleLowerCase()
-                                .includes(search.trim().toLocaleLowerCase()),
+                            source.destinations.length <= 1 ||
+                            ((!onlyMissing ||
+                                (!ready(row.key) && !skipped(row.key))) &&
+                                `${row.recipient} ${row.address} ${row.items.map((item) => itemName(item.delivery_line_id)).join(" ")}`
+                                    .toLocaleLowerCase()
+                                    .includes(
+                                        search.trim().toLocaleLowerCase(),
+                                    )),
                     )
                     return (
                         <>
@@ -219,32 +300,41 @@ export function FulfillmentPackingForm({
                                                     ),
                                                 ).size
                                             }{" "}
-                                            种商品 · {values.packages.length}{" "}
-                                            个包裹
+                                            种商品
                                         </span>
                                     </div>
                                     <p className="text-xs text-muted-foreground">
-                                        同一地址内的商品可合并包裹；每个包裹分别登记物流及商品数量。未发数量保留为后续任务。
+                                        核对本次数量后填写物流，未发数量留待下次处理。
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
-                                    <Input
-                                        id="fulfillment-packing-search"
-                                        placeholder="搜索收货人、地址或商品"
-                                        value={search}
-                                        onChange={(event) =>
-                                            setSearch(event.target.value)
-                                        }
-                                        className="w-64"
-                                    />
-                                    <Label htmlFor="fulfillment-packing-only-missing">
-                                        <Checkbox
-                                            id="fulfillment-packing-only-missing"
-                                            checked={onlyMissing}
-                                            onCheckedChange={setOnlyMissing}
-                                        />
-                                        只看未登记
-                                    </Label>
+                                    {source.destinations.length > 1 && (
+                                        <>
+                                            <Input
+                                                id="fulfillment-packing-search"
+                                                placeholder="搜索收货人、地址或商品"
+                                                value={search}
+                                                onChange={(event) =>
+                                                    setSearch(
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                className="w-full sm:w-64"
+                                            />
+                                            <Label htmlFor="fulfillment-packing-only-missing">
+                                                <Checkbox
+                                                    id="fulfillment-packing-only-missing"
+                                                    checked={onlyMissing}
+                                                    onCheckedChange={
+                                                        setOnlyMissing
+                                                    }
+                                                />
+                                                只看未登记
+                                            </Label>
+                                        </>
+                                    )}
+                                    {source.destinations.length !== 1 &&
+                                        arrangementAction}
                                 </div>
                             </div>
                             {draft.legacyTrackingNeedsAllocation && (
@@ -275,9 +365,14 @@ export function FulfillmentPackingForm({
                                             className="space-y-3 rounded-xl border border-dashed bg-muted/20 p-4"
                                         >
                                             <div>
-                                                <h3 className="font-medium">
-                                                    待补收货地址
-                                                </h3>
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <h3 className="font-medium">
+                                                        待补收货地址
+                                                    </h3>
+                                                    {source.destinations
+                                                        .length === 1 &&
+                                                        arrangementAction}
+                                                </div>
                                                 <p className="text-sm text-muted-foreground">
                                                     以下商品本次暂不发货。补齐地址后可登记包裹，其他商品可以先发。
                                                 </p>
@@ -318,16 +413,24 @@ export function FulfillmentPackingForm({
                                             parcel.destination_key ===
                                             destination.key,
                                     )
+                                const showAllocation =
+                                    parcels.length > 1 ||
+                                    (parcels.length === 1 &&
+                                        !automaticPackage(
+                                            values,
+                                            destination.key,
+                                        )) ||
+                                    !!draft.legacyTrackingNeedsAllocation
                                 const isCollapsed = collapsed.has(
                                     destination.key,
                                 )
                                 return (
                                     <section
                                         key={destination.key}
-                                        className="overflow-hidden rounded-xl border border-border/70"
+                                        className="min-w-0 border-t border-border"
                                         aria-label={`${destination.recipient}的发货明细`}
                                     >
-                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-muted/35 px-3 py-2">
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
                                             <MapPinIcon
                                                 className="size-4 text-muted-foreground"
                                                 aria-hidden="true"
@@ -341,6 +444,8 @@ export function FulfillmentPackingForm({
                                             <span className="min-w-0 flex-1 break-words text-sm">
                                                 {destination.address}
                                             </span>
+                                            {source.destinations.length === 1 &&
+                                                arrangementAction}
                                             <Badge
                                                 variant={
                                                     ready(destination.key)
@@ -348,9 +453,11 @@ export function FulfillmentPackingForm({
                                                         : "outline"
                                                 }
                                             >
-                                                {ready(destination.key)
-                                                    ? "物流已登记"
-                                                    : "待登记物流"}
+                                                {skipped(destination.key)
+                                                    ? "本次不发货"
+                                                    : ready(destination.key)
+                                                      ? "物流已填写"
+                                                      : "待填写物流"}
                                             </Badge>
                                             <Button
                                                 id={`fulfillment-packing-address-${segment}-toggle`}
@@ -380,14 +487,22 @@ export function FulfillmentPackingForm({
                                         </div>
                                         <div
                                             hidden={isCollapsed}
-                                            className="space-y-2 px-3 pb-3"
+                                            className="min-w-0 space-y-4 pb-3"
                                         >
-                                            <Table className="min-w-[34rem] table-fixed">
+                                            <Table
+                                                className={
+                                                    showAllocation
+                                                        ? "min-w-[48rem] table-fixed"
+                                                        : "min-w-[34rem] table-fixed"
+                                                }
+                                            >
                                                 <colgroup>
                                                     <col />
-                                                    <col className="w-24 sm:w-28" />
-                                                    <col className="w-28 sm:w-32" />
-                                                    <col className="w-28 sm:w-40" />
+                                                    <col className="w-32 sm:w-40" />
+                                                    <col className="w-36 sm:w-44" />
+                                                    {showAllocation && (
+                                                        <col className="w-44 sm:w-56" />
+                                                    )}
                                                 </colgroup>
                                                 <TableHeader>
                                                     <TableRow>
@@ -400,9 +515,11 @@ export function FulfillmentPackingForm({
                                                         <TableHead>
                                                             本次发货
                                                         </TableHead>
-                                                        <TableHead>
-                                                            已分配包裹
-                                                        </TableHead>
+                                                        {showAllocation && (
+                                                            <TableHead>
+                                                                包裹分配
+                                                            </TableHead>
+                                                        )}
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
@@ -513,41 +630,43 @@ export function FulfillmentPackingForm({
                                                                                 </form.Field>
                                                                             )}
                                                                     </TableCell>
-                                                                    <TableCell className="whitespace-normal text-sm">
-                                                                        {assigned.length ? (
-                                                                            assigned
-                                                                                .map(
-                                                                                    ({
-                                                                                        index,
-                                                                                    }) =>
-                                                                                        `包裹 ${index + 1}`,
-                                                                                )
-                                                                                .join(
-                                                                                    "、",
-                                                                                )
-                                                                        ) : (
-                                                                            <span className="text-muted-foreground">
-                                                                                未分配
-                                                                            </span>
-                                                                        )}
-                                                                        {balanceNote(
-                                                                            values,
-                                                                            destination.key,
-                                                                            item.delivery_line_id,
-                                                                        ) && (
-                                                                            <p className="mt-1 text-xs text-warning-soft-foreground">
-                                                                                {balanceNote(
-                                                                                    values,
-                                                                                    destination.key,
-                                                                                    item.delivery_line_id,
-                                                                                )}{" "}
-                                                                                {unit(
-                                                                                    item.delivery_line_id,
-                                                                                )}
-                                                                                ，请调整包裹
-                                                                            </p>
-                                                                        )}
-                                                                    </TableCell>
+                                                                    {showAllocation && (
+                                                                        <TableCell className="whitespace-normal text-sm">
+                                                                            {assigned.length ? (
+                                                                                assigned
+                                                                                    .map(
+                                                                                        ({
+                                                                                            index,
+                                                                                        }) =>
+                                                                                            `包裹 ${index + 1}`,
+                                                                                    )
+                                                                                    .join(
+                                                                                        "、",
+                                                                                    )
+                                                                            ) : (
+                                                                                <span className="text-muted-foreground">
+                                                                                    未分配
+                                                                                </span>
+                                                                            )}
+                                                                            {balanceNote(
+                                                                                values,
+                                                                                destination.key,
+                                                                                item.delivery_line_id,
+                                                                            ) && (
+                                                                                <p className="mt-1 text-xs text-warning-soft-foreground">
+                                                                                    {balanceNote(
+                                                                                        values,
+                                                                                        destination.key,
+                                                                                        item.delivery_line_id,
+                                                                                    )}{" "}
+                                                                                    {unit(
+                                                                                        item.delivery_line_id,
+                                                                                    )}
+                                                                                    ，请调整包裹
+                                                                                </p>
+                                                                            )}
+                                                                        </TableCell>
+                                                                    )}
                                                                 </TableRow>
                                                             )
                                                         },
@@ -567,12 +686,22 @@ export function FulfillmentPackingForm({
                                                     return (
                                                         <div
                                                             key={parcel.id}
-                                                            className="space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3"
+                                                            id={
+                                                                parcel.id ===
+                                                                parcels[0]
+                                                                    .parcel.id
+                                                                    ? `fulfillment-packing-address-${segment}-logistics`
+                                                                    : undefined
+                                                            }
+                                                            tabIndex={-1}
+                                                            className="space-y-3 border-t border-border/60 pt-4 outline-none"
                                                         >
                                                             <div className="flex flex-wrap items-center gap-3">
                                                                 <span className="text-sm font-medium">
-                                                                    包裹{" "}
-                                                                    {index + 1}
+                                                                    {parcels.length ===
+                                                                    1
+                                                                        ? "发货物流"
+                                                                        : `包裹 ${index + 1}`}
                                                                 </span>
                                                                 <form.AppField
                                                                     name={`packages[${index}].carrier`}
@@ -622,7 +751,7 @@ export function FulfillmentPackingForm({
                                                                             disabled={
                                                                                 disabled
                                                                             }
-                                                                            className="w-64"
+                                                                            className="w-full sm:w-64"
                                                                         />
                                                                     )}
                                                                 </form.Field>
@@ -630,7 +759,7 @@ export function FulfillmentPackingForm({
                                                                     <Button
                                                                         id={`${prefix}-split`}
                                                                         size="sm"
-                                                                        variant="ghost"
+                                                                        variant="secondary"
                                                                         disabled={
                                                                             disabled ||
                                                                             !parcel
@@ -698,34 +827,57 @@ export function FulfillmentPackingForm({
                                                                                 : "调整商品"}
                                                                         </Button>
                                                                     )}
-                                                                    <Button
-                                                                        id={`${prefix}-remove`}
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        disabled={
-                                                                            disabled
-                                                                        }
-                                                                        onClick={() => {
-                                                                            following.current.delete(
-                                                                                destination.key,
-                                                                            )
-                                                                            apply(
-                                                                                {
-                                                                                    ...values,
-                                                                                    packages:
-                                                                                        values.packages.filter(
-                                                                                            (
-                                                                                                row,
-                                                                                            ) =>
-                                                                                                row.id !==
-                                                                                                parcel.id,
-                                                                                        ),
-                                                                                },
-                                                                            )
-                                                                        }}
-                                                                    >
-                                                                        移除
-                                                                    </Button>
+                                                                    {packing.packages.some(
+                                                                        (row) =>
+                                                                            row.id ===
+                                                                            parcel.id,
+                                                                    ) && (
+                                                                        <Button
+                                                                            id={`${prefix}-remove`}
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={
+                                                                                disabled
+                                                                            }
+                                                                            onClick={() => {
+                                                                                setSplitting(
+                                                                                    null,
+                                                                                )
+                                                                                setEditing(
+                                                                                    (
+                                                                                        current,
+                                                                                    ) => {
+                                                                                        const next =
+                                                                                            new Set(
+                                                                                                current,
+                                                                                            )
+                                                                                        next.delete(
+                                                                                            parcel.id,
+                                                                                        )
+                                                                                        return next
+                                                                                    },
+                                                                                )
+                                                                                following.current.delete(
+                                                                                    destination.key,
+                                                                                )
+                                                                                apply(
+                                                                                    {
+                                                                                        ...values,
+                                                                                        packages:
+                                                                                            values.packages.filter(
+                                                                                                (
+                                                                                                    row,
+                                                                                                ) =>
+                                                                                                    row.id !==
+                                                                                                    parcel.id,
+                                                                                            ),
+                                                                                    },
+                                                                                )
+                                                                            }}
+                                                                        >
+                                                                            移除
+                                                                        </Button>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                             {editingItems ? (
@@ -861,7 +1013,7 @@ export function FulfillmentPackingForm({
                                                                         },
                                                                     )}
                                                                 </div>
-                                                            ) : (
+                                                            ) : showAllocation ? (
                                                                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                                                     <span>
                                                                         包含：
@@ -882,10 +1034,14 @@ export function FulfillmentPackingForm({
                                                                     </span>
                                                                     {automatic && (
                                                                         <span>
-                                                                            数量随本次发货自动更新
+                                                                            一个包裹发出，数量随本次发货自动更新
                                                                         </span>
                                                                     )}
                                                                 </div>
+                                                            ) : (
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    本次商品合并为一个包裹；需要分开发出时，可拆分包裹。
+                                                                </p>
                                                             )}
                                                             {!automatic &&
                                                                 parcels.length ===
@@ -997,7 +1153,15 @@ export function FulfillmentPackingForm({
                                                 )
                                                     return null
                                                 return (
-                                                    <div className="flex flex-wrap items-center gap-3 border-t border-border/50 pt-2">
+                                                    <div
+                                                        id={
+                                                            !parcels.length
+                                                                ? `fulfillment-packing-address-${segment}-logistics`
+                                                                : undefined
+                                                        }
+                                                        tabIndex={-1}
+                                                        className="flex flex-wrap items-center gap-3 border-t border-border/50 pt-2 outline-none"
+                                                    >
                                                         <Button
                                                             id={`fulfillment-packing-address-${segment}-add-package`}
                                                             variant="outline"

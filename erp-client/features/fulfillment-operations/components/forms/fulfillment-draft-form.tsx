@@ -37,6 +37,23 @@ export function getFirstInputId(operation: FulfillmentOperation): string {
         }
         case "WAREHOUSE_SHIP":
         case "SUPPLIER_DIRECT": {
+            const draft = operation.draft
+            if (
+                (draft.type === "WAREHOUSE_SHIP" ||
+                    draft.type === "SUPPLIER_DIRECT") &&
+                draft.packing &&
+                draft.addressSnapshot
+            ) {
+                const parcel = draft.packing.packages[0]
+                if (parcel)
+                    return `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}-carrier`
+                const destination = draft.addressSnapshot.destinations.find(
+                    (row) => !row.pending_address && row.items.length,
+                )
+                return destination
+                    ? `fulfillment-packing-${toAutomationIdSegment(destination.key)}-${toAutomationIdSegment(destination.items[0].delivery_line_id)}-quantity`
+                    : "fulfillment-packing-form"
+            }
             const kind =
                 operation.operationType === "WAREHOUSE_SHIP" ? "ship" : "direct"
             const line = operation.lines[0]

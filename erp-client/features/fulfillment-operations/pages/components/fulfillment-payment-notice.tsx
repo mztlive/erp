@@ -1,10 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowUpRightIcon, CircleAlertIcon } from "lucide-react"
+import { ArrowUpRightIcon, ChevronRightIcon, InfoIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { paymentReminder } from "../../lib/validation"
@@ -23,38 +27,42 @@ export function FulfillmentPaymentNotice({
         hasPermission(profile.data?.permissions, "purchase_order:detail")
 
     return (
-        <Alert id="prepayment-gate" variant="warning">
-            <CircleAlertIcon aria-hidden="true" />
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-3">
-                <div className="min-w-0 flex-1 space-y-1.5">
-                    <AlertTitle>{paymentReminder(operation)}</AlertTitle>
-                    <AlertDescription className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-                        {operation.gate.requiredAmount != null && (
-                            <span>
-                                约定预付{" "}
-                                <MoneyValue
-                                    value={operation.gate.requiredAmount}
-                                />
-                            </span>
-                        )}
-                        {operation.gate.effectivePaidAmount != null && (
-                            <span>
-                                有效已付{" "}
-                                <MoneyValue
-                                    value={operation.gate.effectivePaidAmount}
-                                />
-                            </span>
-                        )}
-                        <span>
-                            付款审批通过不代表已支付。请按实际发货或交付情况确认履约。
-                        </span>
-                    </AlertDescription>
-                </div>
+        <Collapsible
+            id="prepayment-gate"
+            role="note"
+            className="border-t border-border/50 pt-3 text-xs text-muted-foreground"
+        >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <p className="flex min-w-0 items-center gap-2 leading-6 text-foreground">
+                    <InfoIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-muted-foreground"
+                    />
+                    <span>{paymentReminder(operation)}</span>
+                </p>
+                <CollapsibleTrigger
+                    id="fulfillment-payment-details-toggle"
+                    className="group"
+                    render={
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs font-normal text-muted-foreground"
+                        />
+                    }
+                >
+                    <ChevronRightIcon
+                        aria-hidden="true"
+                        className="size-3 transition-transform group-aria-expanded:rotate-90"
+                    />
+                    付款明细
+                </CollapsibleTrigger>
                 {canViewPayment && (
                     <Button
                         id="fulfillment-operations-gate-view-payment"
-                        variant="outline"
+                        variant="link"
                         size="sm"
+                        className="text-xs"
                         render={
                             <Link
                                 href={`/procurement/orders/${encodeURIComponent(purchaseOrderId)}?section=payable`}
@@ -69,6 +77,27 @@ export function FulfillmentPaymentNotice({
                     </Button>
                 )}
             </div>
-        </Alert>
+            <CollapsibleContent>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-2 pl-6 leading-6">
+                    {operation.gate.requiredAmount != null && (
+                        <span>
+                            约定预付{" "}
+                            <MoneyValue value={operation.gate.requiredAmount} />
+                        </span>
+                    )}
+                    {operation.gate.effectivePaidAmount != null && (
+                        <span>
+                            有效已付{" "}
+                            <MoneyValue
+                                value={operation.gate.effectivePaidAmount}
+                            />
+                        </span>
+                    )}
+                    <span>
+                        付款审批通过不代表已支付。请按实际发货或交付情况确认履约。
+                    </span>
+                </div>
+            </CollapsibleContent>
+        </Collapsible>
     )
 }

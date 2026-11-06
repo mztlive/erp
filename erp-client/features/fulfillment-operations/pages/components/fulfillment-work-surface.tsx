@@ -44,7 +44,10 @@ import {
 import { salesOrderHref } from "@/features/fulfillment-operations/pages/lib/gate-copy"
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import { displayName } from "@/lib/display-name"
-import { sourceContextFields } from "@/features/fulfillment-operations/pages/lib/presentation"
+import {
+    sourceContextFields,
+    shipmentSummary,
+} from "@/features/fulfillment-operations/pages/lib/presentation"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { FulfillmentPaymentNotice } from "./fulfillment-payment-notice"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
@@ -131,6 +134,22 @@ export function FulfillmentWorkSurface({
         (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") &&
         !!draft.packing
     const fieldIssues = validationIssues.filter((issue) => issue.id !== "gate")
+    const summary = shipmentSummary(operation, draft)
+    const summaryContent = summary ? (
+        <p className="text-xs text-muted-foreground" role="status">
+            {summary}
+        </p>
+    ) : undefined
+    const validationContent =
+        fieldIssues.length > 0 ? (
+            <ValidationSummary
+                id="fulfillment-operations-field-validation"
+                onLocate={locateIssue}
+                compact
+                title="请补充或检查履约信息"
+                issues={fieldIssues}
+            />
+        ) : null
     const purchaseNo = displayText(
         operation.source.purchaseNo,
         operation.source.purchaseOrderId,
@@ -174,7 +193,7 @@ export function FulfillmentWorkSurface({
                     readOnlyNote={!canExecute ? readOnlyNote : undefined}
                     headingRef={headingRef}
                     onDraftChange={onDraftChange}
-                    actions={
+                    actions={(locateDialogIssue) => (
                         <>
                             <Button
                                 id="fulfillment-operations-dialog-cancel"
@@ -195,6 +214,8 @@ export function FulfillmentWorkSurface({
                                     formalPending={formalPending}
                                     savePending={savePending}
                                     canPost={canPost}
+                                    validationIssues={validationIssues}
+                                    onLocate={locateDialogIssue}
                                     autoNext={autoNext}
                                     onSkip={onSkip}
                                     onDiscard={onDiscard}
@@ -203,7 +224,7 @@ export function FulfillmentWorkSurface({
                                 />
                             ) : null}
                         </>
-                    }
+                    )}
                 />
             </>
         )
@@ -358,6 +379,7 @@ export function FulfillmentWorkSurface({
                         <FulfillmentSourceContext
                             operation={operation}
                             currentUrl={currentUrl}
+                            customerInTitle={singleOperation}
                         />
                     </WorkspaceTaskPageSlot>
                     {singleOperation && addressPacking && !paymentPending && (
@@ -384,14 +406,20 @@ export function FulfillmentWorkSurface({
                         disabled={formalPending || !canExecute || resultUnknown}
                     />
 
-                    {fieldIssues.length > 0 ? (
-                        <ValidationSummary
-                            id="fulfillment-operations-field-validation"
-                            onLocate={locateIssue}
-                            compact
-                            title="请补充或检查履约信息"
-                            issues={fieldIssues}
-                        />
+                    {fieldIssues.length > 0 && (!addressPacking || dirty) ? (
+                        addressPacking ? (
+                            <details className="text-xs text-muted-foreground">
+                                <summary
+                                    id="fulfillment-operations-validation-toggle"
+                                    className="w-fit cursor-pointer py-1"
+                                >
+                                    还有 {fieldIssues.length} 项待完善
+                                </summary>
+                                <div className="pt-2">{validationContent}</div>
+                            </details>
+                        ) : (
+                            validationContent
+                        )
                     ) : null}
 
                     {saveMessage ? (
@@ -405,8 +433,14 @@ export function FulfillmentWorkSurface({
 
                     {canExecute ? (
                         <WorkspaceTaskFooter
+                            summary={summaryContent}
                             fallback={
-                                <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
+                                <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
+                                    {summaryContent && (
+                                        <div className="mr-auto">
+                                            {summaryContent}
+                                        </div>
+                                    )}
                                     <FulfillmentExecuteActions
                                         operation={operation}
                                         singleOperation={singleOperation}
@@ -415,6 +449,8 @@ export function FulfillmentWorkSurface({
                                         formalPending={formalPending}
                                         savePending={savePending}
                                         canPost={canPost}
+                                        validationIssues={validationIssues}
+                                        onLocate={locateIssue}
                                         autoNext={autoNext}
                                         onSkip={onSkip}
                                         onDiscard={onDiscard}
@@ -432,6 +468,8 @@ export function FulfillmentWorkSurface({
                                 formalPending={formalPending}
                                 savePending={savePending}
                                 canPost={canPost}
+                                validationIssues={validationIssues}
+                                onLocate={locateIssue}
                                 autoNext={autoNext}
                                 onSkip={onSkip}
                                 onDiscard={onDiscard}
@@ -479,6 +517,8 @@ function FulfillmentExecuteActions({
     formalPending,
     savePending,
     canPost,
+    validationIssues,
+    onLocate,
     autoNext,
     onSkip,
     onDiscard,
@@ -493,24 +533,43 @@ function FulfillmentExecuteActions({
     formalPending: boolean
     savePending: boolean
     canPost: boolean
+    validationIssues: readonly ValidationIssue[]
+    onLocate: (issue: ValidationIssue) => void
     autoNext: boolean
     onSkip: () => void
     onDiscard: () => void
     onSave: () => void
     onConfirm: () => void
 }) {
+    const actionBlocker = operation.actionBlockers.find(
+        (item) => item.action === "POST",
+    )
+    const firstIssue = validationIssues[0]
     const blockedMessage =
-        operation.actionBlockers.find((item) => item.action === "POST")
-            ?.message || "请先处理页面中的提示后再确认"
+        actionBlocker?.message ||
+        firstIssue?.message ||
+        "请检查本次填写的信息后再确认"
     return (
         <div className="flex flex-wrap items-center justify-end gap-2">
             {!canPost && blockedMessage ? (
-                <p
-                    id="fulfillment-operations-confirm-blocker"
-                    className="max-w-md text-xs text-muted-foreground"
-                >
-                    {blockedMessage}
-                </p>
+                <div className="flex max-w-md items-center gap-2 text-xs text-muted-foreground">
+                    <p
+                        id="fulfillment-operations-confirm-blocker"
+                        role="status"
+                    >
+                        {blockedMessage}
+                    </p>
+                    {!actionBlocker && firstIssue?.targetId && (
+                        <Button
+                            id="fulfillment-operations-locate-blocker"
+                            size="sm"
+                            variant="link"
+                            onClick={() => onLocate(firstIssue)}
+                        >
+                            去填写
+                        </Button>
+                    )}
+                </div>
             ) : null}
             {!singleOperation ? (
                 <Button
@@ -621,9 +680,11 @@ function FulfillmentReadOnlyActions({
 function FulfillmentSourceContext({
     operation,
     currentUrl,
+    customerInTitle = false,
 }: {
     operation: FulfillmentOperation
     currentUrl: string
+    customerInTitle?: boolean
 }) {
     const profile = useAccountProfileQuery()
     const canViewPurchase = hasPermission(
@@ -634,14 +695,21 @@ function FulfillmentSourceContext({
         profile.data?.permissions,
         "sales_order:detail",
     )
-    const fields = sourceContextFields(
-        operation,
-        salesOrderHref(operation.source.salesOrderId, currentUrl),
-    )
+    const fields = [
+        ...sourceContextFields(
+            operation,
+            salesOrderHref(operation.source.salesOrderId, currentUrl),
+        ),
+    ]
+        .filter((field) => !customerInTitle || field.label !== "客户")
+        .sort((left, right) => {
+            const order = ["客户", "供应商", "仓库", "销售单", "采购单"]
+            return order.indexOf(left.label) - order.indexOf(right.label)
+        })
     if (fields.length === 0) return null
     return (
         <section aria-label="来源单据">
-            <dl className="my-3 grid gap-x-8 gap-y-2 border-t border-border/50 pt-3 xl:grid-cols-2">
+            <dl className="my-3 flex flex-wrap gap-x-6 gap-y-2 border-t border-border/50 pt-3">
                 {fields.map((field) => {
                     const purchaseLink =
                         field.label === "采购单" &&
@@ -653,6 +721,9 @@ function FulfillmentSourceContext({
                         purchaseLink || (canViewSales ? field.href : undefined)
                     const isDocument =
                         field.label === "销售单" || field.label === "采购单"
+                    const opaquePurchaseNumber =
+                        field.label === "采购单" &&
+                        /^PO-[0-9a-f]{24,}$/i.test(field.value)
                     return (
                         <div
                             key={field.label}
@@ -662,7 +733,11 @@ function FulfillmentSourceContext({
                                 {field.label}
                             </dt>
                             <dd
-                                title={isDocument ? field.value : undefined}
+                                title={
+                                    isDocument && !opaquePurchaseNumber
+                                        ? field.value
+                                        : undefined
+                                }
                                 className={
                                     isDocument
                                         ? "min-w-0 truncate text-sm font-medium"
@@ -677,11 +752,15 @@ function FulfillmentSourceContext({
                                         rel="noopener noreferrer"
                                         className="text-primary underline underline-offset-4"
                                     >
-                                        {field.value}
+                                        {opaquePurchaseNumber
+                                            ? "查看采购单"
+                                            : field.value}
                                         <span className="sr-only">
                                             （在新标签页打开{field.label}）
                                         </span>
                                     </Link>
+                                ) : opaquePurchaseNumber ? (
+                                    "已关联采购单"
                                 ) : (
                                     field.value
                                 )}

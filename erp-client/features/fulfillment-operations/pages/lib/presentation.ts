@@ -4,8 +4,52 @@
  */
 
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
-import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
+import type {
+    FulfillmentDraft,
+    FulfillmentOperation,
+} from "@/features/fulfillment-operations/types"
 import { displayName } from "@/lib/display-name"
+import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+
+/** 本次发货按单位分别汇总；不把件、箱等不同单位相加，也不把空物流计为已登记。 */
+export function shipmentSummary(
+    operation: FulfillmentOperation,
+    draft: FulfillmentDraft,
+): string | undefined {
+    if (
+        (draft.type !== "SUPPLIER_DIRECT" && draft.type !== "WAREHOUSE_SHIP") ||
+        !draft.packing
+    )
+        return undefined
+    try {
+        const dispatch = draft.packing.dispatch.filter((row) =>
+            row.items.some((item) => compareDecimal(item.quantity, "0", 6) > 0),
+        )
+        const items = dispatch
+            .flatMap((row) => row.items)
+            .filter((item) => compareDecimal(item.quantity, "0", 6) > 0)
+        if (!items.length) return "尚未填写本次发货数量"
+        const groups = new Map<string, string[]>()
+        for (const item of items) {
+            const unit =
+                operation.lines.find(
+                    (line) => line.lineId === item.delivery_line_id,
+                )?.unitCode || ""
+            groups.set(unit, [...(groups.get(unit) ?? []), item.quantity])
+        }
+        const quantity = groups.has("")
+            ? `${new Set(items.map((item) => item.delivery_line_id)).size} 项商品`
+            : [...groups]
+                  .map(
+                      ([unit, quantities]) =>
+                          `${compactFixed(sumFixed(quantities, { maxScale: 6, outputScale: 6 }))} ${unit}`,
+                  )
+                  .join("、")
+        return `本次发货 ${quantity} · ${dispatch.length} 个地址`
+    } catch {
+        return "本次发货数量待核对"
+    }
+}
 
 export type ResponsibilityStatus =
     | "blocked"

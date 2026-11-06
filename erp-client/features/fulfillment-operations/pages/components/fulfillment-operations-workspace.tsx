@@ -125,7 +125,7 @@ export function FulfillmentOperationsWorkspace({
                         deliveryDialog
                             ? "min-w-0"
                             : singleOperation
-                              ? "min-h-[28rem] min-w-0"
+                              ? "min-w-0"
                               : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
                     }
                 >

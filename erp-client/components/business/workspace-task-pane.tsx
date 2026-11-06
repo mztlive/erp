@@ -25,6 +25,7 @@ type WorkspaceTaskPageLayout = {
     fullWidth?: boolean
     singleColumn?: boolean
     summaryInHeader?: boolean
+    denseHeader?: boolean
     unframedBody?: boolean
     summary?: ReactNode
     aside: ReactNode
@@ -194,6 +195,7 @@ export function WorkspaceTaskPane({
                                     "flex shrink-0 items-start justify-between gap-3 bg-card py-5",
                                     !layout && "border-b border-grid",
                                     layout.fullWidth && "py-3",
+                                    layout.denseHeader && "py-3",
                                     layout && "rounded-t-xl sm:px-6",
                                     layout?.compact &&
                                         "bg-transparent px-0 py-1 sm:px-0",
@@ -213,6 +215,7 @@ export function WorkspaceTaskPane({
                                             "px-5 pb-5 sm:px-6",
                                             layout.compact &&
                                                 "px-0 pb-0 sm:px-0",
+                                            layout.denseHeader && "pb-3",
                                         )}
                                     >
                                         {layout.summary}

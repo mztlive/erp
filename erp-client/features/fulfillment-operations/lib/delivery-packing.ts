@@ -5,6 +5,7 @@ import {
     clampZeroFixed,
 } from "@/lib/fixed-decimal"
 import type { ValidationIssue } from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type PackingItem = { delivery_line_id: string; quantity: string }
 export type DeliveryDestination = {
@@ -85,12 +86,12 @@ export function packingIssues(
     source: DeliveryAddressSnapshot,
 ): ValidationIssue[] {
     const issues: ValidationIssue[] = []
-    const add = (message: string) =>
+    const add = (message: string, targetId = "fulfillment-packing-form") =>
         issues.push({
             id: `packing-${issues.length}`,
             label: "发货包裹",
             message,
-            targetId: "fulfillment-packing-form",
+            targetId,
         })
     try {
         if (packing.source_version !== source.source_version)
@@ -101,25 +102,44 @@ export function packingIssues(
         )
             add("一次发货最多100个地址或包裹商品关联")
         const seen = new Set<string>()
-        for (const parcel of packing.packages) {
-            if (
-                !parcel.carrier.trim() ||
-                !parcel.tracking_no.trim() ||
-                !parcel.items.length
-            )
-                add("请填写包裹物流公司、单号及商品数量")
-            const key = `${parcel.carrier.trim()}:${parcel.tracking_no.trim()}`
-            if (seen.has(key)) add("同一物流包裹不能重复登记或发往不同地址")
-            seen.add(key)
-            if (
-                parcel.items.some(
-                    (item) => compareDecimal(item.quantity, "0", 6) <= 0,
+        for (const [index, parcel] of packing.packages.entries()) {
+            const prefix = `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}`
+            const label = `包裹 ${index + 1}`
+            if (!parcel.carrier.trim())
+                add(`${label}尚未选择物流公司`, `${prefix}-carrier`)
+            if (!parcel.tracking_no.trim())
+                add(`${label}尚未填写物流单号`, `${prefix}-tracking`)
+            if (!parcel.items.length)
+                add(
+                    `${label}尚未分配商品，请调整商品或移除包裹`,
+                    `${prefix}-remove`,
                 )
-            )
-                add("包裹商品数量必须大于0")
+            const key = `${parcel.carrier.trim()}:${parcel.tracking_no.trim()}`
+            if (parcel.carrier.trim() && parcel.tracking_no.trim()) {
+                if (seen.has(key))
+                    add(
+                        "同一物流包裹不能重复登记或发往不同地址",
+                        `${prefix}-tracking`,
+                    )
+                seen.add(key)
+            }
+            try {
+                if (
+                    parcel.items.some(
+                        (item) => compareDecimal(item.quantity, "0", 6) <= 0,
+                    )
+                )
+                    add(`${label}的商品数量必须大于0`, `${prefix}-edit-items`)
+            } catch {
+                add(
+                    `${label}的商品数量无效，请填写最多6位小数的数量`,
+                    `${prefix}-edit-items`,
+                )
+            }
         }
         let positive = false
         for (const row of packing.dispatch) {
+            const addressId = `fulfillment-packing-address-${toAutomationIdSegment(row.destination_key)}`
             const destination = source.destinations.find(
                 (value) => value.key === row.destination_key,
             )
@@ -135,6 +155,13 @@ export function packingIssues(
             )
                 add("待补地址的商品本次不能发货，请补齐地址或将本次数量设为0")
             for (const item of row.items) {
+                const quantityId = `fulfillment-packing-${toAutomationIdSegment(row.destination_key)}-${toAutomationIdSegment(item.delivery_line_id)}-quantity`
+                try {
+                    compareDecimal(item.quantity, "0", 6)
+                } catch {
+                    add("请填写有效的本次发货数量，最多6位小数", quantityId)
+                    continue
+                }
                 const limit =
                     source.destinations
                         .find((value) => value.key === row.destination_key)
@@ -147,7 +174,7 @@ export function packingIssues(
                     compareDecimal(item.quantity, "0", 6) < 0 ||
                     compareDecimal(item.quantity, limit, 6) > 0
                 )
-                    add("本次发货数量须在0与该地址应发数量之间")
+                    add("本次发货数量须在0与该地址应发数量之间", quantityId)
                 if (compareDecimal(item.quantity, "0", 6) > 0) positive = true
                 const packed = packingSum(
                     packing.packages
@@ -165,16 +192,47 @@ export function packingIssues(
                                 .map((value) => value.quantity),
                         ),
                 )
-                if (compareDecimal(packed, item.quantity, 6) !== 0)
-                    add("每项商品的包裹数量合计须等于该地址本次发货数量")
+                if (compareDecimal(packed, item.quantity, 6) !== 0) {
+                    const parcel = packing.packages.find(
+                        (parcel) =>
+                            parcel.destination_key === row.destination_key,
+                    )
+                    add(
+                        parcel
+                            ? "包裹分配数量与本次发货不一致，请调整包裹商品数量"
+                            : `${destination?.recipient || "收货地址"}的物流尚未填写，请登记物流公司和单号`,
+                        parcel
+                            ? `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}-edit-items`
+                            : `${addressId}-logistics`,
+                    )
+                }
             }
         }
-        if (!positive) add("本次发货数量必须大于0")
+        if (!positive) {
+            const first = packing.dispatch.find(
+                (row) =>
+                    row.items.length &&
+                    !source.destinations.find(
+                        (destination) =>
+                            destination.key === row.destination_key,
+                    )?.pending_address,
+            )
+            add(
+                "请至少填写一项大于0的本次发货数量",
+                first
+                    ? `fulfillment-packing-${toAutomationIdSegment(first.destination_key)}-${toAutomationIdSegment(first.items[0].delivery_line_id)}-quantity`
+                    : "fulfillment-packing-form",
+            )
+        }
     } catch {
         add("请填写有效数量，最多6位小数")
     }
     return issues.filter(
         (issue, i, all) =>
-            all.findIndex((value) => value.message === issue.message) === i,
+            all.findIndex(
+                (value) =>
+                    value.message === issue.message &&
+                    value.targetId === issue.targetId,
+            ) === i,
     )
 }

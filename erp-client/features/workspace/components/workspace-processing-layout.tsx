@@ -65,6 +65,7 @@ export function WorkspaceProcessingLayout({
                 paymentReview
             }
             summaryInHeader={fulfillment}
+            denseHeader={fulfillment}
             compact={paymentArrangement}
             fullWidth={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
@@ -72,7 +73,13 @@ export function WorkspaceProcessingLayout({
                 item.allowedActions.includes("PROCESS")
             }
             summary={
-                <>
+                <div
+                    className={
+                        fulfillment
+                            ? "flex flex-wrap items-start justify-between gap-x-6 gap-y-2"
+                            : undefined
+                    }
+                >
                     {payment ||
                     paymentArrangement ||
                     purchaseApproval ? undefined : (
@@ -116,11 +123,13 @@ export function WorkspaceProcessingLayout({
                                           item.ownerUserLabel)
                                 }
                             />
-                            <Fact
-                                inline={fulfillment}
-                                label="任务类型"
-                                value={item.workItemTypeLabel}
-                            />
+                            {!fulfillment && (
+                                <Fact
+                                    inline={fulfillment}
+                                    label="任务类型"
+                                    value={item.workItemTypeLabel}
+                                />
+                            )}
                             {fulfillment && (
                                 <Fact
                                     inline={fulfillment}
@@ -128,17 +137,19 @@ export function WorkspaceProcessingLayout({
                                     value={item.enteredAtLabel}
                                 />
                             )}
-                            <Fact
-                                inline={fulfillment}
-                                label="截止时间"
-                                value={item.dueAtLabel || "未设截止时间"}
-                            />
+                            {(!fulfillment || item.dueAt) && (
+                                <Fact
+                                    inline={fulfillment}
+                                    label="截止时间"
+                                    value={item.dueAtLabel || "未设截止时间"}
+                                />
+                            )}
                         </dl>
                     )}
                     {fulfillment && (
                         <details
                             open={item.actionBlockers.length > 0}
-                            className="mt-2 text-sm text-muted-foreground"
+                            className="text-sm leading-6 text-muted-foreground"
                         >
                             <summary
                                 id="workspace-fulfillment-instructions-toggle"
@@ -162,7 +173,7 @@ export function WorkspaceProcessingLayout({
                             </div>
                         </details>
                     )}
-                </>
+                </div>
             }
             aside={
                 <>
@@ -265,7 +276,7 @@ export function WorkspaceProcessingLayout({
             footer={
                 <Button
                     id="workspace-processing-footer-back"
-                    variant="outline"
+                    variant={fulfillment ? "ghost" : "outline"}
                     onClick={onBack}
                 >
                     {backLabel}

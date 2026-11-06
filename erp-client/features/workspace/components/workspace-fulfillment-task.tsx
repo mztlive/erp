@@ -7,6 +7,7 @@ import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Dialog,
     DialogClose,
@@ -29,6 +30,7 @@ import {
 } from "@/features/work-items/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { displayName } from "@/lib/display-name"
 import { WorkspaceTaskPane } from "@/components/business"
 
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
@@ -123,7 +125,26 @@ export function WorkspaceFulfillmentTask({
                 ) : (
                     <WorkspaceTaskIdentityHeader
                         item={item}
-                        title={fulfillmentTaskTitle(item, controller.operation)}
+                        compact
+                        title={
+                            displayName(
+                                controller.operation?.source.customerLabel,
+                            ) ||
+                            fulfillmentTaskTitle(item, controller.operation)
+                        }
+                        badges={
+                            <>
+                                {operationType && (
+                                    <Badge variant="teal">
+                                        {OPERATION_TYPE_LABEL[operationType]}
+                                    </Badge>
+                                )}
+                                <StatusBadge
+                                    label={item.statusLabel}
+                                    tone={item.statusTone}
+                                />
+                            </>
+                        }
                         subtitle={null}
                     >
                         <WorkspaceFulfillmentReassignAction
