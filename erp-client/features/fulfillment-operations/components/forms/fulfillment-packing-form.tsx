@@ -8,7 +8,14 @@ import {
     useState,
     type Ref,
 } from "react"
-import { ChevronDownIcon, MapPinIcon, PlusIcon, PencilIcon } from "lucide-react"
+import {
+    ChevronDownIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    MapPinIcon,
+    PlusIcon,
+    PencilIcon,
+} from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { ArrangementButton } from "@/features/delivery-arrangements/components/arrangement-button"
 import { getDeliveryPackingDetail } from "../../api/packing"
@@ -16,7 +23,7 @@ import { fulfillmentKeys } from "../../hooks/queries"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
+import { FulfillmentAddressList } from "./fulfillment-address-list"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import {
@@ -75,18 +82,115 @@ export function FulfillmentPackingForm({
     const queryClient = useQueryClient()
     const [search, setSearch] = useState("")
     const [onlyMissing, setOnlyMissing] = useState(false)
+    const [activeAddress, setActiveAddress] = useState<string | null>(null)
     const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
     const [editing, setEditing] = useState<Set<string>>(() => new Set())
     const [splitting, setSplitting] = useState<string | null>(null)
     const following = useRef(new Set<string>())
-    // 单地址先展示待填写的包裹；只有用户编辑后才通知外层保存草稿。
+    const itemName = (id: string) =>
+        operation.lines.find((line) => line.lineId === id)?.itemName ||
+        "商品名称未提供"
+    const unit = (id: string) =>
+        operation.lines.find((line) => line.lineId === id)?.unitCode || ""
+    const addressStates = useMemo(
+        () =>
+            new Map(
+                source.destinations.map((destination) => {
+                    const dispatch = packing.dispatch.filter(
+                        (row) => row.destination_key === destination.key,
+                    )
+                    const packages = packing.packages.filter(
+                        (row) => row.destination_key === destination.key,
+                    )
+                    let skipped = false
+                    try {
+                        skipped =
+                            !packages.length &&
+                            !!dispatch[0]?.items.length &&
+                            dispatch[0].items.every(
+                                (item) =>
+                                    compareDecimal(item.quantity, "0", 6) === 0,
+                            )
+                    } catch {
+                        /* 数量录入未完成时继续显示待填写。 */
+                    }
+                    const ready =
+                        !destination.pending_address &&
+                        !packages.some(
+                            (parcel) =>
+                                parcel.carrier.trim() &&
+                                parcel.tracking_no.trim() &&
+                                packing.packages.some(
+                                    (other) =>
+                                        other.id !== parcel.id &&
+                                        other.carrier.trim() ===
+                                            parcel.carrier.trim() &&
+                                        other.tracking_no.trim() ===
+                                            parcel.tracking_no.trim(),
+                                ),
+                        ) &&
+                        packingIssues(
+                            { ...packing, dispatch, packages },
+                            source,
+                        ).length === 0
+                    return [
+                        destination.key,
+                        {
+                            ready,
+                            skipped,
+                            label: destination.pending_address
+                                ? "待补地址"
+                                : skipped
+                                  ? "本次不发货"
+                                  : ready
+                                    ? "已填写"
+                                    : packages.length
+                                      ? "待完善"
+                                      : "待填写",
+                        },
+                    ]
+                }),
+            ),
+        [packing, source],
+    )
+    const visible = source.destinations.filter((row) => {
+        const status = addressStates.get(row.key)!
+        return (
+            (!onlyMissing ||
+                row.pending_address ||
+                (!status.ready && !status.skipped)) &&
+            `${row.recipient} ${row.phone} ${row.address} ${row.items.map((item) => itemName(item.delivery_line_id)).join(" ")}`
+                .toLocaleLowerCase()
+                .includes(search.trim().toLocaleLowerCase())
+        )
+    })
+    const selectedDestination =
+        source.destinations.find((row) => row.key === activeAddress) ??
+        visible[0]
+    const selectedOrder = source.destinations.findIndex(
+        (row) => row.key === selectedDestination?.key,
+    )
+    const previousAddress = visible
+        .filter((row) => source.destinations.indexOf(row) < selectedOrder)
+        .at(-1)
+    const nextAddress =
+        visible.find(
+            (row) => source.destinations.indexOf(row) > selectedOrder,
+        ) ??
+        (onlyMissing
+            ? visible.find((row) => row.key !== selectedDestination?.key)
+            : undefined)
+    const multipleAddresses = source.destinations.length > 1
+    // 只为当前地址展示待填写包裹；切换地址不写草稿，已录入包裹始终保留。
     const formPacking = useMemo(() => {
-        const destination = source.destinations[0]
+        const destination = selectedDestination
         if (
-            source.destinations.length !== 1 ||
             !destination ||
             destination.pending_address ||
-            packing.packages.length ||
+            packing.packages.some(
+                (row) => row.destination_key === destination.key,
+            ) ||
+            packing.packages.length >= 100 ||
             packing.source_version !== source.source_version ||
             draft.legacyTrackingNeedsAllocation
         )
@@ -97,8 +201,9 @@ export function FulfillmentPackingForm({
             return {
                 ...packing,
                 packages: [
+                    ...packing.packages,
                     {
-                        id: "initial-package",
+                        id: `initial-${destination.key}`,
                         destination_key: destination.key,
                         carrier: "",
                         tracking_no: "",
@@ -109,7 +214,12 @@ export function FulfillmentPackingForm({
         } catch {
             return packing
         }
-    }, [packing, source, draft.legacyTrackingNeedsAllocation])
+    }, [
+        packing,
+        source,
+        selectedDestination,
+        draft.legacyTrackingNeedsAllocation,
+    ])
     const form = useAppForm({
         defaultValues: formPacking,
         listeners: {
@@ -131,6 +241,25 @@ export function FulfillmentPackingForm({
             setSearch("")
             setOnlyMissing(false)
             setCollapsed(new Set())
+            const targetPackage = form.state.values.packages.find((row) =>
+                targetId.startsWith(
+                    `fulfillment-packing-package-${toAutomationIdSegment(row.id)}-`,
+                ),
+            )
+            const targetAddress =
+                targetPackage?.destination_key ??
+                source.destinations.find(
+                    (row) =>
+                        targetId.startsWith(
+                            `fulfillment-packing-address-${toAutomationIdSegment(row.key)}-`,
+                        ) ||
+                        row.items.some(
+                            (item) =>
+                                targetId ===
+                                `fulfillment-packing-${toAutomationIdSegment(row.key)}-${toAutomationIdSegment(item.delivery_line_id)}-quantity`,
+                        ),
+                )?.key
+            if (targetAddress) setActiveAddress(targetAddress)
             let focusId = targetId
             const parcel = form.state.values.packages.find(
                 (row) =>
@@ -146,15 +275,21 @@ export function FulfillmentPackingForm({
                     focusId = `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}-item-${toAutomationIdSegment(item.delivery_line_id)}-quantity`
             }
             requestAnimationFrame(() => {
-                const node = document.getElementById(focusId)
-                node?.scrollIntoView({ block: "center" })
-                const input = node?.matches("input, button, textarea, select")
-                    ? node
-                    : node?.querySelector<HTMLElement>(
-                          "input:not(:disabled), button:not(:disabled), textarea:not(:disabled), select:not(:disabled)",
-                      )
-                const focusTarget = input ?? node
-                focusTarget?.focus({ preventScroll: true })
+                if (parcel)
+                    setEditing((current) => new Set([...current, parcel.id]))
+                requestAnimationFrame(() => {
+                    const node = document.getElementById(focusId)
+                    node?.scrollIntoView({ block: "center" })
+                    const input = node?.matches(
+                        "input, button, textarea, select",
+                    )
+                        ? node
+                        : node?.querySelector<HTMLElement>(
+                              "input:not(:disabled), button:not(:disabled), textarea:not(:disabled), select:not(:disabled)",
+                          )
+                    const focusTarget = input ?? node
+                    focusTarget?.focus({ preventScroll: true })
+                })
             })
             return true
         },
@@ -180,11 +315,6 @@ export function FulfillmentPackingForm({
             return "请填写有效数量，最多6位小数"
         }
     }
-    const itemName = (id: string) =>
-        operation.lines.find((line) => line.lineId === id)?.itemName ||
-        "商品名称未提供"
-    const unit = (id: string) =>
-        operation.lines.find((line) => line.lineId === id)?.unitCode || ""
     const toggle = (key: string, setter: typeof setCollapsed) =>
         setter((current) => {
             const next = new Set(current)
@@ -226,55 +356,9 @@ export function FulfillmentPackingForm({
             <form.Subscribe selector={(state) => state.values}>
                 {(values) => {
                     const ready = (key: string) =>
-                        packingIssues(
-                            {
-                                ...values,
-                                dispatch: values.dispatch.filter(
-                                    (row) => row.destination_key === key,
-                                ),
-                                packages: values.packages.filter(
-                                    (row) => row.destination_key === key,
-                                ),
-                            },
-                            source,
-                        ).length === 0
-                    const skipped = (key: string) => {
-                        if (
-                            values.packages.some(
-                                (row) => row.destination_key === key,
-                            )
-                        )
-                            return false
-                        const items = values.dispatch.find(
-                            (row) => row.destination_key === key,
-                        )?.items
-                        try {
-                            return (
-                                !!items?.length &&
-                                items.every(
-                                    (item) =>
-                                        compareDecimal(
-                                            item.quantity,
-                                            "0",
-                                            6,
-                                        ) === 0,
-                                )
-                            )
-                        } catch {
-                            return false
-                        }
-                    }
-                    const visible = source.destinations.filter(
-                        (row) =>
-                            source.destinations.length <= 1 ||
-                            ((!onlyMissing ||
-                                (!ready(row.key) && !skipped(row.key))) &&
-                                `${row.recipient} ${row.address} ${row.items.map((item) => itemName(item.delivery_line_id)).join(" ")}`
-                                    .toLocaleLowerCase()
-                                    .includes(
-                                        search.trim().toLocaleLowerCase(),
-                                    )),
-                    )
+                        addressStates.get(key)?.ready ?? false
+                    const skipped = (key: string) =>
+                        addressStates.get(key)?.skipped ?? false
                     return (
                         <>
                             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -308,31 +392,6 @@ export function FulfillmentPackingForm({
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
-                                    {source.destinations.length > 1 && (
-                                        <>
-                                            <Input
-                                                id="fulfillment-packing-search"
-                                                placeholder="搜索收货人、地址或商品"
-                                                value={search}
-                                                onChange={(event) =>
-                                                    setSearch(
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                className="w-full sm:w-64"
-                                            />
-                                            <Label htmlFor="fulfillment-packing-only-missing">
-                                                <Checkbox
-                                                    id="fulfillment-packing-only-missing"
-                                                    checked={onlyMissing}
-                                                    onCheckedChange={
-                                                        setOnlyMissing
-                                                    }
-                                                />
-                                                只看未登记
-                                            </Label>
-                                        </>
-                                    )}
                                     {source.destinations.length !== 1 &&
                                         arrangementAction}
                                 </div>
@@ -352,878 +411,1005 @@ export function FulfillmentPackingForm({
                                     </p>
                                 </div>
                             )}
-                            {!visible.length && (
-                                <p className="py-8 text-center text-sm text-muted-foreground">
-                                    没有符合条件的收货地址
-                                </p>
-                            )}
-                            {visible.map((destination) => {
-                                if (destination.pending_address)
-                                    return (
-                                        <section
-                                            key={destination.key}
-                                            className="space-y-3 rounded-xl border border-dashed bg-muted/20 p-4"
-                                        >
-                                            <div>
-                                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                                    <h3 className="font-medium">
-                                                        待补收货地址
-                                                    </h3>
-                                                    {source.destinations
-                                                        .length === 1 &&
-                                                        arrangementAction}
-                                                </div>
-                                                <p className="text-sm text-muted-foreground">
-                                                    以下商品本次暂不发货。补齐地址后可登记包裹，其他商品可以先发。
+                            <div
+                                className={
+                                    multipleAddresses
+                                        ? "grid min-w-0 gap-5 border-t border-border pt-4 lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]"
+                                        : "min-w-0"
+                                }
+                            >
+                                {multipleAddresses && (
+                                    <FulfillmentAddressList
+                                        destinations={visible}
+                                        total={source.destinations.length}
+                                        completed={
+                                            [...addressStates.values()].filter(
+                                                (state) => state.ready,
+                                            ).length
+                                        }
+                                        states={addressStates}
+                                        selectedKey={selectedDestination?.key}
+                                        search={search}
+                                        onlyMissing={onlyMissing}
+                                        onSearch={(value) => {
+                                            setSearch(value)
+                                            setActiveAddress(null)
+                                        }}
+                                        onOnlyMissing={(value) => {
+                                            setOnlyMissing(value)
+                                            setActiveAddress(null)
+                                        }}
+                                        onSelect={setActiveAddress}
+                                    />
+                                )}
+                                <div
+                                    id="fulfillment-packing-address-detail"
+                                    className="min-w-0"
+                                >
+                                    {multipleAddresses &&
+                                        selectedDestination && (
+                                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                                <p className="text-xs text-muted-foreground">
+                                                    当前地址 {selectedOrder + 1}{" "}
+                                                    /{" "}
+                                                    {source.destinations.length}
                                                 </p>
-                                            </div>
-                                            {destination.items.map((item) => (
-                                                <div
-                                                    key={item.delivery_line_id}
-                                                    className="flex justify-between gap-4 text-sm"
-                                                >
-                                                    <span>
-                                                        {itemName(
-                                                            item.delivery_line_id,
-                                                        )}
-                                                    </span>
-                                                    <span>
-                                                        {packingQuantity(
-                                                            item.quantity,
-                                                        )}{" "}
-                                                        {unit(
-                                                            item.delivery_line_id,
-                                                        )}
-                                                    </span>
+                                                <div className="flex items-center gap-1">
+                                                    <Button
+                                                        id="fulfillment-packing-previous-address"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        disabled={
+                                                            !previousAddress
+                                                        }
+                                                        onClick={() =>
+                                                            previousAddress &&
+                                                            setActiveAddress(
+                                                                previousAddress.key,
+                                                            )
+                                                        }
+                                                    >
+                                                        <ChevronLeftIcon />
+                                                        上一地址
+                                                    </Button>
+                                                    <Button
+                                                        id="fulfillment-packing-next-address"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={!nextAddress}
+                                                        onClick={() =>
+                                                            nextAddress &&
+                                                            setActiveAddress(
+                                                                nextAddress.key,
+                                                            )
+                                                        }
+                                                    >
+                                                        {onlyMissing
+                                                            ? "下一待办"
+                                                            : "下一地址"}
+                                                        <ChevronRightIcon />
+                                                    </Button>
                                                 </div>
-                                            ))}
-                                        </section>
-                                    )
-                                const segment = toAutomationIdSegment(
-                                    destination.key,
-                                )
-                                const dispatchIndex = values.dispatch.findIndex(
-                                    (row) =>
-                                        row.destination_key === destination.key,
-                                )
-                                const parcels = values.packages
-                                    .map((parcel, index) => ({ parcel, index }))
-                                    .filter(
-                                        ({ parcel }) =>
-                                            parcel.destination_key ===
+                                            </div>
+                                        )}
+                                    {!selectedDestination && (
+                                        <p className="py-12 text-center text-sm text-muted-foreground">
+                                            没有符合条件的收货地址
+                                        </p>
+                                    )}
+                                    {(selectedDestination
+                                        ? [selectedDestination]
+                                        : []
+                                    ).map((destination) => {
+                                        if (destination.pending_address)
+                                            return (
+                                                <section
+                                                    key={destination.key}
+                                                    className="space-y-3 rounded-xl border border-dashed bg-muted/20 p-4"
+                                                >
+                                                    <div>
+                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                            <h3 className="font-medium">
+                                                                待补收货地址
+                                                            </h3>
+                                                            {source.destinations
+                                                                .length === 1 &&
+                                                                arrangementAction}
+                                                        </div>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            以下商品本次暂不发货。补齐地址后可登记包裹，其他商品可以先发。
+                                                        </p>
+                                                    </div>
+                                                    {destination.items.map(
+                                                        (item) => (
+                                                            <div
+                                                                key={
+                                                                    item.delivery_line_id
+                                                                }
+                                                                className="flex justify-between gap-4 text-sm"
+                                                            >
+                                                                <span>
+                                                                    {itemName(
+                                                                        item.delivery_line_id,
+                                                                    )}
+                                                                </span>
+                                                                <span>
+                                                                    {packingQuantity(
+                                                                        item.quantity,
+                                                                    )}{" "}
+                                                                    {unit(
+                                                                        item.delivery_line_id,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        ),
+                                                    )}
+                                                </section>
+                                            )
+                                        const segment = toAutomationIdSegment(
                                             destination.key,
-                                    )
-                                const showAllocation =
-                                    parcels.length > 1 ||
-                                    (parcels.length === 1 &&
-                                        !automaticPackage(
-                                            values,
-                                            destination.key,
-                                        )) ||
-                                    !!draft.legacyTrackingNeedsAllocation
-                                const isCollapsed = collapsed.has(
-                                    destination.key,
-                                )
-                                return (
-                                    <section
-                                        key={destination.key}
-                                        className="min-w-0 border-t border-border"
-                                        aria-label={`${destination.recipient}的发货明细`}
-                                    >
-                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-                                            <MapPinIcon
-                                                className="size-4 text-muted-foreground"
-                                                aria-hidden="true"
-                                            />
-                                            <span className="font-semibold">
-                                                {destination.recipient}
-                                            </span>
-                                            <span className="text-sm">
-                                                {destination.phone}
-                                            </span>
-                                            <span className="min-w-0 flex-1 break-words text-sm">
-                                                {destination.address}
-                                            </span>
-                                            {source.destinations.length === 1 &&
-                                                arrangementAction}
-                                            <Badge
-                                                variant={
-                                                    ready(destination.key)
-                                                        ? "teal"
-                                                        : "outline"
-                                                }
-                                            >
-                                                {skipped(destination.key)
-                                                    ? "本次不发货"
-                                                    : ready(destination.key)
-                                                      ? "物流已填写"
-                                                      : "待填写物流"}
-                                            </Badge>
-                                            <Button
-                                                id={`fulfillment-packing-address-${segment}-toggle`}
-                                                size="icon-sm"
-                                                variant="ghost"
-                                                aria-label={
-                                                    isCollapsed
-                                                        ? "展开收货地址"
-                                                        : "收起收货地址"
-                                                }
-                                                aria-expanded={!isCollapsed}
-                                                onClick={() =>
-                                                    toggle(
+                                        )
+                                        const dispatchIndex =
+                                            values.dispatch.findIndex(
+                                                (row) =>
+                                                    row.destination_key ===
+                                                    destination.key,
+                                            )
+                                        const parcels = values.packages
+                                            .map((parcel, index) => ({
+                                                parcel,
+                                                index,
+                                            }))
+                                            .filter(
+                                                ({ parcel }) =>
+                                                    parcel.destination_key ===
+                                                    destination.key,
+                                            )
+                                        const showAllocation =
+                                            parcels.length > 1 ||
+                                            (parcels.length === 1 &&
+                                                !automaticPackage(
+                                                    values,
+                                                    destination.key,
+                                                )) ||
+                                            !!draft.legacyTrackingNeedsAllocation
+                                        const isCollapsed =
+                                            !multipleAddresses &&
+                                            collapsed.has(destination.key)
+                                        return (
+                                            <section
+                                                key={destination.key}
+                                                className="min-w-0 border-t border-border"
+                                                aria-label={`${destination.recipient}的发货明细`}
+                                                onFocusCapture={() =>
+                                                    setActiveAddress(
                                                         destination.key,
-                                                        setCollapsed,
                                                     )
                                                 }
                                             >
-                                                <ChevronDownIcon
-                                                    className={
-                                                        isCollapsed
-                                                            ? ""
-                                                            : "rotate-180"
-                                                    }
-                                                />
-                                            </Button>
-                                        </div>
-                                        <div
-                                            hidden={isCollapsed}
-                                            className="min-w-0 space-y-4 pb-3"
-                                        >
-                                            <Table
-                                                className={
-                                                    showAllocation
-                                                        ? "min-w-[48rem] table-fixed"
-                                                        : "min-w-[34rem] table-fixed"
-                                                }
-                                            >
-                                                <colgroup>
-                                                    <col />
-                                                    <col className="w-32 sm:w-40" />
-                                                    <col className="w-36 sm:w-44" />
-                                                    {showAllocation && (
-                                                        <col className="w-44 sm:w-56" />
-                                                    )}
-                                                </colgroup>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>
-                                                            商品
-                                                        </TableHead>
-                                                        <TableHead>
-                                                            应发数量
-                                                        </TableHead>
-                                                        <TableHead>
-                                                            本次发货
-                                                        </TableHead>
-                                                        {showAllocation && (
-                                                            <TableHead>
-                                                                包裹分配
-                                                            </TableHead>
-                                                        )}
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {destination.items.map(
-                                                        (item) => {
-                                                            const itemIndex =
-                                                                values.dispatch[
-                                                                    dispatchIndex
-                                                                ]?.items.findIndex(
-                                                                    (value) =>
-                                                                        value.delivery_line_id ===
-                                                                        item.delivery_line_id,
-                                                                ) ?? -1
-                                                            const itemSegment =
-                                                                toAutomationIdSegment(
-                                                                    item.delivery_line_id,
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
+                                                    <MapPinIcon
+                                                        className="size-4 text-muted-foreground"
+                                                        aria-hidden="true"
+                                                    />
+                                                    <span className="font-semibold">
+                                                        {destination.recipient}
+                                                    </span>
+                                                    <span className="text-sm">
+                                                        {destination.phone}
+                                                    </span>
+                                                    <span className="min-w-0 flex-1 break-words text-sm">
+                                                        {destination.address}
+                                                    </span>
+                                                    {source.destinations
+                                                        .length === 1 &&
+                                                        arrangementAction}
+                                                    <Badge
+                                                        variant={
+                                                            ready(
+                                                                destination.key,
+                                                            )
+                                                                ? "teal"
+                                                                : "outline"
+                                                        }
+                                                    >
+                                                        {skipped(
+                                                            destination.key,
+                                                        )
+                                                            ? "本次不发货"
+                                                            : ready(
+                                                                    destination.key,
                                                                 )
-                                                            const assigned =
-                                                                parcels.filter(
-                                                                    ({
-                                                                        parcel,
-                                                                    }) =>
-                                                                        parcel.items.some(
+                                                              ? "物流已填写"
+                                                              : "待填写物流"}
+                                                    </Badge>
+                                                    {!multipleAddresses && (
+                                                        <Button
+                                                            id={`fulfillment-packing-address-${segment}-toggle`}
+                                                            size="icon-sm"
+                                                            variant="ghost"
+                                                            aria-label={
+                                                                isCollapsed
+                                                                    ? "展开收货地址"
+                                                                    : "收起收货地址"
+                                                            }
+                                                            aria-expanded={
+                                                                !isCollapsed
+                                                            }
+                                                            onClick={() =>
+                                                                toggle(
+                                                                    destination.key,
+                                                                    setCollapsed,
+                                                                )
+                                                            }
+                                                        >
+                                                            <ChevronDownIcon
+                                                                className={
+                                                                    isCollapsed
+                                                                        ? ""
+                                                                        : "rotate-180"
+                                                                }
+                                                            />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <div
+                                                    hidden={isCollapsed}
+                                                    className="min-w-0 space-y-4 pb-3"
+                                                >
+                                                    <Table
+                                                        className={
+                                                            showAllocation
+                                                                ? "min-w-[48rem] table-fixed"
+                                                                : "min-w-[34rem] table-fixed"
+                                                        }
+                                                    >
+                                                        <colgroup>
+                                                            <col />
+                                                            <col className="w-32 sm:w-40" />
+                                                            <col className="w-36 sm:w-44" />
+                                                            {showAllocation && (
+                                                                <col className="w-44 sm:w-56" />
+                                                            )}
+                                                        </colgroup>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>
+                                                                    商品
+                                                                </TableHead>
+                                                                <TableHead>
+                                                                    应发数量
+                                                                </TableHead>
+                                                                <TableHead>
+                                                                    本次发货
+                                                                </TableHead>
+                                                                {showAllocation && (
+                                                                    <TableHead>
+                                                                        包裹分配
+                                                                    </TableHead>
+                                                                )}
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {destination.items.map(
+                                                                (item) => {
+                                                                    const itemIndex =
+                                                                        values.dispatch[
+                                                                            dispatchIndex
+                                                                        ]?.items.findIndex(
                                                                             (
                                                                                 value,
                                                                             ) =>
                                                                                 value.delivery_line_id ===
                                                                                 item.delivery_line_id,
-                                                                        ),
-                                                                )
-                                                            return (
-                                                                <TableRow
-                                                                    key={
-                                                                        item.delivery_line_id
-                                                                    }
-                                                                >
-                                                                    <TableCell className="whitespace-normal break-words font-medium">
-                                                                        {itemName(
+                                                                        ) ?? -1
+                                                                    const itemSegment =
+                                                                        toAutomationIdSegment(
                                                                             item.delivery_line_id,
-                                                                        )}
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        {compactFixed(
-                                                                            item.quantity,
-                                                                        )}{" "}
-                                                                        {unit(
-                                                                            item.delivery_line_id,
-                                                                        )}
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        {dispatchIndex >=
-                                                                            0 &&
-                                                                            itemIndex >=
-                                                                                0 && (
-                                                                                <form.Field
-                                                                                    name={`dispatch[${dispatchIndex}].items[${itemIndex}].quantity`}
-                                                                                >
-                                                                                    {(
-                                                                                        field,
-                                                                                    ) => (
-                                                                                        <Input
-                                                                                            id={`fulfillment-packing-${segment}-${itemSegment}-quantity`}
-                                                                                            aria-label={`${destination.recipient} ${itemName(item.delivery_line_id)}本次发货数量`}
-                                                                                            inputMode="decimal"
-                                                                                            value={
-                                                                                                field
-                                                                                                    .state
-                                                                                                    .value
-                                                                                            }
-                                                                                            onFocus={() => {
-                                                                                                if (
-                                                                                                    automaticPackage(
-                                                                                                        values,
-                                                                                                        destination.key,
-                                                                                                    )
-                                                                                                )
-                                                                                                    following.current.add(
-                                                                                                        destination.key,
-                                                                                                    )
-                                                                                            }}
-                                                                                            onChange={(
-                                                                                                event,
-                                                                                            ) =>
-                                                                                                apply(
-                                                                                                    changeDispatch(
-                                                                                                        values,
-                                                                                                        destination.key,
-                                                                                                        item.delivery_line_id,
-                                                                                                        event
-                                                                                                            .target
-                                                                                                            .value,
-                                                                                                        following.current.has(
-                                                                                                            destination.key,
-                                                                                                        ) ||
+                                                                        )
+                                                                    const assigned =
+                                                                        parcels.filter(
+                                                                            ({
+                                                                                parcel,
+                                                                            }) =>
+                                                                                parcel.items.some(
+                                                                                    (
+                                                                                        value,
+                                                                                    ) =>
+                                                                                        value.delivery_line_id ===
+                                                                                        item.delivery_line_id,
+                                                                                ),
+                                                                        )
+                                                                    return (
+                                                                        <TableRow
+                                                                            key={
+                                                                                item.delivery_line_id
+                                                                            }
+                                                                        >
+                                                                            <TableCell className="whitespace-normal break-words font-medium">
+                                                                                {itemName(
+                                                                                    item.delivery_line_id,
+                                                                                )}
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                {compactFixed(
+                                                                                    item.quantity,
+                                                                                )}{" "}
+                                                                                {unit(
+                                                                                    item.delivery_line_id,
+                                                                                )}
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                {dispatchIndex >=
+                                                                                    0 &&
+                                                                                    itemIndex >=
+                                                                                        0 && (
+                                                                                        <form.Field
+                                                                                            name={`dispatch[${dispatchIndex}].items[${itemIndex}].quantity`}
+                                                                                        >
+                                                                                            {(
+                                                                                                field,
+                                                                                            ) => (
+                                                                                                <Input
+                                                                                                    id={`fulfillment-packing-${segment}-${itemSegment}-quantity`}
+                                                                                                    aria-label={`${destination.recipient} ${itemName(item.delivery_line_id)}本次发货数量`}
+                                                                                                    inputMode="decimal"
+                                                                                                    value={
+                                                                                                        field
+                                                                                                            .state
+                                                                                                            .value
+                                                                                                    }
+                                                                                                    onFocus={() => {
+                                                                                                        if (
                                                                                                             automaticPackage(
                                                                                                                 values,
                                                                                                                 destination.key,
+                                                                                                            )
+                                                                                                        )
+                                                                                                            following.current.add(
+                                                                                                                destination.key,
+                                                                                                            )
+                                                                                                    }}
+                                                                                                    onChange={(
+                                                                                                        event,
+                                                                                                    ) =>
+                                                                                                        apply(
+                                                                                                            changeDispatch(
+                                                                                                                values,
+                                                                                                                destination.key,
+                                                                                                                item.delivery_line_id,
+                                                                                                                event
+                                                                                                                    .target
+                                                                                                                    .value,
+                                                                                                                following.current.has(
+                                                                                                                    destination.key,
+                                                                                                                ) ||
+                                                                                                                    automaticPackage(
+                                                                                                                        values,
+                                                                                                                        destination.key,
+                                                                                                                    ),
                                                                                                             ),
-                                                                                                    ),
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                disabled
-                                                                                            }
-                                                                                            className="h-8 w-24"
-                                                                                        />
+                                                                                                        )
+                                                                                                    }
+                                                                                                    disabled={
+                                                                                                        disabled
+                                                                                                    }
+                                                                                                    className="h-8 w-24"
+                                                                                                />
+                                                                                            )}
+                                                                                        </form.Field>
                                                                                     )}
-                                                                                </form.Field>
-                                                                            )}
-                                                                    </TableCell>
-                                                                    {showAllocation && (
-                                                                        <TableCell className="whitespace-normal text-sm">
-                                                                            {assigned.length ? (
-                                                                                assigned
-                                                                                    .map(
-                                                                                        ({
-                                                                                            index,
-                                                                                        }) =>
-                                                                                            `包裹 ${index + 1}`,
-                                                                                    )
-                                                                                    .join(
-                                                                                        "、",
-                                                                                    )
-                                                                            ) : (
-                                                                                <span className="text-muted-foreground">
-                                                                                    未分配
-                                                                                </span>
-                                                                            )}
-                                                                            {balanceNote(
-                                                                                values,
-                                                                                destination.key,
-                                                                                item.delivery_line_id,
-                                                                            ) && (
-                                                                                <p className="mt-1 text-xs text-warning-soft-foreground">
+                                                                            </TableCell>
+                                                                            {showAllocation && (
+                                                                                <TableCell className="whitespace-normal text-sm">
+                                                                                    {assigned.length ? (
+                                                                                        assigned
+                                                                                            .map(
+                                                                                                ({
+                                                                                                    index,
+                                                                                                }) =>
+                                                                                                    `包裹 ${index + 1}`,
+                                                                                            )
+                                                                                            .join(
+                                                                                                "、",
+                                                                                            )
+                                                                                    ) : (
+                                                                                        <span className="text-muted-foreground">
+                                                                                            未分配
+                                                                                        </span>
+                                                                                    )}
                                                                                     {balanceNote(
                                                                                         values,
                                                                                         destination.key,
                                                                                         item.delivery_line_id,
-                                                                                    )}{" "}
-                                                                                    {unit(
-                                                                                        item.delivery_line_id,
+                                                                                    ) && (
+                                                                                        <p className="mt-1 text-xs text-warning-soft-foreground">
+                                                                                            {balanceNote(
+                                                                                                values,
+                                                                                                destination.key,
+                                                                                                item.delivery_line_id,
+                                                                                            )}{" "}
+                                                                                            {unit(
+                                                                                                item.delivery_line_id,
+                                                                                            )}
+                                                                                            ，请调整包裹
+                                                                                        </p>
                                                                                     )}
-                                                                                    ，请调整包裹
-                                                                                </p>
+                                                                                </TableCell>
                                                                             )}
-                                                                        </TableCell>
+                                                                        </TableRow>
+                                                                    )
+                                                                },
+                                                            )}
+                                                        </TableBody>
+                                                    </Table>
+                                                    {parcels.map(
+                                                        ({ parcel, index }) => {
+                                                            const prefix = `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}`
+                                                            const automatic =
+                                                                automaticPackage(
+                                                                    values,
+                                                                    destination.key,
+                                                                )
+                                                            const editingItems =
+                                                                editing.has(
+                                                                    parcel.id,
+                                                                )
+                                                            return (
+                                                                <div
+                                                                    key={
+                                                                        parcel.id
+                                                                    }
+                                                                    id={
+                                                                        parcel.id ===
+                                                                        parcels[0]
+                                                                            .parcel
+                                                                            .id
+                                                                            ? `fulfillment-packing-address-${segment}-logistics`
+                                                                            : undefined
+                                                                    }
+                                                                    tabIndex={
+                                                                        -1
+                                                                    }
+                                                                    className="space-y-3 border-t border-border/60 pt-4 outline-none"
+                                                                >
+                                                                    <div className="flex flex-wrap items-center gap-3">
+                                                                        <span className="text-sm font-medium">
+                                                                            {parcels.length ===
+                                                                            1
+                                                                                ? "发货物流"
+                                                                                : `包裹 ${index + 1}`}
+                                                                        </span>
+                                                                        <form.AppField
+                                                                            name={`packages[${index}].carrier`}
+                                                                        >
+                                                                            {(
+                                                                                field,
+                                                                            ) => (
+                                                                                <field.SelectField
+                                                                                    id={`${prefix}-carrier`}
+                                                                                    label="物流公司"
+                                                                                    hideLabel
+                                                                                    options={
+                                                                                        CARRIER_OPTIONS
+                                                                                    }
+                                                                                    placeholder="选择物流公司"
+                                                                                    disabled={
+                                                                                        disabled
+                                                                                    }
+                                                                                    className="w-40"
+                                                                                />
+                                                                            )}
+                                                                        </form.AppField>
+                                                                        <form.Field
+                                                                            name={`packages[${index}].tracking_no`}
+                                                                        >
+                                                                            {(
+                                                                                field,
+                                                                            ) => (
+                                                                                <Input
+                                                                                    id={`${prefix}-tracking`}
+                                                                                    aria-label={`包裹${index + 1}物流单号`}
+                                                                                    placeholder="输入物流单号"
+                                                                                    value={
+                                                                                        field
+                                                                                            .state
+                                                                                            .value
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        event,
+                                                                                    ) =>
+                                                                                        field.handleChange(
+                                                                                            event
+                                                                                                .target
+                                                                                                .value,
+                                                                                        )
+                                                                                    }
+                                                                                    disabled={
+                                                                                        disabled
+                                                                                    }
+                                                                                    className="w-full sm:w-64"
+                                                                                />
+                                                                            )}
+                                                                        </form.Field>
+                                                                        <div className="ml-auto flex flex-wrap items-center gap-1">
+                                                                            <Button
+                                                                                id={`${prefix}-split`}
+                                                                                size="sm"
+                                                                                variant="secondary"
+                                                                                disabled={
+                                                                                    disabled ||
+                                                                                    !parcel
+                                                                                        .items
+                                                                                        .length ||
+                                                                                    values
+                                                                                        .packages
+                                                                                        .length >=
+                                                                                        100 ||
+                                                                                    destination.items.some(
+                                                                                        (
+                                                                                            item,
+                                                                                        ) =>
+                                                                                            !!balanceNote(
+                                                                                                values,
+                                                                                                destination.key,
+                                                                                                item.delivery_line_id,
+                                                                                            ),
+                                                                                    )
+                                                                                }
+                                                                                onClick={() =>
+                                                                                    setSplitting(
+                                                                                        parcel.id,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                拆分包裹
+                                                                            </Button>
+                                                                            {(!automatic ||
+                                                                                editingItems) && (
+                                                                                <Button
+                                                                                    id={`${prefix}-edit-items`}
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    disabled={
+                                                                                        disabled
+                                                                                    }
+                                                                                    onClick={() => {
+                                                                                        if (
+                                                                                            !editingItems
+                                                                                        )
+                                                                                            form.setFieldValue(
+                                                                                                `packages[${index}].items`,
+                                                                                                parcel.items.map(
+                                                                                                    (
+                                                                                                        item,
+                                                                                                    ) => ({
+                                                                                                        ...item,
+                                                                                                        quantity:
+                                                                                                            normalizePackingQuantity(
+                                                                                                                item.quantity,
+                                                                                                            ),
+                                                                                                    }),
+                                                                                                ),
+                                                                                            )
+                                                                                        toggle(
+                                                                                            parcel.id,
+                                                                                            setEditing,
+                                                                                        )
+                                                                                    }}
+                                                                                >
+                                                                                    <PencilIcon />
+                                                                                    {editingItems
+                                                                                        ? "完成编辑"
+                                                                                        : "调整商品"}
+                                                                                </Button>
+                                                                            )}
+                                                                            {packing.packages.some(
+                                                                                (
+                                                                                    row,
+                                                                                ) =>
+                                                                                    row.id ===
+                                                                                    parcel.id,
+                                                                            ) && (
+                                                                                <Button
+                                                                                    id={`${prefix}-remove`}
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    disabled={
+                                                                                        disabled
+                                                                                    }
+                                                                                    onClick={() => {
+                                                                                        setSplitting(
+                                                                                            null,
+                                                                                        )
+                                                                                        setEditing(
+                                                                                            (
+                                                                                                current,
+                                                                                            ) => {
+                                                                                                const next =
+                                                                                                    new Set(
+                                                                                                        current,
+                                                                                                    )
+                                                                                                next.delete(
+                                                                                                    parcel.id,
+                                                                                                )
+                                                                                                return next
+                                                                                            },
+                                                                                        )
+                                                                                        following.current.delete(
+                                                                                            destination.key,
+                                                                                        )
+                                                                                        apply(
+                                                                                            {
+                                                                                                ...values,
+                                                                                                packages:
+                                                                                                    values.packages.filter(
+                                                                                                        (
+                                                                                                            row,
+                                                                                                        ) =>
+                                                                                                            row.id !==
+                                                                                                            parcel.id,
+                                                                                                    ),
+                                                                                            },
+                                                                                        )
+                                                                                    }}
+                                                                                >
+                                                                                    移除
+                                                                                </Button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    {editingItems ? (
+                                                                        <div className="space-y-2 border-t pt-2">
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                填写分到本包裹的数量，填0表示不放入。其他包裹的数量保持不变。
+                                                                            </p>
+                                                                            {destination.items.map(
+                                                                                (
+                                                                                    item,
+                                                                                ) => {
+                                                                                    const id = `${prefix}-item-${toAutomationIdSegment(item.delivery_line_id)}`
+                                                                                    let other =
+                                                                                        "待核对"
+                                                                                    try {
+                                                                                        other =
+                                                                                            packingQuantity(
+                                                                                                allocationBalance(
+                                                                                                    values,
+                                                                                                    destination.key,
+                                                                                                    item.delivery_line_id,
+                                                                                                    parcel.id,
+                                                                                                )
+                                                                                                    .assigned,
+                                                                                            )
+                                                                                    } catch {}
+                                                                                    return (
+                                                                                        <div
+                                                                                            key={
+                                                                                                item.delivery_line_id
+                                                                                            }
+                                                                                            className="flex flex-wrap items-center gap-x-4 gap-y-2"
+                                                                                        >
+                                                                                            <Label
+                                                                                                htmlFor={`${id}-quantity`}
+                                                                                                className="min-w-40"
+                                                                                            >
+                                                                                                {itemName(
+                                                                                                    item.delivery_line_id,
+                                                                                                )}
+                                                                                            </Label>
+                                                                                            <form.Field
+                                                                                                name={`packages[${index}].items`}
+                                                                                            >
+                                                                                                {(
+                                                                                                    field,
+                                                                                                ) => (
+                                                                                                    <Input
+                                                                                                        id={`${id}-quantity`}
+                                                                                                        aria-label={`包裹${index + 1}中${itemName(item.delivery_line_id)}数量`}
+                                                                                                        inputMode="decimal"
+                                                                                                        className="h-8 w-24"
+                                                                                                        disabled={
+                                                                                                            disabled
+                                                                                                        }
+                                                                                                        value={
+                                                                                                            field.state.value.find(
+                                                                                                                (
+                                                                                                                    row,
+                                                                                                                ) =>
+                                                                                                                    row.delivery_line_id ===
+                                                                                                                    item.delivery_line_id,
+                                                                                                            )
+                                                                                                                ?.quantity ??
+                                                                                                            "0"
+                                                                                                        }
+                                                                                                        onFocus={() =>
+                                                                                                            following.current.delete(
+                                                                                                                destination.key,
+                                                                                                            )
+                                                                                                        }
+                                                                                                        onChange={(
+                                                                                                            event,
+                                                                                                        ) =>
+                                                                                                            field.handleChange(
+                                                                                                                changePackageItem(
+                                                                                                                    field
+                                                                                                                        .state
+                                                                                                                        .value,
+                                                                                                                    item.delivery_line_id,
+                                                                                                                    event
+                                                                                                                        .target
+                                                                                                                        .value,
+                                                                                                                ),
+                                                                                                            )
+                                                                                                        }
+                                                                                                        onBlur={() => {
+                                                                                                            const current =
+                                                                                                                field.state.value.find(
+                                                                                                                    (
+                                                                                                                        row,
+                                                                                                                    ) =>
+                                                                                                                        row.delivery_line_id ===
+                                                                                                                        item.delivery_line_id,
+                                                                                                                )
+                                                                                                            if (
+                                                                                                                current
+                                                                                                            )
+                                                                                                                field.handleChange(
+                                                                                                                    changePackageItem(
+                                                                                                                        field
+                                                                                                                            .state
+                                                                                                                            .value,
+                                                                                                                        item.delivery_line_id,
+                                                                                                                        normalizePackingQuantity(
+                                                                                                                            current.quantity,
+                                                                                                                        ),
+                                                                                                                    ),
+                                                                                                                )
+                                                                                                        }}
+                                                                                                    />
+                                                                                                )}
+                                                                                            </form.Field>
+                                                                                            <span className="text-xs text-muted-foreground">
+                                                                                                {unit(
+                                                                                                    item.delivery_line_id,
+                                                                                                )}{" "}
+                                                                                                ·
+                                                                                                其他包裹已分配{" "}
+                                                                                                {
+                                                                                                    other
+                                                                                                }{" "}
+                                                                                                ·{" "}
+                                                                                                {balanceNote(
+                                                                                                    values,
+                                                                                                    destination.key,
+                                                                                                    item.delivery_line_id,
+                                                                                                ) ||
+                                                                                                    "已全部分配"}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    )
+                                                                                },
+                                                                            )}
+                                                                        </div>
+                                                                    ) : showAllocation ? (
+                                                                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                                                            <span>
+                                                                                包含：
+                                                                                {parcel
+                                                                                    .items
+                                                                                    .length
+                                                                                    ? parcel.items
+                                                                                          .map(
+                                                                                              (
+                                                                                                  item,
+                                                                                              ) =>
+                                                                                                  `${itemName(item.delivery_line_id)} × ${packingQuantity(item.quantity)} ${unit(item.delivery_line_id)}`,
+                                                                                          )
+                                                                                          .join(
+                                                                                              " · ",
+                                                                                          )
+                                                                                    : "尚未分配商品，请调整商品或移除此包裹"}
+                                                                            </span>
+                                                                            {automatic && (
+                                                                                <span>
+                                                                                    一个包裹发出，数量随本次发货自动更新
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            本次商品合并为一个包裹；需要分开发出时，可拆分包裹。
+                                                                        </p>
                                                                     )}
-                                                                </TableRow>
+                                                                    {!automatic &&
+                                                                        parcels.length ===
+                                                                            1 && (
+                                                                            <Button
+                                                                                id={`${prefix}-assign-remaining`}
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                disabled={
+                                                                                    disabled
+                                                                                }
+                                                                                onClick={() => {
+                                                                                    try {
+                                                                                        const items =
+                                                                                            dispatchItems(
+                                                                                                values,
+                                                                                                destination.key,
+                                                                                            )
+                                                                                        apply(
+                                                                                            {
+                                                                                                ...values,
+                                                                                                packages:
+                                                                                                    values.packages.map(
+                                                                                                        (
+                                                                                                            row,
+                                                                                                        ) =>
+                                                                                                            row.id ===
+                                                                                                            parcel.id
+                                                                                                                ? {
+                                                                                                                      ...row,
+                                                                                                                      items,
+                                                                                                                  }
+                                                                                                                : row,
+                                                                                                    ),
+                                                                                            },
+                                                                                        )
+                                                                                    } catch {
+                                                                                        setEditing(
+                                                                                            (
+                                                                                                current,
+                                                                                            ) =>
+                                                                                                new Set(
+                                                                                                    [
+                                                                                                        ...current,
+                                                                                                        parcel.id,
+                                                                                                    ],
+                                                                                                ),
+                                                                                        )
+                                                                                    }
+                                                                                }}
+                                                                            >
+                                                                                将本次商品全部分配到此包裹
+                                                                            </Button>
+                                                                        )}
+                                                                    {splitting ===
+                                                                        parcel.id && (
+                                                                        <FulfillmentPackageSplit
+                                                                            key={
+                                                                                parcel.id
+                                                                            }
+                                                                            packing={
+                                                                                values
+                                                                            }
+                                                                            parcel={
+                                                                                parcel
+                                                                            }
+                                                                            label={`包裹 ${index + 1}`}
+                                                                            itemName={
+                                                                                itemName
+                                                                            }
+                                                                            unit={
+                                                                                unit
+                                                                            }
+                                                                            disabled={
+                                                                                disabled
+                                                                            }
+                                                                            onApply={(
+                                                                                next,
+                                                                            ) => {
+                                                                                following.current.delete(
+                                                                                    destination.key,
+                                                                                )
+                                                                                apply(
+                                                                                    next,
+                                                                                )
+                                                                            }}
+                                                                            onClose={() =>
+                                                                                setSplitting(
+                                                                                    null,
+                                                                                )
+                                                                            }
+                                                                        />
+                                                                    )}
+                                                                </div>
                                                             )
                                                         },
                                                     )}
-                                                </TableBody>
-                                            </Table>
-                                            {parcels.map(
-                                                ({ parcel, index }) => {
-                                                    const prefix = `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}`
-                                                    const automatic =
-                                                        automaticPackage(
-                                                            values,
-                                                            destination.key,
+                                                    {(() => {
+                                                        let remaining: ReturnType<
+                                                            typeof unpackedItems
+                                                        > = []
+                                                        try {
+                                                            remaining =
+                                                                unpackedItems(
+                                                                    values,
+                                                                    destination.key,
+                                                                )
+                                                        } catch {}
+                                                        if (
+                                                            parcels.length &&
+                                                            !remaining.length
                                                         )
-                                                    const editingItems =
-                                                        editing.has(parcel.id)
-                                                    return (
-                                                        <div
-                                                            key={parcel.id}
-                                                            id={
-                                                                parcel.id ===
-                                                                parcels[0]
-                                                                    .parcel.id
-                                                                    ? `fulfillment-packing-address-${segment}-logistics`
-                                                                    : undefined
-                                                            }
-                                                            tabIndex={-1}
-                                                            className="space-y-3 border-t border-border/60 pt-4 outline-none"
-                                                        >
-                                                            <div className="flex flex-wrap items-center gap-3">
-                                                                <span className="text-sm font-medium">
-                                                                    {parcels.length ===
-                                                                    1
-                                                                        ? "发货物流"
-                                                                        : `包裹 ${index + 1}`}
-                                                                </span>
-                                                                <form.AppField
-                                                                    name={`packages[${index}].carrier`}
-                                                                >
-                                                                    {(
-                                                                        field,
-                                                                    ) => (
-                                                                        <field.SelectField
-                                                                            id={`${prefix}-carrier`}
-                                                                            label="物流公司"
-                                                                            hideLabel
-                                                                            options={
-                                                                                CARRIER_OPTIONS
-                                                                            }
-                                                                            placeholder="选择物流公司"
-                                                                            disabled={
-                                                                                disabled
-                                                                            }
-                                                                            className="w-40"
-                                                                        />
-                                                                    )}
-                                                                </form.AppField>
-                                                                <form.Field
-                                                                    name={`packages[${index}].tracking_no`}
-                                                                >
-                                                                    {(
-                                                                        field,
-                                                                    ) => (
-                                                                        <Input
-                                                                            id={`${prefix}-tracking`}
-                                                                            aria-label={`包裹${index + 1}物流单号`}
-                                                                            placeholder="输入物流单号"
-                                                                            value={
-                                                                                field
-                                                                                    .state
-                                                                                    .value
-                                                                            }
-                                                                            onChange={(
-                                                                                event,
-                                                                            ) =>
-                                                                                field.handleChange(
-                                                                                    event
-                                                                                        .target
-                                                                                        .value,
-                                                                                )
-                                                                            }
-                                                                            disabled={
-                                                                                disabled
-                                                                            }
-                                                                            className="w-full sm:w-64"
-                                                                        />
-                                                                    )}
-                                                                </form.Field>
-                                                                <div className="ml-auto flex flex-wrap items-center gap-1">
-                                                                    <Button
-                                                                        id={`${prefix}-split`}
-                                                                        size="sm"
-                                                                        variant="secondary"
-                                                                        disabled={
-                                                                            disabled ||
-                                                                            !parcel
-                                                                                .items
-                                                                                .length ||
-                                                                            values
-                                                                                .packages
-                                                                                .length >=
-                                                                                100 ||
-                                                                            destination.items.some(
-                                                                                (
-                                                                                    item,
-                                                                                ) =>
-                                                                                    !!balanceNote(
-                                                                                        values,
-                                                                                        destination.key,
-                                                                                        item.delivery_line_id,
-                                                                                    ),
-                                                                            )
-                                                                        }
-                                                                        onClick={() =>
-                                                                            setSplitting(
-                                                                                parcel.id,
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        拆分包裹
-                                                                    </Button>
-                                                                    {(!automatic ||
-                                                                        editingItems) && (
-                                                                        <Button
-                                                                            id={`${prefix}-edit-items`}
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={
-                                                                                disabled
-                                                                            }
-                                                                            onClick={() => {
-                                                                                if (
-                                                                                    !editingItems
-                                                                                )
-                                                                                    form.setFieldValue(
-                                                                                        `packages[${index}].items`,
-                                                                                        parcel.items.map(
+                                                            return null
+                                                        return (
+                                                            <div
+                                                                id={
+                                                                    !parcels.length
+                                                                        ? `fulfillment-packing-address-${segment}-logistics`
+                                                                        : undefined
+                                                                }
+                                                                tabIndex={-1}
+                                                                className="flex flex-wrap items-center gap-3 border-t border-border/50 pt-2 outline-none"
+                                                            >
+                                                                <Button
+                                                                    id={`fulfillment-packing-address-${segment}-add-package`}
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    disabled={
+                                                                        disabled ||
+                                                                        !remaining.length ||
+                                                                        values
+                                                                            .packages
+                                                                            .length >=
+                                                                            100
+                                                                    }
+                                                                    onClick={() => {
+                                                                        following.current.delete(
+                                                                            destination.key,
+                                                                        )
+                                                                        apply({
+                                                                            ...values,
+                                                                            packages:
+                                                                                [
+                                                                                    ...values.packages,
+                                                                                    {
+                                                                                        id: crypto.randomUUID(),
+                                                                                        destination_key:
+                                                                                            destination.key,
+                                                                                        carrier:
+                                                                                            "",
+                                                                                        tracking_no:
+                                                                                            "",
+                                                                                        items: remaining.map(
                                                                                             (
                                                                                                 item,
                                                                                             ) => ({
                                                                                                 ...item,
                                                                                                 quantity:
-                                                                                                    normalizePackingQuantity(
+                                                                                                    packingQuantity(
                                                                                                         item.quantity,
                                                                                                     ),
                                                                                             }),
                                                                                         ),
-                                                                                    )
-                                                                                toggle(
-                                                                                    parcel.id,
-                                                                                    setEditing,
-                                                                                )
-                                                                            }}
-                                                                        >
-                                                                            <PencilIcon />
-                                                                            {editingItems
-                                                                                ? "完成编辑"
-                                                                                : "调整商品"}
-                                                                        </Button>
-                                                                    )}
-                                                                    {packing.packages.some(
-                                                                        (row) =>
-                                                                            row.id ===
-                                                                            parcel.id,
-                                                                    ) && (
-                                                                        <Button
-                                                                            id={`${prefix}-remove`}
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={
-                                                                                disabled
-                                                                            }
-                                                                            onClick={() => {
-                                                                                setSplitting(
-                                                                                    null,
-                                                                                )
-                                                                                setEditing(
-                                                                                    (
-                                                                                        current,
-                                                                                    ) => {
-                                                                                        const next =
-                                                                                            new Set(
-                                                                                                current,
-                                                                                            )
-                                                                                        next.delete(
-                                                                                            parcel.id,
-                                                                                        )
-                                                                                        return next
                                                                                     },
-                                                                                )
-                                                                                following.current.delete(
-                                                                                    destination.key,
-                                                                                )
-                                                                                apply(
-                                                                                    {
-                                                                                        ...values,
-                                                                                        packages:
-                                                                                            values.packages.filter(
-                                                                                                (
-                                                                                                    row,
-                                                                                                ) =>
-                                                                                                    row.id !==
-                                                                                                    parcel.id,
-                                                                                            ),
-                                                                                    },
-                                                                                )
-                                                                            }}
-                                                                        >
-                                                                            移除
-                                                                        </Button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            {editingItems ? (
-                                                                <div className="space-y-2 border-t pt-2">
-                                                                    <p className="text-xs text-muted-foreground">
-                                                                        填写分到本包裹的数量，填0表示不放入。其他包裹的数量保持不变。
-                                                                    </p>
-                                                                    {destination.items.map(
-                                                                        (
-                                                                            item,
-                                                                        ) => {
-                                                                            const id = `${prefix}-item-${toAutomationIdSegment(item.delivery_line_id)}`
-                                                                            let other =
-                                                                                "待核对"
-                                                                            try {
-                                                                                other =
-                                                                                    packingQuantity(
-                                                                                        allocationBalance(
-                                                                                            values,
-                                                                                            destination.key,
-                                                                                            item.delivery_line_id,
-                                                                                            parcel.id,
-                                                                                        )
-                                                                                            .assigned,
-                                                                                    )
-                                                                            } catch {}
-                                                                            return (
-                                                                                <div
-                                                                                    key={
-                                                                                        item.delivery_line_id
-                                                                                    }
-                                                                                    className="flex flex-wrap items-center gap-x-4 gap-y-2"
-                                                                                >
-                                                                                    <Label
-                                                                                        htmlFor={`${id}-quantity`}
-                                                                                        className="min-w-40"
-                                                                                    >
-                                                                                        {itemName(
-                                                                                            item.delivery_line_id,
-                                                                                        )}
-                                                                                    </Label>
-                                                                                    <form.Field
-                                                                                        name={`packages[${index}].items`}
-                                                                                    >
-                                                                                        {(
-                                                                                            field,
-                                                                                        ) => (
-                                                                                            <Input
-                                                                                                id={`${id}-quantity`}
-                                                                                                aria-label={`包裹${index + 1}中${itemName(item.delivery_line_id)}数量`}
-                                                                                                inputMode="decimal"
-                                                                                                className="h-8 w-24"
-                                                                                                disabled={
-                                                                                                    disabled
-                                                                                                }
-                                                                                                value={
-                                                                                                    field.state.value.find(
-                                                                                                        (
-                                                                                                            row,
-                                                                                                        ) =>
-                                                                                                            row.delivery_line_id ===
-                                                                                                            item.delivery_line_id,
-                                                                                                    )
-                                                                                                        ?.quantity ??
-                                                                                                    "0"
-                                                                                                }
-                                                                                                onFocus={() =>
-                                                                                                    following.current.delete(
-                                                                                                        destination.key,
-                                                                                                    )
-                                                                                                }
-                                                                                                onChange={(
-                                                                                                    event,
-                                                                                                ) =>
-                                                                                                    field.handleChange(
-                                                                                                        changePackageItem(
-                                                                                                            field
-                                                                                                                .state
-                                                                                                                .value,
-                                                                                                            item.delivery_line_id,
-                                                                                                            event
-                                                                                                                .target
-                                                                                                                .value,
-                                                                                                        ),
-                                                                                                    )
-                                                                                                }
-                                                                                                onBlur={() => {
-                                                                                                    const current =
-                                                                                                        field.state.value.find(
-                                                                                                            (
-                                                                                                                row,
-                                                                                                            ) =>
-                                                                                                                row.delivery_line_id ===
-                                                                                                                item.delivery_line_id,
-                                                                                                        )
-                                                                                                    if (
-                                                                                                        current
-                                                                                                    )
-                                                                                                        field.handleChange(
-                                                                                                            changePackageItem(
-                                                                                                                field
-                                                                                                                    .state
-                                                                                                                    .value,
-                                                                                                                item.delivery_line_id,
-                                                                                                                normalizePackingQuantity(
-                                                                                                                    current.quantity,
-                                                                                                                ),
-                                                                                                            ),
-                                                                                                        )
-                                                                                                }}
-                                                                                            />
-                                                                                        )}
-                                                                                    </form.Field>
-                                                                                    <span className="text-xs text-muted-foreground">
-                                                                                        {unit(
-                                                                                            item.delivery_line_id,
-                                                                                        )}{" "}
-                                                                                        ·
-                                                                                        其他包裹已分配{" "}
-                                                                                        {
-                                                                                            other
-                                                                                        }{" "}
-                                                                                        ·{" "}
-                                                                                        {balanceNote(
-                                                                                            values,
-                                                                                            destination.key,
-                                                                                            item.delivery_line_id,
-                                                                                        ) ||
-                                                                                            "已全部分配"}
-                                                                                    </span>
-                                                                                </div>
-                                                                            )
-                                                                        },
-                                                                    )}
-                                                                </div>
-                                                            ) : showAllocation ? (
-                                                                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                                                    <span>
-                                                                        包含：
-                                                                        {parcel
-                                                                            .items
-                                                                            .length
-                                                                            ? parcel.items
-                                                                                  .map(
-                                                                                      (
-                                                                                          item,
-                                                                                      ) =>
-                                                                                          `${itemName(item.delivery_line_id)} × ${packingQuantity(item.quantity)} ${unit(item.delivery_line_id)}`,
-                                                                                  )
-                                                                                  .join(
-                                                                                      " · ",
-                                                                                  )
-                                                                            : "尚未分配商品，请调整商品或移除此包裹"}
-                                                                    </span>
-                                                                    {automatic && (
-                                                                        <span>
-                                                                            一个包裹发出，数量随本次发货自动更新
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            ) : (
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    本次商品合并为一个包裹；需要分开发出时，可拆分包裹。
-                                                                </p>
-                                                            )}
-                                                            {!automatic &&
-                                                                parcels.length ===
-                                                                    1 && (
-                                                                    <Button
-                                                                        id={`${prefix}-assign-remaining`}
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        disabled={
-                                                                            disabled
-                                                                        }
-                                                                        onClick={() => {
-                                                                            try {
-                                                                                const items =
-                                                                                    dispatchItems(
-                                                                                        values,
-                                                                                        destination.key,
-                                                                                    )
-                                                                                apply(
-                                                                                    {
-                                                                                        ...values,
-                                                                                        packages:
-                                                                                            values.packages.map(
-                                                                                                (
-                                                                                                    row,
-                                                                                                ) =>
-                                                                                                    row.id ===
-                                                                                                    parcel.id
-                                                                                                        ? {
-                                                                                                              ...row,
-                                                                                                              items,
-                                                                                                          }
-                                                                                                        : row,
-                                                                                            ),
-                                                                                    },
-                                                                                )
-                                                                            } catch {
-                                                                                setEditing(
-                                                                                    (
-                                                                                        current,
-                                                                                    ) =>
-                                                                                        new Set(
-                                                                                            [
-                                                                                                ...current,
-                                                                                                parcel.id,
-                                                                                            ],
-                                                                                        ),
-                                                                                )
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        将本次商品全部分配到此包裹
-                                                                    </Button>
-                                                                )}
-                                                            {splitting ===
-                                                                parcel.id && (
-                                                                <FulfillmentPackageSplit
-                                                                    key={
-                                                                        parcel.id
-                                                                    }
-                                                                    packing={
-                                                                        values
-                                                                    }
-                                                                    parcel={
-                                                                        parcel
-                                                                    }
-                                                                    label={`包裹 ${index + 1}`}
-                                                                    itemName={
-                                                                        itemName
-                                                                    }
-                                                                    unit={unit}
-                                                                    disabled={
-                                                                        disabled
-                                                                    }
-                                                                    onApply={(
-                                                                        next,
-                                                                    ) => {
-                                                                        following.current.delete(
-                                                                            destination.key,
-                                                                        )
-                                                                        apply(
-                                                                            next,
-                                                                        )
+                                                                                ],
+                                                                        })
                                                                     }}
-                                                                    onClose={() =>
-                                                                        setSplitting(
-                                                                            null,
-                                                                        )
-                                                                    }
-                                                                />
-                                                            )}
-                                                        </div>
-                                                    )
-                                                },
-                                            )}
-                                            {(() => {
-                                                let remaining: ReturnType<
-                                                    typeof unpackedItems
-                                                > = []
-                                                try {
-                                                    remaining = unpackedItems(
-                                                        values,
-                                                        destination.key,
-                                                    )
-                                                } catch {}
-                                                if (
-                                                    parcels.length &&
-                                                    !remaining.length
-                                                )
-                                                    return null
-                                                return (
-                                                    <div
-                                                        id={
-                                                            !parcels.length
-                                                                ? `fulfillment-packing-address-${segment}-logistics`
-                                                                : undefined
-                                                        }
-                                                        tabIndex={-1}
-                                                        className="flex flex-wrap items-center gap-3 border-t border-border/50 pt-2 outline-none"
-                                                    >
-                                                        <Button
-                                                            id={`fulfillment-packing-address-${segment}-add-package`}
-                                                            variant="outline"
-                                                            size="sm"
-                                                            disabled={
-                                                                disabled ||
-                                                                !remaining.length ||
-                                                                values.packages
-                                                                    .length >=
-                                                                    100
-                                                            }
-                                                            onClick={() => {
-                                                                following.current.delete(
-                                                                    destination.key,
-                                                                )
-                                                                apply({
-                                                                    ...values,
-                                                                    packages: [
-                                                                        ...values.packages,
-                                                                        {
-                                                                            id: crypto.randomUUID(),
-                                                                            destination_key:
-                                                                                destination.key,
-                                                                            carrier:
-                                                                                "",
-                                                                            tracking_no:
-                                                                                "",
-                                                                            items: remaining.map(
-                                                                                (
-                                                                                    item,
-                                                                                ) => ({
-                                                                                    ...item,
-                                                                                    quantity:
-                                                                                        packingQuantity(
-                                                                                            item.quantity,
-                                                                                        ),
-                                                                                }),
-                                                                            ),
-                                                                        },
-                                                                    ],
-                                                                })
-                                                            }}
-                                                        >
-                                                            <PlusIcon />
-                                                            {parcels.length
-                                                                ? "将未分配商品装入新包裹"
-                                                                : "登记首个包裹物流"}
-                                                        </Button>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {parcels.length
-                                                                ? "仅装入尚未分配的数量，原包裹保持不变"
-                                                                : remaining.length
-                                                                  ? "自动装入本次发货商品，填写物流即可"
-                                                                  : "请先填写本次发货数量"}
-                                                        </span>
-                                                    </div>
-                                                )
-                                            })()}
-                                        </div>
-                                    </section>
-                                )
-                            })}
+                                                                >
+                                                                    <PlusIcon />
+                                                                    {parcels.length
+                                                                        ? "将未分配商品装入新包裹"
+                                                                        : "登记首个包裹物流"}
+                                                                </Button>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {parcels.length
+                                                                        ? "仅装入尚未分配的数量，原包裹保持不变"
+                                                                        : remaining.length
+                                                                          ? "自动装入本次发货商品，填写物流即可"
+                                                                          : "请先填写本次发货数量"}
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    })()}
+                                                </div>
+                                            </section>
+                                        )
+                                    })}
+                                </div>
+                            </div>
                         </>
                     )
                 }}
