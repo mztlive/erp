@@ -101,13 +101,25 @@ export function SourcingAddressEditor({
                     field.state.meta.isTouched && !field.state.meta.isValid
                 return (
                     <section
-                        className="space-y-4 border-t border-border pt-5"
+                        className="space-y-2 border-t border-border pt-3"
                         aria-label="本来源交付地址"
                     >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h4 className="text-base font-medium">
-                                交付地址 · {rows.length}
-                            </h4>
+                            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                <h4 className="text-sm font-medium">
+                                    交付地址 · {rows.length}
+                                </h4>
+                                <p
+                                    className="text-xs text-muted-foreground"
+                                    aria-live="polite"
+                                >
+                                    合计{" "}
+                                    <QuantityValue
+                                        value={total || "—"}
+                                        unit={product.unit}
+                                    />
+                                </p>
+                            </div>
                             <SourcingAddressPicker
                                 key={line.basisId}
                                 id={id}
@@ -121,21 +133,13 @@ export function SourcingAddressEditor({
                                 }}
                             />
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            选择本来源负责的地址，分配数量自动汇总。
-                        </p>
                         {rows.length === 0 ? (
-                            <p className="border-y border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+                            <p className="border-y border-dashed border-border py-4 text-center text-sm text-muted-foreground">
                                 尚未安排交付地址，请添加本来源负责的地址。
                             </p>
                         ) : (
                             <div>
-                                <div className="hidden grid-cols-[minmax(0,1fr)_9rem_4.5rem] gap-4 border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground @min-[560px]/sourcing:grid">
-                                    <span>交付地址</span>
-                                    <span>本次交付数量</span>
-                                    <span />
-                                </div>
-                                <div className="divide-y divide-border/60">
+                                <div className="divide-y divide-border/60 border-t border-border/60">
                                     {rows.map((row) => {
                                         const key = deliveryKey(row)
                                         const rowId = `${id}-${addressId(row)}`
@@ -168,37 +172,42 @@ export function SourcingAddressEditor({
                                         return (
                                             <div
                                                 key={key}
-                                                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 border-b border-border/60 px-1 py-5 last:border-0 @min-[560px]/sourcing:grid-cols-[minmax(0,1fr)_9rem_4.5rem] @min-[560px]/sourcing:px-3"
+                                                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-2.5 @min-[560px]/sourcing:grid-cols-[minmax(0,1fr)_7rem_4.5rem]"
                                             >
                                                 <label
                                                     htmlFor={`${rowId}-quantity`}
-                                                    className="col-span-2 min-w-0 space-y-1.5 @min-[560px]/sourcing:col-span-1"
+                                                    className="col-span-2 min-w-0 space-y-1 @min-[560px]/sourcing:col-span-1"
                                                 >
-                                                    <span className="block text-sm font-medium">
-                                                        {row.recipient} ·{" "}
-                                                        {row.phone}
+                                                    <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                                        <span className="text-sm font-medium">
+                                                            {row.recipient} ·{" "}
+                                                            {row.phone}
+                                                        </span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            最多可分配{" "}
+                                                            <QuantityValue
+                                                                value={cap}
+                                                                unit={
+                                                                    product.unit
+                                                                }
+                                                            />
+                                                            {option &&
+                                                            term ===
+                                                                "FREIGHT_EXTRA"
+                                                                ? ` · ${deliveryTermLabel(option, term)}`
+                                                                : ""}
+                                                        </span>
                                                     </span>
                                                     <span className="block break-words text-sm text-muted-foreground">
                                                         {fullDeliveryAddress(
                                                             row,
                                                         )}
                                                     </span>
-                                                    <span className="block text-xs text-muted-foreground">
-                                                        最多可分配{" "}
-                                                        <QuantityValue
-                                                            value={cap}
-                                                            unit={product.unit}
-                                                        />
-                                                        {option &&
-                                                        term === "FREIGHT_EXTRA"
-                                                            ? ` · ${deliveryTermLabel(option, term)}`
-                                                            : ""}
-                                                    </span>
                                                 </label>
                                                 <div className="flex items-center gap-2">
                                                     <Input
                                                         id={`${rowId}-quantity`}
-                                                        className="num w-28"
+                                                        className="num h-8 w-20"
                                                         type="number"
                                                         min="0"
                                                         max={cap}
@@ -333,22 +342,6 @@ export function SourcingAddressEditor({
                                 </div>
                             </div>
                         )}
-                        <div className="flex flex-wrap items-baseline justify-between gap-3 border-t border-border pt-4">
-                            <p className="text-xs text-muted-foreground">
-                                同一地址可由多个来源共同承担
-                            </p>
-                            <p
-                                className="text-sm font-medium"
-                                aria-live="polite"
-                            >
-                                本来源分配合计{" "}
-                                <QuantityValue
-                                    className="ml-2 text-lg"
-                                    value={total || "—"}
-                                    unit={product.unit}
-                                />
-                            </p>
-                        </div>
                         {invalid ? (
                             <FieldError
                                 errors={toFieldErrors(field.state.meta.errors)}
