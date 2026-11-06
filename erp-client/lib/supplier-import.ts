@@ -210,12 +210,61 @@ export const supplierFailuresWorkbook = async (
     return workbook
 }
 
+/** 生成与导入解析器共用表头的空白模板，说明不进入数据行。 */
+export const supplierTemplateWorkbook = async () => {
+    const { Workbook } = await import("exceljs")
+    const workbook = new Workbook()
+    const sheet = workbook.addWorksheet("供应商")
+    sheet.addRow([...SUPPLIER_IMPORT_HEADERS])
+    sheet.columns.forEach((column) => {
+        column.width = 24
+        column.numFmt = "@"
+    })
+    sheet.getRow(1).font = { bold: true }
+    sheet.views = [{ state: "frozen", ySplit: 1 }]
+    const guide = workbook.addWorksheet("填写说明")
+    for (const instruction of [
+        "在「供应商」工作表从第 2 行起填写，每行一个供应商，每次 1–500 行，文件不超过 10 MB。保留第 1 行的全部表头和列顺序。",
+        "供应商全称、结算方式、发票类型必须填写。公司签约主体和公司付款主体至少填写一项，使用系统中已维护的公司全称、简称或别名。",
+        "联系人与联系方式必须同时填写；对公银行账号与开户行必须同时填写。",
+        "结算方式填写：预付款、现结、周结、月结、季结、半年结或年结。发票类型填写：专票、普票或电子发票。",
+        "编号、联系方式和银行账号按文本填写，保留前导零。所有单元格只填写值，不使用公式。",
+        "合同文件、授权书文件、授权书有效期、食品经营许可证、供应商法人身份证列留空，导入后在供应商资料中上传和登记；不要在模板中嵌入图片或填写文件名。",
+        "合同有效期按 YYYY-MM-DD 填写，并同时填写合同编号；不明确的有效期留空。",
+        "提交后在「后台任务」查看进度和逐行结果，下载待处理行并修正后重新导入。",
+    ]) {
+        guide.addRow([instruction])
+    }
+    guide.getColumn(1).width = 100
+    guide.getColumn(1).alignment = { wrapText: true, vertical: "middle" }
+    guide.eachRow((row) => {
+        row.height = 48
+    })
+    return workbook
+}
+
+/** 下载可直接填写的供应商导入模板。 */
+export const downloadSupplierTemplate = async () => {
+    await downloadSupplierWorkbook(
+        await supplierTemplateWorkbook(),
+        "供应商导入模板.xlsx",
+    )
+}
+
 /** 下载仅包含失败行的工作簿。 */
 export const downloadSupplierFailures = async (
     rows: SupplierImportRow[],
     results: SupplierImportResult[],
 ) => {
     const workbook = await supplierFailuresWorkbook(rows, results)
+    await downloadSupplierWorkbook(workbook, "供应商导入失败行.xlsx")
+}
+
+/** 保存供应商工作簿并释放临时下载地址。 */
+const downloadSupplierWorkbook = async (
+    workbook: Workbook,
+    filename: string,
+) => {
     const data = await workbook.xlsx.writeBuffer()
     const url = URL.createObjectURL(
         new Blob([data], {
@@ -224,7 +273,7 @@ export const downloadSupplierFailures = async (
     )
     const link = document.createElement("a")
     link.href = url
-    link.download = "供应商导入失败行.xlsx"
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     link.remove()

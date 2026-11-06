@@ -27,6 +27,7 @@ import { useSupplierListState } from "@/features/master-data/hooks/use-supplier-
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { BackgroundJobView } from "@/lib/background-jobs"
 import { launchNavDelivery } from "@/lib/nav-delivery"
+import { downloadSupplierTemplate } from "@/features/master-data/lib/supplier-import"
 
 /** 导入动作按钮与投递落点：动作 id 同时是动画起点。 */
 const IMPORT_ACTION_ID = "master-data-suppliers-list-import"
@@ -35,6 +36,17 @@ const BACKGROUND_TASKS_HREF = "/governance/background-jobs"
 export function SuppliersListPage() {
     const router = useRouter()
     const [importOpen, setImportOpen] = useState(false)
+    const [templatePending, setTemplatePending] = useState(false)
+    const onDownloadTemplate = async () => {
+        setTemplatePending(true)
+        try {
+            await downloadSupplierTemplate()
+        } catch {
+            toast.add({ title: "模板下载失败，请重试", type: "error" })
+        } finally {
+            setTemplatePending(false)
+        }
+    }
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSupplierListState(searchInputRef)
@@ -85,6 +97,17 @@ export function SuppliersListPage() {
             description="查看供应商资料、资质与供货能力。"
             exportMeta={state.exportMeta}
             actions={[
+                {
+                    id: "master-data-suppliers-list-import-template",
+                    actionKey: "import-template",
+                    label: "下载导入模板",
+                    icon: DownloadIcon,
+                    variant: "outline",
+                    hidden: !state.canCreate,
+                    disabled: templatePending,
+                    loading: templatePending,
+                    onClick: () => void onDownloadTemplate(),
+                },
                 {
                     id: IMPORT_ACTION_ID,
                     actionKey: "import",
