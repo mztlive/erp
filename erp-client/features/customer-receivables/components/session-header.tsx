@@ -39,7 +39,7 @@ export function SessionHeader({
             tone: submitted ? ("warning" as const) : ("neutral" as const),
         }
         return (
-            <div className="space-y-3">
+            <div className="space-y-3 border-b border-border pb-4">
                 {showClose ? (
                     <PageHeader
                         title={title}

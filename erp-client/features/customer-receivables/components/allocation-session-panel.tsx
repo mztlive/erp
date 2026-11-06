@@ -294,18 +294,19 @@ export function AllocationSessionPanel({
                     ) : null}
 
                     {isReceipt ? (
-                        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-                            {/* 左侧：回款事实与凭证（宽屏下固定吸顶） */}
-                            <div className="flex flex-col gap-4 lg:col-span-5 xl:col-span-4 lg:sticky lg:top-4">
-                                <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
-                                    <div className="flex items-center justify-between border-b border-border pb-3">
-                                        <h2 className="text-base font-semibold text-foreground">
+                        <div className="grid min-w-0 flex-1 grid-cols-1 items-start lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
+                            {/* 左侧：回款事实与凭证（扁平无卡片，右分割线，宽屏吸顶） */}
+                            <div className="border-b border-border pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
+                                <div className="space-y-5 lg:sticky lg:top-4">
+                                    <div className="space-y-1">
+                                        <h2 className="text-sm font-semibold text-foreground">
                                             到账信息
                                         </h2>
-                                        <span className="text-xs text-muted-foreground">
-                                            必填项已标注 *
-                                        </span>
+                                        <p className="text-xs text-muted-foreground">
+                                            录入实际到账金额、时间与银行流水
+                                        </p>
                                     </div>
+
                                     <ReceiptSessionFields
                                         form={form}
                                         receiptId={session.existingFactId}
@@ -315,6 +316,7 @@ export function AllocationSessionPanel({
                                         existing={existing}
                                         locked={locked || editingDisabled}
                                     />
+
                                     {attempted && receiptFactIssues.length > 0 ? (
                                         <ValidationSummary
                                             id="customer-receivables-session-fact-validation"
@@ -326,12 +328,12 @@ export function AllocationSessionPanel({
                                 </div>
                             </div>
 
-                            {/* 右侧：核销应收单据明细与审批 */}
-                            <div className="flex min-w-0 flex-col gap-6 lg:col-span-7 xl:col-span-8">
+                            {/* 右侧：核销应收单据明细与审批（扁平无卡片，左内边距与左侧隔开） */}
+                            <div className="min-w-0 pt-6 lg:pt-0 lg:pl-8 space-y-6">
                                 {removedLine ? (
                                     <div
                                         role="status"
-                                        className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
+                                        className="flex items-center justify-between gap-3 rounded-md bg-muted px-3.5 py-2 text-sm"
                                     >
                                         <span>已移除 {removedLine.line.label}</span>
                                         {canOperate && (
@@ -368,11 +370,13 @@ export function AllocationSessionPanel({
                                 />
 
                                 {!submitted && receiptApproval ? (
-                                    <CustomerReceiptApprovalArea
-                                        phase={receiptPhase}
-                                        approval={receiptApproval}
-                                        documentId={session.existingFactId}
-                                    />
+                                    <div className="border-t border-border pt-6">
+                                        <CustomerReceiptApprovalArea
+                                            phase={receiptPhase}
+                                            approval={receiptApproval}
+                                            documentId={session.existingFactId}
+                                        />
+                                    </div>
                                 ) : null}
                             </div>
                         </div>

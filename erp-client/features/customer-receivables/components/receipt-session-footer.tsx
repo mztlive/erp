@@ -26,7 +26,7 @@ export function ReceiptSessionFooter({
     return (
         <aside
             aria-label="本次回款"
-            className="sticky bottom-0 z-20 rounded-lg border border-border bg-card px-5 py-4 shadow-sm"
+            className="sticky bottom-0 z-20 mt-auto border-t border-border bg-card/95 py-4 backdrop-blur-xs"
         >
             <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
                 <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
