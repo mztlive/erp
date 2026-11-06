@@ -12,11 +12,15 @@ import {
     ChevronRightIcon,
     PlusIcon,
     PencilIcon,
+    MapPinIcon,
     SearchIcon,
     Trash2Icon,
 } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrangementButton } from "@/features/delivery-arrangements/components/arrangement-button"
+import {
+    FulfillmentAddressDialog,
+    type AddressAction,
+} from "./fulfillment-address-dialog"
 import { getDeliveryPackingDetail } from "../../api/packing"
 import { fulfillmentKeys } from "../../hooks/queries"
 import { useAppForm } from "@/components/form"
@@ -84,6 +88,9 @@ export function FulfillmentPackingForm({
         address: "",
         query: "",
     })
+    const [addressAction, setAddressAction] = useState<AddressAction | null>(
+        null,
+    )
     const [activeAddress, setActiveAddress] = useState<string | null>(null)
     const [editing, setEditing] = useState<Set<string>>(() => new Set())
     const [splitting, setSplitting] = useState<string | null>(null)
@@ -324,37 +331,54 @@ export function FulfillmentPackingForm({
             else next.add(key)
             return next
         })
-    const arrangementAction = (
-        <ArrangementButton
-            scope="deliveries"
-            objectId={operation.operationId}
+    const reloadAddresses = async () => {
+        const fresh = await queryClient.fetchQuery({
+            queryKey: fulfillmentKeys.packing(operation.operationId),
+            queryFn: () => getDeliveryPackingDetail(operation.operationId),
+            staleTime: 0,
+        })
+        onChange(fresh.operation.draft)
+        setActiveAddress(null)
+    }
+    const arrangementAction = selectedDestination ? (
+        <Button
+            id="fulfillment-packing-edit-address"
+            type="button"
+            variant="outline"
+            size="sm"
             disabled={disabled}
-            label={
-                source.destinations.some((row) => row.pending_address)
-                    ? "补充收货地址"
-                    : "调整地址"
+            onClick={() =>
+                setAddressAction(
+                    selectedDestination.pending_address
+                        ? { mode: "add" }
+                        : { mode: "edit", destination: selectedDestination },
+                )
             }
-            hasUnsavedChanges={
-                JSON.stringify(draft) !== JSON.stringify(operation.draft)
-            }
-            onSaved={async () => {
-                const fresh = await queryClient.fetchQuery({
-                    queryKey: fulfillmentKeys.packing(operation.operationId),
-                    queryFn: () =>
-                        getDeliveryPackingDetail(operation.operationId),
-                    staleTime: 0,
-                })
-                onChange(fresh.operation.draft)
-            }}
-        />
-    )
+        >
+            <MapPinIcon />
+            {selectedDestination.pending_address ? "补充地址" : "调整当前地址"}
+        </Button>
+    ) : null
     return (
         <section
             id="fulfillment-packing-form"
             tabIndex={-1}
-            className="min-w-0 space-y-3 outline-none"
+            className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 outline-none"
             aria-label="按地址登记发货包裹"
         >
+            {addressAction && (
+                <FulfillmentAddressDialog
+                    key={`${addressAction.mode}-${addressAction.mode === "add" ? "new" : addressAction.destination.key}`}
+                    operationId={operation.operationId}
+                    action={addressAction}
+                    hasUnsavedChanges={
+                        JSON.stringify(draft) !==
+                        JSON.stringify(operation.draft)
+                    }
+                    onSaved={reloadAddresses}
+                    onClose={() => setAddressAction(null)}
+                />
+            )}
             <form.Subscribe selector={(state) => state.values}>
                 {(values) => {
                     return (
@@ -374,44 +398,75 @@ export function FulfillmentPackingForm({
                                     </p>
                                 </div>
                             )}
-                            <div
-                                className={
-                                    multipleAddresses
-                                        ? "grid min-w-0 items-start gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]"
-                                        : "min-w-0"
-                                }
-                            >
-                                {multipleAddresses && (
-                                    <FulfillmentAddressList
-                                        destinations={visible}
-                                        total={source.destinations.length}
-                                        completed={
-                                            [...addressStates.values()].filter(
-                                                (state) => state.ready,
-                                            ).length
-                                        }
-                                        states={addressStates}
-                                        selectedKey={selectedDestination?.key}
-                                        search={search}
-                                        onlyMissing={onlyMissing}
-                                        onSearch={(value) => {
-                                            setSearch(value)
-                                            setActiveAddress(null)
-                                        }}
-                                        onOnlyMissing={(value) => {
-                                            setOnlyMissing(value)
-                                            setActiveAddress(null)
-                                        }}
-                                        onSelect={setActiveAddress}
-                                    />
-                                )}
+                            <div className="grid min-h-0 min-w-0 flex-1 gap-5 lg:grid-cols-[15rem_minmax(0,1fr)] lg:overflow-hidden">
+                                <FulfillmentAddressList
+                                    destinations={visible}
+                                    total={source.destinations.length}
+                                    completed={
+                                        [...addressStates.values()].filter(
+                                            (state) => state.ready,
+                                        ).length
+                                    }
+                                    states={addressStates}
+                                    selectedKey={selectedDestination?.key}
+                                    search={search}
+                                    onlyMissing={onlyMissing}
+                                    onSearch={(value) => {
+                                        setSearch(value)
+                                        setActiveAddress(null)
+                                    }}
+                                    onOnlyMissing={(value) => {
+                                        setOnlyMissing(value)
+                                        setActiveAddress(null)
+                                    }}
+                                    actions={
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                id="fulfillment-packing-add-address"
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                title="新增地址"
+                                                aria-label="新增收货地址"
+                                                disabled={disabled}
+                                                onClick={() =>
+                                                    setAddressAction({
+                                                        mode: "add",
+                                                    })
+                                                }
+                                            >
+                                                <PlusIcon />
+                                            </Button>
+                                            <Button
+                                                id="fulfillment-packing-delete-address"
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                title="删除选中地址"
+                                                aria-label="删除选中收货地址"
+                                                disabled={
+                                                    disabled ||
+                                                    !selectedDestination ||
+                                                    selectedDestination.pending_address
+                                                }
+                                                onClick={() =>
+                                                    selectedDestination &&
+                                                    setAddressAction({
+                                                        mode: "delete",
+                                                        destination:
+                                                            selectedDestination,
+                                                    })
+                                                }
+                                            >
+                                                <Trash2Icon />
+                                            </Button>
+                                        </div>
+                                    }
+                                    onSelect={setActiveAddress}
+                                />
                                 <div
                                     id="fulfillment-packing-address-detail"
-                                    className={
-                                        multipleAddresses
-                                            ? "min-w-0 lg:border-l lg:border-border/60 lg:pl-6"
-                                            : "min-w-0"
-                                    }
+                                    className="min-h-0 min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:border-l lg:border-border/60 lg:px-5"
                                 >
                                     {!selectedDestination && (
                                         <p className="py-12 text-center text-sm text-muted-foreground">
@@ -1203,7 +1258,7 @@ export function FulfillmentPackingForm({
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        <div className="[&_[data-slot=table-container]]:max-h-[28rem] [&_[data-slot=table-container]]:overflow-auto [&_[data-slot=table-container]]:overscroll-contain">
+                                                        <div className="[&_[data-slot=table-container]]:overflow-x-auto">
                                                             <Table
                                                                 className={
                                                                     showAllocation

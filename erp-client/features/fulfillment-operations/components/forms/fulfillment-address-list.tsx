@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import {
     CheckIcon,
     CircleIcon,
@@ -34,6 +34,7 @@ export function FulfillmentAddressList({
     onSearch,
     onOnlyMissing,
     onSelect,
+    actions,
 }: {
     destinations: readonly DeliveryDestination[]
     total: number
@@ -45,6 +46,7 @@ export function FulfillmentAddressList({
     onSearch: (value: string) => void
     onOnlyMissing: (value: boolean) => void
     onSelect: (key: string) => void
+    actions?: ReactNode
 }) {
     const listRef = useRef<HTMLDivElement>(null)
     const selectedVisible = destinations.some((row) => row.key === selectedKey)
@@ -61,8 +63,11 @@ export function FulfillmentAddressList({
             list.scrollTop += item.bottom - bounds.bottom
     }, [selectedKey])
     return (
-        <aside aria-label="收货地址导航" className="min-w-0 self-start">
-            <div className="space-y-3 pb-3">
+        <aside
+            aria-label="收货地址导航"
+            className="flex min-h-0 min-w-0 flex-col lg:h-full"
+        >
+            <div className="shrink-0 space-y-3 pb-3">
                 <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="font-medium">
                         收货地址 ·{" "}
@@ -86,21 +91,24 @@ export function FulfillmentAddressList({
                         className="pl-8"
                     />
                 </div>
-                <Label
-                    htmlFor="fulfillment-packing-only-missing"
-                    className="text-xs font-normal"
-                >
-                    <Checkbox
-                        id="fulfillment-packing-only-missing"
-                        checked={onlyMissing}
-                        onCheckedChange={onOnlyMissing}
-                    />
-                    未完成
-                </Label>
+                <div className="flex items-center justify-between gap-2">
+                    <Label
+                        htmlFor="fulfillment-packing-only-missing"
+                        className="text-xs font-normal"
+                    >
+                        <Checkbox
+                            id="fulfillment-packing-only-missing"
+                            checked={onlyMissing}
+                            onCheckedChange={onOnlyMissing}
+                        />
+                        未完成
+                    </Label>
+                    {actions}
+                </div>
             </div>
             <div
                 ref={listRef}
-                className="relative max-h-52 overflow-y-auto overscroll-contain lg:max-h-[34rem]"
+                className="relative max-h-52 min-h-0 overflow-y-auto overscroll-contain lg:max-h-none lg:flex-1"
             >
                 {destinations.map((destination) => {
                     const status = states.get(destination.key)!

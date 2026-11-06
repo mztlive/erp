@@ -6,6 +6,7 @@ import {
     ArrowRightIcon,
     CircleCheckIcon,
     EyeIcon,
+    EllipsisIcon,
     LoaderCircleIcon,
     SaveIcon,
     SkipForwardIcon,
@@ -32,6 +33,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useFulfillmentFieldLocation } from "../hooks/use-fulfillment-field-location"
 import { FulfillmentDraftForm } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
@@ -231,7 +238,15 @@ export function FulfillmentWorkSurface({
     }
 
     return (
-        <div className={singleOperation ? "min-w-0" : "min-w-0 space-y-3"}>
+        <div
+            className={
+                singleOperation && addressPacking
+                    ? "flex min-h-0 min-w-0 flex-1 flex-col"
+                    : singleOperation
+                      ? "min-w-0"
+                      : "min-w-0 space-y-3"
+            }
+        >
             {operation.loadWarnings?.map((message) => (
                 <BusinessFailureState
                     key={message}
@@ -295,7 +310,7 @@ export function FulfillmentWorkSurface({
                 size="sm"
                 className={
                     singleOperation && addressPacking
-                        ? "border-0 bg-transparent py-0 shadow-none"
+                        ? "min-h-0 flex-1 border-0 bg-transparent py-0 shadow-none"
                         : singleOperation
                           ? undefined
                           : surfacePanelClassName
@@ -335,7 +350,7 @@ export function FulfillmentWorkSurface({
                 <CardContent
                     className={
                         singleOperation && addressPacking
-                            ? "space-y-3 px-0"
+                            ? "flex min-h-0 flex-1 flex-col gap-3 px-0"
                             : "space-y-5"
                     }
                 >
@@ -392,9 +407,12 @@ export function FulfillmentWorkSurface({
                             />
                         </WorkspaceTaskPageSlot>
                     )}
-                    {paymentPending ? (
+                    {paymentPending && !singleOperation ? (
                         <WorkspaceTaskPageSlot slot="summary">
-                            <FulfillmentPaymentNotice operation={operation} />
+                            <FulfillmentPaymentNotice
+                                operation={operation}
+                                showAmounts={!singleOperation}
+                            />
                         </WorkspaceTaskPageSlot>
                     ) : null}
 
@@ -550,9 +568,9 @@ function FulfillmentExecuteActions({
         firstIssue?.message ||
         "请检查本次填写的信息后再确认"
     return (
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex min-w-0 flex-col items-end gap-2">
             {!canPost && blockedMessage ? (
-                <div className="flex max-w-md items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex max-w-xl items-center gap-2 text-xs text-muted-foreground">
                     <p
                         id="fulfillment-operations-confirm-blocker"
                         role="status"
@@ -571,72 +589,90 @@ function FulfillmentExecuteActions({
                     )}
                 </div>
             ) : null}
-            {!singleOperation ? (
-                <Button
-                    id="fulfillment-operations-work-surface-skip"
-                    type="button"
-                    variant="ghost"
-                    disabled={formalPending}
-                    onClick={onSkip}
-                >
-                    <SkipForwardIcon data-icon="inline-start" />
-                    先跳过
-                </Button>
-            ) : null}
-            {dirty ? (
-                <Button
-                    id="fulfillment-operations-work-surface-discard"
-                    type="button"
-                    variant="ghost"
-                    disabled={formalPending}
-                    onClick={onDiscard}
-                >
-                    <Undo2Icon data-icon="inline-start" />
-                    放弃修改
-                </Button>
-            ) : null}
-            {supportsSave && (!compact || dirty) ? (
-                <LoadingButton
-                    id="fulfillment-operations-work-surface-save"
-                    type="button"
-                    variant="secondary"
-                    className="rounded-lg shadow-none"
-                    disabled={formalPending || !dirty}
-                    loading={savePending}
-                    onClick={() => void onSave()}
-                >
-                    {!savePending ? (
-                        <SaveIcon data-icon="inline-start" />
-                    ) : null}
-                    {savePending ? "保存中…" : "保存草稿"}
-                </LoadingButton>
-            ) : null}
-            <Button
-                id="fulfillment-operations-work-surface-confirm"
-                type="button"
-                disabled={formalPending || savePending || !canPost}
-                aria-describedby={
-                    !canPost && blockedMessage
-                        ? "fulfillment-operations-confirm-blocker"
-                        : undefined
-                }
-                onClick={onConfirm}
-            >
-                {formalPending ? (
-                    <LoaderCircleIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                        className="animate-spin"
-                    />
-                ) : (
-                    <CircleCheckIcon data-icon="inline-start" />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+                {!singleOperation ? (
+                    <Button
+                        id="fulfillment-operations-work-surface-skip"
+                        type="button"
+                        variant="ghost"
+                        disabled={formalPending}
+                        onClick={onSkip}
+                    >
+                        <SkipForwardIcon data-icon="inline-start" />
+                        先跳过
+                    </Button>
+                ) : null}
+                {dirty && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            id="fulfillment-operations-more-actions"
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="更多操作"
+                                    title="更多操作"
+                                    disabled={formalPending || savePending}
+                                />
+                            }
+                        >
+                            <EllipsisIcon />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                id="fulfillment-operations-work-surface-discard"
+                                onClick={onDiscard}
+                            >
+                                <Undo2Icon />
+                                放弃修改
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 )}
-                {formalPending
-                    ? "正在确认…"
-                    : autoNext
-                      ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
-                      : OPERATION_ACTION_LABEL[operation.operationType]}
-            </Button>
+                {supportsSave && (!compact || dirty) ? (
+                    <LoadingButton
+                        id="fulfillment-operations-work-surface-save"
+                        type="button"
+                        variant="outline"
+                        className="rounded-lg shadow-none"
+                        disabled={formalPending || !dirty}
+                        loading={savePending}
+                        onClick={() => void onSave()}
+                    >
+                        {!savePending ? (
+                            <SaveIcon data-icon="inline-start" />
+                        ) : null}
+                        {savePending ? "保存中…" : "保存草稿"}
+                    </LoadingButton>
+                ) : null}
+                <Button
+                    id="fulfillment-operations-work-surface-confirm"
+                    type="button"
+                    disabled={formalPending || savePending || !canPost}
+                    aria-describedby={
+                        !canPost && blockedMessage
+                            ? "fulfillment-operations-confirm-blocker"
+                            : undefined
+                    }
+                    onClick={onConfirm}
+                >
+                    {formalPending ? (
+                        <LoaderCircleIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                            className="animate-spin"
+                        />
+                    ) : (
+                        <CircleCheckIcon data-icon="inline-start" />
+                    )}
+                    {formalPending
+                        ? "正在确认…"
+                        : autoNext
+                          ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
+                          : OPERATION_ACTION_LABEL[operation.operationType]}
+                </Button>
+            </div>
         </div>
     )
 }
@@ -721,9 +757,6 @@ function FulfillmentSourceContext({
                         purchaseLink || (canViewSales ? field.href : undefined)
                     const isDocument =
                         field.label === "销售单" || field.label === "采购单"
-                    const opaquePurchaseNumber =
-                        field.label === "采购单" &&
-                        /^PO-[0-9a-f]{24,}$/i.test(field.value)
                     return (
                         <div
                             key={field.label}
@@ -733,11 +766,7 @@ function FulfillmentSourceContext({
                                 {field.label}
                             </dt>
                             <dd
-                                title={
-                                    isDocument && !opaquePurchaseNumber
-                                        ? field.value
-                                        : undefined
-                                }
+                                title={isDocument ? field.value : undefined}
                                 className={
                                     isDocument
                                         ? "min-w-0 truncate text-sm font-medium"
@@ -752,15 +781,11 @@ function FulfillmentSourceContext({
                                         rel="noopener noreferrer"
                                         className="text-primary underline underline-offset-4"
                                     >
-                                        {opaquePurchaseNumber
-                                            ? "查看采购单"
-                                            : field.value}
+                                        {field.value}
                                         <span className="sr-only">
                                             （在新标签页打开{field.label}）
                                         </span>
                                     </Link>
-                                ) : opaquePurchaseNumber ? (
-                                    "已关联采购单"
                                 ) : (
                                     field.value
                                 )}

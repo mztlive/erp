@@ -66,6 +66,7 @@ export function WorkspaceProcessingLayout({
             }
             summaryInHeader={fulfillment}
             denseHeader={fulfillment}
+            fillBody={fulfillment && item.businessObjectType === "delivery"}
             compact={paymentArrangement}
             fullWidth={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
@@ -145,33 +146,6 @@ export function WorkspaceProcessingLayout({
                                 />
                             )}
                         </dl>
-                    )}
-                    {fulfillment && (
-                        <details
-                            open={item.actionBlockers.length > 0}
-                            className="text-sm leading-6 text-muted-foreground"
-                        >
-                            <summary
-                                id="workspace-fulfillment-instructions-toggle"
-                                className="w-fit cursor-pointer text-xs"
-                            >
-                                办理说明
-                            </summary>
-                            <div className="mt-2 space-y-1 border-l-2 border-border pl-3 leading-6">
-                                <p>
-                                    {item.nextActionHint ||
-                                        "按收货地址核对商品、数量与物流后，确认本次发货。"}
-                                </p>
-                                {item.impactSummary && (
-                                    <p>{item.impactSummary}</p>
-                                )}
-                                {item.actionBlockers.map((blocker) => (
-                                    <p key={blocker.message}>
-                                        {blocker.message}
-                                    </p>
-                                ))}
-                            </div>
-                        </details>
                     )}
                 </div>
             }
@@ -255,9 +229,7 @@ export function WorkspaceProcessingLayout({
                                     onAutoNextChange(value === true)
                                 }
                             />
-                            {fulfillment
-                                ? "确认成功后自动打开下一项"
-                                : "处理后进入下一项"}
+                            {fulfillment ? "完成后下一项" : "处理后进入下一项"}
                         </label>
                     ) : (
                         <span className="mr-auto text-xs text-muted-foreground">
@@ -274,13 +246,15 @@ export function WorkspaceProcessingLayout({
                 </>
             }
             footer={
-                <Button
-                    id="workspace-processing-footer-back"
-                    variant={fulfillment ? "ghost" : "outline"}
-                    onClick={onBack}
-                >
-                    {backLabel}
-                </Button>
+                fulfillment ? null : (
+                    <Button
+                        id="workspace-processing-footer-back"
+                        variant={fulfillment ? "ghost" : "outline"}
+                        onClick={onBack}
+                    >
+                        {backLabel}
+                    </Button>
+                )
             }
         >
             {children}

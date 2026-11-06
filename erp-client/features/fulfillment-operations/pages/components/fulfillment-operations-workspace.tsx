@@ -58,6 +58,7 @@ export function FulfillmentOperationsWorkspace({
             className={cn(
                 "flex min-w-0 flex-col",
                 embedded || singleOperation ? "gap-0" : "gap-4",
+                singleOperation && !deliveryDialog && "min-h-0 flex-1",
             )}
         >
             {controller.lastResult ? (
@@ -125,7 +126,7 @@ export function FulfillmentOperationsWorkspace({
                         deliveryDialog
                             ? "min-w-0"
                             : singleOperation
-                              ? "min-w-0"
+                              ? "flex min-h-0 min-w-0 flex-1 flex-col"
                               : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
                     }
                 >

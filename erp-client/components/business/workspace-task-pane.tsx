@@ -23,6 +23,7 @@ const WorkspaceTaskFooterHostContext =
 type WorkspaceTaskPageLayout = {
     compact?: boolean
     fullWidth?: boolean
+    fillBody?: boolean
     singleColumn?: boolean
     summaryInHeader?: boolean
     denseHeader?: boolean
@@ -176,6 +177,7 @@ export function WorkspaceTaskPane({
                             layout?.compact && "gap-5 sm:p-6",
                             layout.fullWidth &&
                                 "gap-3 overflow-hidden p-3 sm:p-4",
+                            layout.fillBody && "lg:overflow-hidden",
                         )}
                     >
                         <div
@@ -233,6 +235,8 @@ export function WorkspaceTaskPane({
                                     : "flex flex-1 flex-col",
                                 layout.fullWidth &&
                                     "flex flex-1 shrink flex-col items-stretch overflow-hidden",
+                                layout.fillBody &&
+                                    "lg:flex lg:flex-1 lg:shrink lg:flex-col lg:items-stretch lg:overflow-hidden",
                                 layout.singleColumn &&
                                     "grid-cols-1 xl:grid-cols-1",
                             )}
@@ -250,6 +254,8 @@ export function WorkspaceTaskPane({
                                     "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto",
                                     layout.fullWidth &&
                                         "flex min-h-0 flex-1 flex-col overflow-hidden [&_[data-slot=page-scaffold]]:h-full",
+                                    layout.fillBody &&
+                                        "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden",
                                 )}
                             >
                                 {children}
@@ -286,13 +292,18 @@ export function WorkspaceTaskPane({
                             !layout && "justify-end empty:hidden",
                         )}
                     >
+                        {layout.fillBody && layout.footer}
                         {layout.footerLeading}
                         <div
                             ref={setFooterSummaryHost}
-                            className="min-w-0 flex-[1_1_24rem] empty:hidden"
+                            className={
+                                layout.fillBody
+                                    ? "min-w-0 flex-1 empty:hidden"
+                                    : "min-w-0 flex-[1_1_24rem] empty:hidden"
+                            }
                         ></div>
                         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                            {layout.footer}
+                            {!layout.fillBody && layout.footer}
                             <div
                                 ref={setFooterHost}
                                 className="flex min-w-0 flex-wrap items-center justify-end gap-2 empty:hidden"

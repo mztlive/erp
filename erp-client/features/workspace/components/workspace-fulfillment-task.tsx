@@ -23,6 +23,10 @@ import { FULFILLMENT_ROLES } from "@/features/fulfillment-operations/lib/fulfill
 import { OPERATION_TYPE_LABEL } from "@/features/fulfillment-operations/types"
 import { FulfillmentOperationsWorkspace } from "@/features/fulfillment-operations/pages/components/fulfillment-operations-workspace"
 import { FulfillmentPageStates } from "@/features/fulfillment-operations/pages/components/fulfillment-page-states"
+import {
+    FulfillmentPaymentBadges,
+    FulfillmentPaymentLink,
+} from "@/features/fulfillment-operations/pages/components/fulfillment-payment-notice"
 import { useFulfillmentOperationsController } from "@/features/fulfillment-operations/pages/hooks/use-fulfillment-operations-controller"
 import {
     useWorkItemReassignCandidatesQuery,
@@ -143,6 +147,14 @@ export function WorkspaceFulfillmentTask({
                                     label={item.statusLabel}
                                     tone={item.statusTone}
                                 />
+                                {controller.operation &&
+                                    controller.operation.gate.state ===
+                                        "BLOCKED" &&
+                                    operationType !== "WAREHOUSE_SHIP" && (
+                                        <FulfillmentPaymentBadges
+                                            operation={controller.operation}
+                                        />
+                                    )}
                             </>
                         }
                         subtitle={null}
@@ -153,6 +165,11 @@ export function WorkspaceFulfillmentTask({
                                 onTaskCompleted(item.workItemId)
                             }
                         />
+                        {controller.operation && (
+                            <FulfillmentPaymentLink
+                                operation={controller.operation}
+                            />
+                        )}
                     </WorkspaceTaskIdentityHeader>
                 )
             }
@@ -205,7 +222,7 @@ export function WorkspaceFulfillmentTask({
                     onRetry={() => void controller.queueQuery.refetch()}
                 />
             ) : (
-                <div className="space-y-5">
+                <div className="flex min-h-0 flex-1 flex-col gap-5">
                     <FulfillmentOperationsWorkspace
                         controller={controller}
                         headerDescription="当前任务"
