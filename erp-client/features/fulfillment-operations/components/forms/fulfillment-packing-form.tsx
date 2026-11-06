@@ -39,6 +39,7 @@ import {
 import { CARRIER_OPTIONS } from "@/lib/business-options"
 import { compactFixed, compareDecimal } from "@/lib/fixed-decimal"
 import { FulfillmentPackageSplit } from "./fulfillment-package-split"
+import { FulfillmentPackageImport } from "./fulfillment-package-import"
 import {
     allocationBalance,
     automaticPackage,
@@ -366,6 +367,22 @@ export function FulfillmentPackingForm({
             className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 outline-none"
             aria-label="按地址登记发货包裹"
         >
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                <FulfillmentPackageImport
+                    operationId={operation.operationId}
+                    source={source}
+                    packing={packing}
+                    itemName={itemName}
+                    unit={unit}
+                    disabled={disabled}
+                    onApply={(next) => {
+                        following.current.clear()
+                        setEditing(new Set())
+                        setSplitting(null)
+                        apply(next)
+                    }}
+                />
+            </div>
             {addressAction && (
                 <FulfillmentAddressDialog
                     key={`${addressAction.mode}-${addressAction.mode === "add" ? "new" : addressAction.destination.key}`}
