@@ -22,7 +22,6 @@ import { SessionHeader } from "@/features/customer-receivables/components/sessio
 import { SessionPool } from "@/features/customer-receivables/components/session-pool"
 import { ReceiptSessionFields } from "@/features/customer-receivables/components/receipt-session-fields"
 import { ReceiptAllocationTable } from "@/features/customer-receivables/components/receipt-allocation-table"
-import { ReceiptRegistrationSteps } from "./receipt-registration-steps"
 import { ReceiptSessionFooter } from "@/features/customer-receivables/components/receipt-session-footer"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
 import { CustomerReceiptSubmitConfirmDialog } from "@/features/customer-receivables/components/customer-receipt-submit-confirm-dialog"
@@ -65,8 +64,6 @@ export function AllocationSessionPanel({
     closeLabel?: string
 }) {
     const [attempted, setAttempted] = useState(false)
-    const [receiptStep, setReceiptStep] = useState<1 | 2>(1)
-    const [receiptAttempted, setReceiptAttempted] = useState(false)
     const {
         form,
         isReceipt,
@@ -149,45 +146,20 @@ export function AllocationSessionPanel({
             target?.focus({ preventScroll: true })
         })
     }
-    const showReceiptStep = (step: 1 | 2) => {
-        setReceiptStep(step)
-        focusTarget(
-            step === 1
-                ? "customer-receivables-session-fact-title"
-                : "customer-receivables-session-allocations-title",
-        )
-    }
     const locateIssue = (issue: ValidationIssue) => {
         if (!issue.targetId) return
-        if (receiptFactIssues.some((item) => item.id === issue.id)) {
-            setReceiptAttempted(true)
-            setReceiptStep(1)
-        }
         focusTarget(issue.targetId)
-    }
-    const nextReceiptStep = () => {
-        if (editingDisabled) return
-        setReceiptAttempted(true)
-        if (receiptFactIssues.length > 0) {
-            void form.validateAllFields("submit")
-            locateIssue(receiptFactIssues[0])
-            return
-        }
-        showReceiptStep(2)
     }
     const requestSubmit = () => {
         if (editingDisabled) return
-        if (isReceipt && receiptStep === 1) {
-            nextReceiptStep()
-            return
-        }
         setAttempted(true)
-        if (isReceipt && receiptFactIssues.length > 0) {
-            locateIssue(receiptFactIssues[0])
-            return
-        }
         if (canSubmit) void form.handleSubmit()
-        else void form.validateAllFields("submit")
+        else {
+            void form.validateAllFields("submit")
+            if (issues.length > 0 && issues[0]?.targetId) {
+                locateIssue(issues[0])
+            }
+        }
     }
     const FormRoot = isReceipt ? "form" : "div"
     const submitAction = canOperate ? (
@@ -232,7 +204,9 @@ export function AllocationSessionPanel({
         >
             <div
                 className={
-                    isReceipt ? "flex min-w-0 flex-1 flex-col gap-6" : "min-w-0"
+                    isReceipt
+                        ? "flex w-full min-w-0 flex-1 flex-col gap-6"
+                        : "min-w-0"
                 }
             >
                 <div
@@ -254,9 +228,6 @@ export function AllocationSessionPanel({
                         }
                     />
 
-                    {isReceipt ? (
-                        <ReceiptRegistrationSteps step={receiptStep} />
-                    ) : null}
                     {result ? (
                         <FormalActionResult
                             status={
@@ -323,93 +294,66 @@ export function AllocationSessionPanel({
                     ) : null}
 
                     {isReceipt ? (
-                        <div hidden={receiptStep !== 1} className="space-y-4">
-                            <ReceiptSessionFields
-                                form={form}
-                                receiptId={session.existingFactId}
-                                unsavedFileCount={
-                                    session.fact.receiptFileNames?.length ?? 0
-                                }
-                                existing={existing}
-                                locked={locked || editingDisabled}
-                            />
-                            <ValidationSummary
-                                id="customer-receivables-session-fact-validation"
-                                issues={
-                                    receiptAttempted ? receiptFactIssues : []
-                                }
-                                title="请补全到账信息"
-                                onLocate={locateIssue}
-                            />
-                        </div>
-                    ) : (
-                        <div className="grid gap-4 lg:grid-cols-2">
-                            <SessionFactFields
-                                form={form}
-                                isReceipt={isReceipt}
-                                existing={existing}
-                                locked={locked || editingDisabled}
-                            />
-                            <SessionPool
-                                session={session}
-                                allocations={allocations}
-                                disabled={
-                                    !canOperate ||
-                                    session.status === "posted" ||
-                                    postedLocally
-                                }
-                                onAdd={addFromPool}
-                            />
-                        </div>
-                    )}
-
-                    {removedLine && (!isReceipt || receiptStep === 2) ? (
-                        <div
-                            role="status"
-                            className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
-                        >
-                            <span>已移除 {removedLine.line.label}</span>
-                            {canOperate && (
-                                <Button
-                                    id="customer-receivables-session-undo-remove"
-                                    type="button"
-                                    variant="link"
-                                    size="sm"
-                                    onClick={undoRemoveLine}
-                                    disabled={
-                                        locked ||
-                                        !canOperate ||
-                                        saveMutation.isPending ||
-                                        postMutation.isPending
-                                    }
-                                >
-                                    撤销
-                                </Button>
-                            )}
-                        </div>
-                    ) : null}
-                    {isReceipt ? (
-                        receiptStep === 2 ? (
-                            <>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                                    <span className="text-muted-foreground">
-                                        到账金额
-                                    </span>
-                                    <MoneyValue
-                                        value={factAmountStr}
-                                        className="font-semibold"
+                        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+                            {/* 左侧：回款事实与凭证（宽屏下固定吸顶） */}
+                            <div className="flex flex-col gap-4 lg:col-span-5 xl:col-span-4 lg:sticky lg:top-4">
+                                <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
+                                    <div className="flex items-center justify-between border-b border-border pb-3">
+                                        <h2 className="text-base font-semibold text-foreground">
+                                            到账信息
+                                        </h2>
+                                        <span className="text-xs text-muted-foreground">
+                                            必填项已标注 *
+                                        </span>
+                                    </div>
+                                    <ReceiptSessionFields
+                                        form={form}
+                                        receiptId={session.existingFactId}
+                                        unsavedFileCount={
+                                            session.fact.receiptFileNames?.length ?? 0
+                                        }
+                                        existing={existing}
+                                        locked={locked || editingDisabled}
                                     />
-                                    <Button
-                                        id="customer-receivables-session-edit-fact"
-                                        type="button"
-                                        size="sm"
-                                        variant="link"
-                                        disabled={editingDisabled}
-                                        onClick={() => showReceiptStep(1)}
-                                    >
-                                        修改到账信息
-                                    </Button>
+                                    {attempted && receiptFactIssues.length > 0 ? (
+                                        <ValidationSummary
+                                            id="customer-receivables-session-fact-validation"
+                                            issues={receiptFactIssues}
+                                            title="请补全到账信息"
+                                            onLocate={locateIssue}
+                                        />
+                                    ) : null}
                                 </div>
+                            </div>
+
+                            {/* 右侧：核销应收单据明细与审批 */}
+                            <div className="flex min-w-0 flex-col gap-6 lg:col-span-7 xl:col-span-8">
+                                {removedLine ? (
+                                    <div
+                                        role="status"
+                                        className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
+                                    >
+                                        <span>已移除 {removedLine.line.label}</span>
+                                        {canOperate && (
+                                            <Button
+                                                id="customer-receivables-session-undo-remove"
+                                                type="button"
+                                                variant="link"
+                                                size="sm"
+                                                onClick={undoRemoveLine}
+                                                disabled={
+                                                    locked ||
+                                                    !canOperate ||
+                                                    saveMutation.isPending ||
+                                                    postMutation.isPending
+                                                }
+                                            >
+                                                撤销
+                                            </Button>
+                                        )}
+                                    </div>
+                                ) : null}
+
                                 <ReceiptAllocationTable
                                     session={session}
                                     allocations={allocations}
@@ -422,189 +366,207 @@ export function AllocationSessionPanel({
                                     onAmountChange={updateAmount}
                                     onFill={fillLineAmount}
                                 />
-                            </>
-                        ) : null
-                    ) : (
-                        <AllocationWorkspace
-                            id="customer-receivables-session-allocations"
-                            title="本次分配"
-                            description="拟分配金额仅供参考，以提交后结果为准。"
-                            summary={{
-                                totalToAllocate: (
-                                    <MoneyValue
-                                        value={factAmountStr || "0"}
-                                        taxBasis="gross"
+
+                                {!submitted && receiptApproval ? (
+                                    <CustomerReceiptApprovalArea
+                                        phase={receiptPhase}
+                                        approval={receiptApproval}
+                                        documentId={session.existingFactId}
                                     />
-                                ),
-                                allocated: (
-                                    <span>
-                                        <MoneyValue
-                                            value={money(proposedAllocated)}
-                                            taxBasis="gross"
-                                        />
-                                        <span className="ml-1 text-xs text-muted-foreground">
-                                            拟
-                                        </span>
-                                    </span>
-                                ),
-                                difference: (
-                                    <span>
-                                        <MoneyValue
-                                            value={money(proposedUnallocated)}
-                                            taxBasis="gross"
-                                        />
-                                        <span className="ml-1 text-xs text-muted-foreground">
-                                            拟未分配
-                                        </span>
-                                    </span>
-                                ),
-                            }}
-                            allocations={allocations}
-                            getRowId={(a) => a.lineKey}
-                            disabled={
-                                !canOperate ||
-                                session.status === "posted" ||
-                                postedLocally
-                            }
-                            addLabel="从池中选择"
-                            addDisabledReason="请从左侧同主体池加入目标"
-                            onRemoveAllocation={(a) => removeLine(a.lineKey)}
-                            columns={[
-                                {
-                                    id: "target",
-                                    header: "目标",
-                                    renderValue: ({ item }) => (
-                                        <div>
-                                            <div className="text-sm">
-                                                {item.label}
-                                            </div>
-                                            <div className="num text-xs text-muted-foreground">
-                                                {item.salesOrderNo}
-                                            </div>
-                                        </div>
-                                    ),
-                                },
-                                {
-                                    id: "open",
-                                    header: "开放余额",
-                                    align: "end",
-                                    numeric: true,
-                                    renderValue: ({ item }) => (
-                                        <MoneyValue
-                                            value={item.openAmount}
-                                            taxBasis="gross"
-                                        />
-                                    ),
-                                },
-                                {
-                                    id: "amount",
-                                    header: "分配金额",
-                                    required: true,
-                                    align: "end",
-                                    numeric: true,
-                                    renderValue: ({ item }) => (
-                                        <MoneyValue
-                                            value={item.amount || "0"}
-                                        />
-                                    ),
-                                    renderEditor: ({ item }) => (
-                                        <div className="flex items-center justify-end gap-1">
-                                            <MoneyInput
-                                                id={`customer-receivables-session-allocation-${toAutomationIdSegment(item.lineKey)}-amount`}
-                                                className="num text-right"
-                                                value={item.amount}
-                                                inputMode="decimal"
-                                                aria-label={`${item.label} 分配金额`}
-                                                onChange={(e) =>
-                                                    updateAmount(
-                                                        item.lineKey,
-                                                        e.target.value,
-                                                    )
-                                                }
-                                            />
-                                            <Button
-                                                id={`customer-receivables-session-allocation-${toAutomationIdSegment(item.lineKey)}-fill`}
-                                                type="button"
-                                                size="xs"
-                                                variant="ghost"
-                                                onClick={() =>
-                                                    fillLineAmount(item)
-                                                }
-                                            >
-                                                填满
-                                            </Button>
-                                        </div>
-                                    ),
-                                },
-                            ]}
-                            statusNotice={
-                                issues.length > 0 ? (
-                                    <ValidationSummary
-                                        issues={issues}
-                                        title="分配校验"
-                                    />
-                                ) : (
-                                    <p className="text-xs text-muted-foreground">
-                                        {session.submitPolicy.label}
-                                    </p>
-                                )
-                            }
-                            actions={actions}
-                        />
-                    )}
-                    {isReceipt &&
-                    receiptStep === 2 &&
-                    !submitted &&
-                    receiptApproval ? (
-                        <CustomerReceiptApprovalArea
-                            phase={receiptPhase}
-                            approval={receiptApproval}
-                            documentId={session.existingFactId}
-                        />
-                    ) : null}
-                </div>
-                {isReceipt ? (
-                    receiptStep === 1 ? (
-                        <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
-                            {saveAction}
-                            <Button
-                                id="customer-receivables-session-next"
-                                type="submit"
-                                disabled={editingDisabled}
-                            >
-                                下一步：核销应收
-                            </Button>
+                                ) : null}
+                            </div>
                         </div>
                     ) : (
-                        <ReceiptSessionFooter
-                            submitHint={
-                                attempted && !submitted && !canSubmit
-                                    ? (issues[0]?.message ??
-                                      "请填写大于零的到账金额。")
-                                    : undefined
-                            }
-                            allocationCount={allocations.length}
-                            amount={factAmountStr}
-                            allocated={proposedAllocated}
-                            unallocated={proposedUnallocated}
-                            existing={existing}
-                            submitted={submitted}
-                            actions={
-                                <>
-                                    <Button
-                                        id="customer-receivables-session-previous"
-                                        type="button"
-                                        variant="ghost"
-                                        disabled={editingDisabled}
-                                        onClick={() => showReceiptStep(1)}
-                                    >
-                                        上一步
-                                    </Button>
-                                    {actions}
-                                </>
-                            }
-                        />
-                    )
+                        <>
+                            <div className="grid gap-4 lg:grid-cols-2">
+                                <SessionFactFields
+                                    form={form}
+                                    isReceipt={isReceipt}
+                                    existing={existing}
+                                    locked={locked || editingDisabled}
+                                />
+                                <SessionPool
+                                    session={session}
+                                    allocations={allocations}
+                                    disabled={
+                                        !canOperate ||
+                                        session.status === "posted" ||
+                                        postedLocally
+                                    }
+                                    onAdd={addFromPool}
+                                />
+                            </div>
+
+                            {removedLine ? (
+                                <div
+                                    role="status"
+                                    className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
+                                >
+                                    <span>已移除 {removedLine.line.label}</span>
+                                    {canOperate && (
+                                        <Button
+                                            id="customer-receivables-session-undo-remove"
+                                            type="button"
+                                            variant="link"
+                                            size="sm"
+                                            onClick={undoRemoveLine}
+                                            disabled={
+                                                locked ||
+                                                !canOperate ||
+                                                saveMutation.isPending ||
+                                                postMutation.isPending
+                                            }
+                                        >
+                                            撤销
+                                        </Button>
+                                    )}
+                                </div>
+                            ) : null}
+
+                            <AllocationWorkspace
+                                id="customer-receivables-session-allocations"
+                                title="本次分配"
+                                description="拟分配金额仅供参考，以提交后结果为准。"
+                                summary={{
+                                    totalToAllocate: (
+                                        <MoneyValue
+                                            value={factAmountStr || "0"}
+                                            taxBasis="gross"
+                                        />
+                                    ),
+                                    allocated: (
+                                        <span>
+                                            <MoneyValue
+                                                value={money(proposedAllocated)}
+                                                taxBasis="gross"
+                                            />
+                                            <span className="ml-1 text-xs text-muted-foreground">
+                                                拟
+                                            </span>
+                                        </span>
+                                    ),
+                                    difference: (
+                                        <span>
+                                            <MoneyValue
+                                                value={money(proposedUnallocated)}
+                                                taxBasis="gross"
+                                            />
+                                            <span className="ml-1 text-xs text-muted-foreground">
+                                                拟未分配
+                                            </span>
+                                        </span>
+                                    ),
+                                }}
+                                allocations={allocations}
+                                getRowId={(a) => a.lineKey}
+                                disabled={
+                                    !canOperate ||
+                                    session.status === "posted" ||
+                                    postedLocally
+                                }
+                                addLabel="从池中选择"
+                                addDisabledReason="请从左侧同主体池加入目标"
+                                onRemoveAllocation={(a) => removeLine(a.lineKey)}
+                                columns={[
+                                    {
+                                        id: "target",
+                                        header: "目标",
+                                        renderValue: ({ item }) => (
+                                            <div>
+                                                <div className="text-sm">
+                                                    {item.label}
+                                                </div>
+                                                <div className="num text-xs text-muted-foreground">
+                                                    {item.salesOrderNo}
+                                                </div>
+                                            </div>
+                                        ),
+                                    },
+                                    {
+                                        id: "open",
+                                        header: "开放余额",
+                                        align: "end",
+                                        numeric: true,
+                                        renderValue: ({ item }) => (
+                                            <MoneyValue
+                                                value={item.openAmount}
+                                                taxBasis="gross"
+                                            />
+                                        ),
+                                    },
+                                    {
+                                        id: "amount",
+                                        header: "分配金额",
+                                        required: true,
+                                        align: "end",
+                                        numeric: true,
+                                        renderValue: ({ item }) => (
+                                            <MoneyValue
+                                                value={item.amount || "0"}
+                                            />
+                                        ),
+                                        renderEditor: ({ item }) => (
+                                            <div className="flex items-center justify-end gap-1">
+                                                <MoneyInput
+                                                    id={`customer-receivables-session-allocation-${toAutomationIdSegment(item.lineKey)}-amount`}
+                                                    className="num text-right"
+                                                    value={item.amount}
+                                                    inputMode="decimal"
+                                                    aria-label={`${item.label} 分配金额`}
+                                                    onChange={(e) =>
+                                                        updateAmount(
+                                                            item.lineKey,
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                <Button
+                                                    id={`customer-receivables-session-allocation-${toAutomationIdSegment(item.lineKey)}-fill`}
+                                                    type="button"
+                                                    size="xs"
+                                                    variant="ghost"
+                                                    onClick={() =>
+                                                        fillLineAmount(item)
+                                                    }
+                                                >
+                                                    填满
+                                                </Button>
+                                            </div>
+                                        ),
+                                    },
+                                ]}
+                                statusNotice={
+                                    issues.length > 0 ? (
+                                        <ValidationSummary
+                                            issues={issues}
+                                            title="分配校验"
+                                        />
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            {session.submitPolicy.label}
+                                        </p>
+                                    )
+                                }
+                                actions={actions}
+                            />
+                        </>
+                    )}
+                </div>
+                {isReceipt ? (
+                    <ReceiptSessionFooter
+                        submitHint={
+                            attempted && !submitted && !canSubmit
+                                ? (issues[0]?.message ??
+                                  "请填写大于零的到账金额。")
+                                : undefined
+                        }
+                        amount={factAmountStr}
+                        allocated={proposedAllocated}
+                        unallocated={proposedUnallocated}
+                        allocationCount={allocations.length}
+                        submitted={submitted}
+                        actions={actions}
+                    />
                 ) : null}
             </div>
 

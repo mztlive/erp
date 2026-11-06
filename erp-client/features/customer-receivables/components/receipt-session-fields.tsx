@@ -5,7 +5,7 @@ import { toFieldErrors } from "@/components/form"
 import { ReceiptFiles } from "./receipt-files"
 import type { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
 
-/** 回款登记第一步；切换步骤时保留表单和凭证。 */
+/** 回款登记到账事实与凭证录入表单。 */
 export function ReceiptSessionFields({
     form,
     existing,
@@ -22,16 +22,16 @@ export function ReceiptSessionFields({
     return (
         <section
             aria-labelledby="customer-receivables-session-fact-title"
-            className="max-w-4xl space-y-5"
+            className="space-y-4"
         >
             <h2
                 id="customer-receivables-session-fact-title"
                 tabIndex={-1}
-                className="text-base font-semibold"
+                className="sr-only"
             >
                 填写到账信息
             </h2>
-            <div className="grid items-start gap-x-6 gap-y-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-4">
                 <form.AppField
                     name="amount"
                     children={(field) => (
@@ -45,7 +45,7 @@ export function ReceiptSessionFields({
                             }
                             required
                             inputMode="decimal"
-                            inputClassName="num"
+                            inputClassName="num h-control-lg text-base font-semibold"
                             placeholder="请输入到账金额"
                             disabled={locked}
                         />
@@ -56,11 +56,11 @@ export function ReceiptSessionFields({
                     children={(field) => (
                         <field.DateTimeField
                             id="customer-receivables-session-received-at"
-                            label="实际到账时间"
+                            label="到账时间（北京时间）"
                             required
+                            clearable={false}
                             timeZone="Asia/Shanghai"
                             showTimeZone={false}
-                            description="北京时间（UTC+8）"
                             disabled={locked}
                         />
                     )}
@@ -72,6 +72,7 @@ export function ReceiptSessionFields({
                             id="customer-receivables-session-bank-reference"
                             label="银行流水 / 回单号（选填）"
                             placeholder="填写银行流水或回单引用"
+                            inputClassName="h-control-lg"
                             disabled={locked}
                         />
                     )}

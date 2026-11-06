@@ -1,16 +1,15 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { MoneyValue, StickyTotalBar } from "@/components/business"
+import { MoneyValue } from "@/components/business"
 import { compareAmounts, subtractAmounts } from "../lib/allocation-math"
 
-/** 回款登记第二步的金额核对栏，窄窗口保留全部操作。 */
+/** 左右分栏工作区底部金额核对栏：集中展示到账金额、本次核销与未核销余额，保留全部操作。 */
 export function ReceiptSessionFooter({
     amount,
     allocated,
     unallocated,
     allocationCount,
-    existing,
     submitted,
     submitHint,
     actions,
@@ -18,33 +17,46 @@ export function ReceiptSessionFooter({
     amount: string
     allocated: string
     unallocated: string
-    allocationCount: number
-    existing: boolean
+    allocationCount?: number
     submitted: boolean
     submitHint?: string
     actions: ReactNode
 }) {
     const overAllocated = compareAmounts(allocated, amount) > 0
     return (
-        <StickyTotalBar
-            items={[
-                {
-                    id: "receipt",
-                    label: existing ? "原单到账金额" : "到账金额",
-                    value: <MoneyValue value={amount || "0"} />,
-                },
-                {
-                    id: "allocated",
-                    label: "本次核销",
-                    value: <MoneyValue value={allocated} />,
-                },
-                {
-                    id: "unallocated",
-                    label: overAllocated ? "超出回款金额" : "剩余未核销",
-                    value: (
+        <aside
+            aria-label="本次回款"
+            className="sticky bottom-0 z-20 rounded-lg border border-border bg-card px-5 py-4 shadow-sm"
+        >
+            <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
+                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                    <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                            到账金额
+                        </p>
+                        <MoneyValue
+                            value={amount || "0"}
+                            className="text-2xl font-semibold"
+                        />
+                    </div>
+                    <div className="space-y-1 border-l pl-8">
+                        <p className="text-xs text-muted-foreground">
+                            本次核销
+                        </p>
+                        <MoneyValue
+                            value={allocated}
+                            className="text-2xl font-semibold"
+                        />
+                    </div>
+                    <div className="space-y-1 border-l pl-8">
+                        <p className="text-xs text-muted-foreground">
+                            {overAllocated ? "超出回款金额" : "未核销金额"}
+                        </p>
                         <MoneyValue
                             className={
-                                overAllocated ? "text-destructive" : undefined
+                                overAllocated
+                                    ? "text-lg font-semibold text-destructive"
+                                    : "text-lg font-medium"
                             }
                             value={
                                 overAllocated
@@ -52,14 +64,27 @@ export function ReceiptSessionFooter({
                                     : unallocated
                             }
                         />
-                    ),
-                },
-            ]}
-            note={
-                submitHint ??
-                `本次 ${allocationCount} 笔应收 · ${submitted ? "已提交，核销进度以审批结果为准" : "审批通过后计入已收并完成核销"}`
-            }
-            actions={actions}
-        />
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                    {actions}
+                </div>
+            </div>
+            <p
+                role={submitHint ? "status" : undefined}
+                className={
+                    submitHint || overAllocated
+                        ? "mt-3 text-xs text-destructive"
+                        : "mt-3 text-xs text-muted-foreground"
+                }
+            >
+                {submitHint ??
+                    (submitted
+                        ? "已提交，核销进度以审批结果为准。"
+                        : allocationCount !== undefined
+                          ? `本次已选 ${allocationCount} 笔应收 · 审批通过后计入已收并完成核销。`
+                          : "审批通过后计入已收并完成核销。")}
+            </p>
+        </aside>
     )
 }
