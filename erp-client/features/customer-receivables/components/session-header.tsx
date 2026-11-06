@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeftIcon, LockKeyholeIcon, XIcon } from "lucide-react"
+import { LockKeyholeIcon, XIcon } from "lucide-react"
 
-import { PageHeader, PageActions } from "@/components/business"
+import { PageHeader } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -41,29 +41,7 @@ export function SessionHeader({
         return (
             <div className="space-y-3 border-b border-border pb-4">
                 {showClose ? (
-                    <PageHeader
-                        title={title}
-                        status={status}
-                        actions={
-                            <PageActions
-                                actions={[
-                                    {
-                                        actionKey: "back",
-                                        id: "customer-receivables-session-close",
-                                        label:
-                                            session.returnContext?.from ===
-                                            "W05"
-                                                ? "返回销售单"
-                                                : "返回列表",
-                                        icon: ArrowLeftIcon,
-                                        variant: "outline",
-                                        disabled: closeDisabled,
-                                        onClick: onRequestClose,
-                                    },
-                                ]}
-                            />
-                        }
-                    />
+                    <PageHeader title={title} status={status} />
                 ) : (
                     <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-base font-semibold">{title}</h2>
@@ -129,6 +107,7 @@ export function SessionHeader({
                         type="button"
                         variant="outline"
                         size="sm"
+                        disabled={closeDisabled}
                         onClick={onRequestClose}
                     >
                         <XIcon data-icon="inline-start" aria-hidden="true" />
