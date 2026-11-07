@@ -1,26 +1,14 @@
 "use client"
 
-import { financialDraftEditHref } from "@/features/financial-draft-edit/types"
-import { FinancialDraftEditButton } from "@/features/financial-draft-edit/components/financial-draft-edit-button"
-import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
-import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
-import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
-import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
-import { RuntimeSummary } from "@/features/approval-workflow/components/runtime-summary"
-import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
+import { FinancialApprovalArea } from "@/features/financial-draft-edit/components/financial-approval-area"
 import {
-    useApprovalHistoryInfiniteQuery,
-    useRecoveryOptionsQuery,
-} from "@/features/approval-workflow/queries"
+    RECEIPT_REVERSAL_DOCUMENT_TYPE,
+    type ReceiptReversalApprovalPhase,
+} from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
     ApprovalCommandView,
     DocumentApprovalView,
 } from "@/features/approval-workflow/types"
-import {
-    RECEIPT_REVERSAL_DOCUMENT_TYPE,
-    mergeReceiptReversalAllowedActions,
-    type ReceiptReversalApprovalPhase,
-} from "@/features/customer-receivables/lib/receipt-reversal-approval"
 
 /**
  * 回款冲正单审批区。
@@ -47,110 +35,21 @@ export function ReceiptReversalApprovalArea({
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
 }) {
-    const instanceId = approval?.instance?.id
-    const recoveryQuery = useRecoveryOptionsQuery(
-        instanceId,
-        phase === "runtime" && Boolean(instanceId),
-    )
-    const historyQuery = useApprovalHistoryInfiniteQuery(
-        { instanceId: instanceId ?? "" },
-        phase === "runtime" && Boolean(instanceId),
-    )
-    const historyItems = historyQuery.data
-        ? historyQuery.data.pages.flatMap((page) => page.items)
-        : (approval?.recentHistory ?? [])
-    const allowedActions = mergeReceiptReversalAllowedActions(
-        approval?.allowedActions,
-        workItemAllowedActions,
-    )
-
-    if (phase === "draft") {
-        return (
-            <div className="space-y-3">
-                <DefinitionBindingCard definition={approval?.definition} />
-                {documentId ? (
-                    <FinancialDraftEditButton
-                        kind="receipt_reversal"
-                        documentId={documentId}
-                    />
-                ) : null}
-                {documentId ? (
-                    <ApprovalActionBar
-                        id="customer-receivables-reversal-approval-action-bar"
-                        allowedActions={allowedActions}
-                        definition={approval?.definition}
-                        documentType={RECEIPT_REVERSAL_DOCUMENT_TYPE}
-                        documentId={documentId}
-                        documentVersion={documentVersion}
-                        editDocumentHref={
-                            documentId
-                                ? financialDraftEditHref(
-                                      "receipt_reversal",
-                                      documentId,
-                                  )
-                                : undefined
-                        }
-                    />
-                ) : null}
-            </div>
-        )
-    }
-
-    if (phase === "confirm") {
-        return <SubmissionRouteConfirmation definition={approval?.definition} />
-    }
-
     return (
-        <div className="space-y-3">
-            <ApprovalQueryFeedback
-                surface="receipt-reversal-approval-area"
-                instanceId={instanceId}
-                historyQuery={historyQuery}
-                recoveryQuery={recoveryQuery}
-            />
-            <RuntimeSummary instance={approval?.instance} />
-            {documentId ? (
-                <FinancialDraftEditButton
-                    kind="receipt_reversal"
-                    documentId={documentId}
-                />
-            ) : null}
-            <ExecutionHistory
-                id="customer-receivables-reversal-approval-history"
-                items={historyItems}
-                hasMore={historyQuery.hasNextPage}
-                loadingMore={historyQuery.isFetchingNextPage}
-                onLoadMore={
-                    historyQuery.hasNextPage
-                        ? () => {
-                              void historyQuery.fetchNextPage()
-                          }
-                        : undefined
-                }
-            />
-            <ApprovalActionBar
-                id="customer-receivables-reversal-approval-action-bar"
-                allowedActions={allowedActions}
-                recoveryOptions={
-                    recoveryQuery.isError
-                        ? []
-                        : (recoveryQuery.data?.actions ?? [])
-                }
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                instance={approval?.instance}
-                definition={approval?.definition}
-                documentType={RECEIPT_REVERSAL_DOCUMENT_TYPE}
-                documentId={documentId}
-                documentVersion={documentVersion}
-                editDocumentHref={
-                    documentId
-                        ? financialDraftEditHref("receipt_reversal", documentId)
-                        : undefined
-                }
-                afterCancelStatusLabel="草稿"
-                onDecisionApplied={onDecisionApplied}
-            />
-        </div>
+        <FinancialApprovalArea
+            kind="receipt_reversal"
+            documentType={RECEIPT_REVERSAL_DOCUMENT_TYPE}
+            phase={phase}
+            approval={approval}
+            documentId={documentId}
+            documentVersion={documentVersion}
+            workItemId={workItemId}
+            expectedTaskVersion={expectedTaskVersion}
+            workItemAllowedActions={workItemAllowedActions}
+            onDecisionApplied={onDecisionApplied}
+            surface="receipt-reversal-approval-area"
+            historyId="customer-receivables-reversal-approval-history"
+            actionBarId="customer-receivables-reversal-approval-action-bar"
+        />
     )
 }

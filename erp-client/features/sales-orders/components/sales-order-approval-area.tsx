@@ -10,12 +10,12 @@ import {
     useApprovalHistoryInfiniteQuery,
     useRecoveryOptionsQuery,
 } from "@/features/approval-workflow/queries"
-import type {
-    ApprovalCommandView,
-    DocumentApprovalView,
+import {
+    mergeDocumentAllowedActions,
+    type ApprovalCommandView,
+    type DocumentApprovalView,
 } from "@/features/approval-workflow/types"
 import {
-    mergeSalesOrderAllowedActions,
     SALES_ORDER_DOCUMENT_TYPE,
     type SalesOrderApprovalPhase,
 } from "@/features/sales-orders/lib/sales-order-approval"
@@ -55,7 +55,7 @@ export function SalesOrderApprovalArea({
     const historyItems = historyQuery.data
         ? historyQuery.data.pages.flatMap((page) => page.items)
         : (approval?.recentHistory ?? [])
-    const allowedActions = mergeSalesOrderAllowedActions(
+    const allowedActions = mergeDocumentAllowedActions(
         approval?.allowedActions,
         workItemAllowedActions,
     )

@@ -524,6 +524,21 @@ export const filterAllowedActions = (
     )
 
 /**
+ * 合并单据与当前任务的服务端动作白名单。只做并集过滤，不补默认动作。
+ *
+ * @param documentActions 单据 `allowed_actions`。
+ * @param workItemActions 当前任务 `allowed_actions`。
+ */
+export const mergeDocumentAllowedActions = (
+    documentActions?: readonly ApprovalAllowedAction[] | readonly string[],
+    workItemActions?: readonly string[],
+): readonly ApprovalAllowedAction[] =>
+    filterAllowedActions([
+        ...(documentActions ?? []),
+        ...(workItemActions ?? []),
+    ])
+
+/**
  * 只保留服务端恢复选项。人员失效只给恢复，其它 blocker 只给受阻取消。
  */
 export const filterRecoveryOptions = (

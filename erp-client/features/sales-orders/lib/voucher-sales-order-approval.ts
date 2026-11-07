@@ -1,10 +1,6 @@
-import {
-    mergeSalesOrderAllowedActions,
-    type SalesOrderApprovalPhase,
-} from "@/features/sales-orders/lib/sales-order-approval"
+import type { SalesOrderApprovalPhase } from "@/features/sales-orders/lib/sales-order-approval"
 import {
     mapDocumentApprovalViewDto,
-    type ApprovalAllowedAction,
     type DocumentApprovalView,
     type DocumentApprovalViewDto,
 } from "@/features/approval-workflow/types"
@@ -13,18 +9,6 @@ import {
 export const VOUCHER_SALES_ORDER_DOCUMENT_TYPE = "VoucherSalesOrder" as const
 
 export type VoucherSalesOrderApprovalPhase = SalesOrderApprovalPhase
-
-/**
- * 合并卡券销售单与当前任务的服务端动作白名单。只做并集过滤，不补默认动作。
- *
- * @param documentActions 单据 `allowed_actions`。
- * @param workItemActions 当前任务 `allowed_actions`。
- */
-export const mergeVoucherSalesOrderAllowedActions = (
-    documentActions?: readonly ApprovalAllowedAction[] | readonly string[],
-    workItemActions?: readonly string[],
-): readonly ApprovalAllowedAction[] =>
-    mergeSalesOrderAllowedActions(documentActions, workItemActions)
 
 /**
  * 把卡券销售单详情上的只读审批结构转成通用审批区投影。

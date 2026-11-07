@@ -14,7 +14,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { listFilterText } from "@/lib/ui-text"
 
-export const listWorkspaceFilterBarClassName =
+const listWorkspaceFilterBarClassName =
     "gap-4 [&_[data-slot=list-toolbar-filters]]:self-start [&_[data-slot=list-toolbar-secondary]]:w-full [&_[data-slot=list-toolbar-secondary]]:flex-col [&_[data-slot=list-toolbar-secondary]]:items-stretch [&_[data-slot=list-toolbar-secondary]]:gap-0 max-sm:[&_[data-slot=list-toolbar-primary]]:sticky max-sm:[&_[data-slot=list-toolbar-primary]]:top-0 max-sm:[&_[data-slot=list-toolbar-primary]]:z-10 max-sm:[&_[data-slot=list-toolbar-primary]]:bg-card max-sm:[&_[data-slot=list-toolbar-primary]]:pb-2 [&_[data-slot=list-toolbar-query-tools]]:sm:flex-wrap [&_[data-slot=list-toolbar-search]]:lg:w-96"
 
 export type ListWorkspaceFilterChip = {

@@ -9,6 +9,7 @@ import { ChangeOrderPendingCard } from "@/features/approval-workflow/components/
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { mergeDocumentAllowedActions } from "@/features/approval-workflow/types"
 import { PurchaseChangeOrderApprovalArea } from "@/features/purchase-orders/components/purchase-change-order-approval-area"
 import { PurchaseChangeCoverageEffects } from "./purchase-change-coverage-effects"
 import { PurchaseChangeOrderEditDialog } from "./purchase-change-order-edit-dialog"
@@ -18,7 +19,6 @@ import { getErrorPresentation } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import {
-    mergePurchaseChangeOrderAllowedActions,
     PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE,
     purchaseChangeOrderApprovalPhase,
 } from "@/features/purchase-orders/lib/purchase-change-order-approval"
@@ -68,7 +68,7 @@ export function PurchaseChangeOrderApprovalSection({
             changeOrder.approval,
             changeOrder.statusCode,
         ) === "draft" &&
-        mergePurchaseChangeOrderAllowedActions(
+        mergeDocumentAllowedActions(
             changeOrder.approval?.allowedActions,
             workItemAllowedActions,
         ).includes("SUBMIT"),
@@ -108,7 +108,7 @@ export function PurchaseChangeOrderApprovalSection({
         changeOrder.approval,
         changeOrder.statusCode,
     )
-    const allowedActions = mergePurchaseChangeOrderAllowedActions(
+    const allowedActions = mergeDocumentAllowedActions(
         changeOrder.approval?.allowedActions,
         workItemAllowedActions,
     )

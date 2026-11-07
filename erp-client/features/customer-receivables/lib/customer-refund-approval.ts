@@ -1,7 +1,5 @@
 import {
-    filterAllowedActions,
     mapDocumentApprovalViewDto,
-    type ApprovalAllowedAction,
     type DocumentApprovalView,
     type DocumentApprovalViewDto,
 } from "@/features/approval-workflow/types"
@@ -98,21 +96,6 @@ export const customerRefundApprovalPhase = (
     approval?.instance || !isUnsubmittedCustomerRefundStatus(status)
         ? "runtime"
         : "draft"
-
-/**
- * 合并客户退款单与当前任务的服务端动作白名单。只做并集过滤，不补默认动作。
- *
- * @param documentActions 单据 `allowed_actions`。
- * @param workItemActions 当前任务 `allowed_actions`。
- */
-export const mergeCustomerRefundAllowedActions = (
-    documentActions?: readonly ApprovalAllowedAction[] | readonly string[],
-    workItemActions?: readonly string[],
-): readonly ApprovalAllowedAction[] =>
-    filterAllowedActions([
-        ...(documentActions ?? []),
-        ...(workItemActions ?? []),
-    ])
 
 /**
  * 把客户退款详情上的只读审批结构转成通用审批区投影。

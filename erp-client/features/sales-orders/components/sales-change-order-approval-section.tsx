@@ -11,11 +11,11 @@ import { ChangeOrderVoidButton } from "@/components/business/change-order-void-b
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { mergeDocumentAllowedActions } from "@/features/approval-workflow/types"
 import { useVoidSalesChangeOrderMutation } from "@/features/sales-orders/hooks/queries"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { SalesChangeOrderApprovalArea } from "@/features/sales-orders/components/sales-change-order-approval-area"
 import {
-    mergeSalesChangeOrderAllowedActions,
     SALES_CHANGE_ORDER_DOCUMENT_TYPE,
     salesChangeOrderApprovalPhase,
 } from "@/features/sales-orders/lib/sales-change-order-approval"
@@ -86,7 +86,7 @@ export function SalesChangeOrderApprovalSection({
         changeOrder.approval,
         changeOrder.statusCode,
     )
-    const allowedActions = mergeSalesChangeOrderAllowedActions(
+    const allowedActions = mergeDocumentAllowedActions(
         changeOrder.approval?.allowedActions,
         workItemAllowedActions,
     )

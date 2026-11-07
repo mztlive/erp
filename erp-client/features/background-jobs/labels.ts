@@ -1,4 +1,3 @@
-import type { BackgroundJobStatus } from "@/components/business"
 import type {
     BackgroundJobView,
     JobStatus,
@@ -90,23 +89,6 @@ export function backgroundJobIdentity(
     return {
         title: backgroundJobDomainLabel(job.domain_job_type, job.job_type),
         number: job.job_no,
-    }
-}
-
-export function jobProgressStatus(status: JobStatus): BackgroundJobStatus {
-    switch (status) {
-        case "running":
-            return "running"
-        case "succeeded":
-            return "succeeded"
-        case "partially_succeeded":
-            return "partial"
-        case "failed":
-            return "failed"
-        case "cancelled":
-            return "frozen"
-        default:
-            return "queued"
     }
 }
 

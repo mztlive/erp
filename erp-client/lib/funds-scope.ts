@@ -43,21 +43,6 @@ export type FundsScopedResultWire<T> = Readonly<{
     ownership_basis: string
 }>
 
-/** 范围版本冲突（跨页或导出重验失败）；调用方须回到第一页重新查询。 */
-export function isScopeChangedError(error: unknown): boolean {
-    if (typeof error !== "object" || error === null) return false
-    const code =
-        "code" in error && typeof error.code === "string"
-            ? error.code
-            : undefined
-    if (code === "DATA_SCOPE_CHANGED") return true
-    const message =
-        "message" in error && typeof error.message === "string"
-            ? error.message
-            : ""
-    return message.includes("DATA_SCOPE_CHANGED")
-}
-
 /** URL 中的逗号分隔稳定 ID 列表；空值返回 undefined（参数缺省）。 */
 export function parseScopeIdList(raw: string | null): string | undefined {
     const value = raw?.trim()

@@ -6,7 +6,6 @@ import type {
     ConfigurationStatus,
     DefinitionStatus,
     DocumentType,
-    DraftSource,
 } from "./types"
 
 /** 合同 §4.3 单据类型中文名；目录优先使用服务端 document_type_label。 */
@@ -54,12 +53,6 @@ export const DEFINITION_STATUS_LABEL: Record<DefinitionStatus, string> = {
     DRAFT: "草稿",
     PUBLISHED: "已发布",
     RETIRED: "已退役",
-}
-
-/** 草稿来源中文。 */
-export const DRAFT_SOURCE_LABEL: Record<DraftSource, string> = {
-    EMPTY: "空白流程",
-    CURRENT_PUBLISHED: "复制当前已发布版本",
 }
 
 /**
@@ -160,11 +153,3 @@ export const REJECT_END_COPY =
     "任一节点驳回将结束本次审批，退回原提交人处理；填写重新提交说明后可重新发起审批。"
 
 export const rejectionPolicyCopy = (): string => REJECT_END_COPY
-
-/**
- * 把线性审批人显示名拼成发布预览路径。
- *
- * @param names 按顺序的审批人显示名
- */
-export const publishPathPreview = (names: readonly string[]): string =>
-    names.filter((name) => name.trim().length > 0).join(" → ")

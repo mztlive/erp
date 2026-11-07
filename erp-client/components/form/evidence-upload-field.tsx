@@ -1,15 +1,7 @@
 "use client"
 
-import { useFieldContext } from "@/components/form/form-context"
-import { toFieldErrors } from "@/components/form/utils"
-import {
-    Field,
-    FieldDescription,
-    FieldError,
-    FieldLabel,
-} from "@/components/ui/field"
+import { SingleFileField } from "@/components/form/single-file-field"
 import { fileUploadText } from "@/lib/ui-text"
-import { FileUpload } from "@/components/ui/file-upload"
 
 /** 业务凭证允许的文件类型；与服务端凭证校验一致。 */
 export const EVIDENCE_FILE_TYPES = [
@@ -40,50 +32,18 @@ export function EvidenceUploadField({
     required,
     id,
 }: EvidenceUploadFieldProps) {
-    const field = useFieldContext<File | null>()
-    const file = field.state.value
-    const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
-    const errors = toFieldErrors(field.state.meta.errors)
-    const resolvedId = id ?? field.name
-    const descriptionId = `${resolvedId}-description`
-    const errorId = `${resolvedId}-error`
-    const describedBy = [
-        description ? descriptionId : undefined,
-        isInvalid ? errorId : undefined,
-    ]
-        .filter(Boolean)
-        .join(" ")
-
     return (
-        <Field data-invalid={isInvalid || undefined}>
-            <FieldLabel htmlFor={`${resolvedId}-input`}>
-                {label}
-                {required ? <span className="text-destructive">*</span> : null}
-            </FieldLabel>
-            <FileUpload
-                selectedDescription={fileUploadText.pendingSubmit}
-                idPrefix={resolvedId}
-                accept={EVIDENCE_FILE_TYPES.join(",")}
-                multiple={false}
-                maxFileSize={EVIDENCE_FILE_MAX_BYTES}
-                disabled={disabled}
-                selectedFiles={file ? [file] : []}
-                onFileRemove={() => field.handleChange(null)}
-                label={uploadLabel}
-                description="点击选择文件，或将单个文件拖到此处"
-                onFilesSelected={(files) => {
-                    field.handleChange(files[0] ?? null)
-                    field.handleBlur()
-                }}
-                aria-describedby={describedBy || undefined}
-                aria-invalid={isInvalid || undefined}
-            />
-            {description ? (
-                <FieldDescription id={descriptionId}>
-                    {description}
-                </FieldDescription>
-            ) : null}
-            {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}
-        </Field>
+        <SingleFileField
+            label={label}
+            description={description}
+            disabled={disabled}
+            required={required}
+            id={id}
+            accept={EVIDENCE_FILE_TYPES.join(",")}
+            maxFileSize={EVIDENCE_FILE_MAX_BYTES}
+            uploadLabel={uploadLabel}
+            uploadDescription="点击选择文件，或将单个文件拖到此处"
+            selectedDescription={fileUploadText.pendingSubmit}
+        />
     )
 }

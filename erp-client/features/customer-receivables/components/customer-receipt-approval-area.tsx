@@ -15,14 +15,14 @@ import {
     useApprovalHistoryInfiniteQuery,
     useRecoveryOptionsQuery,
 } from "@/features/approval-workflow/queries"
-import type {
-    ApprovalCommandView,
-    DocumentApprovalView,
+import {
+    mergeDocumentAllowedActions,
+    type ApprovalCommandView,
+    type DocumentApprovalView,
 } from "@/features/approval-workflow/types"
 import { mapDocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import {
     CUSTOMER_RECEIPT_DOCUMENT_TYPE,
-    mergeCustomerReceiptAllowedActions,
     customerReceiptApprovalPhase,
     type CustomerReceiptApprovalPhase,
 } from "@/features/customer-receivables/lib/customer-receipt-approval"
@@ -95,7 +95,7 @@ export function CustomerReceiptApprovalArea({
     const historyItems = historyQuery.data
         ? historyQuery.data.pages.flatMap((page) => page.items)
         : (approval?.recentHistory ?? [])
-    const allowedActions = mergeCustomerReceiptAllowedActions(
+    const allowedActions = mergeDocumentAllowedActions(
         approval?.allowedActions,
         workItemAllowedActions,
     )

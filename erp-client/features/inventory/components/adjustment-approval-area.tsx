@@ -11,8 +11,7 @@ import {
     useRecoveryOptionsQuery,
 } from "@/features/approval-workflow/queries"
 import {
-    filterAllowedActions,
-    type ApprovalAllowedAction,
+    mergeDocumentAllowedActions,
     type ApprovalCommandView,
 } from "@/features/approval-workflow/types"
 import { STOCK_ADJUSTMENT_DOCUMENT_TYPE } from "@/features/inventory/api/adjustment"
@@ -30,18 +29,6 @@ export const adjustmentApprovalPhase = (
     status?: string,
 ): Exclude<AdjustmentApprovalPhase, "confirm"> =>
     isDraftAdjustmentStatus(status) ? "draft" : "runtime"
-
-/**
- * 合并单据与当前任务的服务端动作白名单。只做并集过滤，不补默认动作。
- */
-export const mergeAdjustmentAllowedActions = (
-    documentActions?: readonly ApprovalAllowedAction[] | readonly string[],
-    workItemActions?: readonly string[],
-): readonly ApprovalAllowedAction[] =>
-    filterAllowedActions([
-        ...(documentActions ?? []),
-        ...(workItemActions ?? []),
-    ])
 
 /**
  * 库存调整试点审批区。
@@ -86,7 +73,7 @@ export function AdjustmentApprovalArea({
     const historyItems = historyQuery.data
         ? historyQuery.data.pages.flatMap((page) => page.items)
         : (approval?.recentHistory ?? [])
-    const allowedActions = mergeAdjustmentAllowedActions(
+    const allowedActions = mergeDocumentAllowedActions(
         approval?.allowedActions,
         workItemAllowedActions,
     )

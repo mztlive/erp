@@ -5233,7 +5233,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/sales-invoice-requests/{id}/cancel",
-                description: "撤回开票申请",
+                description: "撤回开票申请或取消剩余额度",
                 permission: {
                     resource: "sales_invoice_request",
                     action: "cancel",

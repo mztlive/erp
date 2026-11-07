@@ -149,7 +149,6 @@ export {
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
     ListWorkspaceInlineFilter,
-    listWorkspaceFilterBarClassName,
     listWorkspaceFilterStatusText,
     type ListWorkspaceFilterChip,
 } from "./list-workspace-filter-bar"
