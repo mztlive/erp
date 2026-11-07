@@ -1,4 +1,4 @@
-import { getErrorMessage, isApiError } from "@/lib/api/errors"
+import { getErrorMessage, nullIfNotFound } from "@/lib/api/errors"
 /**
  * 商品对象中心：SPU 当前修订 + SKU 行 + 媒体回显，组装可编辑详情。
  * 历史修订禁止回填当前主档；SKU 行必须能对上当前修订，否则抛错拒绝编辑。
@@ -82,13 +82,9 @@ export async function centerProduct(
     stableId: string,
 ): Promise<MasterDataCenterView | null> {
     const encodedId = encodeURIComponent(stableId)
-    let product: ProductDto | null
-    try {
-        product = await apiGet<ProductDto>(`/admin/products/${encodedId}`)
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+    const product = await nullIfNotFound(() =>
+        apiGet<ProductDto>(`/admin/products/${encodedId}`),
+    )
     if (!product) return null
 
     const revisions = await fetchAllPages<ProductRevisionDto>(

@@ -1,7 +1,7 @@
 /** 客户往来范围列表 HTTP（M07/M08）：各视图独立分页，同一对象映射裁剪。 */
 
 import { apiGet } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
 import type { Page } from "@/lib/api/paging"
 import { scopePageMeta } from "@/lib/funds-scope"
 
@@ -113,7 +113,7 @@ export async function fetchReceivableScopeDetail(
     kind: "receivable" | "receipt" | "invoice",
     id: string,
 ): Promise<ReceivableScopeDetail | null> {
-    try {
+    return nullIfNotFound(async () => {
         if (kind === "receivable") {
             const result = await apiGet<FundsScopedReceivableResultWire>(
                 `/admin/receivable-accounts/${encodeURIComponent(id)}`,
@@ -130,8 +130,5 @@ export async function fetchReceivableScopeDetail(
             `/admin/invoices/${encodeURIComponent(id)}`,
         )
         return { kind, invoice: result.data }
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+    })
 }

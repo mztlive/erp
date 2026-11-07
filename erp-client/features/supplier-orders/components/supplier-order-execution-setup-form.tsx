@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useAppForm } from "@/components/form"
+import { FormValidationSummary, useAppForm } from "@/components/form"
 import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -358,15 +358,7 @@ export function SupplierExecutionSetupForm({
                     配送方案尚未取得。保存地址资料后，刷新执行状态查看实际返回结果。
                 </p>
             )}
-            <form.Subscribe selector={(state) => state.errors}>
-                {(errors) =>
-                    errors.length ? (
-                        <p role="alert" className="text-sm text-destructive">
-                            {errors.map(String).join("；")}
-                        </p>
-                    ) : null
-                }
-            </form.Subscribe>
+            <FormValidationSummary form={form} />
             {error ? (
                 <Alert variant="destructive">
                     <AlertDescription>

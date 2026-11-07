@@ -77,6 +77,26 @@ export const isApiError = (error: unknown): error is ApiError =>
     "message" in error &&
     typeof error.message === "string"
 
+/** 详情不存在。鉴权、网络和其它业务错误不能当成不存在。 */
+export const isNotFoundError = (error: unknown): boolean =>
+    isApiError(error) && error.status === 404
+
+/**
+ * 执行读取；只有不存在时返回 null，其它错误原样抛出。
+ *
+ * @param load 原读取过程。404 的处理范围与包住这段过程的 try 相同。
+ */
+export async function nullIfNotFound<T>(
+    load: () => Promise<T>,
+): Promise<T | null> {
+    try {
+        return await load()
+    } catch (error) {
+        if (isNotFoundError(error)) return null
+        throw error
+    }
+}
+
 /** 读取统一 API 错误上的稳定错误码。 */
 export const getErrorCode = (error: unknown): string | undefined => {
     if (!isApiError(error) || typeof error.code !== "string") return undefined

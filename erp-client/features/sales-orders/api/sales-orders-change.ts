@@ -6,7 +6,7 @@
 
 import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { apiGet, apiPost } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { isNotFoundError } from "@/lib/api/errors"
 import type {
     BackendSalesChangeOrder,
     PageView,
@@ -129,7 +129,7 @@ export async function fetchActiveSalesChangeOrder(
         return salesChangeListResult(page, order)
     } catch (error) {
         if (isDataScopeChanged(error)) throw error
-        if (isApiError(error) && error.status === 404) {
+        if (isNotFoundError(error)) {
             return salesChangeListResult(page)
         }
         throw error

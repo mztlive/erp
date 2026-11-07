@@ -1,7 +1,7 @@
 import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { runDataTransfer } from "@/lib/data-transfer"
 import { apiGet } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { isNotFoundError, nullIfNotFound } from "@/lib/api/errors"
 import type {
     PurchaseChangeOrderSummary,
     PurchaseCreationBasis,
@@ -137,7 +137,7 @@ export async function fetchActivePurchaseChangeOrder(
                 return { order: preferred }
             }
         } catch (error) {
-            if (!(isApiError(error) && error.status === 404)) throw error
+            if (!isNotFoundError(error)) throw error
         }
     }
 
@@ -165,7 +165,7 @@ export async function fetchActivePurchaseChangeOrder(
         return purchaseChangeListResult(page, order)
     } catch (error) {
         if (isDataScopeChanged(error)) throw error
-        if (isApiError(error) && error.status === 404) {
+        if (isNotFoundError(error)) {
             return purchaseChangeListResult(page)
         }
         throw error
@@ -177,10 +177,10 @@ export async function fetchActivePurchaseChangeOrder(
  *
  * @param changeId 采购变更单 ID。
  */
-const loadCenterFromChangeOrder = async (
+const loadCenterFromChangeOrder = (
     changeId: string,
-): Promise<PurchaseOrderCenterView | null> => {
-    try {
+): Promise<PurchaseOrderCenterView | null> =>
+    nullIfNotFound(async () => {
         const change = await fetchPurchaseChangeOrderDetail(changeId)
         const center = await apiGet<BackendCenter>(
             `/admin/purchase-orders/${encodeURIComponent(change.purchaseOrderId)}`,
@@ -189,11 +189,7 @@ const loadCenterFromChangeOrder = async (
             ...mapCenter(center),
             activeChangeOrder: change,
         }
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
-}
+    })
 
 /**
  * 读取采购单对象中心，并挂上在途采购变更单的只读审批投影。
@@ -225,7 +221,7 @@ export async function fetchPurchaseOrderCenter(
             scopeVersion: activeChange.scopeVersion,
         }
     } catch (error) {
-        if (isApiError(error) && error.status === 404) {
+        if (isNotFoundError(error)) {
             return loadCenterFromChangeOrder(purchaseOrderId)
         }
         throw error

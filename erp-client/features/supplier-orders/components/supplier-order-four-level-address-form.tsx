@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
-import { useAppForm } from "@/components/form"
+import { FormValidationSummary, useAppForm } from "@/components/form"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -285,15 +285,7 @@ export function SupplierOrderFourLevelAddressForm({
                     </AlertDescription>
                 </Alert>
             ) : null}
-            <form.Subscribe selector={(state) => state.errors}>
-                {(errors) =>
-                    errors.length ? (
-                        <p role="alert" className="text-sm text-destructive">
-                            {errors.map(String).join("；")}
-                        </p>
-                    ) : null
-                }
-            </form.Subscribe>
+            <FormValidationSummary form={form} />
             {error ? (
                 <Alert variant="destructive">
                     <AlertDescription>

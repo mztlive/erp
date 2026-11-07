@@ -1,4 +1,4 @@
-import { isApiError } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
 import { apiGet } from "@/lib/api"
 import type { BackendFileAsset } from "@/features/master-data/api/contracts"
 
@@ -6,14 +6,11 @@ import type { BackendFileAsset } from "@/features/master-data/api/contracts"
 export async function fetchFileAsset(
     assetId: string,
 ): Promise<BackendFileAsset | null> {
-    try {
-        return await apiGet<BackendFileAsset>(
+    return nullIfNotFound(() =>
+        apiGet<BackendFileAsset>(
             `/admin/file-assets/${encodeURIComponent(assetId)}`,
-        )
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+        ),
+    )
 }
 
 /** 批量解析媒体文件资产为 `assetId → 资产详情`（去重，仅明确不存在时视为缺失）。 */

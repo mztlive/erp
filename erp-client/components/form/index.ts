@@ -58,6 +58,7 @@ export { TextField } from "@/components/form/text-field"
 export { TextareaField } from "@/components/form/textarea-field"
 export { SubmitButton } from "@/components/form/submit-button"
 export { FormError } from "@/components/form/form-error"
+export { FormValidationSummary } from "@/components/form/form-validation-summary"
 export {
     SelectField,
     type SelectFieldOption,

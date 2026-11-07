@@ -2,7 +2,7 @@ import { supplierTaxPercentages } from "@/lib/supplier-tax-rates"
 /** 供应商对象中心：聚合 Party / 联系人 / 银行 / 税号 / 能力 / 资质 / 评分。 */
 
 import { apiGet } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { isNotFoundError } from "@/lib/api/errors"
 import type {
     SupplierDetailDto,
     SupplierQualificationDto,
@@ -36,7 +36,7 @@ export async function centerSupplier(
     try {
         detail = await apiGet<SupplierDetailDto>(`/admin/suppliers/${stableId}`)
     } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
+        if (isNotFoundError(error)) return null
         throw error
     }
 

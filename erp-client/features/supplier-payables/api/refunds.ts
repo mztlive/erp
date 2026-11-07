@@ -1,11 +1,10 @@
-import { isApiError } from "@/lib/api/errors"
 /**
  * W12 供应商往来 · 供应商退款草稿创建与提交审批。
  * 过账只由最终通过动作内部消费，本文件不得调用 /post。
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
+import { getErrorCode, getErrorMessage, nullIfNotFound } from "@/lib/api/errors"
 import type { BackendSupplierRefund } from "@/features/supplier-payables/api/mappers"
 import { projectSupplierRefund } from "@/features/supplier-payables/api/mappers"
 import { isOutcomeUnknown } from "@/features/supplier-payables/api/shared"
@@ -40,15 +39,12 @@ function refundError(
 export async function fetchSupplierRefund(
     refundId: string,
 ): Promise<SupplierRefundRow | null> {
-    try {
+    return nullIfNotFound(async () => {
         const refund = await apiGet<BackendSupplierRefund>(
             `/admin/supplier-refunds/${encodeURIComponent(refundId)}`,
         )
         return projectSupplierRefund(refund)
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+    })
 }
 
 /**

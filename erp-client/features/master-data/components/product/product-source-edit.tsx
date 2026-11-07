@@ -1,7 +1,7 @@
 "use client"
 
 import { ArrowDownIcon, ArrowUpIcon, XIcon } from "lucide-react"
-import { useAppForm } from "@/components/form"
+import { FormValidationSummary, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -262,15 +262,7 @@ export function SourceFieldEdit({
                     )
                 }}
             </form.Field>
-            <form.Subscribe selector={(state) => state.errors}>
-                {(errors) =>
-                    errors.length ? (
-                        <p role="alert" className="text-sm text-destructive">
-                            {errors.map(String).join("；")}
-                        </p>
-                    ) : null
-                }
-            </form.Subscribe>
+            <FormValidationSummary form={form} />
             <div className="flex justify-end gap-2">
                 <Button
                     id={`${prefix}-edit-cancel`}

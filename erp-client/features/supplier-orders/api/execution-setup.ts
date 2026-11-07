@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
 
 export type SupplierDeliveryGeocode = Readonly<{
     city_name: string
@@ -129,15 +129,12 @@ export function querySupplierExecutionResult(
 }
 
 export async function fetchSupplierExecutionSetup(orderId: string) {
-    try {
-        return await apiGet<SupplierExecutionSetup>(
+    // 既有非 API 自动订单没有执行资料；真实鉴权及网络错误不能吞掉。
+    return nullIfNotFound(() =>
+        apiGet<SupplierExecutionSetup>(
             `/admin/supplier-fulfillment-orders/${encodeURIComponent(orderId)}/execution-setup`,
-        )
-    } catch (error) {
-        // 既有非 API 自动订单没有执行资料；真实鉴权及网络错误不能吞掉。
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+        ),
+    )
 }
 
 export function saveSupplierExecutionSetup(

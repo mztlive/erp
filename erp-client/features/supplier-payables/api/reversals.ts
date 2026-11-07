@@ -1,11 +1,10 @@
-import { isApiError } from "@/lib/api/errors"
 /**
  * W12 供应商往来 · 付款冲正草稿创建与提交审批。
  * 过账只由最终通过动作内部消费，本文件不得调用 /post。
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
+import { getErrorCode, getErrorMessage, nullIfNotFound } from "@/lib/api/errors"
 import type { BackendPaymentReversal } from "@/features/supplier-payables/api/mappers"
 import { projectPaymentReversal } from "@/features/supplier-payables/api/mappers"
 import { isOutcomeUnknown } from "@/features/supplier-payables/api/shared"
@@ -40,15 +39,12 @@ function reversalError(
 export async function fetchPaymentReversal(
     reversalId: string,
 ): Promise<PaymentReversalRow | null> {
-    try {
+    return nullIfNotFound(async () => {
         const reversal = await apiGet<BackendPaymentReversal>(
             `/admin/payment-reversals/${encodeURIComponent(reversalId)}`,
         )
         return projectPaymentReversal(reversal)
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+    })
 }
 
 /**

@@ -1,7 +1,7 @@
 /** List view + detail view composition (client projection of server data). */
 
 import { apiGet, type Page } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
 
 import type {
     CustomerAccountsDetailView,
@@ -193,13 +193,8 @@ export async function fetchCustomerAccountsList(
     }
 }
 
-async function loadDetailOrNull<T>(path: string): Promise<T | null> {
-    try {
-        return await apiGet<T>(path)
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+function loadDetailOrNull<T>(path: string): Promise<T | null> {
+    return nullIfNotFound(() => apiGet<T>(path))
 }
 
 export async function fetchCustomerAccountsDetail(

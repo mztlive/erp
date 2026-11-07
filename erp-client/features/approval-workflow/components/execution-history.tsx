@@ -1,6 +1,5 @@
 "use client"
 
-import type * as React from "react"
 import {
     BanIcon,
     CircleAlertIcon,
@@ -13,7 +12,8 @@ import {
 } from "lucide-react"
 
 import { LoadingButton } from "@/components/ui/loading-button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { ApprovalSectionHeading } from "./section-heading"
 import {
     StatusBadge,
     statusToneMarkerClass,
@@ -47,19 +47,6 @@ const TONE_ICON: Record<StatusTone, LucideIcon> = {
     warning: CircleAlertIcon,
     destructive: TriangleAlertIcon,
     void: BanIcon,
-}
-
-function HistoryHeading({
-    compact,
-    children,
-}: {
-    compact?: boolean
-    children: React.ReactNode
-}) {
-    if (compact) {
-        return <h2 className="text-sm font-medium">{children}</h2>
-    }
-    return <CardTitle>{children}</CardTitle>
 }
 
 function HistoryEntry({ item }: { item: ApprovalHistoryItem }) {
@@ -191,7 +178,9 @@ export function ExecutionHistory({
     return (
         <Card size="sm" className="border border-border shadow-sm">
             <CardHeader className="border-b">
-                <HistoryHeading compact={compact}>审批历史</HistoryHeading>
+                <ApprovalSectionHeading compact={compact}>
+                    审批历史
+                </ApprovalSectionHeading>
             </CardHeader>
             <CardContent>{content}</CardContent>
         </Card>

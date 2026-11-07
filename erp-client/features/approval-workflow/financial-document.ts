@@ -84,6 +84,44 @@ export const financialDocumentStatusTone = (
     }
 }
 
+/** 资金单据行状态。未知码归草稿，不把枚举原值写进行上。 */
+export type FinancialDocumentStatus =
+    | "draft"
+    | "rejected"
+    | "in_approval"
+    | "posted"
+    | "reversed"
+
+/**
+ * 把资金单据服务端状态码收成行状态。
+ *
+ * 旧的待复核状态已收敛为审批中。未识别的码，包括草稿的两种大小写，都归草稿。
+ *
+ * @param status 服务端状态码。
+ */
+export function mapFinancialDocumentStatus(
+    status: string,
+): FinancialDocumentStatus {
+    switch (status) {
+        case "REJECTED":
+        case "rejected":
+            return "rejected"
+        case "reversed":
+        case "REVERSED":
+            return "reversed"
+        case "posted":
+        case "POSTED":
+            return "posted"
+        case "IN_APPROVAL":
+        case "in_approval":
+        case "pending_review":
+        case "PENDING_REVIEW":
+            return "in_approval"
+        default:
+            return "draft"
+    }
+}
+
 /**
  * 按单据生命周期选择审批区相位。提交确认由调用方显式传入。
  *

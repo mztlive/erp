@@ -1,8 +1,7 @@
 "use client"
 
-import type * as React from "react"
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { ApprovalSectionHeading } from "./section-heading"
 
 import {
     displayActorName,
@@ -20,19 +19,6 @@ function routeNodes(
     return definition.nodes.length > 0
         ? definition.nodes
         : definition.publishedNodes
-}
-
-function BindingHeading({
-    compact,
-    children,
-}: {
-    compact?: boolean
-    children: React.ReactNode
-}) {
-    if (compact) {
-        return <h2 className="text-sm font-medium">{children}</h2>
-    }
-    return <CardTitle>{children}</CardTitle>
 }
 
 /**
@@ -54,7 +40,9 @@ export function DefinitionBindingCard({
         return (
             <Card size="sm">
                 <CardHeader>
-                    <BindingHeading compact={compact}>审批流程</BindingHeading>
+                    <ApprovalSectionHeading compact={compact}>
+                        审批流程
+                    </ApprovalSectionHeading>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                     {emptyLabel}
@@ -68,13 +56,13 @@ export function DefinitionBindingCard({
     return (
         <Card size="sm">
             <CardHeader>
-                <BindingHeading compact={compact}>
+                <ApprovalSectionHeading compact={compact}>
                     {displayProcessVersion({
                         name: definition.name,
                         version: definition.version,
                         id: definition.id,
                     })}
-                </BindingHeading>
+                </ApprovalSectionHeading>
             </CardHeader>
             <CardContent>
                 {nodes.length === 0 ? (

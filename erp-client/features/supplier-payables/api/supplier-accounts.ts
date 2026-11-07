@@ -1,4 +1,4 @@
-import { isApiError } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
 import { payableDue } from "@/features/supplier-payables/lib/payable-due"
 /**
  * W12 供应商往来 · 应付台账相关请求（列表、详情、核销会话）。
@@ -254,12 +254,11 @@ export async function fetchSupplierInvoice(
 export async function fetchPayableDetail(
     payableAccountId: string,
 ): Promise<PayableDetailView | null> {
-    const a = await apiGet<BackendPayableAccount>(
-        `/admin/payable-accounts/${encodeURIComponent(payableAccountId)}`,
-    ).catch((error: unknown) => {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    })
+    const a = await nullIfNotFound(() =>
+        apiGet<BackendPayableAccount>(
+            `/admin/payable-accounts/${encodeURIComponent(payableAccountId)}`,
+        ),
+    )
     if (!a) return null
     const payable = projectPayable(a)
     const allocPage = await apiGet<Page<BackendPurchaseInvoiceAllocation>>(
@@ -351,15 +350,12 @@ export async function revealPaymentRecipient(
 export async function fetchSupplierPayment(
     paymentId: string,
 ): Promise<PaymentRow | null> {
-    try {
+    return nullIfNotFound(async () => {
         const payment = await apiGet<BackendSupplierPayment>(
             `/admin/supplier-payments/${encodeURIComponent(paymentId)}`,
         )
         return projectPayment(payment)
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+    })
 }
 
 export async function fetchAllocationSession(input: {

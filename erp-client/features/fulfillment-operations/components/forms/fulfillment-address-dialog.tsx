@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAppForm } from "@/components/form"
+import { FormValidationSummary, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -484,15 +484,7 @@ function AddressEditor({
                     )}
                 </form.Field>
             )}
-            <form.Subscribe selector={(state) => state.errors}>
-                {(errors) =>
-                    errors.length ? (
-                        <p role="alert" className="text-sm text-destructive">
-                            {errors.map(String).join("；")}
-                        </p>
-                    ) : null
-                }
-            </form.Subscribe>
+            <FormValidationSummary form={form} />
             {mutation.isError && (
                 <p role="alert" className="text-sm text-destructive">
                     {mutation.error.message}。输入已保留。

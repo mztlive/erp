@@ -1,5 +1,5 @@
 import { apiGet } from "@/lib/api"
-import { getErrorMessage, isApiError } from "@/lib/api/errors"
+import { getErrorMessage, isNotFoundError } from "@/lib/api/errors"
 import { paymentTermLabel } from "@/lib/business-options"
 
 import {
@@ -35,7 +35,7 @@ export async function fetchContractCenter(
             `/admin/contracts/${contractId}`,
         )
     } catch (error) {
-        if (isApiError(error) && error.status === 404) {
+        if (isNotFoundError(error)) {
             return null
         }
         throw error

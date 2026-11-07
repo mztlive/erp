@@ -1,6 +1,7 @@
 /** W12 供应商往来 · 后端 DTO 与视图映射（纯函数，无 HTTP 无 React）。 */
 
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
+import { mapFinancialDocumentStatus } from "@/features/approval-workflow/financial-document"
 import { payableDue } from "@/features/supplier-payables/lib/payable-due"
 import type {
     PayableRow,
@@ -476,7 +477,7 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
 function projectPaymentReversalSummary(
     reversal: BackendPaymentReversalSummary,
 ): PaymentReversalSummary {
-    const status = mapReversalStatus(reversal.status)
+    const status = mapFinancialDocumentStatus(reversal.status)
     return {
         reversalId: reversal.id,
         reversalNo: reversal.reversal_no,
@@ -489,21 +490,6 @@ function projectPaymentReversalSummary(
     }
 }
 
-function mapRefundStatus(s: string): SupplierRefundRow["status"] {
-    if (s === "REJECTED" || s === "rejected") return "rejected"
-    if (s === "reversed" || s === "REVERSED") return "reversed"
-    if (s === "posted" || s === "POSTED") return "posted"
-    if (
-        s === "IN_APPROVAL" ||
-        s === "in_approval" ||
-        s === "pending_review" ||
-        s === "PENDING_REVIEW"
-    ) {
-        return "in_approval"
-    }
-    return "draft"
-}
-
 /**
  * 把供应商退款详情投影为预览行。SupplierRefund 为 PROCESS_REQUIRED，只读映射审批绑定。
  *
@@ -512,7 +498,7 @@ function mapRefundStatus(s: string): SupplierRefundRow["status"] {
 export function projectSupplierRefund(
     refund: BackendSupplierRefund,
 ): SupplierRefundRow {
-    const status = mapRefundStatus(refund.status)
+    const status = mapFinancialDocumentStatus(refund.status)
     return {
         refundId: refund.id,
         refundNo: refund.refund_no,
@@ -535,21 +521,6 @@ export function projectSupplierRefund(
     }
 }
 
-function mapReversalStatus(s: string): PaymentReversalRow["status"] {
-    if (s === "REJECTED" || s === "rejected") return "rejected"
-    if (s === "reversed" || s === "REVERSED") return "reversed"
-    if (s === "posted" || s === "POSTED") return "posted"
-    if (
-        s === "IN_APPROVAL" ||
-        s === "in_approval" ||
-        s === "pending_review" ||
-        s === "PENDING_REVIEW"
-    ) {
-        return "in_approval"
-    }
-    return "draft"
-}
-
 /**
  * 把付款冲正详情投影为预览行。PaymentReversal 为 PROCESS_REQUIRED，只读映射审批绑定。
  *
@@ -558,7 +529,7 @@ function mapReversalStatus(s: string): PaymentReversalRow["status"] {
 export function projectPaymentReversal(
     reversal: BackendPaymentReversal,
 ): PaymentReversalRow {
-    const status = mapReversalStatus(reversal.status)
+    const status = mapFinancialDocumentStatus(reversal.status)
     return {
         reversalId: reversal.id,
         reversalNo: reversal.reversal_no,

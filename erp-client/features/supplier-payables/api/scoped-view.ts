@@ -1,7 +1,7 @@
 /** 供应商往来范围列表 HTTP（M09）：采购负责人/付款/收票经办人分别查询。 */
 
 import { apiGet } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
 import type { Page } from "@/lib/api/paging"
 import { scopePageMeta } from "@/lib/funds-scope"
 
@@ -105,7 +105,7 @@ export async function fetchSupplierScopeDetail(
     kind: "payable" | "payment",
     id: string,
 ): Promise<SupplierScopeDetail | null> {
-    try {
+    return nullIfNotFound(async () => {
         if (kind === "payable") {
             const result = await apiGet<FundsScopedPayableResultWire>(
                 `/admin/payable-accounts/${encodeURIComponent(id)}`,
@@ -116,10 +116,7 @@ export async function fetchSupplierScopeDetail(
             `/admin/supplier-payments/${encodeURIComponent(id)}`,
         )
         return { kind, payment: result.data }
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+    })
 }
 
 export function toQuery(query: SupplierScopeQuery): Record<string, unknown> {

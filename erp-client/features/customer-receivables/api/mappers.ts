@@ -36,6 +36,7 @@ import {
     receiptReversalStatusLabel,
     receiptReversalStatusTone,
 } from "@/features/customer-receivables/lib/receipt-reversal-approval"
+import { mapFinancialDocumentStatus } from "@/features/approval-workflow/financial-document"
 
 import type {
     BackendCustomerReceipt,
@@ -79,21 +80,6 @@ function statusMeta(status: ReceivableAccountRow["status"]): {
 }
 
 function mapReceiptStatus(s: string): ReceiptRow["status"] {
-    if (s === "REJECTED" || s === "rejected") return "rejected"
-    if (s === "reversed" || s === "REVERSED") return "reversed"
-    if (s === "posted" || s === "POSTED") return "posted"
-    if (
-        s === "IN_APPROVAL" ||
-        s === "in_approval" ||
-        s === "pending_review" ||
-        s === "PENDING_REVIEW"
-    ) {
-        return "in_approval"
-    }
-    return "draft"
-}
-
-function mapRefundStatus(s: string): CustomerRefundRow["status"] {
     if (s === "REJECTED" || s === "rejected") return "rejected"
     if (s === "reversed" || s === "REVERSED") return "reversed"
     if (s === "posted" || s === "POSTED") return "posted"
@@ -282,7 +268,7 @@ export function projectReceipt(
 export function projectCustomerRefund(
     refund: BackendCustomerRefund,
 ): CustomerRefundRow {
-    const status = mapRefundStatus(refund.status)
+    const status = mapFinancialDocumentStatus(refund.status)
     return {
         refundId: refund.id,
         refundNo: refund.refund_no,
@@ -303,21 +289,6 @@ export function projectCustomerRefund(
     }
 }
 
-function mapReversalStatus(s: string): ReceiptReversalRow["status"] {
-    if (s === "REJECTED" || s === "rejected") return "rejected"
-    if (s === "reversed" || s === "REVERSED") return "reversed"
-    if (s === "posted" || s === "POSTED") return "posted"
-    if (
-        s === "IN_APPROVAL" ||
-        s === "in_approval" ||
-        s === "pending_review" ||
-        s === "PENDING_REVIEW"
-    ) {
-        return "in_approval"
-    }
-    return "draft"
-}
-
 /**
  * 把回款冲正详情投影为预览行。ReceiptReversal 为 PROCESS_REQUIRED，只读映射审批绑定。
  *
@@ -326,7 +297,7 @@ function mapReversalStatus(s: string): ReceiptReversalRow["status"] {
 export function projectReceiptReversal(
     reversal: BackendReceiptReversal,
 ): ReceiptReversalRow {
-    const status = mapReversalStatus(reversal.status)
+    const status = mapFinancialDocumentStatus(reversal.status)
     return {
         reversalId: reversal.id,
         reversalNo: reversal.reversal_no,

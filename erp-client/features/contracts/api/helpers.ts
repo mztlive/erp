@@ -1,4 +1,4 @@
-import { isApiError } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
 import type {
     BackendCustomerDetail,
     BackendFileAsset,
@@ -112,7 +112,7 @@ export async function loadCustomerBrief(customerId: string): Promise<{
     partyId: string
     ownerLabel: string
 } | null> {
-    try {
+    return nullIfNotFound(async () => {
         const c = await apiGet<BackendCustomerDetail>(
             `/admin/customers/${customerId}`,
         )
@@ -124,22 +124,16 @@ export async function loadCustomerBrief(customerId: string): Promise<{
             ownerLabel:
                 c.owner_user_name?.trim() || c.owner_user_id?.trim() || "—",
         }
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+    })
 }
 
 export async function loadFileAsset(
     contractId: string,
     fileId: string,
 ): Promise<BackendFileAsset | null> {
-    try {
-        return await apiGet<BackendFileAsset>(
+    return nullIfNotFound(() =>
+        apiGet<BackendFileAsset>(
             `/admin/contracts/${encodeURIComponent(contractId)}/files/${encodeURIComponent(fileId)}`,
-        )
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
-        throw error
-    }
+        ),
+    )
 }
