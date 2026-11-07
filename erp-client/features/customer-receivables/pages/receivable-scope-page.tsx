@@ -4,9 +4,7 @@ import * as React from "react"
 
 import { PageScaffold } from "@/components/business"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
-import { downloadListCsv } from "@/lib/list-export"
-import { getErrorMessage } from "@/lib/api/errors"
-import { toast } from "@/components/ui/toast"
+import { useScopeListExport } from "@/lib/use-scope-list-export"
 import { exportReceivableScopeCsv } from "@/features/customer-receivables/lib/scoped-export"
 import { useReceivableScopeDetailQuery } from "@/features/customer-receivables/hooks/scoped-queries"
 import { useReceivableScopeListQuery } from "@/features/customer-receivables/hooks/scoped-queries"
@@ -26,29 +24,9 @@ export function ReceivableScopePage() {
         preview?.kind ?? null,
         preview?.id ?? null,
     )
-    const [exporting, setExporting] = React.useState(false)
-
-    async function handleExport() {
-        if (exporting) return
-        setExporting(true)
-        try {
-            const result = await exportReceivableScopeCsv(urlState.query)
-            downloadListCsv(result.content, result.fileName)
-            toast.add({
-                title: "导出已完成",
-                description: `已按当前范围生成 ${result.fileName}（${result.rowCount} 条）。`,
-                type: "success",
-            })
-        } catch (error) {
-            toast.add({
-                title: "导出失败",
-                description: getErrorMessage(error, "请重新查询后重试"),
-                type: "error",
-            })
-        } finally {
-            setExporting(false)
-        }
-    }
+    const { exporting, handleExport } = useScopeListExport(() =>
+        exportReceivableScopeCsv(urlState.query),
+    )
 
     return (
         <PageScaffold density="compact" className="space-y-4">

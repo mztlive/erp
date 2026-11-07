@@ -1,41 +1,19 @@
 "use client"
 
-import { surfaceInsetClassName } from "@/components/business"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { MasterDataSummaryStrip } from "@/features/master-data/components/shared/summary-strip"
 import {
     PRODUCT_EDITOR_SECTIONS,
     type ProductEditorSectionId,
 } from "@/features/master-data/lib/product-editor-model"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
 function ProductSummaryStrip({
     rows,
 }: {
     rows: ReadonlyArray<Readonly<{ label: string; value: string }>>
 }) {
-    return (
-        <dl
-            className={cn(
-                surfaceInsetClassName,
-                "grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 sm:grid-cols-4",
-            )}
-        >
-            {rows.map((row) => (
-                <div key={row.label} className="min-w-0">
-                    <dt className="text-tiny text-muted-foreground">
-                        {row.label}
-                    </dt>
-                    <dd
-                        className="mt-0.5 truncate text-sm font-medium text-foreground"
-                        title={row.value}
-                    >
-                        {row.value}
-                    </dd>
-                </div>
-            ))}
-        </dl>
-    )
+    return <MasterDataSummaryStrip rows={rows} />
 }
 
 function ProductSectionTabs({

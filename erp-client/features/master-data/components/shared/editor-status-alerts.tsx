@@ -1,0 +1,89 @@
+"use client"
+
+import * as React from "react"
+import { CircleAlertIcon } from "lucide-react"
+
+import { FormalActionResult } from "@/components/business"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import type { MasterDataMutationResult } from "@/features/master-data/types"
+
+/** 商品与供应商编辑页共用的只读、阻断、冲突和表单错误提示。 */
+export function MasterDataEditorStatusAlerts({
+    isCreate,
+    canRevise,
+    reviseBlocker,
+    result,
+    formError,
+    formErrorTitle,
+    errorRef,
+    readOnlyFallback,
+}: {
+    isCreate: boolean
+    canRevise: boolean
+    reviseBlocker: { message: string } | undefined
+    result: MasterDataMutationResult | null
+    formError: string | null
+    formErrorTitle: string
+    errorRef: React.Ref<HTMLDivElement>
+    readOnlyFallback: string
+}) {
+    return (
+        <>
+            {!isCreate && !canRevise ? (
+                <Alert variant="info">
+                    <AlertTitle>你只能查看</AlertTitle>
+                    <AlertDescription>
+                        {reviseBlocker
+                            ? masterDataCopy.centerUpdateBlocked(
+                                  reviseBlocker.message,
+                              )
+                            : readOnlyFallback}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            {result?.outcome === "blocked" ? (
+                <FormalActionResult
+                    status="blocked"
+                    title={
+                        isCreate
+                            ? masterDataCopy.createBlockedTitle
+                            : masterDataCopy.reviseBlockedTitle
+                    }
+                    description={result.message}
+                    facts={
+                        result.detail
+                            ? [
+                                  {
+                                      label: "说明",
+                                      value: result.detail,
+                                  },
+                              ]
+                            : undefined
+                    }
+                />
+            ) : null}
+
+            {result?.outcome === "conflict" ? (
+                <FormalActionResult
+                    status="blocked"
+                    title={masterDataCopy.reviseConflictTitle}
+                    description={
+                        result.message || masterDataCopy.reviseConflictHint
+                    }
+                />
+            ) : null}
+
+            {formError ? (
+                <div ref={errorRef}>
+                    <Alert variant="destructive">
+                        <CircleAlertIcon aria-hidden />
+                        <AlertTitle>{formErrorTitle}</AlertTitle>
+                        <AlertDescription>{formError}</AlertDescription>
+                    </Alert>
+                </div>
+            ) : null}
+        </>
+    )
+}

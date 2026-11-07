@@ -41,10 +41,9 @@ import {
     createSupplierScopedPaymentColumns,
 } from "@/features/supplier-payables/components/scoped-columns"
 import { VIEW_LABEL } from "@/features/supplier-payables/types"
-import { downloadListCsv } from "@/lib/list-export"
 import { getErrorMessage } from "@/lib/api/errors"
+import { useScopeListExport } from "@/lib/use-scope-list-export"
 import { scopeText } from "@/lib/ui-text"
-import { toast } from "@/components/ui/toast"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const SCOPE_VIEWS = ["payable", "payment", "purchase_invoice"] as const
@@ -70,7 +69,9 @@ export function SupplierScopePage() {
         preview?.kind ?? null,
         preview?.id ?? null,
     )
-    const [exporting, setExporting] = React.useState(false)
+    const { exporting, handleExport } = useScopeListExport(() =>
+        exportSupplierScopeCsv(urlState.query),
+    )
 
     const payableColumns = React.useMemo(createSupplierScopedPayableColumns, [])
     const paymentColumns = React.useMemo(createSupplierScopedPaymentColumns, [])
@@ -79,28 +80,6 @@ export function SupplierScopePage() {
         [],
     )
     const data: SupplierScopeListView | undefined = listQuery.data
-
-    async function handleExport() {
-        if (exporting) return
-        setExporting(true)
-        try {
-            const result = await exportSupplierScopeCsv(urlState.query)
-            downloadListCsv(result.content, result.fileName)
-            toast.add({
-                title: "导出已完成",
-                description: `已按当前范围生成 ${result.fileName}（${result.rowCount} 条）。`,
-                type: "success",
-            })
-        } catch (error) {
-            toast.add({
-                title: "导出失败",
-                description: getErrorMessage(error, "请重新查询后重试"),
-                type: "error",
-            })
-        } finally {
-            setExporting(false)
-        }
-    }
 
     const payableRows =
         urlState.view === "payable" ? [...(data?.payables ?? [])] : []

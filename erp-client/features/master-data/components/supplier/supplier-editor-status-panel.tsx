@@ -1,11 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { CircleAlertIcon } from "lucide-react"
 
-import { FormalActionResult } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { MasterDataEditorStatusAlerts } from "@/features/master-data/components/shared/editor-status-alerts"
 import type { MasterDataMutationResult } from "@/features/master-data/types"
 
 export function SupplierEditorStatusPanel({
@@ -26,61 +23,15 @@ export function SupplierEditorStatusPanel({
     errorRef: React.RefObject<HTMLDivElement | null>
 }) {
     return (
-        <>
-            {!isCreate && !canRevise ? (
-                <Alert variant="info">
-                    <AlertTitle>你只能查看</AlertTitle>
-                    <AlertDescription>
-                        {reviseBlocker
-                            ? masterDataCopy.centerUpdateBlocked(
-                                  reviseBlocker.message,
-                              )
-                            : "当前账号没有维护供应商资料的权限；需要修改请联系有权限的同事。"}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {result?.outcome === "blocked" ? (
-                <FormalActionResult
-                    status="blocked"
-                    title={
-                        isCreate
-                            ? masterDataCopy.createBlockedTitle
-                            : masterDataCopy.reviseBlockedTitle
-                    }
-                    description={result.message}
-                    facts={
-                        result.detail
-                            ? [
-                                  {
-                                      label: "说明",
-                                      value: result.detail,
-                                  },
-                              ]
-                            : undefined
-                    }
-                />
-            ) : null}
-
-            {result?.outcome === "conflict" ? (
-                <FormalActionResult
-                    status="blocked"
-                    title={masterDataCopy.reviseConflictTitle}
-                    description={
-                        result.message || masterDataCopy.reviseConflictHint
-                    }
-                />
-            ) : null}
-
-            {formError ? (
-                <div ref={errorRef}>
-                    <Alert variant="destructive">
-                        <CircleAlertIcon aria-hidden />
-                        <AlertTitle>{formErrorTitle}</AlertTitle>
-                        <AlertDescription>{formError}</AlertDescription>
-                    </Alert>
-                </div>
-            ) : null}
-        </>
+        <MasterDataEditorStatusAlerts
+            isCreate={isCreate}
+            canRevise={canRevise}
+            reviseBlocker={reviseBlocker}
+            result={result}
+            formError={formError}
+            formErrorTitle={formErrorTitle}
+            errorRef={errorRef}
+            readOnlyFallback="当前账号没有维护供应商资料的权限；需要修改请联系有权限的同事。"
+        />
     )
 }

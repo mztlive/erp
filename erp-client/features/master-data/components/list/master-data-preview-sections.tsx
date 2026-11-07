@@ -4,10 +4,10 @@ import Link from "next/link"
 import { ChevronDownIcon } from "lucide-react"
 
 import { RevisionTimeline, SensitiveValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
+import { masterDataRevisionEntry } from "@/features/master-data/components/shared/revision-timeline-item"
 import {
     masterDataActionLabel,
     masterDataCopy,
@@ -140,42 +140,16 @@ export function PreviewHistorySection({
                     </summary>
                     <div className="mt-2">
                         <RevisionTimeline
-                            revisions={revisions.map((rev) => ({
-                                id: rev.id,
-                                version: rev.revisionNo,
-                                source: "erp-change" as const,
-                                actor: rev.actor,
-                                effectiveAt: {
-                                    dateTime: rev.effectiveFrom,
-                                    label: formatEffectiveRange(
+                            revisions={revisions.map((rev) =>
+                                masterDataRevisionEntry(rev, {
+                                    effectiveLabel: formatEffectiveRange(
                                         rev.effectiveFrom,
                                         rev.effectiveTo,
                                     ),
-                                },
-                                reason: (
-                                    <div className="space-y-1">
-                                        <div>
-                                            {masterDataCopy.centerHistoryName}：
-                                            <strong>{rev.nameSnapshot}</strong>
-                                        </div>
-                                        <div className="text-muted-foreground">
-                                            {rev.changeReason}
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            <Badge variant="outline">
-                                                {rev.timingLabel}
-                                            </Badge>
-                                            <Badge variant="secondary">
-                                                {rev.lifecycleAtRevision ===
-                                                "ENABLED"
-                                                    ? "启用"
-                                                    : "停用"}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                ),
-                                isCurrent: rev.isCurrent,
-                            }))}
+                                    showTiming: true,
+                                    muteChangeReason: true,
+                                }),
+                            )}
                         />
                     </div>
                 </details>

@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
+import { masterDataRevisionEntry } from "@/features/master-data/components/shared/revision-timeline-item"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataCenterView } from "@/features/master-data/types"
@@ -164,39 +165,15 @@ export function ObjectCenterVersionsSection({
             description={masterDataCopy.centerVersionsDesc}
         >
             <RevisionTimeline
-                revisions={data.revisionTimeline.map((rev) => ({
-                    id: rev.id,
-                    version: rev.revisionNo,
-                    source: "erp-change" as const,
-                    actor: rev.actor,
-                    effectiveAt: {
-                        dateTime: rev.effectiveFrom,
-                        label: formatEffectiveRange(
+                revisions={data.revisionTimeline.map((rev) =>
+                    masterDataRevisionEntry(rev, {
+                        effectiveLabel: formatEffectiveRange(
                             rev.effectiveFrom,
                             rev.effectiveTo,
                         ),
-                    },
-                    reason: (
-                        <div className="space-y-1">
-                            <div>
-                                {masterDataCopy.centerHistoryName}：
-                                <strong>{rev.nameSnapshot}</strong>
-                            </div>
-                            <div>{rev.changeReason}</div>
-                            <div className="flex flex-wrap gap-2">
-                                <Badge variant="outline">
-                                    {rev.timingLabel}
-                                </Badge>
-                                <Badge variant="secondary">
-                                    {rev.lifecycleAtRevision === "ENABLED"
-                                        ? "启用"
-                                        : "停用"}
-                                </Badge>
-                            </div>
-                        </div>
-                    ),
-                    isCurrent: rev.isCurrent,
-                }))}
+                        showTiming: true,
+                    }),
+                )}
             />
         </DocumentSection>
     )
