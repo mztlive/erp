@@ -79,9 +79,7 @@ export type CustomerFormApi = AppFieldExtendedReactFormApi<
     }
 >
 
-export function newIdempotencyKey(prefix: string): string {
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
+export { newIdempotencyKey } from "@/lib/idempotency-key"
 
 let customerFormDraftSequence = 0
 

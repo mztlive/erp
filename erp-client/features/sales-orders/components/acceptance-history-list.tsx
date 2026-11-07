@@ -15,7 +15,10 @@ import {
 
 import { BusinessStatusBadge, DocumentSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import type { StatusTone } from "@/components/ui/status-badge"
+import {
+    statusToneMarkerClass,
+    type StatusTone,
+} from "@/components/ui/status-badge"
 import {
     Timeline,
     TimelineDescription,
@@ -38,19 +41,6 @@ import {
 } from "@/features/sales-orders/lib/acceptance-types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
-
-const TONE_MARKER_CLASS: Record<StatusTone, string> = {
-    neutral:
-        "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
-    info: "border-info-border bg-info-soft text-info-soft-foreground",
-    success:
-        "border-success-border bg-success-soft text-success-soft-foreground",
-    warning:
-        "border-warning-border bg-warning-soft text-warning-soft-foreground",
-    destructive:
-        "border-destructive-border bg-destructive-soft text-destructive-soft-foreground",
-    void: "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
-}
 
 export function AcceptanceHistoryList({
     history,
@@ -156,7 +146,7 @@ function HistoryEntry({
         <TimelineItem
             className={cn(item.status === "REVERSED" && "opacity-80")}
         >
-            <TimelineMarker className={TONE_MARKER_CLASS[tone]}>
+            <TimelineMarker className={statusToneMarkerClass[tone]}>
                 <Icon aria-hidden="true" />
             </TimelineMarker>
             <TimelineHeader className="items-center justify-between">

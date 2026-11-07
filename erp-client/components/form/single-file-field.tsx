@@ -1,7 +1,6 @@
 "use client"
 
-import { useFieldContext } from "@/components/form/form-context"
-import { toFieldErrors } from "@/components/form/utils"
+import { useFieldA11y } from "@/components/form/field-a11y"
 import {
     Field,
     FieldDescription,
@@ -36,19 +35,16 @@ export function SingleFileField({
     uploadDescription: string
     selectedDescription?: string
 }) {
-    const field = useFieldContext<File | null>()
+    const {
+        field,
+        isInvalid,
+        errors,
+        resolvedId,
+        descriptionId,
+        errorId,
+        describedBy,
+    } = useFieldA11y<File | null>(description, id)
     const file = field.state.value
-    const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
-    const errors = toFieldErrors(field.state.meta.errors)
-    const resolvedId = id ?? field.name
-    const descriptionId = `${resolvedId}-description`
-    const errorId = `${resolvedId}-error`
-    const describedBy = [
-        description ? descriptionId : undefined,
-        isInvalid ? errorId : undefined,
-    ]
-        .filter(Boolean)
-        .join(" ")
 
     return (
         <Field data-invalid={isInvalid || undefined}>

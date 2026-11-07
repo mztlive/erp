@@ -3,8 +3,7 @@
 import type { ComboboxRefreshProps } from "@/components/business/combobox-refresh"
 
 import { MultiOptionCombobox } from "@/components/business"
-import { useFieldContext } from "@/components/form/form-context"
-import { toFieldErrors } from "@/components/form/utils"
+import { useFieldA11y } from "@/components/form/field-a11y"
 import type { SelectFieldOption } from "@/components/form/select-field"
 import {
     Field,
@@ -47,18 +46,15 @@ export function MultiSelectField({
     id,
     getChipLabel,
 }: MultiSelectFieldProps) {
-    const field = useFieldContext<string[]>()
-    const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
-    const errors = toFieldErrors(field.state.meta.errors)
-    const resolvedId = id ?? field.name
-    const descriptionId = `${resolvedId}-description`
-    const errorId = `${resolvedId}-error`
-    const describedBy = [
-        description ? descriptionId : undefined,
-        isInvalid ? errorId : undefined,
-    ]
-        .filter(Boolean)
-        .join(" ")
+    const {
+        field,
+        isInvalid,
+        errors,
+        resolvedId,
+        descriptionId,
+        errorId,
+        describedBy,
+    } = useFieldA11y<string[]>(description, id)
 
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>

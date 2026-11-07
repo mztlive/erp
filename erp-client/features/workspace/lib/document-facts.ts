@@ -11,6 +11,7 @@ import type {
     BackendPaymentReversal,
     BackendSupplierPayment,
 } from "@/features/supplier-payables/api/mappers"
+import { normalizeObjectType } from "./object-type"
 
 export type WorkspaceFactSection = Readonly<{
     label: string
@@ -46,15 +47,7 @@ const RECEIPT_TYPES = new Set(["customer_receipt", "customerreceipt"])
 
 const PAYMENT_REVERSAL_TYPES = new Set(["payment_reversal", "paymentreversal"])
 
-/**
- * 把工作台任务的业务对象类型收成小写稳定码。
- */
-export function normalizeObjectType(businessObjectType: string): string {
-    return businessObjectType
-        .trim()
-        .replace(/([a-z])([A-Z])/g, "$1_$2")
-        .toLowerCase()
-}
+export { normalizeObjectType } from "./object-type"
 
 /**
  * 工作台任务是否应补拉单据事实。

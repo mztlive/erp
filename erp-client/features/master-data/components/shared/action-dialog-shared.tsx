@@ -16,9 +16,7 @@ import type {
 } from "@/features/master-data/types"
 import { getErrorMessage } from "@/lib/api/errors"
 
-export function newIdempotencyKey(prefix: string): string {
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
+export { newIdempotencyKey } from "@/lib/idempotency-key"
 
 export function notifySuccess(
     title: string,

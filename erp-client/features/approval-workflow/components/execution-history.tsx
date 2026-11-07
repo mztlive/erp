@@ -14,7 +14,11 @@ import {
 
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import {
+    StatusBadge,
+    statusToneMarkerClass,
+    type StatusTone,
+} from "@/components/ui/status-badge"
 import {
     Timeline,
     TimelineDescription,
@@ -45,19 +49,6 @@ const TONE_ICON: Record<StatusTone, LucideIcon> = {
     void: BanIcon,
 }
 
-const TONE_MARKER_CLASS: Record<StatusTone, string> = {
-    neutral:
-        "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
-    info: "border-info-border bg-info-soft text-info-soft-foreground",
-    success:
-        "border-success-border bg-success-soft text-success-soft-foreground",
-    warning:
-        "border-warning-border bg-warning-soft text-warning-soft-foreground",
-    destructive:
-        "border-destructive-border bg-destructive-soft text-destructive-soft-foreground",
-    void: "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
-}
-
 function HistoryHeading({
     compact,
     children,
@@ -81,7 +72,7 @@ function HistoryEntry({ item }: { item: ApprovalHistoryItem }) {
 
     return (
         <TimelineItem>
-            <TimelineMarker className={TONE_MARKER_CLASS[tone]}>
+            <TimelineMarker className={statusToneMarkerClass[tone]}>
                 <Icon aria-hidden="true" />
             </TimelineMarker>
             <TimelineHeader>

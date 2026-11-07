@@ -34,19 +34,9 @@ import type {
     BackendSensitiveField,
 } from "./wire-types"
 
-/** 返回本地业务日期。 */
-export function todayBusinessDate(): string {
-    const date = new Date()
-    const pad = (value: number) => String(value).padStart(2, "0")
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
+import { todayDate, unixSecondsToIsoOrNow as tsToIso } from "@/lib/datetime"
 
-/** 秒级时间戳转 ISO 时间。 */
-export function tsToIso(seconds: number | undefined | null): string {
-    return seconds == null || !Number.isFinite(seconds)
-        ? new Date().toISOString()
-        : new Date(seconds * 1000).toISOString()
-}
+export { tsToIso, todayDate as todayBusinessDate }
 
 /** 映射客户状态及其展示语义。 */
 export function mapCustomerStatus(status: BackendCustomerStatus | string): {
@@ -187,7 +177,7 @@ export function mapBank(
 export function mapAssignment(
     assignment: BackendAssignment,
 ): CustomerAssignmentView {
-    const today = todayBusinessDate()
+    const today = todayDate()
     return {
         id: assignment.id,
         role: assignment.assignment_role,

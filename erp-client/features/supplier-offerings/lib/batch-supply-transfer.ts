@@ -1,3 +1,4 @@
+import { downloadBlob } from "@/lib/download-blob"
 import type { BatchRow } from "./batch-supply"
 import { SupplyBatchValidationError } from "./batch-supply-error"
 
@@ -36,14 +37,6 @@ export function parseDelimited(text: string, delimiter = "\t"): string[][] {
     rows.push(row)
     return rows.filter((cells) => cells.some((value) => value.trim()))
 }
-function downloadBlob(blob: Blob, name: string) {
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = name
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 export function downloadFailedRows(rows: BatchRow[]) {
     const matrix = [
         ["公司 SKU 编号", "商品名称", "供应商订货编码", "处理状态", "说明"],
@@ -70,5 +63,6 @@ export function downloadFailedRows(rows: BatchRow[]) {
     downloadBlob(
         new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }),
         "供给未完成明细.csv",
+        { revokeDelayMs: 1000 },
     )
 }

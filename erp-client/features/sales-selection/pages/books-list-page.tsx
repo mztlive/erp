@@ -8,6 +8,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { PackageSearchIcon } from "lucide-react"
 import type { PaginationState } from "@tanstack/react-table"
 
@@ -110,13 +111,8 @@ export const BooksListPage = () => {
 
     const patchUrl = React.useCallback(
         (patch: Record<string, string | null>) => {
-            const next = new URLSearchParams(searchParams.toString())
-            for (const [key, value] of Object.entries(patch)) {
-                if (value == null || value === "") next.delete(key)
-                else next.set(key, value)
-            }
-            const qs = next.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname, {
+            patchSearchParams({ router, pathname, searchParams }, patch, {
+                replace: true,
                 scroll: false,
             })
         },

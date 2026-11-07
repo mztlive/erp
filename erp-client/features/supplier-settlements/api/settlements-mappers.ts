@@ -24,11 +24,7 @@ import type {
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { settlementActor, settlementDisplayLabel } from "../lib/display-labels"
 
-function tsToIso(secs: number | null | undefined): string {
-    if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
-        return ""
-    return new Date(Number(secs) * 1000).toISOString()
-}
+import { unixSecondsToIsoOrEmpty as tsToIso } from "@/lib/datetime"
 
 export function asStatus(raw: string): SettlementStatus {
     if (raw.toUpperCase() === "PENDING_RECONCILIATION") {

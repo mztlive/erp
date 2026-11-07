@@ -5,6 +5,8 @@
 
 import { z } from "zod"
 
+import { todayDate } from "@/lib/datetime"
+
 import {
     EVIDENCE_FILE_MAX_BYTES,
     EVIDENCE_FILE_TYPES,
@@ -124,13 +126,7 @@ export type ReduceExtraCostValues = z.input<
     ReturnType<typeof reduceExtraCostSchema>
 >
 
-/** 本地时区今天（YYYY-MM-DD）。 */
-export function todayDate(): string {
-    const now = new Date()
-    const pad = (value: number) => String(value).padStart(2, "0")
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}
-
+export { todayDate } from "@/lib/datetime"
 export function registerDefaults(): RegisterExtraCostValues {
     return {
         category: "",

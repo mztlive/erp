@@ -2,10 +2,10 @@
 
 import { DocumentSection, RevisionTimeline } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { MasterDataAuditList } from "@/features/master-data/components/shared/audit-event-list"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataCenterView } from "@/features/master-data/types"
-import { formatDateTime } from "@/lib/datetime"
 
 type ProductHistorySectionProps = {
     data: MasterDataCenterView | null | undefined
@@ -113,35 +113,7 @@ function ProductHistorySection({ data }: ProductHistorySectionProps) {
                 title={masterDataCopy.centerAudit}
                 description={masterDataCopy.centerAuditDesc}
             >
-                {data.auditEvents.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                        {masterDataCopy.centerNoAudit}
-                    </p>
-                ) : (
-                    <ul className="space-y-2 text-sm">
-                        {data.auditEvents.map((ev) => (
-                            <li
-                                key={ev.id}
-                                className="rounded-md border border-border px-3 py-2"
-                            >
-                                <div className="flex flex-wrap gap-2">
-                                    <span className="num text-xs text-muted-foreground">
-                                        {formatDateTime(
-                                            ev.at,
-                                            "full",
-                                            "passthrough",
-                                        )}
-                                    </span>
-                                    <span>{ev.actor}</span>
-                                    <Badge variant="outline">{ev.action}</Badge>
-                                </div>
-                                <div className="mt-1 text-muted-foreground">
-                                    {ev.detail}
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                <MasterDataAuditList events={data.auditEvents} />
             </DocumentSection>
         </section>
     ) : null

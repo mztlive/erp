@@ -1,7 +1,10 @@
 "use client"
 import { BanIcon, CheckIcon, XIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { StatusBadge } from "@/components/ui/status-badge"
+import {
+    StatusBadge,
+    statusToneMarkerClass,
+} from "@/components/ui/status-badge"
 import {
     Timeline,
     TimelineItem,
@@ -19,19 +22,19 @@ const approvalPresentation = {
         label: approvalResultText.approved,
         tone: "success",
         icon: CheckIcon,
-        marker: "border-success-border bg-success-soft text-success-soft-foreground",
+        marker: statusToneMarkerClass.success,
     },
     REJECTED: {
         label: approvalResultText.rejected,
         tone: "destructive",
         icon: XIcon,
-        marker: "border-destructive-border bg-destructive-soft text-destructive-soft-foreground",
+        marker: statusToneMarkerClass.destructive,
     },
     CANCELLED: {
         label: approvalResultText.cancelled,
         tone: "neutral",
         icon: BanIcon,
-        marker: "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
+        marker: statusToneMarkerClass.neutral,
     },
 } as const
 

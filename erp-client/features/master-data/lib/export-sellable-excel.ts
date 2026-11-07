@@ -4,12 +4,12 @@ import { fetchFileAssetPreviewBlob } from "@/features/file-assets/api"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import {
     SELLABLE_EXCEL_HEADERS,
-    downloadBlob,
     excelImageExtension,
     mapWithConcurrency,
     toSellableExcelRow,
     type SellableExcelImageExtension,
 } from "@/features/master-data/lib/sellable-excel-rows"
+import { downloadBlob } from "@/lib/download-blob"
 
 import {
     appendInquiryDeliverySheets,

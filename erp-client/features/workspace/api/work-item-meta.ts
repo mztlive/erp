@@ -5,6 +5,7 @@
  */
 
 import type { WorkspaceFamilyFilter, WorkspaceWorkItem } from "../types"
+import { normalizeObjectType } from "../lib/object-type"
 
 /** 单据类型徽章色。不用 warning / destructive，避免和受阻、超期状态抢语义。 */
 export type WorkspaceDocumentBadgeVariant =
@@ -294,19 +295,6 @@ const DOCUMENT_TYPED_WORK_ITEMS = new Set([
     "DOCUMENT_APPROVAL",
     "APPROVAL_INSTANCE",
 ])
-
-/**
- * 把业务对象种类收成小写稳定码，兼容 PascalCase 与 snake_case。
- *
- * @param businessObjectType 业务对象种类。
- * @returns 例如 `SalesOrder` → `sales_order`。
- */
-function normalizeObjectType(businessObjectType: string): string {
-    return businessObjectType
-        .trim()
-        .replace(/([a-z])([A-Z])/g, "$1_$2")
-        .toLowerCase()
-}
 
 /**
  * 按业务对象种类查找单据展示元数据。

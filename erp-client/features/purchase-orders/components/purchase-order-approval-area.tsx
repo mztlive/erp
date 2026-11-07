@@ -1,19 +1,9 @@
 "use client"
 
-import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
-import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
-import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
-import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
-import { RuntimeSummary } from "@/features/approval-workflow/components/runtime-summary"
-import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
-import {
-    useApprovalHistoryInfiniteQuery,
-    useRecoveryOptionsQuery,
-} from "@/features/approval-workflow/queries"
-import {
-    mergeDocumentAllowedActions,
-    type ApprovalCommandView,
-    type DocumentApprovalView,
+import { DocumentApprovalArea } from "@/features/approval-workflow/components/document-approval-area"
+import type {
+    ApprovalCommandView,
+    DocumentApprovalView,
 } from "@/features/approval-workflow/types"
 import {
     PURCHASE_ORDER_DOCUMENT_TYPE,
@@ -43,86 +33,19 @@ export function PurchaseOrderApprovalArea({
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
 }) {
-    const instanceId = approval?.instance?.id
-    const recoveryQuery = useRecoveryOptionsQuery(
-        instanceId,
-        phase === "runtime" && Boolean(instanceId),
-    )
-    const historyQuery = useApprovalHistoryInfiniteQuery(
-        { instanceId: instanceId ?? "" },
-        phase === "runtime" && Boolean(instanceId),
-    )
-    const historyItems = historyQuery.data
-        ? historyQuery.data.pages.flatMap((page) => page.items)
-        : (approval?.recentHistory ?? [])
-    const allowedActions = mergeDocumentAllowedActions(
-        approval?.allowedActions,
-        workItemAllowedActions,
-    )
-
-    if (phase === "draft") {
-        return (
-            <div className="space-y-3">
-                <DefinitionBindingCard
-                    definition={approval?.definition}
-                    compact
-                />
-                {documentId ? (
-                    <ApprovalActionBar
-                        allowedActions={allowedActions}
-                        definition={approval?.definition}
-                        documentType={PURCHASE_ORDER_DOCUMENT_TYPE}
-                        documentId={documentId}
-                        hiddenActions={["CANCEL", "CANCEL_APPROVAL"]}
-                    />
-                ) : null}
-            </div>
-        )
-    }
-
-    if (phase === "confirm") {
-        return <SubmissionRouteConfirmation definition={approval?.definition} />
-    }
-
     return (
-        <div className="flex flex-col gap-4">
-            <ApprovalQueryFeedback
-                surface="purchase-order-approval-area"
-                instanceId={instanceId}
-                historyQuery={historyQuery}
-                recoveryQuery={recoveryQuery}
-            />
-            <RuntimeSummary instance={approval?.instance} compact />
-            <ExecutionHistory
-                items={historyItems}
-                hasMore={historyQuery.hasNextPage}
-                loadingMore={historyQuery.isFetchingNextPage}
-                onLoadMore={
-                    historyQuery.hasNextPage
-                        ? () => {
-                              void historyQuery.fetchNextPage()
-                          }
-                        : undefined
-                }
-                compact
-            />
-            <ApprovalActionBar
-                allowedActions={allowedActions}
-                recoveryOptions={
-                    recoveryQuery.isError
-                        ? []
-                        : (recoveryQuery.data?.actions ?? [])
-                }
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                instance={approval?.instance}
-                definition={approval?.definition}
-                documentType={PURCHASE_ORDER_DOCUMENT_TYPE}
-                documentId={documentId}
-                afterCancelStatusLabel="草稿"
-                hiddenActions={["CANCEL", "CANCEL_APPROVAL"]}
-                onDecisionApplied={onDecisionApplied}
-            />
-        </div>
+        <DocumentApprovalArea
+            phase={phase}
+            approval={approval}
+            surface="purchase-order-approval-area"
+            documentType={PURCHASE_ORDER_DOCUMENT_TYPE}
+            documentId={documentId}
+            hiddenActions={["CANCEL", "CANCEL_APPROVAL"]}
+            workItemId={workItemId}
+            expectedTaskVersion={expectedTaskVersion}
+            workItemAllowedActions={workItemAllowedActions}
+            onDecisionApplied={onDecisionApplied}
+            compact
+        />
     )
 }

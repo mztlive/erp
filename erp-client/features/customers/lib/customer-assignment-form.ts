@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { todayDate } from "@/lib/datetime"
+
 import type { CustomerAssignmentView } from "@/features/customers/types"
 
 export type CustomerAssignmentFormValues = {
@@ -8,13 +10,6 @@ export type CustomerAssignmentFormValues = {
     effectiveFrom: string
     effectiveTo: string
     reason: string
-}
-
-/** 返回本地业务日期。 */
-function todayBusinessDate(): string {
-    const date = new Date()
-    const pad = (value: number) => String(value).padStart(2, "0")
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 /** 返回给定业务日的下一天。 */
@@ -29,7 +24,7 @@ function nextBusinessDate(value: string): string {
 export function customerAssignmentDefaults(
     target?: CustomerAssignmentView,
 ): CustomerAssignmentFormValues {
-    const today = todayBusinessDate()
+    const today = todayDate()
     return {
         userId: "",
         role: "OWNER",

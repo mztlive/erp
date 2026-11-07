@@ -1,4 +1,6 @@
 import { z } from "zod"
+
+import { newIdempotencyKey } from "@/lib/idempotency-key"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
     compactFixed,
@@ -121,9 +123,7 @@ export const statusRevisionSchema = z.object({
     changeReason: z.string().trim().min(1, "请填写变更原因"),
 })
 
-export function idempotencyKey(prefix: string): string {
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-}
+export const idempotencyKey = (prefix: string) => newIdempotencyKey(prefix, 8)
 
 export function rateFromPercentage(value: string): string {
     return divideFixed(value, "100", {

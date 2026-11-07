@@ -3,6 +3,8 @@
 import * as React from "react"
 import { z } from "zod"
 
+import { todayDate } from "@/lib/datetime"
+
 import { MoneyValue, RateValue } from "@/components/business"
 import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 import {
@@ -41,13 +43,6 @@ import { hasPermission } from "@/lib/permissions"
 type ExpenseLine = PurchaseOrderCenterView["currentContent"]["lines"][number]
 
 const CONFIRMABLE_STATUSES = new Set(["EFFECTIVE", "PARTIAL", "COMPLETED"])
-
-/** 本地时区今天（YYYY-MM-DD）。 */
-function todayDate(): string {
-    const now = new Date()
-    const pad = (value: number) => String(value).padStart(2, "0")
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}
 
 const confirmSchema = z.object({
     occurredOn: z

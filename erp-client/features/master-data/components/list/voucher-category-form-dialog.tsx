@@ -18,6 +18,7 @@ import {
 import { toast } from "@/components/ui/toast"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { defaultImmediateEffectiveFrom } from "@/features/master-data/lib/resource-fields"
+import { newIdempotencyKey } from "@/lib/idempotency-key"
 import {
     useCreateMasterDataMutation,
     useCreateRevisionMutation,
@@ -33,10 +34,6 @@ import type {
  * 用户只填编号（新建）/ 名称 / 描述；分类（共用卡券根）、品牌（福尚云）、单位（张）
  * 由后端默认补齐。编辑时编号只读。
  */
-
-function newIdempotencyKey(prefix: string): string {
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
 
 const formSchema = z.object({
     voucherNo: z.string().trim().min(1, "请填写卡券类目编号"),

@@ -46,6 +46,20 @@ const toneVariant: Record<
     void: "neutral",
 }
 
+/** 时间轴标记等状态底色；与徽章使用的语义色一致。 */
+const statusToneMarkerClass: Record<StatusTone, string> = {
+    neutral:
+        "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
+    info: "border-info-border bg-info-soft text-info-soft-foreground",
+    success:
+        "border-success-border bg-success-soft text-success-soft-foreground",
+    warning:
+        "border-warning-border bg-warning-soft text-warning-soft-foreground",
+    destructive:
+        "border-destructive-border bg-destructive-soft text-destructive-soft-foreground",
+    void: "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
+}
+
 function StatusBadge({
     tone = "neutral",
     icon,
@@ -89,4 +103,4 @@ function StatusBadge({
     )
 }
 
-export { StatusBadge, type StatusTone }
+export { StatusBadge, statusToneMarkerClass, type StatusTone }

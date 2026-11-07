@@ -9,8 +9,7 @@ import {
     FieldError,
     FieldLabel,
 } from "@/components/ui/field"
-import { useFieldContext } from "@/components/form/form-context"
-import { toFieldErrors } from "@/components/form/utils"
+import { useFieldA11y } from "@/components/form/field-a11y"
 import { cn } from "@/lib/utils"
 
 type TextareaFieldProps = {
@@ -48,19 +47,16 @@ export function TextareaField({
     id,
     onKeyDown,
 }: TextareaFieldProps) {
-    const field = useFieldContext<string>()
+    const {
+        field,
+        isInvalid,
+        errors,
+        resolvedId,
+        descriptionId,
+        errorId,
+        describedBy,
+    } = useFieldA11y<string>(description, id)
     const Control = inInputGroup ? InputGroupTextarea : Textarea
-    const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
-    const errors = toFieldErrors(field.state.meta.errors)
-    const resolvedId = id ?? field.name
-    const descriptionId = `${resolvedId}-description`
-    const errorId = `${resolvedId}-error`
-    const describedBy = [
-        description ? descriptionId : undefined,
-        isInvalid ? errorId : undefined,
-    ]
-        .filter(Boolean)
-        .join(" ")
 
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>

@@ -1,3 +1,4 @@
+import { downloadBlob } from "@/lib/download-blob"
 import type { PortalBatchMode } from "../types"
 import {
     batchColumns,
@@ -213,15 +214,6 @@ export function pastePortalCells(
     )
     return editBatchValues(rows, updates, mode)
 }
-function downloadBlob(blob: Blob, name: string, mode: PortalBatchMode) {
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.id = `supplier-portal-batch-${mode}-download-file`
-    link.href = url
-    link.download = name
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 export async function downloadPortalBatchTemplate(mode: PortalBatchMode) {
     const { Workbook } = await import("exceljs")
     const workbook = new Workbook()
@@ -266,7 +258,10 @@ export async function downloadPortalBatchTemplate(mode: PortalBatchMode) {
             type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
         `${batchModeLabels[mode]}模板.xlsx`,
-        mode,
+        {
+            linkId: `supplier-portal-batch-${mode}-download-file`,
+            revokeDelayMs: 1000,
+        },
     )
 }
 /** CSV单元格引号转义后增加公式防护，保留未完成的全部原始输入。 */
@@ -298,7 +293,10 @@ export function downloadPortalBatchErrors(
     downloadBlob(
         new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
         `${batchModeLabels[mode]}未完成明细.csv`,
-        mode,
+        {
+            linkId: `supplier-portal-batch-${mode}-download-file`,
+            revokeDelayMs: 1000,
+        },
     )
 }
 function formulaLike(value: string): boolean {

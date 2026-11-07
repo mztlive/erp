@@ -4,6 +4,8 @@ import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import type { PaginationState } from "@tanstack/react-table"
 
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+
 /** 列表筛选 / 分页写入 URL（刷新、后退、分享一致）。 */
 export function useListUrl() {
     const router = useRouter()
@@ -12,13 +14,8 @@ export function useListUrl() {
 
     const patchUrl = React.useCallback(
         (patch: Record<string, string | null>) => {
-            const next = new URLSearchParams(searchParams.toString())
-            for (const [key, value] of Object.entries(patch)) {
-                if (value == null || value === "") next.delete(key)
-                else next.set(key, value)
-            }
-            const qs = next.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname, {
+            patchSearchParams({ router, pathname, searchParams }, patch, {
+                replace: true,
                 scroll: false,
             })
         },

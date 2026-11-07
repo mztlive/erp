@@ -7,11 +7,9 @@ import type { InterfaceErrorClass } from "@/components/business"
 import type { WorkItemProjection } from "@/features/work-items"
 import type { IntegrationResolutionItemView } from "../types"
 
-export function tsToIso(secs: number | null | undefined): string {
-    if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
-        return ""
-    return new Date(Number(secs) * 1000).toISOString()
-}
+import { unixSecondsToIsoOrEmpty as tsToIso } from "@/lib/datetime"
+
+export { tsToIso }
 
 export function ageLabel(createdAtSecs: number): string {
     const ms = Date.now() - createdAtSecs * 1000

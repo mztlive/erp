@@ -22,17 +22,14 @@ import {
 } from "@/features/supplier-orders/types"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { displayBusinessText, displayName } from "@/lib/display-name"
+import { unixSecondsToIsoOrEmpty as tsToIso } from "@/lib/datetime"
 import type { BackendDetail, BackendOrder } from "./wire-types"
+
+export { tsToIso }
 
 export const SUPPLIER_EXECUTION_NOTICE =
     "系统按已批准的采购条件执行供应商发单与履约接口确认。实际收付款以 ERP 财务记录为准，履约、取消和退款分别跟踪。"
 export const PERMISSION_VERSION = "server"
-
-export function tsToIso(secs: number | null | undefined): string {
-    if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
-        return ""
-    return new Date(Number(secs) * 1000).toISOString()
-}
 
 export function asFulfillment(raw: string): SupplierFulfillmentStatus {
     const u = raw.toUpperCase() as SupplierFulfillmentStatus

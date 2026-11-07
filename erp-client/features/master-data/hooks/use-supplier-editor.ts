@@ -23,6 +23,7 @@ import type {
     PendingAssetUpload,
     SupplierFields,
 } from "@/features/master-data/types"
+import { newIdempotencyKey } from "@/lib/idempotency-key"
 import {
     createSupplierEditorDefaults,
     hydrateSupplierEditor,
@@ -30,10 +31,6 @@ import {
 } from "@/features/master-data/lib/supplier-editor-model"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
-
-function newIdempotencyKey(prefix: string): string {
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
 
 const supplierFieldAliases = {
     legal_name: "company",

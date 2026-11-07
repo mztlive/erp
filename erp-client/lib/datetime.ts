@@ -24,6 +24,31 @@ export type DateTimeFormatMode =
 
 export type DateTimeEmptyHandling = "dash" | "passthrough"
 
+/** 本地时区今天（YYYY-MM-DD）。 */
+export function todayDate(): string {
+    const date = new Date()
+    const pad = (value: number) => String(value).padStart(2, "0")
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** Unix 秒转 ISO；空值、非有限值或非正数返回空串。 */
+export function unixSecondsToIsoOrEmpty(
+    secs: number | null | undefined,
+): string {
+    if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
+        return ""
+    return new Date(Number(secs) * 1000).toISOString()
+}
+
+/** Unix 秒转 ISO；空值或非有限值回退当前时间。 */
+export function unixSecondsToIsoOrNow(
+    seconds: number | null | undefined,
+): string {
+    return seconds == null || !Number.isFinite(seconds)
+        ? new Date().toISOString()
+        : new Date(seconds * 1000).toISOString()
+}
+
 export function formatDateTime(
     iso: string | null | undefined,
     mode: DateTimeFormatMode = "full",

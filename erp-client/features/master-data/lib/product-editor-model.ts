@@ -1,4 +1,5 @@
 import { defaultImmediateEffectiveFrom } from "@/features/master-data/lib/resource-fields"
+import { newIdempotencyKey } from "@/lib/idempotency-key"
 import {
     emptyProductFields,
     rebuildSkusFromSpecs,
@@ -10,10 +11,6 @@ import type {
     ProductFields,
     ProductSpecDimension,
 } from "@/features/master-data/types"
-
-function newIdempotencyKey(prefix: string): string {
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
 
 type ProductSpecDraft = Readonly<{
     draftId: string

@@ -12,12 +12,9 @@ import type {
 import { apiGet } from "@/lib/api"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 
-export function tsToIso(seconds: number | undefined | null): string {
-    if (seconds == null || !Number.isFinite(seconds)) {
-        return new Date().toISOString()
-    }
-    return new Date(seconds * 1000).toISOString()
-}
+import { unixSecondsToIsoOrNow as tsToIso } from "@/lib/datetime"
+
+export { tsToIso }
 
 export function isExpiringWithin30Days(
     status: ContractStatus,
