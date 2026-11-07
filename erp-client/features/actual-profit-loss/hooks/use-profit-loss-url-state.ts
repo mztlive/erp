@@ -21,6 +21,7 @@ import type {
 } from "@/features/actual-profit-loss/types"
 import { COST_TYPE_CHIP_PREFIX } from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 export type ProfitLossUrlPatch = Record<string, string | null | undefined>
@@ -84,8 +85,9 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         attributionOrgUnitIds.length > 0,
     )
 
-    const [searchInput, setSearchInput] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const { searchDraft: searchInput, setSearchDraft: setSearchInput } =
+        useSearchDraft(qParam, { inputRef: searchInputRef })
     const [benefitScenarioDraft, setBenefitScenarioDraft] = React.useState(
         benefitScenario ?? "",
     )
@@ -192,9 +194,6 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         : null
 
     React.useEffect(() => {
-        setSearchInput(qParam)
-    }, [qParam])
-    React.useEffect(() => {
         setCoverageDraft(coverage)
     }, [coverage])
     React.useEffect(() => {
@@ -273,7 +272,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
             costType: null,
             page: null,
         })
-    }, [patchUrl])
+    }, [patchUrl, setSearchInput])
     const resetMoreFilters = React.useCallback(() => {
         setBenefitScenarioDraft("")
         setCostTypesDraft([])
@@ -336,7 +335,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
                 })
             }
         },
-        [costTypes, patchUrl],
+        [costTypes, patchUrl, setSearchInput],
     )
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {

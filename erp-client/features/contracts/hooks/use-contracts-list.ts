@@ -18,6 +18,7 @@ import {
     type ContractsUrlState,
 } from "@/features/contracts/lib/contracts-url-state"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
+import { useSearchDraft } from "@/lib/use-search-draft"
 
 /** 可被单独移除的已生效条件。 */
 export type ContractFilterKey =
@@ -73,7 +74,9 @@ export function useContractsList() {
     const total = contractsQuery.data?.total ?? 0
 
     // Draft：本地受控，变化不请求
-    const [searchDraft, setSearchDraft] = React.useState(q ?? "")
+    const { searchDraft, setSearchDraft } = useSearchDraft(q ?? "", {
+        inputRef: searchInputRef,
+    })
     const [settlementPartyIdDraft, setSettlementPartyIdDraft] = React.useState<
         string | null
     >(settlementPartyId ?? null)
@@ -174,7 +177,7 @@ export function useContractsList() {
                     break
             }
         },
-        [pushUrl],
+        [pushUrl, setSearchDraft],
     )
 
     /** 清除全部筛选（含来源锁定与分页）；保留排序等视图/导航参数。 */
@@ -195,13 +198,9 @@ export function useContractsList() {
             includeDescendants: false,
             page: 1,
         })
-    }, [pushUrl])
+    }, [pushUrl, setSearchDraft])
 
     // URL 回填：仅同步 Draft；面板展开态不在此重置
-    React.useEffect(() => {
-        setSearchDraft(q ?? "")
-    }, [q])
-
     React.useEffect(() => {
         setSettlementPartyIdDraft(settlementPartyId ?? null)
         setOwnerDraft(ownerUserIds ?? null)

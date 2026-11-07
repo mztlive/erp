@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/permissions"
 
 import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
 import { getErrorPresentation, type ApiError } from "@/lib/api/errors"
+import { downloadBlob } from "@/lib/download-blob"
 import {
     PERMISSION_VERSION,
     type BackendContractDetail,
@@ -71,14 +72,7 @@ export async function downloadSalesOrderContractPdf(
         `/admin/contracts/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}/preview`,
         { timeoutMs: 30_000, cache: "no-store" },
     )
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = `${contract.contract_no}.pdf`
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `${contract.contract_no}.pdf`)
 }
 
 /** 详情页附属信息：在途改单及变更列表范围元数据。 */

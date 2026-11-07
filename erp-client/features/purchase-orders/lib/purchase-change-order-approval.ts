@@ -4,6 +4,10 @@ import {
     type DocumentApprovalView,
     type DocumentApprovalViewDto,
 } from "@/features/approval-workflow/types"
+import {
+    changeOrderApprovalPhase,
+    isUnsubmittedStatus,
+} from "@/features/approval-workflow/status"
 
 /** 采购变更单作为合同 DocumentType 的固定值。 */
 export const PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE =
@@ -15,22 +19,13 @@ export const PURCHASE_CHANGE_ORDER_OBJECT_TYPE =
 
 export type PurchaseChangeOrderApprovalPhase = "draft" | "confirm" | "runtime"
 
-const UNSUBMITTED_STATUS_CODES = new Set([
-    "DRAFT",
-    "draft",
-    "REJECTED",
-    "rejected",
-])
-
 /**
  * 判断采购变更单是否仍处于未提交审批的生命周期。
  *
  * @param status 服务端状态码；缺省视为未提交。
  * @returns 未提交为 true。
  */
-export const isUnsubmittedPurchaseChangeOrderStatus = (
-    status?: string,
-): boolean => !status || UNSUBMITTED_STATUS_CODES.has(status)
+export const isUnsubmittedPurchaseChangeOrderStatus = isUnsubmittedStatus
 
 /**
  * 把采购变更单业务状态映射为用户可见中文，不上屏枚举原值。
@@ -93,12 +88,7 @@ export const purchaseChangeOrderApprovalPhase = (
     approval?: DocumentApprovalView,
     status?: string,
 ): Exclude<PurchaseChangeOrderApprovalPhase, "confirm"> =>
-    !isUnsubmittedPurchaseChangeOrderStatus(status) ||
-    (approval?.instance &&
-        approval.instance.status !== "CANCELLED" &&
-        approval.instance.status !== "REJECTED")
-        ? "runtime"
-        : "draft"
+    changeOrderApprovalPhase(approval, status)
 
 /**
  * 把采购变更单详情上的只读审批结构转成通用审批区投影。

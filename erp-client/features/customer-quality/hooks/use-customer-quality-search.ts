@@ -1,7 +1,6 @@
 "use client"
 
-import * as React from "react"
-
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 /**
@@ -11,17 +10,7 @@ import { useSearchHotkey } from "@/lib/use-search-hotkey"
  * （Enter / 「查询」）。
  */
 export function useCustomerQualitySearch({ qParam }: { qParam: string }) {
-    const [searchDraft, setSearchDraft] = React.useState(qParam)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-
-    // URL 回填搜索草稿（输入框聚焦时保留未提交的编辑）
-    React.useEffect(() => {
-        const el = searchInputRef.current
-        if (el && document.activeElement === el) return
-        setSearchDraft(qParam)
-    }, [qParam])
-
-    useSearchHotkey(searchInputRef)
-
-    return { searchDraft, setSearchDraft, searchInputRef }
+    const draft = useSearchDraft(qParam, { skipWhileFocused: true })
+    useSearchHotkey(draft.searchInputRef)
+    return draft
 }

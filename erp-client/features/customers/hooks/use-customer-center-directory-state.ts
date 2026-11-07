@@ -14,6 +14,7 @@ import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
 import { parseCustomerScope } from "@/features/customers/lib/filter-customers"
 import type { CustomerScope } from "@/features/customers/types"
 import { hasPermission } from "@/lib/permissions"
+import { useSearchDraft } from "@/lib/use-search-draft"
 
 /** 目录筛选/分页/排序的 URL 参数增量。 */
 export type CustomerCenterDirectoryPatch = {
@@ -76,18 +77,18 @@ export function useCustomerCenterDirectoryState() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
     // ---- Draft：本地受控，提交前不请求 ----
-    const [searchDraft, setSearchDraft] = React.useState(q)
+    const { searchDraft, setSearchDraft } = useSearchDraft(q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     const [statusDraft, setStatusDraft] =
         React.useState<DirectoryStatus>(status)
     const [panelOpen, setPanelOpen] = React.useState(false)
 
     // URL 回填只同步 Draft
     React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(q)
-        }
         setStatusDraft(status)
-    }, [q, status, ownerUserIds])
+    }, [status, ownerUserIds])
 
     const pushState = React.useCallback(
         (next: CustomerCenterDirectoryPatch) => {
@@ -176,7 +177,7 @@ export function useCustomerCenterDirectoryState() {
                 pushState({ status: "active", page: 1 })
             }
         },
-        [pushState],
+        [pushState, setSearchDraft],
     )
 
     /** 只清组织草稿；保留搜索、负责销售、状态和当前结果。 */
@@ -208,7 +209,7 @@ export function useCustomerCenterDirectoryState() {
             includeDescendants: false,
             page: 1,
         })
-    }, [pushState])
+    }, [pushState, setSearchDraft])
 
     /** 所有已生效筛选均可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<readonly CustomerAppliedChip[]>(() => {

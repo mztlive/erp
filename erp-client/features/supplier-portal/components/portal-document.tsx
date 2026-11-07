@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { downloadBlob } from "@/lib/download-blob"
 import { portalFile } from "../api"
 import { PortalError } from "./surface"
 
@@ -24,13 +25,11 @@ export function PortalDocument({
                 { request_id: applicationId },
                 assetId,
             )
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download =
-                blob.type === "application/pdf" ? `${label}.pdf` : label
-            link.click()
-            setTimeout(() => URL.revokeObjectURL(url), 1000)
+            downloadBlob(
+                blob,
+                blob.type === "application/pdf" ? `${label}.pdf` : label,
+                { revokeDelayMs: 1000 },
+            )
         },
         retry: false,
     })

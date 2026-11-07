@@ -1,9 +1,11 @@
 "use client"
 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+
 import { accountProfileKeys } from "@/features/auth/hooks/queries"
 import { fetchAccountProfile } from "@/features/auth/api"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useScopedListQuery } from "@/lib/use-scoped-list-query"
 
 import {
     fetchSalesOrderContractCheck,
@@ -62,30 +64,10 @@ export function useSalesOrdersQuery(
     query: SalesOrdersListQuery,
     enabled = true,
 ) {
-    const client = useQueryClient()
-    const firstPage = { ...query, page: 1, scopeVersion: undefined }
-    const baseline = client.getQueryData<
-        import("@/features/sales-orders/api/contracts").SalesOrderListView
-    >(salesOrderKeys.list(firstPage))
-    const scopeVersion =
-        query.scopeVersion ??
-        (query.page > 1 ? baseline?.scopeVersion : undefined)
-    const scoped = { ...query, scopeVersion }
-    return useQuery({
-        queryKey: salesOrderKeys.list(scoped),
-        queryFn: async () => {
-            if (query.page === 1 || scopeVersion)
-                return fetchSalesOrders(scoped)
-            // 直接打开后续页时先建立本次查询的第一页授权快照。
-            const first = await client.fetchQuery({
-                queryKey: salesOrderKeys.list(firstPage),
-                queryFn: () => fetchSalesOrders(firstPage),
-            })
-            return fetchSalesOrders({
-                ...query,
-                scopeVersion: first.scopeVersion,
-            })
-        },
+    return useScopedListQuery({
+        query,
+        queryKey: salesOrderKeys.list,
+        fetchPage: fetchSalesOrders,
         enabled,
     })
 }

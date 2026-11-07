@@ -12,6 +12,7 @@ import {
     type Page,
 } from "@/lib/api"
 import { paymentTermLabel } from "@/lib/business-options"
+import { downloadBlob } from "@/lib/download-blob"
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
 import { subtractFixed, sumFixed } from "@/lib/fixed-decimal"
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
@@ -491,12 +492,7 @@ export async function downloadAttachment(
         `${ROOT}/${encodeURIComponent(requestId)}/materials/${encodeURIComponent(attachment.file_asset_id)}/download${query}`,
         { cache: "no-store" },
     )
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = attachment.file_name
-    anchor.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, attachment.file_name)
 }
 export async function revealPaymentRecipient(
     request: PaymentRequest,

@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query"
 import { toast } from "@/components/ui/toast"
 import { getErrorMessage } from "@/lib/api/errors"
+import { downloadBlob } from "@/lib/download-blob"
 import { fetchPaymentExport } from "../api/payment-export"
 import type { WorkspaceUrlState } from "../lib/url-state"
 
@@ -13,14 +14,9 @@ export function usePaymentExport() {
             const rows = await fetchPaymentExport(state)
             const { buildPaymentWorkbook } =
                 await import("../lib/payment-export")
-            const url = URL.createObjectURL(await buildPaymentWorkbook(rows))
-            const anchor = document.createElement("a")
-            anchor.href = url
-            anchor.download = `待执行采购付款-${new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(new Date())}.xlsx`
-            document.body.appendChild(anchor)
-            anchor.click()
-            anchor.remove()
-            window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+            const blob = await buildPaymentWorkbook(rows)
+            const fileName = `待执行采购付款-${new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(new Date())}.xlsx`
+            downloadBlob(blob, fileName, { revokeDelayMs: 30_000 })
             return rows.length
         },
         onSuccess: (count) =>

@@ -1,7 +1,6 @@
 "use client"
 
-import * as React from "react"
-
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 export interface LedgerSearchInput {
@@ -15,15 +14,7 @@ export interface LedgerSearchInput {
  * 「/」聚焦搜索时忽略输入控件与打开的 Dialog / Sheet。
  */
 export function useLedgerSearch({ qParam }: LedgerSearchInput) {
-    const [searchDraft, setSearchDraft] = React.useState(qParam)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-
-    // URL q 变化时同步输入框；clearAllFilters 直接清空草稿，不依赖此 effect
-    React.useEffect(() => {
-        setSearchDraft(qParam)
-    }, [qParam])
-
-    useSearchHotkey(searchInputRef)
-
-    return { searchDraft, setSearchDraft, searchInputRef }
+    const draft = useSearchDraft(qParam)
+    useSearchHotkey(draft.searchInputRef)
+    return draft
 }

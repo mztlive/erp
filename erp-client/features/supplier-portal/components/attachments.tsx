@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { commandFailureDisposition } from "@/lib/api/command-recovery"
 import { selectedFileKey } from "@/lib/file-selection"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { downloadBlob } from "@/lib/download-blob"
 import { portalFile, portalUpload } from "../api"
 import { commandKey } from "../lib/presentation"
 import { usePortalApplication } from "../hooks/queries"
@@ -128,18 +129,16 @@ export function PortalAttachments({
     const download = useMutation({
         mutationFn: async (id: string) => {
             const blob = await portalFile({ request_id: applicationId }, id)
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download =
+            downloadBlob(
+                blob,
                 names[id] ??
-                (blob.type === "application/pdf"
-                    ? "商品资料.pdf"
-                    : imageOnly
-                      ? "商品图片"
-                      : "商品资料")
-            link.click()
-            setTimeout(() => URL.revokeObjectURL(url), 1000)
+                    (blob.type === "application/pdf"
+                        ? "商品资料.pdf"
+                        : imageOnly
+                          ? "商品图片"
+                          : "商品资料"),
+                { revokeDelayMs: 1000 },
+            )
         },
         retry: false,
     })

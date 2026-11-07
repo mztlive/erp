@@ -10,6 +10,7 @@ import {
     setContractSalesAccess,
 } from "@/features/contracts/api/contracts"
 import type { UploadContractPdfInput } from "@/features/contracts/types"
+import { useScopedListQuery } from "@/lib/use-scoped-list-query"
 import { previewContractFile } from "../api/preview"
 
 const contractKeys = {
@@ -22,29 +23,11 @@ const contractKeys = {
 export function useContractsQuery(
     query: import("../lib/contracts-url-state").ContractsUrlState,
 ) {
-    const queryClient = useQueryClient()
-    const firstPage = { ...query, page: 1, scopeVersion: undefined }
-    const baseline = queryClient.getQueryData<
-        import("../api/list").ContractListData
-    >([...contractKeys.list(), firstPage])
-    const scopeVersion =
-        query.scopeVersion ??
-        (query.page > 1 ? baseline?.scopeVersion : undefined)
-    const scoped = { ...query, scopeVersion }
-    return useQuery({
-        queryKey: [...contractKeys.list(), scoped],
-        queryFn: async () => {
-            if (query.page === 1 || scopeVersion) return fetchContracts(scoped)
-            const first = await queryClient.fetchQuery({
-                queryKey: [...contractKeys.list(), firstPage],
-                queryFn: () => fetchContracts(firstPage),
-            })
-            return fetchContracts({
-                ...query,
-                scopeVersion: first.scopeVersion,
-            })
-        },
-        placeholderData: (previous) => previous,
+    return useScopedListQuery({
+        query,
+        queryKey: (value) => [...contractKeys.list(), value],
+        fetchPage: fetchContracts,
+        keepPreviousData: true,
     })
 }
 

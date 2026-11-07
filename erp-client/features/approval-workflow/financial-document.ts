@@ -10,6 +10,7 @@ import {
     type DocumentApprovalView,
     type DocumentApprovalViewDto,
 } from "./types"
+import { isUnsubmittedStatus } from "./status"
 
 export type FinancialApprovalPhase = "draft" | "confirm" | "runtime"
 
@@ -20,20 +21,12 @@ export type FinancialStatusTone =
     | "warning"
     | "neutral"
 
-const UNSUBMITTED_STATUS_CODES = new Set([
-    "DRAFT",
-    "draft",
-    "REJECTED",
-    "rejected",
-])
-
 /**
  * 判断资金单据是否仍处于未提交审批的生命周期。
  *
  * @param status 服务端状态码；缺省视为未提交。
  */
-export const isUnsubmittedFinancialStatus = (status?: string): boolean =>
-    !status || UNSUBMITTED_STATUS_CODES.has(status)
+export const isUnsubmittedFinancialStatus = isUnsubmittedStatus
 
 /**
  * 把资金单据业务状态映射为用户可见中文，不上屏枚举原值。

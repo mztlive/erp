@@ -1,16 +1,8 @@
-import * as React from "react"
-
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 export function useIntegrationSearch({ q }: { q: string | undefined }) {
-    const [searchDraft, setSearchDraft] = React.useState(q ?? "")
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-
-    React.useEffect(() => {
-        setSearchDraft(q ?? "")
-    }, [q])
-
-    useSearchHotkey(searchInputRef)
-
-    return { searchDraft, setSearchDraft, searchInputRef }
+    const draft = useSearchDraft(q)
+    useSearchHotkey(draft.searchInputRef)
+    return draft
 }

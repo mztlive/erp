@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { useScopedListQuery } from "@/lib/use-scoped-list-query"
 import { confirmDirectReturn, syncReturnFinance } from "../api/direct-returns"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
@@ -84,28 +85,10 @@ export function usePurchaseOrdersQuery(
     query: PurchaseOrderListQuery,
     options?: { enabled?: boolean },
 ) {
-    const client = useQueryClient()
-    const firstPage = { ...query, page: 1, scopeVersion: undefined }
-    const baseline = client.getQueryData<
-        import("@/features/purchase-orders/api/purchase-orders-contract").PurchaseOrderListResult
-    >(purchaseOrderKeys.list(firstPage))
-    const page = query.page ?? 1
-    const scopeVersion =
-        query.scopeVersion ?? (page > 1 ? baseline?.scopeVersion : undefined)
-    const scoped = { ...query, scopeVersion }
-    return useQuery({
-        queryKey: purchaseOrderKeys.list(scoped),
-        queryFn: async () => {
-            if (page === 1 || scopeVersion) return fetchPurchaseOrders(scoped)
-            const first = await client.fetchQuery({
-                queryKey: purchaseOrderKeys.list(firstPage),
-                queryFn: () => fetchPurchaseOrders(firstPage),
-            })
-            return fetchPurchaseOrders({
-                ...query,
-                scopeVersion: first.scopeVersion,
-            })
-        },
+    return useScopedListQuery({
+        query,
+        queryKey: purchaseOrderKeys.list,
+        fetchPage: fetchPurchaseOrders,
         enabled: options?.enabled ?? true,
     })
 }

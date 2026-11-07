@@ -1,6 +1,7 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query"
 import { apiGet, apiPost } from "@/lib/api"
 import { getToken } from "@/lib/api/session"
+import { downloadBlob } from "@/lib/download-blob"
 import { toast } from "@/components/ui/toast"
 import {
     captureNavDeliveryOrigin,
@@ -209,14 +210,11 @@ export function transferText(file: TransferFile) {
     )
 }
 export function downloadTransfer(file: TransferFile) {
-    const url = URL.createObjectURL(
+    downloadBlob(
         new Blob([transferBytes(file)], { type: file.content_type }),
+        file.file_name,
+        { revokeDelayMs: 1000 },
     )
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = file.file_name
-    anchor.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 export async function transferCsv(kind: TransferKind, input: unknown) {
     const file = await runDataTransfer(kind, input)

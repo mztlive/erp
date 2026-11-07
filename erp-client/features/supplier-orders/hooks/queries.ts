@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { useScopedListQuery } from "@/lib/use-scoped-list-query"
 import {
     addCollaborationNote,
     completeSupplierOrderTask,
@@ -27,29 +28,10 @@ const supplierOrderKeys = {
 }
 
 export function useSupplierOrdersQuery(query: SupplierOrderListQuery) {
-    const client = useQueryClient()
-    const firstPage = { ...query, page: 1, scopeVersion: undefined }
-    const baseline = client.getQueryData<
-        Awaited<ReturnType<typeof fetchSupplierOrders>>
-    >(supplierOrderKeys.list(firstPage))
-    const scopeVersion =
-        query.scopeVersion ??
-        (query.page > 1 ? baseline?.scopeVersion : undefined)
-    const scoped = { ...query, scopeVersion }
-    return useQuery({
-        queryKey: supplierOrderKeys.list(scoped),
-        queryFn: async () => {
-            if (query.page === 1 || scopeVersion)
-                return fetchSupplierOrders(scoped)
-            const first = await client.fetchQuery({
-                queryKey: supplierOrderKeys.list(firstPage),
-                queryFn: () => fetchSupplierOrders(firstPage),
-            })
-            return fetchSupplierOrders({
-                ...query,
-                scopeVersion: first.scopeVersion,
-            })
-        },
+    return useScopedListQuery({
+        query,
+        queryKey: supplierOrderKeys.list,
+        fetchPage: fetchSupplierOrders,
     })
 }
 

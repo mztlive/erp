@@ -28,6 +28,7 @@ import {
     type PackingImportPreview,
 } from "../../lib/packing-import"
 import type { DeliveryPacking } from "../../lib/delivery-packing"
+import { downloadBlob } from "@/lib/download-blob"
 
 type ImportProps = PackingImportContext & {
     unit: (id: string) => string
@@ -97,13 +98,10 @@ function PackageImportDialog({
         try {
             const blob = await createPackingWorkbook(props)
             if (request !== generation.current) return
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.id = `${prefix}-download-file`
-            link.href = url
-            link.download = "履约包裹导入模板.xlsx"
-            link.click()
-            setTimeout(() => URL.revokeObjectURL(url), 1000)
+            downloadBlob(blob, "履约包裹导入模板.xlsx", {
+                linkId: `${prefix}-download-file`,
+                revokeDelayMs: 1000,
+            })
         } catch (reason) {
             if (request === generation.current) setError(message(reason))
         } finally {

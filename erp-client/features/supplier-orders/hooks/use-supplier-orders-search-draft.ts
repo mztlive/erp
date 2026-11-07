@@ -1,6 +1,8 @@
 "use client"
 
-import * as React from "react"
+import type { RefObject } from "react"
+
+import { useSearchDraft } from "@/lib/use-search-draft"
 
 /**
  * 列表页搜索草稿（docs/ui-filter-design.md §5）：
@@ -12,15 +14,11 @@ export function useSupplierOrdersSearchDraft({
     searchInputRef,
 }: {
     q: string | undefined
-    searchInputRef: React.RefObject<HTMLInputElement | null>
+    searchInputRef: RefObject<HTMLInputElement | null>
 }) {
-    const [searchDraft, setSearchDraft] = React.useState(q ?? "")
-
-    React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(q ?? "")
-        }
-    }, [q, searchInputRef])
-
+    const { searchDraft, setSearchDraft } = useSearchDraft(q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     return { searchDraft, setSearchDraft }
 }

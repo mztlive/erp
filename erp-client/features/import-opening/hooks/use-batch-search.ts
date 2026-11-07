@@ -1,7 +1,6 @@
 "use client"
 
-import * as React from "react"
-
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 /**
@@ -9,16 +8,9 @@ import { useSearchHotkey } from "@/lib/use-search-hotkey"
  * `/` 快捷键聚焦搜索框（Enter 由筛选表单统一提交，见 use-batch-list-filters）。
  */
 export function useBatchSearchDraft(q: string) {
-    const [qDraft, setQDraft] = React.useState(q)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-
-    React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setQDraft(q)
-        }
-    }, [q])
-
+    const { searchDraft, setSearchDraft, searchInputRef } = useSearchDraft(q, {
+        skipWhileFocused: true,
+    })
     useSearchHotkey(searchInputRef)
-
-    return { qDraft, setQDraft, searchInputRef }
+    return { qDraft: searchDraft, setQDraft: setSearchDraft, searchInputRef }
 }

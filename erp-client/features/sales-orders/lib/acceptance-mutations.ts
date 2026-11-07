@@ -6,6 +6,7 @@
 import { uploadEvidenceFileAsset } from "@/features/file-assets/api"
 import { apiGetBlob, apiPost } from "@/lib/api"
 import { getErrorMessage, type ApiError } from "@/lib/api/errors"
+import { downloadBlob } from "@/lib/download-blob"
 import type {
     PostAcceptanceInput,
     PostAcceptanceResult,
@@ -169,9 +170,6 @@ export async function downloadAcceptanceEvidence(
         `/admin/customer-acceptances/${encodeURIComponent(acceptanceId)}/evidence`,
         { timeoutMs: 30_000, cache: "no-store" },
     )
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
     const extension =
         blob.type === "application/pdf"
             ? ".pdf"
@@ -180,9 +178,5 @@ export async function downloadAcceptanceEvidence(
               : blob.type === "image/webp"
                 ? ".webp"
                 : ".png"
-    link.download = `${acceptanceNo || "签收单"}${extension}`
-    document.body.append(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `${acceptanceNo || "签收单"}${extension}`)
 }

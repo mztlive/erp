@@ -1,4 +1,5 @@
 import { getFontEmbedCSS, toBlob } from "html-to-image"
+import { downloadBlob } from "@/lib/download-blob"
 
 /** 下载完整纸张，尺寸不受预览容器滚动位置或祖先缩放影响。 */
 export async function downloadSalesOrderPreviewImage(
@@ -26,16 +27,8 @@ export async function downloadSalesOrderPreviewImage(
     })
     if (!blob?.size) throw new Error("销售单图片未生成，请重试")
     const name = customerName.replace(/[^\p{L}\p{N}_-]/gu, "_").slice(0, 60)
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.id = "sales-orders-submit-preview-image-file"
-    anchor.href = url
-    anchor.download = `销售单-${name || "未填写客户"}-提交预览.png`
-    document.body.appendChild(anchor)
-    try {
-        anchor.click()
-    } finally {
-        anchor.remove()
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    }
+    downloadBlob(blob, `销售单-${name || "未填写客户"}-提交预览.png`, {
+        linkId: "sales-orders-submit-preview-image-file",
+        revokeDelayMs: 60_000,
+    })
 }
