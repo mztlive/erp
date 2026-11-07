@@ -6,11 +6,11 @@ import { toast } from "@/components/ui/toast"
 import { launchNavDelivery } from "@/lib/nav-delivery"
 import type { BackgroundJobView } from "@/lib/background-jobs"
 import { BrandImportDialog } from "@/features/master-data/components/brand/brand-import-dialog"
-import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
+import { UploadIcon } from "lucide-react"
 
 import { ListWorkSurface } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
+import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
@@ -23,10 +23,11 @@ import {
 import { BrandDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
+import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import {
-    masterDataCopy,
-    masterDataSearchPlaceholder,
-} from "@/features/master-data/lib/copy"
+    masterDataCreateAction,
+    masterDataExportAction,
+} from "@/features/master-data/lib/list-page-actions"
 
 export function BrandsListPage() {
     const router = useRouter()
@@ -68,18 +69,12 @@ export function BrandsListPage() {
             description="查看品牌字典，供商品与 SKU 选用。"
             exportMeta={state.exportMeta}
             actions={[
-                {
+                masterDataExportAction({
                     id: "master-data-brands-list-export",
-                    actionKey: "export",
-                    label: exportPending
-                        ? "导出中…"
-                        : masterDataCopy.actionExport,
-                    icon: DownloadIcon,
-                    variant: "outline",
-                    loading: exportPending,
-                    disabled: exportPending || state.rows.length === 0,
+                    pending: exportPending,
+                    rowCount: state.rows.length,
                     onClick: state.onExport,
-                },
+                }),
                 {
                     id: "master-data-brands-list-import",
                     actionKey: "import",
@@ -89,18 +84,12 @@ export function BrandsListPage() {
                     hidden: !state.canCreate,
                     onClick: () => setImportOpen(true),
                 },
-                {
+                masterDataCreateAction({
                     id: "master-data-brands-list-create",
-                    actionKey: "create",
-                    label: masterDataCopy.actionCreate,
-                    icon: PlusIcon,
-                    hidden: !state.canCreate,
-                    disabled: !state.canCreate,
-                    title: !state.canCreate
-                        ? state.createBlockedReason
-                        : undefined,
+                    canCreate: state.canCreate,
+                    blockedReason: state.createBlockedReason,
                     onClick: () => state.setCreateOpen(true),
-                },
+                }),
             ]}
             resultsLabel={`品牌 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
@@ -154,16 +143,10 @@ export function BrandsListPage() {
                         emptyDescription="点击「新建」创建品牌，或使用「批量导入」一次建立多个品牌。"
                         emptyAction={
                             state.canCreate ? (
-                                <Button
+                                <MasterDataEmptyCreateButton
                                     id="master-data-brands-list-empty-create"
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    className="rounded-lg shadow-none"
                                     onClick={() => state.setCreateOpen(true)}
-                                >
-                                    {masterDataCopy.actionCreate}
-                                </Button>
+                                />
                             ) : undefined
                         }
                         onPreview={(row) => {

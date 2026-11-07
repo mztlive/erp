@@ -8,6 +8,7 @@ import {
     BusinessTableFrame,
     DataTable,
     FundsScopeBanner,
+    scopeQueryFrameHeading,
     MoneyValue,
     PageScaffold,
 } from "@/components/business"
@@ -191,22 +192,7 @@ export function InvoiceRequestScopePage() {
 
             <BusinessTableFrame
                 showHeader
-                title={
-                    <span className="inline-flex min-w-0 flex-wrap items-baseline gap-2">
-                        按数据范围查询
-                        <span
-                            aria-live="polite"
-                            className="font-normal text-muted-foreground"
-                        >
-                            {(data?.total ?? 0).toLocaleString("zh-CN")} 条
-                        </span>
-                    </span>
-                }
-                description={
-                    <span aria-live="polite" className="break-words">
-                        {data?.scopeSummary ?? "加载中…"}
-                    </span>
-                }
+                {...scopeQueryFrameHeading(data?.total, data?.scopeSummary)}
                 toolbar={
                     <ListWorkspaceFilterBar
                         density="compact"

@@ -59,3 +59,12 @@ export function PreviewFact({
 export function PreviewNote({ children }: { children: ReactNode }) {
     return <p className="text-xs leading-5 text-muted-foreground">{children}</p>
 }
+
+/** 已过账往来记录的统一限制说明。 */
+export function PostedRecordNote() {
+    return (
+        <PreviewNote>
+            已过账记录不可编辑或删除；纠错须追加反向记录。
+        </PreviewNote>
+    )
+}

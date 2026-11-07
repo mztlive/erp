@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { SupplierImportDialog } from "@/features/master-data/components/supplier/supplier-import-dialog"
 import { useRouter } from "@/lib/navigation"
-import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
+import { DownloadIcon, UploadIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -17,6 +17,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
+import {
+    MasterDataClearFiltersButton,
+    MasterDataEmptyCreateButton,
+} from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { SupplierListToolbar } from "@/features/master-data/components/list/supplier-list-toolbar"
 import { suppliersListStyles } from "./suppliers-list-styles"
@@ -24,6 +28,10 @@ import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-ch
 import { useSupplierListColumns } from "@/features/master-data/hooks/use-supplier-list-columns"
 import { useSupplierListState } from "@/features/master-data/hooks/use-supplier-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+import {
+    masterDataCreateAction,
+    masterDataExportAction,
+} from "@/features/master-data/lib/list-page-actions"
 import type { BackgroundJobView } from "@/lib/background-jobs"
 import { launchNavDelivery } from "@/lib/nav-delivery"
 import { downloadSupplierTemplate } from "@/features/master-data/lib/supplier-import"
@@ -108,30 +116,18 @@ export function SuppliersListPage() {
                         : undefined,
                     onClick: () => setImportOpen(true),
                 },
-                {
+                masterDataExportAction({
                     id: "master-data-suppliers-list-export",
-                    actionKey: "export",
-                    label: exportPending
-                        ? "导出中…"
-                        : masterDataCopy.actionExport,
-                    icon: DownloadIcon,
-                    variant: "outline",
-                    disabled: exportPending || state.rows.length === 0,
-                    loading: exportPending,
+                    pending: exportPending,
+                    rowCount: state.rows.length,
                     onClick: state.onExport,
-                },
-                {
+                }),
+                masterDataCreateAction({
                     id: "master-data-suppliers-list-create",
-                    actionKey: "create",
-                    label: masterDataCopy.actionCreate,
-                    icon: PlusIcon,
-                    hidden: !state.canCreate,
-                    disabled: !state.canCreate,
-                    title: !state.canCreate
-                        ? state.createBlockedReason
-                        : undefined,
+                    canCreate: state.canCreate,
+                    blockedReason: state.createBlockedReason,
                     onClick: () => router.push("/master-data/suppliers/new"),
-                },
+                }),
             ]}
             resultsLabel={`供应商与资质 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
@@ -225,38 +221,26 @@ export function SuppliersListPage() {
                                         noScope
                                             ? "当前权限与数据范围内没有供应商；不代表系统尚无供应商。"
                                             : hasActiveFilters
-                                              ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                              ? masterDataCopy.filterEmptyDescription
                                               : "点击「新建」创建第一份资料；历史记录会随资料保留。"
                                     }
                                     action={
                                         hasActiveFilters ? (
-                                            <Button
+                                            <MasterDataClearFiltersButton
                                                 id="master-data-suppliers-list-empty-clear-filters"
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
                                                 onClick={
                                                     filters.clearAllFilters
                                                 }
-                                            >
-                                                清除筛选
-                                            </Button>
+                                            />
                                         ) : state.canCreate ? (
-                                            <Button
+                                            <MasterDataEmptyCreateButton
                                                 id="master-data-suppliers-list-empty-create"
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
                                                 onClick={() =>
                                                     router.push(
                                                         "/master-data/suppliers/new",
                                                     )
                                                 }
-                                            >
-                                                {masterDataCopy.actionCreate}
-                                            </Button>
+                                            />
                                         ) : undefined
                                     }
                                 />

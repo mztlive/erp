@@ -3,7 +3,7 @@
 import * as React from "react"
 import type { FixedSku } from "@/features/supplier-offerings/types"
 import { useRouter } from "@/lib/navigation"
-import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
+import { UploadIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -17,6 +17,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
+import {
+    MasterDataClearFiltersButton,
+    MasterDataEmptyCreateButton,
+} from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { ProductListToolbar } from "@/features/master-data/components/list/product-list-toolbar"
 import { productsListStyles } from "./products-list-styles"
@@ -27,6 +31,10 @@ import { useProductListColumns } from "@/features/master-data/hooks/use-product-
 import { useProductListSkusQuery } from "@/features/master-data/hooks/queries"
 import { useProductListState } from "@/features/master-data/hooks/use-product-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+import {
+    masterDataCreateAction,
+    masterDataExportAction,
+} from "@/features/master-data/lib/list-page-actions"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
 import { ProductImportDialog } from "@/features/master-data/components/product/product-import-dialog"
 import { launchNavDelivery } from "@/lib/nav-delivery"
@@ -162,30 +170,18 @@ export function ProductsListPage() {
                         : undefined,
                     onClick: () => setImportOpen(true),
                 },
-                {
+                masterDataExportAction({
                     id: "master-data-products-list-export",
-                    actionKey: "export",
-                    label: exportPending
-                        ? "导出中…"
-                        : masterDataCopy.actionExport,
-                    icon: DownloadIcon,
-                    variant: "outline",
-                    loading: exportPending,
-                    disabled: exportPending || state.rows.length === 0,
+                    pending: exportPending,
+                    rowCount: state.rows.length,
                     onClick: state.onExport,
-                },
-                {
+                }),
+                masterDataCreateAction({
                     id: "master-data-products-list-create",
-                    actionKey: "create",
-                    label: masterDataCopy.actionCreate,
-                    icon: PlusIcon,
-                    hidden: !state.canCreate,
-                    disabled: !state.canCreate,
-                    title: !state.canCreate
-                        ? state.createBlockedReason
-                        : undefined,
+                    canCreate: state.canCreate,
+                    blockedReason: state.createBlockedReason,
                     onClick: openCreate,
-                },
+                }),
             ]}
             resultsLabel={`商品列表 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
@@ -301,34 +297,22 @@ export function ProductsListPage() {
                                         noScope
                                             ? "已授权动作但没有可见商品。请联系管理员配置数据范围，或清除筛选后重试。"
                                             : hasActiveFilters
-                                              ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                              ? masterDataCopy.filterEmptyDescription
                                               : "点击「新建」创建第一份资料；历史记录会随资料保留。"
                                     }
                                     action={
                                         hasActiveFilters ? (
-                                            <Button
+                                            <MasterDataClearFiltersButton
                                                 id="master-data-products-list-empty-clear-filters"
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
                                                 onClick={
                                                     filters.clearAllFilters
                                                 }
-                                            >
-                                                清除筛选
-                                            </Button>
+                                            />
                                         ) : state.canCreate ? (
-                                            <Button
+                                            <MasterDataEmptyCreateButton
                                                 id="master-data-products-list-empty-create"
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
                                                 onClick={openCreate}
-                                            >
-                                                {masterDataCopy.actionCreate}
-                                            </Button>
+                                            />
                                         ) : undefined
                                     }
                                 />

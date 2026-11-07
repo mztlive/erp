@@ -8,6 +8,7 @@ import {
     PreviewAmount,
     PreviewSection,
     PreviewFact,
+    PostedRecordNote,
     PreviewNote,
 } from "@/components/business/financial-preview"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
@@ -290,11 +291,7 @@ export function CustomerRefundDetailBody({
                     onDecisionApplied={onDecisionApplied}
                 />
             </PreviewSection>
-            {posted ? (
-                <PreviewNote>
-                    已过账记录不可编辑或删除；纠错须追加反向记录。
-                </PreviewNote>
-            ) : null}
+            {posted ? <PostedRecordNote /> : null}
         </div>
     )
 }
@@ -345,11 +342,7 @@ export function ReceiptReversalDetailBody({
                     onDecisionApplied={onDecisionApplied}
                 />
             </PreviewSection>
-            {posted ? (
-                <PreviewNote>
-                    已过账记录不可编辑或删除；纠错须追加反向记录。
-                </PreviewNote>
-            ) : null}
+            {posted ? <PostedRecordNote /> : null}
         </div>
     )
 }

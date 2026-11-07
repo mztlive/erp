@@ -125,6 +125,7 @@ export const masterDataCopy = {
     actionCreate: "新建",
     actionCreateClosed: "新建（暂不可用）",
     actionExport: "导出",
+    filterEmptyDescription: "没有记录符合当前筛选条件，可清除筛选后重试。",
     actionOpenDetail: "打开完整资料",
     actionBackList: "返回列表",
     permissionModule: "模块：有权",

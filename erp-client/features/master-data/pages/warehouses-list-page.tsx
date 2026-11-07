@@ -1,6 +1,6 @@
 "use client"
 
-import { DownloadIcon, PlusIcon } from "lucide-react"
+import { PlusIcon } from "lucide-react"
 
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -21,6 +21,7 @@ import {
     masterDataCopy,
     masterDataSearchPlaceholder,
 } from "@/features/master-data/lib/copy"
+import { masterDataExportAction } from "@/features/master-data/lib/list-page-actions"
 import { hasPermission } from "@/lib/permissions"
 
 export function WarehousesListPage() {
@@ -57,18 +58,12 @@ export function WarehousesListPage() {
             description="查看仓库资料与库存摘要。"
             exportMeta={state.exportMeta}
             actions={[
-                {
+                masterDataExportAction({
                     id: "master-data-warehouses-list-export",
-                    actionKey: "export",
-                    label: exportPending
-                        ? "导出中…"
-                        : masterDataCopy.actionExport,
-                    icon: DownloadIcon,
-                    variant: "outline",
-                    loading: exportPending,
-                    disabled: exportPending || state.rows.length === 0,
+                    pending: exportPending,
+                    rowCount: state.rows.length,
                     onClick: state.onExport,
-                },
+                }),
                 {
                     id: "master-data-warehouses-list-create",
                     actionKey: "create",

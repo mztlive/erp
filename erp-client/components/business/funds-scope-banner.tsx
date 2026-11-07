@@ -60,6 +60,34 @@ type LimitedBadgeProps = {
     className?: string
 }
 
+/**
+ * 范围列表表格的标题和说明。
+ * 标题固定为「按数据范围查询」加条数，说明为范围摘要；查询未返回时说明为「加载中…」。
+ */
+export function scopeQueryFrameHeading(
+    total: number | undefined,
+    scopeSummary: string | undefined,
+) {
+    return {
+        title: (
+            <span className="inline-flex min-w-0 flex-wrap items-baseline gap-2">
+                按数据范围查询
+                <span
+                    aria-live="polite"
+                    className="font-normal text-muted-foreground"
+                >
+                    {(total ?? 0).toLocaleString("zh-CN")} 条
+                </span>
+            </span>
+        ),
+        description: (
+            <span aria-live="polite" className="break-words">
+                {scopeSummary ?? "加载中…"}
+            </span>
+        ),
+    }
+}
+
 /** 部分受限行的统一标记；金额统一用 MoneyValue 空值展示，不写零。 */
 export function LimitedBadge({ id, className }: LimitedBadgeProps) {
     return (

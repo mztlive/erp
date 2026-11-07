@@ -16,6 +16,7 @@ import {
 } from "@/components/business"
 import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -106,7 +107,7 @@ export function DictionaryCompactList({
                 title={hasActiveFilters ? "当前筛选无结果" : emptyTitle}
                 description={
                     hasActiveFilters
-                        ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                        ? masterDataCopy.filterEmptyDescription
                         : emptyDescription
                 }
                 action={

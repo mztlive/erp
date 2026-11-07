@@ -6,6 +6,7 @@ import { SupplierSourceDocuments } from "./supplier-source-documents"
 import {
     PreviewAmount,
     PreviewSection,
+    PostedRecordNote,
     PreviewNote,
 } from "@/components/business/financial-preview"
 import { Button } from "@/components/ui/button"
@@ -109,11 +110,7 @@ export function SupplierRefundDetailBody({
                     onDecisionApplied={onDecisionApplied}
                 />
             </PreviewSection>
-            {posted ? (
-                <PreviewNote>
-                    已过账记录不可编辑或删除；纠错须追加反向记录。
-                </PreviewNote>
-            ) : null}
+            {posted ? <PostedRecordNote /> : null}
         </div>
     )
 }

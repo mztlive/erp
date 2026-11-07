@@ -1,11 +1,9 @@
 "use client"
 
-import { DownloadIcon, PlusIcon } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
+import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { UnitOfMeasurePreviewSheet } from "@/features/master-data/components/unit-of-measure/unit-of-measure-preview-sheet"
@@ -20,6 +18,10 @@ import {
     masterDataCopy,
     masterDataSearchPlaceholder,
 } from "@/features/master-data/lib/copy"
+import {
+    masterDataCreateAction,
+    masterDataExportAction,
+} from "@/features/master-data/lib/list-page-actions"
 
 export function UnitOfMeasuresListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
@@ -43,30 +45,18 @@ export function UnitOfMeasuresListPage() {
             description="查看计量单位，供商品选择基础单位。"
             exportMeta={state.exportMeta}
             actions={[
-                {
+                masterDataExportAction({
                     id: "master-data-unit-of-measures-list-export",
-                    actionKey: "export",
-                    label: exportPending
-                        ? "导出中…"
-                        : masterDataCopy.actionExport,
-                    icon: DownloadIcon,
-                    variant: "outline",
-                    loading: exportPending,
-                    disabled: exportPending || state.rows.length === 0,
+                    pending: exportPending,
+                    rowCount: state.rows.length,
                     onClick: state.onExport,
-                },
-                {
+                }),
+                masterDataCreateAction({
                     id: "master-data-unit-of-measures-list-create",
-                    actionKey: "create",
-                    label: masterDataCopy.actionCreate,
-                    icon: PlusIcon,
-                    hidden: !state.canCreate,
-                    disabled: !state.canCreate,
-                    title: !state.canCreate
-                        ? state.createBlockedReason
-                        : undefined,
+                    canCreate: state.canCreate,
+                    blockedReason: state.createBlockedReason,
                     onClick: () => state.setCreateOpen(true),
-                },
+                }),
             ]}
             resultsLabel={`计量单位 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
@@ -122,18 +112,12 @@ export function UnitOfMeasuresListPage() {
                             emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
                             emptyAction={
                                 state.canCreate ? (
-                                    <Button
+                                    <MasterDataEmptyCreateButton
                                         id="master-data-unit-of-measures-list-empty-create"
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        className="rounded-lg shadow-none"
                                         onClick={() =>
                                             state.setCreateOpen(true)
                                         }
-                                    >
-                                        {masterDataCopy.actionCreate}
-                                    </Button>
+                                    />
                                 ) : undefined
                             }
                             onPreview={(row) => {

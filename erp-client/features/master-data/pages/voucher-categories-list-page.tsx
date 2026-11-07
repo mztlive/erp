@@ -4,22 +4,21 @@ import { useState } from "react"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { VoucherCategoryStatusDialog } from "@/features/master-data/components/list/voucher-category-status-dialog"
 
-import { DownloadIcon, PlusIcon } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
+import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
 import { VoucherCategoryPreviewSheet } from "@/features/master-data/components/list/voucher-category-preview-sheet"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
+import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import {
-    masterDataCopy,
-    masterDataSearchPlaceholder,
-} from "@/features/master-data/lib/copy"
+    masterDataCreateAction,
+    masterDataExportAction,
+} from "@/features/master-data/lib/list-page-actions"
 
 export function VoucherCategoriesListPage() {
     const [statusTarget, setStatusTarget] = useState<MasterDataListItem | null>(
@@ -46,30 +45,18 @@ export function VoucherCategoriesListPage() {
             description="查看卡券类目资料。"
             exportMeta={state.exportMeta}
             actions={[
-                {
+                masterDataExportAction({
                     id: "master-data-voucher-categories-list-export",
-                    actionKey: "export",
-                    label: exportPending
-                        ? "导出中…"
-                        : masterDataCopy.actionExport,
-                    icon: DownloadIcon,
-                    variant: "outline",
-                    loading: exportPending,
-                    disabled: exportPending || state.rows.length === 0,
+                    pending: exportPending,
+                    rowCount: state.rows.length,
                     onClick: state.onExport,
-                },
-                {
+                }),
+                masterDataCreateAction({
                     id: "master-data-voucher-categories-list-create",
-                    actionKey: "create",
-                    label: masterDataCopy.actionCreate,
-                    icon: PlusIcon,
-                    hidden: !state.canCreate,
-                    disabled: !state.canCreate,
-                    title: !state.canCreate
-                        ? state.createBlockedReason
-                        : undefined,
+                    canCreate: state.canCreate,
+                    blockedReason: state.createBlockedReason,
                     onClick: () => state.setCreateOpen(true),
-                },
+                }),
             ]}
             resultsLabel={`卡券类目 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
@@ -123,16 +110,10 @@ export function VoucherCategoriesListPage() {
                         emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
                         emptyAction={
                             state.canCreate ? (
-                                <Button
+                                <MasterDataEmptyCreateButton
                                     id="master-data-voucher-categories-list-empty-create"
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    className="rounded-lg shadow-none"
                                     onClick={() => state.setCreateOpen(true)}
-                                >
-                                    {masterDataCopy.actionCreate}
-                                </Button>
+                                />
                             ) : undefined
                         }
                         onPreview={(row) => {

@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { ExternalLinkIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { WarehouseSkuIdentity } from "@/features/inventory/components/columns/warehouse-sku-cell"
 import { formatQty } from "@/features/inventory/components/presentation"
 import type { StockMovementRow } from "@/features/inventory/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -17,16 +18,11 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
             header: "仓库 / SKU",
             meta: { label: "仓库 / SKU", width: "reference" },
             cell: ({ row }) => (
-                <div className="min-w-0 text-sm">
-                    <div className="truncate font-medium">
-                        {row.original.warehouseName}
-                    </div>
-                    <div className="truncate">
-                        <span className="num">{row.original.skuCode}</span>
-                        <span className="text-muted-foreground"> · </span>
-                        {row.original.skuName}
-                    </div>
-                </div>
+                <WarehouseSkuIdentity
+                    warehouseName={row.original.warehouseName}
+                    skuCode={row.original.skuCode}
+                    skuName={row.original.skuName}
+                />
             ),
         },
         {

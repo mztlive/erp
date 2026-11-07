@@ -39,6 +39,7 @@ import { useSellableExcelExport } from "@/features/master-data/hooks/use-sellabl
 import { useSellableGallerySelection } from "@/features/master-data/hooks/use-sellable-gallery-selection"
 import { useSellableListColumns } from "@/features/master-data/hooks/use-sellable-list-columns"
 import { useSellableListState } from "@/features/master-data/hooks/use-sellable-list-state"
+import { MasterDataClearFiltersButton } from "@/features/master-data/components/list/list-empty-actions"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
@@ -384,23 +385,17 @@ export function SellableItemsListPage() {
                                         }
                                         description={
                                             hasActiveFilters
-                                                ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                                ? masterDataCopy.filterEmptyDescription
                                                 : "商品需要已上架、资料有效且存在有效供给，才会出现在这里。"
                                         }
                                         action={
                                             hasActiveFilters ? (
-                                                <Button
+                                                <MasterDataClearFiltersButton
                                                     id="master-data-sellable-items-list-empty-clear-filters"
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    className="rounded-lg shadow-none"
                                                     onClick={
                                                         filters.clearAllFilters
                                                     }
-                                                >
-                                                    清除筛选
-                                                </Button>
+                                                />
                                             ) : undefined
                                         }
                                     />

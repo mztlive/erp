@@ -3,6 +3,10 @@
 import * as React from "react"
 
 import { useListUrl } from "@/features/master-data/hooks/use-list-url"
+import {
+    changeListLifecycle,
+    commitTrimmedListSearch,
+} from "@/features/master-data/lib/list-url-writes"
 import { useSearchDraft } from "@/lib/use-search-draft"
 import {
     csvFilterValue,
@@ -108,22 +112,23 @@ export function useSupplierListFilters(
 
     const changeLifecycle = React.useCallback(
         (next: "enabled" | "disabled" | "all") => {
-            if (next === lifecycleStatus) return
-            patchUrl({
-                lifecycleStatus: next === "all" ? null : next,
-                metricKey: next === "all" ? null : next,
-                page: null,
+            changeListLifecycle({
+                next,
+                current: lifecycleStatus,
+                patchUrl,
+                resetPagination,
             })
-            resetPagination()
         },
         [lifecycleStatus, patchUrl, resetPagination],
     )
 
     const commitSearch = React.useCallback(() => {
-        const next = searchDraft.trim()
-        if (next === q.trim()) return
-        patchUrl({ q: next || null, page: null })
-        resetPagination()
+        commitTrimmedListSearch({
+            searchDraft,
+            appliedQuery: q,
+            patchUrl,
+            resetPagination,
+        })
     }, [patchUrl, q, resetPagination, searchDraft])
 
     const applySupplierFilters = React.useCallback(() => {

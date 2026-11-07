@@ -6,6 +6,7 @@ import { useStore } from "@tanstack/react-form"
 import { useAppForm } from "@/components/form"
 
 import { useListUrl } from "@/features/master-data/hooks/use-list-url"
+import { commitTrimmedListSearch } from "@/features/master-data/lib/list-url-writes"
 import { productSalesPriceRangeError } from "@/features/master-data/lib/list-filters"
 import {
     parseSellableDeliveryExtent,
@@ -203,10 +204,12 @@ export function useSellableListFilters(
     )
 
     const commitSearch = React.useCallback(() => {
-        const next = searchDraft.trim()
-        if (next === q.trim()) return
-        patchUrl({ q: next || null, page: null })
-        resetPagination()
+        commitTrimmedListSearch({
+            searchDraft,
+            appliedQuery: q,
+            patchUrl,
+            resetPagination,
+        })
     }, [patchUrl, q, resetPagination, searchDraft])
 
     const applySellableFilters = React.useCallback(() => {
