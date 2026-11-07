@@ -1,15 +1,10 @@
 "use client"
 
 import type { KeyboardEventHandler } from "react"
-import { Textarea } from "@/components/ui/textarea"
-import { InputGroupTextarea } from "@/components/ui/input-group"
-import {
-    Field,
-    FieldDescription,
-    FieldError,
-    FieldLabel,
-} from "@/components/ui/field"
+import { FieldFrame } from "@/components/form/field-frame"
 import { useFieldA11y } from "@/components/form/field-a11y"
+import { InputGroupTextarea } from "@/components/ui/input-group"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 type TextareaFieldProps = {
@@ -59,14 +54,18 @@ export function TextareaField({
     const Control = inInputGroup ? InputGroupTextarea : Textarea
 
     return (
-        <Field data-invalid={isInvalid || undefined} className={cn(className)}>
-            <FieldLabel
-                htmlFor={resolvedId}
-                className={hideLabel ? "sr-only" : undefined}
-            >
-                {label}
-                {required ? <span className="text-destructive">*</span> : null}
-            </FieldLabel>
+        <FieldFrame
+            className={cn(className)}
+            label={label}
+            labelClassName={hideLabel ? "sr-only" : undefined}
+            htmlFor={resolvedId}
+            required={required}
+            description={description}
+            descriptionId={descriptionId}
+            isInvalid={isInvalid}
+            errorId={errorId}
+            errors={errors}
+        >
             <Control
                 id={resolvedId}
                 name={field.name}
@@ -85,12 +84,6 @@ export function TextareaField({
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
             />
-            {description ? (
-                <FieldDescription id={descriptionId}>
-                    {description}
-                </FieldDescription>
-            ) : null}
-            {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}
-        </Field>
+        </FieldFrame>
     )
 }

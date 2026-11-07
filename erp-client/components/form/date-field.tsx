@@ -3,14 +3,9 @@
 import type { Matcher } from "react-day-picker"
 import type { ComponentProps } from "react"
 
+import { FieldFrame } from "@/components/form/field-frame"
 import { useFieldA11y } from "@/components/form/field-a11y"
 import { DatePicker, DateTimeLocalPicker } from "@/components/ui/date-picker"
-import {
-    Field,
-    FieldDescription,
-    FieldError,
-    FieldLabel,
-} from "@/components/ui/field"
 import { cn } from "@/lib/utils"
 
 type DateFieldProps = {
@@ -59,14 +54,18 @@ export function DateField({
     } = useFieldA11y<string>(description, id)
 
     return (
-        <Field data-invalid={isInvalid || undefined} className={cn(className)}>
-            <FieldLabel
-                htmlFor={resolvedId}
-                className={hideLabel ? "sr-only" : undefined}
-            >
-                {label}
-                {required ? <span className="text-destructive">*</span> : null}
-            </FieldLabel>
+        <FieldFrame
+            className={cn(className)}
+            label={label}
+            labelClassName={hideLabel ? "sr-only" : undefined}
+            htmlFor={resolvedId}
+            required={required}
+            description={description}
+            descriptionId={descriptionId}
+            isInvalid={isInvalid}
+            errorId={errorId}
+            errors={errors}
+        >
             <DatePicker
                 id={resolvedId}
                 size={size}
@@ -84,13 +83,7 @@ export function DateField({
                 aria-invalid={isInvalid || undefined}
                 aria-describedby={describedBy || undefined}
             />
-            {description ? (
-                <FieldDescription id={descriptionId}>
-                    {description}
-                </FieldDescription>
-            ) : null}
-            {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}
-        </Field>
+        </FieldFrame>
     )
 }
 
@@ -140,14 +133,18 @@ export function DateTimeField({
     } = useFieldA11y<string>(description, id)
 
     return (
-        <Field data-invalid={isInvalid || undefined} className={cn(className)}>
-            <FieldLabel
-                htmlFor={resolvedId}
-                className={hideLabel ? "sr-only" : undefined}
-            >
-                {label}
-                {required ? <span className="text-destructive">*</span> : null}
-            </FieldLabel>
+        <FieldFrame
+            className={cn(className)}
+            label={label}
+            labelClassName={hideLabel ? "sr-only" : undefined}
+            htmlFor={resolvedId}
+            required={required}
+            description={description}
+            descriptionId={descriptionId}
+            isInvalid={isInvalid}
+            errorId={errorId}
+            errors={errors}
+        >
             <DateTimeLocalPicker
                 id={resolvedId}
                 value={field.state.value || undefined}
@@ -165,12 +162,6 @@ export function DateTimeField({
                 aria-invalid={isInvalid || undefined}
                 aria-describedby={describedBy || undefined}
             />
-            {description ? (
-                <FieldDescription id={descriptionId}>
-                    {description}
-                </FieldDescription>
-            ) : null}
-            {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}
-        </Field>
+        </FieldFrame>
     )
 }

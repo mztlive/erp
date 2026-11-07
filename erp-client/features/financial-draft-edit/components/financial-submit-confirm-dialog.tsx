@@ -8,6 +8,22 @@ import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { FinancialSubmitRecovery } from "@/features/financial-draft-edit/components/financial-submit-recovery"
 import type { FinancialApprovalKind } from "@/features/financial-draft-edit/components/financial-approval-area"
 
+/** 四个提交确认壳共用的开关、单据和审批参数。 */
+export type FinancialSubmitConfirmControls = {
+    open: boolean
+    pending: boolean
+    unknown?: boolean
+    frozenReason?: string
+    documentId?: string
+    expectedVersion?: number
+    onEndRecovery?: () => void
+    approval?: DocumentApprovalView
+    onOpenChange: (open: boolean) => void
+    onConfirm: (resubmissionReason?: string) => void | Promise<void>
+    id?: string
+    idPrefix?: string
+}
+
 /**
  * 逆向财务单据（退款、冲正）的提交确认。
  *
@@ -31,23 +47,11 @@ export function FinancialSubmitConfirmDialog({
     id,
     idPrefix,
     defaultId = "financial-submit-confirm",
-}: {
+}: FinancialSubmitConfirmControls & {
     kind: FinancialApprovalKind
     actionLabel: string
     effects: readonly ReactNode[]
     approvalArea: ReactNode
-    approval?: DocumentApprovalView
-    open: boolean
-    pending: boolean
-    unknown?: boolean
-    frozenReason?: string
-    documentId?: string
-    expectedVersion?: number
-    onEndRecovery?: () => void
-    onOpenChange: (open: boolean) => void
-    onConfirm: (resubmissionReason?: string) => void | Promise<void>
-    id?: string
-    idPrefix?: string
     defaultId?: string
 }) {
     const baseId = idPrefix ?? id ?? defaultId

@@ -1,12 +1,7 @@
 "use client"
 
+import { FieldFrame } from "@/components/form/field-frame"
 import { useFieldA11y } from "@/components/form/field-a11y"
-import {
-    Field,
-    FieldDescription,
-    FieldError,
-    FieldLabel,
-} from "@/components/ui/field"
 import { FileUpload } from "@/components/ui/file-upload"
 
 /** 绑定 TanStack Form 的单文件上传字段；业务侧只提供文件类型与文案。 */
@@ -47,14 +42,17 @@ export function SingleFileField({
     const file = field.state.value
 
     return (
-        <Field data-invalid={isInvalid || undefined}>
-            <FieldLabel
-                htmlFor={`${resolvedId}-input`}
-                className={hideLabel ? "sr-only" : undefined}
-            >
-                {label}
-                {required ? <span className="text-destructive">*</span> : null}
-            </FieldLabel>
+        <FieldFrame
+            label={label}
+            labelClassName={hideLabel ? "sr-only" : undefined}
+            htmlFor={`${resolvedId}-input`}
+            required={required}
+            description={description}
+            descriptionId={descriptionId}
+            isInvalid={isInvalid}
+            errorId={errorId}
+            errors={errors}
+        >
             <FileUpload
                 selectedDescription={selectedDescription}
                 idPrefix={resolvedId}
@@ -73,12 +71,6 @@ export function SingleFileField({
                 aria-describedby={describedBy || undefined}
                 aria-invalid={isInvalid || undefined}
             />
-            {description ? (
-                <FieldDescription id={descriptionId}>
-                    {description}
-                </FieldDescription>
-            ) : null}
-            {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}
-        </Field>
+        </FieldFrame>
     )
 }

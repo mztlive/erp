@@ -3,14 +3,9 @@
 import type { ComboboxRefreshProps } from "@/components/business/combobox-refresh"
 
 import { MultiOptionCombobox } from "@/components/business"
+import { FieldFrame } from "@/components/form/field-frame"
 import { useFieldA11y } from "@/components/form/field-a11y"
 import type { SelectFieldOption } from "@/components/form/select-field"
-import {
-    Field,
-    FieldDescription,
-    FieldError,
-    FieldLabel,
-} from "@/components/ui/field"
 import { cn } from "@/lib/utils"
 
 type MultiSelectFieldProps = ComboboxRefreshProps & {
@@ -57,14 +52,18 @@ export function MultiSelectField({
     } = useFieldA11y<string[]>(description, id)
 
     return (
-        <Field data-invalid={isInvalid || undefined} className={cn(className)}>
-            <FieldLabel
-                htmlFor={resolvedId}
-                className={disabled ? "opacity-60" : undefined}
-            >
-                {label}
-                {required ? <span className="text-destructive">*</span> : null}
-            </FieldLabel>
+        <FieldFrame
+            className={cn(className)}
+            label={label}
+            labelClassName={disabled ? "opacity-60" : undefined}
+            htmlFor={resolvedId}
+            required={required}
+            description={description}
+            descriptionId={descriptionId}
+            isInvalid={isInvalid}
+            errorId={errorId}
+            errors={errors}
+        >
             <MultiOptionCombobox
                 id={resolvedId}
                 options={options}
@@ -82,12 +81,6 @@ export function MultiSelectField({
                 getChipLabel={getChipLabel}
                 onValueChange={(next) => field.handleChange(next)}
             />
-            {description ? (
-                <FieldDescription id={descriptionId}>
-                    {description}
-                </FieldDescription>
-            ) : null}
-            {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}
-        </Field>
+        </FieldFrame>
     )
 }
