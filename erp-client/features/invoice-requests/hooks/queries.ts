@@ -95,13 +95,13 @@ export function useInvoiceRequestCommands() {
     const refresh = async () => {
         await Promise.all(
             [
-                "invoice-requests",
-                "customer-receivables",
-                "sales-orders",
-                "work-items",
-                "workspace-home",
-                "approval",
-            ].map((root) => client.invalidateQueries({ queryKey: [root] })),
+                queryKeyRoots.invoiceRequests,
+                queryKeyRoots.customerReceivables,
+                queryKeyRoots.salesOrders,
+                queryKeyRoots.workItems,
+                queryKeyRoots.workspaceHome,
+                queryKeyRoots.approvals,
+            ].map((root) => client.invalidateQueries({ queryKey: root })),
         )
     }
     const submit = useMutation({

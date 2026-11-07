@@ -2,10 +2,8 @@
 
 import * as React from "react"
 
-import {
-    useListUrl,
-    useSearchDraft,
-} from "@/features/master-data/hooks/use-list-url"
+import { useListUrl } from "@/features/master-data/hooks/use-list-url"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import {
     csvFilterValue,
     parseLifecycleStatus,
@@ -38,7 +36,10 @@ export function useSupplierListFilters(
         resetPagination,
         changePagination,
     } = useListUrl()
-    const { searchDraft, setSearchDraft } = useSearchDraft(q, searchInputRef)
+    const { searchDraft, setSearchDraft } = useSearchDraft(q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
 
     const lifecycleStatus = parseLifecycleStatus(
         searchParams.get("lifecycleStatus"),

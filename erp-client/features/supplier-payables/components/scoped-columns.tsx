@@ -6,6 +6,7 @@ import {
     BusinessStatusBadge,
     LimitedBadge,
     MoneyValue,
+    wholeUnallocatedCell,
 } from "@/components/business"
 import type {
     ScopedPayableAccountWire,
@@ -86,36 +87,12 @@ export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAcc
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            未分配
-                        </span>
-                        <MoneyValue
-                            value={row.original.open_total}
-                            unavailableReason={
-                                row.original.permission_limited
-                                    ? scopeText.wholeRestricted
-                                    : undefined
-                            }
-                        />
-                    </div>
-                    <div className="mt-1">
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            整单
-                        </span>
-                        <MoneyValue
-                            value={row.original.gross_total}
-                            unavailableReason={
-                                row.original.permission_limited
-                                    ? scopeText.wholeRestricted
-                                    : undefined
-                            }
-                        />
-                    </div>
-                </div>
-            ),
+            cell: ({ row }) =>
+                wholeUnallocatedCell({
+                    unallocated: row.original.open_total,
+                    whole: row.original.gross_total,
+                    permissionLimited: row.original.permission_limited,
+                }),
         },
         {
             id: "status",
@@ -176,36 +153,12 @@ export function createSupplierScopedPaymentColumns(): ColumnDef<ScopedSupplierPa
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            未分配
-                        </span>
-                        <MoneyValue
-                            value={row.original.unallocated_amount}
-                            unavailableReason={
-                                row.original.permission_limited
-                                    ? scopeText.wholeRestricted
-                                    : undefined
-                            }
-                        />
-                    </div>
-                    <div className="mt-1">
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            整单
-                        </span>
-                        <MoneyValue
-                            value={row.original.amount}
-                            unavailableReason={
-                                row.original.permission_limited
-                                    ? scopeText.wholeRestricted
-                                    : undefined
-                            }
-                        />
-                    </div>
-                </div>
-            ),
+            cell: ({ row }) =>
+                wholeUnallocatedCell({
+                    unallocated: row.original.unallocated_amount,
+                    whole: row.original.amount,
+                    permissionLimited: row.original.permission_limited,
+                }),
         },
         {
             id: "status",

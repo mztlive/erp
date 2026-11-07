@@ -11,6 +11,7 @@ import {
 } from "@/components/business/list-workspace"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
+import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 import type { ReceivableScopeChip } from "@/features/customer-receivables/pages/hooks/use-receivable-scope-url-state"
 import type { ReceivableScopeQuery } from "@/features/customer-receivables/api/scoped"
 
@@ -18,13 +19,6 @@ type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 const prefix = "customer-receivables-scope-toolbar"
 const panelId = `${prefix}-more-panel`
-
-function selectedOrgUnitIds(value: string): string[] {
-    return value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean)
-}
 
 const OPERATOR_KIND_OPTIONS = [
     { value: "register", label: "登记" },

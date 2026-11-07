@@ -1,6 +1,10 @@
 "use client"
 
-import { MoneyValue } from "@/components/business"
+import {
+    blockedChangeOrderSections,
+    ChangeOrderBlockers,
+    MoneyValue,
+} from "@/components/business"
 import { ChangeOrderSection } from "@/components/business/change-order-section"
 import {
     paymentTermLabel,
@@ -212,52 +216,19 @@ export function PurchaseChangeBlockers({
             selector={(state) =>
                 state.canSubmit
                     ? ""
-                    : Array.from(
-                          new Set(
-                              Object.entries(state.fieldMeta)
-                                  .filter(([, meta]) => meta?.errors.length)
-                                  .map(([name]) => blockerSection(name)),
-                          ),
-                      ).join(",")
+                    : blockedChangeOrderSections(
+                          state.fieldMeta,
+                          blockerSection,
+                      )
             }
         >
-            {(blocked) =>
-                blocked ? (
-                    <p
-                        role="status"
-                        className="flex flex-wrap items-center text-xs text-destructive"
-                    >
-                        待处理：
-                        {BLOCKER_SECTIONS.filter(([key]) =>
-                            blocked.split(",").includes(key),
-                        ).map(([key, label], index) => (
-                            <span
-                                key={key}
-                                className="inline-flex items-center"
-                            >
-                                {index ? "、" : null}
-                                <button
-                                    id={`${id}-blocker-${key}`}
-                                    type="button"
-                                    className="underline underline-offset-2"
-                                    onClick={() =>
-                                        document
-                                            .getElementById(
-                                                `${id}-${key}-title`,
-                                            )
-                                            ?.scrollIntoView({
-                                                behavior: "smooth",
-                                                block: "start",
-                                            })
-                                    }
-                                >
-                                    {label}
-                                </button>
-                            </span>
-                        ))}
-                    </p>
-                ) : null
-            }
+            {(blocked) => (
+                <ChangeOrderBlockers
+                    id={id}
+                    blocked={blocked}
+                    sections={BLOCKER_SECTIONS}
+                />
+            )}
         </form.Subscribe>
     )
 }

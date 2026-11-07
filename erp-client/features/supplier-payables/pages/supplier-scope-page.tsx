@@ -9,18 +9,19 @@ import {
     DataTable,
     FundsScopeBanner,
     MoneyValue,
+    PageScaffold,
+    QuickPreviewSheet,
 } from "@/components/business"
+import { ListSearchField } from "@/components/business/list-search-field"
 import {
     ListWorkspaceFilterBar,
+    ListWorkspaceHeader,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
-import { ListSearchField } from "@/components/business/list-search-field"
-import { ListWorkspaceHeader } from "@/components/business/list-workspace"
-import { PageScaffold } from "@/components/business"
+import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { QuickPreviewSheet } from "@/components/business"
 import {
     PreviewAmount,
     PreviewFact,
@@ -48,13 +49,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const SCOPE_VIEWS = ["payable", "payment", "purchase_invoice"] as const
 const toolbarPrefix = "supplier-payables-scope-toolbar"
-
-function selectedOrgUnitIds(value: string): string[] {
-    return value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean)
-}
 
 /** 供应商往来范围页：应付、付款、进项分配的人员筛选都走采购目录。 */
 export function SupplierScopePage() {

@@ -2,10 +2,8 @@
 
 import * as React from "react"
 
-import {
-    useListUrl,
-    useSearchDraft,
-} from "@/features/master-data/hooks/use-list-url"
+import { useListUrl } from "@/features/master-data/hooks/use-list-url"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import {
     parseLifecycleStatus,
     parseRevisionTiming,
@@ -48,7 +46,10 @@ export function useProductListFilters(
         resetPagination,
         changePagination,
     } = useListUrl()
-    const { searchDraft, setSearchDraft } = useSearchDraft(q, searchInputRef)
+    const { searchDraft, setSearchDraft } = useSearchDraft(q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
 
     const hasLegacyOrganizationFilter =
         searchParams.has("orgUnitIds") || searchParams.has("includeDescendants")

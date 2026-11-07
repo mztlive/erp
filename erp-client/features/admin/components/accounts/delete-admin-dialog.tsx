@@ -1,20 +1,8 @@
 "use client"
 
-import * as React from "react"
-import { getErrorMessage } from "@/lib/api/errors"
-
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { useAdminMutations } from "@/features/admin/hooks/queries"
+
+import { DeleteConfirmationDialog } from "../delete-confirmation-dialog"
 
 /** 删除账号确认对话框；系统内置账号会被后端拒绝删除。 */
 export function DeleteAdminDialog({
@@ -29,54 +17,16 @@ export function DeleteAdminDialog({
     id?: string
 }) {
     const { deleteAdmin, isDeleting } = useAdminMutations()
-    const [error, setError] = React.useState<string | null>(null)
 
     return (
-        <AlertDialog open onOpenChange={(open) => !open && onOpenChange(false)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>
-                        删除账号 {account.account}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                        删除后，该账号将无法登录后台。
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                {error ? (
-                    <Alert variant="destructive" role="alert">
-                        <AlertTitle>删除失败</AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                ) : null}
-                <AlertDialogFooter>
-                    <AlertDialogCancel
-                        id={`${id}-cancel`}
-                        disabled={isDeleting}
-                    >
-                        取消
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                        loading={isDeleting}
-                        id={`${id}-confirm`}
-                        variant="destructive"
-                        disabled={isDeleting}
-                        onClick={async () => {
-                            setError(null)
-                            try {
-                                await deleteAdmin(account.id)
-                                onOpenChange(false)
-                                onDeleted?.()
-                            } catch (e) {
-                                setError(
-                                    getErrorMessage(e, "删除失败，请重试。"),
-                                )
-                            }
-                        }}
-                    >
-                        {isDeleting ? "删除中…" : "确认删除"}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+        <DeleteConfirmationDialog
+            id={id}
+            title={`删除账号 ${account.account}`}
+            description="删除后，该账号将无法登录后台。"
+            pending={isDeleting}
+            onConfirm={() => deleteAdmin(account.id)}
+            onClose={() => onOpenChange(false)}
+            onDeleted={onDeleted}
+        />
     )
 }

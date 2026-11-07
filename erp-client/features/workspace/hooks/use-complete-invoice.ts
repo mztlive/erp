@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/components/ui/toast"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import { completeInvoice } from "../api/invoice-evidence"
 import type { WorkspaceWorkItem } from "../types"
 import type { InvoiceRequest } from "@/features/invoice-requests/api"
@@ -36,12 +37,12 @@ export function useCompleteInvoice(
             onCompleted?.(item.workItemId)
             void Promise.all(
                 [
-                    "invoice-requests",
-                    "customer-receivables",
-                    "sales-orders",
-                    "work-items",
-                    "workspace-home",
-                ].map((root) => client.invalidateQueries({ queryKey: [root] })),
+                    queryKeyRoots.invoiceRequests,
+                    queryKeyRoots.customerReceivables,
+                    queryKeyRoots.salesOrders,
+                    queryKeyRoots.workItems,
+                    queryKeyRoots.workspaceHome,
+                ].map((root) => client.invalidateQueries({ queryKey: root })),
             )
         },
     })

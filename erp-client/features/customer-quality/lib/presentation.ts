@@ -1,16 +1,6 @@
 import type { DataFreshnessState } from "@/components/business/page"
 
-export function formatClock(iso: string) {
-    try {
-        return new Intl.DateTimeFormat("zh-CN", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-        }).format(new Date(iso))
-    } catch {
-        return iso
-    }
-}
+export { formatClock } from "@/lib/datetime"
 
 /** 来源更新位置形如 outbox:cq:2026-08-01T09:35:48+08:00，提取可读时间部分。 */
 export function formatSourceWatermark(w: string): string {

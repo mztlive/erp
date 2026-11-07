@@ -2,10 +2,8 @@
 
 import * as React from "react"
 
-import {
-    useListUrl,
-    useSearchDraft,
-} from "@/features/master-data/hooks/use-list-url"
+import { useListUrl } from "@/features/master-data/hooks/use-list-url"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { revisionTimingFilterLabel } from "@/features/master-data/lib/copy"
 import {
     parseLifecycleStatus,
@@ -37,7 +35,10 @@ export function useLifecycleListFilters(
         resetPagination,
         changePagination,
     } = useListUrl()
-    const { searchDraft, setSearchDraft } = useSearchDraft(q, searchInputRef)
+    const { searchDraft, setSearchDraft } = useSearchDraft(q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
 
     const lifecycleStatus = parseLifecycleStatus(
         searchParams.get("lifecycleStatus"),

@@ -26,13 +26,14 @@ import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
+    IconActionButton,
     taxAmountToneClass,
     WorkspaceTaskPane,
     workspaceTaskSurfaceClassName,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -41,11 +42,6 @@ import {
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -1136,57 +1132,6 @@ function WorkspaceDocumentTaskDetail({
                 }}
             />
         </WorkspaceTaskPane>
-    )
-}
-
-function IconActionButton({
-    id,
-    label,
-    testId,
-    href,
-    onClick,
-    children,
-}: {
-    id?: string
-    label: string
-    testId: string
-    href?: string
-    onClick?: () => void
-    children: ReactNode
-}) {
-    return (
-        <Tooltip>
-            <TooltipTrigger
-                id={id}
-                render={
-                    href ? (
-                        <a
-                            id={id}
-                            href={href}
-                            aria-label={label}
-                            data-testid={testId}
-                            className={buttonVariants({
-                                variant: "ghost",
-                                size: "icon-sm",
-                            })}
-                        />
-                    ) : (
-                        <Button
-                            id={id}
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={label}
-                            data-testid={testId}
-                            onClick={onClick}
-                        />
-                    )
-                }
-            >
-                {children}
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-        </Tooltip>
     )
 }
 

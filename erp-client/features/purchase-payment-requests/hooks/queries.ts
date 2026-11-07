@@ -4,6 +4,7 @@ import type {
 } from "../lib/candidate-list-query"
 import type { RequestListQuery } from "../lib/list-query"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     commandRequest,
     executeRequestDeposit,
@@ -112,7 +113,7 @@ function useInvalidate() {
     return async () => {
         await Promise.all([
             client.invalidateQueries({ queryKey: paymentRequestKeys.all }),
-            client.invalidateQueries({ queryKey: ["work-items"] }),
+            client.invalidateQueries({ queryKey: queryKeyRoots.workItems }),
             client.invalidateQueries({ queryKey: ["workspace-home"] }),
             client.invalidateQueries({ queryKey: ["supplier-payables"] }),
             client.invalidateQueries({ queryKey: ["purchase-orders"] }),

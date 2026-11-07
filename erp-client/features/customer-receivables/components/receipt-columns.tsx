@@ -3,6 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import type { ReceiptRow } from "@/features/customer-receivables/types"
 import { formatDateTime } from "@/lib/datetime"
+import { allocationSummaryCell } from "./allocation-summary"
 
 export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
     return [
@@ -56,22 +57,7 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            未分配
-                        </span>
-                        <MoneyValue value={row.original.unallocatedAmount} />
-                    </div>
-                    <div className="mt-1">
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            净已分配
-                        </span>
-                        <MoneyValue value={row.original.allocatedTotal} />
-                    </div>
-                </div>
-            ),
+            cell: ({ row }) => allocationSummaryCell(row.original),
         },
         {
             id: "status",

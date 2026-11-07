@@ -1,5 +1,6 @@
 "use client"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     fetchPaymentArrangement,
     schedulePaymentFollowUp,
@@ -20,9 +21,15 @@ export function useSchedulePaymentFollowUp(id: string) {
             schedulePaymentFollowUp(id, data),
         onSuccess: async () => {
             await Promise.all([
-                client.invalidateQueries({ queryKey: ["purchase-orders"] }),
-                client.invalidateQueries({ queryKey: ["work-items"] }),
-                client.invalidateQueries({ queryKey: ["workspace-home"] }),
+                client.invalidateQueries({
+                    queryKey: queryKeyRoots.purchaseOrders,
+                }),
+                client.invalidateQueries({
+                    queryKey: queryKeyRoots.workItems,
+                }),
+                client.invalidateQueries({
+                    queryKey: queryKeyRoots.workspaceHome,
+                }),
             ])
         },
     })

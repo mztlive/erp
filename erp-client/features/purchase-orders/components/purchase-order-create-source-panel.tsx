@@ -9,23 +9,19 @@ import {
 } from "lucide-react"
 
 import {
+    IconActionButton,
     MoneyValue,
     surfaceClassName,
     surfaceInsetClassName,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
     DescriptionDetails,
     DescriptionItem,
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { PurchaseOrderCreateSourcePickerDialog } from "@/features/purchase-orders/components/purchase-order-create-source-picker-dialog"
 import {
     summarizeSourcingOrder,
@@ -205,57 +201,6 @@ export function PurchaseOrderCreateSourcePanel({
                 onSelect={onSalesOrderChange}
             />
         </section>
-    )
-}
-
-/** 标题栏图标动作：预览或跳转销售单。 */
-function IconActionButton({
-    id,
-    label,
-    testId,
-    href,
-    onClick,
-    children,
-}: {
-    id?: string
-    label: string
-    testId: string
-    href?: string
-    onClick?: () => void
-    children: ReactNode
-}) {
-    return (
-        <Tooltip>
-            <TooltipTrigger
-                render={
-                    href ? (
-                        <a
-                            id={id}
-                            href={href}
-                            aria-label={label}
-                            data-testid={testId}
-                            className={buttonVariants({
-                                variant: "ghost",
-                                size: "icon-sm",
-                            })}
-                        />
-                    ) : (
-                        <Button
-                            id={id}
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={label}
-                            data-testid={testId}
-                            onClick={onClick}
-                        />
-                    )
-                }
-            >
-                {children}
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-        </Tooltip>
     )
 }
 

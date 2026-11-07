@@ -15,6 +15,7 @@ import type {
 } from "@/features/customers/hooks/use-customer-center-directory-state"
 import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
+import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -25,10 +26,6 @@ const STATUS_OPTIONS = [
 ] as const
 
 const MORE_CHIP_KEYS: readonly CustomerFilterKey[] = ["orgUnitIds"]
-
-function selectedOrgUnitIds(value: string): string[] {
-    return value.split(",").filter(Boolean)
-}
 
 /**
  * 客户中心目录工具条：负责销售和状态常驻，组织在更多筛选。

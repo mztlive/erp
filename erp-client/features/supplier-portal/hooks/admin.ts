@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import * as api from "../admin-api"
 export const portalAdminKeys = { all: ["supplier-portal-admin"] as const }
 export function usePortalAdminAccess() {
@@ -41,7 +42,9 @@ export function usePortalAdminCommand<TInput, TResult>(
         onSuccess: async () => {
             await Promise.all([
                 client.invalidateQueries({ queryKey: portalAdminKeys.all }),
-                client.invalidateQueries({ queryKey: ["work-items"] }),
+                client.invalidateQueries({
+                    queryKey: queryKeyRoots.workItems,
+                }),
                 client.invalidateQueries({ queryKey: ["workspace"] }),
                 client.invalidateQueries({ queryKey: ["master-data"] }),
             ])

@@ -15,6 +15,7 @@ import type {
     IntegrationResolveInput,
     IntegrationTaskActionInput,
 } from "@/features/integration-errors/types"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 const integrationErrorKeys = {
     all: ["integration-errors"] as const,
@@ -60,7 +61,7 @@ export function useIntegrationActionMutation() {
                         queryKey: integrationErrorKeys.all,
                     }),
                     queryClient.invalidateQueries({
-                        queryKey: ["work-items"],
+                        queryKey: queryKeyRoots.workItems,
                     }),
                 ])
             }
@@ -80,7 +81,7 @@ export function useResolveIntegrationMutation() {
                         queryKey: integrationErrorKeys.all,
                     }),
                     queryClient.invalidateQueries({
-                        queryKey: ["work-items"],
+                        queryKey: queryKeyRoots.workItems,
                     }),
                 ])
             }

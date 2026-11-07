@@ -22,13 +22,15 @@ export type ScopeVersionedListQuery = {
 
 export function useScopedListQuery<
     TQuery extends ScopeVersionedListQuery,
-    TResult extends { scopeVersion?: string },
+    TResult,
 >({
     query,
     queryKey,
     fetchPage,
     enabled = true,
     keepPreviousData = false,
+    getScopeVersion = (result: TResult) =>
+        (result as { scopeVersion?: string }).scopeVersion,
 }: {
     query: TQuery
     queryKey: (query: TQuery) => QueryKey
@@ -36,13 +38,16 @@ export function useScopedListQuery<
     enabled?: boolean
     /** 切换筛选时保留上一批结果，避免整卡闪烁。 */
     keepPreviousData?: boolean
+    /** 响应里的范围版本字段名；snake_case 接口由调用方提供。 */
+    getScopeVersion?: (result: TResult) => string | undefined
 }) {
     const client = useQueryClient()
     const page = query.page ?? 1
     const firstPage = { ...query, page: 1, scopeVersion: undefined } as TQuery
     const baseline = client.getQueryData<TResult>(queryKey(firstPage))
     const scopeVersion =
-        query.scopeVersion ?? (page > 1 ? baseline?.scopeVersion : undefined)
+        query.scopeVersion ??
+        (page > 1 && baseline ? getScopeVersion(baseline) : undefined)
     const scoped = { ...query, scopeVersion } as TQuery
 
     const options: UseQueryOptions<TResult, Error, TResult, QueryKey> = {
@@ -56,7 +61,7 @@ export function useScopedListQuery<
             })
             return fetchPage({
                 ...query,
-                scopeVersion: first.scopeVersion,
+                scopeVersion: getScopeVersion(first),
             } as TQuery)
         },
         enabled,

@@ -1,17 +1,6 @@
 import type { DataFreshnessState } from "@/components/business/page"
 import type { TodayWorkspaceView } from "@/features/workspace/types"
-
-function formatClock(iso: string): string {
-    try {
-        return new Intl.DateTimeFormat("zh-CN", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-        }).format(new Date(iso))
-    } catch {
-        return iso
-    }
-}
+import { formatClock } from "@/lib/datetime"
 
 export function deriveWorkItemsFreshness(
     freshness: TodayWorkspaceView["freshness"],

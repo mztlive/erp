@@ -4,6 +4,7 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 
 import { OptionCombobox } from "@/components/business"
 import {
@@ -39,10 +40,6 @@ const MORE_CHIP_KEYS: readonly SalesOrdersListFilterKey[] = [
     "createdBy",
     "orgUnitIds",
 ]
-
-function selectedOrgUnitIds(value: string): string[] {
-    return value.split(",").filter(Boolean)
-}
 
 export function SalesOrdersListFilterBar({
     filters: f,

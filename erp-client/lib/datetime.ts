@@ -31,6 +31,19 @@ export function todayDate(): string {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/** 本地时间 HH:mm（zh-CN，24 小时制）；无法解析时原样返回。 */
+export function formatClock(iso: string): string {
+    try {
+        return new Intl.DateTimeFormat("zh-CN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+        }).format(new Date(iso))
+    } catch {
+        return iso
+    }
+}
+
 /** Unix 秒转 ISO；空值、非有限值或非正数返回空串。 */
 export function unixSecondsToIsoOrEmpty(
     secs: number | null | undefined,

@@ -5,15 +5,9 @@ import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
-import { WorkspaceTaskPane } from "@/components/business"
+import { IconActionButton, WorkspaceTaskPane } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button, buttonVariants } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
 import { workspaceReadActionLabel } from "@/features/workspace/api/work-item-meta"
 import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
@@ -137,56 +131,5 @@ export function WorkspaceAcceptanceTask({
                 }}
             />
         </WorkspaceTaskPane>
-    )
-}
-
-function IconActionButton({
-    id,
-    label,
-    testId,
-    href,
-    onClick,
-    children,
-}: {
-    id: string
-    label: string
-    testId: string
-    href?: string
-    onClick?: () => void
-    children: React.ReactNode
-}) {
-    return (
-        <Tooltip>
-            <TooltipTrigger
-                id={id}
-                render={
-                    href ? (
-                        <a
-                            id={id}
-                            href={href}
-                            aria-label={label}
-                            data-testid={testId}
-                            className={buttonVariants({
-                                variant: "ghost",
-                                size: "icon-sm",
-                            })}
-                        />
-                    ) : (
-                        <Button
-                            id={id}
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={label}
-                            data-testid={testId}
-                            onClick={onClick}
-                        />
-                    )
-                }
-            >
-                {children}
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-        </Tooltip>
     )
 }

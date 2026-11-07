@@ -67,19 +67,3 @@ export function useListUrl() {
         changePagination,
     }
 }
-
-/** 搜索草稿：URL 回填时保护正在输入的焦点。 */
-export function useSearchDraft(
-    q: string,
-    searchInputRef: React.RefObject<HTMLInputElement | null>,
-) {
-    const [searchDraft, setSearchDraft] = React.useState(q)
-
-    React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(q)
-        }
-    }, [q, searchInputRef])
-
-    return { searchDraft, setSearchDraft }
-}

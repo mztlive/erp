@@ -9,13 +9,16 @@ import {
     DataTable,
     FundsScopeBanner,
     MoneyValue,
+    PageScaffold,
 } from "@/components/business"
+import { ListSearchField } from "@/components/business/list-search-field"
 import {
     ListWorkspaceFilterBar,
+    ListWorkspaceHeader,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
-import { ListSearchField } from "@/components/business/list-search-field"
+import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -26,8 +29,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { PageScaffold } from "@/components/business"
-import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import type { ColumnDef } from "@tanstack/react-table"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -42,13 +43,6 @@ import { useInvoiceRequestScopeUrlState } from "@/features/invoice-requests/hook
 import { scopeText } from "@/lib/ui-text"
 
 const toolbarPrefix = "invoice-request-scope-toolbar"
-
-function selectedOrgUnitIds(value: string): string[] {
-    return value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean)
-}
 
 function ScopeColumns(): ColumnDef<ScopedInvoiceRequestWire>[] {
     return [

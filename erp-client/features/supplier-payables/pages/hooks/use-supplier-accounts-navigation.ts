@@ -12,6 +12,7 @@ import type {
     SessionState,
 } from "@/features/supplier-payables/types"
 import { invoiceRegistrationHref } from "@/features/supplier-payables/lib/invoice-registration-route"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import type { SupplierAccountsPatchUrl } from "./use-supplier-accounts-filters"
 
 type Options = {
@@ -45,15 +46,12 @@ export function useSupplierAccountsNavigation({
         previewKind === "invoice" && detailId ? detailId : null
     const previewUnallocatedId =
         previewKind === "unallocated" && detailId ? detailId : null
-    const lastFocusedRow = React.useRef<HTMLElement | null>(null)
+    const lastFocusedRowId = React.useRef<string | null>(null)
     const rememberRow = React.useCallback((id: string) => {
-        const row = document.querySelector<HTMLElement>(
-            `[data-row-id="${CSS.escape(id)}"]`,
-        )
-        if (row) lastFocusedRow.current = row
+        lastFocusedRowId.current = id
     }, [])
     const restoreRowFocus = React.useCallback(() => {
-        if (lastFocusedRow.current?.isConnected) lastFocusedRow.current.focus()
+        restoreListRowFocus(lastFocusedRowId.current)
     }, [])
 
     const previousDetailId = React.useRef(detailId)

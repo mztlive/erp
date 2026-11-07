@@ -7,6 +7,7 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { SalesInvoiceRow } from "@/features/customer-receivables/types"
+import { allocationSummaryCell } from "./allocation-summary"
 
 /** 销项发票列表只展示事实，操作由行预览 Sheet 承载。 */
 export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
@@ -73,22 +74,7 @@ export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            未分配
-                        </span>
-                        <MoneyValue value={row.original.unallocatedAmount} />
-                    </div>
-                    <div className="mt-1">
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            净已分配
-                        </span>
-                        <MoneyValue value={row.original.allocatedTotal} />
-                    </div>
-                </div>
-            ),
+            cell: ({ row }) => allocationSummaryCell(row.original),
         },
         {
             id: "status",

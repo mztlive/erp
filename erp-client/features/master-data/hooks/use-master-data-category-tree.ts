@@ -1,10 +1,8 @@
 "use client"
 
 import * as React from "react"
-import {
-    useListUrl,
-    useSearchDraft,
-} from "@/features/master-data/hooks/use-list-url"
+import { useListUrl } from "@/features/master-data/hooks/use-list-url"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
@@ -77,7 +75,10 @@ export function useMasterDataCategoryTree(
     const lifecycleStatus = parseLifecycleStatus(
         searchParams.get("lifecycleStatus"),
     )
-    const { searchDraft, setSearchDraft } = useSearchDraft(q, searchInputRef)
+    const { searchDraft, setSearchDraft } = useSearchDraft(q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     const selectedId = searchParams.get("category")
     const [expandedState, setExpanded] =
         React.useState<ReadonlySet<string> | null>(null)

@@ -15,10 +15,10 @@ import {
     parseWorkItemConflict,
     submitWorkItemResponsibility,
     type WorkItemListParams,
-    type WorkItemPage,
 } from "./api"
 import type { WorkItemDto, WorkItemResponsibilityCommand } from "./types"
 import { isApiError } from "@/lib/api/errors"
+import { useScopedListQuery } from "@/lib/use-scoped-list-query"
 
 export const workItemKeys = {
     all: ["work-items"] as const,
@@ -68,29 +68,11 @@ export const synchronizeWorkItemConflict = async (
 }
 
 export function useWorkItemsQuery(params: WorkItemListParams) {
-    const client = useQueryClient()
-    const firstPage = { ...params, page: 1, scopeVersion: undefined }
-    const baseline = client.getQueryData<WorkItemPage>(
-        workItemKeys.list(firstPage),
-    )
-    const scopeVersion =
-        params.scopeVersion ??
-        ((params.page ?? 1) > 1 ? baseline?.scope_version : undefined)
-    const scoped = { ...params, scopeVersion }
-    return useQuery({
-        queryKey: workItemKeys.list(scoped),
-        queryFn: async () => {
-            if ((params.page ?? 1) === 1 || scopeVersion)
-                return listWorkItems(scoped)
-            const first = await client.fetchQuery({
-                queryKey: workItemKeys.list(firstPage),
-                queryFn: () => listWorkItems(firstPage),
-            })
-            return listWorkItems({
-                ...params,
-                scopeVersion: first.scope_version,
-            })
-        },
+    return useScopedListQuery({
+        query: params,
+        queryKey: workItemKeys.list,
+        fetchPage: listWorkItems,
+        getScopeVersion: (page) => page.scope_version,
     })
 }
 

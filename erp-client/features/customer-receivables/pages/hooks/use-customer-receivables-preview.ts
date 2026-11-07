@@ -4,6 +4,7 @@ import * as React from "react"
 
 import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/customer-account-columns"
 import type { CustomerAccountsView } from "@/features/customer-receivables/types"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import type { CustomerReceivablesPatchUrl } from "./use-customer-receivables-url-state"
 
 export function useCustomerReceivablesPreview(args: {
@@ -25,9 +26,9 @@ export function useCustomerReceivablesPreview(args: {
     restoreRowFocus: () => void
 } {
     const { previewKind, previewId, focusId, patchUrl } = args
-    const lastFocusedRow = React.useRef<HTMLElement | null>(null)
+    const lastFocusedRowId = React.useRef<string | null>(null)
     const restoreRowFocus = React.useCallback(() => {
-        if (lastFocusedRow.current?.isConnected) lastFocusedRow.current.focus()
+        restoreListRowFocus(lastFocusedRowId.current)
     }, [])
 
     const [preview, setPreview] =
@@ -53,9 +54,7 @@ export function useCustomerReceivablesPreview(args: {
         (next: CustomerAccountPreviewTarget | null) => {
             setPreview(next)
             if (next) {
-                lastFocusedRow.current = document.querySelector<HTMLElement>(
-                    `[data-row-id="${CSS.escape(next.id)}"]`,
-                )
+                lastFocusedRowId.current = next.id
                 // 打开/关闭详情用 push（P2）；旧 focusId 一并清理
                 patchUrl(
                     {
