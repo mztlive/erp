@@ -1,5 +1,6 @@
 import type { CellValue, Workbook } from "exceljs"
 import { multiplyFixed, compactFixed } from "@/lib/fixed-decimal"
+import { downloadWorkbook, loadWorkbookFromFile } from "@/lib/xlsx"
 
 export const SUPPLIER_IMPORT_HEADERS = [
     "供应商编号",
@@ -172,10 +173,7 @@ export const readSupplierFile = async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".xlsx"))
         throw new Error("请选择 .xlsx 格式的供应商模板")
     if (file.size > 10 * 1024 * 1024) throw new Error("文件不能超过 10 MB")
-    const { Workbook } = await import("exceljs")
-    const workbook = new Workbook()
-    await workbook.xlsx.load(await file.arrayBuffer())
-    return supplierWorkbookRows(workbook)
+    return supplierWorkbookRows(await loadWorkbookFromFile(file))
 }
 
 /** 失败清单含原数据，保存为文本单元格，避免公式执行和长账号精度丢失。 */
@@ -265,17 +263,5 @@ const downloadSupplierWorkbook = async (
     workbook: Workbook,
     filename: string,
 ) => {
-    const data = await workbook.xlsx.writeBuffer()
-    const url = URL.createObjectURL(
-        new Blob([data], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
-    )
-    const link = document.createElement("a")
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    await downloadWorkbook(workbook, filename, { revokeDelayMs: 1000 })
 }

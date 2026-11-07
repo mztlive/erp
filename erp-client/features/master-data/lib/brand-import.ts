@@ -3,15 +3,14 @@ import type {
     BrandImportResult,
     BrandImportRow,
 } from "@/features/master-data/api/brand-import"
+import { downloadWorkbook, loadWorkbookFromFile } from "@/lib/xlsx"
 
 /** 表头按名称匹配，允许只提供品牌名称一列。 */
 export async function readBrandFile(file: File): Promise<BrandImportRow[]> {
     if (!file.name.toLowerCase().endsWith(".xlsx"))
         throw new Error("请选择 .xlsx 格式的 Excel 文件")
     if (file.size > 5 * 1024 * 1024) throw new Error("文件不能超过 5 MB")
-    const { Workbook } = await import("exceljs")
-    const workbook = new Workbook()
-    await workbook.xlsx.load(await file.arrayBuffer())
+    const workbook = await loadWorkbookFromFile(file)
     const sheet = workbook.getWorksheet("品牌") ?? workbook.worksheets[0]
     if (!sheet) throw new Error("文件没有工作表")
     if (sheet.rowCount > 10001)
@@ -78,20 +77,8 @@ function unsupportedCell(cell: Cell) {
     )
 }
 
-async function downloadWorkbook(workbook: Workbook, name: string) {
-    const buffer = await workbook.xlsx.writeBuffer()
-    const url = URL.createObjectURL(
-        new Blob([buffer], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
-    )
-    const link = document.createElement("a")
-    link.href = url
-    link.download = name
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+async function downloadBrandWorkbook(workbook: Workbook, name: string) {
+    await downloadWorkbook(workbook, name, { revokeDelayMs: 1000 })
 }
 
 export async function downloadBrandTemplate() {
@@ -115,7 +102,7 @@ export async function downloadBrandTemplate() {
     ])
         guide.addRow([text])
     guide.getColumn(1).width = 100
-    await downloadWorkbook(workbook, "品牌导入模板.xlsx")
+    await downloadBrandWorkbook(workbook, "品牌导入模板.xlsx")
 }
 
 export async function downloadBrandFailures(
@@ -146,5 +133,5 @@ export async function downloadBrandFailures(
         column.numFmt = "@"
     })
     sheet.getRow(1).font = { bold: true }
-    await downloadWorkbook(workbook, "品牌导入失败行.xlsx")
+    await downloadBrandWorkbook(workbook, "品牌导入失败行.xlsx")
 }

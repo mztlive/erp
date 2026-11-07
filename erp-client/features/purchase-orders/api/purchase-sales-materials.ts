@@ -1,4 +1,5 @@
 import { apiGetBlob } from "@/lib/api"
+import { downloadBlob } from "@/lib/download-blob"
 
 /** 使用采购单来源关系授权读取文件，服务端按关联销售版本重新核验。 */
 export function fetchPurchaseSalesMaterial(
@@ -18,12 +19,5 @@ export async function downloadPurchaseSalesMaterial(
     fileName: string,
 ): Promise<void> {
     const blob = await fetchPurchaseSalesMaterial(purchaseOrderId, fileAssetId)
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = fileName
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, fileName)
 }

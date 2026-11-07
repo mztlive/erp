@@ -16,16 +16,12 @@ import type {
     MasterDataListQuery,
 } from "@/features/master-data/types"
 import { fetchAllPages } from "./fetch-all"
+import { lifecycleStatusParam } from "./query-params"
 
 export async function listCategories(
     query: MasterDataListQuery,
 ): Promise<MasterDataListItem[]> {
-    const status =
-        query.lifecycleStatus === "enabled"
-            ? "active"
-            : query.lifecycleStatus === "disabled"
-              ? "disabled"
-              : undefined
+    const status = lifecycleStatusParam(query)
     const items = await fetchAllPages<ProductCategoryDto>(
         "/admin/product-categories",
         {
@@ -61,12 +57,7 @@ export async function listCategories(
 export async function listBrands(
     query: MasterDataListQuery,
 ): Promise<MasterDataListItem[]> {
-    const status =
-        query.lifecycleStatus === "enabled"
-            ? "active"
-            : query.lifecycleStatus === "disabled"
-              ? "disabled"
-              : undefined
+    const status = lifecycleStatusParam(query)
     const items = await fetchAllPages<ProductBrandDto>(
         "/admin/product-brands",
         {
@@ -80,12 +71,7 @@ export async function listBrands(
 export async function listUnitOfMeasures(
     query: MasterDataListQuery,
 ): Promise<MasterDataListItem[]> {
-    const status =
-        query.lifecycleStatus === "enabled"
-            ? "active"
-            : query.lifecycleStatus === "disabled"
-              ? "disabled"
-              : undefined
+    const status = lifecycleStatusParam(query)
     // 仅按 status 拉全量（字典体量小）；代码/名称/符号在本地模糊匹配
     const items = await fetchAllPages<UnitOfMeasureDto>(
         "/admin/unit-of-measures",

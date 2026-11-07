@@ -1,4 +1,5 @@
 import { apiGet, apiGetBlob, apiPost, apiPostForm, type Page } from "@/lib/api"
+import { downloadBlob } from "@/lib/download-blob"
 
 export type NumberGroup = "FSY" | "ZHYF" | "GYL" | "BDKJ"
 export const NUMBER_GROUP_OPTIONS = [
@@ -96,11 +97,5 @@ export async function downloadContractWord(input: {
         ? `/admin/contract-templates/${encodeURIComponent(input.id)}/sample`
         : `/admin/contract-applications/${encodeURIComponent(input.id)}/download`
     const blob = await apiGetBlob(path, { timeoutMs: 60_000 })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = input.filename
-    link.click()
-    // 浏览器下载读取完成后释放；下载链接不依赖临时公开文件地址。
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    downloadBlob(blob, input.filename, { revokeDelayMs: 60_000 })
 }

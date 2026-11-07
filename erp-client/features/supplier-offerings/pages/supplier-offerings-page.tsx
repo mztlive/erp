@@ -21,6 +21,7 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { cn } from "@/lib/utils"
 import { ChangeOfferingStatusDialog } from "@/features/supplier-offerings/components/dialogs/change-offering-status-dialog"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/components/dialogs/register-supply-for-sku-dialog"
@@ -53,12 +54,7 @@ export const SupplierOfferingsPage = () => {
     const lastFocusedRowId = React.useRef<string | null>(null)
     const closePreview = () => setPreviewId(null)
     const restorePreviewFocus = () => {
-        const id = lastFocusedRowId.current
-        if (id) {
-            document
-                .querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`)
-                ?.focus()
-        }
+        restoreListRowFocus(lastFocusedRowId.current)
     }
     const account = useAccountProfileQuery()
     const canBatchRevise =

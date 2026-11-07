@@ -1,5 +1,6 @@
 import type { SalesLinePrices } from "@/lib/sales-line-prices"
 import { apiGet, apiGetBlob } from "@/lib/api"
+import { downloadBlob } from "@/lib/download-blob"
 
 /** 仅提交时冻结的展示与文件白名单；关联对象标识不构成读取入口。 */
 export type ApprovalMaterials = {
@@ -191,14 +192,7 @@ export async function downloadApprovalMaterial(
         materialContentPath(instanceId, assetId, "download", sourceRevisionId),
         { timeoutMs: 30_000, cache: "no-store" },
     )
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = fileName
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, fileName)
 }
 
 /** 采购审批锁定的完整销售版本，复用销售单纸质预览。 */

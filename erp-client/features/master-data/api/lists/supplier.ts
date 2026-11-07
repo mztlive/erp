@@ -7,44 +7,20 @@ import type {
     MasterDataListQuery,
     MasterDataListResult,
 } from "@/features/master-data/types"
+import { supplierListParams } from "./query-params"
+
+export { joinFilterCodes } from "./query-params"
 
 export async function listSuppliers(
     query: MasterDataListQuery,
 ): Promise<Pick<MasterDataListResult, "rows" | "emptyReason">> {
-    const status =
-        query.lifecycleStatus === "enabled"
-            ? "active"
-            : query.lifecycleStatus === "disabled"
-              ? "disabled"
-              : undefined
     const result = await fetchCompleteList<SupplierDto>(
         "/admin/suppliers",
-        {
-            status,
-            keyword: query.q || undefined,
-            capability_codes: joinFilterCodes(query.supplierCapabilityCodes),
-            qualification_types: joinFilterCodes(
-                query.supplierQualificationTypes,
-            ),
-            qualification_health: query.supplierQualificationHealth,
-            owner_user_ids: query.owner_user_ids || undefined,
-            capability_owner_user_ids:
-                query.capability_owner_user_ids || undefined,
-        },
+        supplierListParams(query),
         (item) => item.id,
     )
     return {
         rows: result.items.map((supplier) => mapSupplierRow(supplier)),
         emptyReason: result.empty_reason === "no_scope" ? "no_scope" : null,
     }
-}
-
-/** 规范化多选条件，供后端以逗号分隔的稳定查询参数接收。 */
-export function joinFilterCodes(
-    values: readonly string[] | undefined,
-): string | undefined {
-    if (!values?.length) return undefined
-    return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
-        .sort()
-        .join(",")
 }

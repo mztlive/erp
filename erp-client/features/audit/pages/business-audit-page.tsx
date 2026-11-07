@@ -28,6 +28,7 @@ import {
     auditResultView,
 } from "../lib/display"
 import type { AuditLogItem, BusinessAuditResult } from "../types"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 const FILTER_KEYS = {
     actorAccount: "business_actor",
@@ -175,13 +176,7 @@ export function BusinessAuditPage({ views }: { views: ReactNode }) {
                     if (!open) setSelected(null)
                 }}
                 onOpenChangeComplete={(open) => {
-                    if (!open && lastFocusedRowId.current) {
-                        document
-                            .querySelector<HTMLElement>(
-                                `[data-row-id="${CSS.escape(lastFocusedRowId.current)}"]`,
-                            )
-                            ?.focus()
-                    }
+                    if (!open) restoreListRowFocus(lastFocusedRowId.current)
                 }}
                 title={selected ? auditActionLabel(selected) : "业务操作记录"}
                 identity={

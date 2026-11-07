@@ -1,4 +1,5 @@
 import { toBlob } from "html-to-image"
+import { downloadBlob } from "@/lib/download-blob"
 
 export function purchasePaperFileNamePart(value: string): string {
     return (
@@ -31,17 +32,8 @@ export async function renderPurchasePaperImage(
 }
 
 export function downloadPurchasePaperFile(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.id = "purchase-order-paper-file"
-    anchor.href = url
-    anchor.download = filename
-    document.body.appendChild(anchor)
-    try {
-        anchor.click()
-    } finally {
-        anchor.remove()
-        // 给浏览器留出读取文件的时间，再释放对象 URL。
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    }
+    downloadBlob(blob, filename, {
+        linkId: "purchase-order-paper-file",
+        revokeDelayMs: 60_000,
+    })
 }

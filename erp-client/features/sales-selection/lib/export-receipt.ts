@@ -1,4 +1,6 @@
 import { Workbook } from "exceljs"
+import { downloadBlob } from "@/lib/download-blob"
+import { workbookBlob } from "@/lib/xlsx"
 import type { PublicReceiptView } from "../types"
 import type { ReceiptContent } from "./receipt"
 
@@ -99,18 +101,12 @@ export async function downloadReceipt(
         })
     })
     sheet.views = [{ state: "frozen", ySplit: header.number }]
-    const buffer = await workbook.xlsx.writeBuffer()
-    const url = URL.createObjectURL(
-        new Blob([new Uint8Array(buffer)], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
+    downloadBlob(
+        await workbookBlob(workbook),
+        `选品清单-${receipt.proposal_no.replace(/[^\p{L}\p{N}_-]/gu, "_")}.xlsx`,
+        {
+            linkId: "sales-selection-receipt-download-file",
+            revokeDelayMs: 30_000,
+        },
     )
-    const link = document.createElement("a")
-    link.id = "sales-selection-receipt-download-file"
-    link.href = url
-    link.download = `选品清单-${receipt.proposal_no.replace(/[^\p{L}\p{N}_-]/gu, "_")}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }

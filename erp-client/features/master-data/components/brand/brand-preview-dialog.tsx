@@ -15,6 +15,7 @@ import {
 import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { BrandLogoImage } from "@/features/master-data/components/brand/brand-card-content"
 import type { MasterDataListItem } from "@/features/master-data/types"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 /** 品牌资料使用紧凑的只读预览，更新和停用仍由原有弹窗处理。 */
 export function BrandPreviewDialog({
@@ -51,13 +52,7 @@ export function BrandPreviewDialog({
                 if (!open) onClose()
             }}
             onOpenChangeComplete={(open) => {
-                if (!open && lastFocusedRowId.current) {
-                    document
-                        .querySelector<HTMLElement>(
-                            `[data-row-id="${CSS.escape(lastFocusedRowId.current)}"]`,
-                        )
-                        ?.focus()
-                }
+                if (!open) restoreListRowFocus(lastFocusedRowId.current)
             }}
         >
             <DialogContent

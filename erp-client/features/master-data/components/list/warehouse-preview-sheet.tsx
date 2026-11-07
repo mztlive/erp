@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { MasterDataPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     MasterDataCenterView,
@@ -43,12 +44,7 @@ export function WarehousePreviewSheet({
             onOpenChange={(open) => {
                 if (!open) {
                     onClose()
-                    if (lastFocusedRowId.current) {
-                        const el = document.querySelector(
-                            `[data-row-id="${lastFocusedRowId.current}"]`,
-                        )
-                        if (el instanceof HTMLElement) el.focus()
-                    }
+                    restoreListRowFocus(lastFocusedRowId.current)
                 }
             }}
             size="preview"

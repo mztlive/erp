@@ -12,16 +12,12 @@ import type {
     MasterDataListQuery,
 } from "@/features/master-data/types"
 import { fetchAllPages } from "./fetch-all"
+import { lifecycleStatusParam } from "./query-params"
 
 export async function listWarehouses(
     query: MasterDataListQuery,
 ): Promise<MasterDataListItem[]> {
-    const status =
-        query.lifecycleStatus === "enabled"
-            ? "active"
-            : query.lifecycleStatus === "disabled"
-              ? "disabled"
-              : undefined
+    const status = lifecycleStatusParam(query)
     const warehouses = await fetchAllPages<WarehouseDto>("/admin/warehouses", {
         status,
         q: query.q || undefined,

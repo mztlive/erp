@@ -1,11 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
-import type { PaginationState } from "@tanstack/react-table"
+import { useSearchParams } from "@/lib/navigation"
 
-import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { countScopeIds, parseScopeIdList } from "@/lib/funds-scope"
+import { useScopeUrlPagination } from "@/lib/use-scope-url-pagination"
 import type { InvoiceRequestScopeQuery } from "@/features/invoice-requests/scoped"
 
 export type InvoiceRequestScopeFilterKey =
@@ -23,8 +22,7 @@ export type InvoiceRequestScopeChip = Readonly<{
 
 /** 开票申请范围查询 URL 状态：有效条件进入 URL 与 Query key。 */
 export function useInvoiceRequestScopeUrlState() {
-    const router = useRouter()
-    const pathname = usePathname()
+    const pageSize = 10
     const searchParams = useSearchParams()
 
     const qParam = searchParams.get("q") ?? ""
@@ -40,6 +38,8 @@ export function useInvoiceRequestScopeUrlState() {
     const status = searchParams.get("status") ?? undefined
     const salesOrderId = searchParams.get("salesOrderId") ?? undefined
     const scopeVersion = searchParams.get("scopeVersion") ?? undefined
+    const { pageFromUrl, pagination, patchUrl, handlePaginationChange } =
+        useScopeUrlPagination({ pageSize, scopeVersion })
 
     const [searchDraft, setSearchDraft] = React.useState(qParam)
     const [salesOwnerDraft, setSalesOwnerDraft] = React.useState(
@@ -54,12 +54,6 @@ export function useInvoiceRequestScopeUrlState() {
         React.useState(includeDescendants)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [panelOpen, setPanelOpen] = React.useState(false)
-
-    const pageFromUrl = React.useMemo(() => {
-        const page = Number.parseInt(searchParams.get("page") ?? "1", 10)
-        return Number.isFinite(page) && page >= 1 ? page : 1
-    }, [searchParams])
-    const pageSize = 10
 
     const query: InvoiceRequestScopeQuery = React.useMemo(
         () => ({
@@ -88,25 +82,6 @@ export function useInvoiceRequestScopeUrlState() {
             scopeVersion,
             status,
         ],
-    )
-
-    const pagination = React.useMemo<PaginationState>(
-        () => ({ pageIndex: Math.max(0, pageFromUrl - 1), pageSize }),
-        [pageFromUrl],
-    )
-
-    const patchUrl = React.useCallback(
-        (
-            patch: Record<string, string | null | undefined>,
-            options?: { replace?: boolean },
-        ) => {
-            patchSearchParams(
-                { router, pathname, searchParams },
-                patch,
-                options?.replace ? { replace: true, scroll: false } : options,
-            )
-        },
-        [pathname, router, searchParams],
     )
 
     const hasActiveFilters = Boolean(
@@ -207,25 +182,6 @@ export function useInvoiceRequestScopeUrlState() {
         setDescendantsDraft(includeDescendants)
         setPanelOpen(false)
     }, [applicantUserIds, handlerUserIds, includeDescendants, orgUnitIds])
-
-    const handlePaginationChange = React.useCallback(
-        (next: PaginationState, nextScopeVersion?: string) => {
-            patchUrl(
-                {
-                    page:
-                        next.pageIndex + 1 > 1
-                            ? String(next.pageIndex + 1)
-                            : null,
-                    scopeVersion:
-                        next.pageIndex + 1 > 1
-                            ? (nextScopeVersion ?? scopeVersion)
-                            : null,
-                },
-                { replace: true },
-            )
-        },
-        [patchUrl, scopeVersion],
-    )
 
     const appliedChips = React.useMemo<
         readonly InvoiceRequestScopeChip[]

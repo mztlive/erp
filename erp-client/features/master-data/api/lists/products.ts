@@ -23,6 +23,7 @@ import type {
 } from "@/features/master-data/types"
 import { fetchCompleteList } from "@/lib/collect-pages"
 import { fetchAllPages } from "./fetch-all"
+import { productListParams } from "./query-params"
 
 /** 读取 fetchAllPages 挂上的响应字段；没有该字段时返回 undefined，不编造。 */
 function attachedEmptyReason(value: object): string | null | undefined {
@@ -36,27 +37,10 @@ export async function listProducts(query: MasterDataListQuery): Promise<{
     rows: MasterDataListItem[]
     emptyReason?: string | null
 }> {
-    const status =
-        query.lifecycleStatus === "enabled"
-            ? "active"
-            : query.lifecycleStatus === "disabled"
-              ? "disabled"
-              : undefined
-    const page = await fetchCompleteList<ProductDto>("/admin/products", {
-        status,
-        keyword: query.q || undefined,
-        product_kind: query.productKind,
-        category_id: query.productCategoryId,
-        brand_id: query.productBrandId,
-        supplier_id: query.productSupplierId,
-        listing_status: query.productListingStatus,
-        supply_coverage: query.productSupplyCoverage,
-        source_diff_pending: query.productSourceDiffPending,
-        sales_price_min: query.productSalesPriceMin,
-        sales_price_max: query.productSalesPriceMax,
-        owner_user_ids: query.ownerUserIds || undefined,
-        procurement_owner_user_ids: query.procurementOwnerUserIds || undefined,
-    })
+    const page = await fetchCompleteList<ProductDto>(
+        "/admin/products",
+        productListParams(query),
+    )
     return {
         rows: page.items.map((product) => mapProductRow(product)),
         emptyReason: page.empty_reason,

@@ -1,5 +1,6 @@
 import type { PaymentExportRow } from "../api/payment-export"
 import { formatFixedDisplay } from "@/lib/fixed-decimal"
+import { workbookBlob } from "@/lib/xlsx"
 
 const money = (value: string) =>
     formatFixedDisplay(value, {
@@ -119,7 +120,5 @@ export async function buildPaymentWorkbook(rows: readonly PaymentExportRow[]) {
             to: { row: tab.rowCount, column: tab.columnCount },
         }
     }
-    return new Blob([new Uint8Array(await workbook.xlsx.writeBuffer())], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    })
+    return workbookBlob(workbook)
 }

@@ -6,6 +6,9 @@ import type {
     BookVoucherView,
 } from "@/features/sales-selection/types"
 
+import { workbookBlob } from "@/lib/xlsx"
+import { downloadBlob } from "@/lib/download-blob"
+
 function prepareSheet(sheet: Worksheet, headings: readonly string[]) {
     const header = sheet.addRow([...headings])
     header.font = { name: "微软雅黑", bold: true }
@@ -31,20 +34,11 @@ async function downloadWorkbook(
             })
         })
     })
-    const buffer = await workbook.xlsx.writeBuffer()
-    const url = URL.createObjectURL(
-        new Blob([new Uint8Array(buffer)], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
+    downloadBlob(
+        await workbookBlob(workbook),
+        `${label}-${customerName.replace(/[^\p{L}\p{N}_-]/gu, "_") || "客户"}.xlsx`,
+        { linkId: downloadId, revokeDelayMs: 30_000 },
     )
-    const link = document.createElement("a")
-    link.id = downloadId
-    link.href = url
-    link.download = `${label}-${customerName.replace(/[^\p{L}\p{N}_-]/gu, "_") || "客户"}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
 /** 导出可分发的业务提货码，不包含选品册密码和内部编号。 */

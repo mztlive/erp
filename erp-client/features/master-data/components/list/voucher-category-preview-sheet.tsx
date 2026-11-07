@@ -7,6 +7,7 @@ import { VoucherCategoryStatusButton } from "./voucher-category-status-dialog"
 import type { useMasterDataCenterQuery } from "@/features/master-data/hooks/queries"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataListItem } from "@/features/master-data/types"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 /** 卡券类目只读详情与版本记录，沿用公司商品池的窄栏与分区样式。 */
 export function VoucherCategoryPreviewSheet({
@@ -40,13 +41,7 @@ export function VoucherCategoryPreviewSheet({
                 if (!open) onClose()
             }}
             onOpenChangeComplete={(open) => {
-                if (!open && lastFocusedRowId.current) {
-                    document
-                        .querySelector<HTMLElement>(
-                            `[data-row-id="${CSS.escape(lastFocusedRowId.current)}"]`,
-                        )
-                        ?.focus()
-                }
+                if (!open) restoreListRowFocus(lastFocusedRowId.current)
             }}
             size="preview"
             title={detail?.name ?? row?.name ?? "卡券类目详情"}

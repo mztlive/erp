@@ -1,6 +1,7 @@
 /** 文件资产（D05）受控预览与下载适配层。 */
 
 import { apiGetBlob, apiPostForm } from "@/lib/api"
+import { downloadBlob } from "@/lib/download-blob"
 
 /** 通过受控预览接口读取文件内容；调用方负责创建并释放 Blob URL。 */
 export function fetchFileAssetPreviewBlob(assetId: string): Promise<Blob> {
@@ -21,14 +22,7 @@ export async function downloadFileAsset(
     fileName: string,
 ): Promise<void> {
     const blob = await fetchFileAssetPreviewBlob(assetId)
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = fileName
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, fileName)
 }
 
 const evidenceUploads = new WeakMap<

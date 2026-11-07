@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataListItem } from "@/features/master-data/types"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 /** 单位预览直接展示列表已有资料，修改和停用沿用独立确认弹窗。 */
 export function UnitOfMeasurePreviewSheet({
@@ -42,12 +43,7 @@ export function UnitOfMeasurePreviewSheet({
                 if (!open) onClose()
             }}
             onOpenChangeComplete={(open) => {
-                if (!open && lastFocusedRowId.current)
-                    document
-                        .querySelector<HTMLElement>(
-                            `[data-row-id="${CSS.escape(lastFocusedRowId.current)}"]`,
-                        )
-                        ?.focus()
+                if (!open) restoreListRowFocus(lastFocusedRowId.current)
             }}
             size="preview"
             title={row?.name ?? "计量单位详情"}

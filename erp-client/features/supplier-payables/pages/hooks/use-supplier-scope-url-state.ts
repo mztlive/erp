@@ -1,11 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
-import type { PaginationState } from "@tanstack/react-table"
+import { useSearchParams } from "@/lib/navigation"
 
-import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { countScopeIds, parseScopeIdList } from "@/lib/funds-scope"
+import { useScopeUrlPagination } from "@/lib/use-scope-url-pagination"
 import type { SupplierScopeQuery } from "@/features/supplier-payables/api/scoped"
 import { parseView } from "@/features/supplier-payables/lib/url-state"
 
@@ -25,8 +24,7 @@ export type SupplierScopeChip = Readonly<{
 
 /** 供应商往来范围查询 URL 状态：有效条件进入 URL 与 Query key。 */
 export function useSupplierScopeUrlState() {
-    const router = useRouter()
-    const pathname = usePathname()
+    const pageSize = 20
     const searchParams = useSearchParams()
 
     const viewParam = parseView(searchParams.get("view"))
@@ -45,6 +43,8 @@ export function useSupplierScopeUrlState() {
     const purchaseOrderId = searchParams.get("purchaseOrderId") ?? undefined
     const payableAccountId = searchParams.get("payableAccountId") ?? undefined
     const scopeVersion = searchParams.get("scopeVersion") ?? undefined
+    const { pageFromUrl, pagination, patchUrl, handlePaginationChange } =
+        useScopeUrlPagination({ view, pageSize, scopeVersion })
 
     const [searchDraft, setSearchDraft] = React.useState(qParam)
     const [procurementOwnerDraft, setProcurementOwnerDraft] = React.useState(
@@ -58,12 +58,6 @@ export function useSupplierScopeUrlState() {
         React.useState(includeDescendants)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [panelOpen, setPanelOpen] = React.useState(false)
-
-    const pageFromUrl = React.useMemo(() => {
-        const page = Number.parseInt(searchParams.get("page") ?? "1", 10)
-        return Number.isFinite(page) && page >= 1 ? page : 1
-    }, [searchParams])
-    const pageSize = 20
 
     const query: SupplierScopeQuery = React.useMemo(
         () => ({
@@ -94,25 +88,6 @@ export function useSupplierScopeUrlState() {
             supplierId,
             view,
         ],
-    )
-
-    const pagination = React.useMemo<PaginationState>(
-        () => ({ pageIndex: Math.max(0, pageFromUrl - 1), pageSize }),
-        [pageFromUrl],
-    )
-
-    const patchUrl = React.useCallback(
-        (
-            patch: Record<string, string | null | undefined>,
-            options?: { replace?: boolean },
-        ) => {
-            patchSearchParams(
-                { router, pathname, searchParams, view },
-                patch,
-                options?.replace ? { replace: true, scroll: false } : options,
-            )
-        },
-        [pathname, router, searchParams, view],
     )
 
     const hasActiveFilters = Boolean(
@@ -207,25 +182,6 @@ export function useSupplierScopeUrlState() {
         setDescendantsDraft(includeDescendants)
         setPanelOpen(false)
     }, [includeDescendants, operatorUserIds, orgUnitIds])
-
-    const handlePaginationChange = React.useCallback(
-        (next: PaginationState, nextScopeVersion?: string) => {
-            patchUrl(
-                {
-                    page:
-                        next.pageIndex + 1 > 1
-                            ? String(next.pageIndex + 1)
-                            : null,
-                    scopeVersion:
-                        next.pageIndex + 1 > 1
-                            ? (nextScopeVersion ?? scopeVersion)
-                            : null,
-                },
-                { replace: true },
-            )
-        },
-        [patchUrl, scopeVersion],
-    )
 
     const changeView = React.useCallback(
         (nextView: SupplierScopeQuery["view"]) => {

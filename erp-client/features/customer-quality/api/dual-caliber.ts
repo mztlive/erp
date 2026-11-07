@@ -7,6 +7,7 @@ import { runDataTransfer, transferText } from "@/lib/data-transfer"
  */
 
 import { apiGet } from "@/lib/api"
+import { downloadBlob } from "@/lib/download-blob"
 
 import type {
     CurrentQualityQuery,
@@ -122,12 +123,5 @@ export function downloadQualityCsv(csvContent: string, fileName: string) {
     const blob = new Blob(["\uFEFF" + csvContent], {
         type: "text/csv;charset=utf-8",
     })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = fileName
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, fileName)
 }

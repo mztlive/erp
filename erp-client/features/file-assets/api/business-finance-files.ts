@@ -1,5 +1,6 @@
 /** 财务文件按发票、销售单或正式履约任务访问，不授予通用资产下载资格。 */
 import { apiGet, apiGetBlob } from "@/lib/api"
+import { downloadBlob } from "@/lib/download-blob"
 
 export type FinancialFile = {
     document_id: string
@@ -26,14 +27,7 @@ async function download(path: string, fileName: string): Promise<void> {
         timeoutMs: 30_000,
         cache: "no-store",
     })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = fileName
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, fileName)
 }
 export function downloadSalesInvoiceFile(
     salesOrderId: string,

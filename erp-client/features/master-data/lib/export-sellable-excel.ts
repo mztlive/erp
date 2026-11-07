@@ -10,12 +10,12 @@ import {
     type SellableExcelImageExtension,
 } from "@/features/master-data/lib/sellable-excel-rows"
 import { downloadBlob } from "@/lib/download-blob"
+import { workbookBlob } from "@/lib/xlsx"
 
 import {
     appendInquiryDeliverySheets,
     INQUIRY_IMPORT_MAX_BYTES,
     INQUIRY_POOL_TEMPLATE_VERSION,
-    INQUIRY_WORKBOOK_MIME,
 } from "@/lib/inquiry-workbook"
 
 import { INQUIRY_POOL_TABLE } from "@/lib/inquiry-pool-delivery"
@@ -227,10 +227,7 @@ export async function buildSellableItemsWorkbook(input: {
         })),
         true,
     )
-    const buffer = await workbook.xlsx.writeBuffer()
-    const blob = new Blob([new Uint8Array(buffer as ArrayBuffer)], {
-        type: INQUIRY_WORKBOOK_MIME,
-    })
+    const blob = await workbookBlob(workbook)
     if (blob.size > INQUIRY_IMPORT_MAX_BYTES)
         throw new Error("导出文件超过询价可导入的 5 MiB，请减少商品数量后重试")
     return blob

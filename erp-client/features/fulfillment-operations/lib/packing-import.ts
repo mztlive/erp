@@ -1,4 +1,5 @@
 import type { Cell } from "exceljs"
+import { workbookBlob } from "@/lib/xlsx"
 import { compactFixed, compareDecimal } from "@/lib/fixed-decimal"
 import { CARRIER_OPTIONS } from "@/lib/business-options"
 import {
@@ -130,9 +131,7 @@ export async function createPackingWorkbook(context: PackingImportContext) {
         context.operationId,
         context.source.source_version,
     ])
-    return new Blob([new Uint8Array(await workbook.xlsx.writeBuffer())], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    })
+    return workbookBlob(workbook)
 }
 
 /** 拒绝公式、日期、错误和数值型身份字段，避免物流号或电话精度丢失后静默导入。 */

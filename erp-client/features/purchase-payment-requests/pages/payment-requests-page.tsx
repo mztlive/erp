@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { hasPermission } from "@/lib/permissions"
 import {
     paymentRequestKeys,
@@ -119,14 +120,7 @@ export function PaymentRequestsPage({
     function closePreview() {
         const id = preview?.id
         setPreview(null)
-        if (id)
-            requestAnimationFrame(() =>
-                document
-                    .querySelector<HTMLElement>(
-                        `[data-row-id="${CSS.escape(id)}"]`,
-                    )
-                    ?.focus(),
-            )
+        if (id) requestAnimationFrame(() => restoreListRowFocus(id))
     }
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>

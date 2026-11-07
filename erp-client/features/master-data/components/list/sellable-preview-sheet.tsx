@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SellableItemPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
 import type { MasterDataListItem } from "@/features/master-data/types"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 export function SellablePreviewSheet({
     idPrefix,
@@ -28,12 +29,7 @@ export function SellablePreviewSheet({
             onOpenChange={(open) => {
                 if (!open) {
                     onClose()
-                    if (lastFocusedRowId.current) {
-                        const el = document.querySelector(
-                            `[data-row-id="${lastFocusedRowId.current}"]`,
-                        )
-                        if (el instanceof HTMLElement) el.focus()
-                    }
+                    restoreListRowFocus(lastFocusedRowId.current)
                 }
             }}
             size="preview"

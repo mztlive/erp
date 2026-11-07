@@ -1,3 +1,5 @@
+import { downloadBlob } from "@/lib/download-blob"
+
 /** 纯展示：导出 CSV（不触网）。 */
 
 export function buildMasterDataExportCsv(
@@ -55,12 +57,8 @@ export function buildMasterDataExportCsv(
 }
 
 export function downloadCsv(content: string, fileName: string) {
-    const url = URL.createObjectURL(
+    downloadBlob(
         new Blob(["\uFEFF", content], { type: "text/csv;charset=utf-8" }),
+        fileName.endsWith(".csv") ? fileName : `${fileName}.csv`,
     )
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = fileName.endsWith(".csv") ? fileName : `${fileName}.csv`
-    anchor.click()
-    URL.revokeObjectURL(url)
 }

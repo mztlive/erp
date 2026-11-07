@@ -14,7 +14,9 @@ export function downloadBlob(
     if (options?.linkId) link.id = options.linkId
     link.href = url
     link.download = fileName
+    document.body.append(link)
     link.click()
+    link.remove()
     if (options?.revokeDelayMs) {
         setTimeout(() => URL.revokeObjectURL(url), options.revokeDelayMs)
     } else {

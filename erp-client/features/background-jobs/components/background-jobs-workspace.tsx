@@ -15,6 +15,7 @@ import {
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api/errors"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { BackgroundJobView, CancelAllBackgroundJobsResult } from "../api"
 import { isBackgroundJobAdmin, isJobActive } from "../labels"
@@ -80,12 +81,7 @@ export function BackgroundJobsWorkspace() {
 
     const closePreview = React.useCallback(() => {
         setPreviewId(null)
-        if (lastFocusedRowId.current) {
-            const el = document.querySelector(
-                `[data-row-id="${CSS.escape(lastFocusedRowId.current)}"]`,
-            )
-            if (el instanceof HTMLElement) el.focus()
-        }
+        restoreListRowFocus(lastFocusedRowId.current)
     }, [])
 
     const confirmCancel = React.useCallback(async () => {

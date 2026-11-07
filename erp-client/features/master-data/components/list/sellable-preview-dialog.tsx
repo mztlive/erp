@@ -17,14 +17,7 @@ import { SellableItemPreviewPanel } from "@/features/master-data/components/list
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
 import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import type { MasterDataListItem } from "@/features/master-data/types"
-
-function restoreRowFocus(rowId: string | null) {
-    if (!rowId) return
-    const element = document.querySelector(
-        `[data-row-id="${CSS.escape(rowId)}"]`,
-    )
-    if (element instanceof HTMLElement) element.focus()
-}
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 export function SellablePreviewDialog({
     idPrefix,
@@ -49,7 +42,7 @@ export function SellablePreviewDialog({
             onOpenChange={(open) => {
                 if (!open) {
                     onClose()
-                    restoreRowFocus(lastFocusedRowId.current)
+                    restoreListRowFocus(lastFocusedRowId.current)
                 }
             }}
         >

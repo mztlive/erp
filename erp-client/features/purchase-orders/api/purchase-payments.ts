@@ -1,4 +1,5 @@
 import { apiGet, apiGetBlob } from "@/lib/api"
+import { downloadBlob } from "@/lib/download-blob"
 import type { FinancialFile } from "@/features/file-assets/api/business-finance-files"
 
 export type PurchasePayment = {
@@ -33,12 +34,5 @@ export async function downloadPurchasePaymentReceipt(
         purchaseOrderId,
         file.document_id,
     )
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = file.file_name
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, file.file_name)
 }

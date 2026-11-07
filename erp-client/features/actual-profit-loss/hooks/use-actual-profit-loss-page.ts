@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ApiErrorException } from "@/lib/api/errors"
 
 import { getErrorMessage } from "@/lib/api/errors"
+import { downloadBlob } from "@/lib/download-blob"
 import { buildProfitLossColumns } from "@/features/actual-profit-loss/hooks/columns"
 import {
     useCostEntriesForRowQuery,
@@ -246,16 +247,12 @@ export function useActualProfitLossPage() {
             })
             setExportJob(job)
 
-            const url = URL.createObjectURL(
+            downloadBlob(
                 new Blob(["\uFEFF", job.csvContent], {
                     type: "text/csv;charset=utf-8",
                 }),
+                job.fileName,
             )
-            const anchor = document.createElement("a")
-            anchor.href = url
-            anchor.download = job.fileName
-            anchor.click()
-            URL.revokeObjectURL(url)
         } catch (error) {
             reportOperationProblem(error, { title: "导出未完成" })
         }

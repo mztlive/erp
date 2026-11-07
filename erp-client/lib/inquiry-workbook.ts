@@ -1,5 +1,7 @@
 import type { Workbook, Worksheet } from "exceljs"
 import { appendPoolDeliverySheet } from "@/lib/inquiry-pool-delivery"
+import { downloadBlob } from "@/lib/download-blob"
+import { workbookBlob } from "@/lib/xlsx"
 
 export const INQUIRY_TEMPLATE_VERSION = "sales-inquiry-v1"
 export const INQUIRY_POOL_TEMPLATE_VERSION = "sales-inquiry-pool-v4"
@@ -116,10 +118,7 @@ export async function buildInquiryCustomerWorkbook(
 
     appendInquiryDeliverySheets(workbook, products)
 
-    const buffer = await workbook.xlsx.writeBuffer()
-    const blob = new Blob([new Uint8Array(buffer as ArrayBuffer)], {
-        type: INQUIRY_WORKBOOK_MIME,
-    })
+    const blob = await workbookBlob(workbook)
     if (blob.size > INQUIRY_IMPORT_MAX_BYTES)
         throw new Error("生成的模板超过 5 MiB，请减少商品数量后重新下载")
     return blob
@@ -130,13 +129,14 @@ export async function downloadInquiryCustomerWorkbook(
     inquiry_no?: string,
 ): Promise<void> {
     const blob = await buildInquiryCustomerWorkbook(products)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.id = "sales-inquiry-customer-workbook-download"
-    link.href = url
-    link.download = `客户选品-${inquiry_no?.replace(/[\\/:*?"<>|]/g, "-") || "询价"}.xlsx`
-    link.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    downloadBlob(
+        blob,
+        `客户选品-${inquiry_no?.replace(/[\\/:*?"<>|]/g, "-") || "询价"}.xlsx`,
+        {
+            linkId: "sales-inquiry-customer-workbook-download",
+            revokeDelayMs: 1000,
+        },
+    )
 }
 
 /** 为原商品池导出和询价模板追加同一套配送填写页。 */

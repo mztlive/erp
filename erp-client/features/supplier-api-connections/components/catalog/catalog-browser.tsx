@@ -26,6 +26,7 @@ import {
     HoverCardTrigger,
 } from "@/components/ui/hover-card"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import type {
     CatalogAvailability,
     CatalogFilters,
@@ -339,13 +340,7 @@ export function CatalogBrowser({
     )
     const closePreview = () => {
         setPreviewRow(null)
-        if (lastFocusedRowId.current) {
-            document
-                .querySelector<HTMLElement>(
-                    `[data-row-id="${CSS.escape(lastFocusedRowId.current)}"]`,
-                )
-                ?.focus()
-        }
+        restoreListRowFocus(lastFocusedRowId.current)
     }
     return (
         <>

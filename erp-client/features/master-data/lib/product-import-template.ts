@@ -1,3 +1,5 @@
+import { downloadWorkbook } from "@/lib/xlsx"
+
 /** 列序与后端 PRODUCT_IMPORT_HEADERS 一致，供应商成本与公司售价分别填写。 */
 export const PRODUCT_IMPORT_HEADERS = [
     "产品编码",
@@ -56,17 +58,7 @@ export async function createProductImportTemplate() {
 
 export async function downloadProductImportTemplate() {
     const workbook = await createProductImportTemplate()
-    const buffer = await workbook.xlsx.writeBuffer()
-    const url = URL.createObjectURL(
-        new Blob([buffer], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
-    )
-    const link = document.createElement("a")
-    link.href = url
-    link.download = "商品与供给导入模板.xlsx"
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    await downloadWorkbook(workbook, "商品与供给导入模板.xlsx", {
+        revokeDelayMs: 1000,
+    })
 }

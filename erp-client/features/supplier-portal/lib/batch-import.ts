@@ -1,4 +1,5 @@
 import { downloadBlob } from "@/lib/download-blob"
+import { loadWorkbookFromFile, workbookBlob } from "@/lib/xlsx"
 import type { PortalBatchMode } from "../types"
 import {
     batchColumns,
@@ -147,9 +148,8 @@ export async function readPortalBatchFile(
     }
     if (!/\.xlsx$/i.test(file.name))
         throw new Error("请选择Excel .xlsx或UTF-8 CSV文件")
-    const { Workbook, ValueType } = await import("exceljs")
-    const workbook = new Workbook()
-    await workbook.xlsx.load(await file.arrayBuffer())
+    const { ValueType } = await import("exceljs")
+    const workbook = await loadWorkbookFromFile(file)
     const sheet =
         workbook.getWorksheet(batchModeLabels[mode]) ?? workbook.worksheets[0]
     if (!sheet) throw new Error("文件没有工作表，请按模板填写")
@@ -254,9 +254,7 @@ export async function downloadPortalBatchTemplate(mode: PortalBatchMode) {
     for (const note of [...common, ...specific]) notes.addRow([note])
     notes.getColumn(1).width = 110
     downloadBlob(
-        new Blob([await workbook.xlsx.writeBuffer()], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
+        await workbookBlob(workbook),
         `${batchModeLabels[mode]}模板.xlsx`,
         {
             linkId: `supplier-portal-batch-${mode}-download-file`,
