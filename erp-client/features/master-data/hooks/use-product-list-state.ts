@@ -74,7 +74,8 @@ export function useProductListState(
         procurementOwnerUserIds: filters.procurementOwnerUserIds,
     })
     const productFilterOptionsQuery = useProductFilterOptionsQuery(true)
-    const { exportMeta, handleExport } = useMasterDataListExport()
+    const { exportMeta, exportPending, handleExport } =
+        useMasterDataListExport()
     const productListingMutation = useProductListingMutation()
     const canUpdateProductListing = hasPermission(
         accountQuery.data?.permissions,
@@ -393,6 +394,7 @@ export function useProductListState(
         listQuery,
         productFilterOptionsQuery,
         exportMeta,
+        exportPending,
         productListingMutation,
         canCreate,
         createBlockedReason,

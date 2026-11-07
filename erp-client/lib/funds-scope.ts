@@ -49,6 +49,20 @@ export function parseScopeIdList(raw: string | null): string | undefined {
     return value ? value : undefined
 }
 
+/** 资金往来列表共用的范围元数据（视图字段与行字段由调用方补齐）。 */
+export function scopePageMeta<T>(page: FundsScopedPageWire<T>) {
+    return {
+        summary: page.summary,
+        scopeVersion: page.scope_version,
+        policyVersion: page.policy_version,
+        organizationVersion: page.organization_version,
+        scopeSummary: page.scope_summary,
+        asOf: page.as_of,
+        emptyReason: page.empty_reason,
+        hasScope: page.empty_reason !== "no_scope",
+    }
+}
+
 /** 已选 ID 数量（逗号分隔），用于已生效条件标签。 */
 export function countScopeIds(value: string | undefined): number {
     if (!value) return 0

@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
+
 /**
  * 搜索关键词草稿：URL 回填 + `/` 聚焦快捷键。
  *
@@ -19,37 +21,7 @@ export function useCustomerQualitySearch({ qParam }: { qParam: string }) {
         setSearchDraft(qParam)
     }, [qParam])
 
-    // `/` 聚焦搜索；忽略输入框/文本域/可编辑区域与弹层场景
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            )
-                return
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            if (
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-            ) {
-                return
-            }
-            if (
-                document.querySelector('[role="dialog"], [data-slot="sheet"]')
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
+    useSearchHotkey(searchInputRef)
 
     return { searchDraft, setSearchDraft, searchInputRef }
 }

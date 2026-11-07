@@ -7,7 +7,6 @@ import { launchNavDelivery } from "@/lib/nav-delivery"
 import type { BackgroundJobView } from "@/lib/background-jobs"
 import { BrandImportDialog } from "@/features/master-data/components/brand/brand-import-dialog"
 import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
 
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
@@ -55,19 +54,7 @@ export function BrandsListPage() {
         createPermission: "product_brand:create",
         searchInputRef,
     })
-    const exportPending =
-        useIsMutating({
-            predicate: (mutation) => {
-                const variables = mutation.state.variables
-                return (
-                    typeof variables === "object" &&
-                    variables !== null &&
-                    "resource" in variables &&
-                    variables.resource === "brands" &&
-                    !("idempotencyKey" in variables)
-                )
-            },
-        }) > 0
+    const exportPending = state.exportPending
     const { filters } = state
     const hasActiveFilters =
         filters.q.trim() !== "" ||

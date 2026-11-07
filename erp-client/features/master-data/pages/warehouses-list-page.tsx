@@ -1,7 +1,6 @@
 "use client"
 
 import { DownloadIcon, PlusIcon } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
 
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -37,19 +36,7 @@ export function WarehousesListPage() {
         searchInputRef,
         enablePreview: true,
     })
-    const exportPending =
-        useIsMutating({
-            predicate: (mutation) => {
-                const variables = mutation.state.variables
-                return (
-                    typeof variables === "object" &&
-                    variables !== null &&
-                    "resource" in variables &&
-                    variables.resource === "warehouses" &&
-                    !("idempotencyKey" in variables)
-                )
-            },
-        }) > 0
+    const exportPending = state.exportPending
     const columns = useWarehouseListColumns({
         lastFocusedRowId,
         rows: state.rows,

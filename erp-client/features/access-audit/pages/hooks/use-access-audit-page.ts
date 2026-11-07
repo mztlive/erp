@@ -30,6 +30,7 @@ import { resultFilterLabel } from "@/features/access-audit/lib/filter-options"
 import { buildAccessListQuery } from "@/features/access-audit/pages/lib/build-list-query"
 import { useAssignableRolesQuery } from "@/features/admin/queries"
 import type { AccessView } from "@/features/access-audit/types"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 export type { ExplainSubject }
 
@@ -132,38 +133,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         patchUrl,
     })
 
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            )
-                return
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            if (
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-            ) {
-                return
-            }
-            // 弹层（Dialog / Sheet）打开时不聚焦背景搜索框
-            if (
-                document.querySelector('[role="dialog"], [data-slot="sheet"]')
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    useSearchHotkey(searchInputRef)
 
     /** 本地时区的 YYYY-MM-DD，供日期筛选控件与 URL 使用。 */
     const toDateInput = (date: Date) => {

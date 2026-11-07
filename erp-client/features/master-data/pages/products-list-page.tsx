@@ -4,7 +4,6 @@ import * as React from "react"
 import type { FixedSku } from "@/features/supplier-offerings/types"
 import { useRouter } from "@/lib/navigation"
 import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
 
 import {
     BusinessEmptyState,
@@ -69,19 +68,7 @@ export function ProductsListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useProductListState(searchInputRef)
-    const exportPending =
-        useIsMutating({
-            predicate: (mutation) => {
-                const variables = mutation.state.variables
-                return (
-                    typeof variables === "object" &&
-                    variables !== null &&
-                    "resource" in variables &&
-                    variables.resource === "products" &&
-                    !("idempotencyKey" in variables)
-                )
-            },
-        }) > 0
+    const exportPending = state.exportPending
     const { filters } = state
     const openSupply = (
         product: MasterDataListItem,

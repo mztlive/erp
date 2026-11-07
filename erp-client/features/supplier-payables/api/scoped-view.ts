@@ -1,7 +1,9 @@
 /** 供应商往来范围列表 HTTP（M09）：采购负责人/付款/收票经办人分别查询。 */
 
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type { Page } from "@/lib/api/paging"
+import { scopePageMeta } from "@/lib/funds-scope"
 
 import type {
     FundsScopedPayablePageWire,
@@ -51,14 +53,7 @@ export async function fetchSupplierScopeList(
             payments: [],
             allocations: [],
             total: page.total ?? 0,
-            summary: page.summary,
-            scopeVersion: page.scope_version,
-            policyVersion: page.policy_version,
-            organizationVersion: page.organization_version,
-            scopeSummary: page.scope_summary,
-            asOf: page.as_of,
-            emptyReason: page.empty_reason,
-            hasScope: page.empty_reason !== "no_scope",
+            ...scopePageMeta(page),
         }
     }
     if (query.view === "payment") {
@@ -76,14 +71,7 @@ export async function fetchSupplierScopeList(
             payments: page.items ?? [],
             allocations: [],
             total: page.total ?? 0,
-            summary: page.summary,
-            scopeVersion: page.scope_version,
-            policyVersion: page.policy_version,
-            organizationVersion: page.organization_version,
-            scopeSummary: page.scope_summary,
-            asOf: page.as_of,
-            emptyReason: page.empty_reason,
-            hasScope: page.empty_reason !== "no_scope",
+            ...scopePageMeta(page),
         }
     }
     const page = await apiGet<
@@ -129,13 +117,7 @@ export async function fetchSupplierScopeDetail(
         )
         return { kind, payment: result.data }
     } catch (error) {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "status" in error &&
-            error.status === 404
-        )
-            return null
+        if (isApiError(error) && error.status === 404) return null
         throw error
     }
 }

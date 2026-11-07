@@ -18,6 +18,7 @@ import {
     type WorkItemPage,
 } from "./api"
 import type { WorkItemDto, WorkItemResponsibilityCommand } from "./types"
+import { isApiError } from "@/lib/api/errors"
 
 export const workItemKeys = {
     all: ["work-items"] as const,
@@ -47,11 +48,7 @@ export const synchronizeWorkItemConflict = async (
     error: unknown,
 ): Promise<void> => {
     const conflict = parseWorkItemConflict(error)
-    const isHttpConflict =
-        typeof error === "object" &&
-        error !== null &&
-        "status" in error &&
-        error.status === 409
+    const isHttpConflict = isApiError(error) && error.status === 409
     if (!conflict) {
         if (isHttpConflict) {
             await queryClient.invalidateQueries({ queryKey: workItemKeys.all })

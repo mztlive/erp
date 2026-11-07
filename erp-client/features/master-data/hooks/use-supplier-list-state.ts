@@ -42,7 +42,8 @@ export function useSupplierListState(
         owner_user_ids: filters.ownerUserIds || undefined,
         capability_owner_user_ids: filters.capabilityOwnerUserIds || undefined,
     })
-    const { exportMeta, handleExport } = useMasterDataListExport()
+    const { exportMeta, exportPending, handleExport } =
+        useMasterDataListExport()
 
     const rows = React.useMemo(
         () => listQuery.data?.rows ?? [],
@@ -175,6 +176,7 @@ export function useSupplierListState(
         filters,
         listQuery,
         exportMeta,
+        exportPending,
         canCreate,
         createBlockedReason,
         rows,

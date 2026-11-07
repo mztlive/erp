@@ -1,8 +1,13 @@
 import {
-    mapDocumentApprovalViewDto,
-    type DocumentApprovalView,
-    type DocumentApprovalViewDto,
-} from "@/features/approval-workflow/types"
+    financialDocumentApprovalPhase,
+    financialDocumentStatusLabel,
+    financialDocumentStatusTone,
+    isFinancialDocumentWorkItem,
+    isUnsubmittedFinancialStatus,
+    mapFinancialDocumentApproval,
+    type FinancialApprovalPhase,
+} from "@/features/approval-workflow/financial-document"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type { ReceiptRow } from "@/features/customer-receivables/types"
 
 /** 客户回款单作为合同 DocumentType 的固定值。 */
@@ -11,14 +16,7 @@ export const CUSTOMER_RECEIPT_DOCUMENT_TYPE = "CustomerReceipt" as const
 /** 工作项上的客户回款对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
 export const CUSTOMER_RECEIPT_OBJECT_TYPE = "customer_receipt" as const
 
-export type CustomerReceiptApprovalPhase = "draft" | "confirm" | "runtime"
-
-const UNSUBMITTED_STATUS_CODES = new Set([
-    "DRAFT",
-    "draft",
-    "REJECTED",
-    "rejected",
-])
+export type CustomerReceiptApprovalPhase = FinancialApprovalPhase
 
 /**
  * 判断客户回款单是否仍处于未提交审批的生命周期。
@@ -26,39 +24,15 @@ const UNSUBMITTED_STATUS_CODES = new Set([
  * @param status 服务端状态码；缺省视为未提交。
  * @returns 未提交为 true。
  */
-export const isUnsubmittedCustomerReceiptStatus = (status?: string): boolean =>
-    !status || UNSUBMITTED_STATUS_CODES.has(status)
+export const isUnsubmittedCustomerReceiptStatus = isUnsubmittedFinancialStatus
 
 /**
  * 把客户回款业务状态映射为用户可见中文，不上屏枚举原值。
  *
- * 旧的待复核状态已收敛为审批中，不得再拆成独立复核节点。
- *
  * @param status 服务端状态码。
  */
-export const customerReceiptStatusLabel = (status?: string): string => {
-    switch (status) {
-        case "DRAFT":
-        case "draft":
-            return "草稿"
-        case "REJECTED":
-        case "rejected":
-            return "已驳回"
-        case "IN_APPROVAL":
-        case "PENDING_REVIEW":
-        case "pending_review":
-        case "in_approval":
-            return "审批中"
-        case "POSTED":
-        case "posted":
-            return "已过账"
-        case "REVERSED":
-        case "reversed":
-            return "已冲正"
-        default:
-            return "回款单"
-    }
-}
+export const customerReceiptStatusLabel = (status?: string): string =>
+    financialDocumentStatusLabel(status, "回款单")
 
 /**
  * 客户回款状态对应的列表色调。未知码按进行中处理，不上屏枚举。
@@ -67,35 +41,15 @@ export const customerReceiptStatusLabel = (status?: string): string => {
  */
 export const customerReceiptStatusTone = (
     status?: string,
-): ReceiptRow["statusTone"] => {
-    switch (customerReceiptStatusLabel(status)) {
-        case "已过账":
-            return "success"
-        case "审批中":
-            return "warning"
-        case "已驳回":
-        case "已冲正":
-            return "destructive"
-        default:
-            return "neutral"
-    }
-}
+): ReceiptRow["statusTone"] => financialDocumentStatusTone(status)
 
 /**
  * 按单据生命周期选择客户回款审批区相位。提交确认由调用方显式传入。
  *
- * 有运行实例或已离开未提交阶段时进入 runtime，不得按复核或角色推导。
- *
  * @param approval 服务端只读审批投影。
  * @param status 单据状态码。
  */
-export const customerReceiptApprovalPhase = (
-    approval?: DocumentApprovalView,
-    status?: string,
-): Exclude<CustomerReceiptApprovalPhase, "confirm"> =>
-    approval?.instance || !isUnsubmittedCustomerReceiptStatus(status)
-        ? "runtime"
-        : "draft"
+export const customerReceiptApprovalPhase = financialDocumentApprovalPhase
 
 /**
  * 把客户回款详情上的只读审批结构转成通用审批区投影。
@@ -104,10 +58,7 @@ export const customerReceiptApprovalPhase = (
  *
  * @param dto 详情内嵌的审批 DTO。
  */
-export const mapCustomerReceiptApproval = (
-    dto?: DocumentApprovalViewDto | null,
-): DocumentApprovalView | undefined =>
-    dto ? mapDocumentApprovalViewDto(dto) : undefined
+export const mapCustomerReceiptApproval = mapFinancialDocumentApproval
 
 /**
  * 只读取实例投影上的当前节点与当前审批人。
@@ -148,5 +99,8 @@ function responsibilityName(
 export const isCustomerReceiptWorkItem = (workItem?: {
     businessObjectType?: string
 }): boolean =>
-    workItem?.businessObjectType === CUSTOMER_RECEIPT_DOCUMENT_TYPE ||
-    workItem?.businessObjectType === CUSTOMER_RECEIPT_OBJECT_TYPE
+    isFinancialDocumentWorkItem(
+        workItem,
+        CUSTOMER_RECEIPT_DOCUMENT_TYPE,
+        CUSTOMER_RECEIPT_OBJECT_TYPE,
+    )

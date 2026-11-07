@@ -7,7 +7,7 @@ import {
 } from "@/features/master-data/hooks/use-list-url"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
-import { useSlashSearchHotkey } from "@/features/master-data/hooks/use-slash-search-hotkey"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import {
     buildCategoryForest,
     filterCategoryForest,
@@ -98,7 +98,7 @@ export function useMasterDataCategoryTree(
     const { canCreate, createBlockedReason } = useCreatePermission(
         "product_category:create",
     )
-    useSlashSearchHotkey(searchInputRef)
+    useSearchHotkey(searchInputRef)
 
     const fullQuery = useMasterDataListQuery({
         resource: "categories",

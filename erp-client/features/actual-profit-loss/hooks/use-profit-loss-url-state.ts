@@ -21,6 +21,7 @@ import type {
 } from "@/features/actual-profit-loss/types"
 import { COST_TYPE_CHIP_PREFIX } from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 export type ProfitLossUrlPatch = Record<string, string | null | undefined>
 
@@ -200,34 +201,10 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         setBenefitScenarioDraft(benefitScenario ?? "")
         setCostTypesDraft([...costTypes])
     }, [benefitScenario, costTypes])
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            ) {
-                return
-            }
-            const target = event.target as HTMLElement | null
-            if (
-                target?.tagName === "INPUT" ||
-                target?.tagName === "TEXTAREA" ||
-                target?.tagName === "SELECT" ||
-                target?.isContentEditable ||
-                document.querySelector(
-                    '[role="dialog"], [data-slot="sheet"], [data-slot="popover-content"], [data-slot="combobox-content"]',
-                )
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
+    useSearchHotkey(searchInputRef, {
+        overlaySelector:
+            '[role="dialog"], [data-slot="sheet"], [data-slot="popover-content"], [data-slot="combobox-content"]',
+    })
 
     const tableSorting = React.useMemo<SortingState>(() => {
         const [id, direction] = sort.split(":")

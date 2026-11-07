@@ -4,7 +4,6 @@ import { useState } from "react"
 import { SupplierImportDialog } from "@/features/master-data/components/supplier/supplier-import-dialog"
 import { useRouter } from "@/lib/navigation"
 import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
 
 import {
     BusinessEmptyState,
@@ -50,19 +49,7 @@ export function SuppliersListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSupplierListState(searchInputRef)
-    const exportPending =
-        useIsMutating({
-            predicate: (mutation) => {
-                const variables = mutation.state.variables
-                return (
-                    typeof variables === "object" &&
-                    variables !== null &&
-                    "resource" in variables &&
-                    variables.resource === "suppliers" &&
-                    !("idempotencyKey" in variables)
-                )
-            },
-        }) > 0
+    const exportPending = state.exportPending
     const { filters } = state
     const openDetail = (stableId: string) => {
         lastFocusedRowId.current = stableId

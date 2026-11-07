@@ -1,7 +1,9 @@
 /** 客户往来范围列表 HTTP（M07/M08）：各视图独立分页，同一对象映射裁剪。 */
 
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type { Page } from "@/lib/api/paging"
+import { scopePageMeta } from "@/lib/funds-scope"
 
 import type {
     FundsScopedInvoicePageWire,
@@ -60,14 +62,7 @@ async function loadScopedView(
             receipts: [],
             invoices: [],
             total: page.total ?? 0,
-            summary: page.summary,
-            scopeVersion: page.scope_version,
-            policyVersion: page.policy_version,
-            organizationVersion: page.organization_version,
-            scopeSummary: page.scope_summary,
-            asOf: page.as_of,
-            emptyReason: page.empty_reason,
-            hasScope: page.empty_reason !== "no_scope",
+            ...scopePageMeta(page),
         }
     }
     if (query.view === "receipt") {
@@ -80,14 +75,7 @@ async function loadScopedView(
             receipts: page.items ?? [],
             invoices: [],
             total: page.total ?? 0,
-            summary: page.summary,
-            scopeVersion: page.scope_version,
-            policyVersion: page.policy_version,
-            organizationVersion: page.organization_version,
-            scopeSummary: page.scope_summary,
-            asOf: page.as_of,
-            emptyReason: page.empty_reason,
-            hasScope: page.empty_reason !== "no_scope",
+            ...scopePageMeta(page),
         }
     }
     const page = await apiGet<
@@ -143,13 +131,7 @@ export async function fetchReceivableScopeDetail(
         )
         return { kind, invoice: result.data }
     } catch (error) {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "status" in error &&
-            error.status === 404
-        )
-            return null
+        if (isApiError(error) && error.status === 404) return null
         throw error
     }
 }

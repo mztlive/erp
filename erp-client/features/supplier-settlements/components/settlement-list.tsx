@@ -30,7 +30,7 @@ import { SettlementListToolbar } from "@/features/supplier-settlements/component
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useSettlementListQuery } from "@/features/supplier-settlements/hooks/queries"
 import { useSettlementListColumns } from "@/features/supplier-settlements/hooks/use-settlement-list-columns"
-import { useSettlementListSearchHotkey } from "@/features/supplier-settlements/hooks/use-settlement-list-search-hotkey"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import { useSettlementListState } from "@/features/supplier-settlements/hooks/use-settlement-list-state"
 import { outcomeToResult } from "@/features/supplier-settlements/lib/operations"
 import {
@@ -89,7 +89,7 @@ function SettlementList({
     const { pagination } = filters
 
     // 与加载/错误早返回无关，热键始终挂载（原行为：早返回前已注册）。
-    useSettlementListSearchHotkey()
+    useSearchHotkey(searchInputRef)
 
     const previewRow =
         data?.rows.find((r) => r.statementId === urlState.preview) ?? null

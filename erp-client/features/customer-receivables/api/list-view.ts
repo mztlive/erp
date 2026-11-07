@@ -1,6 +1,7 @@
 /** List view + detail view composition (client projection of server data). */
 
 import { apiGet, type Page } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 
 import type {
     CustomerAccountsDetailView,
@@ -192,111 +193,52 @@ export async function fetchCustomerAccountsList(
     }
 }
 
+async function loadDetailOrNull<T>(path: string): Promise<T | null> {
+    try {
+        return await apiGet<T>(path)
+    } catch (error) {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
+    }
+}
+
 export async function fetchCustomerAccountsDetail(
     kind: CustomerAccountsDetailKind,
     id: string,
 ): Promise<CustomerAccountsDetailView | null> {
+    const queriedAt = new Date().toISOString()
     if (kind === "receivable") {
-        try {
-            const seed = await apiGet<BackendReceivableAccount>(
-                `/admin/receivable-accounts/${encodeURIComponent(id)}`,
-            )
-            return {
-                kind,
-                receivable: projectReceivable(seed),
-                queriedAt: new Date().toISOString(),
-            }
-        } catch (error) {
-            if (
-                typeof error === "object" &&
-                error !== null &&
-                "status" in error &&
-                error.status === 404
-            )
-                return null
-            throw error
-        }
+        const seed = await loadDetailOrNull<BackendReceivableAccount>(
+            `/admin/receivable-accounts/${encodeURIComponent(id)}`,
+        )
+        return seed
+            ? { kind, receivable: projectReceivable(seed), queriedAt }
+            : null
     }
     if (kind === "receipt") {
-        try {
-            const seed = await apiGet<BackendCustomerReceipt>(
-                `/admin/customer-receipts/${encodeURIComponent(id)}`,
-            )
-            return {
-                kind,
-                receipt: projectReceipt(seed),
-                queriedAt: new Date().toISOString(),
-            }
-        } catch (error) {
-            if (
-                typeof error === "object" &&
-                error !== null &&
-                "status" in error &&
-                error.status === 404
-            )
-                return null
-            throw error
-        }
+        const seed = await loadDetailOrNull<BackendCustomerReceipt>(
+            `/admin/customer-receipts/${encodeURIComponent(id)}`,
+        )
+        return seed ? { kind, receipt: projectReceipt(seed), queriedAt } : null
     }
     if (kind === "refund") {
-        try {
-            const seed = await apiGet<BackendCustomerRefund>(
-                `/admin/customer-refunds/${encodeURIComponent(id)}`,
-            )
-            return {
-                kind,
-                refund: projectCustomerRefund(seed),
-                queriedAt: new Date().toISOString(),
-            }
-        } catch (error) {
-            if (
-                typeof error === "object" &&
-                error !== null &&
-                "status" in error &&
-                error.status === 404
-            )
-                return null
-            throw error
-        }
+        const seed = await loadDetailOrNull<BackendCustomerRefund>(
+            `/admin/customer-refunds/${encodeURIComponent(id)}`,
+        )
+        return seed
+            ? { kind, refund: projectCustomerRefund(seed), queriedAt }
+            : null
     }
     if (kind === "reversal") {
-        try {
-            const seed = await apiGet<BackendReceiptReversal>(
-                `/admin/receipt-reversals/${encodeURIComponent(id)}`,
-            )
-            return {
-                kind,
-                reversal: projectReceiptReversal(seed),
-                queriedAt: new Date().toISOString(),
-            }
-        } catch (error) {
-            if (
-                typeof error === "object" &&
-                error !== null &&
-                "status" in error &&
-                error.status === 404
-            )
-                return null
-            throw error
-        }
-    }
-    try {
-        const seed = await apiGet<BackendInvoice>(
-            `/admin/invoices/${encodeURIComponent(id)}`,
+        const seed = await loadDetailOrNull<BackendReceiptReversal>(
+            `/admin/receipt-reversals/${encodeURIComponent(id)}`,
         )
-        return {
-            kind,
-            invoice: projectInvoice(seed),
-            queriedAt: new Date().toISOString(),
-        }
-    } catch (error) {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "status" in error &&
-            error.status === 404
-        )
-            return null
-        throw error
+        return seed
+            ? { kind, reversal: projectReceiptReversal(seed), queriedAt }
+            : null
     }
+    const seed = await loadDetailOrNull<BackendInvoice>(
+        `/admin/invoices/${encodeURIComponent(id)}`,
+    )
+    return seed ? { kind, invoice: projectInvoice(seed), queriedAt } : null
 }

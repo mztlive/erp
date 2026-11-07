@@ -17,6 +17,7 @@ import {
     contractsUrlCodec,
     type ContractsUrlState,
 } from "@/features/contracts/lib/contracts-url-state"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 /** 可被单独移除的已生效条件。 */
 export type ContractFilterKey =
@@ -208,31 +209,7 @@ export function useContractsList() {
         setDescendantsDraft(includeDescendants)
     }, [includeDescendants, orgUnitIds, ownerUserIds, settlementPartyId])
 
-    // `/` 聚焦搜索：忽略输入框/文本域/弹层（Dialog / Sheet）
-    React.useEffect(() => {
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== "/" || event.metaKey || event.ctrlKey) return
-            const target = event.target as HTMLElement | null
-            if (
-                target &&
-                (target.tagName === "INPUT" ||
-                    target.tagName === "TEXTAREA" ||
-                    target.tagName === "SELECT" ||
-                    target.isContentEditable)
-            ) {
-                return
-            }
-            if (
-                document.querySelector('[role="dialog"], [data-slot="sheet"]')
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKeyDown)
-        return () => window.removeEventListener("keydown", onKeyDown)
-    }, [])
+    useSearchHotkey(searchInputRef)
 
     const sorting = React.useMemo<SortingState>(
         () => (sort ? [{ id: sort, desc: dir === "desc" }] : []),

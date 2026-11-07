@@ -1,7 +1,6 @@
 "use client"
 
 import { DownloadIcon, PlusIcon } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
 import { ListWorkSurface } from "@/components/business/list-workspace"
@@ -30,19 +29,7 @@ export function UnitOfMeasuresListPage() {
         createPermission: "unit_of_measure:create",
         searchInputRef,
     })
-    const exportPending =
-        useIsMutating({
-            predicate: (mutation) => {
-                const variables = mutation.state.variables
-                return (
-                    typeof variables === "object" &&
-                    variables !== null &&
-                    "resource" in variables &&
-                    variables.resource === "unit-of-measures" &&
-                    !("idempotencyKey" in variables)
-                )
-            },
-        }) > 0
+    const exportPending = state.exportPending
     const { filters } = state
     const hasActiveFilters =
         filters.q.trim() !== "" ||

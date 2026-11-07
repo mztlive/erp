@@ -1,7 +1,9 @@
 /** 开票申请范围列表 HTTP（M08）：负责销售/申请人/当前开票处理人分别查询。 */
 
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import type { Page } from "@/lib/api/paging"
+import { scopePageMeta } from "@/lib/funds-scope"
 
 import type {
     FundsScopedInvoiceRequestPageWire,
@@ -21,14 +23,7 @@ export async function fetchInvoiceRequestScopeList(
     return {
         requests: page.items ?? [],
         total: page.total ?? 0,
-        summary: page.summary,
-        scopeVersion: page.scope_version,
-        policyVersion: page.policy_version,
-        organizationVersion: page.organization_version,
-        scopeSummary: page.scope_summary,
-        asOf: page.as_of,
-        emptyReason: page.empty_reason,
-        hasScope: page.empty_reason !== "no_scope",
+        ...scopePageMeta(page),
     }
 }
 
@@ -47,13 +42,7 @@ export async function fetchInvoiceRequestScopeDetail(
         }
         return result?.data ?? null
     } catch (error) {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "status" in error &&
-            error.status === 404
-        )
-            return null
+        if (isApiError(error) && error.status === 404) return null
         throw error
     }
 }

@@ -14,6 +14,7 @@ import {
 import { mapWorkItemDto, type WorkItemDto } from "@/features/work-items/types"
 import { formatCurrencyFixed } from "@/lib/fixed-decimal"
 import { displayBusinessText, displayName } from "@/lib/display-name"
+import { isApiError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 
@@ -300,12 +301,7 @@ function buildMetrics(
 }
 
 function isForbiddenError(error: unknown): boolean {
-    return (
-        typeof error === "object" &&
-        error !== null &&
-        "status" in error &&
-        (error as { status?: unknown }).status === 403
-    )
+    return isApiError(error) && error.status === 403
 }
 
 /**

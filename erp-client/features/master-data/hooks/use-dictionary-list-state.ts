@@ -50,7 +50,8 @@ export function useDictionaryListState({
         lifecycleStatus: filters.lifecycleStatus,
         revisionTiming: filters.revisionTiming,
     })
-    const { exportMeta, handleExport } = useMasterDataListExport()
+    const { exportMeta, exportPending, handleExport } =
+        useMasterDataListExport()
     const [createOpen, setCreateOpen] = React.useState(false)
     const [reviseTarget, setReviseTarget] =
         React.useState<MasterDataListItem | null>(null)
@@ -125,6 +126,7 @@ export function useDictionaryListState({
         filters,
         listQuery,
         exportMeta,
+        exportPending,
         createOpen,
         setCreateOpen,
         reviseTarget,

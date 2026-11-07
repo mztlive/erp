@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
+
 export interface LedgerSearchInput {
     qParam: string
 }
@@ -21,38 +23,7 @@ export function useLedgerSearch({ qParam }: LedgerSearchInput) {
         setSearchDraft(qParam)
     }, [qParam])
 
-    // `/` 聚焦列表搜索（输入框内输入、Dialog/Sheet 打开时忽略）
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            ) {
-                return
-            }
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            if (
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-            ) {
-                return
-            }
-            if (
-                document.querySelector('[role="dialog"], [data-slot="sheet"]')
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
+    useSearchHotkey(searchInputRef)
 
     return { searchDraft, setSearchDraft, searchInputRef }
 }

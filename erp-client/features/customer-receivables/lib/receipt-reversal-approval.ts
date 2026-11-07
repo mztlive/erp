@@ -1,8 +1,13 @@
 import {
-    mapDocumentApprovalViewDto,
-    type DocumentApprovalView,
-    type DocumentApprovalViewDto,
-} from "@/features/approval-workflow/types"
+    buildFinancialSubmitRequest,
+    financialDocumentApprovalPhase,
+    financialDocumentStatusLabel,
+    financialDocumentStatusTone,
+    isFinancialDocumentWorkItem,
+    isUnsubmittedFinancialStatus,
+    mapFinancialDocumentApproval,
+    type FinancialApprovalPhase,
+} from "@/features/approval-workflow/financial-document"
 import type { ReceiptReversalRow } from "@/features/customer-receivables/types"
 
 /** 回款冲正单作为合同 DocumentType 的固定值。 */
@@ -11,14 +16,7 @@ export const RECEIPT_REVERSAL_DOCUMENT_TYPE = "ReceiptReversal" as const
 /** 工作项上的回款冲正对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
 export const RECEIPT_REVERSAL_OBJECT_TYPE = "receipt_reversal" as const
 
-export type ReceiptReversalApprovalPhase = "draft" | "confirm" | "runtime"
-
-const UNSUBMITTED_STATUS_CODES = new Set([
-    "DRAFT",
-    "draft",
-    "REJECTED",
-    "rejected",
-])
+export type ReceiptReversalApprovalPhase = FinancialApprovalPhase
 
 /**
  * 判断回款冲正单是否仍处于未提交审批的生命周期。
@@ -26,39 +24,15 @@ const UNSUBMITTED_STATUS_CODES = new Set([
  * @param status 服务端状态码；缺省视为未提交。
  * @returns 未提交为 true。
  */
-export const isUnsubmittedReceiptReversalStatus = (status?: string): boolean =>
-    !status || UNSUBMITTED_STATUS_CODES.has(status)
+export const isUnsubmittedReceiptReversalStatus = isUnsubmittedFinancialStatus
 
 /**
  * 把回款冲正业务状态映射为用户可见中文，不上屏枚举原值。
  *
- * 旧的待复核状态已收敛为审批中，不得再拆成独立复核节点。
- *
  * @param status 服务端状态码。
  */
-export const receiptReversalStatusLabel = (status?: string): string => {
-    switch (status) {
-        case "DRAFT":
-        case "draft":
-            return "草稿"
-        case "REJECTED":
-        case "rejected":
-            return "已驳回"
-        case "IN_APPROVAL":
-        case "PENDING_REVIEW":
-        case "pending_review":
-        case "in_approval":
-            return "审批中"
-        case "POSTED":
-        case "posted":
-            return "已过账"
-        case "REVERSED":
-        case "reversed":
-            return "已冲正"
-        default:
-            return "冲正单"
-    }
-}
+export const receiptReversalStatusLabel = (status?: string): string =>
+    financialDocumentStatusLabel(status, "冲正单")
 
 /**
  * 回款冲正状态对应的列表色调。未知码按进行中处理，不上屏枚举。
@@ -67,35 +41,15 @@ export const receiptReversalStatusLabel = (status?: string): string => {
  */
 export const receiptReversalStatusTone = (
     status?: string,
-): ReceiptReversalRow["statusTone"] => {
-    switch (receiptReversalStatusLabel(status)) {
-        case "已过账":
-            return "success"
-        case "审批中":
-            return "warning"
-        case "已驳回":
-        case "已冲正":
-            return "destructive"
-        default:
-            return "neutral"
-    }
-}
+): ReceiptReversalRow["statusTone"] => financialDocumentStatusTone(status)
 
 /**
  * 按单据生命周期选择回款冲正审批区相位。提交确认由调用方显式传入。
  *
- * 有运行实例或已离开未提交阶段时进入 runtime，不得按复核或角色推导。
- *
  * @param approval 服务端只读审批投影。
  * @param status 单据状态码。
  */
-export const receiptReversalApprovalPhase = (
-    approval?: DocumentApprovalView,
-    status?: string,
-): Exclude<ReceiptReversalApprovalPhase, "confirm"> =>
-    approval?.instance || !isUnsubmittedReceiptReversalStatus(status)
-        ? "runtime"
-        : "draft"
+export const receiptReversalApprovalPhase = financialDocumentApprovalPhase
 
 /**
  * 把回款冲正详情上的只读审批结构转成通用审批区投影。
@@ -104,10 +58,7 @@ export const receiptReversalApprovalPhase = (
  *
  * @param dto 详情内嵌的审批 DTO。
  */
-export const mapReceiptReversalApproval = (
-    dto?: DocumentApprovalViewDto | null,
-): DocumentApprovalView | undefined =>
-    dto ? mapDocumentApprovalViewDto(dto) : undefined
+export const mapReceiptReversalApproval = mapFinancialDocumentApproval
 
 /**
  * 判断当前任务是否属于回款冲正单。
@@ -117,27 +68,18 @@ export const mapReceiptReversalApproval = (
 export const isReceiptReversalWorkItem = (workItem?: {
     businessObjectType?: string
 }): boolean =>
-    workItem?.businessObjectType === RECEIPT_REVERSAL_DOCUMENT_TYPE ||
-    workItem?.businessObjectType === RECEIPT_REVERSAL_OBJECT_TYPE
+    isFinancialDocumentWorkItem(
+        workItem,
+        RECEIPT_REVERSAL_DOCUMENT_TYPE,
+        RECEIPT_REVERSAL_OBJECT_TYPE,
+    )
 
 /**
  * 构造回款冲正提交审批请求。包含版本、重提说明与幂等键。
  *
  * @param input 提交所需字段。
  */
-export const buildReceiptReversalSubmitRequest = (input: {
-    expectedVersion: number
-    idempotencyKey: string
-    resubmissionReason?: string
-}): Readonly<{
-    expected_version: number
-    idempotency_key: string
-    resubmission_reason?: string
-}> => ({
-    resubmission_reason: input.resubmissionReason,
-    expected_version: input.expectedVersion,
-    idempotency_key: input.idempotencyKey,
-})
+export const buildReceiptReversalSubmitRequest = buildFinancialSubmitRequest
 
 /** 回款冲正提交意图对应的幂等槽。 */
 export type ReceiptReversalIdempotencySlot = Readonly<{

@@ -27,6 +27,7 @@ import {
 } from "@/features/supplier-payables/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import type {
     SupplierAppliedChip,
     SupplierFilterKey,
@@ -387,32 +388,7 @@ export function useSupplierAccountsFilters() {
         setTrackDraft(track ?? "all")
     }, [due, paymentGate, qParam, sourceType, status, supplierId, track])
 
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            ) {
-                return
-            }
-            const target = event.target as HTMLElement | null
-            if (
-                target?.tagName === "INPUT" ||
-                target?.tagName === "TEXTAREA" ||
-                target?.tagName === "SELECT" ||
-                target?.isContentEditable ||
-                document.querySelector('[role="dialog"], [data-slot="sheet"]')
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
+    useSearchHotkey(searchInputRef)
 
     return {
         view,

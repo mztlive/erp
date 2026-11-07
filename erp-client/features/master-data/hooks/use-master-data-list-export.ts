@@ -70,11 +70,11 @@ export function useMasterDataListExport() {
         [exportMutation, background],
     )
 
+    // 导出可能走后台任务或同步刷新，两者任一挂起都按「导出中」处理。
+    const exportPending = exportMutation.isPending || background.isPending
+
     return {
-        exportMutation: {
-            ...exportMutation,
-            isPending: exportMutation.isPending || background.isPending,
-        },
+        exportPending,
         exportMeta,
         handleExport,
     }

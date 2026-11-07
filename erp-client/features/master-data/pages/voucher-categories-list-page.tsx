@@ -5,7 +5,6 @@ import type { MasterDataListItem } from "@/features/master-data/types"
 import { VoucherCategoryStatusDialog } from "@/features/master-data/components/list/voucher-category-status-dialog"
 
 import { DownloadIcon, PlusIcon } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
 import { ListWorkSurface } from "@/components/business/list-workspace"
@@ -35,19 +34,7 @@ export function VoucherCategoriesListPage() {
         enableRevisionFilter: false,
         searchInputRef,
     })
-    const exportPending =
-        useIsMutating({
-            predicate: (mutation) => {
-                const variables = mutation.state.variables
-                return (
-                    typeof variables === "object" &&
-                    variables !== null &&
-                    "resource" in variables &&
-                    variables.resource === "voucher-categories" &&
-                    !("idempotencyKey" in variables)
-                )
-            },
-        }) > 0
+    const exportPending = state.exportPending
     const { filters } = state
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.lifecycleStatus !== "all"
