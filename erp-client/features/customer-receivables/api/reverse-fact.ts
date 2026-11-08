@@ -1,8 +1,7 @@
 /** Reverse facts (receipt reversal / refund / red invoice) — append-only. */
 
 import { apiPost } from "@/lib/api"
-import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
-import { classifyFormalCommandError } from "@/lib/formal-command"
+import { commandSubmitFailure } from "@/lib/formal-command"
 
 import type {
     ReverseFactInput,
@@ -21,15 +20,11 @@ function correctionError(
     error: unknown,
     idempotencyKey: string,
 ): Extract<ReverseFactResult, { status: "failed" | "unknown" }> {
-    const message = getErrorMessage(error, "纠错提交失败，请稍后重试。")
-    const code = getErrorCode(error) ?? "HTTP_ERROR"
-    if (
-        code === "OUTCOME_UNKNOWN" ||
-        classifyFormalCommandError(error) === "unknown"
-    ) {
-        return { status: "unknown", message, idempotencyKey }
-    }
-    return { status: "failed", code, message }
+    return commandSubmitFailure(
+        error,
+        idempotencyKey,
+        "纠错提交失败，请稍后重试。",
+    )
 }
 
 /** 提交已有客户退款草稿并启动审批。 */

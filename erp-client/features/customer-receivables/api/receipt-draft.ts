@@ -6,8 +6,7 @@ import {
     removeReceiptFileValue,
 } from "@/lib/receipt-file-store"
 import { apiGet, apiPost, apiPostForm } from "@/lib/api"
-import { classifyFormalCommandError } from "@/lib/formal-command"
-import { getErrorCode } from "@/lib/api/errors"
+import { isCommandOutcomeUnknown } from "@/lib/formal-command"
 import { normalizeFixed } from "@/lib/fixed-decimal"
 import type { AllocationSessionView, SaveAllocationDraftInput } from "../types"
 import type { BackendCustomerReceipt } from "./dto"
@@ -24,10 +23,7 @@ import {
 } from "../lib/receipt-session-storage"
 
 export function isReceiptOutcomeUnknown(error: unknown) {
-    return (
-        getErrorCode(error) === "OUTCOME_UNKNOWN" ||
-        classifyFormalCommandError(error) === "unknown"
-    )
+    return isCommandOutcomeUnknown(error)
 }
 
 export async function restoreReceiptSession(

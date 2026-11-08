@@ -4,10 +4,10 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import { getErrorCode, getErrorMessage, nullIfNotFound } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
+import { commandSubmitFailure } from "@/lib/formal-command"
 import type { BackendSupplierRefund } from "@/features/supplier-payables/api/mappers"
 import { projectSupplierRefund } from "@/features/supplier-payables/api/mappers"
-import { isOutcomeUnknown } from "@/features/supplier-payables/api/shared"
 import { buildSupplierRefundSubmitRequest } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type { SupplierRefundRow } from "@/features/supplier-payables/types"
 
@@ -20,15 +20,11 @@ function refundError(
     error: unknown,
     idempotencyKey: string,
 ): Exclude<SupplierRefundMutationResult, { status: "succeeded" }> {
-    const message = getErrorMessage(error, "退款提交失败，请稍后重试。")
-    if (isOutcomeUnknown(error)) {
-        return { status: "unknown", message, idempotencyKey }
-    }
-    return {
-        status: "failed",
-        code: getErrorCode(error) ?? "HTTP_ERROR",
-        message,
-    }
+    return commandSubmitFailure(
+        error,
+        idempotencyKey,
+        "退款提交失败，请稍后重试。",
+    )
 }
 
 /**

@@ -4,10 +4,10 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import { getErrorCode, getErrorMessage, nullIfNotFound } from "@/lib/api/errors"
+import { nullIfNotFound } from "@/lib/api/errors"
+import { commandSubmitFailure } from "@/lib/formal-command"
 import type { BackendPaymentReversal } from "@/features/supplier-payables/api/mappers"
 import { projectPaymentReversal } from "@/features/supplier-payables/api/mappers"
-import { isOutcomeUnknown } from "@/features/supplier-payables/api/shared"
 import { buildPaymentReversalSubmitRequest } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import type { PaymentReversalRow } from "@/features/supplier-payables/types"
 
@@ -20,15 +20,11 @@ function reversalError(
     error: unknown,
     idempotencyKey: string,
 ): Exclude<PaymentReversalMutationResult, { status: "succeeded" }> {
-    const message = getErrorMessage(error, "冲正提交失败，请稍后重试。")
-    if (isOutcomeUnknown(error)) {
-        return { status: "unknown", message, idempotencyKey }
-    }
-    return {
-        status: "failed",
-        code: getErrorCode(error) ?? "HTTP_ERROR",
-        message,
-    }
+    return commandSubmitFailure(
+        error,
+        idempotencyKey,
+        "冲正提交失败，请稍后重试。",
+    )
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { RouteLoading } from "@/components/layout/route-loading"
 import { WarehousesListPage } from "@/features/master-data/pages/warehouses-list-page"
 
 export const metadata: Metadata = {
@@ -9,13 +10,7 @@ export const metadata: Metadata = {
 
 export default function Page() {
     return (
-        <Suspense
-            fallback={
-                <div className="p-5 text-sm text-muted-foreground">
-                    正在加载仓库列表…
-                </div>
-            }
-        >
+        <Suspense fallback={<RouteLoading label="正在加载仓库列表…" />}>
             <WarehousesListPage />
         </Suspense>
     )

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { RouteLoading } from "@/components/layout/route-loading"
 import { WarehouseObjectPage } from "@/features/master-data/pages/warehouse-object-page"
 
 export const metadata: Metadata = {
@@ -17,13 +18,7 @@ export default async function Page({
     const { stableId } = await params
     const { section } = await searchParams
     return (
-        <Suspense
-            fallback={
-                <div className="p-5 text-sm text-muted-foreground">
-                    正在加载仓库资料…
-                </div>
-            }
-        >
+        <Suspense fallback={<RouteLoading label="正在加载仓库资料…" />}>
             <WarehouseObjectPage
                 key={`${stableId}-${section ?? "overview"}`}
                 stableId={stableId}

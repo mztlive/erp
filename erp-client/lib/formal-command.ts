@@ -1,4 +1,4 @@
-import { isApiError } from "./api/errors"
+import { getErrorCode, getErrorMessage, isApiError } from "./api/errors"
 
 export type FormalCommandSettlement = "succeeded" | "failed" | "unknown"
 
@@ -22,6 +22,37 @@ export const classifyFormalCommandError = (
         (error.status != null && error.status >= 500))
         ? "unknown"
         : "failed"
+
+/** 正式命令无法证明成功或失败：结果未知码，或网络、解析、5xx。 */
+export function isCommandOutcomeUnknown(error: unknown): boolean {
+    return (
+        getErrorCode(error) === "OUTCOME_UNKNOWN" ||
+        classifyFormalCommandError(error) === "unknown"
+    )
+}
+
+/**
+ * 把正式命令异常收成未知或失败。
+ *
+ * 未知不带错误码，失败码缺省为 HTTP_ERROR。各单据仍传入自己的失败文案。
+ */
+export function commandSubmitFailure(
+    error: unknown,
+    idempotencyKey: string,
+    fallback: string,
+):
+    | { status: "unknown"; message: string; idempotencyKey: string }
+    | { status: "failed"; code: string; message: string } {
+    const message = getErrorMessage(error, fallback)
+    if (isCommandOutcomeUnknown(error)) {
+        return { status: "unknown", message, idempotencyKey }
+    }
+    return {
+        status: "failed",
+        code: getErrorCode(error) ?? "HTTP_ERROR",
+        message,
+    }
+}
 
 const clonePayload = <T>(payload: T): T => structuredClone(payload)
 

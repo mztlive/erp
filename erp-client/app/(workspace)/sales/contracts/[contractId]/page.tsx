@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { RouteLoading } from "@/components/layout/route-loading"
 import { ContractDetailPage } from "@/features/contracts/pages/contract-detail-page"
 
 export const metadata: Metadata = {
@@ -17,13 +18,7 @@ export default async function Page({
     const { contractId } = await params
     const { section } = await searchParams
     return (
-        <Suspense
-            fallback={
-                <div className="p-5 text-sm text-muted-foreground">
-                    正在加载合同…
-                </div>
-            }
-        >
+        <Suspense fallback={<RouteLoading label="正在加载合同…" />}>
             <ContractDetailPage
                 key={contractId}
                 contractId={contractId}

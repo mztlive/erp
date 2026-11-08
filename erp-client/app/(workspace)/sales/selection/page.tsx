@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { RouteLoading } from "@/components/layout/route-loading"
 import { BooksListPage } from "@/features/sales-selection/pages/books-list-page"
 
 export const metadata: Metadata = {
@@ -12,13 +13,7 @@ export const metadata: Metadata = {
  */
 export default function SalesSelectionPage() {
     return (
-        <Suspense
-            fallback={
-                <div className="p-5 text-sm text-muted-foreground">
-                    正在加载选品册…
-                </div>
-            }
-        >
+        <Suspense fallback={<RouteLoading label="正在加载选品册…" />}>
             <BooksListPage />
         </Suspense>
     )

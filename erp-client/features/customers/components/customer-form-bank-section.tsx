@@ -3,8 +3,7 @@
 import { PlusIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
+import { CustomerFormDefaultFlag } from "@/features/customers/components/customer-form-default-flag"
 import {
     createCustomerFormDraftId,
     type CustomerFormApi,
@@ -138,32 +137,16 @@ export function BankAccountRowsSection({
                                         <form.AppField
                                             name={`bankAccounts[${index}].isDefault`}
                                         >
-                                            {(nested) => {
-                                                const checkboxId = `customers-form-bank-${rowKey}-default`
-                                                return (
-                                                    <Label
-                                                        htmlFor={checkboxId}
-                                                        className="flex items-center gap-2 text-sm"
-                                                    >
-                                                        <Checkbox
-                                                            id={checkboxId}
-                                                            checked={
-                                                                nested.state
-                                                                    .value
-                                                            }
-                                                            onCheckedChange={(
-                                                                checked,
-                                                            ) =>
-                                                                nested.handleChange(
-                                                                    checked ===
-                                                                        true,
-                                                                )
-                                                            }
-                                                        />
-                                                        默认账户
-                                                    </Label>
-                                                )
-                                            }}
+                                            {(nested) => (
+                                                <CustomerFormDefaultFlag
+                                                    id={`customers-form-bank-${rowKey}-default`}
+                                                    label="默认账户"
+                                                    checked={nested.state.value}
+                                                    onCheckedChange={
+                                                        nested.handleChange
+                                                    }
+                                                />
+                                            )}
                                         </form.AppField>
                                         <Button
                                             id={`customers-form-bank-${rowKey}-remove`}

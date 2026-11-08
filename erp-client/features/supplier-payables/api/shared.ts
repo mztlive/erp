@@ -1,7 +1,7 @@
 /** W12 供应商往来 · 无状态 API 工具（不属于公开导出面）。 */
 
-import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
-import { classifyFormalCommandError } from "@/lib/formal-command"
+import { getErrorMessage } from "@/lib/api/errors"
+import { isCommandOutcomeUnknown } from "@/lib/formal-command"
 
 export const LIST_PAGE_SIZE = 100
 
@@ -28,8 +28,5 @@ export function errorMessage(err: unknown, fallback: string): string {
 
 /** 判断正式命令是否处于无法证明成功或失败的结果未知状态。 */
 export function isOutcomeUnknown(err: unknown): boolean {
-    return (
-        getErrorCode(err) === "OUTCOME_UNKNOWN" ||
-        classifyFormalCommandError(err) === "unknown"
-    )
+    return isCommandOutcomeUnknown(err)
 }

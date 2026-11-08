@@ -3,6 +3,7 @@
 import {
     blockedChangeOrderSections,
     ChangeOrderBlockers,
+    MoneyChangePhrase,
     MoneyValue,
 } from "@/components/business"
 import { ChangeOrderSection } from "@/components/business/change-order-section"
@@ -140,8 +141,6 @@ export function PurchaseChangeTotalSummary({
                 } catch {
                     /* 字段错误会标出未填写完整的行。 */
                 }
-                const direction =
-                    delta === null ? null : compareDecimal(delta, "0", 2)
                 return (
                     <div className="min-w-0 space-y-0.5" aria-live="polite">
                         <div className="flex flex-wrap items-baseline gap-x-3">
@@ -158,22 +157,7 @@ export function PurchaseChangeTotalSummary({
                         </div>
                         <p className="text-xs text-muted-foreground">
                             当前生效 <MoneyValue value={baseAmount || null} />
-                            {direction === null ? null : (
-                                <>
-                                    <span className="mx-1.5">·</span>
-                                    {direction === 0 ? (
-                                        "金额未变"
-                                    ) : (
-                                        <>
-                                            {direction > 0 ? "增加 " : "减少 "}
-                                            <MoneyValue
-                                                value={delta!.replace(/^-/, "")}
-                                                className="text-foreground"
-                                            />
-                                        </>
-                                    )}
-                                </>
-                            )}
+                            <MoneyChangePhrase delta={delta} />
                         </p>
                         {belowPaid ? (
                             <p className="text-xs text-destructive">

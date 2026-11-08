@@ -5,8 +5,7 @@ import { PlusIcon } from "lucide-react"
 
 import { DocumentSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
+import { CustomerFormDefaultFlag } from "@/features/customers/components/customer-form-default-flag"
 import {
     createCustomerFormDraftId,
     type CustomerFormApi,
@@ -191,32 +190,16 @@ export function ContactRowsSection({
                                         <form.AppField
                                             name={`contacts[${index}].isDefault`}
                                         >
-                                            {(nested) => {
-                                                const checkboxId = `customers-form-contacts-${rowKey}-default`
-                                                return (
-                                                    <Label
-                                                        htmlFor={checkboxId}
-                                                        className="flex items-center gap-2 text-sm"
-                                                    >
-                                                        <Checkbox
-                                                            id={checkboxId}
-                                                            checked={
-                                                                nested.state
-                                                                    .value
-                                                            }
-                                                            onCheckedChange={(
-                                                                checked,
-                                                            ) =>
-                                                                nested.handleChange(
-                                                                    checked ===
-                                                                        true,
-                                                                )
-                                                            }
-                                                        />
-                                                        默认联系人
-                                                    </Label>
-                                                )
-                                            }}
+                                            {(nested) => (
+                                                <CustomerFormDefaultFlag
+                                                    id={`customers-form-contacts-${rowKey}-default`}
+                                                    label="默认联系人"
+                                                    checked={nested.state.value}
+                                                    onCheckedChange={
+                                                        nested.handleChange
+                                                    }
+                                                />
+                                            )}
                                         </form.AppField>
                                         <Button
                                             id={`customers-form-contacts-${rowKey}-remove`}
@@ -348,32 +331,16 @@ export function AddressRowsSection({
                                         <form.AppField
                                             name={`addresses[${index}].isDefault`}
                                         >
-                                            {(nested) => {
-                                                const checkboxId = `customers-form-addresses-${rowKey}-default`
-                                                return (
-                                                    <Label
-                                                        htmlFor={checkboxId}
-                                                        className="flex items-center gap-2 text-sm"
-                                                    >
-                                                        <Checkbox
-                                                            id={checkboxId}
-                                                            checked={
-                                                                nested.state
-                                                                    .value
-                                                            }
-                                                            onCheckedChange={(
-                                                                checked,
-                                                            ) =>
-                                                                nested.handleChange(
-                                                                    checked ===
-                                                                        true,
-                                                                )
-                                                            }
-                                                        />
-                                                        默认地址
-                                                    </Label>
-                                                )
-                                            }}
+                                            {(nested) => (
+                                                <CustomerFormDefaultFlag
+                                                    id={`customers-form-addresses-${rowKey}-default`}
+                                                    label="默认地址"
+                                                    checked={nested.state.value}
+                                                    onCheckedChange={
+                                                        nested.handleChange
+                                                    }
+                                                />
+                                            )}
                                         </form.AppField>
                                         <Button
                                             id={`customers-form-addresses-${rowKey}-remove`}
