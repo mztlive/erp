@@ -7,7 +7,10 @@ import { PRICE_FILTER_OPTIONS, parsePriceFilterKind } from "@/lib/price-filter"
 
 import { CategoryCombobox, OptionCombobox } from "@/components/business"
 import { DirectoryFilterControl } from "@/features/master-data/components/list/directory-filter-control"
-import { DirectoryOptionFilter } from "@/features/master-data/components/list/directory-option-filter"
+import {
+    DirectoryOptionFilter,
+    brandDirectoryFilterBindings,
+} from "@/features/master-data/components/list/directory-option-filter"
 import {
     directoryOptionEmptyLabel,
     productFilterDirectoryState,
@@ -205,29 +208,18 @@ export function SellableItemsFilterBar({
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                             <DirectoryOptionFilter
-                                permission="product_brand:list"
-                                unavailable={directory.brandUnavailable}
+                                {...brandDirectoryFilterBindings(
+                                    directory,
+                                    () =>
+                                        filterOptions.refetch({
+                                            throwOnError: true,
+                                        }),
+                                )}
                                 id={`${prefix}-brand`}
-                                label="品牌"
                                 comboboxClassName="w-full"
                                 ariaLabel="品牌"
                                 value={f.productBrandIdDraft}
                                 onValueChange={f.setProductBrandIdDraft}
-                                options={directory.brands}
-                                loading={directory.fetching}
-                                placeholder="全部品牌"
-                                searchPlaceholder="搜索品牌名称或代码"
-                                unavailableLabel="当前账号无品牌查询权限"
-                                noScope={directory.brandNoScope}
-                                failed={directory.failed}
-                                emptyLabel="没有符合条件的品牌"
-                                error={directory.error}
-                                onRetry={directory.refetch}
-                                onRefresh={() =>
-                                    filterOptions.refetch({
-                                        throwOnError: true,
-                                    })
-                                }
                             />
                         </div>
                     </fieldset>

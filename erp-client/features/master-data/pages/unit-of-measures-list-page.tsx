@@ -1,10 +1,7 @@
 "use client"
 
-import { ListWorkSurface } from "@/components/business/list-workspace"
-import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
-import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
+import { DictionaryCompactWorkspace } from "@/features/master-data/components/list/dictionary-compact-workspace"
 import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
-import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { UnitOfMeasurePreviewSheet } from "@/features/master-data/components/unit-of-measure/unit-of-measure-preview-sheet"
 import {
@@ -32,12 +29,6 @@ export function UnitOfMeasuresListPage() {
         searchInputRef,
     })
     const exportPending = state.exportPending
-    const { filters } = state
-    const hasActiveFilters =
-        filters.q.trim() !== "" ||
-        filters.lifecycleStatus !== "all" ||
-        filters.revisionTiming !== "all"
-    const listLoadFailed = state.listQuery.isError || !state.listQuery.data
 
     return (
         <ListPageFrame
@@ -62,72 +53,43 @@ export function UnitOfMeasuresListPage() {
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <div className="w-full">
-                <ListWorkSurface
-                    ariaLabel="计量单位列表"
-                    views={
-                        <LifecycleMetricStrip
-                            idPrefix="master-data-unit-of-measures-list-metrics"
-                            metrics={state.syncedMetrics}
-                            metricKey={filters.metricKey}
-                            ariaLabel="计量单位指标筛选"
-                            allLabel="全部单位"
-                            hint="选择单位查看详情"
-                            onChangeLifecycle={filters.changeLifecycle}
+            <DictionaryCompactWorkspace
+                listId="master-data-unit-of-measures-list"
+                ariaLabel="计量单位列表"
+                fullWidth
+                metricsAriaLabel="计量单位指标筛选"
+                allLabel="全部单位"
+                hint="选择单位查看详情"
+                countLabel="计量单位"
+                searchPlaceholder={masterDataSearchPlaceholder(
+                    "unit-of-measures",
+                )}
+                codeLabel={masterDataCopy.fUnitCode}
+                emptyTitle="还没有计量单位资料"
+                emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
+                emptyAction={
+                    state.canCreate ? (
+                        <MasterDataEmptyCreateButton
+                            id="master-data-unit-of-measures-list-empty-create"
+                            onClick={() => state.setCreateOpen(true)}
                         />
-                    }
-                    toolbar={
-                        <DictionaryListToolbar
-                            idPrefix="master-data-unit-of-measures-list-toolbar"
-                            searchInputRef={searchInputRef}
-                            filters={filters}
-                            searchPlaceholder={masterDataSearchPlaceholder(
-                                "unit-of-measures",
-                            )}
-                            countLabel="计量单位"
-                            resultCount={
-                                state.listQuery.data
-                                    ? state.rows.length
-                                    : undefined
-                            }
-                            loading={state.listQuery.isFetching}
-                            failed={state.listQuery.isError}
-                        />
-                    }
-                    table={
-                        <DictionaryCompactList
-                            id="master-data-unit-of-measures-list"
-                            rows={state.rows}
-                            codeLabel={masterDataCopy.fUnitCode}
-                            selectedId={state.previewId}
-                            pagination={filters.pagination}
-                            onPaginationChange={filters.changePagination}
-                            loading={state.listQuery.isFetching}
-                            listLoadFailed={listLoadFailed}
-                            error={state.listQuery.error}
-                            onRetry={() => void state.listQuery.refetch()}
-                            hasActiveFilters={hasActiveFilters}
-                            onClearFilters={filters.clearAllFilters}
-                            emptyTitle="还没有计量单位资料"
-                            emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
-                            emptyAction={
-                                state.canCreate ? (
-                                    <MasterDataEmptyCreateButton
-                                        id="master-data-unit-of-measures-list-empty-create"
-                                        onClick={() =>
-                                            state.setCreateOpen(true)
-                                        }
-                                    />
-                                ) : undefined
-                            }
-                            onPreview={(row) => {
-                                lastFocusedRowId.current = row.stableId
-                                state.setPreviewId(row.stableId)
-                            }}
-                        />
-                    }
-                />
-            </div>
+                    ) : undefined
+                }
+                searchInputRef={searchInputRef}
+                filters={state.filters}
+                syncedMetrics={state.syncedMetrics}
+                rows={state.rows}
+                previewId={state.previewId}
+                fetching={state.listQuery.isFetching}
+                failed={state.listQuery.isError}
+                hasData={state.listQuery.data != null}
+                error={state.listQuery.error}
+                onRetry={() => void state.listQuery.refetch()}
+                onPreview={(row) => {
+                    lastFocusedRowId.current = row.stableId
+                    state.setPreviewId(row.stableId)
+                }}
+            />
             <UnitOfMeasurePreviewSheet
                 row={state.previewRow}
                 lastFocusedRowId={lastFocusedRowId}

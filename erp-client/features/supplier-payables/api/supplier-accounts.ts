@@ -481,116 +481,68 @@ async function allocationPoolTarget(account: BackendPayableAccount) {
 }
 
 /**
- * 应付列表若仍缺供应商名称，则按供应商主数据补全；失败时保留业务占位。
- *
- * @param payables 已投影的应付行。
+ * 名称仍是占位时按主数据补全。没有缺口或全部补全失败时返回原数组。
  */
+async function fillMissingSupplierNames<
+    T extends { supplierId: string; supplierName: string },
+>(
+    rows: T[],
+    loadName: (id: string) => Promise<string | null | undefined>,
+): Promise<T[]> {
+    const missingIds = [
+        ...new Set(
+            rows
+                .filter((row) => row.supplierName === MISSING_SUPPLIER_NAME)
+                .map((row) => row.supplierId)
+                .filter(Boolean),
+        ),
+    ]
+    if (missingIds.length === 0) return rows
+    const resolved = new Map<string, string>()
+    await Promise.all(
+        missingIds.map(async (id) => {
+            const name = businessLabelOrPlaceholder(
+                await loadName(id),
+                id,
+                MISSING_SUPPLIER_NAME,
+            )
+            if (name !== MISSING_SUPPLIER_NAME) resolved.set(id, name)
+        }),
+    )
+    if (resolved.size === 0) return rows
+    return rows.map((row) => {
+        const supplierName = resolved.get(row.supplierId)
+        return supplierName ? { ...row, supplierName } : row
+    })
+}
+
+/** 应付列表若仍缺供应商名称，则按供应商主数据补全；失败时保留业务占位。 */
 async function hydratePayableSupplierNames(
     payables: PayableRow[],
 ): Promise<PayableRow[]> {
-    const missingIds = [
-        ...new Set(
-            payables
-                .filter((row) => row.supplierName === MISSING_SUPPLIER_NAME)
-                .map((row) => row.supplierId)
-                .filter(Boolean),
-        ),
-    ]
-    if (missingIds.length === 0) return payables
-    const resolved = new Map<string, string>()
-    await Promise.all(
-        missingIds.map(async (supplierId) => {
-            const option = await fetchSupplierOption(supplierId)
-            const name = businessLabelOrPlaceholder(
-                option?.supplierName,
-                supplierId,
-                MISSING_SUPPLIER_NAME,
-            )
-            if (name !== MISSING_SUPPLIER_NAME) {
-                resolved.set(supplierId, name)
-            }
-        }),
-    )
-    if (resolved.size === 0) return payables
-    return payables.map((row) => {
-        const supplierName = resolved.get(row.supplierId)
-        return supplierName ? { ...row, supplierName } : row
+    return fillMissingSupplierNames(payables, async (supplierId) => {
+        const option = await fetchSupplierOption(supplierId)
+        return option?.supplierName
     })
 }
 
-/**
- * 付款列表若仍缺供应商名称，则按供应商主数据补全；失败时保留业务占位。
- *
- * @param payments 已投影的付款行。
- */
+/** 付款列表若仍缺供应商名称，则按供应商主数据补全；失败时保留业务占位。 */
 async function hydratePaymentSupplierNames(
     payments: PaymentRow[],
 ): Promise<PaymentRow[]> {
-    const missingIds = [
-        ...new Set(
-            payments
-                .filter((row) => row.supplierName === MISSING_SUPPLIER_NAME)
-                .map((row) => row.supplierId)
-                .filter(Boolean),
-        ),
-    ]
-    if (missingIds.length === 0) return payments
-    const resolved = new Map<string, string>()
-    await Promise.all(
-        missingIds.map(async (supplierId) => {
-            const option = await fetchSupplierOption(supplierId)
-            const name = businessLabelOrPlaceholder(
-                option?.supplierName,
-                supplierId,
-                MISSING_SUPPLIER_NAME,
-            )
-            if (name !== MISSING_SUPPLIER_NAME) {
-                resolved.set(supplierId, name)
-            }
-        }),
-    )
-    if (resolved.size === 0) return payments
-    return payments.map((row) => {
-        const supplierName = resolved.get(row.supplierId)
-        return supplierName ? { ...row, supplierName } : row
+    return fillMissingSupplierNames(payments, async (supplierId) => {
+        const option = await fetchSupplierOption(supplierId)
+        return option?.supplierName
     })
 }
 
-/**
- * 进项发票往来主体按主体主数据补全名称；失败时保留业务占位。
- *
- * @param invoices 已投影的进项发票行。
- */
+/** 进项发票往来主体按主体主数据补全名称；失败时保留业务占位。 */
 async function hydrateInvoicePartyNames(
     invoices: PurchaseInvoiceRow[],
 ): Promise<PurchaseInvoiceRow[]> {
-    const missingIds = [
-        ...new Set(
-            invoices
-                .filter((row) => row.supplierName === MISSING_SUPPLIER_NAME)
-                .map((row) => row.supplierId)
-                .filter(Boolean),
-        ),
-    ]
-    if (missingIds.length === 0) return invoices
-    const resolved = new Map<string, string>()
-    await Promise.all(
-        missingIds.map(async (partyId) => {
-            const option = await fetchPartyOption(partyId)
-            const name = businessLabelOrPlaceholder(
-                option?.displayName,
-                partyId,
-                MISSING_SUPPLIER_NAME,
-            )
-            if (name !== MISSING_SUPPLIER_NAME) {
-                resolved.set(partyId, name)
-            }
-        }),
-    )
-    if (resolved.size === 0) return invoices
-    return invoices.map((row) => {
-        const supplierName = resolved.get(row.supplierId)
-        return supplierName ? { ...row, supplierName } : row
+    return fillMissingSupplierNames(invoices, async (partyId) => {
+        const option = await fetchPartyOption(partyId)
+        return option?.displayName
     })
 }
 

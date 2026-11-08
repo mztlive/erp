@@ -4,12 +4,9 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { useRouter } from "next/navigation"
 import { DataTable } from "@/components/business"
-import {
-    ListSearchField,
-    ListWorkSurface,
-} from "@/components/business/list-workspace"
+import { ListWorkSurface } from "@/components/business/list-workspace"
+import { PortalListSearchForm } from "../components/portal-list-search-form"
 import { OptionCombobox } from "@/components/business/option-combobox"
-import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePortalApplications } from "../hooks/queries"
 import { kindLabels, statusLabels, timeLabel } from "../lib/presentation"
@@ -89,21 +86,18 @@ export function PortalApplicationsPage() {
                     </span>
                 }
                 toolbar={
-                    <form
-                        className="flex w-full flex-wrap items-center gap-2 [&>[data-slot=input-group]]:w-full [&>[data-slot=input-group]]:sm:w-96"
-                        onSubmit={(event) => {
-                            event.preventDefault()
+                    <PortalListSearchForm
+                        searchId="supplier-portal-applications-search"
+                        searchLabel="搜索申请"
+                        placeholder="搜索申请"
+                        value={search}
+                        onChange={setSearch}
+                        submitId="supplier-portal-applications-search-submit"
+                        onSubmit={() => {
                             setQ(search.trim())
                             setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
                     >
-                        <ListSearchField
-                            id="supplier-portal-applications-search"
-                            aria-label="搜索申请"
-                            placeholder="搜索申请"
-                            value={search}
-                            onChange={setSearch}
-                        />
                         <OptionCombobox
                             id="supplier-portal-applications-status"
                             aria-label="申请状态"
@@ -117,14 +111,7 @@ export function PortalApplicationsPage() {
                             )}
                             placeholder="全部状态"
                         />
-                        <Button
-                            id="supplier-portal-applications-search-submit"
-                            type="submit"
-                            variant="outline"
-                        >
-                            搜索
-                        </Button>
-                    </form>
+                    </PortalListSearchForm>
                 }
                 table={
                     <DataTable

@@ -6,7 +6,12 @@ import * as React from "react"
 
 import { CategoryCombobox, OptionCombobox } from "@/components/business"
 import { DirectoryFilterControl } from "@/features/master-data/components/list/directory-filter-control"
-import { DirectoryOptionFilter } from "@/features/master-data/components/list/directory-option-filter"
+import {
+    DirectoryOptionFilter,
+    brandDirectoryFilterBindings,
+    supplierDirectoryFilterBindings,
+} from "@/features/master-data/components/list/directory-option-filter"
+import { GrossPriceRangeInputs } from "@/features/master-data/components/list/gross-price-range-inputs"
 import {
     directoryOptionEmptyLabel,
     productFilterDirectoryState,
@@ -14,12 +19,10 @@ import {
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
     ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import type {
     SellableFilterKey,
@@ -310,54 +313,32 @@ export function SellableListToolbar({
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-3">
                             <DirectoryOptionFilter
-                                permission="product_brand:list"
-                                unavailable={directory.brandUnavailable}
+                                {...brandDirectoryFilterBindings(
+                                    directory,
+                                    () =>
+                                        productFilterOptionsQuery.refetch({
+                                            throwOnError: true,
+                                        }),
+                                )}
                                 id="master-data-list-sellable-list-toolbar-optioncombobox-1"
-                                label="品牌"
                                 comboboxClassName="w-full"
                                 ariaLabel="商品品牌"
                                 value={productBrandIdDraft}
                                 onValueChange={setProductBrandIdDraft}
-                                options={directory.brands}
-                                loading={directory.fetching}
-                                placeholder="全部品牌"
-                                searchPlaceholder="搜索品牌名称或代码"
-                                unavailableLabel="当前账号无品牌查询权限"
-                                noScope={directory.brandNoScope}
-                                failed={directory.failed}
-                                emptyLabel="没有符合条件的品牌"
-                                error={directory.error}
-                                onRetry={directory.refetch}
-                                onRefresh={() =>
-                                    productFilterOptionsQuery.refetch({
-                                        throwOnError: true,
-                                    })
-                                }
                             />
                             <DirectoryOptionFilter
-                                permission="supplier:list"
-                                unavailable={directory.supplierUnavailable}
+                                {...supplierDirectoryFilterBindings(
+                                    directory,
+                                    () =>
+                                        productFilterOptionsQuery.refetch({
+                                            throwOnError: true,
+                                        }),
+                                )}
                                 id="master-data-list-sellable-list-toolbar-optioncombobox-2"
-                                label="供应商"
                                 comboboxClassName="w-full"
                                 ariaLabel="供应商"
                                 value={productSupplierIdDraft}
                                 onValueChange={setProductSupplierIdDraft}
-                                options={directory.suppliers}
-                                loading={directory.fetching}
-                                placeholder="全部供应商"
-                                searchPlaceholder="搜索供应商名称或代码"
-                                unavailableLabel="当前账号无供应商查询权限"
-                                noScope={directory.supplierNoScope}
-                                failed={directory.failed}
-                                emptyLabel="没有符合条件的供应商"
-                                error={directory.error}
-                                onRetry={directory.refetch}
-                                onRefresh={() =>
-                                    productFilterOptionsQuery.refetch({
-                                        throwOnError: true,
-                                    })
-                                }
                             />
                         </div>
                     </fieldset>
@@ -365,69 +346,24 @@ export function SellableListToolbar({
                         <legend className="mb-3 text-xs font-medium">
                             一件代发价格
                         </legend>
-                        <ListWorkspaceFilterField label="含税售价 · 元">
-                            <div className="flex min-w-0 items-center gap-2">
-                                <Input
-                                    id="master-data-list-sellable-list-toolbar-input-2"
-                                    ref={priceInputRef}
-                                    className="w-0 min-w-0 flex-1"
-                                    value={productSalesPriceMinDraft}
-                                    onChange={(event) => {
-                                        setProductSalesPriceMinDraft(
-                                            event.target.value,
-                                        )
-                                        setProductSalesPriceError(null)
-                                    }}
-                                    inputMode="decimal"
-                                    autoComplete="off"
-                                    placeholder="最低价"
-                                    aria-label="最低一件代发价"
-                                    aria-invalid={Boolean(
-                                        productSalesPriceError,
-                                    )}
-                                    aria-describedby={
-                                        productSalesPriceError
-                                            ? priceErrorId
-                                            : undefined
-                                    }
-                                />
-                                <span className="text-xs text-muted-foreground">
-                                    至
-                                </span>
-                                <Input
-                                    id="master-data-list-sellable-list-toolbar-input-3"
-                                    className="w-0 min-w-0 flex-1"
-                                    value={productSalesPriceMaxDraft}
-                                    onChange={(event) => {
-                                        setProductSalesPriceMaxDraft(
-                                            event.target.value,
-                                        )
-                                        setProductSalesPriceError(null)
-                                    }}
-                                    inputMode="decimal"
-                                    autoComplete="off"
-                                    placeholder="最高价"
-                                    aria-label="最高一件代发价"
-                                    aria-invalid={Boolean(
-                                        productSalesPriceError,
-                                    )}
-                                    aria-describedby={
-                                        productSalesPriceError
-                                            ? priceErrorId
-                                            : undefined
-                                    }
-                                />
-                            </div>
-                            {productSalesPriceError ? (
-                                <p
-                                    id={priceErrorId}
-                                    className="text-xs text-destructive"
-                                    role="alert"
-                                >
-                                    {productSalesPriceError}
-                                </p>
-                            ) : null}
-                        </ListWorkspaceFilterField>
+                        <GrossPriceRangeInputs
+                            minId="master-data-list-sellable-list-toolbar-input-2"
+                            maxId="master-data-list-sellable-list-toolbar-input-3"
+                            errorId={priceErrorId}
+                            inputClassName="w-0 min-w-0 flex-1"
+                            inputRef={priceInputRef}
+                            min={productSalesPriceMinDraft}
+                            max={productSalesPriceMaxDraft}
+                            error={productSalesPriceError}
+                            onMinChange={(value) => {
+                                setProductSalesPriceMinDraft(value)
+                                setProductSalesPriceError(null)
+                            }}
+                            onMaxChange={(value) => {
+                                setProductSalesPriceMaxDraft(value)
+                                setProductSalesPriceError(null)
+                            }}
+                        />
                     </fieldset>
                 </div>
             }

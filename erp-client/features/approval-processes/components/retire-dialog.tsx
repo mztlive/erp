@@ -1,7 +1,5 @@
 "use client"
 
-import * as React from "react"
-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -14,15 +12,11 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 
-import {
-    definitionErrorMessage,
-    isDefinitionVersionConflict,
-    newCommandKey,
-} from "../errors"
 import { documentTypeLabel, versionLabel } from "../labels"
 import { useRetireDefinitionMutation } from "../queries"
 import type { DefinitionDetailView } from "../types"
 import { buildLockRequest } from "../write-payload"
+import { useDefinitionLockCommand } from "./use-definition-lock-command"
 
 /**
  * 退役确认。退役后若无发布版本，该类型新单据创建将失败关闭。
@@ -45,34 +39,19 @@ export function RetireDialog({
     id?: string
 }) {
     const retire = useRetireDefinitionMutation()
-    const [error, setError] = React.useState<string | null>(null)
-    const [commandKey, setCommandKey] = React.useState(() =>
-        newCommandKey("retire"),
-    )
-
-    React.useEffect(() => {
-        if (!open) return
-        setError(null)
-        setCommandKey(newCommandKey("retire"))
-    }, [open, lockVersion])
-
-    const handleRetire = async () => {
-        setError(null)
-        try {
-            await retire.mutateAsync({
+    const { error, submit } = useDefinitionLockCommand({
+        prefix: "retire",
+        open,
+        lockVersion,
+        run: (commandKey) =>
+            retire.mutateAsync({
                 definitionId: detail.definition_id,
                 request: buildLockRequest(lockVersion, commandKey),
-            })
-            onOpenChange(false)
-            onRetired()
-        } catch (cause) {
-            setError(definitionErrorMessage(cause))
-            if (isDefinitionVersionConflict(cause)) {
-                setCommandKey(newCommandKey("retire"))
-                onConflict()
-            }
-        }
-    }
+            }),
+        onOpenChange,
+        onDone: onRetired,
+        onConflict,
+    })
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,7 +92,7 @@ export function RetireDialog({
                         type="button"
                         variant="destructive"
                         disabled={retire.isPending}
-                        onClick={() => void handleRetire()}
+                        onClick={() => void submit()}
                     >
                         {retire.isPending ? "正在退役…" : "确认退役"}
                     </LoadingButton>

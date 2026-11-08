@@ -8,12 +8,9 @@ import type { BackgroundJobView } from "@/lib/background-jobs"
 import { BrandImportDialog } from "@/features/master-data/components/brand/brand-import-dialog"
 import { UploadIcon } from "lucide-react"
 
-import { ListWorkSurface } from "@/components/business/list-workspace"
-import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
+import { DictionaryCompactWorkspace } from "@/features/master-data/components/list/dictionary-compact-workspace"
 import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
-import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
-import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
 import { BrandPreviewDialog } from "@/features/master-data/components/brand/brand-preview-dialog"
 import { BrandCardContent } from "@/features/master-data/components/brand/brand-card-content"
 import {
@@ -56,12 +53,6 @@ export function BrandsListPage() {
         searchInputRef,
     })
     const exportPending = state.exportPending
-    const { filters } = state
-    const hasActiveFilters =
-        filters.q.trim() !== "" ||
-        filters.lifecycleStatus !== "all" ||
-        filters.revisionTiming !== "all"
-    const listLoadFailed = state.listQuery.isError || !state.listQuery.data
 
     return (
         <ListPageFrame
@@ -95,66 +86,40 @@ export function BrandsListPage() {
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <ListWorkSurface
+            <DictionaryCompactWorkspace
+                listId="master-data-brands-list"
                 ariaLabel="品牌列表"
-                views={
-                    <LifecycleMetricStrip
-                        idPrefix="master-data-brands-list-metrics"
-                        metrics={state.syncedMetrics}
-                        metricKey={filters.metricKey}
-                        ariaLabel="品牌指标筛选"
-                        allLabel="全部品牌"
-                        hint="选择品牌查看详情"
-                        onChangeLifecycle={filters.changeLifecycle}
-                    />
+                metricsAriaLabel="品牌指标筛选"
+                allLabel="全部品牌"
+                hint="选择品牌查看详情"
+                countLabel="品牌"
+                searchPlaceholder={masterDataSearchPlaceholder("brands")}
+                codeLabel="品牌代码"
+                renderCard={(row) => <BrandCardContent row={row} />}
+                emptyTitle="还没有品牌资料"
+                emptyDescription="点击「新建」创建品牌，或使用「批量导入」一次建立多个品牌。"
+                emptyAction={
+                    state.canCreate ? (
+                        <MasterDataEmptyCreateButton
+                            id="master-data-brands-list-empty-create"
+                            onClick={() => state.setCreateOpen(true)}
+                        />
+                    ) : undefined
                 }
-                toolbar={
-                    <DictionaryListToolbar
-                        idPrefix="master-data-brands-list-toolbar"
-                        searchInputRef={searchInputRef}
-                        filters={filters}
-                        searchPlaceholder={masterDataSearchPlaceholder(
-                            "brands",
-                        )}
-                        countLabel="品牌"
-                        resultCount={
-                            state.listQuery.data ? state.rows.length : undefined
-                        }
-                        loading={state.listQuery.isFetching}
-                        failed={state.listQuery.isError}
-                    />
-                }
-                table={
-                    <DictionaryCompactList
-                        id="master-data-brands-list"
-                        rows={state.rows}
-                        codeLabel="品牌代码"
-                        renderCard={(row) => <BrandCardContent row={row} />}
-                        selectedId={state.previewId}
-                        pagination={filters.pagination}
-                        onPaginationChange={filters.changePagination}
-                        loading={state.listQuery.isFetching}
-                        listLoadFailed={listLoadFailed}
-                        error={state.listQuery.error}
-                        onRetry={() => void state.listQuery.refetch()}
-                        hasActiveFilters={hasActiveFilters}
-                        onClearFilters={filters.clearAllFilters}
-                        emptyTitle="还没有品牌资料"
-                        emptyDescription="点击「新建」创建品牌，或使用「批量导入」一次建立多个品牌。"
-                        emptyAction={
-                            state.canCreate ? (
-                                <MasterDataEmptyCreateButton
-                                    id="master-data-brands-list-empty-create"
-                                    onClick={() => state.setCreateOpen(true)}
-                                />
-                            ) : undefined
-                        }
-                        onPreview={(row) => {
-                            lastFocusedRowId.current = row.stableId
-                            state.setPreviewId(row.stableId)
-                        }}
-                    />
-                }
+                searchInputRef={searchInputRef}
+                filters={state.filters}
+                syncedMetrics={state.syncedMetrics}
+                rows={state.rows}
+                previewId={state.previewId}
+                fetching={state.listQuery.isFetching}
+                failed={state.listQuery.isError}
+                hasData={Boolean(state.listQuery.data)}
+                error={state.listQuery.error}
+                onRetry={() => void state.listQuery.refetch()}
+                onPreview={(row) => {
+                    lastFocusedRowId.current = row.stableId
+                    state.setPreviewId(row.stableId)
+                }}
             />
             <BrandPreviewDialog
                 row={state.previewRow}

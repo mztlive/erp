@@ -6,7 +6,12 @@ import * as React from "react"
 
 import { CategoryCombobox, OptionCombobox } from "@/components/business"
 import { DirectoryFilterControl } from "@/features/master-data/components/list/directory-filter-control"
-import { DirectoryOptionFilter } from "@/features/master-data/components/list/directory-option-filter"
+import {
+    DirectoryOptionFilter,
+    brandDirectoryFilterBindings,
+    supplierDirectoryFilterBindings,
+} from "@/features/master-data/components/list/directory-option-filter"
+import { GrossPriceRangeInputs } from "@/features/master-data/components/list/gross-price-range-inputs"
 import {
     directoryOptionEmptyLabel,
     productFilterDirectoryState,
@@ -17,7 +22,6 @@ import {
     ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { Input } from "@/components/ui/input"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import type { ProductAppliedChip } from "@/features/master-data/hooks/use-product-list-state"
@@ -323,121 +327,52 @@ export function ProductListToolbar({
                                 />
                             </ListWorkspaceFilterField>
                             <DirectoryOptionFilter
-                                permission="product_brand:list"
-                                unavailable={directory.brandUnavailable}
+                                {...brandDirectoryFilterBindings(
+                                    directory,
+                                    () =>
+                                        productFilterOptionsQuery.refetch({
+                                            throwOnError: true,
+                                        }),
+                                )}
                                 id={`${prefix}-brand`}
-                                label="品牌"
                                 comboboxClassName="w-full min-w-0"
                                 ariaLabel="商品品牌"
                                 value={f.productBrandIdDraft}
                                 onValueChange={f.setProductBrandIdDraft}
-                                options={directory.brands}
-                                loading={directory.fetching}
-                                placeholder="全部品牌"
-                                searchPlaceholder="搜索品牌名称或代码"
-                                unavailableLabel="当前账号无品牌查询权限"
-                                noScope={directory.brandNoScope}
-                                failed={directory.failed}
-                                emptyLabel="没有符合条件的品牌"
-                                error={directory.error}
-                                onRetry={directory.refetch}
-                                onRefresh={() =>
-                                    productFilterOptionsQuery.refetch({
-                                        throwOnError: true,
-                                    })
-                                }
                             />
                             <DirectoryOptionFilter
-                                permission="supplier:list"
-                                unavailable={directory.supplierUnavailable}
+                                {...supplierDirectoryFilterBindings(
+                                    directory,
+                                    () =>
+                                        productFilterOptionsQuery.refetch({
+                                            throwOnError: true,
+                                        }),
+                                )}
                                 id={`${prefix}-supplier`}
-                                label="供应商"
                                 comboboxClassName="w-full min-w-0"
                                 ariaLabel="供应商"
                                 value={f.productSupplierIdDraft}
                                 onValueChange={f.setProductSupplierIdDraft}
-                                options={directory.suppliers}
-                                loading={directory.fetching}
-                                placeholder="全部供应商"
-                                searchPlaceholder="搜索供应商名称或代码"
-                                unavailableLabel="当前账号无供应商查询权限"
-                                noScope={directory.supplierNoScope}
-                                failed={directory.failed}
-                                emptyLabel="没有符合条件的供应商"
-                                error={directory.error}
-                                onRetry={directory.refetch}
-                                onRefresh={() =>
-                                    productFilterOptionsQuery.refetch({
-                                        throwOnError: true,
-                                    })
-                                }
                             />
-                            <ListWorkspaceFilterField
-                                className="sm:col-span-2"
-                                label="含税售价 · 元"
-                            >
-                                <div className="flex min-w-0 items-center gap-2">
-                                    <Input
-                                        id={`${prefix}-price-min`}
-                                        ref={priceInputRef}
-                                        className="h-control w-0 min-w-0 flex-1"
-                                        value={f.productSalesPriceMinDraft}
-                                        onChange={(event) => {
-                                            f.setProductSalesPriceMinDraft(
-                                                event.target.value,
-                                            )
-                                            f.setProductSalesPriceError(null)
-                                        }}
-                                        inputMode="decimal"
-                                        autoComplete="off"
-                                        placeholder="最低价"
-                                        aria-label="最低一件代发价"
-                                        aria-invalid={Boolean(
-                                            f.productSalesPriceError,
-                                        )}
-                                        aria-describedby={
-                                            f.productSalesPriceError
-                                                ? priceErrorId
-                                                : undefined
-                                        }
-                                    />
-                                    <span className="text-xs text-muted-foreground">
-                                        至
-                                    </span>
-                                    <Input
-                                        id={`${prefix}-price-max`}
-                                        className="h-control w-0 min-w-0 flex-1"
-                                        value={f.productSalesPriceMaxDraft}
-                                        onChange={(event) => {
-                                            f.setProductSalesPriceMaxDraft(
-                                                event.target.value,
-                                            )
-                                            f.setProductSalesPriceError(null)
-                                        }}
-                                        inputMode="decimal"
-                                        autoComplete="off"
-                                        placeholder="最高价"
-                                        aria-label="最高一件代发价"
-                                        aria-invalid={Boolean(
-                                            f.productSalesPriceError,
-                                        )}
-                                        aria-describedby={
-                                            f.productSalesPriceError
-                                                ? priceErrorId
-                                                : undefined
-                                        }
-                                    />
-                                </div>
-                                {f.productSalesPriceError ? (
-                                    <p
-                                        id={priceErrorId}
-                                        className="text-xs text-destructive"
-                                        role="alert"
-                                    >
-                                        {f.productSalesPriceError}
-                                    </p>
-                                ) : null}
-                            </ListWorkspaceFilterField>
+                            <GrossPriceRangeInputs
+                                fieldClassName="sm:col-span-2"
+                                minId={`${prefix}-price-min`}
+                                maxId={`${prefix}-price-max`}
+                                errorId={priceErrorId}
+                                inputClassName="h-control w-0 min-w-0 flex-1"
+                                inputRef={priceInputRef}
+                                min={f.productSalesPriceMinDraft}
+                                max={f.productSalesPriceMaxDraft}
+                                error={f.productSalesPriceError}
+                                onMinChange={(value) => {
+                                    f.setProductSalesPriceMinDraft(value)
+                                    f.setProductSalesPriceError(null)
+                                }}
+                                onMaxChange={(value) => {
+                                    f.setProductSalesPriceMaxDraft(value)
+                                    f.setProductSalesPriceError(null)
+                                }}
+                            />
                         </div>
                     </fieldset>
                 </div>

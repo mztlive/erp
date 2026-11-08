@@ -4,10 +4,8 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { useRouter } from "next/navigation"
 import { DataTable, MoneyValue, QuantityValue } from "@/components/business"
-import {
-    ListSearchField,
-    ListWorkSurface,
-} from "@/components/business/list-workspace"
+import { ListWorkSurface } from "@/components/business/list-workspace"
+import { PortalListSearchForm } from "../components/portal-list-search-form"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePortalOfferings } from "../hooks/queries"
@@ -154,29 +152,18 @@ export function PortalOfferingsPage() {
                     </span>
                 }
                 toolbar={
-                    <form
-                        className="flex w-full flex-wrap items-center gap-2 [&>[data-slot=input-group]]:w-full [&>[data-slot=input-group]]:sm:w-96"
-                        onSubmit={(event) => {
-                            event.preventDefault()
+                    <PortalListSearchForm
+                        searchId="supplier-portal-offerings-search"
+                        searchLabel="商品名称或订货编码"
+                        placeholder="商品名称或订货编码"
+                        value={search}
+                        onChange={setSearch}
+                        submitId="supplier-portal-offerings-search-submit"
+                        onSubmit={() => {
                             setQ(search.trim())
                             setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
-                    >
-                        <ListSearchField
-                            id="supplier-portal-offerings-search"
-                            aria-label="商品名称或订货编码"
-                            placeholder="商品名称或订货编码"
-                            value={search}
-                            onChange={setSearch}
-                        />
-                        <Button
-                            id="supplier-portal-offerings-search-submit"
-                            type="submit"
-                            variant="outline"
-                        >
-                            搜索
-                        </Button>
-                    </form>
+                    />
                 }
                 table={
                     <DataTable

@@ -105,6 +105,26 @@ export function useSalesOrderCreateSubmission({
             value.orderBasis === "evidence"
                 ? (value.evidenceAttachments?.map((file) => file.id) ?? [])
                 : []
+        const acceptFormal = (slot: "submit-existing" | "create") => {
+            commandLedger.settle(slot, "succeeded")
+            setFormalFailure(null)
+        }
+        const rejectFormal = (
+            slot: "submit-existing" | "create",
+            error: unknown,
+            copy: { unknown: string; failed: string },
+        ) => {
+            const settlement = classifyFormalCommandError(error)
+            commandLedger.settle(slot, settlement)
+            setFormalFailure({
+                error,
+                unknown: settlement === "unknown",
+                description:
+                    settlement === "unknown"
+                        ? copy.unknown
+                        : getErrorMessage(error, copy.failed),
+            })
+        }
         const draftContent = {
             nature: value.nature,
             settlementPartyId: value.settlementPartyId,
@@ -176,18 +196,12 @@ export function useSalesOrderCreateSubmission({
                     ...command.payload,
                     idempotencyKey: command.idempotencyKey,
                 })
-                commandLedger.settle("submit-existing", "succeeded")
-                setFormalFailure(null)
+                acceptFormal("submit-existing")
             } catch (error) {
-                const settlement = classifyFormalCommandError(error)
-                commandLedger.settle("submit-existing", settlement)
-                setFormalFailure({
-                    error,
-                    unknown: settlement === "unknown",
-                    description:
-                        settlement === "unknown"
-                            ? "当前输入已保留，请使用本次操作重试；确认前不要再次提交。"
-                            : getErrorMessage(error, "提交未完成，请重试。"),
+                rejectFormal("submit-existing", error, {
+                    unknown:
+                        "当前输入已保留，请使用本次操作重试；确认前不要再次提交。",
+                    failed: "提交未完成，请重试。",
                 })
                 throw error
             }
@@ -227,18 +241,12 @@ export function useSalesOrderCreateSubmission({
                 ...command.payload,
                 idempotencyKey: command.idempotencyKey,
             })
-            commandLedger.settle("create", "succeeded")
-            setFormalFailure(null)
+            acceptFormal("create")
         } catch (error) {
-            const settlement = classifyFormalCommandError(error)
-            commandLedger.settle("create", settlement)
-            setFormalFailure({
-                error,
-                unknown: settlement === "unknown",
-                description:
-                    settlement === "unknown"
-                        ? "当前整单输入已保留，请使用本次操作重试；确认前不要再次创建。"
-                        : getErrorMessage(error, "销售单未创建，请重试。"),
+            rejectFormal("create", error, {
+                unknown:
+                    "当前整单输入已保留，请使用本次操作重试；确认前不要再次创建。",
+                failed: "销售单未创建，请重试。",
             })
             throw error
         }

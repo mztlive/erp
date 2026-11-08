@@ -3,10 +3,8 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/business"
-import {
-    ListSearchField,
-    ListWorkSurface,
-} from "@/components/business/list-workspace"
+import { ListWorkSurface } from "@/components/business/list-workspace"
+import { PortalListSearchForm } from "../components/portal-list-search-form"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePortalCatalog } from "../hooks/queries"
@@ -93,29 +91,18 @@ export function PortalQuotesPage() {
                     </span>
                 }
                 toolbar={
-                    <form
-                        className="flex w-full flex-wrap items-center gap-2 [&>[data-slot=input-group]]:w-full [&>[data-slot=input-group]]:sm:w-96"
-                        onSubmit={(event) => {
-                            event.preventDefault()
+                    <PortalListSearchForm
+                        searchId="supplier-portal-catalog-search"
+                        searchLabel="商品或公司SKU编号"
+                        placeholder="商品或公司 SKU 编号"
+                        value={search}
+                        onChange={setSearch}
+                        submitId="supplier-portal-catalog-search-submit"
+                        onSubmit={() => {
                             setQ(search.trim())
                             setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
-                    >
-                        <ListSearchField
-                            id="supplier-portal-catalog-search"
-                            aria-label="商品或公司SKU编号"
-                            value={search}
-                            onChange={setSearch}
-                            placeholder="商品或公司 SKU 编号"
-                        />
-                        <Button
-                            id="supplier-portal-catalog-search-submit"
-                            type="submit"
-                            variant="outline"
-                        >
-                            搜索
-                        </Button>
-                    </form>
+                    />
                 }
                 table={
                     <DataTable

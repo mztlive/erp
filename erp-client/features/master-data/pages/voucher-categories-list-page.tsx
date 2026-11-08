@@ -4,11 +4,8 @@ import { useState } from "react"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { VoucherCategoryStatusDialog } from "@/features/master-data/components/list/voucher-category-status-dialog"
 
-import { ListWorkSurface } from "@/components/business/list-workspace"
-import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
-import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
+import { DictionaryCompactWorkspace } from "@/features/master-data/components/list/dictionary-compact-workspace"
 import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
-import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
 import { VoucherCategoryPreviewSheet } from "@/features/master-data/components/list/voucher-category-preview-sheet"
@@ -34,10 +31,6 @@ export function VoucherCategoriesListPage() {
         searchInputRef,
     })
     const exportPending = state.exportPending
-    const { filters } = state
-    const hasActiveFilters =
-        filters.q.trim() !== "" || filters.lifecycleStatus !== "all"
-    const listLoadFailed = state.listQuery.isError || !state.listQuery.data
 
     return (
         <ListPageFrame
@@ -62,66 +55,42 @@ export function VoucherCategoriesListPage() {
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
-            <ListWorkSurface
+            <DictionaryCompactWorkspace
+                listId="master-data-voucher-categories-list"
                 ariaLabel="卡券类目列表"
-                views={
-                    <LifecycleMetricStrip
-                        idPrefix="master-data-voucher-categories-list-metrics"
-                        metrics={state.syncedMetrics}
-                        metricKey={filters.metricKey}
-                        ariaLabel="卡券类目指标筛选"
-                        allLabel="全部类目"
-                        hint="选择类目查看详情"
-                        onChangeLifecycle={filters.changeLifecycle}
-                    />
+                metricsAriaLabel="卡券类目指标筛选"
+                allLabel="全部类目"
+                hint="选择类目查看详情"
+                countLabel="卡券类目"
+                showRevisionFilter={false}
+                searchPlaceholder={masterDataSearchPlaceholder(
+                    "voucher-categories",
+                )}
+                codeLabel="类目编号"
+                emptyTitle="还没有卡券类目资料"
+                emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
+                emptyAction={
+                    state.canCreate ? (
+                        <MasterDataEmptyCreateButton
+                            id="master-data-voucher-categories-list-empty-create"
+                            onClick={() => state.setCreateOpen(true)}
+                        />
+                    ) : undefined
                 }
-                toolbar={
-                    <DictionaryListToolbar
-                        idPrefix="master-data-voucher-categories-list-toolbar"
-                        searchInputRef={searchInputRef}
-                        filters={filters}
-                        showRevisionFilter={false}
-                        searchPlaceholder={masterDataSearchPlaceholder(
-                            "voucher-categories",
-                        )}
-                        countLabel="卡券类目"
-                        resultCount={
-                            state.listQuery.data ? state.rows.length : undefined
-                        }
-                        loading={state.listQuery.isFetching}
-                        failed={state.listQuery.isError}
-                    />
-                }
-                table={
-                    <DictionaryCompactList
-                        id="master-data-voucher-categories-list"
-                        rows={state.rows}
-                        codeLabel="类目编号"
-                        selectedId={state.previewId}
-                        pagination={filters.pagination}
-                        onPaginationChange={filters.changePagination}
-                        loading={state.listQuery.isFetching}
-                        listLoadFailed={listLoadFailed}
-                        error={state.listQuery.error}
-                        onRetry={() => void state.listQuery.refetch()}
-                        hasActiveFilters={hasActiveFilters}
-                        onClearFilters={filters.clearAllFilters}
-                        emptyTitle="还没有卡券类目资料"
-                        emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
-                        emptyAction={
-                            state.canCreate ? (
-                                <MasterDataEmptyCreateButton
-                                    id="master-data-voucher-categories-list-empty-create"
-                                    onClick={() => state.setCreateOpen(true)}
-                                />
-                            ) : undefined
-                        }
-                        onPreview={(row) => {
-                            lastFocusedRowId.current = row.stableId
-                            state.setPreviewId(row.stableId)
-                        }}
-                    />
-                }
+                searchInputRef={searchInputRef}
+                filters={state.filters}
+                syncedMetrics={state.syncedMetrics}
+                rows={state.rows}
+                previewId={state.previewId}
+                fetching={state.listQuery.isFetching}
+                failed={state.listQuery.isError}
+                hasData={state.listQuery.data != null}
+                error={state.listQuery.error}
+                onRetry={() => void state.listQuery.refetch()}
+                onPreview={(row) => {
+                    lastFocusedRowId.current = row.stableId
+                    state.setPreviewId(row.stableId)
+                }}
             />
             <VoucherCategoryPreviewSheet
                 row={state.previewRow}
