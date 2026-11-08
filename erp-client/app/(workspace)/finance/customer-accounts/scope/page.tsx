@@ -1,21 +1,11 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { PageScaffold } from "@/components/business"
+import { ScopePagePulse } from "@/components/layout/page-pulse"
 import { ReceivableScopePage } from "@/features/customer-receivables/pages/receivable-scope-page"
 
 export const metadata: Metadata = {
     title: "客户往来（按数据范围）",
-}
-
-function ScopeFallback() {
-    return (
-        <PageScaffold>
-            <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-            <div className="h-12 animate-pulse rounded-lg bg-muted" />
-            <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
-        </PageScaffold>
-    )
 }
 
 /**
@@ -26,7 +16,7 @@ function ScopeFallback() {
  */
 export default function Page() {
     return (
-        <Suspense fallback={<ScopeFallback />}>
+        <Suspense fallback={<ScopePagePulse />}>
             <ReceivableScopePage />
         </Suspense>
     )

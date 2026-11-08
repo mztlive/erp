@@ -1,3 +1,4 @@
+import { PagePulseShell } from "@/components/layout/page-pulse"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 
 function AccessAuditFallback() {
     return (
-        <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:gap-4 md:px-6 md:py-5">
+        <PagePulseShell>
             <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
             <div className="h-12 animate-pulse rounded-xl bg-muted" />
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -21,7 +22,7 @@ function AccessAuditFallback() {
                 ))}
             </div>
             <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
-        </div>
+        </PagePulseShell>
     )
 }
 

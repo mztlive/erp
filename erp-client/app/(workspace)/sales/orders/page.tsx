@@ -1,3 +1,4 @@
+import { PagePulseBars } from "@/components/layout/page-pulse"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
@@ -10,12 +11,14 @@ export const metadata: Metadata = {
 
 function SalesOrdersListFallback() {
     return (
-        <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:gap-4 md:px-6 md:py-5">
-            <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-            <div className="h-16 animate-pulse rounded-xl bg-muted" />
-            <div className="h-24 animate-pulse rounded-lg bg-muted" />
-            <div className="h-72 animate-pulse rounded-lg bg-muted" />
-        </div>
+        <PagePulseBars
+            bars={[
+                "h-10 w-56 animate-pulse rounded-lg bg-muted",
+                "h-16 animate-pulse rounded-xl bg-muted",
+                "h-24 animate-pulse rounded-lg bg-muted",
+                "h-72 animate-pulse rounded-lg bg-muted",
+            ]}
+        />
     )
 }
 

@@ -22,7 +22,8 @@ import { SellableItemsFilterBar } from "@/features/master-data/components/list/s
 import type { SellableAppliedChip } from "@/features/master-data/components/list/sellable-list-toolbar"
 import { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import {
-    directorySelectionLabel,
+    directoryBrandLabel,
+    directoryCategoryLabel,
     productFilterDirectoryState,
 } from "@/features/master-data/lib/product-filter-directory"
 import { PRICE_FILTER_LABELS } from "@/lib/price-filter"
@@ -114,19 +115,13 @@ export function SellableSkuSelectDialog({
     }, [open])
 
     const directory = productFilterDirectoryState(productFilterOptionsQuery)
-    const selectedCategoryLabel = directorySelectionLabel(
+    const selectedCategoryLabel = directoryCategoryLabel(
+        directory,
         filters.productCategoryId,
-        directory.categories,
-        (option) => option.categoryId,
-        (option) => option.categoryName,
-        directory,
     )
-    const selectedBrandLabel = directorySelectionLabel(
-        filters.productBrandId,
-        directory.brands,
-        (option) => option.value,
-        (option) => option.label,
+    const selectedBrandLabel = directoryBrandLabel(
         directory,
+        filters.productBrandId,
     )
     const appliedChips = React.useMemo<readonly SellableAppliedChip[]>(() => {
         const chips: SellableAppliedChip[] = []

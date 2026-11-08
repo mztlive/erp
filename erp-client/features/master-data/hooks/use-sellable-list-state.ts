@@ -12,7 +12,8 @@ import {
     buildSellableTableDescription,
 } from "@/features/master-data/lib/master-data-list-summaries"
 import {
-    directorySelectionLabel,
+    directoryBrandLabel,
+    directoryCategoryLabel,
     productFilterDirectoryState,
 } from "@/features/master-data/lib/product-filter-directory"
 import { sellableDeliveryFilterText } from "@/features/master-data/lib/sellable-delivery-filter"
@@ -86,19 +87,13 @@ export function useSellableListState(
         [previewId, rows],
     )
     const directory = productFilterDirectoryState(productFilterOptionsQuery)
-    const selectedCategoryLabel = directorySelectionLabel(
+    const selectedCategoryLabel = directoryCategoryLabel(
+        directory,
         filters.productCategoryId,
-        directory.categories,
-        (option) => option.categoryId,
-        (option) => option.categoryName,
-        directory,
     )
-    const selectedBrandLabel = directorySelectionLabel(
-        filters.productBrandId,
-        directory.brands,
-        (option) => option.value,
-        (option) => option.label,
+    const selectedBrandLabel = directoryBrandLabel(
         directory,
+        filters.productBrandId,
     )
     /** 所有已生效条件均可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<readonly SellableAppliedChip[]>(() => {

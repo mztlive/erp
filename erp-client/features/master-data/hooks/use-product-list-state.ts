@@ -27,7 +27,9 @@ import {
 } from "@/features/master-data/lib/list-filters"
 import { revisionTimingFilterLabel } from "@/features/master-data/lib/copy"
 import {
-    directorySelectionLabel,
+    directoryBrandLabel,
+    directoryCategoryLabel,
+    directorySupplierLabel,
     productFilterDirectoryState,
 } from "@/features/master-data/lib/product-filter-directory"
 import { resourceLabel } from "@/features/master-data/lib/data"
@@ -129,26 +131,17 @@ export function useProductListState(
         [supplierOfferingsQuery.data],
     )
     const directory = productFilterDirectoryState(productFilterOptionsQuery)
-    const selectedCategoryLabel = directorySelectionLabel(
+    const selectedCategoryLabel = directoryCategoryLabel(
+        directory,
         filters.productCategoryId,
-        directory.categories,
-        (option) => option.categoryId,
-        (option) => option.categoryName,
-        directory,
     )
-    const selectedBrandLabel = directorySelectionLabel(
+    const selectedBrandLabel = directoryBrandLabel(
+        directory,
         filters.productBrandId,
-        directory.brands,
-        (option) => option.value,
-        (option) => option.label,
-        directory,
     )
-    const selectedSupplierLabel = directorySelectionLabel(
-        filters.productSupplierId,
-        directory.suppliers,
-        (option) => option.value,
-        (option) => option.label,
+    const selectedSupplierLabel = directorySupplierLabel(
         directory,
+        filters.productSupplierId,
     )
     /** 所有已生效条件均可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<readonly ProductAppliedChip[]>(() => {

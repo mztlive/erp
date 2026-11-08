@@ -24,6 +24,7 @@ import {
     workspaceUrl,
     type WorkspaceFrameState,
 } from "@/lib/workspace-tabs"
+import { WorkspaceOpeningMark } from "./workspace-opening-mark"
 import { WorkspaceTabBar } from "./workspace-tab-bar"
 
 export type WorkspaceTab = WorkspaceFrameState & {
@@ -381,9 +382,10 @@ export function WorkspaceTabs({
                             {!tab.ready ? (
                                 <div
                                     role="status"
-                                    className="absolute inset-0 flex items-center justify-center bg-background text-sm text-muted-foreground"
+                                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background text-sm text-muted-foreground"
                                 >
-                                    正在打开工作页…
+                                    <WorkspaceOpeningMark />
+                                    <span>正在打开工作页…</span>
                                 </div>
                             ) : null}
                             <iframe

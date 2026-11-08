@@ -1,0 +1,61 @@
+.workspace-opening-mark .workspace-opening-chrome,
+.workspace-opening-mark .workspace-opening-line {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.25;
+    stroke-linecap: round;
+}
+
+.workspace-opening-mark .workspace-opening-chrome {
+    opacity: 0.4;
+}
+
+.workspace-opening-mark .workspace-opening-line {
+    opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .workspace-opening-mark .workspace-opening-line {
+        /* 线长用 px，且 SVG 与 viewBox 1:1。无单位值会被编译成 1px，描边几乎不动。 */
+        stroke-dasharray: var(--len);
+        stroke-dashoffset: var(--len);
+        opacity: 0.35;
+        animation-name: workspace-opening-line;
+        animation-duration: 1.2s;
+        animation-timing-function: ease-in-out;
+        animation-iteration-count: infinite;
+    }
+
+    .workspace-opening-mark .workspace-opening-line-a {
+        --len: 22px;
+    }
+
+    .workspace-opening-mark .workspace-opening-line-b {
+        --len: 14px;
+        animation-delay: 150ms;
+    }
+
+    .workspace-opening-mark .workspace-opening-line-c {
+        --len: 18px;
+        animation-delay: 300ms;
+    }
+}
+
+@keyframes workspace-opening-line {
+    0% {
+        stroke-dashoffset: var(--len);
+        opacity: 0.2;
+    }
+    35% {
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+    70% {
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+    100% {
+        stroke-dashoffset: var(--len);
+        opacity: 0.2;
+    }
+}

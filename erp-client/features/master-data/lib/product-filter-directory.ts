@@ -85,6 +85,45 @@ export function directorySelectionLabel<T>(
     return found ? labelOf(found) : MISSING_SELECTION_UNAVAILABLE_LABEL
 }
 
+export function directoryCategoryLabel(
+    directory: ProductFilterDirectoryState,
+    categoryId: string | null | undefined,
+) {
+    return directorySelectionLabel(
+        categoryId,
+        directory.categories,
+        (option) => option.categoryId,
+        (option) => option.categoryName,
+        directory,
+    )
+}
+
+export function directoryBrandLabel(
+    directory: ProductFilterDirectoryState,
+    brandId: string | null | undefined,
+) {
+    return directorySelectionLabel(
+        brandId,
+        directory.brands,
+        (option) => option.value,
+        (option) => option.label,
+        directory,
+    )
+}
+
+export function directorySupplierLabel(
+    directory: ProductFilterDirectoryState,
+    supplierId: string | null | undefined,
+) {
+    return directorySelectionLabel(
+        supplierId,
+        directory.suppliers,
+        (option) => option.value,
+        (option) => option.label,
+        directory,
+    )
+}
+
 /** 缺动作权限沿用原拒绝文案；no_scope 与网络失败分开，不互相伪装。 */
 export function directoryOptionEmptyLabel(input: {
     unavailable: boolean
