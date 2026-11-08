@@ -3,8 +3,7 @@ import type {
     FulfillmentFormalOutcome,
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
-
-type ForbidKey<T, K extends string> = K extends keyof T ? never : true
+import { stripApprovalField, type ForbidKey } from "@/lib/no-approval"
 
 /** 编译期证明：仓发 HTTP DTO 不得携带审批绑定。 */
 export const DELIVERY_DTO_HAS_NO_APPROVAL: ForbidKey<
@@ -34,12 +33,5 @@ export const DELIVERY_OUTCOME_HAS_NO_APPROVAL: ForbidKey<
 export function stripDeliveryApprovalField<T extends object>(
     dto: T,
 ): Omit<T, "approval"> {
-    if (!("approval" in dto)) {
-        return dto
-    }
-    const { approval: _discarded, ...rest } = dto as T & {
-        approval?: unknown
-    }
-    void _discarded
-    return rest
+    return stripApprovalField(dto)
 }

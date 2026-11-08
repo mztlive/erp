@@ -67,3 +67,35 @@ export function useSearchHotkey(
         return () => window.removeEventListener("keydown", onKey)
     }, [overlaySelector, target])
 }
+
+/**
+ * `/` 聚焦搜索框。判定与连接列表、供给列表原来的监听一致：
+ * 只跳过 input / textarea，不看修饰键，Dialog / Sheet 打开时不抢焦点。
+ *
+ * @param inputRef 页面持有的搜索框 ref。
+ */
+export function useLooseSearchHotkey(
+    inputRef: React.RefObject<HTMLInputElement | null>,
+) {
+    React.useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if (
+                event.key === "/" &&
+                !(event.target instanceof HTMLInputElement) &&
+                !(event.target instanceof HTMLTextAreaElement)
+            ) {
+                if (
+                    document.querySelector(
+                        '[role="dialog"], [data-slot="sheet"]',
+                    )
+                ) {
+                    return
+                }
+                event.preventDefault()
+                inputRef.current?.focus()
+            }
+        }
+        window.addEventListener("keydown", onKey)
+        return () => window.removeEventListener("keydown", onKey)
+    }, [inputRef])
+}

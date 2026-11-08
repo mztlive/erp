@@ -5,6 +5,7 @@ import { useSearchParams } from "@/lib/navigation"
 
 import { countScopeIds, parseScopeIdList } from "@/lib/funds-scope"
 import { useScopeUrlPagination } from "@/lib/use-scope-url-pagination"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import type { InvoiceRequestScopeQuery } from "@/features/invoice-requests/scoped"
 
 export type InvoiceRequestScopeFilterKey =
@@ -41,7 +42,11 @@ export function useInvoiceRequestScopeUrlState() {
     const { pageFromUrl, pagination, patchUrl, handlePaginationChange } =
         useScopeUrlPagination({ pageSize, scopeVersion })
 
-    const [searchDraft, setSearchDraft] = React.useState(qParam)
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const { searchDraft, setSearchDraft } = useSearchDraft(qParam, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     const [salesOwnerDraft, setSalesOwnerDraft] = React.useState(
         salesOwnerUserIds ?? "",
     )
@@ -52,7 +57,6 @@ export function useInvoiceRequestScopeUrlState() {
     const [orgDraft, setOrgDraft] = React.useState(orgUnitIds ?? "")
     const [descendantsDraft, setDescendantsDraft] =
         React.useState(includeDescendants)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [panelOpen, setPanelOpen] = React.useState(false)
 
     const query: InvoiceRequestScopeQuery = React.useMemo(
@@ -138,7 +142,7 @@ export function useInvoiceRequestScopeUrlState() {
             if (key === "orgUnitIds") patch.includeDescendants = null
             patchUrl(patch, { replace: true })
         },
-        [patchUrl],
+        [patchUrl, setSearchDraft],
     )
 
     const clearFilters = React.useCallback(() => {
@@ -164,7 +168,7 @@ export function useInvoiceRequestScopeUrlState() {
             },
             { replace: true },
         )
-    }, [patchUrl])
+    }, [patchUrl, setSearchDraft])
 
     /** 只清申请人、当前开票处理人和业务组织草稿；保留搜索与负责销售。 */
     const resetMoreFilters = React.useCallback(() => {
@@ -235,9 +239,6 @@ export function useInvoiceRequestScopeUrlState() {
         descendantsDraft !== includeDescendants
 
     React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(qParam)
-        }
         setSalesOwnerDraft(salesOwnerUserIds ?? "")
         setApplicantDraft(applicantUserIds ?? "")
         setHandlerDraft(handlerUserIds ?? "")
@@ -248,7 +249,6 @@ export function useInvoiceRequestScopeUrlState() {
         handlerUserIds,
         includeDescendants,
         orgUnitIds,
-        qParam,
         salesOwnerUserIds,
     ])
 

@@ -21,7 +21,7 @@ import {
     SettlementPartySearchCombobox,
 } from "@/features/entity-selectors"
 import { parseDecimal } from "@/lib/fixed-decimal"
-import { isApiError } from "@/lib/api/errors"
+import { isUncertainDepositCommandError } from "@/features/supplier-deposits/lib/command-error"
 import { useDepositCommand } from "../hooks/queries"
 import type { AccountDetail, DepositCommand, RechargeRequest } from "../types"
 
@@ -325,10 +325,7 @@ export function DepositCommandDialog({
                 await mutation.mutateAsync(command)
                 onOpenChange(false)
             } catch (error) {
-                const uncertain =
-                    !isApiError(error) ||
-                    ["Network", "Parse", "Unknown"].includes(error.kind) ||
-                    (error.status ?? 0) >= 500
+                const uncertain = isUncertainDepositCommandError(error)
                 setUnknown(uncertain)
                 if (!uncertain) frozen.current = null
                 applyApiFormError(form, error)
@@ -388,12 +385,7 @@ export function DepositCommandDialog({
                         await mutation.mutateAsync(command)
                         onOpenChange(false)
                     } catch (error) {
-                        const uncertain =
-                            !isApiError(error) ||
-                            ["Network", "Parse", "Unknown"].includes(
-                                error.kind,
-                            ) ||
-                            (error.status ?? 0) >= 500
+                        const uncertain = isUncertainDepositCommandError(error)
                         setUnknown(uncertain)
                         if (!uncertain) frozen.current = null
                         throw error

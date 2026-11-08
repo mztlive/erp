@@ -14,6 +14,8 @@ import {
     type AvailabilityStatus,
     type OfferingSourceType,
 } from "@/features/supplier-offerings/types"
+import { useSearchDraft } from "@/lib/use-search-draft"
+import { useLooseSearchHotkey } from "@/lib/use-search-hotkey"
 
 export type OfferingSourceFilter = OfferingSourceType | "all"
 export type AvailabilityStatusFilter = AvailabilityStatus | "all"
@@ -150,7 +152,11 @@ export function useSupplierOfferingsPageState() {
         urlState.ownerUserIds ||
         urlState.procurementOwnerUserIds,
     )
-    const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
+    const { searchDraft, setSearchDraft } = useSearchDraft(urlState.q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
+    useLooseSearchHotkey(searchInputRef)
     const [skuIdDraft, setSkuIdDraft] = React.useState<string | null>(
         urlState.skuId ?? null,
     )
@@ -287,7 +293,7 @@ export function useSupplierOfferingsPageState() {
                 scopeVersion: undefined,
             })
         },
-        [clearSkuLock, patchUrl],
+        [clearSkuLock, patchUrl, setSearchDraft],
     )
 
     /**
@@ -350,37 +356,7 @@ export function useSupplierOfferingsPageState() {
             scopeVersion: undefined,
             page: 1,
         })
-    }, [patchUrl, skuLocked])
-
-    // `/` 聚焦搜索框；Dialog / Sheet 打开时不得聚焦背景搜索框（§3.2、§14.4）。
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key === "/" &&
-                !(event.target instanceof HTMLInputElement) &&
-                !(event.target instanceof HTMLTextAreaElement)
-            ) {
-                if (
-                    document.querySelector(
-                        '[role="dialog"], [data-slot="sheet"]',
-                    )
-                ) {
-                    return
-                }
-                event.preventDefault()
-                searchInputRef.current?.focus()
-            }
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
-
-    // URL 回填关键词草稿（后退/前进/刷新/清除）；正在编辑时做焦点保护（§5.4）。
-    React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(urlState.q ?? "")
-        }
-    }, [urlState.q, searchInputRef])
+    }, [patchUrl, setSearchDraft, skuLocked])
 
     // URL 回填结构化草稿；展开态由初始值、用户操作与提交结果管理（§5.4、§5.5）。
     React.useEffect(() => {

@@ -4,7 +4,8 @@ import { ArrowUpRightIcon } from "lucide-react"
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, TableRowActions } from "@/components/business"
+import { TableRowActions } from "@/components/business"
+import { inventoryStatusColumn } from "@/features/inventory/components/columns/status-column"
 import { WarehouseSkuIdentity } from "@/features/inventory/components/columns/warehouse-sku-cell"
 import type { StockReservationRow } from "@/features/inventory/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -61,18 +62,7 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
                 </div>
             ),
         },
-        {
-            id: "status",
-            header: "状态",
-            meta: { label: "状态", width: "status" },
-            cell: ({ row }) => (
-                <BusinessStatusBadge
-                    context="list"
-                    label={row.original.statusLabel}
-                    tone={row.original.statusTone}
-                />
-            ),
-        },
+        inventoryStatusColumn<StockReservationRow>(),
         {
             id: "source",
             header: "入库来源",

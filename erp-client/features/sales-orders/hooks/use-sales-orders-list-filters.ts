@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { useSearchDraft } from "@/lib/use-search-draft"
+
 import {
     EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
     filterDraftFromUrl,
@@ -34,7 +36,7 @@ export function useSalesOrdersListFilters(
     url: SalesOrdersUrlState,
     pushUrl: (patch: Partial<SalesOrdersUrlState>) => void,
 ) {
-    const [searchDraft, setSearchDraft] = React.useState(url.search ?? "")
+    const { searchDraft, setSearchDraft } = useSearchDraft(url.search ?? "")
     const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
     const [filterDraft, setFilterDraft] = React.useState(() =>
         filterDraftFromUrl(url),
@@ -65,7 +67,6 @@ export function useSalesOrdersListFilters(
 
     // URL 回填只同步草稿；深链条件显示为已生效标签，不自动打开浮层。
     React.useEffect(() => {
-        setSearchDraft(search ?? "")
         setFilterDraft(
             filterDraftFromUrl({
                 customerId,
@@ -105,7 +106,6 @@ export function useSalesOrdersListFilters(
         nature,
         origin,
         reviewStatus,
-        search,
     ])
 
     const applyFilters = React.useCallback(() => {
@@ -240,7 +240,7 @@ export function useSalesOrdersListFilters(
             createdTo: undefined,
             page: 1,
         })
-    }, [pushUrl])
+    }, [pushUrl, setSearchDraft])
 
     return {
         searchDraft,

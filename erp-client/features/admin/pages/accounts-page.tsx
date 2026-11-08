@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "@/lib/navigation"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
     BanIcon,
@@ -73,14 +74,11 @@ export function AccountsPage() {
     const assignableRolesQuery = useAssignableRolesQuery()
 
     /** 权限配置页按角色跳转过来时（?q=角色名），首屏直接带上该筛选。 */
-    const [keyword, setKeyword] = React.useState(
-        () => searchParams.get("q") ?? "",
-    )
-    const [searchDraft, setSearchDraft] = React.useState(keyword)
+    const keywordFromUrl = searchParams.get("q") ?? ""
+    const [keyword, setKeyword] = React.useState(keywordFromUrl)
+    const { searchDraft, setSearchDraft } = useSearchDraft(keywordFromUrl)
     React.useEffect(() => {
-        const next = searchParams.get("q") ?? ""
-        setKeyword(next)
-        setSearchDraft(next)
+        setKeyword(searchParams.get("q") ?? "")
     }, [searchParams])
     const [creating, setCreating] = React.useState(false)
     const [togglingAccount, setTogglingAccount] =
@@ -291,13 +289,13 @@ export function AccountsPage() {
             `/system/accounts${next ? `?q=${encodeURIComponent(next)}` : ""}`,
             { scroll: false },
         )
-    }, [searchDraft, router])
+    }, [searchDraft, router, setSearchDraft])
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setKeyword("")
         router.replace("/system/accounts", { scroll: false })
-    }, [router])
+    }, [router, setSearchDraft])
 
     return (
         <PageScaffold density="compact" className={styles.page}>

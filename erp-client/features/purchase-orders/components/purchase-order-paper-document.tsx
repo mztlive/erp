@@ -12,7 +12,7 @@ import {
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
 import { PurchaseDeliveryPlan } from "./purchase-delivery-plan"
-import { multiplyFixed } from "@/lib/fixed-decimal"
+import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 
 type PurchaseOrderPaperLine =
     PurchaseOrderCenterView["currentContent"]["lines"][number]
@@ -186,11 +186,7 @@ export function PurchaseOrderPaperDocument({
                     numeric: true,
                     cell: (row) => (
                         <RateValue
-                            value={multiplyFixed(row.inputTaxRate, "100", {
-                                leftMaxScale: 6,
-                                rightMaxScale: 0,
-                                outputScale: 2,
-                            })}
+                            value={inputTaxRatePercent(row.inputTaxRate)}
                             precision={2}
                         />
                     ),

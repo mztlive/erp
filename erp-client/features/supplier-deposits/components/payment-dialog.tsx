@@ -17,7 +17,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { MoneyValue } from "@/components/business"
 import { uploadEvidenceFileAsset } from "@/features/file-assets/api/file-assets"
-import { isApiError } from "@/lib/api/errors"
+import { isUncertainDepositCommandError } from "@/features/supplier-deposits/lib/command-error"
 import { useDepositCommand } from "../hooks/queries"
 import type { AccountDetail, RechargeRequest, DepositCommand } from "../types"
 
@@ -88,9 +88,7 @@ export function RechargePaymentDialog({
             } catch (error) {
                 const uncertain =
                     frozen.current !== null &&
-                    (!isApiError(error) ||
-                        ["Network", "Parse", "Unknown"].includes(error.kind) ||
-                        (error.status ?? 0) >= 500)
+                    isUncertainDepositCommandError(error)
                 setUnknown(uncertain)
                 if (!uncertain) frozen.current = null
                 applyApiFormError(form, error)

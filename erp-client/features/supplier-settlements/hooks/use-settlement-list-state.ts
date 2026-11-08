@@ -12,6 +12,7 @@ import {
     type SettlementFilterKey,
 } from "@/features/supplier-settlements/lib/settlement-list-filters"
 import type { DifferenceType } from "@/features/supplier-settlements/types"
+import { useSearchDraft } from "@/lib/use-search-draft"
 
 /**
  * 结算列表分页与筛选状态：三层状态模型（docs/ui-filter-design.md §5）。
@@ -34,7 +35,10 @@ export function useSettlementListState(
     const hasActiveFilters = hasAppliedSettlementFilters(urlState)
 
     // ---- Draft（本地受控，变化不请求） ----
-    const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
+    const { searchDraft, setSearchDraft } = useSearchDraft(urlState.q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     const [supplierIdDraft, setSupplierIdDraft] = React.useState<string | null>(
         urlState.supplierId ?? null,
     )
@@ -166,7 +170,7 @@ export function useSettlementListState(
             setPeriodError(null)
             patchUrl({ periodFrom: undefined, periodTo: undefined, page: 1 })
         },
-        [patchUrl],
+        [patchUrl, setSearchDraft],
     )
 
     /** 只清低频草稿；保留关键词、供应商、状态、差异类型与当前结果。 */
@@ -241,14 +245,10 @@ export function useSettlementListState(
             includeDescendants: undefined,
             page: 1,
         })
-    }, [patchUrl])
+    }, [patchUrl, setSearchDraft])
 
     // ---- URL 回填：只同步 Draft，不抢夺面板展开态 ----
     React.useEffect(() => {
-        // 关键词正在编辑时做焦点保护；clearAllFilters 已直接清空草稿，不依赖此 effect。
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(urlState.q ?? "")
-        }
         setSupplierIdDraft(urlState.supplierId ?? null)
         setStatusDraft(parseSettlementStatusParam(urlState.status))
         setDifferenceTypeDraft(urlState.differenceType ?? "all")
@@ -261,7 +261,6 @@ export function useSettlementListState(
         setIncludeDescendantsDraft(Boolean(urlState.includeDescendants))
         setPeriodError(null)
     }, [
-        searchInputRef,
         urlState.differenceType,
         urlState.handlerUserIds,
         urlState.includeDescendants,
@@ -270,7 +269,6 @@ export function useSettlementListState(
         urlState.ownerUserIds,
         urlState.periodFrom,
         urlState.periodTo,
-        urlState.q,
         urlState.status,
         urlState.supplierId,
     ])

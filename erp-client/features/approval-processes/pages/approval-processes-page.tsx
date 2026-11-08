@@ -21,6 +21,7 @@ import {
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { useSearchDraft } from "@/lib/use-search-draft"
 
 import { CreateDraftDialog } from "../components/create-draft-dialog"
 import { ProcessCatalog } from "../components/process-catalog"
@@ -70,12 +71,9 @@ export function ApprovalProcessesPage() {
         [searchParams],
     )
     const [moreOpen, setMoreOpen] = React.useState(false)
-    const [searchDraft, setSearchDraft] = React.useState(urlState.q)
+    const { searchDraft, setSearchDraft } = useSearchDraft(urlState.q)
     const [policyDraft, setPolicyDraft] = React.useState(urlState.policy)
     const [statusDraft, setStatusDraft] = React.useState(urlState.status)
-    React.useEffect(() => {
-        setSearchDraft(urlState.q)
-    }, [urlState.q])
     React.useEffect(() => {
         setPolicyDraft(urlState.policy)
     }, [urlState.policy])

@@ -12,6 +12,8 @@ import {
     type ConnectionStatus,
     type HealthResult,
 } from "@/features/supplier-api-connections/types"
+import { useSearchDraft } from "@/lib/use-search-draft"
+import { useLooseSearchHotkey } from "@/lib/use-search-hotkey"
 
 /** 可被单独移除的已生效条件。 */
 export type ConnectionFilterKey =
@@ -120,7 +122,11 @@ export function useConnectionListFilters(
     )
     const hasFilters = Boolean(applied.q || hasStructuredFilters)
 
-    const [searchDraft, setSearchDraft] = React.useState(applied.q ?? "")
+    const { searchDraft, setSearchDraft } = useSearchDraft(applied.q, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
+    useLooseSearchHotkey(searchInputRef)
     const [healthDraft, setHealthDraft] = React.useState<string[]>(
         applied.health,
     )
@@ -185,7 +191,7 @@ export function useConnectionListFilters(
             setSupplierIdDraft(null)
             patchUrl({ supplierId: undefined, page: 1 })
         },
-        [patchUrl],
+        [patchUrl, setSearchDraft],
     )
 
     /** 只清低频草稿；保留关键词、供应商、状态与已生效结果。 */
@@ -223,37 +229,7 @@ export function useConnectionListFilters(
             supplierId: undefined,
             page: 1,
         })
-    }, [patchUrl])
-
-    // `/` 聚焦搜索框；Dialog / Sheet 打开时不得聚焦背景搜索框（§3.2、§14.4）。
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key === "/" &&
-                !(event.target instanceof HTMLInputElement) &&
-                !(event.target instanceof HTMLTextAreaElement)
-            ) {
-                if (
-                    document.querySelector(
-                        '[role="dialog"], [data-slot="sheet"]',
-                    )
-                ) {
-                    return
-                }
-                event.preventDefault()
-                searchInputRef.current?.focus()
-            }
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
-
-    // URL 回填关键词草稿（后退/前进/刷新/清除）；正在编辑时做焦点保护（§5.4）。
-    React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(applied.q ?? "")
-        }
-    }, [applied.q, searchInputRef])
+    }, [patchUrl, setSearchDraft])
 
     // URL 回填结构化草稿；不触碰面板展开态（§5.4、§5.5）。
     React.useEffect(() => {

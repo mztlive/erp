@@ -3,6 +3,7 @@ import {
     splitGrossByPercentRate,
     sumFixed,
 } from "@/lib/fixed-decimal"
+import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 import { sourcingDeliveryAllocations } from "./delivery"
 import { findSourcingOption } from "./options"
 import type {
@@ -173,11 +174,7 @@ export function previewLineAmounts(
             rightMaxScale: 6,
             outputScale: 2,
         })
-        const taxRatePercent = multiplyFixed(inputTaxRate, "100", {
-            leftMaxScale: 6,
-            rightMaxScale: 0,
-            outputScale: 2,
-        })
+        const taxRatePercent = inputTaxRatePercent(inputTaxRate)
         return splitGrossByPercentRate(gross, taxRatePercent)
     } catch {
         return { gross: "0.00", net: "0.00", tax: "0.00" }

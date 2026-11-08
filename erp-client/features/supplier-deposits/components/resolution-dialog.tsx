@@ -17,7 +17,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { uploadEvidenceFileAsset } from "@/features/file-assets/api/file-assets"
-import { isApiError } from "@/lib/api/errors"
+import { isUncertainDepositCommandError } from "@/features/supplier-deposits/lib/command-error"
 import { compareDecimal, formatCurrencyFixed } from "@/lib/fixed-decimal"
 import { useDepositCommand } from "../hooks/queries"
 import {
@@ -150,9 +150,7 @@ export function DepositResolutionDialog({
             } catch (error) {
                 const uncertain =
                     frozen.current !== null &&
-                    (!isApiError(error) ||
-                        ["Network", "Parse", "Unknown"].includes(error.kind) ||
-                        (error.status ?? 0) >= 500)
+                    isUncertainDepositCommandError(error)
                 setUnknown(uncertain)
                 if (!uncertain) frozen.current = null
                 applyApiFormError(form, error)

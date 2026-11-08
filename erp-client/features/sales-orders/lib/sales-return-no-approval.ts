@@ -4,8 +4,7 @@ import type {
     SalesReturnCaseType,
     SalesReturnRoute,
 } from "@/features/sales-orders/api/sales-return-cases"
-
-type ForbidKey<T, K extends string> = K extends keyof T ? never : true
+import type { ForbidKey } from "@/lib/no-approval"
 
 /** 编译期证明：销售退货 HTTP DTO 不得携带审批绑定。 */
 export const SALES_RETURN_CASE_DTO_HAS_NO_APPROVAL: ForbidKey<

@@ -5,6 +5,7 @@ import { useSearchParams } from "@/lib/navigation"
 
 import { countScopeIds, parseScopeIdList } from "@/lib/funds-scope"
 import { useScopeUrlPagination } from "@/lib/use-scope-url-pagination"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import type { SupplierScopeQuery } from "@/features/supplier-payables/api/scoped"
 import { parseView } from "@/features/supplier-payables/lib/url-state"
 
@@ -46,7 +47,11 @@ export function useSupplierScopeUrlState() {
     const { pageFromUrl, pagination, patchUrl, handlePaginationChange } =
         useScopeUrlPagination({ view, pageSize, scopeVersion })
 
-    const [searchDraft, setSearchDraft] = React.useState(qParam)
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const { searchDraft, setSearchDraft } = useSearchDraft(qParam, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     const [procurementOwnerDraft, setProcurementOwnerDraft] = React.useState(
         procurementOwnerUserIds ?? "",
     )
@@ -56,7 +61,6 @@ export function useSupplierScopeUrlState() {
     const [orgDraft, setOrgDraft] = React.useState(orgUnitIds ?? "")
     const [descendantsDraft, setDescendantsDraft] =
         React.useState(includeDescendants)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [panelOpen, setPanelOpen] = React.useState(false)
 
     const query: SupplierScopeQuery = React.useMemo(
@@ -141,7 +145,7 @@ export function useSupplierScopeUrlState() {
             if (key === "orgUnitIds") patch.includeDescendants = null
             patchUrl(patch, { replace: true })
         },
-        [patchUrl],
+        [patchUrl, setSearchDraft],
     )
 
     const clearFilters = React.useCallback(() => {
@@ -166,7 +170,7 @@ export function useSupplierScopeUrlState() {
             },
             { replace: true },
         )
-    }, [patchUrl])
+    }, [patchUrl, setSearchDraft])
 
     /** 只清经办人和业务组织草稿；保留搜索与采购负责人。 */
     const resetMoreFilters = React.useCallback(() => {
@@ -241,9 +245,6 @@ export function useSupplierScopeUrlState() {
         descendantsDraft !== includeDescendants
 
     React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(qParam)
-        }
         setProcurementOwnerDraft(procurementOwnerUserIds ?? "")
         setOperatorDraft(operatorUserIds ?? "")
         setOrgDraft(orgUnitIds ?? "")
@@ -253,7 +254,6 @@ export function useSupplierScopeUrlState() {
         operatorUserIds,
         orgUnitIds,
         procurementOwnerUserIds,
-        qParam,
     ])
 
     return {

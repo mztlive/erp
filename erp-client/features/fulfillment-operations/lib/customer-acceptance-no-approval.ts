@@ -2,6 +2,7 @@ import type {
     FulfillmentFormalOutcome,
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
+import type { ForbidKey } from "@/lib/no-approval"
 
 /**
  * 履约结果面板交给客户验收的后续步骤投影。
@@ -12,8 +13,6 @@ export type CustomerAcceptanceHandoff = {
     acceptanceRequired: true
     acceptanceNextStep: string
 }
-
-type ForbidKey<T, K extends string> = K extends keyof T ? never : true
 
 /** 编译期证明：客户验收交接投影不得携带审批绑定。 */
 export const CUSTOMER_ACCEPTANCE_DTO_HAS_NO_APPROVAL: ForbidKey<

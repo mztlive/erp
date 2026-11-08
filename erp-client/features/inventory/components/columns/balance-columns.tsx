@@ -4,11 +4,8 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { EyeIcon, SlidersHorizontalIcon } from "lucide-react"
 
-import {
-    BusinessStatusBadge,
-    TableRowActions,
-    type TableRowAction,
-} from "@/components/business"
+import { TableRowActions, type TableRowAction } from "@/components/business"
+import { inventoryStatusColumn } from "@/features/inventory/components/columns/status-column"
 import { Badge } from "@/components/ui/badge"
 import { formatQty } from "@/features/inventory/components/presentation"
 import type { StockBalanceRow } from "@/features/inventory/types"
@@ -99,18 +96,7 @@ export function buildBalanceColumns({
                 </div>
             ),
         },
-        {
-            id: "status",
-            header: "状态",
-            meta: { label: "状态", width: "status" },
-            cell: ({ row }) => (
-                <BusinessStatusBadge
-                    context="list"
-                    label={row.original.statusLabel}
-                    tone={row.original.statusTone}
-                />
-            ),
-        },
+        inventoryStatusColumn<StockBalanceRow>(),
         {
             id: "lastMovement",
             header: "最后变动",

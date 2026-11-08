@@ -5,6 +5,7 @@ import { useSearchParams } from "@/lib/navigation"
 
 import { countScopeIds, parseScopeIdList } from "@/lib/funds-scope"
 import { useScopeUrlPagination } from "@/lib/use-scope-url-pagination"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import type { ReceivableScopeQuery } from "@/features/customer-receivables/api/scoped"
 
 export type ReceivableScopeFilterKey =
@@ -57,7 +58,11 @@ export function useReceivableScopeUrlState() {
     const { pageFromUrl, pagination, patchUrl, handlePaginationChange } =
         useScopeUrlPagination({ view, pageSize, scopeVersion })
 
-    const [searchDraft, setSearchDraft] = React.useState(qParam)
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const { searchDraft, setSearchDraft } = useSearchDraft(qParam, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     const [salesOwnerDraft, setSalesOwnerDraft] = React.useState(
         salesOwnerUserIds ?? "",
     )
@@ -70,7 +75,6 @@ export function useReceivableScopeUrlState() {
     const [orgDraft, setOrgDraft] = React.useState(orgUnitIds ?? "")
     const [descendantsDraft, setDescendantsDraft] =
         React.useState(includeDescendants)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [panelOpen, setPanelOpen] = React.useState(false)
 
     const query: ReceivableScopeQuery = React.useMemo(
@@ -165,7 +169,7 @@ export function useReceivableScopeUrlState() {
             if (key === "orgUnitIds") patch.includeDescendants = null
             patchUrl(patch, { replace: true })
         },
-        [patchUrl],
+        [patchUrl, setSearchDraft],
     )
 
     const clearFilters = React.useCallback(() => {
@@ -191,7 +195,7 @@ export function useReceivableScopeUrlState() {
             },
             { replace: true },
         )
-    }, [patchUrl])
+    }, [patchUrl, setSearchDraft])
 
     /** 只清经办人、经办人口径和组织草稿；保留搜索与负责销售。 */
     const resetMoreFilters = React.useCallback(() => {
@@ -282,9 +286,6 @@ export function useReceivableScopeUrlState() {
         descendantsDraft !== includeDescendants
 
     React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(qParam)
-        }
         setSalesOwnerDraft(salesOwnerUserIds ?? "")
         setOperatorDraft(operatorUserIds ?? "")
         setOperatorKindDraft(operatorKind ?? "")
@@ -295,7 +296,6 @@ export function useReceivableScopeUrlState() {
         operatorKind,
         operatorUserIds,
         orgUnitIds,
-        qParam,
         salesOwnerUserIds,
     ])
 

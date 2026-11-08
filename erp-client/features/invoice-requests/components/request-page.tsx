@@ -18,6 +18,7 @@ import {
     useInvoiceRequestPermissions,
     useInvoiceRequests,
 } from "../hooks/queries"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { requestStatusLabels, type RequestStatus } from "../api"
 import { InvoiceRequestPanel } from "./request-panel"
 
@@ -40,7 +41,7 @@ export function InvoiceRequestsPage() {
     const salesOrderId = params.get("salesOrderId") ?? ""
     const statusParam = params.get("status") ?? ""
     const appliedStatus = isRequestStatus(statusParam) ? statusParam : ""
-    const [searchDraft, setSearchDraft] = React.useState(q)
+    const { searchDraft, setSearchDraft } = useSearchDraft(q)
     const [customerDraft, setCustomerDraft] = React.useState(customerId)
     const [orderDraft, setOrderDraft] = React.useState(salesOrderId)
     const [statusDraft, setStatusDraft] = React.useState(appliedStatus)
@@ -62,11 +63,10 @@ export function InvoiceRequestsPage() {
     )
 
     React.useEffect(() => {
-        setSearchDraft(q)
         setCustomerDraft(customerId)
         setOrderDraft(salesOrderId)
         setStatusDraft(appliedStatus)
-    }, [appliedStatus, customerId, q, salesOrderId])
+    }, [appliedStatus, customerId, salesOrderId])
 
     const replaceFilters = React.useCallback(
         (nextValues: {
@@ -131,7 +131,14 @@ export function InvoiceRequestsPage() {
                 status: key === "status" ? "" : appliedStatus,
             })
         },
-        [appliedStatus, customerId, q, replaceFilters, salesOrderId],
+        [
+            appliedStatus,
+            customerId,
+            q,
+            replaceFilters,
+            salesOrderId,
+            setSearchDraft,
+        ],
     )
 
     const clearFilters = React.useCallback(() => {
@@ -145,7 +152,7 @@ export function InvoiceRequestsPage() {
             salesOrderId: "",
             status: "",
         })
-    }, [replaceFilters])
+    }, [replaceFilters, setSearchDraft])
 
     const chips = React.useMemo(() => {
         const items: { key: string; label: string }[] = []

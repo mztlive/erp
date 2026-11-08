@@ -1,8 +1,7 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 import type { BackendPurchaseReturnOrder } from "@/features/purchase-orders/api/purchase-return-order-wire-types"
 import type { PurchaseReturnOrderRow } from "@/features/purchase-orders/types"
-
-type ForbidKey<T, K extends string> = K extends keyof T ? never : true
+import { stripApprovalField, type ForbidKey } from "@/lib/no-approval"
 
 /** 编译期证明：采购退货 HTTP DTO 不得携带审批绑定。 */
 export const PURCHASE_RETURN_ORDER_DTO_HAS_NO_APPROVAL: ForbidKey<
@@ -84,12 +83,5 @@ export const purchaseReturnModeLabel = (mode?: string): string => {
 export function stripPurchaseReturnApprovalField<T extends object>(
     dto: T,
 ): Omit<T, "approval"> {
-    if (!("approval" in dto)) {
-        return dto
-    }
-    const { approval: _discarded, ...rest } = dto as T & {
-        approval?: unknown
-    }
-    void _discarded
-    return rest
+    return stripApprovalField(dto)
 }

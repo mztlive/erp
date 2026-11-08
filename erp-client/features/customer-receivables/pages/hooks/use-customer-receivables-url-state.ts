@@ -5,6 +5,7 @@ import type { PaginationState } from "@tanstack/react-table"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { useSearchDraft } from "@/lib/use-search-draft"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import type {
     CustomerAccountsQuery,
@@ -132,8 +133,11 @@ export function useCustomerReceivablesUrlState(
         undefined
 
     // Draft：本地受控，提交前不触发请求（docs/ui-filter-design.md §5）。
-    const [searchDraft, setSearchDraft] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const { searchDraft, setSearchDraft } = useSearchDraft(qParam, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
     const [counterpartyPartyIdDraft, setCounterpartyPartyIdDraft] =
         React.useState<string | null>(counterpartyPartyId ?? null)
     const [dueDraft, setDueDraft] = React.useState<DueFilter>(due ?? "all")
@@ -326,13 +330,10 @@ export function useCustomerReceivablesUrlState(
 
     // URL 回填：只同步 Draft，不重置面板展开态（§5.4 / §5.5）。
     React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(qParam)
-        }
         setCounterpartyPartyIdDraft(counterpartyPartyId ?? null)
         setDueDraft(due ?? "all")
         setStatusDraft(statusDraftFromUrl)
-    }, [counterpartyPartyId, due, qParam, statusDraftFromUrl])
+    }, [counterpartyPartyId, due, statusDraftFromUrl])
 
     useSearchHotkey(searchInputRef)
 

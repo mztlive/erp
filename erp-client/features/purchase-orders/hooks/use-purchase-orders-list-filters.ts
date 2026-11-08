@@ -4,6 +4,7 @@ import * as React from "react"
 import { PURCHASE_TYPE_LABEL, type PurchaseType } from "../types"
 
 import { usePurchaseOrdersListUrl } from "@/features/purchase-orders/hooks/use-purchase-orders-list-url"
+import { useSearchDraft } from "@/lib/use-search-draft"
 
 /** 可被单独移除的已生效筛选条件。 */
 export type PurchaseOrderFilterKey = "q" | "ownerUserIds" | "purchaseType"
@@ -65,14 +66,10 @@ export function usePurchaseOrdersListFilters(
         [url.ownerUserIds],
     )
 
-    const [searchDraft, setSearchDraft] = React.useState(search)
-
-    // URL 回填草稿：正在输入搜索框时不覆盖尚未提交的关键词
-    React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(search)
-        }
-    }, [search, searchInputRef])
+    const { searchDraft, setSearchDraft } = useSearchDraft(search, {
+        skipWhileFocused: true,
+        inputRef: searchInputRef,
+    })
 
     const applyFilters = React.useCallback(() => {
         pushUrl({
@@ -99,7 +96,7 @@ export function usePurchaseOrdersListFilters(
             if (key === "q") setSearchDraft("")
             pushUrl({ q: undefined, page: 1 })
         },
-        [pushUrl],
+        [pushUrl, setSearchDraft],
     )
 
     /** 无更多面板，重置为空操作。 */
@@ -123,7 +120,7 @@ export function usePurchaseOrdersListFilters(
             metric: "all",
             page: 1,
         })
-    }, [pushUrl])
+    }, [pushUrl, setSearchDraft])
 
     const appliedChips = React.useMemo<
         readonly PurchaseOrderAppliedChip[]

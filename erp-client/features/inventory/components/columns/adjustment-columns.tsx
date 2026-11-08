@@ -2,8 +2,8 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
 import type { StockAdjustmentRow } from "@/features/inventory/types"
+import { inventoryStatusColumn } from "@/features/inventory/components/columns/status-column"
 import { formatDateTime } from "@/lib/datetime"
 
 export function buildAdjustmentColumns(): ColumnDef<StockAdjustmentRow>[] {
@@ -40,18 +40,7 @@ export function buildAdjustmentColumns(): ColumnDef<StockAdjustmentRow>[] {
                 </div>
             ),
         },
-        {
-            id: "status",
-            header: "状态",
-            meta: { label: "状态", width: "status" },
-            cell: ({ row }) => (
-                <BusinessStatusBadge
-                    context="list"
-                    label={row.original.statusLabel}
-                    tone={row.original.statusTone}
-                />
-            ),
-        },
+        inventoryStatusColumn<StockAdjustmentRow>(),
         {
             id: "people",
             header: "审批进度",

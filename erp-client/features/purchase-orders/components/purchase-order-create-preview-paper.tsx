@@ -18,7 +18,7 @@ import {
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
 import { PurchaseDeliveryPlan } from "./purchase-delivery-plan"
-import { multiplyFixed } from "@/lib/fixed-decimal"
+import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 
 /**
  * 把拆单预览投影成纸质采购单，金额与明细以当前选源结果为准。
@@ -170,11 +170,7 @@ export function PurchaseOrderPreviewPaper({
                         numeric: true,
                         cell: (row) => (
                             <RateValue
-                                value={multiplyFixed(row.inputTaxRate, "100", {
-                                    leftMaxScale: 6,
-                                    rightMaxScale: 0,
-                                    outputScale: 2,
-                                })}
+                                value={inputTaxRatePercent(row.inputTaxRate)}
                                 precision={2}
                             />
                         ),
