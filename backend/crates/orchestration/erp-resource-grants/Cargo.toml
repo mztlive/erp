@@ -1,0 +1,18 @@
+[package]
+name = "erp-resource-grants"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+
+[dependencies]
+async-trait = { workspace = true }
+bpm = { workspace = true }
+erp-core = { workspace = true }
+erp-finance = { workspace = true }
+erp-identity = { workspace = true }
+erp-procurement = { workspace = true }
+erp-sales = { workspace = true }
+erp-workflow = { workspace = true }
+mongodb = { workspace = true }
+persistence-core = { workspace = true }
+tokio = { workspace = true }

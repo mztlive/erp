@@ -167,3 +167,5 @@ git diff --check
 ## 外部 OCR 技术客户端
 
 [aliyun-ocr](platform/aliyun-ocr/README.md) 负责阿里云图片识别签名和传输，不依赖业务 crate。合同 PDF 逐页转图、`ContractOcr` 与 `ContractExtractor` 适配位于 [erp-contract-recognition](adapters/erp-contract-recognition/README.md)，由 web-api 使用 `SafeConfig` 装配；Process 只持有合同领域 Port。
+
+- `orchestration/erp-resource-grants`：独立 worker 自动读取授权规则、事务发布、恢复、分页重算及就绪状态；存储归 `erp-identity`。

@@ -179,6 +179,39 @@ impl GrantEvent {
     }
 }
 
+impl GrantEvent {
+    /// 核验幂等证据及当前租约，防止旧 worker 覆盖新领取。
+    /// # 参数
+    /// claim 为原领取快照。
+    /// # 返回
+    /// 已完成的同事件重放或当前持有者成功。
+    /// # 错误
+    /// 异载荷、空令牌、状态或领取令牌变化时拒绝。
+    pub fn ensure_claim(&self, claim: &Self) -> Result<()> {
+        self.ensure_replay(claim)?;
+        if self.status == GrantEventStatus::Applied {
+            return Ok(());
+        }
+        if self.status != GrantEventStatus::Processing
+            || self.lease_owner.as_deref().is_none_or(str::is_empty)
+            || self.lease_owner != claim.lease_owner
+        {
+            return Err(Error::ConflictError("授权事件领取已失效".into()));
+        }
+        Ok(())
+    }
+    /// 计算有上限的失败退避时间。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 秒数，最大 900 秒。
+    /// # 错误
+    /// 无。
+    pub fn retry_delay(&self) -> u64 {
+        2_u64.saturating_pow(self.attempts.min(10)).min(900)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
@@ -303,5 +336,32 @@ mod tests {
         let mut bad = serde_json::to_value(&payloads()[0]).unwrap();
         bad["assignment_id"] = json!("unexpected");
         assert!(serde_json::from_value::<GrantEventPayload>(bad).is_err());
+    }
+    #[test]
+    fn lease_takeover_rejects_old_worker_but_applied_replay_is_safe() {
+        let mut event = GrantEvent::new(evidence(payloads().remove(0))).unwrap();
+        assert!(event.ensure_claim(&event).is_err());
+        event.status = GrantEventStatus::Processing;
+        assert!(event.ensure_claim(&event).is_err());
+        event.lease_owner = Some("worker-a-token".into());
+        let claim = event.clone();
+        event.ensure_claim(&claim).unwrap();
+        event.lease_owner = Some("worker-b-token".into());
+        assert!(event.ensure_claim(&claim).is_err());
+        event.status = GrantEventStatus::Failed;
+        assert!(event.ensure_claim(&claim).is_err());
+        event.status = GrantEventStatus::Applied;
+        event.lease_owner = None;
+        event.ensure_claim(&claim).unwrap();
+        event.evidence.occurred_at += 1;
+        assert!(event.ensure_claim(&claim).is_err());
+    }
+    #[test]
+    fn retry_backoff_is_bounded_even_after_many_failures() {
+        let mut event = GrantEvent::new(evidence(payloads().remove(0))).unwrap();
+        for (attempts, expected) in [(1, 2), (2, 4), (9, 512), (10, 900), (u32::MAX, 900)] {
+            event.attempts = attempts;
+            assert_eq!(event.retry_delay(), expected);
+        }
     }
 }

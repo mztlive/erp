@@ -1,6 +1,7 @@
 //! 常驻任务装配与监督；所有循环共享进程退出边界。
 mod approval_outbox;
 mod data_transfer;
+mod resource_grants;
 mod supplier_orders;
 mod xxl;
 
@@ -81,6 +82,7 @@ impl Workers {
         tasks.push(tokio::spawn(async move {
             runner.run(runner_stop).await;
         }));
+        tasks.push(tokio::spawn(resource_grants::run(state.clone(), receive.clone())));
         tasks.push(tokio::spawn(data_transfer::run(state.clone(), receive)));
         let orders = supplier_orders::spawn(state.clone());
         let outbox = ApprovalOutboxWorker::start(state.approval_outbox_port());

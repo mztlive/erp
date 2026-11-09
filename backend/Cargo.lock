@@ -2490,6 +2490,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "erp-resource-grants"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bpm",
+ "erp-core",
+ "erp-finance",
+ "erp-identity",
+ "erp-procurement",
+ "erp-sales",
+ "erp-workflow",
+ "mongodb",
+ "persistence-core",
+ "tokio",
+]
+
+[[package]]
 name = "erp-returns"
 version = "0.1.0"
 dependencies = [
@@ -2613,6 +2630,7 @@ dependencies = [
  "erp-procure-to-pay",
  "erp-procurement",
  "erp-read-models",
+ "erp-resource-grants",
  "erp-returns",
  "erp-reverse-flow",
  "erp-sales",

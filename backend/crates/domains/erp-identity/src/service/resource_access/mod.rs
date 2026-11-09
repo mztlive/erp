@@ -1,10 +1,12 @@
 //! 统一读取判定及按来源授权管理；业务写入必须在原 Executor 内重新解析。
 mod command;
+mod queue;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use mongodb::Database;
 use persistence_core::Executor;
+pub use queue::{GrantQueueHealth, GrantRecompute, GrantRule};
 
 use crate::entity::resource_access::ResourceKind;
 pub use crate::entity::resource_access::SourceUpdate;

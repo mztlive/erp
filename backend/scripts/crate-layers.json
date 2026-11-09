@@ -715,6 +715,25 @@
       "paths": [
         "crates/domains/erp-notification"
       ]
+    },
+    "erp-resource-grants": {
+      "layer": "orchestration",
+      "paths": [
+        "crates/orchestration/erp-resource-grants"
+      ],
+      "dependencies": [
+        "async-trait",
+        "bpm",
+        "erp-core",
+        "erp-finance",
+        "erp-identity",
+        "erp-procurement",
+        "erp-sales",
+        "erp-workflow",
+        "mongodb",
+        "persistence-core",
+        "tokio"
+      ]
     }
   }
 }

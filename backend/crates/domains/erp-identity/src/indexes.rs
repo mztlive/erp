@@ -372,6 +372,10 @@ async fn ensure_resource_grant_sources(db: &Database) -> Result<()> {
         db,
         "resource_grant_sources",
         vec![
+            named_index(
+                "idx_resource_grant_sources_recent",
+                doc! { "key.rule": 1, "updated_at": -1, "id": 1 },
+            ),
             unique_index("uk_resource_grant_sources_id", doc! { "id": 1 }),
             unique_index(
                 "uk_resource_grant_sources_key",
@@ -401,6 +405,10 @@ async fn ensure_resource_grant_events(db: &Database) -> Result<()> {
         db,
         "resource_grant_events",
         vec![
+            named_index("idx_resource_grant_events_recompute", doc! { "source.rule": 1, "id": 1 }),
+            named_index("idx_resource_grant_events_oldest", doc! { "status": 1, "deleted_at": 1, "evidence.occurred_at": 1 }),
+            named_index("idx_resource_grant_events_recover", doc! { "status": 1, "lease_until": 1, "id": 1 }),
+            named_index("idx_resource_grant_events_source_page", doc! { "source.rule": 1, "source.business_type": 1, "source.business_id": 1, "source.recipient": 1, "id": 1 }),
             unique_index("uk_resource_grant_events_id", doc! { "id": 1 }),
             named_index(
                 "idx_resource_grant_events_claim",

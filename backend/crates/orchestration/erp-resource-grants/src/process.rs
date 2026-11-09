@@ -1,0 +1,167 @@
+use std::sync::Arc;
+
+use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventStatus};
+use erp_identity::service::resource_access::{GrantQueueHealth, GrantRecompute, ResourceAccessService};
+use erp_identity::{Error, Result, SharedRbacService};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
+
+use super::facts::Facts;
+
+#[derive(Clone)]
+pub struct ResourceGrantProcess {
+    db: Database,
+    rbac: SharedRbacService,
+}
+
+impl ResourceGrantProcess {
+    /// 装配独立授权处理器。
+    /// # 参数
+    /// db、rbac 为组合根共享设施。
+    /// # 返回
+    /// 不启动循环的处理器。
+    /// # 错误
+    /// 无。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
+    }
+
+    fn access(&self, event: Option<GrantEvent>) -> ResourceAccessService {
+        ResourceAccessService::new(
+            self.db.clone(),
+            self.rbac.clone(),
+            Arc::new(Facts { db: self.db.clone(), event }),
+        )
+    }
+
+    /// 领取并处理一个事件；未知提交结果保持租约，恢复时先检查事件结果。
+    /// # 参数
+    /// token 为每次领取唯一令牌；now 为当前秒级时间。
+    /// # 返回
+    /// 是否领取到事件。
+    /// # 错误
+    /// 读取或发布失败返回错误，业务事务不会重放。
+    pub async fn tick(&self, token: &str, now: u64) -> Result<bool> {
+        let queue = self.access(None);
+        let Some(event) = queue.claim_event(token, now).await? else {
+            return Ok(false);
+        };
+
+        let this = self.clone();
+        let claim = event.clone();
+        let result = self
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |ex| Box::pin(async move { this.publish(claim, ex).await }))
+            .await;
+
+        if let Err(error) = result {
+            if !matches!(error, Error::OutcomeUnknown(_)) {
+                queue.fail_event(&event, now, &error.to_string()).await?;
+            }
+            return Err(error);
+        }
+
+        Ok(true)
+    }
+
+    async fn publish(&self, claim: GrantEvent, ex: &mut dyn Executor) -> Result<()> {
+        let access = self.access(Some(claim.clone()));
+        let current = access.claimed_event(&claim, ex).await?;
+        if current.status == GrantEventStatus::Applied {
+            return Ok(());
+        }
+
+        let old = access.source(&current.source, ex).await?;
+        if old.as_ref().is_some_and(|s| s.terminated) {
+            return access.complete_event(current, ex).await;
+        }
+
+        let update = Facts { db: self.db.clone(), event: None }.compute(&current, ex).await?;
+        if !old.as_ref().is_some_and(|s| s.fact_version > update.fact_version) {
+            access.apply_source(update, ex).await?;
+        }
+
+        access.complete_event(current, ex).await
+    }
+}
+
+impl ResourceGrantProcess {
+    /// 周期有界重验所有正式事件；游标由 worker 保留。
+    /// # 参数
+    /// after 为上次页末主键，now 为秒级时间。
+    /// # 返回
+    /// 下一页游标；空值表示本轮结束。
+    /// # 错误
+    /// 持久化失败返回错误。
+    pub async fn reconcile(&self, after: Option<&str>, now: u64) -> Result<Option<String>> {
+        self.recompute(&GrantRecompute::All, after, now).await
+    }
+    /// 按来源、资源或规则分批重新排队。
+    /// # 参数
+    /// selection 为维护范围，after 为游标，now 为秒级时间。
+    /// # 返回
+    /// 下一页游标。
+    /// # 错误
+    /// 数据库失败返回错误。
+    pub async fn recompute(
+        &self,
+        selection: &GrantRecompute,
+        after: Option<&str>,
+        now: u64,
+    ) -> Result<Option<String>> {
+        self.access(None).requeue(selection, after, now).await
+    }
+    /// 查询授权积压与故障统计。
+    /// # 参数
+    /// now 为当前秒级时间。
+    /// # 返回
+    /// 队列状态。
+    /// # 错误
+    /// 查询失败时返回错误。
+    pub async fn health(&self, now: u64) -> Result<GrantQueueHealth> {
+        self.access(None).grant_health(now).await
+    }
+}
+
+/// 仅表示读取授权生成状态，不授予功能权限或办理资格。
+#[derive(Debug, PartialEq, Eq)]
+pub enum GrantReadiness {
+    Absent,
+    NotReady,
+    Ready,
+    Terminated,
+}
+impl ResourceGrantProcess {
+    /// 核对合法来源后返回读取授权是否就绪。
+    /// # 参数
+    /// expected 来自服务端正式事实，executor 为请求执行器。
+    /// # 返回
+    /// 待处理合法来源返回 NotReady，供业务接口映射为可刷新状态。
+    /// # 错误
+    /// 关联错误、事实读取失败或同键冲突时返回错误。
+    pub async fn readiness(
+        &self,
+        expected: &GrantEvent,
+        executor: &mut dyn Executor,
+    ) -> Result<GrantReadiness> {
+        let access = self.access(Some(expected.clone()));
+        let Some(event) = access.event(expected, executor).await? else {
+            return Ok(GrantReadiness::Absent);
+        };
+        let update = Facts { db: self.db.clone(), event: None }.compute(&event, executor).await?;
+        let source = access.source(&event.source, executor).await?;
+        Ok(match source {
+            Some(s) if s.terminated => GrantReadiness::Terminated,
+            Some(s)
+                if s.fact_version == update.fact_version
+                    && s.rule_version == update.rule_version
+                    && s.targets == update.targets =>
+            {
+                GrantReadiness::Ready
+            },
+            _ => GrantReadiness::NotReady,
+        })
+    }
+}

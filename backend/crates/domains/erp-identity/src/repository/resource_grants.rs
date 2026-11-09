@@ -1,5 +1,6 @@
 //! 只访问身份领域自有集合，所有读写复用调用方执行器。
 mod query;
+pub mod queue;
 mod revision;
 use futures_util::TryStreamExt;
 use mongodb::Database;
