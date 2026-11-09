@@ -7,15 +7,15 @@ digraph resourceAuthorization {
     label="一、业务事实：维护归属，触发额外数据授权";
     fontsize=16; fontcolor="#355984"; color="#c9dbef"; style="rounded";
     scope [label="单据与客户的个人数据配置\n指定公司 / 部门 / 单资源；内建 root 例外"];
-    business [label="业务事件\n指定责任人归属 / 所有权移交\n单据所有权与未完成任务原子移交"];
+    business [label="业务事件\n既有归属映射 / 实际所有权变化\n保持原有任务分配与业务事务"];
     bpm [label="BPM 与工作流\n创建任务 / 变更负责人 / 维护状态"];
     governance [label="治理与受限身份\n按自身范围及动作授予或终止，禁止自授\n来源独立有效 / 外部会话 / 服务作业"];
     {rank=same; scope; business; bpm; governance;}
   }
-  policy [label="额外数据授权策略\n审批来源完整保留，移交不中断读取\n非审批完成、转派或取消：固定快照\n历史来源可整体终止，重算不恢复\n归属本身不生成授权；独立审批授权不扣减", fillcolor="#edf4ff", color="#6e9bd2"];
+  policy [label="额外数据授权策略\n审批来源完整保留，移交不中断读取\n非审批历史：沿用已有合同\n历史来源可整体终止，重算不恢复\n归属本身不生成授权；独立审批授权不扣减", fillcolor="#edf4ff", color="#6e9bd2"];
   outbox [label="业务事务\n业务事实 + 任务状态 + 业务审计 + Outbox 事件", fillcolor="#edf4ff", color="#6e9bd2"];
   worker [label="独立授权处理器\n可靠消费 / 重试 / 按资源、来源、策略重算", fillcolor="#edf4ff", color="#6e9bd2"];
-  facts [label="事实查询 Port\n当前所有者 / 固定部门 / 当前与历史分配\n材料版本 / 管理员终止版本"];
+  facts [label="事实查询 Port\n当前所有者 / 固定部门 / 当前与历史分配\n已有资料版本 / 管理员终止版本"];
   scope -> outbox; business -> outbox; bpm -> outbox; governance -> outbox;
   outbox -> worker [label="提交后至少一次投递"];
   worker -> facts [label="读取当前事实"];
@@ -30,7 +30,7 @@ digraph resourceAuthorization {
     request [label="管理列表 / 工作台 / 详情\nAPI / 文件 / 导出 / 后台命令"];
     identity [label="身份与强制边界\n账号状态 / 会话有效 / 当前功能资格"];
     capability [label="功能权限\n普通角色仅提供功能；有效角色取并集"];
-    dataCheck [label="按资源分类检查\n单据 / 客户：归属或有效授权\n公共资料：无需人员数据范围\n任务 / 材料 / 会话：登记上下文约束\n普通附件继承所属资源读取资格"];
+    dataCheck [label="按资源分类检查\n单据 / 客户：归属或有效授权\n公共资料：无需人员数据范围\n任务 / 办理资料 / 会话：统一上下文检查\n普通附件继承所属资源读取资格"];
     decision [label="统一授权结果\n身份 AND 功能 AND 对应资源访问规则", fillcolor="#e9f2ff", color="#557fb1", penwidth=2];
     {rank=same; identity; capability; dataCheck;}
     request -> identity; request -> capability; request -> dataCheck;
@@ -47,7 +47,7 @@ digraph resourceAuthorization {
     fontsize=16; fontcolor="#355984"; color="#c9dbef"; style="rounded";
     query [label="查询\n单据 / 客户：统一范围约束后分页、汇总\n供应商 / 商品等公共资料：不按人员过滤\n我的待办：仅本人当前任务"];
     command [label="执行\n业务状态 / 金额 / 版本 / 职责分离\n当前分配代次 / 流程迁移"];
-    material [label="输出\n完整对象或登记材料视图\n附件读取随所属资源；成本毛利用功能控制\n导出按读取范围；下载重验"];
+    material [label="输出\n保持既有对象与资料输出合同\n附件读取随所属资源；成本毛利用功能控制\n导出按读取范围；下载重验"];
     {rank=same; query; command; material;}
   }
   decision -> query; decision -> command; decision -> material;
