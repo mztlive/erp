@@ -25,8 +25,9 @@ use access::{
 };
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
-    WorkItemAllowedAction, WorkItemApprovalContextView, WorkItemConflict, WorkItemConflictKind,
-    WorkItemMutationOutcome, WorkItemPartyView, WorkItemReassignCandidateView, WorkItemScope,
+    WorkItemAllowedAction, WorkItemApprovalContextView, WorkItemCommandView, WorkItemConflict,
+    WorkItemConflictKind, WorkItemMutationOutcome, WorkItemPartyView, WorkItemReassignCandidateView,
+    WorkItemScope,
 };
 pub use finance_responsibility::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
@@ -316,9 +317,7 @@ mod tests {
 
     fn managed_action_access() -> ActorAccess {
         ActorAccess::new("manager-1".to_string())
-            .with_permissions(
-                ["work_item:reassign", "work_item:close"].into_iter().map(|code| code.to_string()).collect(),
-            )
+            .with_permissions(["work_item:manage"].into_iter().map(|code| code.to_string()).collect())
             .with_can_manage(true)
     }
 

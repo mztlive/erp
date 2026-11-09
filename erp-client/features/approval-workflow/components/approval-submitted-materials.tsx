@@ -12,7 +12,10 @@ import {
 import { BusinessFailureState } from "@/components/business"
 import { Spinner } from "@/components/ui/spinner"
 import { displayBusinessText } from "@/lib/display-name"
-import { useApprovalMaterials } from "../hooks/use-approval-materials"
+import {
+    useApprovalMaterials,
+    type MaterialReference,
+} from "../hooks/use-approval-materials"
 import { displayActorName, displayReadableName } from "../display"
 
 /** 审批专用资料预览；不加载普通业务详情，不把冻结摘要当作完整单据。 */
@@ -21,13 +24,15 @@ export function ApprovalSubmittedMaterials({
     enabled,
     view = "all",
     sourceRevisionId,
+    reference,
 }: {
     instanceId: string
     enabled: boolean
     view?: "all" | "source-sales" | "attachments"
     sourceRevisionId?: string
+    reference?: MaterialReference
 }) {
-    const query = useApprovalMaterials(instanceId, enabled)
+    const query = useApprovalMaterials(instanceId, enabled, reference)
     if (query.isPending || query.isFetching)
         return (
             <div className="flex min-h-64 items-center justify-center gap-2 rounded-lg bg-card p-8">

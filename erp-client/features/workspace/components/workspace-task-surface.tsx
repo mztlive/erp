@@ -46,6 +46,18 @@ export function WorkspaceTaskSurface({
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
     const fullPage = useWorkspaceTaskPage()
+    if (item.workItemType === "APPROVAL_REWORK") {
+        return (
+            <WorkspaceDocumentTaskDetail
+                item={item}
+                reworkTask={item}
+                canReadSensitive={canReadSensitive}
+                grantedPermissions={grantedPermissions}
+                onTaskCompleted={onTaskCompleted}
+                onDecisionApplied={onDecisionApplied}
+            />
+        )
+    }
     if (
         item.workItemType === "SALES_INQUIRY_PROCESSING" &&
         item.handlerKey === "sales_inquiry_processing" &&
@@ -149,7 +161,7 @@ export function WorkspaceTaskSurface({
         )
     }
 
-    // 非执行者统一阅读服务端摘要，避免挂载建单、确认或异常处理表单。
+    // 非执行者独立读取关联材料，避免挂载建单、确认或异常处理表单。
     if (
         item.workItemType !== "DOCUMENT_APPROVAL" &&
         item.workItemType !== "APPROVAL_INSTANCE" &&

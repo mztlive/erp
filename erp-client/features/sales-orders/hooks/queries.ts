@@ -75,10 +75,17 @@ export function useSalesOrdersQuery(
 export function useSalesOrderDetailQuery(
     salesOrderId: string,
     refreshOnMount = false,
+    expectedSubjectVersion?: string,
 ) {
     const client = useQueryClient()
     return useQuery({
-        queryKey: salesOrderKeys.detail(salesOrderId),
+        queryKey: expectedSubjectVersion
+            ? [
+                  ...salesOrderKeys.detail(salesOrderId),
+                  "task-material",
+                  expectedSubjectVersion,
+              ]
+            : salesOrderKeys.detail(salesOrderId),
         refetchOnMount: refreshOnMount ? "always" : true,
         queryFn: async () => {
             const account = await client.ensureQueryData({
@@ -93,6 +100,7 @@ export function useSalesOrderDetailQuery(
                 salesOrderId,
                 previous?.changeOrderScopeVersion,
                 account.permissions,
+                expectedSubjectVersion,
             )
         },
         enabled: Boolean(salesOrderId),

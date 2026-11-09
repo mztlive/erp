@@ -86,12 +86,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         ensure_rework_owner(&item, actor.id())?;
-        self.ensure_domain_decision_access(actor, &item, executor).await?;
+        self.ensure_task_manage(actor, &item, executor).await?;
         if let Some(committed) =
             self.db.work_item_command_receipts().find_command(receipt.id(), executor).await?
         {
             verify_abandon_replay(&item, &committed, receipt, actor.id())?;
-            return Ok(WorkItemMutationOutcome::Applied { work_item_id: id.to_owned() });
+            return Ok(WorkItemMutationOutcome::Applied {
+                work_item_id: id.to_owned(),
+                task_version: item.base.version,
+            });
         }
         if item.base.version != version {
             return Err(Error::ConflictError("任务版本已变化，请刷新后重试".into()));
@@ -109,7 +112,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             audit.id.clone(),
         )?;
         self.db.work_item_command_receipts().create(&committed, executor).await?;
-        Ok(WorkItemMutationOutcome::Applied { work_item_id: id.to_owned() })
+        Ok(WorkItemMutationOutcome::Applied { work_item_id: id.to_owned(), task_version: item.base.version })
     }
 }
 

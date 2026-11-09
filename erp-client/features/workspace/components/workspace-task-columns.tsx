@@ -30,8 +30,12 @@ import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceMoney } from "./workspace-money"
 import { WorkspaceFulfillmentBadges } from "./workspace-fulfillment-badges"
 
-/** 每行只消费列表已有的授权摘要，不补查当前单据替换审批资料。 */
-export function queueTaskRow(item: WorkspaceWorkItem) {
+/** 每行使用独立授权且版本匹配的材料；失败时保留任务与操作入口。 */
+export function queueTaskRow(
+    item: WorkspaceWorkItem,
+    materialNotice?: string,
+    retryMaterials?: () => void,
+) {
     const presentation = workspaceTaskPresentation(item)
     const first = item.briefLines?.[0]
     const goods = [
@@ -49,8 +53,17 @@ export function queueTaskRow(item: WorkspaceWorkItem) {
             : presentation.summary
     return {
         item,
-        summaryPreview,
-        presentation,
+        materialNotice,
+        retryMaterials,
+        summaryPreview: materialNotice ? undefined : summaryPreview,
+        presentation: materialNotice
+            ? {
+                  ...presentation,
+                  number: "—",
+                  title: materialNotice,
+                  summary: undefined,
+              }
+            : presentation,
         processable:
             item.status === "OPEN" &&
             !isBlockedWorkItem(item) &&
@@ -59,7 +72,9 @@ export function queueTaskRow(item: WorkspaceWorkItem) {
                     action,
                 ),
             ),
-        source: findSourceSalesOrder(item.summarySections),
+        source: materialNotice
+            ? undefined
+            : findSourceSalesOrder(item.summarySections),
         content: workspaceTaskRightContent(
             item,
             presentation.amount,
@@ -141,7 +156,22 @@ function TaskOverview({ row }: { row: QueueTaskRow }) {
                 )}
                 title={row.presentation.summary}
             >
-                {row.summaryPreview || "—"}
+                {row.retryMaterials ? (
+                    <Button
+                        id={`workspace-materials-retry-${toAutomationIdSegment(row.item.workItemId)}`}
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            row.retryMaterials?.()
+                        }}
+                    >
+                        重新加载资料
+                    </Button>
+                ) : (
+                    row.summaryPreview || "—"
+                )}
             </div>
         </div>
     )
@@ -309,7 +339,11 @@ export function workspaceTaskColumns({
                 >
                     <div className="num text-sm font-semibold tabular-nums text-foreground">
                         <WorkspaceMoney
-                            value={row.content.metric.value}
+                            value={
+                                row.materialNotice
+                                    ? "—"
+                                    : row.content.metric.value
+                            }
                             display="exact"
                         />
                     </div>
@@ -318,7 +352,9 @@ export function workspaceTaskColumns({
                             row.content.metric.label,
                         )) && (
                         <div className="text-xs text-muted-foreground">
-                            {row.content.metric.label}
+                            {row.materialNotice
+                                ? "业务资料"
+                                : row.content.metric.label}
                         </div>
                     )}
                 </div>

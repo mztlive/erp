@@ -146,6 +146,9 @@ impl AuthorizationPolicy {
     /// 不返回错误。不产生具体对象的授权结论。
     pub fn description_for(self, resource: &str) -> &'static str {
         match resource {
+            "work_item" => {
+                "列表和详情默认包含本人负责的任务，扩大读取范围需追加授权；任务管理必须显式配置范围，各动作仍需具备对应操作权限。"
+            },
             "stock_balance" | "stock_movement" | "stock_reservation" => {
                 "采用库存仓库范围政策；余额、流水、预占及各操作的已有范围分别保留，不自动合并，也不使用仓库目录的可见范围。"
             },

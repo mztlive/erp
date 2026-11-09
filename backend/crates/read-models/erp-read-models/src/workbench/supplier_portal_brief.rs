@@ -71,13 +71,7 @@ impl WorkbenchReadService {
         executor: &mut dyn Executor,
     ) -> Result<PortalDisplayContext> {
         let suppliers = self.object_reader().supplier_display_names(supplier_ids, executor).await?;
-        let applicants = self
-            .auth
-            .load_accounts(applicant_ids, executor)
-            .await?
-            .into_iter()
-            .map(|account| (account.id, account.display_name))
-            .collect();
+        let applicants = self.object_reader().load_account_names(applicant_ids, executor).await?;
         Ok(PortalDisplayContext { suppliers, applicants })
     }
 }

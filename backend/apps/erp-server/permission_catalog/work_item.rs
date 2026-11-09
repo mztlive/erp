@@ -51,25 +51,24 @@ pub const REASSIGN_CANDIDATES: PermissionDef =
     REASSIGN.described(groups::FINANCIAL_FILES, "查询非审批任务可转交人员");
 
 /// 在授权范围内受控转交非审批任务。
-pub const REASSIGN: PermissionDef = PermissionDef {
-    code: "work_item:reassign",
+pub const MANAGE: PermissionDef = PermissionDef {
+    code: "work_item:manage",
     group: groups::FINANCIAL_FILES,
-    description: "在授权范围内受控转交非审批任务",
+    description: "在授权范围内操作待办",
 };
 
-/// 关闭重复、误派或已有替代的非审批任务。
-pub const CLOSE: PermissionDef = PermissionDef {
-    code: "work_item:close",
-    group: groups::FINANCIAL_FILES,
-    description: "关闭重复、误派或已有替代的非审批任务",
-};
+/// 在任务数据范围内转交。
+pub const REASSIGN: PermissionDef = MANAGE.described(groups::FINANCIAL_FILES, "转交待办");
+
+/// 在任务数据范围内关闭。
+pub const CLOSE: PermissionDef = MANAGE.described(groups::FINANCIAL_FILES, "关闭待办");
 
 /// 查询本人有权查看的待办详情。
 pub const TIMELINE_TASK_TIMELINE: PermissionDef = DETAIL;
 
 /// 原提交人放弃本人驳回处理任务；服务层再次校验责任身份与版本。
 pub const ABANDON_REWORK: PermissionDef =
-    DETAIL.described(groups::FINANCIAL_FILES, "原提交人放弃本人驳回处理任务");
+    MANAGE.described(groups::FINANCIAL_FILES, "原提交人放弃本人驳回处理任务");
 
 /// 本模块可供路由引用的显式权限定义。
 pub const ENTRIES: &[(&str, PermissionDef)] = &[
@@ -90,6 +89,7 @@ pub const ENTRIES: &[(&str, PermissionDef)] = &[
         FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_OWNER_OPTIONS,
     ),
     ("LIST", LIST),
+    ("MANAGE", MANAGE),
     ("FULFILLMENT_QUEUE_LIST", FULFILLMENT_QUEUE_LIST),
     ("STATS", STATS),
     ("DETAIL", DETAIL),

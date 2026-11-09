@@ -1,6 +1,7 @@
 import {
     AUTHORIZATION_POLICY_LABEL,
     personEffectiveDescription,
+    personHasDefaultSelf,
     type PersonScopeBusiness,
     type PersonScopeList,
 } from "../../api/person-data-scopes"
@@ -24,8 +25,16 @@ export function personalPolicyView(
             (item) =>
                 item.resource === business.resource && item.action === action,
         )
-        const key = JSON.stringify(scope?.expression) ?? "default"
-        let description = personEffectiveDescription(scope, business, labels)
+        const key = JSON.stringify([
+            scope?.expression ?? null,
+            personHasDefaultSelf(business, action),
+        ])
+        let description = personEffectiveDescription(
+            scope,
+            business,
+            labels,
+            action,
+        )
         if (description === "无数据访问范围，请添加授权")
             description =
                 business.authorization_policy === "directory"

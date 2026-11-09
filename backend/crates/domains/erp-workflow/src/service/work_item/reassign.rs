@@ -8,8 +8,8 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::access::{
-    ActorAccess, MANAGE_PERMISSION, active_role_ids, ensure_generic_work_item_mutation,
-    ensure_item_in_managed_scope, ensure_managed_access, has_assignment_candidate_access, object_policy,
+    ActorAccess, active_role_ids, ensure_generic_work_item_mutation, ensure_item_in_managed_scope,
+    has_assignment_candidate_access, object_policy,
 };
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
@@ -33,8 +33,6 @@ pub(super) struct AssignmentAuthorizationSnapshot {
     pub(super) actor_kind: erp_core::AccountKind,
     pub(super) assignee_kind: erp_core::AccountKind,
     pub(super) read_permission: String,
-    pub(super) actor_read_role_ids: Vec<String>,
-    pub(super) actor_manage_role_ids: Vec<String>,
     pub(super) assignee_read_role_ids: Vec<String>,
     pub(super) assignee_permissions: Vec<String>,
 }
@@ -199,7 +197,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
                 ensure_generic_work_item_mutation(&replayed)?;
                 ensure_item_in_managed_scope(&replayed, &managed_access)?;
-                self.ensure_object_participation(&actor, &replayed).await?;
+                self.ensure_task_control_access(&actor, &replayed).await?;
                 return self.applied_outcome(replayed, &actor).await;
             }
             if item.base.version != expected_task_version {
@@ -239,15 +237,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let policy = object_policy(item.work_item_type, &item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let read_permission = policy.read_permission.to_string();
-        let manage_permission = MANAGE_PERMISSION.to_string();
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = self.auth.current_policy_revision().await?;
-            let actor_role_ids =
-                active_role_ids(&self.auth, actor.kind(), actor.id(), &mut NoTransaction).await?;
-            let actor_read_role_ids =
-                self.roles_granting_permission(&actor_role_ids, &read_permission, true).await?;
-            let actor_manage_role_ids =
-                self.roles_granting_permission(&actor_role_ids, &manage_permission, true).await?;
             let assignee = self
                 .auth
                 .load_account(assignee_id, &mut NoTransaction)
@@ -265,8 +256,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 actor_kind: actor.kind(),
                 assignee_kind: assignee.kind(),
                 read_permission: read_permission.clone(),
-                actor_read_role_ids,
-                actor_manage_role_ids,
                 assignee_read_role_ids,
                 assignee_permissions,
             };
@@ -320,28 +309,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         authorization: &AssignmentAuthorizationSnapshot,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let account = self
-            .auth
-            .load_account(actor_id, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
-        AvailableWorkItemAccount::from_account_kind(&account, actor_kind)
-            .map_err(|_| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
-        let access = self
-            .assignment_access_for_executor(
-                actor_kind,
-                actor_id,
-                &authorization.read_permission,
-                &authorization.actor_read_role_ids,
-                &authorization.actor_manage_role_ids,
-                executor,
-            )
-            .await?;
-        if require_manager {
-            ensure_managed_access(&access)?;
-            ensure_item_in_managed_scope(item, &access)?;
-        }
-        self.ensure_item_access_with_executor(item, &access, executor).await.map_err(task_read_error)
+        let _ = (require_manager, authorization);
+        let actor = AuditActor::new(actor_id.to_owned(), actor_id.to_owned(), actor_kind);
+        self.ensure_task_manage(&actor, item, executor).await
     }
 
     /// 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。

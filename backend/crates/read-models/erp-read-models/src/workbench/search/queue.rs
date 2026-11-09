@@ -7,7 +7,7 @@ use super::super::query::{
     AUTHORIZED_SCAN_BATCH_SIZE, AuthorizedPage, AuthorizedPageCollector, matches_handler,
     matches_order_sources, queue_scope_version,
 };
-use super::super::{WorkItemFilter, WorkItemScope, WorkbenchObjectFactMap, WorkbenchReadService, dto};
+use super::super::{WorkItemFilter, WorkbenchObjectFactMap, WorkbenchReadService, dto};
 use super::{SearchOptions, collect_options};
 use crate::Result;
 
@@ -39,21 +39,13 @@ impl WorkbenchReadService {
             if candidate_count == 0 {
                 break;
             }
-            let mut facts = self
-                .candidate_object_facts(
-                    &rows,
-                    filter.query.is_some() || query.filters != Default::default(),
-                    executor,
-                )
-                .await?;
-            let mut fields = if query.scope == WorkItemScope::Mine {
-                self.personal_queue_fields(rows, actor.id(), &facts, executor).await?
+            let facts = if query.sales_order_ids.is_empty() && query.purchase_order_ids.is_empty() {
+                WorkbenchObjectFactMap::new()
             } else {
-                self.authorize_queue_rows(rows, access, &mut facts, executor).await?
+                self.candidate_object_facts(&rows, false, executor).await?
             };
-            if filter.query.is_some() || query.filters != Default::default() {
-                self.search_documents(&mut fields, executor).await?;
-            }
+            let mut fields = rows.into_iter().map(dto::WorkItemFields::from).collect::<Vec<_>>();
+            self.search_documents(&mut fields, executor).await?;
             if query.filters.blocked {
                 self.search_blockers(&mut fields, query.scope, actor, access, executor).await?;
             }

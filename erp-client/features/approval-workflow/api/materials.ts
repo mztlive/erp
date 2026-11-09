@@ -168,8 +168,32 @@ export type ApprovalSalesSubmission = {
 const materialsPath = (instanceId: string) =>
     `/admin/approval-instances/${encodeURIComponent(instanceId)}/materials`
 
-export const fetchApprovalMaterials = (instanceId: string) =>
-    apiGet<ApprovalMaterials>(materialsPath(instanceId), { cache: "no-store" })
+export type MaterialReference = Readonly<{
+    businessObjectType: string
+    businessObjectId: string
+    subjectVersion: string
+}>
+
+/** 独立授权的冻结材料必须匹配任务绑定的单据及提交版本。 */
+export async function fetchApprovalMaterials(
+    instanceId: string,
+    reference?: MaterialReference,
+): Promise<ApprovalMaterials> {
+    const materials = await apiGet<ApprovalMaterials>(
+        materialsPath(instanceId),
+        {
+            cache: "no-store",
+        },
+    )
+    if (
+        reference &&
+        (materials.document_id !== reference.businessObjectId ||
+            materials.document_type !== reference.businessObjectType ||
+            String(materials.subject_version) !== reference.subjectVersion)
+    )
+        throw new Error("关联资料与当前任务版本不一致，请刷新任务后重试")
+    return materials
+}
 
 export const fetchApprovalMaterialPreview = (
     instanceId: string,

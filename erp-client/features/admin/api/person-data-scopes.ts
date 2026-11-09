@@ -1,3 +1,4 @@
+import { actionLabel } from "@/lib/permission-catalog"
 import { apiGet, apiPut } from "@/lib/api"
 import type { ScopeDimension } from "@/features/organization/types"
 
@@ -55,6 +56,7 @@ export type PersonScopeBusiness = {
     actions: string[]
     dimensions: ScopeDimension[]
     default_self: boolean
+    default_self_actions?: string[]
 }
 export type PersonScopeList = {
     items: PersonDataScope[]
@@ -211,11 +213,35 @@ export function personScopeDescription(
         : union
 }
 
+/** 默认本人范围按动作判断，旧服务端仍兼容资源级标记。 */
+export function personHasDefaultSelf(
+    business: PersonScopeBusiness,
+    action: string,
+): boolean {
+    return (
+        business.default_self_actions?.includes(action) ?? business.default_self
+    )
+}
+
+/** 同一资源可同时包含默认本人读取和必须显式配置的管理动作。 */
+export function personDefaultScopeDescription(
+    business: PersonScopeBusiness,
+): string {
+    const defaults = business.configurable_actions.filter((action) =>
+        personHasDefaultSelf(business, action),
+    )
+    if (!defaults.length) return "没有默认本人范围，请添加授权。"
+    if (defaults.length === business.configurable_actions.length)
+        return "默认包含本人负责的数据；扩大范围需添加授权。"
+    return `${defaults.map(actionLabel).join("、")}默认包含本人负责的数据；其余操作需显式添加范围。`
+}
+
 /** 基础范围只对新授权模型生效；旧授权按原条件单独说明。 */
 export function personEffectiveDescription(
     scope: PersonDataScope | undefined,
     business: PersonScopeBusiness,
     labels: Map<string, string> = new Map(),
+    action = scope?.action,
 ): string {
     if (
         !business.configurable_actions.length ||
@@ -224,19 +250,22 @@ export function personEffectiveDescription(
         return business.policy_description
     if (scope && !scope.expression.additive)
         return `原授权：${personScopeDescription(scope, labels)}（待转换）`
+    const defaultSelf = action
+        ? personHasDefaultSelf(business, action)
+        : business.default_self
     const alternatives = scope?.expression.alternatives ?? []
     if (
         alternatives.some((terms) =>
             terms.some((term) => term.scope_type === "company"),
         )
     )
-        return business.default_self
+        return defaultSelf
             ? "公司范围（已覆盖本人及其他追加范围）"
             : "公司范围（已覆盖其他追加范围）"
     const descriptions = alternatives.map((terms) =>
         personTermsDescription(terms, labels),
     )
-    if (business.default_self) descriptions.unshift("本人负责的数据")
+    if (defaultSelf) descriptions.unshift("本人负责的数据")
     return descriptions.join("；或 ") || "无数据访问范围，请添加授权"
 }
 
@@ -257,7 +286,8 @@ export function personScopeDefaults(
         for (const terms of row.expression.alternatives) {
             if (
                 !terms.length ||
-                (business?.default_self &&
+                (business &&
+                    personHasDefaultSelf(business, row.action) &&
                     terms.length === 1 &&
                     terms[0].scope_type === "self_owned")
             )

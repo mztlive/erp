@@ -14,7 +14,7 @@ use persistence_core::Executor;
 use serde::Serialize;
 
 use super::WorkbenchReadService;
-use super::brief::{BriefSection, ObjectBriefSource};
+use super::brief::BriefSection;
 use super::dto::WorkItemFields;
 use crate::Result;
 
@@ -81,24 +81,6 @@ impl SearchDocument {
         if !value.trim().is_empty() {
             self.texts.push(SearchOption { value: value.to_owned(), label: label.to_owned() });
         }
-    }
-    /// 从已授权摘要构造检索资料。
-    /// # 参数
-    /// 参数只接受已授权事项的可读业务字段。
-    /// # 返回
-    /// 更新当前检索资料，匹配方法返回命中说明或空结果。
-    /// # 错误
-    /// 无。
-    pub(super) fn source(&mut self, source: &ObjectBriefSource) {
-        if let Some(customer) = &source.customer {
-            self.text("客户", customer);
-            self.facet("counterparties", customer, customer);
-        }
-        for line in &source.lines {
-            self.text("商品", &line.title);
-        }
-        self.text("事项摘要", &source.list_summary);
-        self.sections(&source.extra_sections);
     }
     /// 从已授权业务键值构造文本及筛选维度。
     /// # 参数
@@ -204,7 +186,7 @@ impl WorkbenchReadService {
         for field in fields.iter_mut() {
             field.search = task_document(field, &names);
         }
-        self.search_order_lines(fields, executor).await
+        Ok(())
     }
 }
 
@@ -227,28 +209,13 @@ pub(in crate::workbench) fn task_document(
         ..Default::default()
     };
     task_facets(&mut doc, field);
-    doc.text("单号", &field.business_object_label);
-    if let Some(name) = &field.counterparty_label {
-        doc.facet("counterparties", name, name);
-        doc.text("往来方", name);
-    }
+    doc.text("任务编号", &field.id);
+    doc.text("关联对象编号", &field.business_object_id);
     if let Some(id) = &field.owner_user_id
         && let Some(name) = names.get(id)
     {
         doc.facet("handlers", id, name);
         doc.text("处理人", name);
-    }
-    if let Some(source) = &field.brief_source {
-        doc.source(source);
-    }
-    for text in &field.search_lines {
-        doc.text("商品", text);
-    }
-    for line in &field.delivery_lines {
-        doc.text("商品", &line.title);
-    }
-    if let Some(impact) = &field.impact_summary {
-        doc.text("事项说明", impact);
     }
     doc
 }

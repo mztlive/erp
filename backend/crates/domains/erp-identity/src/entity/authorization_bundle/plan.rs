@@ -258,12 +258,14 @@ fn policy_notes(document: &PolicyDocument) -> Result<Vec<String>> {
     ];
     for scope in &document.data_scopes {
         let request = scope.request(0)?;
-        let baseline = if PersonScopeExpression::default_self(&request.resource) {
-            "本人负责的数据与追加范围求并，清空追加范围仍保留本人基础"
-        } else {
-            "无本人基础，清空追加范围后该动作无独立数据范围"
-        };
-        notes.push(format!("{}/{}：{baseline}", scope.user_id, scope.resource));
+        for action in &request.actions {
+            let baseline = if PersonScopeExpression::default_self(&request.resource, action) {
+                "本人负责的数据与追加范围求并，清空追加范围仍保留本人基础"
+            } else {
+                "无本人基础，清空追加范围后该动作无独立数据范围"
+            };
+            notes.push(format!("{}/{}:{action}：{baseline}", scope.user_id, scope.resource));
+        }
     }
     Ok(notes)
 }
@@ -605,7 +607,7 @@ mod tests {
         let scope = &exported.document.data_scopes[0];
         assert_eq!(scope.resource, "stock_balance");
         assert!(scope.grants.is_empty());
-        assert!(!PersonScopeExpression::default_self(&scope.resource));
+        assert!(!PersonScopeExpression::default_self(&scope.resource, "list"));
         assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
     }
 

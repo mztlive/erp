@@ -163,7 +163,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         ensure_generic_work_item_mutation(&item)?;
         let access = self.managed_access(actor).await?;
         ensure_item_in_managed_scope(&item, &access)?;
-        self.ensure_object_participation(actor, &item).await?;
+        self.ensure_task_control_access(actor, &item).await?;
         Ok(Some(item))
     }
 
@@ -184,7 +184,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
         let _ = actor;
-        Ok(WorkItemMutationOutcome::Applied { work_item_id: item.base.id })
+        Ok(WorkItemMutationOutcome::Applied { work_item_id: item.base.id, task_version: item.base.version })
     }
 
     /// 冲突后返回任务 ID，供 HTTP 向 read-models 投影。

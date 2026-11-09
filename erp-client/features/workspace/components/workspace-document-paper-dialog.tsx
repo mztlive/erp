@@ -1,5 +1,6 @@
 "use client"
 
+import type { MaterialReference } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { BusinessFailureState } from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,7 @@ export type WorkspacePaperTarget = Readonly<{
 }>
 
 type WorkspaceDocumentPaperDialogProps = {
+    reference?: MaterialReference
     target: WorkspacePaperTarget | null
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -44,6 +46,7 @@ type WorkspaceDocumentPaperDialogProps = {
  */
 export function WorkspaceDocumentPaperDialog({
     target,
+    reference,
     open,
     onOpenChange,
 }: WorkspaceDocumentPaperDialogProps) {
@@ -105,6 +108,7 @@ export function WorkspaceDocumentPaperDialog({
                         ) : target?.kind === "approval_snapshot" ? (
                             <ApprovalSubmittedMaterials
                                 instanceId={target.objectId}
+                                reference={reference}
                                 enabled={open}
                                 view={
                                     target.materialsView ===
@@ -117,6 +121,7 @@ export function WorkspaceDocumentPaperDialog({
                         ) : target ? (
                             <WorkspacePaperBody
                                 kind={target.kind}
+                                reference={reference}
                                 objectId={target.objectId}
                                 enabled={open}
                             />
@@ -132,14 +137,22 @@ function WorkspacePaperBody({
     kind,
     objectId,
     enabled,
+    reference,
 }: {
+    reference?: MaterialReference
     kind: WorkspacePaperKind
     objectId: string
     enabled: boolean
 }) {
     const salesId = kind === "sales_order" && enabled ? objectId : ""
     const purchaseId = kind === "purchase_order" && enabled ? objectId : ""
-    const salesQuery = useSalesOrderDetailQuery(salesId)
+    const salesQuery = useSalesOrderDetailQuery(
+        salesId,
+        true,
+        reference?.businessObjectId === objectId
+            ? reference.subjectVersion
+            : undefined,
+    )
     const purchaseQuery = usePurchaseOrderCenterQuery(purchaseId)
 
     if (kind === "sales_order") {
@@ -172,6 +185,24 @@ function WorkspacePaperBody({
         )
     }
     if (!purchaseQuery.data) return <PaperMissingState />
+    const order = purchaseQuery.data
+    if (
+        reference?.businessObjectId === objectId &&
+        (order.identity.purchaseOrderId !== objectId ||
+            ![
+                order.identity.currentRevisionId,
+                order.identity.currentSubmissionId,
+                String(order.currentContent.version),
+            ].includes(reference.subjectVersion))
+    ) {
+        return (
+            <PaperErrorState
+                objectId={objectId}
+                error={new Error("关联采购资料版本已变化，请刷新任务后重试")}
+                onRetry={() => void purchaseQuery.refetch()}
+            />
+        )
+    }
     return <PurchaseOrderPaperDocument order={purchaseQuery.data} />
 }
 

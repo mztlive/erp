@@ -50,6 +50,8 @@ export type FulfillmentQueueFilters = {
     purchaseOrderId?: string
     /** W01 任务只允许加载该任务绑定的履约对象。 */
     operationId?: string
+    /** 从已授权任务详情取得的材料版本；无需额外列表权限。 */
+    taskSourceVersion?: string
     currentOperationId?: string
     /** 服务端页码（1 起），同时进入 URL、queryKey 与请求参数。 */
     page?: number
@@ -244,7 +246,11 @@ async function fetchExactOperationQueue(
         const matchesFilters =
             hasFrozenIdentity &&
             matchOperation(operation, filters, [operationType])
-        if (matchesFilters) {
+        if (matchesFilters && filters.taskSourceVersion) {
+            if (operation.sourceVersion !== filters.taskSourceVersion)
+                throw new Error("关联履约资料版本已变化，请刷新任务后重试")
+        }
+        if (matchesFilters && !filters.taskSourceVersion) {
             const gatePage = decodeFulfillmentQueuePage(
                 await apiGet<unknown>("/admin/work-items/fulfillment-queue", {
                     operation_id: filters.operationId,
@@ -268,7 +274,12 @@ async function fetchExactOperationQueue(
                     "NO_OPERATIONS",
                 )
             }
-            // W01 单任务入口也必须使用服务端冻结条件及正式核销净额，不能沿用详情的默认门槛。
+            if (
+                operation &&
+                operation.sourceVersion !== responsibility.source_version
+            )
+                throw new Error("关联履约资料版本已变化，请刷新任务后重试")
+            // 状态来自任务，业务材料由各自详情接口授权读取。
             operation = {
                 ...operation,
                 gate: fulfillmentQueueItemToOperation(responsibility).gate,

@@ -238,7 +238,7 @@ export function WorkspaceSearchPanel({
                                     state.view === "managed") &&
                                 hasPermission(
                                     profile?.permissions,
-                                    "work_item:manage",
+                                    "work_item:list",
                                 ) && (
                                     <FilterSelect
                                         id="workspace-task-scope"

@@ -7,7 +7,11 @@ import { hasPermission } from "@/lib/permissions"
  */
 
 import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
-import { getErrorPresentation, type ApiError } from "@/lib/api/errors"
+import {
+    createApiError,
+    getErrorPresentation,
+    type ApiError,
+} from "@/lib/api/errors"
 import { downloadBlob } from "@/lib/download-blob"
 import {
     PERMISSION_VERSION,
@@ -176,6 +180,7 @@ export async function fetchSalesOrderDetail(
     id: string,
     changeOrderScopeVersion?: string,
     permissions?: readonly string[],
+    expectedSubjectVersion?: string,
 ): Promise<SalesOrderDetailView | null> {
     let detail: BackendSalesOrderDetail
     try {
@@ -211,6 +216,24 @@ export async function fetchSalesOrderDetail(
             })
     }
     const commercialSource = pickSalesOrderCommercialSource(detail)
+    if (
+        expectedSubjectVersion &&
+        (detail.id !== id ||
+            !commercialSource ||
+            !(
+                commercialSource.id === expectedSubjectVersion ||
+                ("submission_no" in commercialSource &&
+                    String(commercialSource.submission_no) ===
+                        expectedSubjectVersion)
+            ))
+    ) {
+        throw createApiError({
+            kind: "Validation",
+            code: "WORK_ITEM_MATERIAL_VERSION_MISMATCH",
+            message: "关联销售资料版本已变化，请刷新任务后重试",
+            retryable: false,
+        })
+    }
     const [customerDisplay, contractDisplay, extras] = await Promise.all([
         canReadCustomer
             ? loadCustomerDisplay(detail.customer_id, loadWarnings)

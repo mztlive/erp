@@ -3,30 +3,25 @@
 //! 本模块只从当前账号持有的开放 `FULFILLMENT_OPERATION` WorkItem 形成页面投影。
 //! 作业单据、来源单据和仓库由数据库批量关联；分页、筛选和指标均在服务端完成。
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use application_core::AuditActor;
 use application_core::query::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::Instant;
-use erp_core::ids::PurchaseOrderId;
 use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
-use erp_workflow::entity::work_item::{
-    QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType,
-};
+use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority};
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::access::{ActorAccess, has_execution_permissions};
+use super::access::{ActorAccess, has_permission};
 use super::query::{ensure_queue_context, ensure_scope_version, queue_scope_version};
-use super::supply_warnings::{purchase_owner_label, supply_warning_summary};
 use super::{WorkItemDueFilter, WorkbenchReadService};
 use crate::errors::{Error, Result};
 use crate::fulfillment_queue::{
     FulfillmentQueueFilter as RepositoryFilter, FulfillmentQueueItemRow, FulfillmentQueueRepository,
 };
-use crate::supplier_portal::{PurchaseSupplyWarningReader, PurchaseSupplyWarnings};
 
 const ALL_OPERATION_TYPES: [FulfillmentQueueOperationType; 5] = [
     FulfillmentQueueOperationType::Receipt,
@@ -61,15 +56,6 @@ impl FulfillmentQueueOperationType {
             Self::SupplierDirect => "SUPPLIER_DIRECT",
             Self::Electronic => "ELECTRONIC",
             Self::Service => "SERVICE",
-        }
-    }
-
-    fn business_object_type(self) -> &'static str {
-        match self {
-            Self::Receipt => "purchase_receipt",
-            Self::WarehouseShip | Self::SupplierDirect => "delivery",
-            Self::Electronic => "electronic_delivery",
-            Self::Service => "service_fulfillment",
         }
     }
 
@@ -249,18 +235,21 @@ pub struct FulfillmentQueueItemView {
     pub sales_order_id: Option<String>,
     /// 来源销售单号。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub sales_order_no: Option<String>,
     /// 来源采购单 ID。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub purchase_order_id: Option<String>,
     /// 来源采购单号。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub purchase_order_no: Option<String>,
     /// 作业仓库 ID。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warehouse_id: Option<String>,
     /// 作业仓库标签。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub warehouse_label: Option<String>,
     /// 销售责任明细 ID。
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -270,19 +259,24 @@ pub struct FulfillmentQueueItemView {
     pub purchase_line_sales_allocation_id: Option<String>,
     /// 作业数量的十进制字符串。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub quantity: Option<String>,
     /// 履约结果代码。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub result: Option<String>,
     /// 完整物流条目，每条关联销售明细和承运方。
+    #[serde(skip_serializing)]
     pub tracking_entries: Vec<DeliveryTrackingEntry>,
     /// 先决条件状态。
     pub gate_state: FulfillmentQueueGateState,
     /// 冻结付款条件要求的最低金额。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub gate_required_amount: Option<String>,
     /// 正式付款核销 APPLY 减 REVERSE 的净金额。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub gate_effective_paid_amount: Option<String>,
 }
 
@@ -372,8 +366,7 @@ impl WorkbenchReadService {
         let repository_page =
             FulfillmentQueueRepository::new(&self.db).search_fulfillment_queue(&filter, executor).await?;
 
-        let mut items = repository_page.items.into_iter().map(map_item).collect::<Result<Vec<_>>>()?;
-        self.apply_fulfillment_queue_supply_warnings(&mut items, executor).await?;
+        let items = repository_page.items.into_iter().map(map_item).collect::<Result<Vec<_>>>()?;
         let result_version = items.iter().fold(String::new(), |version, item| {
             queue_scope_version(&version, &item.work_item_id, &item.task_version)
         });
@@ -403,65 +396,6 @@ impl WorkbenchReadService {
             metrics,
             as_of: Instant::now(),
         })
-    }
-
-    /// 仅对聚合已授权且校验当前草稿身份的页面追加供给提示，保留付款门槛与任务事实。
-    async fn apply_fulfillment_queue_supply_warnings(
-        &self,
-        items: &mut [FulfillmentQueueItemView],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = queue_purchase_ids(items);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let warnings =
-            PurchaseSupplyWarningReader::new(self.db.clone()).for_purchases(&ids, executor).await?;
-        let owner_names = self.supply_warning_owner_names(&warnings, executor).await?;
-        apply_queue_supply_warnings(items, &warnings, &owner_names);
-        Ok(())
-    }
-}
-
-/// 当前页相同采购只读取一次；仓发即使存在异常采购字段也不参加供给猜测。
-fn queue_purchase_id(item: &FulfillmentQueueItemView) -> Option<&str> {
-    if item.operation_type == FulfillmentQueueOperationType::WarehouseShip {
-        return None;
-    }
-    item.purchase_order_id.as_deref()
-}
-
-fn queue_purchase_ids(items: &[FulfillmentQueueItemView]) -> Vec<PurchaseOrderId> {
-    items
-        .iter()
-        .filter_map(queue_purchase_id)
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .map(PurchaseOrderId::new)
-        .collect()
-}
-
-/// 供给风险只追加业务文字，不改变来源、金额、支付状态或既有门槛筛选。
-fn apply_queue_supply_warnings(
-    items: &mut [FulfillmentQueueItemView],
-    warnings: &HashMap<String, PurchaseSupplyWarnings>,
-    owner_names: &HashMap<String, String>,
-) {
-    for item in items {
-        let Some(warnings) = queue_purchase_id(item).and_then(|id| warnings.get(id)) else {
-            continue;
-        };
-        let Some(summary) = supply_warning_summary(warnings) else {
-            continue;
-        };
-        let owner = purchase_owner_label(warnings, owner_names);
-        let warning = format!("当前采购负责人：{owner}；供给影响提示：{summary}");
-        if item.impact_summary.trim().is_empty() {
-            item.impact_summary = warning;
-        } else {
-            item.impact_summary.push('；');
-            item.impact_summary.push_str(&warning);
-        }
     }
 }
 
@@ -519,17 +453,12 @@ fn visible_operation_types(
     requested: &[FulfillmentQueueOperationType],
     access: &ActorAccess,
 ) -> Vec<FulfillmentQueueOperationType> {
-    requested
-        .iter()
-        .copied()
-        .filter(|operation_type| {
-            has_execution_permissions(
-                WorkItemType::FulfillmentOperation,
-                operation_type.business_object_type(),
-                access,
-            )
-        })
-        .collect()
+    if !has_permission(access, "work_item:list")
+        || !access.readable_owner_ids.as_ref().is_none_or(|ids| ids.contains(&access.actor_id))
+    {
+        return Vec::new();
+    }
+    requested.to_vec()
 }
 
 fn ensure_timezone(timezone: Option<&str>) -> Result<()> {
@@ -589,11 +518,11 @@ fn map_item(row: FulfillmentQueueItemRow) -> Result<FulfillmentQueueItemView> {
         owner_organization_id: row.owner_organization_id,
         priority: row.priority,
         reason_code: row.reason_code,
-        impact_summary: row.impact_summary,
+        impact_summary: "请读取关联资料后核对并处理".into(),
         operation_id: row.operation_id,
         operation_type,
         business_object_type: row.business_object_type,
-        summary: row.summary,
+        summary: "待处理履约任务".into(),
         edit_version: row.edit_version,
         due_at: Instant::from_unix_secs(row.due_at),
         sales_order_id: row.sales_order_id,
@@ -634,12 +563,9 @@ fn empty_page(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use serde_json::json;
 
     use super::*;
-    use crate::supplier_portal::SupplyInterruptionWarning;
 
     fn item(operation_type: &str, purchase_id: Option<&str>) -> FulfillmentQueueItemView {
         map_item(serde_json::from_value(json!({
@@ -653,55 +579,24 @@ mod tests {
     }
 
     #[test]
-    fn supply_lookup_uses_only_deduplicated_actual_page_purchase_links() {
-        let items = [
-            item("SUPPLIER_DIRECT", Some("purchase-a")),
-            item("RECEIPT", Some("purchase-a")),
-            item("ELECTRONIC", Some("purchase-b")),
-            item("SERVICE", None),
-            item("WAREHOUSE_SHIP", Some("cannot-use")),
-        ];
-        assert_eq!(
-            queue_purchase_ids(&items),
-            vec![PurchaseOrderId::new("purchase-a"), PurchaseOrderId::new("purchase-b")]
-        );
-        assert!(queue_purchase_ids(&[]).is_empty());
-    }
-
-    #[test]
-    fn supply_warning_only_appends_real_purchase_owner_and_preserves_payment_gate() {
-        let mut items = [
-            item("SUPPLIER_DIRECT", Some("purchase")),
-            item("WAREHOUSE_SHIP", Some("purchase")),
-            item("SERVICE", None),
-        ];
-        let original = items.clone();
-        let warning = PurchaseSupplyWarnings {
-            warnings: vec![SupplyInterruptionWarning {
-                offering_id: "internal-offering".into(),
-                status: None,
-                availability_version: Some(7),
-                code: "SUPPLY_UNAVAILABLE".into(),
-                message: "供应商当前缺货，请核验未完成履约".into(),
-            }],
-            purchase_order_owner_user_id: Some("buyer".into()),
-            association_unknown: true,
-            association_notice: Some("历史采购选源关联未知".into()),
-        };
-        let names = HashMap::from([("buyer".into(), "陈国平".into())]);
-        apply_queue_supply_warnings(&mut items, &HashMap::from([("purchase".into(), warning)]), &names);
-        let mut expected = original.clone();
-        expected[0].impact_summary="供应商直发待发货；当前采购负责人：陈国平；供给影响提示：供应商当前缺货，请核验未完成履约；历史采购选源关联未知".into();
-        assert_eq!(items, expected);
-        assert!(!items[0].impact_summary.contains("internal-offering"));
-        assert!(!items[0].impact_summary.contains("SUPPLY_UNAVAILABLE"));
-        let mut no_warning = original.clone();
-        apply_queue_supply_warnings(
-            &mut no_warning,
-            &HashMap::from([("purchase".into(), PurchaseSupplyWarnings::default())]),
-            &names,
-        );
-        assert_eq!(no_warning, original);
+    fn queue_returns_references_without_business_materials() {
+        let view = item("SUPPLIER_DIRECT", Some("purchase"));
+        let value = serde_json::to_value(view).unwrap();
+        assert_eq!(value["operation_id"], "operation");
+        assert_eq!(value["source_version"], "3");
+        assert_eq!(value["purchase_order_id"], "purchase");
+        for field in [
+            "sales_order_no",
+            "purchase_order_no",
+            "warehouse_label",
+            "quantity",
+            "result",
+            "tracking_entries",
+            "gate_required_amount",
+            "gate_effective_paid_amount",
+        ] {
+            assert!(value.get(field).is_none(), "{field}");
+        }
     }
 
     #[test]

@@ -421,10 +421,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/work-items/{id}/reassign",
-                description: "在授权范围内受控转交非审批任务",
+                description: "转交待办",
                 permission: {
                     resource: "work_item",
-                    action: "reassign",
+                    action: "manage",
                 },
             },
             {
@@ -434,17 +434,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 description: "查询非审批任务可转交人员",
                 permission: {
                     resource: "work_item",
-                    action: "reassign",
+                    action: "manage",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
                 path: "/admin/work-items/{id}/close",
-                description: "关闭重复、误派或已有替代的非审批任务",
+                description: "关闭待办",
                 permission: {
                     resource: "work_item",
-                    action: "close",
+                    action: "manage",
                 },
             },
             {
@@ -454,7 +454,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 description: "原提交人放弃本人驳回处理任务",
                 permission: {
                     resource: "work_item",
-                    action: "detail",
+                    action: "manage",
                 },
             },
             {

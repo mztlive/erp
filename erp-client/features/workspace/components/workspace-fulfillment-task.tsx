@@ -75,9 +75,15 @@ export function WorkspaceFulfillmentTask({
             role: descriptor?.role ?? "sales_order",
             operationTypes: operationType ? [operationType] : [],
             operationId: item.businessObjectId,
+            taskSourceVersion: item.subjectVersion,
             currentOperationId: item.businessObjectId,
         }),
-        [descriptor?.role, item.businessObjectId, operationType],
+        [
+            descriptor?.role,
+            item.businessObjectId,
+            item.subjectVersion,
+            operationType,
+        ],
     )
     const controller = useFulfillmentOperationsController({
         roleValue: filters.role,

@@ -34,8 +34,7 @@ export function useAbandonApprovalReworkMutation() {
     const client = useQueryClient()
     return useMutation({
         mutationFn: abandonApprovalRework,
-        onSuccess: async (item) => {
-            client.setQueryData(workItemKeys.detail(item.id), item)
+        onSuccess: async () => {
             await client.invalidateQueries({ queryKey: workItemKeys.all })
         },
     })

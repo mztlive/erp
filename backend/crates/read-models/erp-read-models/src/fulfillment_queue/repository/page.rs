@@ -80,14 +80,8 @@ pub(super) fn append_optional_filters(pipeline: &mut Vec<Document>, filter: &Ful
         pipeline.push(doc! {
             "$match": {
                 "$or": [
-                    { "operation.summary": { "$regex": &literal, "$options": "i" } },
+                    { "id": { "$regex": &literal, "$options": "i" } },
                     { "operation.operation_id": { "$regex": &literal, "$options": "i" } },
-                    { "_purchase_order.purchase_no": { "$regex": &literal, "$options": "i" } },
-                    { "_sales_order.order_no": { "$regex": &literal, "$options": "i" } },
-                    { "_customer_names.legal_name": { "$regex": &literal, "$options": "i" } },
-                    { "_customer_names.short_name": { "$regex": &literal, "$options": "i" } },
-                    { "_supplier_names.legal_name": { "$regex": &literal, "$options": "i" } },
-                    { "_supplier_names.short_name": { "$regex": &literal, "$options": "i" } },
                 ]
             }
         });

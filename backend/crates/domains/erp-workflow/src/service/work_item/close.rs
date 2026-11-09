@@ -85,14 +85,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
             ensure_generic_work_item_mutation(&replayed)?;
             ensure_item_in_managed_scope(&replayed, &managed_access)?;
-            self.ensure_object_participation(&actor, &replayed).await?;
+            self.ensure_task_control_access(&actor, &replayed).await?;
             return self.applied_outcome(replayed, &actor).await;
         }
         if item.base.version != expected_task_version {
             return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
         }
         ensure_item_in_managed_scope(&item, &managed_access)?;
-        self.ensure_object_participation(&actor, &item).await?;
+        self.ensure_task_control_access(&actor, &item).await?;
         if !item.is_w29_closable() {
             return Err(Error::BusinessLogicError("只有 W29 登记的异常任务允许受控关闭".to_string()));
         }
@@ -126,7 +126,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             return Err(Error::ConflictError("替代任务必须是同一 W29 对象类别的开放正式任务".to_string()));
         }
         ensure_item_in_managed_scope(&replacement, access)?;
-        self.ensure_object_participation(actor, &replacement).await
+        self.ensure_task_control_access(actor, &replacement).await
     }
 
     /// 在同一事务内写入 W29 领域证据、关闭任务并登记审计。
@@ -163,9 +163,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let attempt_audit = audit.clone();
         let audit_port = Arc::clone(&self.audit);
         let client = db.client().clone();
+        let service = self.clone();
+        let close_actor = actor.clone();
         let result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    service.ensure_task_manage(&close_actor, &item, executor).await?;
                     facts
                         .persist_w29_close(
                             &item,

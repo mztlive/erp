@@ -171,13 +171,19 @@ export function getWorkItemStats(
 export const getWorkItem = (workItemId: string): Promise<WorkItemDto> =>
     apiGet<WorkItemDto>(`/admin/work-items/${encodeURIComponent(workItemId)}`)
 
+/** 成功操作仅返回已提交的任务身份与版本。 */
+export type WorkItemCommandResult = Readonly<{
+    id: string
+    task_version: string
+}>
+
 /** 关闭本人驳回处理待办；原单据和审批历史保留。 */
 export function abandonApprovalRework(input: {
     workItemId: string
     expectedTaskVersion: string
     idempotencyKey: string
     reason: string
-}): Promise<WorkItemDto> {
+}): Promise<WorkItemCommandResult> {
     return apiPost(
         `/admin/work-items/${encodeURIComponent(input.workItemId)}/abandon-rework`,
         {
@@ -199,7 +205,7 @@ export const getWorkItemReassignCandidates = (
 /** 发送一条责任命令；任务版本只能来自最近一次服务端查询。 */
 export function submitWorkItemResponsibility(
     command: WorkItemResponsibilityCommand,
-): Promise<WorkItemDto> {
+): Promise<WorkItemCommandResult> {
     const id = encodeURIComponent(command.workItemId)
     const common = {
         expected_task_version: command.expectedTaskVersion,
@@ -208,17 +214,23 @@ export function submitWorkItemResponsibility(
 
     switch (command.kind) {
         case "REASSIGN":
-            return apiPost<WorkItemDto>(`/admin/work-items/${id}/reassign`, {
-                ...common,
-                target_user_id: command.targetUserId,
-                reason: command.reason,
-            })
+            return apiPost<WorkItemCommandResult>(
+                `/admin/work-items/${id}/reassign`,
+                {
+                    ...common,
+                    target_user_id: command.targetUserId,
+                    reason: command.reason,
+                },
+            )
         case "CLOSE":
-            return apiPost<WorkItemDto>(`/admin/work-items/${id}/close`, {
-                ...common,
-                reason_code: command.reasonCode,
-                replacement_work_item_id: command.replacementWorkItemId,
-                comment: command.comment,
-            })
+            return apiPost<WorkItemCommandResult>(
+                `/admin/work-items/${id}/close`,
+                {
+                    ...common,
+                    reason_code: command.reasonCode,
+                    replacement_work_item_id: command.replacementWorkItemId,
+                    comment: command.comment,
+                },
+            )
     }
 }

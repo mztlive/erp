@@ -305,7 +305,7 @@ mod scope_manifest_tests {
         assert!(validate_scope_manifest("role-sales", "customer", &[bad]).is_err());
         let mut bad = good.clone();
         bad.binding.resource = "work_item".into();
-        assert!(validate_scope_manifest("role-sales", "work_item", &[bad]).is_err());
+        assert!(validate_scope_manifest("role-sales", "work_item", &[bad]).is_ok());
         let mut bad = good;
         bad.binding.target_dimension = ScopeDimension::Warehouse;
         assert!(validate_scope_manifest("role-sales", "customer", &[bad]).is_err());

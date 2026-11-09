@@ -227,6 +227,15 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
     }
 
+    async fn task_scope_owners(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<Option<Vec<String>>> {
+        super::task_scope::task_owners(&self.db, &self.rbac, actor, action, executor).await
+    }
+
     async fn managed_task_owners(
         &self,
         actor: &AuditActor,

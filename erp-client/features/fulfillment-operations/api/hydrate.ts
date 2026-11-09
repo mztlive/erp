@@ -15,6 +15,10 @@ import { apiGet } from "@/lib/api"
 
 import {
     deliveryToOperation,
+    electronicToOperation,
+    serviceToOperation,
+    type BackendElectronicDelivery,
+    type BackendServiceFulfillment,
     receiptToOperation,
     type BackendDeliveryDetail,
     type BackendPurchaseReceiptDetail,
@@ -172,6 +176,7 @@ export async function hydrateOperationDetail(
         const detail = await apiGet<BackendPurchaseReceiptDetail>(
             `/admin/purchase-receipts/${encodeURIComponent(operation.operationId)}`,
         )
+        assertTaskMaterial(operation, detail.receipt)
         return enrichOperationDisplay(
             applyPurchaseReceiptDetail(operation, detail),
         )
@@ -183,7 +188,40 @@ export async function hydrateOperationDetail(
         const detail = await apiGet<BackendDeliveryDetail>(
             `/admin/deliveries/${encodeURIComponent(operation.operationId)}`,
         )
+        assertTaskMaterial(operation, detail.delivery)
         return enrichOperationDisplay(applyDeliveryDetail(operation, detail))
     }
+    if (operation.operationType === "ELECTRONIC") {
+        const material = await apiGet<BackendElectronicDelivery>(
+            `/admin/electronic-deliveries/${encodeURIComponent(operation.operationId)}`,
+        )
+        assertTaskMaterial(operation, material)
+        return enrichOperationDisplay({
+            ...electronicToOperation(material),
+            gate: operation.gate,
+        })
+    }
+    if (operation.operationType === "SERVICE") {
+        const material = await apiGet<BackendServiceFulfillment>(
+            `/admin/service-fulfillments/${encodeURIComponent(operation.operationId)}`,
+        )
+        assertTaskMaterial(operation, material)
+        return enrichOperationDisplay({
+            ...serviceToOperation(material),
+            gate: operation.gate,
+        })
+    }
     return enrichOperationDisplay(operation)
+}
+
+/** 精确任务读取不能用业务接口返回的新版本覆盖任务绑定版本。 */
+function assertTaskMaterial(
+    operation: FulfillmentOperation,
+    material: { id: string; version: number },
+) {
+    if (
+        material.id !== operation.operationId ||
+        String(material.version) !== operation.sourceVersion
+    )
+        throw new Error("关联履约资料版本已变化，请刷新任务后重试")
 }

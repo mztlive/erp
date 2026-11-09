@@ -2,6 +2,7 @@ import { actionLabel } from "@/lib/permission-catalog"
 import type { OrgUnit, ScopeDimension } from "@/features/organization/types"
 import {
     personEffectiveDescription,
+    personHasDefaultSelf,
     personGrantKey,
     type PersonScopeBusiness,
     type PersonScopeInput,
@@ -41,9 +42,10 @@ export function ProposedScopeSummary({
         )
         const key = company
             ? "company"
-            : JSON.stringify(
+            : JSON.stringify([
+                  personHasDefaultSelf(business, action),
                   [...new Set(alternatives.map(personGrantKey))].sort(),
-              )
+              ])
         const group = groups.get(key) ?? {
             actions: [],
             description: personEffectiveDescription(

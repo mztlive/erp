@@ -155,7 +155,7 @@ impl WorkbenchReadService {
         all_families: bool,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemStatsView> {
-        let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+        let (access, version) = self.queue_access_with_version(&actor, executor).await?;
         access.scope_filter(&query)?;
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs())?;
@@ -180,6 +180,8 @@ impl WorkbenchReadService {
         } else {
             self.stream_stats(&query, &context, executor).await?.selected
         };
+        let current = self.auth.queue_scope_version(&actor, executor).await?;
+        super::query::ensure_scope_version(1, Some(&version), &current)?;
         Ok(WorkItemStatsView {
             assigned,
             due_today: selected.due_today,

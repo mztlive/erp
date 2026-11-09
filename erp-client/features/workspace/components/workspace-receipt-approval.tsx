@@ -42,7 +42,7 @@ export function WorkspaceReceiptApproval({
     item: WorkspaceWorkItem
     instanceId: string
 }) {
-    const materials = useApprovalMaterials(instanceId, true)
+    const materials = useApprovalMaterials(instanceId, true, item)
     const prefix = `workspace-receipt-approval-${toAutomationIdSegment(item.workItemId)}`
     const source = materials.data?.display.source
     const sections = source

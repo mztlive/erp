@@ -414,6 +414,22 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("任务管理范围未装配".into())) }
     }
 
+    /// 通过统一 DataScope 解析任务动作的数据范围。
+    /// # 参数
+    /// `actor` 为真实账号，`action` 只允许 list、detail、manage，`executor` 为当前执行器。
+    /// # 返回
+    /// 公司范围返回 None；受限范围返回负责人集合，空集合不得扩大。
+    /// # 错误
+    /// 缺少权限、范围未装配或读取失败时拒绝。
+    fn task_scope_owners(
+        &self,
+        _actor: &AuditActor,
+        _action: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<Option<Vec<String>>>> + Send {
+        async { Err(Error::Internal("任务数据范围未装配".into())) }
+    }
+
     /// 获取任务队列身份授权版本；不提供对象授权结论。
     ///
     /// # 参数

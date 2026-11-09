@@ -43,6 +43,7 @@ import { fullDeliveryAddress } from "@/lib/delivery-address"
 import { displayBusinessText } from "@/lib/display-name"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
+import type { WorkspaceWorkItem } from "../types"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
 const dateLabel = (value: number | null) =>
@@ -51,12 +52,14 @@ const dateLabel = (value: number | null) =>
 /** 全部明细与纸质预览读取同一审批提交，不回退到当前销售单。 */
 export function WorkspaceSalesApproval({
     instanceId,
+    item,
     onPreview,
 }: {
     instanceId: string
+    item: WorkspaceWorkItem
     onPreview: (target: WorkspacePaperTarget) => void
 }) {
-    const query = useApprovalMaterials(instanceId, true)
+    const query = useApprovalMaterials(instanceId, true, item)
     const submission = query.data?.sales_order
     const prefix = `workspace-sales-approval-${toAutomationIdSegment(instanceId)}`
 

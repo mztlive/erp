@@ -70,7 +70,7 @@ export function useWorkspaceApprovalDetailQuery(
             return fetchWorkspaceApprovalDetail(instanceId, {
                 canReadRework: hasPermission(
                     profile?.permissions,
-                    "work_item:read",
+                    "work_item:detail",
                 ),
             })
         },

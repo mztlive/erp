@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { DataTable } from "@/components/business/data-table"
+import { useWorkspaceListMaterials } from "../hooks/use-workspace-list-materials"
 import { useWorkspaceScroll } from "../hooks/use-workspace-scroll"
 import type { WorkspaceWorkItem } from "../types"
 import { queueTaskRow, workspaceTaskColumns } from "./workspace-task-columns"
@@ -36,7 +37,14 @@ export function WorkspaceTaskList({
         `queue:${scrollKey}`,
         "[data-slot=table-container]",
     )
-    const rows = useMemo(() => items.map(queueTaskRow), [items])
+    const materials = useWorkspaceListMaterials(items)
+    const rows = useMemo(
+        () =>
+            materials.map(({ item, materialNotice, retryMaterials }) =>
+                queueTaskRow(item, materialNotice, retryMaterials),
+            ),
+        [materials],
+    )
     const columns = useMemo(
         () =>
             workspaceTaskColumns({

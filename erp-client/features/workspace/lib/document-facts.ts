@@ -3,6 +3,7 @@ import { salesLineSpecification } from "@/features/sales-orders/lib/sales-line-s
 import { compareDecimal, formatCurrencyFixed } from "@/lib/fixed-decimal"
 import type {
     BackendSalesOrderDetail,
+    BackendRevisionCommercial,
     BackendSubmission,
     BackendWorkingCopy,
     BackendWorkingCopyLine,
@@ -27,6 +28,7 @@ export type WorkspaceFactLine = Readonly<{
 }>
 
 export type WorkspaceDocumentFacts = Readonly<{
+    documentNumber?: string
     counterparty?: string
     impact: string
     listSummary?: string
@@ -71,19 +73,24 @@ export function shouldLoadDocumentFacts(input: {
 export async function fetchWorkspaceDocumentFacts(input: {
     businessObjectType: string
     businessObjectId: string
+    subjectVersion: string
 }): Promise<WorkspaceDocumentFacts | null> {
     const id = input.businessObjectId.trim()
     if (!id) return null
     const kind = normalizeObjectType(input.businessObjectType)
-    if (SALES_ORDER_TYPES.has(kind)) return loadSalesOrderFacts(id)
-    if (RECEIPT_TYPES.has(kind)) return loadCustomerReceiptFacts(id)
+    if (SALES_ORDER_TYPES.has(kind))
+        return loadSalesOrderFacts(id, input.subjectVersion)
+    if (RECEIPT_TYPES.has(kind))
+        return loadCustomerReceiptFacts(id, input.subjectVersion)
     if (PAYMENT_REVERSAL_TYPES.has(kind)) {
-        return loadPaymentReversalFacts(id)
+        return loadPaymentReversalFacts(id, input.subjectVersion)
     }
     return null
 }
 
 type CustomerReceiptDto = Readonly<{
+    id: string
+    version: number | string
     receipt_no: string
     amount: string
     received_at: number
@@ -98,11 +105,36 @@ type CustomerReceiptDto = Readonly<{
 
 async function loadSalesOrderFacts(
     salesOrderId: string,
+    subjectVersion: string,
 ): Promise<WorkspaceDocumentFacts | null> {
     const detail = await apiGet<BackendSalesOrderDetail>(
         `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
     )
-    return salesOrderDocumentFacts(detail)
+    if (detail.id !== salesOrderId)
+        throw new Error("关联销售单不一致，请刷新任务后重试")
+    // 供给分配绑定提交记录 ID；提交序号与修订 ID 继续按各自引用精确匹配。
+    const submission = detail.submissions.find(
+        (entry) =>
+            entry.id === subjectVersion ||
+            String(entry.submission_no) === subjectVersion,
+    )
+    if (submission)
+        return {
+            ...salesContentToFacts(detail.business_type, submission),
+            documentNumber: detail.order_no,
+        }
+    const revision = detail.revisions.find(
+        (entry) => entry.id === subjectVersion,
+    )
+    if (revision)
+        return {
+            ...salesContentToFacts(detail.business_type, {
+                ...revision,
+                lines: revision.commercial_lines ?? [],
+            }),
+            documentNumber: detail.order_no,
+        }
+    throw new Error("未找到任务对应的销售单版本，请刷新任务后重试")
 }
 
 /**
@@ -113,15 +145,21 @@ export function salesOrderDocumentFacts(
 ): WorkspaceDocumentFacts | null {
     const content = pickSalesContent(detail)
     if (!content) return null
-    return salesContentToFacts(detail.business_type, content)
+    return {
+        ...salesContentToFacts(detail.business_type, content),
+        documentNumber: detail.order_no,
+    }
 }
 
 async function loadCustomerReceiptFacts(
     receiptId: string,
+    subjectVersion: string,
 ): Promise<WorkspaceDocumentFacts | null> {
     const receipt = await apiGet<CustomerReceiptDto>(
         `/admin/customer-receipts/${encodeURIComponent(receiptId)}`,
     )
+    if (receipt.id !== receiptId || String(receipt.version) !== subjectVersion)
+        throw new Error("关联回款资料版本已变化，请刷新任务后重试")
     const amount = formatYuan(receipt.amount)
     const sections: WorkspaceFactSection[] = [
         { label: "含税金额", value: amount, numeric: true },
@@ -142,6 +180,7 @@ async function loadCustomerReceiptFacts(
             quantity: formatYuan(row.allocated_amount),
         }))
     return {
+        documentNumber: receipt.receipt_no,
         impact: "不审批则回款不能过账、不能核销应收",
         listSummary: joinSummary([amount, receipt.bank_reference ?? undefined]),
         sections,
@@ -152,10 +191,16 @@ async function loadCustomerReceiptFacts(
 
 async function loadPaymentReversalFacts(
     reversalId: string,
+    subjectVersion: string,
 ): Promise<WorkspaceDocumentFacts> {
     const reversal = await apiGet<BackendPaymentReversal>(
         `/admin/payment-reversals/${encodeURIComponent(reversalId)}`,
     )
+    if (
+        reversal.id !== reversalId ||
+        String(reversal.version) !== subjectVersion
+    )
+        throw new Error("关联冲正资料版本已变化，请刷新任务后重试")
     const payment = await apiGet<BackendSupplierPayment>(
         `/admin/supplier-payments/${encodeURIComponent(
             reversal.original_supplier_payment_id,
@@ -199,6 +244,7 @@ export function paymentReversalDocumentFacts(
             quantity: formatYuan(allocation.allocated_amount),
         }))
     return {
+        documentNumber: reversal.reversal_no,
         counterparty: emptyToUndefined(payment.supplier_name),
         impact: "审批通过前原付款保持不变；通过后系统追加冲正记录并回冲原付款。",
         listSummary: joinSummary([
@@ -227,7 +273,7 @@ function pickSalesContent(
 
 function salesContentToFacts(
     businessType: string,
-    content: BackendSubmission | BackendWorkingCopy,
+    content: BackendSubmission | BackendWorkingCopy | BackendRevisionCommercial,
 ): WorkspaceDocumentFacts {
     const voucher = businessType === "VOUCHER"
     const linesSource = content.lines ?? []

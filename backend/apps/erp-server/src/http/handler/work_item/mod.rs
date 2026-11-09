@@ -8,7 +8,6 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use erp_read_models::workbench::{SearchOptions, WorkItemSearchParams};
 use erp_read_models::{
@@ -17,8 +16,8 @@ use erp_read_models::{
 };
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::work_item::{
-    AbandonApprovalReworkRequest, CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemConflictKind,
-    WorkItemMutationOutcome, WorkItemReassignCandidateView,
+    AbandonApprovalReworkRequest, CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemCommandView,
+    WorkItemConflictKind, WorkItemMutationOutcome, WorkItemReassignCandidateView,
 };
 use erp_workflow::{Error as WorkflowError, ErrorCode};
 use serde::{Deserialize, Serialize};
@@ -26,7 +25,7 @@ use uuid::Uuid;
 
 use crate::http::errors::{Error as HttpError, Result};
 use crate::http::extractor::{Json, Query};
-use crate::http::handler::approval_instance::error::{ApprovalHttpError, correlation_id};
+use crate::http::handler::approval_instance::error::ApprovalHttpError;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::errors::Error as ProcessError;
@@ -178,7 +177,7 @@ impl IntoResponse for WorkItemActionError {
 }
 
 /// 责任命令 HTTP 结果。
-pub type WorkItemActionResult = StdResult<ApiResponse<WorkItemHttpView>, WorkItemActionError>;
+pub type WorkItemActionResult = StdResult<ApiResponse<WorkItemCommandView>, WorkItemActionError>;
 
 /// 由任务类型计算责任类型。
 ///
@@ -234,41 +233,17 @@ fn wrap_page(page: WorkItemPageView) -> WorkItemHttpPageView {
     }
 }
 
-/// 拒绝审批任务的通用写命令。
-///
-/// # 错误
-/// `DocumentApproval` 返回稳定 409。
-fn reject_approval_task(
-    work_item_type: WorkItemType,
-    approval_node_execution_id: Option<&str>,
-    headers: &HeaderMap,
-) -> StdResult<(), WorkItemActionError> {
-    if work_item_type != WorkItemType::DocumentApproval && approval_node_execution_id.is_none() {
-        return Ok(());
-    }
-    Err(WorkItemActionError::ApprovalProtected(ApprovalHttpError::coded(
-        ErrorCode::ApprovalGenericWorkItemMutationForbidden,
-        correlation_id(headers),
-        None,
-    )))
-}
-
 async fn work_item_action_response(
     state: HttpState,
     actor: AuditActor,
     outcome: WorkItemMutationOutcome,
-    headers: HeaderMap,
 ) -> WorkItemActionResult {
     match outcome {
-        WorkItemMutationOutcome::Applied { work_item_id } => {
-            let view = WorkbenchReadService::new(
-                state.application().db(),
-                Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
-            )
-            .work_item_detail(work_item_id, actor)
-            .await?;
-            reject_approval_task(view.work_item_type, view.approval_node_execution_id.as_deref(), &headers)?;
-            Ok(ApiResponse::ok_with_data(view.into()))
+        WorkItemMutationOutcome::Applied { work_item_id, task_version } => {
+            Ok(ApiResponse::ok_with_data(WorkItemCommandView {
+                id: work_item_id,
+                task_version: task_version.to_string(),
+            }))
         },
         WorkItemMutationOutcome::Conflict(conflict) => {
             let current = match conflict.work_item_id() {
@@ -276,7 +251,7 @@ async fn work_item_action_response(
                     state.application().db(),
                     Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
                 )
-                .work_item_detail(id.to_string(), actor)
+                .work_item_action_view(id.to_string(), actor)
                 .await
                 .ok(),
                 None => None,
@@ -438,26 +413,24 @@ pub async fn work_item_reassign_candidates(
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 当前操作人
-/// * `headers` - 请求追踪等响应上下文
 /// * `id` - 任务 ID
 /// * `req` - 责任动作请求
 ///
 /// # 返回
-/// 返回责任已更新的同一任务。
+/// 返回任务 ID 与更新后的任务版本。
 ///
 /// # 错误
 /// 授权不足、目标资格不符、版本冲突或任务转交失败时返回错误。
 pub async fn work_item_reassign(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<ReassignWorkItemRequest>,
 ) -> WorkItemActionResult {
     let outcome = work_item_service(state.application().db(), state.application().rbac())
         .reassign(id, req, actor.clone())
         .await?;
-    work_item_action_response(state, actor, outcome, headers).await
+    work_item_action_response(state, actor, outcome).await
 }
 
 /// 受控关闭允许人工关闭的无效非审批任务。
@@ -467,26 +440,24 @@ pub async fn work_item_reassign(
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 当前操作人
-/// * `headers` - 请求追踪等响应上下文
 /// * `id` - 任务 ID
 /// * `req` - 责任动作请求
 ///
 /// # 返回
-/// 返回已关闭任务的只读事实。
+/// 返回已关闭任务 ID 与新版本。
 ///
 /// # 错误
 /// 授权不足、任务不允许关闭、版本冲突或任务关闭失败时返回错误。
 pub async fn work_item_close(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<CloseWorkItemRequest>,
 ) -> WorkItemActionResult {
     let outcome = work_item_service(state.application().db(), state.application().rbac())
         .close(id, req, actor.clone())
         .await?;
-    work_item_action_response(state, actor, outcome, headers).await
+    work_item_action_response(state, actor, outcome).await
 }
 
 /// 放弃本次驳回处理责任，保留原单据及审批历史。
@@ -494,26 +465,24 @@ pub async fn work_item_close(
 /// # 参数
 /// * `state` - 应用状态。
 /// * `actor` - 当前认证原提交人。
-/// * `headers` - 响应追踪上下文。
 /// * `id` - 驳回处理任务。
 /// * `req` - 版本、幂等键及放弃原因。
 ///
 /// # 返回
-/// 返回已关闭任务的授权视图。
+/// 返回已关闭任务 ID 与新版本。
 ///
 /// # 错误
 /// 责任、身份、类型或版本失效时拒绝；持久化错误保留原分类。
 pub async fn abandon_rework(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<AbandonApprovalReworkRequest>,
 ) -> WorkItemActionResult {
     let outcome = work_item_service(state.application().db(), state.application().rbac())
         .abandon_rework(id, req, actor.clone())
         .await?;
-    work_item_action_response(state, actor, outcome, headers).await
+    work_item_action_response(state, actor, outcome).await
 }
 
 #[cfg(test)]

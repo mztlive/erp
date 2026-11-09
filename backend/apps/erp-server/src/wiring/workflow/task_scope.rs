@@ -126,6 +126,30 @@ pub(super) async fn managed_owners(
     limited_owners(&scope)
 }
 
+/// 统一解析 list、detail、manage；读取拒绝不得回退到本人或历史参与。
+/// # 参数
+/// 数据库、RBAC、真实账号、任务动作及当前执行器。
+/// # 返回
+/// 返回 DataScope 编译后的负责人条件。
+/// # 错误
+/// 未登记动作、权限或数据范围拒绝、基础设施故障均返回错误。
+pub(super) async fn task_owners(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    action: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<Vec<String>>> {
+    if !matches!(action, "list" | "detail" | "manage") {
+        return Err(Error::ValidationError("未登记的任务权限动作".into()));
+    }
+    let scope = DataScopeService::new(db.clone(), rbac.clone())
+        .resolve(actor, "work_item", action, executor)
+        .await
+        .map_err(|error| map_service(error.into()))?;
+    limited_owners(&scope)
+}
+
 /// 编译后的负责人集合沿用原 20000 人上限与验证错误。
 fn limited_owners(scope: &AuthorizedDataScope) -> Result<Option<Vec<String>>> {
     let owners = owners(scope);

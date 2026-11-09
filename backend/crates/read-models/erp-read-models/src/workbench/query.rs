@@ -112,9 +112,9 @@ impl WorkbenchReadService {
                     .find_work_item(id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-                let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+                let access = self.task_access(actor, "detail", executor).await?;
                 detail_scope(&item, actor.id(), &access)?;
-                Ok(!self.authorized_fields_for_items(vec![item], &access, executor).await?.is_empty())
+                Ok(true)
             }
             .await;
             match result {
@@ -193,7 +193,7 @@ impl WorkbenchReadService {
             self.authorized_page_fields(&filter, &query, &actor, &access, executor).await?;
         let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
-        let mut fields = self
+        let fields = self
             .focused_fields(
                 authorized_page.items,
                 query.current_work_item_id.as_deref(),
@@ -203,9 +203,6 @@ impl WorkbenchReadService {
                 executor,
             )
             .await?;
-        if query.query.is_none() && query.filters == Default::default() {
-            self.page_display_fields(&mut fields, executor).await?;
-        }
         let items =
             self.project_fields(fields, query.scope, &actor, &access, &queue_context_id, executor).await?;
         let current_version = self.auth.queue_scope_version(&actor, executor).await?;
@@ -250,13 +247,7 @@ impl WorkbenchReadService {
             .find_visible_by_id(current_id, &candidates, executor)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
-        let mut current = if query.scope == WorkItemScope::Mine {
-            let mut fields = vec![dto::WorkItemFields::from(current)];
-            self.page_display_fields(&mut fields, executor).await?;
-            fields
-        } else {
-            self.authorized_fields_for_items(vec![current], context.access, executor).await?
-        };
+        let mut current = vec![dto::WorkItemFields::from(current)];
         self.search_documents(&mut current, executor).await?;
         if query.filters.blocked {
             self.search_blockers(&mut current, query.scope, context.actor, context.access, executor).await?;
@@ -268,8 +259,16 @@ impl WorkbenchReadService {
         }) else {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
         };
-        let keys = current_order_keys(&current);
-        let facts = self.load_object_facts(&keys, executor).await?;
+        let facts = if query.sales_order_ids.is_empty() && query.purchase_order_ids.is_empty() {
+            super::WorkbenchObjectFactMap::new()
+        } else {
+            self.facts_reader()
+                .load(&current_order_keys(&current), executor)
+                .await?
+                .into_iter()
+                .map(|(key, fact)| (key, super::WorkbenchObjectFact::from_authority(fact)))
+                .collect()
+        };
         if !matches_order_sources(&current, &facts, &query.sales_order_ids, &query.purchase_order_ids) {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
         }
@@ -315,14 +314,13 @@ impl WorkbenchReadService {
     /// 供给预警、视图访问、路由投影、姓名、审批上下文或负责人资格读取失败时返回对应错误。
     pub(super) async fn project_fields(
         &self,
-        mut fields: Vec<dto::WorkItemFields>,
+        fields: Vec<dto::WorkItemFields>,
         scope: WorkItemScope,
         actor: &AuditActor,
         actor_access: &ActorAccess,
         queue_context_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItemView>> {
-        self.apply_fulfillment_supply_warnings(&mut fields, executor).await?;
         let mut items = Vec::with_capacity(fields.len());
         for fields in fields {
             let access = self.view_access(&fields, scope, actor, actor_access)?;
@@ -335,10 +333,6 @@ impl WorkbenchReadService {
         }
         self.apply_party_names_with(executor, &mut items).await?;
         self.apply_approval_contexts(&mut items, executor).await?;
-        if scope != WorkItemScope::Mine {
-            self.apply_owner_qualification(&mut items, executor).await?;
-        }
-        self.apply_fulfillment_statuses(&mut items, executor).await?;
         Ok(items)
     }
 
@@ -422,6 +416,30 @@ impl WorkbenchReadService {
         })
     }
 
+    /// 使用 manage 的数据范围返回操作结果，不追加 detail 权限要求。
+    /// # 参数
+    /// `id` 为操作后的任务，`actor` 为真实操作人。
+    /// # 返回
+    /// 当前管理范围内的任务身份和状态。
+    /// # 错误
+    /// 范围撤销、任务不存在或读取失败时拒绝。
+    pub fn work_item_action_view(
+        self,
+        id: String,
+        actor: AuditActor,
+    ) -> BoxFuture<'static, Result<WorkItemView>> {
+        Box::pin(async move {
+            let this = self.clone();
+            self.db
+                .client()
+                .clone()
+                .with_transaction(move |executor| {
+                    Box::pin(async move { this.detail_page_for(&id, &actor, "manage", executor).await })
+                })
+                .await
+        })
+    }
+
     /// 在同一事务快照内重验详情授权、对象事实与展示补齐。
     ///
     /// # 参数
@@ -444,7 +462,19 @@ impl WorkbenchReadService {
         actor: &'a AuditActor,
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<WorkItemView>> {
+        self.detail_page_for(id, actor, "detail", executor)
+    }
+
+    /// 详情与操作结果使用各自动作的数据范围，材料不进入结果。
+    fn detail_page_for<'a>(
+        &'a self,
+        id: &'a str,
+        actor: &'a AuditActor,
+        action: &'static str,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<WorkItemView>> {
         Box::pin(async move {
+            let version = self.auth.queue_scope_version(actor, executor).await?;
             let item = self
                 .db
                 .work_items()
@@ -452,14 +482,9 @@ impl WorkbenchReadService {
                 .await?
                 .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
             let item_id = item.base.id.clone();
-            let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
+            let access = self.task_access(actor, action, executor).await?;
             let scope = detail_scope(&item, actor.id(), &access)?;
-            let fields = self.authorized_fields_for_items(vec![item], &access, executor).await?;
-            let mut fields = fields
-                .into_iter()
-                .next()
-                .ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
-            self.apply_fulfillment_supply_warnings(std::slice::from_mut(&mut fields), executor).await?;
+            let fields = dto::WorkItemFields::from(item);
             let queue_context_id = single_item_context_id(actor.id(), &item_id);
             let view_access = self.view_access(&fields, scope, actor, &access)?;
             let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
@@ -470,8 +495,8 @@ impl WorkbenchReadService {
             );
             self.apply_party_names_with(executor, std::slice::from_mut(&mut view)).await?;
             self.apply_approval_contexts(std::slice::from_mut(&mut view), executor).await?;
-            self.apply_owner_qualification(std::slice::from_mut(&mut view), executor).await?;
-            self.apply_fulfillment_statuses(std::slice::from_mut(&mut view), executor).await?;
+            let current = self.auth.queue_scope_version(actor, executor).await?;
+            ensure_scope_version(1, Some(&version), &current)?;
             Ok(view)
         })
     }
@@ -552,6 +577,8 @@ fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &Act
             QueueContextField::scalar("all_owners", access.managed_owner_ids.is_none().to_string()),
             QueueContextField::set("owners", access.managed_owner_ids.clone().unwrap_or_default()),
             QueueContextField::scalar("can_manage", access.can_manage.to_string()),
+            QueueContextField::scalar("all_readers", access.readable_owner_ids.is_none().to_string()),
+            QueueContextField::set("readers", access.readable_owner_ids.clone().unwrap_or_default()),
         ],
     )
     .into_string()
@@ -790,7 +817,7 @@ mod tests {
     };
 
     #[test]
-    fn keyword_filters_display_facts_before_paging_and_counting() {
+    fn keyword_filters_task_identity_without_searching_business_materials() {
         use erp_core::ids::WorkItemId;
         use erp_workflow::entity::work_item::{
             AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
@@ -816,17 +843,19 @@ mod tests {
         .into();
         fields.business_object_label = "销售单 SO.[1]".into();
         fields.counterparty_label = Some("Acme 客户".into());
-        assert!(super::matches_keyword(&fields, Some(" acME ")));
-        assert!(super::matches_keyword(&fields, Some("SO.[1]")));
+        assert!(!super::matches_keyword(&fields, Some(" acME ")));
+        assert!(!super::matches_keyword(&fields, Some("SO.[1]")));
+        assert!(super::matches_keyword(&fields, Some(" object ")));
         assert!(!super::matches_keyword(&fields, Some(".*")));
         assert!(super::matches_keyword(&fields, Some("  ")));
         let mut other = fields.clone();
-        other.counterparty_label = None;
+        other.business_object_id = "other-object-id".into();
+        other.id = "different".into();
         let mut collector = AuthorizedPageCollector::new(1, 1).unwrap();
         collector.extend(
             [other, fields.clone(), fields]
                 .into_iter()
-                .filter(|item| super::matches_keyword(item, Some("acme"))),
+                .filter(|item| super::matches_keyword(item, Some("task"))),
         );
         let page = collector.finish();
         assert_eq!(page.items.len(), 1);

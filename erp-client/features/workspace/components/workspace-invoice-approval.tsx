@@ -27,6 +27,7 @@ import type {
     InvoiceApprovalReview,
     InvoiceReviewRecord,
 } from "../api/invoice-review"
+import type { WorkspaceWorkItem } from "../types"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
 const sectionClass = cn(
@@ -37,13 +38,15 @@ const sectionClass = cn(
 /** 当前核对依据和原提交材料分区展示，只消费审批实例授权的接口。 */
 export function WorkspaceInvoiceApproval({
     instanceId,
+    item,
     onPreview,
 }: {
     instanceId: string
+    item: WorkspaceWorkItem
     onPreview: (target: WorkspacePaperTarget) => void
 }) {
     const review = useInvoiceApprovalReview(instanceId)
-    const materials = useApprovalMaterials(instanceId, true)
+    const materials = useApprovalMaterials(instanceId, true, item)
     const prefix = `workspace-invoice-approval-${toAutomationIdSegment(instanceId)}`
     const currentBasis = materials.data?.current_sales_basis
     const showCurrent =

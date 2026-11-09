@@ -1,4 +1,6 @@
 "use client"
+
+import { BusinessFailureState } from "@/components/business"
 import { useEffect, useState, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { downloadFileAsset } from "@/features/file-assets/api"
@@ -100,7 +102,8 @@ export function WorkspaceDocumentTaskDetail({
     const approvalDocument =
         approvalTask ||
         trackingTask ||
-        item.workItemType === "DOCUMENT_APPROVAL"
+        item.workItemType === "DOCUMENT_APPROVAL" ||
+        item.workItemType === "APPROVAL_REWORK"
     const instanceId =
         item.approvalProcessInstanceId ?? item.approval?.instanceId
     const recoveryQuery = useRecoveryOptionsQuery(
@@ -167,6 +170,7 @@ export function WorkspaceDocumentTaskDetail({
     const salesMaterials = useApprovalMaterials(
         instanceId ?? "",
         Boolean(salesApproval && instanceId && canReadSensitive),
+        item,
     )
     const salesSubmission = salesMaterials.data?.sales_order
     const documentFields = [
@@ -209,41 +213,40 @@ export function WorkspaceDocumentTaskDetail({
         item.workItemType === "FULFILLMENT_OPERATION" &&
         item.businessObjectType === "delivery" &&
         item.deliveryLines !== undefined
-    const actions =
-        reworkTask && canReadSensitive ? (
-            <WorkspaceApprovalReworkActions
-                item={reworkTask}
-                onTaskCompleted={onTaskCompleted}
-            />
-        ) : approvalTask && !trackingTask ? (
-            <ApprovalActionBar
-                presentation="workspace"
-                showInlineOpinion={!purchaseApproval}
-                id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
-                allowedActions={item.allowedActions}
-                recoveryOptions={recoveryQuery.data?.actions ?? []}
-                workItemId={item.workItemId}
-                expectedTaskVersion={item.taskVersion}
-                instance={instance}
-                canReadSensitive={canReadSensitive}
-                hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
-                decisionContext={{
-                    documentLabel: item.objectTitle,
-                    amountLabel: primaryAmount?.value,
-                    currentNodeLabel: instance?.currentNodeName,
-                    impactSummary,
-                }}
-                onDecisionApplied={(view) =>
-                    onDecisionApplied?.(view, item.workItemId)
-                }
-            />
-        ) : item.workItemType === "FULFILLMENT_OPERATION" ? (
-            <WorkspaceFulfillmentProcessAction
-                item={item}
-                grantedPermissions={grantedPermissions}
-                onTaskCompleted={(id) => onTaskCompleted?.(id)}
-            />
-        ) : null
+    const actions = reworkTask ? (
+        <WorkspaceApprovalReworkActions
+            item={reworkTask}
+            onTaskCompleted={onTaskCompleted}
+        />
+    ) : approvalTask && !trackingTask ? (
+        <ApprovalActionBar
+            presentation="workspace"
+            showInlineOpinion={!purchaseApproval}
+            id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
+            allowedActions={item.allowedActions}
+            recoveryOptions={recoveryQuery.data?.actions ?? []}
+            workItemId={item.workItemId}
+            expectedTaskVersion={item.taskVersion}
+            instance={instance}
+            canReadSensitive={canReadSensitive}
+            hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
+            decisionContext={{
+                documentLabel: item.objectTitle,
+                amountLabel: primaryAmount?.value,
+                currentNodeLabel: instance?.currentNodeName,
+                impactSummary,
+            }}
+            onDecisionApplied={(view) =>
+                onDecisionApplied?.(view, item.workItemId)
+            }
+        />
+    ) : item.workItemType === "FULFILLMENT_OPERATION" ? (
+        <WorkspaceFulfillmentProcessAction
+            item={item}
+            grantedPermissions={grantedPermissions}
+            onTaskCompleted={(id) => onTaskCompleted?.(id)}
+        />
+    ) : null
     const canOpenDocument = Boolean(
         !approvalDocument &&
         documentHref &&
@@ -435,32 +438,22 @@ export function WorkspaceDocumentTaskDetail({
                     </p>
                 ) : null}
 
+                {sourceSales.error ? (
+                    <BusinessFailureState
+                        id={`workspace-source-materials-${toAutomationIdSegment(item.workItemId)}`}
+                        error={sourceSales.error}
+                        onRetry={() => void sourceSales.refetch()}
+                        className={workspaceTaskSurfacePadClassName}
+                    />
+                ) : null}
+
                 {documentFacts.isError ? (
-                    <div
-                        className={cn(workspaceTaskSurfacePadClassName, "mt-4")}
-                    >
-                        <div
-                            role="status"
-                            className="text-sm text-muted-foreground"
-                        >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <span>
-                                    {facts
-                                        ? "已保留当前可见内容；部分最新信息可能暂未显示。"
-                                        : "当前没有可展示的单据事实，请重试后再执行审批或财务操作。"}
-                                </span>
-                                <Button
-                                    id={`workspace-task-detail-document-facts-retry-${toAutomationIdSegment(item.workItemId)}`}
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => void documentFacts.refetch()}
-                                >
-                                    重试
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
+                    <BusinessFailureState
+                        id={`workspace-materials-${toAutomationIdSegment(item.workItemId)}`}
+                        error={documentFacts.error}
+                        onRetry={() => void documentFacts.refetch()}
+                        className={workspaceTaskSurfacePadClassName}
+                    />
                 ) : null}
 
                 {receiptApproval && instanceId ? (
@@ -557,6 +550,7 @@ export function WorkspaceDocumentTaskDetail({
                 )}
                 {purchaseApproval && instanceId ? (
                     <WorkspacePurchaseApproval
+                        item={item}
                         key={instanceId}
                         instanceId={instanceId}
                         onPreview={setPaper}
@@ -601,6 +595,7 @@ export function WorkspaceDocumentTaskDetail({
                 canReadSensitive &&
                 item.businessObjectType === "sales_invoice_request" ? (
                     <WorkspaceInvoiceApproval
+                        item={item}
                         key={instanceId}
                         instanceId={instanceId}
                         onPreview={setPaper}
@@ -609,6 +604,7 @@ export function WorkspaceDocumentTaskDetail({
 
                 {salesApproval && instanceId && canReadSensitive ? (
                     <WorkspaceSalesApproval
+                        item={item}
                         key={instanceId}
                         instanceId={instanceId}
                         onPreview={setPaper}
@@ -715,6 +711,7 @@ export function WorkspaceDocumentTaskDetail({
                 ) : null}
             </div>
             <WorkspaceDocumentPaperDialog
+                reference={item}
                 target={paper}
                 open={Boolean(paper)}
                 onOpenChange={(open) => {

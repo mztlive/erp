@@ -8,55 +8,14 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use erp_workflow::entity::work_item::WorkItemType;
 use persistence_core::Executor;
 
 use super::super::WorkbenchReadService;
-use super::super::dto::WorkItemFields;
 use super::SearchDocument;
 use crate::Result;
 
 pub(super) type SubjectKey = (String, String, String);
 impl WorkbenchReadService {
-    /// 补齐完整销售与采购提交商品行，不改变展示摘要长度。
-    /// # 参数
-    /// `fields` 为已授权候选；`executor` 为列表快照。
-    /// # 返回
-    /// 就地追加匹配资料。
-    /// # 错误
-    /// 版本或明细读取失败时中止查询。
-    pub(in crate::workbench) async fn search_order_lines(
-        &self,
-        fields: &mut [WorkItemFields],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let keys = fields
-            .iter()
-            .filter(|f| f.work_item_type != WorkItemType::ProcurementOrderCreation)
-            .map(|f| {
-                (f.business_object_type.clone(), f.business_object_id.clone(), f.subject_version.clone())
-            })
-            .collect::<Vec<_>>();
-        let sources = self.submission_search(&keys, executor).await?;
-        for field in fields {
-            let key = (
-                field.business_object_type.clone(),
-                field.business_object_id.clone(),
-                field.subject_version.clone(),
-            );
-            if let Some(source) = sources.get(&key) {
-                field.search.merge(source);
-            }
-            let kind = match field.business_object_type.as_str() {
-                "sales_order" | "voucher_sales_order" => "sales_orders",
-                "purchase_order" => "purchase_orders",
-                _ => continue,
-            };
-            field.search.facet(kind, &key.1, &field.business_object_label.clone());
-        }
-        Ok(())
-    }
-
     /// 批量读取精确提交版本的全部商品与 SKU 编号。
     /// # 参数
     /// `keys` 为已授权单据类型、身份及提交号；`executor` 沿用调用方快照。

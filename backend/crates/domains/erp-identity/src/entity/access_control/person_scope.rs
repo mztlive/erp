@@ -108,14 +108,18 @@ impl PersonScopeTerm {
 }
 
 impl PersonScopeExpression {
-    /// 明确允许使用当前业务负责人作为基础范围的业务。
+    /// 按资源动作判定本人基础；任务仅 list/detail 默认本人，manage 必须显式授权。
     /// # 参数
     /// * `resource` - 已注册业务标识。
+    /// * `action` - 已登记的资源动作。
     /// # 返回
     /// 仅负责人语义明确且不要求其他身份维度的业务返回 `true`；其余业务返回 `false`。
     /// # 错误
     /// 不返回错误。
-    pub fn default_self(resource: &str) -> bool {
+    pub fn default_self(resource: &str, action: &str) -> bool {
+        if resource == "work_item" {
+            return matches!(action, "list" | "detail");
+        }
         matches!(
             resource,
             "customer"
@@ -145,9 +149,9 @@ impl PersonScopeExpression {
     }
 
     /// 基础本人只加入新模型；旧配置原样保留，不因发布自动扩权。
-    fn branches(&self, resource: &str) -> Vec<Vec<PersonScopeTerm>> {
+    fn branches(&self, resource: &str, action: &str) -> Vec<Vec<PersonScopeTerm>> {
         let mut branches = self.alternatives.clone();
-        if self.additive && Self::default_self(resource) {
+        if self.additive && Self::default_self(resource, action) {
             branches.push(vec![PersonScopeTerm {
                 scope_type: DataScopeType::SelfOwned,
                 target_dimension: ScopeDimension::InternalOrg,
@@ -209,7 +213,7 @@ impl PersonDataScope {
         allows_history: bool,
         at: Instant,
     ) -> Result<ResolvedScope> {
-        let branches = self.expression.branches(&self.resource);
+        let branches = self.expression.branches(&self.resource, &self.action);
         let condition = self.expression.read_limit(&branches, dimensions, allows_history)?;
         let mut rules = Vec::new();
         let roles = (0..branches.len()).map(|n| format!("branch-{n}")).collect::<Vec<_>>();
@@ -561,5 +565,36 @@ mod tests {
         target.settlement_party_id = Some("y");
         assert!(!scope.allows(&target, false));
         assert!(policy.resolve(&departments(), &dimensions, true, Instant::now()).is_err());
+    }
+    /// 无人员配置时只为任务读取提供本人基础，不能取得他人任务或管理范围。
+    #[test]
+    fn task_read_defaults_to_self_without_granting_manage() {
+        for action in ["list", "detail", "manage"] {
+            let policy = PersonDataScope::default_for("alice", "work_item", action);
+            let scope = policy
+                .resolve(&departments(), &[ScopeDimension::InternalOrg], false, Instant::now())
+                .unwrap();
+            assert_eq!(scope.allows(&object(true, false), false), action != "manage");
+            assert!(!scope.allows(&object(false, true), false));
+        }
+    }
+
+    /// 追加组织范围不会替代本人读取；旧显式限制与显式拒绝不被新默认绕过。
+    #[test]
+    fn task_self_baseline_respects_explicit_scope_contract() {
+        let mut policy = PersonDataScope::default_for("alice", "work_item", "detail");
+        policy.expression.alternatives = vec![vec![department("two")]];
+        let resolve = |policy: &PersonDataScope| {
+            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], false, Instant::now()).unwrap()
+        };
+        assert!(resolve(&policy).allows(&object(true, false), false));
+        policy.expression.additive = false;
+        assert!(!resolve(&policy).allows(&object(true, false), false));
+        policy.expression.alternatives = vec![vec![term(DataScopeType::SelfOwned)]];
+        policy.expression.condition = Some(vec![]);
+        assert!(!resolve(&policy).allows(&object(true, false), false));
+        policy.action = "manage".into();
+        policy.expression.condition = None;
+        assert!(resolve(&policy).allows(&object(true, false), false));
     }
 }

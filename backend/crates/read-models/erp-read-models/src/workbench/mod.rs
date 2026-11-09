@@ -1,8 +1,6 @@
 //! 工作台读模型：已授权的任务列表、详情、统计和简报。
 
 mod access;
-mod action_projection;
-mod approval_access;
 mod material_transfer;
 pub use material_transfer::authorize_material_transfer;
 mod approval_list;
@@ -24,12 +22,8 @@ mod inventory_settlement_brief;
 pub use inventory_settlement_brief::capture_stock_adjustment_display;
 mod invoice_review;
 mod operational_brief;
-mod owner_qualification;
 mod party_names;
 mod payment_request;
-mod personal_queue;
-mod procurement_brief;
-mod task_access;
 pub use invoice_review::materials::invoice_sales_reference;
 pub(crate) use invoice_review::materials::{InvoiceSalesBasis, optional_sales_basis};
 pub use invoice_review::{InvoiceApprovalReview, invoice_approval_review};
@@ -41,9 +35,6 @@ mod search;
 mod stats;
 pub use search::{SearchOption, SearchOptions, WorkItemSearchParams, WorkspaceFilters};
 mod supplier_portal_brief;
-mod supply_warnings;
-#[cfg(test)]
-mod test_auth;
 
 pub(crate) use dto::{
     ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily,

@@ -1,5 +1,6 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useQuery } from "@tanstack/react-query"
 
 import {
@@ -10,9 +11,10 @@ import {
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
 
 /**
- * 工作台详情在服务端简报为空时，按单据详情补齐只读事实。
+ * 工作台按任务绑定的身份和版本独立读取资料；材料拒绝不影响任务。
  */
 export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
+    const { data: profile } = useAccountProfileQuery()
     const hasSummary = Boolean(
         item.documentSummaryResolved ||
         (item.summarySections && item.summarySections.length > 0) ||
@@ -20,7 +22,8 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
     )
     const approval =
         item.workItemType === "DOCUMENT_APPROVAL" ||
-        item.workItemType === "APPROVAL_INSTANCE"
+        item.workItemType === "APPROVAL_INSTANCE" ||
+        item.workItemType === "APPROVAL_REWORK"
     const enabled =
         !approval &&
         shouldLoadDocumentFacts({
@@ -30,6 +33,9 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
     const query = useQuery({
         queryKey: [
             "workspace-document-facts",
+            profile?.userid,
+            profile?.policy_version,
+            profile?.organization_version,
             item.businessObjectType,
             item.businessObjectId,
             item.subjectVersion,
@@ -38,9 +44,11 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
             fetchWorkspaceDocumentFacts({
                 businessObjectType: item.businessObjectType,
                 businessObjectId: item.businessObjectId,
+                subjectVersion: item.subjectVersion,
             }),
-        enabled,
-        staleTime: 60 * 1000,
+        enabled: enabled && Boolean(profile),
+        staleTime: 0,
+        retry: false,
     })
     const facts: WorkspaceDocumentFacts | null = hasSummary
         ? {
@@ -53,7 +61,9 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
           }
         : approval
           ? null
-          : (query.data ?? null)
+          : query.isError
+            ? null
+            : (query.data ?? null)
     return {
         facts,
         isPending: enabled && query.isPending,

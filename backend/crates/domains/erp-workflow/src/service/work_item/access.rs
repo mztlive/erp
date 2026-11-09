@@ -40,8 +40,8 @@ pub fn object_policy(
 use super::{ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemScope, WorkItemService};
 
 pub const MANAGE_PERMISSION: &str = "work_item:manage";
-pub const REASSIGN_PERMISSION: &str = "work_item:reassign";
-pub const CLOSE_PERMISSION: &str = "work_item:close";
+pub const REASSIGN_PERMISSION: &str = MANAGE_PERMISSION;
+pub const CLOSE_PERMISSION: &str = MANAGE_PERMISSION;
 
 pub struct ActorAccess {
     pub actor_id: String,
@@ -133,7 +133,7 @@ impl ActorAccess {
 }
 
 impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
-    /// 写命令执行前重验对象存在、阅读权限和参与依据。
+    /// 任务控制命令执行前按 manage DataScope 重验任务负责人范围。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
@@ -144,9 +144,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ///
     /// # 错误
     /// 授权快照读取失败时返回对应错误；对象不可访问时经 `task_read_error` 隐藏存在性。
-    pub async fn ensure_object_participation(&self, actor: &AuditActor, item: &WorkItem) -> Result<()> {
-        let access = self.actor_access(actor).await?;
-        self.ensure_item_access(item, &access).await.map_err(task_read_error)
+    pub async fn ensure_task_control_access(&self, actor: &AuditActor, item: &WorkItem) -> Result<()> {
+        self.ensure_task_manage(actor, item, &mut NoTransaction).await
     }
 
     /// 用当前访问快照确认该任务能投影为已授权字段。
@@ -453,6 +452,29 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         self.auth.ensure_policy_snapshot_with_executor(policy_revision, executor).await
     }
 
+    /// 在操作执行器内验证 work_item:manage 及其 DataScope。
+    /// # 参数
+    /// `actor` 为真实账号，`item` 为当前任务，`executor` 与写入共享事务。
+    /// # 返回
+    /// 仅在当前管理数据范围覆盖负责人时成功。
+    /// # 错误
+    /// 无权限、越界、账号失效或授权读取失败时拒绝。
+    pub async fn ensure_task_manage(
+        &self,
+        actor: &AuditActor,
+        item: &WorkItem,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let owners = self.auth.task_scope_owners(actor, "manage", executor).await?;
+        if owners
+            .as_ref()
+            .is_some_and(|ids| !item.owner_user_id.as_ref().is_some_and(|owner| ids.contains(owner)))
+        {
+            return Err(Error::Forbidden("任务不在操作数据范围内".into()));
+        }
+        Ok(())
+    }
+
     /// 构造并要求操作人具备非空的任务管理范围。
     ///
     /// # 参数
@@ -464,11 +486,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// # 错误
     /// 没有管理权限或管理范围为空列表时返回禁止；快照读取失败时返回对应错误。
     pub async fn managed_access(&self, actor: &AuditActor) -> Result<ActorAccess> {
-        let access = self.actor_access(actor).await?;
-        if access.can_manage && !access.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
-            return Ok(access);
+        let owners = self.auth.task_scope_owners(actor, "manage", &mut NoTransaction).await?;
+        if owners.as_ref().is_some_and(Vec::is_empty) {
+            return Err(Error::Forbidden("当前账号没有任务责任管理范围".into()));
         }
-        Err(Error::Forbidden("当前账号没有任务责任管理权限".to_string()))
+        Ok(ActorAccess::new(actor.id().to_owned())
+            .with_permissions(vec![MANAGE_PERMISSION.to_owned()])
+            .with_managed_owner_ids(owners)
+            .with_can_manage(true))
     }
 }
 

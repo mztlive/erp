@@ -245,7 +245,6 @@ export function mapWorkspaceWorkItem(
               }
             : undefined,
         rootBusinessObjectId: task.rootBusinessObjectId,
-        documentSummaryResolved: task.workItemType === "DOCUMENT_APPROVAL",
         summarySections: task.summarySections,
         briefLines: task.briefLines,
         deliveryLines: task.deliveryLines,
@@ -362,9 +361,7 @@ export async function fetchWorkspaceDashboard(
         profile.permissions,
         "work_item:list",
     )
-    const canManage =
-        canListWorkItems &&
-        hasPermission(profile.permissions, "work_item:manage")
+    const canManage = canListWorkItems
     const canReadStarted = hasPermission(
         profile.permissions,
         "approval_instance:read",

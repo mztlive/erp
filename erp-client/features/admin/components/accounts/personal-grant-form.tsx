@@ -32,6 +32,7 @@ import type { PersonalGrantDraft } from "../../hooks/use-personal-grant-draft"
 import { useSavePersonScope } from "../../hooks/use-person-data-scopes"
 import {
     personScopeDefaults,
+    personDefaultScopeDescription,
     personScopeDescription,
     personGrantKey,
     type PersonGrantEditorInput,
@@ -398,19 +399,12 @@ export function PersonalGrantForm({
                                             aria-hidden
                                         />
                                         <p>
-                                            {business.default_self ? (
-                                                <>
-                                                    <span className="font-medium text-foreground">
-                                                        默认包含本人负责的数据
-                                                    </span>{" "}
-                                                    · 按当前负责人判断
-                                                    {legacy.length
-                                                        ? "（转换后生效）"
-                                                        : ""}
-                                                </>
-                                            ) : (
-                                                "此业务没有默认本人范围，请添加授权。"
+                                            {personDefaultScopeDescription(
+                                                business,
                                             )}
+                                            {legacy.length
+                                                ? "（原授权转换后生效）"
+                                                : ""}
                                         </p>
                                     </div>
                                     {legacy.length > 0 && (

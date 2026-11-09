@@ -14,17 +14,20 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 import { WorkspacePurchaseComparisonTable } from "./workspace-purchase-comparison-table"
+import type { WorkspaceWorkItem } from "../types"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
 /** 采购审批只消费实例授权的提交资料；来源入口保持在同一审批上下文。 */
 export function WorkspacePurchaseApproval({
     instanceId,
+    item,
     onPreview,
 }: {
     instanceId: string
+    item: WorkspaceWorkItem
     onPreview: (target: WorkspacePaperTarget) => void
 }) {
-    const query = useApprovalMaterials(instanceId, true)
+    const query = useApprovalMaterials(instanceId, true, item)
     const prefix = `workspace-purchase-approval-${toAutomationIdSegment(instanceId)}`
     const sectionClass = cn(
         workspaceTaskSurfacePadClassName,

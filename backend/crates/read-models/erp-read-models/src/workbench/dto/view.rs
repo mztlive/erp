@@ -127,21 +127,29 @@ pub struct WorkItemView {
     pub business_object_id: String,
     /// 业务对象所属的工作面根对象；与任务对象相同时返回同一 ID。
     pub root_business_object_id: String,
+    #[serde(skip_serializing)]
     pub business_object_label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub counterparty_label: Option<String>,
     pub next_action_hint: String,
+    #[serde(skip_serializing)]
     pub summary_sections: Vec<WorkItemSummarySection>,
+    #[serde(skip_serializing)]
     pub brief_lines: Vec<WorkItemBriefLine>,
     /// 本发货批次的数量与交期；其他任务不返回。
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing)]
     pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
     /// 当前页批量读取的实际付款与放行状态；缺失时不得推断为可发货。
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub fulfillment_status: Option<WorkItemFulfillmentStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub brief_more_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub list_summary: Option<String>,
     pub subject_version: String,
     pub task_version: String,
@@ -298,7 +306,7 @@ impl WorkItemView {
             due_at: seconds(inner.due_at),
             reason_label: reason_label(inner.reason_code.as_deref(), inner.work_item_type),
             reason_code: inner.reason_code,
-            impact_summary: usable_impact_summary(inner.impact_summary.as_deref(), inner.work_item_type),
+            impact_summary: usable_impact_summary(None, inner.work_item_type),
             assigned_at: seconds(inner.assigned_at),
             started_at: seconds(inner.started_at),
             current_assignment_at: seconds(inner.current_assignment_at),
@@ -321,14 +329,11 @@ impl WorkItemView {
 pub(crate) struct WorkItemFields {
     pub(in crate::workbench) search: super::super::search::SearchDocument,
     pub search_matches: Vec<String>,
-    pub search_lines: Vec<String>,
     inner: erp_workflow::dto::work_item::WorkItemFields,
     /// 仅完整任务详情提供固定驳回实例关联，列表行不得猜测。
     rework_instance_id: Option<String>,
     pub brief_source: Option<super::super::brief::ObjectBriefSource>,
     pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
-    /// 供给任务的冻结销售行，仅用于服务端收窄任务简报。
-    pub procurement_scope_ids: Vec<String>,
 }
 
 impl WorkItemFields {
@@ -361,7 +366,6 @@ impl DerefMut for WorkItemFields {
 impl From<WorkItem> for WorkItemFields {
     /// 从完整任务保留驳回实例关联；其他任务不产生实例读取入口。
     fn from(item: WorkItem) -> Self {
-        let procurement_scope_ids = item.responsibility_scope_ids().to_vec();
         let rework_instance_id = item
             .responsibility_key()
             .filter(|_| item.work_item_type == WorkItemType::ApprovalRework)
@@ -373,10 +377,8 @@ impl From<WorkItem> for WorkItemFields {
             rework_instance_id,
             brief_source: None,
             delivery_lines: Vec::new(),
-            procurement_scope_ids,
             search: Default::default(),
             search_matches: Vec::new(),
-            search_lines: Vec::new(),
         }
     }
 }
@@ -389,10 +391,8 @@ impl From<erp_workflow::WorkItemRow> for WorkItemFields {
             rework_instance_id: None,
             search: Default::default(),
             search_matches: Vec::new(),
-            search_lines: Vec::new(),
             brief_source: None,
             delivery_lines: Vec::new(),
-            procurement_scope_ids: Vec::new(),
         }
     }
 }

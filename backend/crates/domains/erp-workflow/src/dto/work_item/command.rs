@@ -105,10 +105,17 @@ impl WorkItemConflict {
 /// 责任命令的服务端结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkItemMutationOutcome {
-    /// 命令已应用；HTTP 再向 read-models 投影。
-    Applied { work_item_id: String },
+    /// 命令已应用；直接返回事务形成的回执，不读取转交后的任务。
+    Applied { work_item_id: String, task_version: u64 },
     /// 命令因并发版本或责任变化未应用。
     Conflict(WorkItemConflict),
+}
+
+/// 任务控制命令回执；不携带任务详情或业务材料。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemCommandView {
+    pub id: String,
+    pub task_version: String,
 }
 
 /// 转交任务请求。

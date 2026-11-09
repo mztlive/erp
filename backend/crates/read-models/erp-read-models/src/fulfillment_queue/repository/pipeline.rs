@@ -1,12 +1,9 @@
 //! 履约责任队列聚合管道：WorkItem 权限范围与四类履约草稿关联。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_customer::CustomerExt;
 use erp_fulfillment::repository::FulfillmentExt;
-use erp_party::PartyExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
-use erp_supplier::SupplierExt;
 use erp_warehouse::WarehouseExt;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use mongodb::Database;
@@ -40,18 +37,6 @@ pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Res
         .map_err(|_| Error::EntityMetadataOutOfRange("fulfillment_queue_offset"))?;
     let page_size = i64::from(filter.page_size);
     let mut pipeline = fulfillment_facts_pipeline(base_match(filter));
-    if filter.query.is_some() {
-        pipeline.push(counterparty_lookup(
-            <Database as CustomerExt>::CUSTOMER_ACCOUNTS,
-            "$_sales_order.customer_id",
-            "_customer_names",
-        ));
-        pipeline.push(counterparty_lookup(
-            <Database as SupplierExt>::SUPPLIER_ACCOUNTS,
-            "$_purchase_order.supplier_id",
-            "_supplier_names",
-        ));
-    }
     append_optional_filters(&mut pipeline, filter);
     pipeline.push(page_facet(offset, page_size));
     Ok(pipeline)
@@ -501,23 +486,6 @@ fn warehouse_lookup() -> Document {
     }
 }
 
-/// 读取来源单据的当前往来方名称；缺失或删除主数据不制造名称命中。
-fn counterparty_lookup(accounts: &str, account_id: &str, output: &str) -> Document {
-    doc! { "$lookup": {
-        "from": accounts, "let": { "account_id": account_id }, "as": output,
-        "pipeline": [
-            { "$match": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": { "$eq": ["$id", "$$account_id"] } } },
-            { "$lookup": { "from": <Database as PartyExt>::PARTIES, "localField": "party_id", "foreignField": "id", "as": "party" } },
-            { "$unwind": "$party" },
-            { "$match": { "party.deleted_at": NOT_DELETED_TIMESTAMP_BSON } },
-            { "$lookup": { "from": <Database as PartyExt>::PARTY_REVISIONS, "localField": "party.current_revision_id", "foreignField": "id", "as": "revision" } },
-            { "$unwind": "$revision" },
-            { "$match": { "revision.deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": { "$eq": ["$revision.party_id", "$party.id"] } } },
-            { "$project": { "_id": 0, "legal_name": "$revision.legal_name", "short_name": "$revision.short_name" } },
-        ]
-    } }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::FulfillmentQueueFilter;
@@ -558,19 +526,14 @@ mod tests {
         assert!(rendered.contains("metrics"));
         assert!(rendered.contains("warehouses"));
         assert!(rendered.contains("SO\\\\.1"), "检索词必须按字面量转义");
-        let customer_lookup = pipeline
+        let keyword = pipeline
             .iter()
-            .position(|stage| {
-                stage
-                    .get_document("$lookup")
-                    .ok()
-                    .is_some_and(|lookup| lookup.get_str("as").ok() == Some("_customer_names"))
-            })
+            .filter_map(|stage| stage.get_document("$match").ok())
+            .filter_map(|matched| matched.get_array("$or").ok())
+            .next_back()
             .unwrap();
-        let facet = pipeline.iter().position(|stage| stage.contains_key("$facet")).unwrap();
-        assert!(customer_lookup < facet, "名称过滤必须先于分页和计数");
-        assert!(rendered.contains("party.current_revision_id"));
-        assert!(rendered.contains("revision.party_id"));
+        let fields = keyword.iter().flat_map(|value| value.as_document().unwrap().keys()).collect::<Vec<_>>();
+        assert_eq!(fields, ["id", "operation.operation_id"]);
     }
 
     #[test]

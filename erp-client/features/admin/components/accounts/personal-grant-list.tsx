@@ -15,6 +15,7 @@ import { actionLabel } from "@/lib/permission-catalog"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     personTermsDescription,
+    personDefaultScopeDescription,
     type PersonScopeInput,
     type PersonScopeBusiness,
     type PersonScopeGrant,
@@ -92,9 +93,7 @@ export function PersonalGrantList({
             </div>
             {!value.grants.length ? (
                 <div className="rounded-lg border border-dashed border-grid px-4 py-6 text-center text-sm text-muted-foreground">
-                    {business.default_self
-                        ? "仅包含本人负责的数据。需要扩大范围时，点击添加范围。"
-                        : "尚未配置范围，点击添加范围开始设置。"}
+                    {personDefaultScopeDescription(business)}
                 </div>
             ) : (
                 <div className="space-y-3">

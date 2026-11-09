@@ -34,7 +34,9 @@ pub struct PersonBusinessOption {
     pub resource: String,
     pub actions: Vec<String>,
     pub dimensions: Vec<ScopeDimension>,
+    /// 全部可配置动作是否均包含本人基础；部分动作时使用 default_self_actions。
     pub default_self: bool,
+    pub default_self_actions: Vec<String>,
 }
 #[derive(Serialize)]
 pub struct PersonScopeView {
@@ -61,18 +63,25 @@ impl PersonBusinessOption {
                 Ok::<_, Error>(if candidate == AuthorizationPolicy::Shared { candidate } else { policy })
             },
         )?;
-        let configurable_actions = actions
+        let configurable_actions: Vec<String> = actions
             .iter()
             .filter(|action| configurable_registration(resource, action).is_ok())
             .cloned()
             .collect();
-        let default_self = authorization_policy.configurable() && registration(resource, first)?.default_self;
+        let default_self_actions = configurable_actions
+            .iter()
+            .filter(|action| registration(resource, action).is_ok_and(|entry| entry.default_self))
+            .cloned()
+            .collect::<Vec<_>>();
+        let default_self =
+            !configurable_actions.is_empty() && default_self_actions.len() == configurable_actions.len();
         Ok(Self {
             resource: resource.into(),
             authorization_policy,
             configurable_actions,
             policy_description: authorization_policy.description_for(resource).into(),
             default_self,
+            default_self_actions,
             actions,
             dimensions: dimensions.to_vec(),
         })
@@ -431,5 +440,29 @@ mod tests {
             target.owned = true;
             assert!(scope.allows(&target, action == "list"));
         }
+    }
+    /// 配置页面必须区分默认本人读取和显式管理范围，不依赖动作排列顺序。
+    #[test]
+    fn task_scope_options_expose_baseline_for_each_action() {
+        for actions in [vec!["manage", "list", "detail"], vec!["detail", "manage", "list"]] {
+            let option = PersonBusinessOption::from_granted(
+                "work_item",
+                actions.into_iter().map(String::from).collect(),
+                &[ScopeDimension::InternalOrg],
+            )
+            .unwrap();
+            assert!(!option.default_self);
+            assert_eq!(option.default_self_actions.len(), 2);
+            assert!(option.default_self_actions.contains(&"list".to_owned()));
+            assert!(option.default_self_actions.contains(&"detail".to_owned()));
+            assert!(!option.default_self_actions.contains(&"manage".to_owned()));
+        }
+        let reader = PersonBusinessOption::from_granted(
+            "work_item",
+            vec!["list".into(), "detail".into()],
+            &[ScopeDimension::InternalOrg],
+        )
+        .unwrap();
+        assert!(reader.default_self);
     }
 }

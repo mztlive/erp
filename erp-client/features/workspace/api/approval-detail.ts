@@ -102,7 +102,7 @@ function matchesSubmission(task: WorkspaceWorkItem, item: WorkspaceWorkItem) {
     )
 }
 
-/** 驳回任务使用实例详情展示，其他任务保留原工作面。 */
+/** 任务详情只读取任务权限；关联审批材料由页面按身份及版本独立加载。 */
 export async function fetchWorkspaceTaskDetail(
     workItemId: string,
 ): Promise<WorkspaceDetail> {
@@ -110,10 +110,8 @@ export async function fetchWorkspaceTaskDetail(
         await getWorkItem(workItemId),
         "Asia/Shanghai",
     )
-    if (item.workItemType !== "APPROVAL_REWORK") return { item }
-    if (!item.approvalProcessInstanceId)
-        throw new Error("驳回任务缺少审批关联，请刷新后重试")
-    return fetchWorkspaceApprovalDetail(item.approvalProcessInstanceId, {
-        task: item,
-    })
+    return {
+        item,
+        reworkTask: item.workItemType === "APPROVAL_REWORK" ? item : undefined,
+    }
 }

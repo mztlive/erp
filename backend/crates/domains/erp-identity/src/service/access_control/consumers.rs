@@ -27,7 +27,7 @@ pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
         &["list", "detail", "create", "update", "submit", "confirm"],
         &[ScopeDimension::InternalOrg],
     ),
-    ("work_item", &["manage"], &[ScopeDimension::InternalOrg]),
+    ("work_item", &["list", "detail", "manage"], &[ScopeDimension::InternalOrg]),
     ("org_unit", &["list", "manage"], &[ScopeDimension::InternalOrg]),
     ("customer", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
     ("contract", &["list", "detail", "create", "update"], &[ScopeDimension::InternalOrg]),
@@ -181,7 +181,7 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
     }
     Ok(ConsumerRegistration {
         default_self: AuthorizationPolicy::for_action(resource, action)?.configurable()
-            && PersonScopeExpression::default_self(resource),
+            && PersonScopeExpression::default_self(resource, action),
         supported_dimensions: entry.2,
         required_dimensions: if resource == "approval_instance" { &[] } else { entry.2 },
         allows_history: matches!(resource, "customer" | "contract" | "sales_order" | "purchase_order")
@@ -421,7 +421,8 @@ mod tests {
         assert!(registration("purchase_return_order", "list").is_err());
         assert!(registration("contract", "delete").is_err());
         assert!(registration("purchase_order", "transfer").is_err());
-        assert!(registration("work_item", "list").is_err());
+        assert!(registration("work_item", "list").is_ok());
+        assert!(registration("work_item", "detail").is_ok());
         assert!(registration("approval_instance", "decide").is_ok());
         assert!(registration("work_item", "manage").is_ok());
     }
@@ -543,5 +544,17 @@ mod tests {
         assert!(!registration("product", "list").unwrap().default_self);
         assert!(!registration("supplier_payment", "detail").unwrap().default_self);
         assert!(registration("integration_error_task", "list").unwrap().default_self);
+    }
+    /// 工作台默认本人只应用于已登记读取动作。
+    #[test]
+    fn task_scope_defaults_are_action_specific() {
+        for action in ["list", "detail"] {
+            let scope = configurable_registration("work_item", action).unwrap();
+            assert!(scope.default_self);
+            assert!(!scope.allows_history);
+            assert_eq!(scope.required_dimensions, &[ScopeDimension::InternalOrg]);
+        }
+        assert!(!configurable_registration("work_item", "manage").unwrap().default_self);
+        assert!(registration("work_item", "reassign").is_err());
     }
 }
