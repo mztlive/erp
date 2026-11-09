@@ -186,7 +186,7 @@ impl WorkbenchReadService {
         let (access, identity_version) = self.queue_access_with_version(&actor, executor).await?;
         let queue_context_id = queue_context_id(actor.id(), &query, &access);
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
-        let mut filter = self.scope_filter(&query, &actor, &access)?;
+        let mut filter = access.scope_filter(&query)?;
         apply_due_filter(&mut filter, query.due)?;
         filter.narrow_current_handlers(&query.handler_user_ids);
         let (authorized_page, result_version, filter_options) =
@@ -250,7 +250,13 @@ impl WorkbenchReadService {
             .find_visible_by_id(current_id, &candidates, executor)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
-        let mut current = self.authorized_fields_for_items(vec![current], context.access, executor).await?;
+        let mut current = if query.scope == WorkItemScope::Mine {
+            let mut fields = vec![dto::WorkItemFields::from(current)];
+            self.page_display_fields(&mut fields, executor).await?;
+            fields
+        } else {
+            self.authorized_fields_for_items(vec![current], context.access, executor).await?
+        };
         self.search_documents(&mut current, executor).await?;
         if query.filters.blocked {
             self.search_blockers(&mut current, query.scope, context.actor, context.access, executor).await?;
@@ -329,7 +335,9 @@ impl WorkbenchReadService {
         }
         self.apply_party_names_with(executor, &mut items).await?;
         self.apply_approval_contexts(&mut items, executor).await?;
-        self.apply_owner_qualification(&mut items, executor).await?;
+        if scope != WorkItemScope::Mine {
+            self.apply_owner_qualification(&mut items, executor).await?;
+        }
         self.apply_fulfillment_statuses(&mut items, executor).await?;
         Ok(items)
     }

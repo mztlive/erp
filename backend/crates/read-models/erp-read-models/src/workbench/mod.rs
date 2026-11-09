@@ -27,6 +27,7 @@ mod operational_brief;
 mod owner_qualification;
 mod party_names;
 mod payment_request;
+mod personal_queue;
 mod procurement_brief;
 mod task_access;
 pub use invoice_review::materials::invoice_sales_reference;

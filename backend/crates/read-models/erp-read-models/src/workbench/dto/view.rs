@@ -331,6 +331,19 @@ pub(crate) struct WorkItemFields {
     pub procurement_scope_ids: Vec<String>,
 }
 
+impl WorkItemFields {
+    /// 本人待办只由持久化的当前负责人和开放状态决定，不使用业务权限或历史参与。
+    /// # 参数
+    /// `actor_id` 为当前已认证账号；字段来自已排除软删除的仓储结果。
+    /// # 返回
+    /// 任务开放且当前负责人是该账号时返回 `true`。
+    /// # 错误
+    /// 无。
+    pub(in crate::workbench) fn is_pending_for(&self, actor_id: &str) -> bool {
+        self.status == WorkItemStatus::Open && self.owner_user_id.as_deref() == Some(actor_id)
+    }
+}
+
 impl Deref for WorkItemFields {
     type Target = erp_workflow::dto::work_item::WorkItemFields;
 
@@ -652,8 +665,6 @@ mod payment_request_tests {
     };
 
     use super::*;
-    use crate::workbench::access::ViewAccess;
-    use crate::workbench::action_projection::ActionProjection;
 
     /// 每类审批驳回均进入同一个处理器，并保留原单据工作面。
     #[test]
@@ -683,9 +694,9 @@ mod payment_request_tests {
         assert!(handler_destination(WorkItemType::ApprovalRework, "unregistered").is_err());
     }
 
-    /// 正式付款申请审批任务可同时进入队列及统计投影，保留精确执行和决定动作。
+    /// 正式付款申请审批任务进入队列时保留精确执行和路由。
     #[test]
-    fn payment_request_approval_has_matching_queue_and_stats_routes() {
+    fn payment_request_approval_has_registered_queue_route() {
         let at = Instant::now();
         let fields: WorkItemFields = WorkItem::new_document_approval(
             WorkItemId::new("payment-request-task"),
@@ -704,11 +715,7 @@ mod payment_request_tests {
         )
         .unwrap()
         .into();
-        let allowed =
-            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Approve, WorkItemAllowedAction::Reject];
-        let projection = ActionProjection::from_fields(fields.clone(), ViewAccess::ready(allowed.clone()))
-            .expect("合法付款申请不得阻断整个待办统计");
-        let mut view = WorkItemView::from_fields(fields, "finance-queue".into())
+        let view = WorkItemView::from_fields(fields, "finance-queue".into())
             .expect("合法付款申请必须显示在审批队列");
         assert_eq!(view.handler_key, "document_approval");
         assert_eq!(view.destination_workspace_id, "W12");
@@ -718,24 +725,15 @@ mod payment_request_tests {
         );
         assert_eq!(view.subject_version, "2");
         assert_eq!(view.due_at, seconds(Some(at)));
-        assert_eq!(projection.business_object_type, view.business_object_type);
-        assert_eq!(projection.business_object_id, view.business_object_id);
-        assert_eq!(projection.owner_user_id, view.owner_user_id);
-        assert_eq!(projection.approval_node_execution_id, view.approval_node_execution_id);
         assert_eq!(view.approval_node_execution_id.as_deref(), Some("payment-request-execution"));
-        projection.apply(&mut view);
         assert_eq!(view.processing_state, ProcessingState::Ready);
-        assert_eq!(view.allowed_actions, allowed);
     }
 
-    /// 批准申请产生的真实付款任务在队列和统计中使用同一申请身份。
+    /// 批准申请产生的真实付款任务在队列中保留申请身份。
     #[test]
-    fn approved_payment_request_execution_has_matching_queue_and_stats_routes() {
+    fn approved_payment_request_execution_has_registered_queue_route() {
         let fields = approved_execution_fields();
-        let allowed = vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process];
-        let projection = ActionProjection::from_fields(fields.clone(), ViewAccess::ready(allowed.clone()))
-            .expect("批准申请的付款执行任务不得阻断待办统计");
-        let mut view = WorkItemView::from_fields(fields.clone(), "cashier-queue".into())
+        let view = WorkItemView::from_fields(fields.clone(), "cashier-queue".into())
             .expect("批准申请的付款执行任务必须显示在出纳队列");
         assert_eq!(view.handler_key, "supplier_payment_execution");
         assert_eq!(view.destination_workspace_id, "W12");
@@ -745,29 +743,17 @@ mod payment_request_tests {
         assert_eq!(view.subject_version, "2");
         assert_eq!(view.due_at, seconds(fields.due_at));
         assert_eq!(view.reason_code.as_deref(), Some("PURCHASE_PAYMENT_REQUEST_APPROVED"));
-        assert_eq!(projection.business_object_type, view.business_object_type);
-        assert_eq!(projection.business_object_id, view.business_object_id);
-        assert_eq!(projection.owner_user_id, view.owner_user_id);
         assert!(view.approval_node_execution_id.is_none());
-        projection.apply(&mut view);
         assert_eq!(view.processing_state, ProcessingState::Ready);
-        assert_eq!(view.allowed_actions, allowed);
     }
 
-    /// 旧应付子账付款任务不得绕过批准申请进入列表或统计。
+    /// 旧应付子账付款任务不得绕过批准申请进入办理页面。
     #[test]
-    fn legacy_payable_execution_is_rejected_by_queue_and_stats_routes() {
+    fn legacy_payable_execution_has_no_registered_queue_route() {
         let mut fields = approved_execution_fields();
         fields.business_object_type = "payable_account".into();
         fields.business_object_id = "legacy-payable-account".into();
-        let stats = ActionProjection::from_fields(
-            fields.clone(),
-            ViewAccess::ready(vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process]),
-        );
         let queue = WorkItemView::from_fields(fields, "cashier-queue".into());
-        assert!(
-            matches!(stats, Err(Error::ValidationError(message)) if message == "付款执行任务业务对象未注册")
-        );
         assert!(
             matches!(queue, Err(Error::ValidationError(message)) if message == "付款执行任务业务对象未注册")
         );

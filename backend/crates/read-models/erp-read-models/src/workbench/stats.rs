@@ -1,4 +1,4 @@
-//! 责任队列待办统计；每批授权、资格重验及累计后立即释放。
+//! 本人待办统计按持久化分配累计；办理资格不参与任务计数。
 
 use std::collections::HashMap;
 
@@ -10,14 +10,12 @@ use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{ActorAccess, ViewAccess};
-use super::action_projection::ActionProjection;
+use super::access::ActorAccess;
 use super::dto::WorkItemTypeTiming;
-use super::owner_qualification::QualificationCache;
-use super::query::AUTHORIZED_SCAN_BATCH_SIZE;
+use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_handler, matches_order_sources};
 use super::{
-    ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
-    WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService, dto,
+    WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView, WorkItemFilter, WorkItemScope,
+    WorkItemStatsParams, WorkItemStatsView, WorkbenchObjectFactMap, WorkbenchReadService, dto,
 };
 use crate::errors::{Error, Result};
 
@@ -47,7 +45,7 @@ struct StatsCounts {
     work_item_type_timing: HashMap<WorkItemType, WorkItemTypeTiming>,
 }
 
-/// 选中范围的可处理总数、到期及异常指标。
+/// 选中范围的待办总数、到期及异常指标。
 #[derive(Default)]
 struct SelectedCounts {
     assigned: u64,
@@ -57,29 +55,36 @@ struct SelectedCounts {
 }
 
 impl StatsCounts {
-    /// 消费并释放一个完整批次，累计器不持有任务或权限投影。
-    fn extend_batch(
-        &mut self,
-        batch: impl IntoIterator<Item = (StatIdentity, ViewAccess)>,
-        scope: WorkItemScope,
-        context: &StatsContext<'_>,
-    ) {
-        for (item, access) in batch {
-            self.observe(item, scope, &access, context);
+    /// 消费并释放本人开放任务批次，累计器不持有任务或对象资料。
+    fn extend_batch(&mut self, batch: impl IntoIterator<Item = StatIdentity>, context: &StatsContext<'_>) {
+        for item in batch {
+            self.observe(item, context);
         }
     }
 
-    /// 只累计正式动作判定通过的任务；任务族和选中类型分别保留原口径。
-    fn observe(
+    /// 同一任务分配条件供总数与各类型统计使用；业务筛选只收窄结果。
+    fn extend_pending(
         &mut self,
-        item: StatIdentity,
-        scope: WorkItemScope,
-        access: &ViewAccess,
+        fields: impl IntoIterator<Item = dto::WorkItemFields>,
+        query: &dto::WorkItemListQuery,
         context: &StatsContext<'_>,
+        facts: &WorkbenchObjectFactMap,
     ) {
-        if !counts_as_processable_stat(scope, access) {
-            return;
-        }
+        self.extend_batch(
+            fields
+                .into_iter()
+                .filter(|item| item.is_pending_for(context.actor.id()))
+                .filter(|item| matches_handler(item, &query.handler_user_ids))
+                .filter(|item| {
+                    matches_order_sources(item, facts, &query.sales_order_ids, &query.purchase_order_ids)
+                })
+                .map(|item| StatIdentity { work_item_type: item.work_item_type, due_at: item.due_at }),
+            context,
+        );
+    }
+
+    /// 任务已经通过当前分配与开放状态筛选，缺少办理权限不影响计数。
+    fn observe(&mut self, item: StatIdentity, context: &StatsContext<'_>) {
         increment_family_count(&mut self.family_counts, item.work_item_type);
         let count = self.work_item_type_counts.entry(item.work_item_type).or_default();
         *count = count.saturating_add(1);
@@ -142,7 +147,7 @@ impl WorkbenchReadService {
         })
     }
 
-    /// 个人统计与任务族统计单遍计算；非个人选中范围仍执行其原授权查询。
+    /// 个人统计与任务族统计单遍计算；非个人范围校验入口后保留零待办指标。
     async fn stats_at(
         &self,
         query: dto::WorkItemListQuery,
@@ -151,7 +156,7 @@ impl WorkbenchReadService {
         executor: &mut dyn Executor,
     ) -> Result<WorkItemStatsView> {
         let access = self.actor_access_for(actor.kind(), actor.id(), executor).await?;
-        self.scope_filter(&query, &actor, &access)?;
+        access.scope_filter(&query)?;
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs())?;
         let context = StatsContext {
@@ -187,19 +192,21 @@ impl WorkbenchReadService {
         })
     }
 
-    /// 使用完整授权范围扫描，每批只保留本批动作事实和常量大小计数器。
+    /// 按当前任务分配分批扫描，累计器只保留类型和时限计数。
     async fn stream_stats(
         &self,
         query: &dto::WorkItemListQuery,
         context: &StatsContext<'_>,
         executor: &mut dyn Executor,
     ) -> Result<StatsCounts> {
-        let mut filter = self.scope_filter(query, context.actor, context.access)?;
+        let mut filter = context.access.scope_filter(query)?;
         apply_due_filter_at(&mut filter, query.due, context.as_of)?;
         filter.narrow_current_handlers(&query.handler_user_ids);
         filter.query = None;
         let mut counts = StatsCounts::default();
-        let mut qualification = QualificationCache::new(executor);
+        if query.scope != WorkItemScope::Mine {
+            return Ok(counts);
+        }
         let mut scan = self.candidate_scan(&filter, executor).await?;
         loop {
             let rows = scan.next_batch(AUTHORIZED_SCAN_BATCH_SIZE, executor).await?;
@@ -207,7 +214,7 @@ impl WorkbenchReadService {
             if candidate_count == 0 {
                 break;
             }
-            self.count_stat_batch(rows, query, context, &mut counts, &mut qualification, executor).await?;
+            self.count_stat_batch(rows, query, context, &mut counts, executor).await?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }
@@ -215,70 +222,22 @@ impl WorkbenchReadService {
         Ok(counts)
     }
 
-    /// 授权与处理人、来源筛选均发生在累计之前，负责人资格直接复用本批权威事实。
+    /// 直接累计本人开放任务，仅在用户指定来源筛选时读取关联事实。
     async fn count_stat_batch(
         &self,
         rows: Vec<WorkItemRow>,
         query: &dto::WorkItemListQuery,
         context: &StatsContext<'_>,
         counts: &mut StatsCounts,
-        qualification: &mut QualificationCache,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let mut facts = self.candidate_object_facts(&rows, false, executor).await?;
-        let fields = self.authorize_queue_rows(rows, context.access, &mut facts, executor).await?;
-        let mut identities = Vec::with_capacity(fields.len());
-        let mut actions = Vec::with_capacity(fields.len());
-        for item in fields {
-            if !super::query::matches_handler(&item, &query.handler_user_ids)
-                || !super::query::matches_order_sources(
-                    &item,
-                    &facts,
-                    &query.sales_order_ids,
-                    &query.purchase_order_ids,
-                )
-            {
-                continue;
-            }
-            let access = self.view_access(&item, query.scope, context.actor, context.access)?;
-            identities.push(StatIdentity { work_item_type: item.work_item_type, due_at: item.due_at });
-            actions.push(ActionProjection::from_fields(item, access)?);
-        }
-        self.apply_stat_approval_contexts(&mut actions, executor).await?;
-        let authority = facts.into_iter().map(|(key, fact)| (key, fact.authority)).collect();
-        self.apply_action_qualification(&mut actions, &authority, qualification, executor).await?;
-        counts.extend_batch(
-            identities.into_iter().zip(actions).map(|(item, action)| (item, action.access)),
-            query.scope,
-            context,
-        );
+        let facts = if query.sales_order_ids.is_empty() && query.purchase_order_ids.is_empty() {
+            WorkbenchObjectFactMap::new()
+        } else {
+            self.candidate_object_facts(&rows, false, executor).await?
+        };
+        counts.extend_pending(rows.into_iter().map(dto::WorkItemFields::from), query, context, &facts);
         Ok(())
-    }
-}
-
-/// 判断任务是否计入「当前真的能推进」的指标。
-///
-/// 单据审批任务由审批运行时直接指派，只会拿到 `Approve`/`Reject`——`allowed_actions`
-/// 的 `Process` 分支要求 `owner_role` 能过责任范围校验，而审批任务的 `owner_role`
-/// 是语义标签（`sales_order_approver`）不是角色 ID，永远过不了。只认 `Process` 会让
-/// 待办列表有条目、「待我处理」却是 0。
-///
-/// # 参数
-/// `scope` 为统计责任范围，`access` 为当前完整资格判断。
-/// # 返回
-/// 个人范围中准备就绪且可处理或决定的任务返回 true。
-/// # 错误
-/// 无。
-pub(super) fn counts_as_processable_stat(scope: WorkItemScope, access: &ViewAccess) -> bool {
-    if access.processing_state != ProcessingState::Ready {
-        return false;
-    }
-    match scope {
-        WorkItemScope::Mine => access
-            .allowed_actions
-            .iter()
-            .any(|action| matches!(action, WorkItemAllowedAction::Process | WorkItemAllowedAction::Approve)),
-        WorkItemScope::Managed | WorkItemScope::History => false,
     }
 }
 
@@ -362,6 +321,78 @@ mod tests {
 
     use super::*;
 
+    /// 仅有待办列表权限时，审批与采购任务按同一当前分配规则进入列表和统计。
+    #[test]
+    fn pending_counts_match_assignment_pages_without_business_or_execution_permissions() {
+        use bpm::ids::ApprovalNodeExecutionId;
+        use erp_core::ids::WorkItemId;
+        use erp_identity::Permission;
+        use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+
+        use crate::workbench::WorkItemListParams;
+        use crate::workbench::query::AuthorizedPageCollector;
+
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let access = ActorAccess::new("actor".into())
+            .with_permissions(vec![Permission::parse("work_item:list").unwrap()]);
+        let at = Instant::from_unix_secs(1_790_784_000);
+        let approval: dto::WorkItemFields = WorkItem::new_document_approval(
+            WorkItemId::new("approval"),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: ApprovalNodeExecutionId::new("execution"),
+                business_object_type: "sales_order".into(),
+                business_object_id: "order".into(),
+                subject_version: "1".into(),
+                owner_role: "sales_order_approver".into(),
+                owner_organization_id: "org".into(),
+                owner_user_id: "actor".into(),
+                priority: WorkItemPriority::Normal,
+                due_at: Some(at),
+            },
+            at,
+        )
+        .unwrap()
+        .into();
+        let mut procurement = approval.clone();
+        procurement.id = "procurement".into();
+        procurement.work_item_type = WorkItemType::ProcurementOrderCreation;
+        procurement.approval_node_execution_id = None;
+        let mut rows = vec![approval.clone(), procurement];
+        for (status, owner) in [
+            (WorkItemStatus::Open, Some("other")),
+            (WorkItemStatus::Open, None),
+            (WorkItemStatus::Closed, Some("actor")),
+            (WorkItemStatus::Completed, Some("actor")),
+        ] {
+            let mut item = approval.clone();
+            item.status = status;
+            item.owner_user_id = owner.map(str::to_owned);
+            rows.push(item);
+        }
+        let params: WorkItemListParams = serde_json::from_value(serde_json::json!({"scope":"mine"})).unwrap();
+        let query = params.normalized().unwrap();
+        let context = context(&actor, &access, &query.work_item_types, at);
+        let mut counts = StatsCounts::default();
+        // 来源事实缺失或授权未就绪不改变持久化任务数量。
+        counts.extend_pending(rows.clone(), &query, &context, &WorkbenchObjectFactMap::new());
+        assert_eq!(counts.selected.assigned, 2);
+        assert_eq!(counts.family_counts.approval, 1);
+        assert_eq!(counts.family_counts.procurement, 1);
+        assert_eq!(counts.selected.due_today, 2);
+        for (page, expected) in [(1, vec!["approval"]), (2, vec!["procurement"]), (3, vec![])] {
+            let mut collector = AuthorizedPageCollector::new(page, 1).unwrap();
+            collector.extend(rows.clone().into_iter().filter(|item| item.is_pending_for(actor.id())));
+            let page = collector.finish();
+            assert_eq!(u64::try_from(page.total).unwrap(), counts.selected.assigned);
+            assert_eq!(page.items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), expected);
+        }
+        let mut other_handler = query.clone();
+        other_handler.handler_user_ids = vec!["other".into()];
+        let mut narrowed = StatsCounts::default();
+        narrowed.extend_pending(rows, &other_handler, &context, &WorkbenchObjectFactMap::new());
+        assert_eq!(narrowed.selected.assigned, 0);
+    }
+
     /// 使用固定业务时点构造实际计数上下文。
     fn context<'a>(
         actor: &'a AuditActor,
@@ -373,24 +404,21 @@ mod tests {
         StatsContext { actor, access, selected_types: types, as_of, today_start, tomorrow_start }
     }
 
-    /// 构造已完成正式资格检查的最小统计身份与动作。
-    fn ready(kind: WorkItemType, due: Option<Instant>) -> (StatIdentity, ViewAccess) {
-        (
-            StatIdentity { work_item_type: kind, due_at: due },
-            ViewAccess::ready(vec![WorkItemAllowedAction::Process]),
-        )
+    /// 构造已由当前任务分配确定的最小统计身份。
+    fn assigned(kind: WorkItemType, due: Option<Instant>) -> StatIdentity {
+        StatIdentity { work_item_type: kind, due_at: due }
     }
 
     /// 模拟扫描批次寿命；生产累计方法消费后必须释放源批次。
     struct TrackedBatch {
-        rows: std::vec::IntoIter<(StatIdentity, ViewAccess)>,
+        rows: std::vec::IntoIter<StatIdentity>,
         drops: Arc<AtomicUsize>,
     }
     impl Iterator for TrackedBatch {
         fn next(&mut self) -> Option<Self::Item> {
             self.rows.next()
         }
-        type Item = (StatIdentity, ViewAccess);
+        type Item = StatIdentity;
     }
     impl Drop for TrackedBatch {
         fn drop(&mut self) {
@@ -409,18 +437,17 @@ mod tests {
         let mut counts = StatsCounts::default();
         for rows in [
             vec![
-                ready(WorkItemType::DocumentApproval, None),
-                ready(WorkItemType::FulfillmentOperation, None),
+                assigned(WorkItemType::DocumentApproval, None),
+                assigned(WorkItemType::FulfillmentOperation, None),
             ],
-            vec![ready(WorkItemType::DocumentApproval, None), ready(WorkItemType::BusinessException, None)],
+            vec![
+                assigned(WorkItemType::DocumentApproval, None),
+                assigned(WorkItemType::BusinessException, None),
+            ],
             Vec::new(),
         ] {
             let previous = drops.load(Ordering::SeqCst);
-            counts.extend_batch(
-                TrackedBatch { rows: rows.into_iter(), drops: drops.clone() },
-                WorkItemScope::Mine,
-                &context,
-            );
+            counts.extend_batch(TrackedBatch { rows: rows.into_iter(), drops: drops.clone() }, &context);
             assert_eq!(drops.load(Ordering::SeqCst), previous + 1);
         }
         assert_eq!(counts.selected.assigned, 2);
@@ -452,8 +479,8 @@ mod tests {
             Some(context.tomorrow_start),
             Some(Instant::from_unix_secs(context.today_start.unix_secs() - 1)),
         ] {
-            let (item, access) = ready(WorkItemType::SupplierPaymentExecution, due);
-            counts.observe(item, WorkItemScope::Mine, &access, &context);
+            let item = assigned(WorkItemType::SupplierPaymentExecution, due);
+            counts.observe(item, &context);
         }
         assert_eq!(counts.selected.assigned, 0);
         assert_eq!(counts.work_item_type_counts[&WorkItemType::SupplierPaymentExecution], 4);
@@ -461,43 +488,6 @@ mod tests {
             counts.work_item_type_timing[&WorkItemType::SupplierPaymentExecution],
             WorkItemTypeTiming { due_today: 1, overdue: 2 }
         );
-    }
-
-    /// 审批可决定即计入；失效、受阻、仅查看和非个人范围沿正式动作语义排除。
-    #[test]
-    fn eligibility_and_scope_exclude_unprocessable_statistics() {
-        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = ActorAccess::new("actor".into());
-        let types = [WorkItemType::DocumentApproval];
-        let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_784_000));
-        let identity = StatIdentity {
-            work_item_type: WorkItemType::DocumentApproval,
-            due_at: Some(context.today_start),
-        };
-        let mut counts = StatsCounts::default();
-        let approve = ViewAccess::ready(vec![WorkItemAllowedAction::Approve, WorkItemAllowedAction::Reject]);
-        counts.observe(identity, WorkItemScope::Mine, &approve, &context);
-        counts.observe(identity, WorkItemScope::Managed, &approve, &context);
-        counts.observe(identity, WorkItemScope::History, &approve, &context);
-        counts.observe(
-            identity,
-            WorkItemScope::Mine,
-            &ViewAccess::ready(vec![WorkItemAllowedAction::View]),
-            &context,
-        );
-        for state in [ProcessingState::ApprovalBlocked, ProcessingState::ExecutionBlocked] {
-            let mut blocked = ViewAccess::ready(vec![WorkItemAllowedAction::Process]);
-            blocked.processing_state = state;
-            counts.observe(identity, WorkItemScope::Mine, &blocked, &context);
-        }
-        assert_eq!(counts.selected.assigned, 1);
-        assert_eq!(counts.selected.due_today, 1);
-        assert_eq!(
-            counts.work_item_type_timing.get(&WorkItemType::DocumentApproval),
-            Some(&WorkItemTypeTiming { due_today: 1, overdue: 0 })
-        );
-        assert_eq!(counts.family_counts.approval, 1);
-        assert_eq!(counts.work_item_type_counts, HashMap::from([(WorkItemType::DocumentApproval, 1)]));
     }
 
     /// 空队列不产生分类，跨越多个页面的任务仍完整累计并返回稳定类型码。
@@ -508,12 +498,11 @@ mod tests {
         let types = [WorkItemType::ProcurementOrderCreation];
         let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_784_000));
         let mut counts = StatsCounts::default();
-        counts.extend_batch([], WorkItemScope::Mine, &context);
+        counts.extend_batch([], &context);
         assert!(counts.work_item_type_counts.is_empty());
         for batch_size in [50, 50, 25] {
             counts.extend_batch(
-                (0..batch_size).map(|_| ready(WorkItemType::ProcurementOrderCreation, None)),
-                WorkItemScope::Mine,
+                (0..batch_size).map(|_| assigned(WorkItemType::ProcurementOrderCreation, None)),
                 &context,
             );
         }
@@ -538,12 +527,11 @@ mod tests {
         let before = Instant::from_unix_secs(midnight.unix_secs() - 1);
         counts.extend_batch(
             [
-                ready(WorkItemType::BusinessException, Some(before)),
-                ready(WorkItemType::BusinessException, Some(midnight)),
-                ready(WorkItemType::BusinessException, Some(context.tomorrow_start)),
-                ready(WorkItemType::BusinessException, None),
+                assigned(WorkItemType::BusinessException, Some(before)),
+                assigned(WorkItemType::BusinessException, Some(midnight)),
+                assigned(WorkItemType::BusinessException, Some(context.tomorrow_start)),
+                assigned(WorkItemType::BusinessException, None),
             ],
-            WorkItemScope::Mine,
             &context,
         );
         assert_eq!(counts.selected.assigned, 4);

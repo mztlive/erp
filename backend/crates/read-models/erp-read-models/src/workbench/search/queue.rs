@@ -7,7 +7,7 @@ use super::super::query::{
     AUTHORIZED_SCAN_BATCH_SIZE, AuthorizedPage, AuthorizedPageCollector, matches_handler,
     matches_order_sources, queue_scope_version,
 };
-use super::super::{WorkItemFilter, WorkbenchObjectFactMap, WorkbenchReadService, dto};
+use super::super::{WorkItemFilter, WorkItemScope, WorkbenchObjectFactMap, WorkbenchReadService, dto};
 use super::{SearchOptions, collect_options};
 use crate::Result;
 
@@ -46,7 +46,11 @@ impl WorkbenchReadService {
                     executor,
                 )
                 .await?;
-            let mut fields = self.authorize_queue_rows(rows, access, &mut facts, executor).await?;
+            let mut fields = if query.scope == WorkItemScope::Mine {
+                self.personal_queue_fields(rows, actor.id(), &facts, executor).await?
+            } else {
+                self.authorize_queue_rows(rows, access, &mut facts, executor).await?
+            };
             if filter.query.is_some() || query.filters != Default::default() {
                 self.search_documents(&mut fields, executor).await?;
             }

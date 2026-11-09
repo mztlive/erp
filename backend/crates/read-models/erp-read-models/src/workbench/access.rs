@@ -33,6 +33,50 @@ pub(super) struct ActorAccess {
 }
 
 impl ActorAccess {
+    /// 把列表查询和授权快照收成仓储过滤条件。
+    ///
+    /// # 参数
+    /// * `query` - 工作项列表查询。
+    ///
+    /// # 返回
+    /// `Mine` 限定本人；`Managed` 限定管理范围内的负责人；`History` 带上历史操作人，能管理且管理负责人不是空列表时再附带可管理负责人。
+    ///
+    /// # 错误
+    /// 缺少列表权限或管理范围时返回 `Error::Forbidden`。
+    pub(super) fn scope_filter(&self, query: &dto::WorkItemListQuery) -> Result<WorkItemFilter> {
+        let mut filter = WorkItemFilter {
+            work_item_types: query.work_item_types.clone(),
+            statuses: query.statuses.clone(),
+            priorities: query.priorities.clone(),
+            query: query.query.clone(),
+            object_access_shapes: (query.scope != WorkItemScope::Mine).then(|| object_access_shapes(self)),
+            page: query.page,
+            page_size: query.page_size,
+            sort_by: Some(query.sort_by.to_string()),
+            sort_ascending: query.sort_ascending,
+            ..WorkItemFilter::default()
+        };
+        match query.scope {
+            WorkItemScope::Mine => {
+                if !has_permission(self, "work_item:list") {
+                    return Err(Error::Forbidden("没有待办列表权限".into()));
+                }
+                filter.owner_user_id = Some(self.actor_id.clone());
+            },
+            WorkItemScope::Managed => {
+                ensure_managed_access(self)?;
+                filter.managed_owner_ids = self.managed_owner_ids.clone();
+            },
+            WorkItemScope::History => {
+                filter.history_actor_id = Some(self.actor_id.clone());
+                if self.can_manage && !self.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
+                    filter.history_managed_owner_ids = Some(self.managed_owner_ids.clone());
+                }
+            },
+        }
+        Ok(filter)
+    }
+
     /// 构造责任队列授权快照。
     ///
     /// # 参数
@@ -226,52 +270,6 @@ impl WorkbenchReadService {
             }
         }
         Ok(granting_roles)
-    }
-
-    /// 把列表查询和授权快照收成仓储过滤条件。
-    ///
-    /// # 参数
-    /// * `query` - 工作项列表查询。
-    /// * `actor` - 当前账号。
-    /// * `access` - 已装载的授权快照。
-    ///
-    /// # 返回
-    /// `Mine` 限定本人；`Managed` 限定管理范围内的负责人；`History` 带上历史操作人，能管理且管理负责人不是空列表时再附带可管理负责人。
-    ///
-    /// # 错误
-    /// `Managed` 且账号没有管理范围时返回 `Error::Forbidden`。
-    pub(super) fn scope_filter(
-        &self,
-        query: &dto::WorkItemListQuery,
-        actor: &AuditActor,
-        access: &ActorAccess,
-    ) -> Result<WorkItemFilter> {
-        let mut filter = WorkItemFilter {
-            work_item_types: query.work_item_types.clone(),
-            statuses: query.statuses.clone(),
-            priorities: query.priorities.clone(),
-            query: query.query.clone(),
-            object_access_shapes: Some(object_access_shapes(access)),
-            page: query.page,
-            page_size: query.page_size,
-            sort_by: Some(query.sort_by.to_string()),
-            sort_ascending: query.sort_ascending,
-            ..WorkItemFilter::default()
-        };
-        match query.scope {
-            WorkItemScope::Mine => filter.owner_user_id = Some(actor.id().to_string()),
-            WorkItemScope::Managed => {
-                ensure_managed_access(access)?;
-                filter.managed_owner_ids = access.managed_owner_ids.clone();
-            },
-            WorkItemScope::History => {
-                filter.history_actor_id = Some(actor.id().to_string());
-                if access.can_manage && !access.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
-                    filter.history_managed_owner_ids = Some(access.managed_owner_ids.clone());
-                }
-            },
-        }
-        Ok(filter)
     }
 
     /// 计算当前视图下的处理状态与允许动作。
@@ -906,5 +904,64 @@ mod rework_history_tests {
         );
         item.status = WorkItemStatus::Open;
         assert!(authorized_item_fields(item, &access, &facts).is_none());
+    }
+}
+
+#[cfg(test)]
+mod personal_scope_tests {
+    use persistence_core::QueryFilter;
+    use serde_json::json;
+    use test_support::matches_filter;
+
+    use super::*;
+    use crate::workbench::WorkItemListParams;
+
+    /// 列表权限只开启本人任务查询，来源单据权限不参与候选筛选。
+    #[test]
+    fn list_permission_admits_only_current_open_assignments() {
+        let access = ActorAccess::new("actor".into())
+            .with_permissions(vec![Permission::parse("work_item:list").unwrap()]);
+        let params: WorkItemListParams = serde_json::from_value(json!({"scope": "mine"})).unwrap();
+        let query = params.normalized().unwrap();
+        let filter = access.scope_filter(&query).unwrap();
+        assert!(filter.object_access_shapes.is_none());
+        assert!(!has_permission(&access, "sales_order:detail"));
+        assert!(!has_permission(&access, "purchase_order:detail"));
+        let filter = filter.to_doc();
+        for kind in ["DOCUMENT_APPROVAL", "PROCUREMENT_ORDER_CREATION", "FULFILLMENT_OPERATION"] {
+            let task = json!({
+                "deleted_at": 0, "status": "OPEN", "owner_user_id": "actor",
+                "work_item_type": kind, "business_object_type": "sales_order",
+                "business_object_id": "order", "owner_role": "role-procurement",
+                "responsibility_actor_ids": ["actor"]
+            });
+            assert!(matches_filter(&filter, &task), "{kind}");
+            for (key, value) in [
+                ("owner_user_id", json!("other")),
+                ("owner_user_id", json!(null)),
+                ("status", json!("COMPLETED")),
+                ("status", json!("CLOSED")),
+                ("deleted_at", json!(100)),
+            ] {
+                let mut excluded = task.clone();
+                excluded[key] = value;
+                assert!(!matches_filter(&filter, &excluded), "{kind}: {excluded}");
+            }
+        }
+    }
+
+    /// 业务单据权限及历史参与不替代待办入口权限，也不提供管理范围。
+    #[test]
+    fn business_permissions_do_not_replace_list_or_management_permission() {
+        let mut access = ActorAccess::new("actor".into())
+            .with_permissions(vec![Permission::parse("sales_order:detail").unwrap()])
+            .with_participant_document_ids(HashSet::from(["order".into()]));
+        let params: WorkItemListParams = serde_json::from_value(json!({"scope": "mine"})).unwrap();
+        let mut query = params.normalized().unwrap();
+        assert!(matches!(access.scope_filter(&query), Err(Error::Forbidden(_))));
+        access.permissions.push(Permission::parse("work_item:list").unwrap());
+        assert!(access.scope_filter(&query).is_ok());
+        query.scope = WorkItemScope::Managed;
+        assert!(matches!(access.scope_filter(&query), Err(Error::Forbidden(_))));
     }
 }

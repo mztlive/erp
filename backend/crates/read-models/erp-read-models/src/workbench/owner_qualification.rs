@@ -18,7 +18,7 @@ use super::{
 use crate::ports::workbench_authorization::WorkbenchAuthorizationReadPort;
 use crate::{Error, Result};
 
-/// 一个统计扫描阶段内最多复用 128 个负责人的角色事实，不保存对象授权结论。
+/// 一个页面资格验证内最多复用 128 个负责人的角色事实，不保存对象授权结论。
 pub(super) struct QualificationCache {
     enabled: bool,
     owners: HashMap<String, OwnerPermissions>,
@@ -34,7 +34,7 @@ struct OwnerPermissions {
 }
 
 impl QualificationCache {
-    /// 只在调用方事务执行器内启用；每个完整扫描创建独立缓存。
+    /// 只在调用方事务执行器内启用；每次页面验证创建独立缓存。
     ///
     /// # 参数
     /// * `executor` - 调用方执行器；只用来判断是否处于事务会话
@@ -48,7 +48,8 @@ impl QualificationCache {
         Self { enabled: executor.session().is_some(), owners: HashMap::new() }
     }
 
-    /// 页面单批资格验证沿用逐次读取合同，不启用跨批复用。
+    /// 测试逐次读取合同，不启用缓存复用。
+    #[cfg(test)]
     fn disabled() -> Self {
         Self { enabled: false, owners: HashMap::new() }
     }
@@ -91,43 +92,19 @@ impl WorkbenchReadService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut actions = items.iter().map(ActionProjection::from_view).collect::<Vec<_>>();
+        let mut qualification = QualificationCache::new(executor);
         self.qualify_approvals(&mut actions, executor).await?;
-        self.qualify_portal_reviews(&mut actions, &mut QualificationCache::disabled(), executor).await?;
+        self.qualify_portal_reviews(&mut actions, &mut qualification, executor).await?;
         let keys = qualification_keys(&actions);
         if !keys.is_empty() {
             let facts = self.facts_reader().load(&keys, executor).await?;
             let groups = owner_groups(&actions, &facts)?;
-            self.qualify_owner_groups(&mut actions, groups, &mut QualificationCache::disabled(), executor)
-                .await?;
+            self.qualify_owner_groups(&mut actions, groups, &mut qualification, executor).await?;
         }
         for (action, item) in actions.into_iter().zip(items) {
             action.apply(item);
         }
         Ok(())
-    }
-
-    /// 统计复用页面资格重验，直接消费本批已读的权威来源。
-    ///
-    /// # 参数
-    /// * `items` - 最小动作投影
-    /// * `facts` - 同一执行器中的对象权威事实
-    /// * `qualification` - 本扫描阶段的负责人资格缓存
-    /// * `executor` - 资格读取沿用的执行器
-    /// # 返回
-    /// 原地阻断失去账号、执行权限或订单读取资格的负责人。
-    /// # 错误
-    /// 当前账号、权限、来源资格读取失败时传播原错误。
-    pub(super) async fn apply_action_qualification(
-        &self,
-        items: &mut [ActionProjection],
-        facts: &ObjectFactMap,
-        qualification: &mut QualificationCache,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.qualify_approvals(items, executor).await?;
-        self.qualify_portal_reviews(items, qualification, executor).await?;
-        let groups = owner_groups(items, facts)?;
-        self.qualify_owner_groups(items, groups, qualification, executor).await
     }
 
     /// 供应商申请单人确认同时重验内部身份、完整执行权限和独立对象范围。
