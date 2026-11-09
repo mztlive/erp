@@ -9,14 +9,17 @@ use application_core::AuditActor;
 use application_core::query::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::Instant;
 use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
+use erp_workflow::WorkItemReadService;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority};
+use erp_workflow::service::work_item::read::access::{ActorAccess, has_permission};
+use erp_workflow::service::work_item::read::context::{
+    ensure_queue_context, ensure_scope_version, queue_scope_version,
+};
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::access::{ActorAccess, has_permission};
-use super::query::{ensure_queue_context, ensure_scope_version, queue_scope_version};
 use super::{WorkItemDueFilter, WorkbenchReadService};
 use crate::errors::{Error, Result};
 use crate::fulfillment_queue::{
@@ -329,6 +332,7 @@ impl WorkbenchReadService {
         &self,
         params: FulfillmentQueueListParams,
         actor: AuditActor,
+        tasks: WorkItemReadService,
     ) -> BoxFuture<'_, Result<FulfillmentQueuePageView>> {
         Box::pin(async move {
             params.validate()?;
@@ -338,7 +342,7 @@ impl WorkbenchReadService {
                 .client()
                 .clone()
                 .with_transaction(move |executor| {
-                    Box::pin(async move { this.fulfillment_queue_page(query, actor, executor).await })
+                    Box::pin(async move { this.fulfillment_queue_page(query, actor, tasks, executor).await })
                 })
                 .await
         })
@@ -349,9 +353,10 @@ impl WorkbenchReadService {
         &self,
         mut query: FulfillmentQueueQuery,
         actor: AuditActor,
+        tasks: WorkItemReadService,
         executor: &mut dyn Executor,
     ) -> Result<FulfillmentQueuePageView> {
-        let (access, identity_version) = self.queue_access_with_version(&actor, executor).await?;
+        let (access, identity_version) = tasks.queue_access_with_version(&actor, executor).await?;
         let visible_types = visible_operation_types(&query.operation_types, &access);
         let context_id = fulfillment_queue_context_id(actor.id(), &query, &visible_types);
         ensure_queue_context(&query.queue_context_id, &context_id)?;
@@ -382,7 +387,7 @@ impl WorkbenchReadService {
                 operation_type,
             })
             .collect();
-        let current_version = self.auth.queue_scope_version(&actor, executor).await?;
+        let current_version = tasks.queue_scope_version(&actor, executor).await?;
         ensure_scope_version(1, Some(&identity_version), &current_version)?;
 
         Ok(FulfillmentQueuePageView {

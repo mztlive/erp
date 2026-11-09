@@ -7,22 +7,29 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useDebouncedSearch } from "@/features/entity-selectors/hooks/queries"
 import type {
     WorkspaceFilters,
+    WorkspaceChoiceKey,
     WorkspaceSearchOptions,
 } from "@/lib/workspace-search"
+import { taskOrderOptions } from "../api/filter-options"
 import type { WorkspaceViewFilter } from "../types"
 
 /** 候选搜索使用后端完整授权集；不对已加载选项做本地匹配。 */
 export function useWorkspaceFilterOptions(
     view: WorkspaceViewFilter,
     filters?: WorkspaceFilters,
+    name?: WorkspaceChoiceKey,
 ) {
     const [search, setSearch] = useState("")
     const queryText = useDebouncedSearch(search, 300)
     const profile = useAccountProfileQuery().data
+    const orderDirectory =
+        view !== "started" &&
+        (name === "sales_orders" || name === "purchase_orders")
     const query = useQuery({
         queryKey: [
             "workspace-filter-options",
             view,
+            name,
             queryText,
             filters,
             profile?.userid,
@@ -30,6 +37,7 @@ export function useWorkspaceFilterOptions(
             profile?.permissions,
         ],
         queryFn: async (): Promise<WorkspaceSearchOptions> => {
+            if (orderDirectory && name) return taskOrderOptions(name, queryText)
             const options = {
                 ...filters,
                 include_options: true,
@@ -53,7 +61,7 @@ export function useWorkspaceFilterOptions(
             })
             return page.filter_options ?? {}
         },
-        enabled: Boolean(profile) && Boolean(search.trim()),
+        enabled: Boolean(profile) && (orderDirectory || Boolean(search.trim())),
     })
     return { ...query, search, setSearch }
 }

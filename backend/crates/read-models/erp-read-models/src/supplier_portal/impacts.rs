@@ -11,7 +11,7 @@ use erp_procurement::PurchaseAccess;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::purchase_order::PurchaseOfferingUsageFact;
 use erp_supply::repository::{SupplierOfferingAvailabilityRepositoryExt, SupplierOfferingExt};
-use erp_workflow::WorkflowAuthorizationPort;
+use erp_workflow::WorkItemReadService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;
@@ -20,7 +20,6 @@ use super::repository::impacts::actual_open_tasks;
 use super::repository::query::PortalQuery;
 use super::warnings::current_warning;
 use super::{PortalListParams, PortalReadAuthorizationPort, SupplyInterruptionWarning};
-use crate::workbench::WorkbenchReadService;
 use crate::{Error, Result};
 
 /// 内部可读的实际采购影响，禁止向门户账号返回。
@@ -71,14 +70,14 @@ pub struct PortalOfferingImpactView {
 
 /// 根装配供给、采购与工作项的正式资格，读取全程共用执行器。
 #[derive(Clone)]
-pub struct PortalOfferingImpactReadService<A> {
+pub struct PortalOfferingImpactReadService {
     db: Database,
     purchase: PurchaseAccess,
     authorization: Arc<dyn PortalReadAuthorizationPort>,
-    workflow: A,
+    workflow: WorkItemReadService,
 }
 
-impl<A: WorkflowAuthorizationPort> PortalOfferingImpactReadService<A> {
+impl PortalOfferingImpactReadService {
     /// 装配领域对象范围与当前工作项授权，不缓存岗位或责任人。
     /// # 参数
     /// `db` 为数据库；`purchase` 为真实采购范围；`authorization` 为供给资格；`workflow` 为真实任务授权。
@@ -90,7 +89,7 @@ impl<A: WorkflowAuthorizationPort> PortalOfferingImpactReadService<A> {
         db: Database,
         purchase: PurchaseAccess,
         authorization: Arc<dyn PortalReadAuthorizationPort>,
-        workflow: A,
+        workflow: WorkItemReadService,
     ) -> Self {
         Self { db, purchase, authorization, workflow }
     }
@@ -219,7 +218,7 @@ impl<A: WorkflowAuthorizationPort> PortalOfferingImpactReadService<A> {
             .map(|fact| fact.order.current_owner_user_id().map(str::to_string))
             .collect::<erp_core::Result<Vec<_>>>()?;
         let names = self.db.accounts().names_by_ids(&owner_ids, executor).await?;
-        let workbench = WorkbenchReadService::new(self.db.clone(), Arc::new(self.workflow.clone()));
+        let workbench = self.workflow.clone();
         let mut result = Vec::new();
         for fact in facts {
             let mut tasks = Vec::new();

@@ -9,8 +9,8 @@ use persistence_core::Executor;
 use crate::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
-use crate::repository::WorkItemExt;
 use crate::repository::prelude::*;
+use crate::repository::{ApprovalIntegrationExt, WorkItemExt};
 use crate::service::approval::process_kind::document_type_of;
 use crate::{Error, Result};
 
@@ -65,6 +65,12 @@ pub async fn create_rework(
         },
         format!("approval_rework:{}", instance.base.id),
     )?;
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&instance.base.id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("驳回任务缺少冻结业务快照".into()))?;
+    item.inherit_approval_links(&snapshot)?;
     item.assigned_at = Some(now);
     item.current_assignment_at = Some(now);
     db.work_items().create(&item, executor).await?;

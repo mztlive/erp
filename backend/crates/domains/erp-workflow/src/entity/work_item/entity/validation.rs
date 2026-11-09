@@ -8,6 +8,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
+use crate::entity::work_item::WorkItemLink;
 
 const OBJECT_TYPE_MAX_LEN: usize = 64;
 const OBJECT_ID_MAX_LEN: usize = 128;
@@ -292,6 +293,7 @@ impl WorkItem {
         let responsibility_actor_ids = vec![normalized.owner_user_id.clone()];
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            links: vec![WorkItemLink::new(&normalized.business_object_type, &normalized.business_object_id)?],
             work_item_type: normalized.work_item_type,
             approval_node_execution_id: None,
             business_object_type: normalized.business_object_type,

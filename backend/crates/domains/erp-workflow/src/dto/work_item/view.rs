@@ -1,7 +1,8 @@
 use serde::Serialize;
 
 use crate::entity::work_item::{
-    AssignmentSource, WorkItem, WorkItemActionPolicy, WorkItemPriority, WorkItemStatus, WorkItemType,
+    AssignmentSource, WorkItem, WorkItemActionPolicy, WorkItemLink, WorkItemPriority, WorkItemStatus,
+    WorkItemType,
 };
 
 /// 用户或组织安全摘要。
@@ -49,6 +50,7 @@ pub struct WorkItemApprovalContextView {
 #[derive(Debug, Clone)]
 pub struct WorkItemFields {
     pub id: String,
+    pub links: Vec<WorkItemLink>,
     pub work_item_type: WorkItemType,
     pub approval_node_execution_id: Option<String>,
     pub business_object_type: String,
@@ -82,8 +84,10 @@ pub struct WorkItemFields {
 impl From<WorkItem> for WorkItemFields {
     fn from(item: WorkItem) -> Self {
         let root_business_object_id = item.business_object_id.clone();
+        let links = item.links().to_vec();
         Self {
             id: item.base.id,
+            links,
             work_item_type: item.work_item_type,
             approval_node_execution_id: item
                 .approval_node_execution_id
@@ -159,8 +163,10 @@ impl WorkItemFields {
 impl From<crate::repository::WorkItemRow> for WorkItemFields {
     fn from(item: crate::repository::WorkItemRow) -> Self {
         let root_business_object_id = item.business_object_id.clone();
+        let links = item.links.clone();
         Self {
             id: item.id,
+            links,
             work_item_type: item.work_item_type,
             approval_node_execution_id: item.approval_node_execution_id,
             business_object_type: item.business_object_type,
@@ -205,6 +211,7 @@ mod tests {
     ) -> WorkItemFields {
         WorkItemFields {
             id: "wi-1".to_string(),
+            links: Vec::new(),
             work_item_type,
             approval_node_execution_id: approval_node_execution_id.map(str::to_string),
             business_object_type: business_object_type.to_string(),

@@ -1,6 +1,5 @@
 //! 审批展示快照的事务内捕获与授权后装载。
 use std::collections::{BTreeSet, HashSet};
-use std::sync::Arc;
 
 use erp_workflow::ApprovalIntegrationExt;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
@@ -35,10 +34,7 @@ pub async fn capture_approval_display(
     let policy = object_policy(WorkItemType::DocumentApproval, document_type.as_str())
         .ok_or_else(|| Error::ValidationError("单据未注册审批摘要".into()))?;
     let key = (policy.object_kind, id.to_owned());
-    let reader = WorkbenchReadService::new(
-        db.clone(),
-        Arc::new(erp_workflow::ports::FailClosedWorkflowAuthorizationPort),
-    );
+    let reader = WorkbenchReadService::new(db.clone());
     let mut facts = reader.load_live_object_facts(&HashSet::from([key.clone()]), executor).await?;
     let fact = facts.remove(&key).ok_or_else(|| Error::ValidationError("审批单据不存在".into()))?;
     let snapshot = ApprovalDisplaySnapshot {

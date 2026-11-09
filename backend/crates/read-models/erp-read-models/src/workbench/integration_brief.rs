@@ -5,13 +5,14 @@ use std::collections::HashSet;
 use erp_core::common::time::Instant;
 use erp_integration::dto::{DifferenceView, ErrorTaskView};
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
+use erp_workflow::dto::work_item::role_label;
 use persistence_core::Executor;
 
 use super::integration_brief_labels::{
     business_type_label, difference_type_label, evidence_category, external_reference,
 };
 use super::{
-    ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, brief, dto, object_ids,
+    ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, brief, object_ids,
 };
 use crate::errors::Result;
 use crate::integration_center::display::object_labels;
@@ -52,7 +53,7 @@ fn integration_error_brief_source(
     brief::push_section(&mut sections, "重试记录", Some(attempt_count.as_str()), false);
     brief::push_section(&mut sections, "最近尝试", last_attempt_at.as_deref(), false);
     brief::push_section(&mut sections, "错误摘要", task.last_attempt_summary.as_deref(), false);
-    let owner_role = task.owner_role.as_deref().map(dto::role_label);
+    let owner_role = task.owner_role.as_deref().map(role_label);
     brief::push_section(&mut sections, "责任角色", owner_role.as_deref(), false);
     brief::push_section(&mut sections, "责任人", task.owner_user_id.as_deref(), false);
     brief::push_section(

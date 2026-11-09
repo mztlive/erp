@@ -11,7 +11,7 @@
 
 ## 协作示例
 
-采购单提交审批后，[bpm](../../platform/bpm/README.md) 计算流程下一步，本 crate 持久化审批并管理工作项；审批通过后的采购生效由 [erp-procure-to-pay](../../orchestration/erp-procure-to-pay/README.md) 调用采购领域。工作台展示多种待办的业务摘要由 [erp-read-models](../../read-models/erp-read-models/README.md) 提供。
+采购单提交审批后，[bpm](../../platform/bpm/README.md) 计算流程下一步，本 crate 持久化审批并管理工作项；审批通过后的采购生效由 [erp-procure-to-pay](../../orchestration/erp-procure-to-pay/README.md) 调用采购领域。任务列表、详情和统计统一由 `WorkItemReadService` 提供；跨业务审批材料和履约队列由 [erp-read-models](../../read-models/erp-read-models/README.md) 提供。
 
 ## 负责的数据与能力
 
@@ -26,7 +26,7 @@
 
 - 本领域的数据结构、业务规则、服务和数据库仓储在此维护。常规、构建和测试依赖均不得指向其他业务领域或组合层。
 - 流程图和纯状态迁移规则复用 bpm；账号资格、单据事实和领域动作通过 Port 取得。
-- 跨域审批动作由 web-api 分派；工作台聚合查询与正式任务事实读取由 erp-read-models 负责。
+- 任务查询、授权范围和分页归本 crate；直接调用 identity 的公开服务。跨域审批动作由 web-api 分派，业务材料读取归 erp-read-models。
 - 需要其他领域的能力时，由组合层或应用将本域接口接到实际提供方；公开入口见 [src/lib.rs](src/lib.rs)。
 
 ## 代码入口
@@ -60,3 +60,11 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-workflow --lib --locked
 ```
 
 代码变更还须执行[统一质量门禁](../../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
+
+## 任务查询与关联链路
+
+- 列表、详情、统计和查询 DTO 使用 `service/work_item/read` 与 `dto/work_item`；调用方保留固定 Future 边界。
+- 处理人、来源销售单和来源采购单筛选只接受稳定 ID。姓名仅按已授权页中的账号 ID 批量补齐，不参与任务关键词匹配。
+- 来源筛选使用 `WorkItem.links` 的类型与 ID 配对引用；同字段取并集，不同字段取交集，不授予关联单据读取权限。
+- 创建任务及改变业务版本时，写流程须在原事务写入完整上级链路。审批任务须继承对应提交快照，后续节点和驳回处理不得从当前草稿重建历史链路。
+- 发布前按 [任务链路迁移合同](../../../docs/work-item-links-migration.md) 完成历史数据审计与回填。

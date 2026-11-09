@@ -2,8 +2,8 @@
 use chrono::{FixedOffset, NaiveDate, TimeZone};
 use serde::{Deserialize, Serialize};
 
-use super::super::WorkItemListParams;
 use super::SearchDocument;
+use crate::dto::work_item::WorkItemListParams;
 use crate::{Error, Result};
 
 /// 多视图共用查询条件，线协议以 filters JSON 传输。
@@ -98,7 +98,7 @@ impl WorkspaceFilters {
     /// 该字段的已选值；未知字段返回空切片。
     /// # 错误
     /// 无。
-    pub(super) fn selected(&self, key: &str) -> &[String] {
+    pub fn selected(&self, key: &str) -> &[String] {
         match key {
             "item_types" => &self.item_types,
             "counterparties" => &self.counterparties,
@@ -119,7 +119,7 @@ impl WorkspaceFilters {
     /// 全部条件成立时返回 true。
     /// # 错误
     /// 无；输入条件须先经过 parse 校验。
-    pub(in crate::workbench) fn matches(&self, document: &SearchDocument) -> bool {
+    pub fn matches(&self, document: &SearchDocument) -> bool {
         let facets = [
             (&self.item_types, "item_types"),
             (&self.counterparties, "counterparties"),

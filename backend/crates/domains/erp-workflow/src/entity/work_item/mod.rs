@@ -10,6 +10,8 @@ mod finance_responsibility;
 mod finance_task;
 mod fulfillment_responsibility;
 mod inquiry;
+mod links;
+pub use links::WorkItemLink;
 mod payment_execution_merge;
 mod queue_context;
 

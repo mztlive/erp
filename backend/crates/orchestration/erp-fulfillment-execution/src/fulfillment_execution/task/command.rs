@@ -2,8 +2,9 @@
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
+use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
-use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -61,6 +62,17 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
             .await
     }
     async fn update(&self, task: &mut WorkItem, executor: &mut dyn Executor) -> Result<()> {
+        if task.status == WorkItemStatus::Open {
+            task.set_links(
+                work_item_links::capture(
+                    self.db,
+                    &task.business_object_type,
+                    &task.business_object_id,
+                    executor,
+                )
+                .await?,
+            )?;
+        }
         self.db.work_items().update(task, executor).await?;
         Ok(())
     }

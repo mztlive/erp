@@ -1,0 +1,17 @@
+{
+  "packages": [
+    {
+      "name": "bpm",
+      "deps": [
+        {
+          "name": "erp-identity",
+          "kind": "normal"
+        }
+      ]
+    },
+    {
+      "name": "erp-identity",
+      "deps": []
+    }
+  ]
+}

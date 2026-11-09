@@ -138,6 +138,7 @@ async fn create_task(
         },
         owner.responsibility_key,
     )
+    .and_then(|task| task.with_link("sales_order", order.sales_order_id.to_string()))
     .map_err(Error::Logic)?;
     db.work_items().create(&item, executor).await?;
     Ok(())

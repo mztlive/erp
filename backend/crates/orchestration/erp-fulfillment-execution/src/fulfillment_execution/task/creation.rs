@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use erp_core::ids::WorkItemId;
 use erp_identity::SharedRbacService;
+use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
@@ -75,7 +76,12 @@ impl TaskCreationPort for MongoTaskCreation<'_> {
     }
 
     async fn create(&self, task: &WorkItem, executor: &mut dyn Executor) -> Result<()> {
-        self.0.work_items().create(task, executor).await?;
+        let mut task = task.clone();
+        task.set_links(
+            work_item_links::capture(self.0, &task.business_object_type, &task.business_object_id, executor)
+                .await?,
+        )?;
+        self.0.work_items().create(&task, executor).await?;
         Ok(())
     }
 }

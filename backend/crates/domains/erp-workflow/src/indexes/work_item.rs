@@ -122,6 +122,10 @@ fn is_current_open_object_type_index(index: &IndexModel) -> bool {
 fn work_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_work_items_id", doc! { "id": 1 }),
+        named_index(
+            "idx_work_items_links_owner_status",
+            doc! { "links.object_type": 1, "links.object_id": 1, "owner_user_id": 1, "status": 1, "deleted_at": 1 },
+        ),
         unique_open_object_type_index(),
         unique_open_fulfillment_object_index(),
         unique_open_customer_acceptance_object_index(),

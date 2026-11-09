@@ -57,7 +57,8 @@ backend/
 ## 架构与依赖
 
 - 调用链：Handler → 本域 Service 或 Process/ReadModel → 拥有领域 Repository → MongoDB；Handler 禁直连数据库。
-- 业务领域的 normal/build/dev 依赖禁指向其他业务领域、编排库、`erp-read-models`；跨域事实经本域 `ports/` 窄 Port 获取，实现由组合层装配。
+- 业务领域的 normal/build/dev 依赖允许指向 `erp-identity`，用于公开的身份查询、权限类型与授权服务；其余业务领域之间禁止直接依赖，禁依赖编排库、`erp-read-models`。其余跨域事实经本域 `ports/` 窄 Port 获取，实现由组合层装配。
+- `erp-identity` 只依赖基础库与技术组件，禁止反向依赖其他业务领域、编排库、ReadModel 或应用；需要业务事实时由组合层实现 identity 的窄 Port。基础库和通用技术组件禁止依赖 identity。
 - 跨域写入放 `crates/orchestration/` 的所属业务库，命名为 Process；跨域读取放 `erp-read-models`。编排可依赖 ReadModel，禁反向；事实权限政策由拥有领域执行。
 - 单域查询留在本域 Service/Repository，禁放 ReadModel。
 - `erp-core`、`application-core`、`persistence-core` 禁放业务实体（AccountCore、Role、AuditLog、WorkItem、SalesOrder 等），禁依赖业务领域。

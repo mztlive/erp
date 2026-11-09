@@ -1,21 +1,18 @@
 //! 审批 outbox 到统一通知入口的组合层适配。
-use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_identity::subject;
 use erp_notification::{Channel, Error, NotificationData, NotificationService};
-use erp_read_models::workbench::WorkItemSearchParams;
-use erp_read_models::{WorkItemListParams, WorkbenchReadService};
-use erp_workflow::ApprovalNotificationOutbox;
 use erp_workflow::entity::approval_integration::ApprovalNotificationEventKind;
 use erp_workflow::service::approval::execution::notification_worker::{
     ApprovalNotificationDelivery, DeliveryAttempt,
 };
+use erp_workflow::service::work_item::read::WorkItemSearchParams;
+use erp_workflow::{ApprovalNotificationOutbox, WorkItemListParams, WorkItemReadService};
 
 use super::Application;
 use super::errors::{Error as ApplicationError, Result as ApplicationResult};
-use super::workflow::workflow_auth;
 use crate::permissions;
 
 pub(super) struct ApprovalNotifications(NotificationService);
@@ -91,7 +88,7 @@ pub async fn todo_count(app: &Application, actor: &AuditActor) -> ApplicationRes
         "scope": "mine", "page": 1, "page_size": 1, "timezone": "Asia/Shanghai"
     }))
     .map_err(|error| ApplicationError::Internal(error.to_string()))?;
-    let page = WorkbenchReadService::new(app.db(), Arc::new(workflow_auth(app.db(), app.rbac())))
+    let page = WorkItemReadService::new(app.db(), app.rbac())
         .work_item_search(
             WorkItemSearchParams { base: params, filters: Some("{\"include_options\":false}".into()) },
             actor.clone(),

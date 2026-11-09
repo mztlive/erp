@@ -10,6 +10,7 @@ use persistence_core::Executor;
 
 use super::super::apply_plan::PlannedWrites;
 use super::{ensure_expected_version, hidden_not_found};
+use crate::ApprovalIntegrationExt;
 use crate::entity::work_item::{
     ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority,
 };
@@ -133,12 +134,17 @@ pub(super) async fn create_open_tasks(
     input: CreateOpenTasksInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&input.writes.instance.base.id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("审批任务缺少冻结业务快照".into()))?;
     let due_at = due::inherited_due_at(db, input.writes, executor).await?;
     for (index, intent) in input.writes.create_tasks.iter().enumerate() {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
-        let item = WorkItem::new_document_approval(
+        let mut item = WorkItem::new_document_approval(
             WorkItemId::new(input.new_task_ids.get(index).cloned().unwrap_or_else(next_id)),
             DocumentApprovalWorkItemData {
                 approval_node_execution_id: execution_id.clone(),
@@ -154,6 +160,7 @@ pub(super) async fn create_open_tasks(
             input.now,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
+        item.inherit_approval_links(&snapshot)?;
         db.work_items().create(&item, executor).await?;
     }
     Ok(())

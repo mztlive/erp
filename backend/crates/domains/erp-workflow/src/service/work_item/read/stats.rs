@@ -4,20 +4,19 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_workflow::WorkItemRow;
-use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::ActorAccess;
 use super::dto::WorkItemTypeTiming;
-use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_handler, matches_order_sources};
+use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_handler};
 use super::{
-    WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView, WorkItemFilter, WorkItemScope,
-    WorkItemStatsParams, WorkItemStatsView, WorkbenchObjectFactMap, WorkbenchReadService, dto,
+    WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView, WorkItemFilter, WorkItemReadService,
+    WorkItemScope, WorkItemStatsParams, WorkItemStatsView, dto, family_of,
 };
-use crate::errors::{Error, Result};
+use crate::entity::work_item::{WorkItemStatus, WorkItemType};
+use crate::error::{Error, Result};
 
 /// 统计时限与选中类型共用固定基准，累计状态不保存任何任务或对象事实。
 struct StatsContext<'a> {
@@ -68,16 +67,12 @@ impl StatsCounts {
         fields: impl IntoIterator<Item = dto::WorkItemFields>,
         query: &dto::WorkItemListQuery,
         context: &StatsContext<'_>,
-        facts: &WorkbenchObjectFactMap,
     ) {
         self.extend_batch(
             fields
                 .into_iter()
                 .filter(|item| item.is_pending_for(context.actor.id()))
                 .filter(|item| matches_handler(item, &query.handler_user_ids))
-                .filter(|item| {
-                    matches_order_sources(item, facts, &query.sales_order_ids, &query.purchase_order_ids)
-                })
                 .map(|item| StatIdentity { work_item_type: item.work_item_type, due_at: item.due_at }),
             context,
         );
@@ -116,7 +111,7 @@ impl StatsCounts {
     }
 }
 
-impl WorkbenchReadService {
+impl WorkItemReadService {
     /// 查询与正式队列复用同一授权快照的待办统计。
     ///
     /// # 参数
@@ -180,8 +175,8 @@ impl WorkbenchReadService {
         } else {
             self.stream_stats(&query, &context, executor).await?.selected
         };
-        let current = self.auth.queue_scope_version(&actor, executor).await?;
-        super::query::ensure_scope_version(1, Some(&version), &current)?;
+        let current = self.queue_scope_version(&actor, executor).await?;
+        super::context::ensure_scope_version(1, Some(&version), &current)?;
         Ok(WorkItemStatsView {
             assigned,
             due_today: selected.due_today,
@@ -216,30 +211,12 @@ impl WorkbenchReadService {
             if candidate_count == 0 {
                 break;
             }
-            self.count_stat_batch(rows, query, context, &mut counts, executor).await?;
+            counts.extend_pending(rows.into_iter().map(dto::WorkItemFields::from), query, context);
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }
         }
         Ok(counts)
-    }
-
-    /// 直接累计本人开放任务，仅在用户指定来源筛选时读取关联事实。
-    async fn count_stat_batch(
-        &self,
-        rows: Vec<WorkItemRow>,
-        query: &dto::WorkItemListQuery,
-        context: &StatsContext<'_>,
-        counts: &mut StatsCounts,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let facts = if query.sales_order_ids.is_empty() && query.purchase_order_ids.is_empty() {
-            WorkbenchObjectFactMap::new()
-        } else {
-            self.candidate_object_facts(&rows, false, executor).await?
-        };
-        counts.extend_pending(rows.into_iter().map(dto::WorkItemFields::from), query, context, &facts);
-        Ok(())
     }
 }
 
@@ -304,7 +281,7 @@ fn registered_work_item_types() -> Vec<WorkItemType> {
 
 /// 单条任务族计数只依赖领域的固定映射。
 fn increment_family_count(counts: &mut WorkItemFamilyCountsView, work_item_type: WorkItemType) {
-    let count = match dto::family_of(work_item_type) {
+    let count = match family_of(work_item_type) {
         WorkItemFamily::Approval => &mut counts.approval,
         WorkItemFamily::Procurement => &mut counts.procurement,
         WorkItemFamily::Fulfillment => &mut counts.fulfillment,
@@ -329,10 +306,10 @@ mod tests {
         use bpm::ids::ApprovalNodeExecutionId;
         use erp_core::ids::WorkItemId;
         use erp_identity::Permission;
-        use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 
-        use crate::workbench::WorkItemListParams;
-        use crate::workbench::query::AuthorizedPageCollector;
+        use crate::dto::work_item::WorkItemListParams;
+        use crate::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+        use crate::service::work_item::read::context::AuthorizedPageCollector;
 
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let access = ActorAccess::new("actor".into())
@@ -376,7 +353,7 @@ mod tests {
         let context = context(&actor, &access, &query.work_item_types, at);
         let mut counts = StatsCounts::default();
         // 来源事实缺失或授权未就绪不改变持久化任务数量。
-        counts.extend_pending(rows.clone(), &query, &context, &WorkbenchObjectFactMap::new());
+        counts.extend_pending(rows.clone(), &query, &context);
         assert_eq!(counts.selected.assigned, 2);
         assert_eq!(counts.family_counts.approval, 1);
         assert_eq!(counts.family_counts.procurement, 1);
@@ -391,7 +368,7 @@ mod tests {
         let mut other_handler = query.clone();
         other_handler.handler_user_ids = vec!["other".into()];
         let mut narrowed = StatsCounts::default();
-        narrowed.extend_pending(rows, &other_handler, &context, &WorkbenchObjectFactMap::new());
+        narrowed.extend_pending(rows, &other_handler, &context);
         assert_eq!(narrowed.selected.assigned, 0);
     }
 

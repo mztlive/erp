@@ -2,27 +2,27 @@
 
 use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet};
-use erp_workflow::entity::work_item::{
-    WorkItem, WorkItemActionAccess, WorkItemActionRequirement, WorkItemStatus, WorkItemType,
-};
-use erp_workflow::service::work_item::access::required_execution_permissions;
 use persistence_core::Executor;
 
 use super::{
-    ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemFilter, WorkItemScope,
-    WorkbenchReadService, dto,
+    ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemFilter, WorkItemReadService,
+    WorkItemScope, dto,
 };
-use crate::errors::{Error, Result};
+use crate::entity::work_item::{
+    WorkItem, WorkItemActionAccess, WorkItemActionRequirement, WorkItemStatus, WorkItemType,
+};
+use crate::error::{Error, Result};
+use crate::service::work_item::access::required_execution_permissions;
 
-pub(super) const MANAGE_PERMISSION: &str = "work_item:manage";
+pub const MANAGE_PERMISSION: &str = "work_item:manage";
 
-pub(super) struct ActorAccess {
-    pub(super) actor_id: String,
-    pub(super) permissions: Vec<Permission>,
-    pub(super) managed_owner_ids: Option<Vec<String>>,
-    pub(super) can_manage: bool,
-    pub(super) read_action: &'static str,
-    pub(super) readable_owner_ids: Option<Vec<String>>,
+pub struct ActorAccess {
+    pub actor_id: String,
+    pub permissions: Vec<Permission>,
+    pub managed_owner_ids: Option<Vec<String>>,
+    pub can_manage: bool,
+    pub read_action: &'static str,
+    pub readable_owner_ids: Option<Vec<String>>,
 }
 
 impl ActorAccess {
@@ -41,6 +41,8 @@ impl ActorAccess {
             return Err(Error::Forbidden("没有待办列表权限".into()));
         }
         let mut filter = WorkItemFilter {
+            sales_order_ids: query.sales_order_ids.clone(),
+            purchase_order_ids: query.purchase_order_ids.clone(),
             work_item_types: query.work_item_types.clone(),
             statuses: query.statuses.clone(),
             priorities: query.priorities.clone(),
@@ -70,7 +72,7 @@ impl ActorAccess {
     ///
     /// # 错误
     /// 无。
-    pub(super) fn new(actor_id: String) -> Self {
+    pub fn new(actor_id: String) -> Self {
         Self {
             actor_id,
             permissions: Vec::new(),
@@ -91,7 +93,7 @@ impl ActorAccess {
     ///
     /// # 错误
     /// 无。
-    pub(super) fn with_permissions(mut self, permissions: Vec<Permission>) -> Self {
+    pub fn with_permissions(mut self, permissions: Vec<Permission>) -> Self {
         self.permissions = permissions;
         self
     }
@@ -108,18 +110,14 @@ impl ActorAccess {
     /// # 错误
     /// 无。
     #[cfg(test)]
-    pub(super) fn with_managed_scope(
-        mut self,
-        managed_owner_ids: Option<Vec<String>>,
-        can_manage: bool,
-    ) -> Self {
+    pub fn with_managed_scope(mut self, managed_owner_ids: Option<Vec<String>>, can_manage: bool) -> Self {
         self.managed_owner_ids = managed_owner_ids;
         self.can_manage = can_manage;
         self
     }
 }
 
-impl WorkbenchReadService {
+impl WorkItemReadService {
     /// 分别解析读取和操作的 DataScope，操作权限缺失不影响读取。
     /// # 参数
     /// `actor` 为真实账号，`action` 为当前读取动作，`executor` 为同一执行器。
@@ -127,31 +125,25 @@ impl WorkbenchReadService {
     /// 返回相互独立的读取范围和管理范围。
     /// # 错误
     /// 当前读取动作拒绝或基础设施故障时失败关闭。
-    pub(super) async fn task_access(
+    pub async fn task_access(
         &self,
         actor: &AuditActor,
         action: &'static str,
         executor: &mut dyn Executor,
     ) -> Result<ActorAccess> {
-        let readable_owner_ids = self.auth.task_scope_owners(actor, action, executor).await?;
-        let permissions = self
-            .auth
-            .permission_codes(actor.kind(), actor.id())
-            .await?
-            .into_iter()
-            .map(|code| Permission::parse(&code).map_err(|error| Error::Internal(error.to_string())))
-            .collect::<Result<Vec<_>>>()?;
+        let readable_owner_ids = self.task_scope_owners(actor, action, executor).await?;
+        let permissions = self.rbac.permissions(actor.kind(), actor.id()).await?;
         let mut access = ActorAccess::new(actor.id().to_owned()).with_permissions(permissions);
         access.readable_owner_ids = readable_owner_ids;
         access.read_action = action;
         if has_permission(&access, MANAGE_PERMISSION) {
-            match self.auth.task_scope_owners(actor, "manage", executor).await {
+            match self.task_scope_owners(actor, "manage", executor).await {
                 Ok(owners) => {
                     access.managed_owner_ids = owners;
                     access.can_manage = true;
                 },
-                Err(erp_workflow::Error::Forbidden(_)) => {},
-                Err(error) => return Err(error.into()),
+                Err(crate::Error::Forbidden(_)) => {},
+                Err(error) => return Err(error),
             }
         }
         Ok(access)
@@ -164,12 +156,12 @@ impl WorkbenchReadService {
     /// 列表访问范围及身份版本。
     /// # 错误
     /// 权限、范围或版本读取失败时返回错误。
-    pub(super) async fn queue_access_with_version(
+    pub async fn queue_access_with_version(
         &self,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(ActorAccess, String)> {
-        let version = self.auth.queue_scope_version(actor, executor).await?;
+        let version = self.queue_scope_version(actor, executor).await?;
         let access = self.task_access(actor, "list", executor).await?;
         Ok((access, version))
     }
@@ -209,16 +201,16 @@ impl WorkbenchReadService {
     }
 }
 
-pub(super) fn has_permission(access: &ActorAccess, permission: &str) -> bool {
+pub fn has_permission(access: &ActorAccess, permission: &str) -> bool {
     let required = Permission::parse(permission).expect("对象注册表权限必须合法");
     PermissionSet::new(access.permissions.clone()).covers_one(&required)
 }
 
-pub(super) struct ViewAccess {
-    pub(super) processing_state: ProcessingState,
-    pub(super) processing_blocker: Option<ProcessingBlockerView>,
-    pub(super) allowed_actions: Vec<WorkItemAllowedAction>,
-    pub(super) action_blockers: Vec<ProcessingBlockerView>,
+pub struct ViewAccess {
+    pub processing_state: ProcessingState,
+    pub processing_blocker: Option<ProcessingBlockerView>,
+    pub allowed_actions: Vec<WorkItemAllowedAction>,
+    pub action_blockers: Vec<ProcessingBlockerView>,
 }
 
 impl ViewAccess {
@@ -232,7 +224,7 @@ impl ViewAccess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub(super) fn ready(allowed_actions: Vec<WorkItemAllowedAction>) -> Self {
+    pub fn ready(allowed_actions: Vec<WorkItemAllowedAction>) -> Self {
         Self {
             processing_state: ProcessingState::Ready,
             processing_blocker: None,
@@ -251,7 +243,7 @@ impl ViewAccess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub(super) fn blocked(blocker: ProcessingBlockerView) -> Self {
+    pub fn blocked(blocker: ProcessingBlockerView) -> Self {
         Self {
             processing_state: ProcessingState::ApprovalBlocked,
             processing_blocker: Some(blocker.clone()),
@@ -322,7 +314,7 @@ pub(super) fn allowed_actions(
 ///
 /// # 错误
 /// 当前动作权限或 DataScope 不覆盖任务时返回 `Error::Forbidden`。
-pub(super) fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
+pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
     if !has_permission(access, &format!("work_item:{}", access.read_action))
         || !access
             .readable_owner_ids
@@ -351,7 +343,7 @@ pub(super) fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
+pub fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
     access
         .managed_owner_ids
         .as_ref()
@@ -361,10 +353,11 @@ pub(super) fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use erp_core::ids::WorkItemId;
-    use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemType};
     use persistence_core::QueryFilter;
 
     use super::*;
+    use crate::dto::work_item::WorkItemView;
+    use crate::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemType};
 
     fn item() -> WorkItem {
         WorkItem::new(
@@ -488,18 +481,14 @@ mod tests {
         );
     }
 
-    /// 即使内部投影被附加资料，任务线协议仍只输出关联身份与版本。
+    /// 任务线协议只输出任务信息、关联身份与版本。
     #[test]
     fn task_wire_projection_never_serializes_business_materials() {
         let mut task = item();
         task.work_item_type = WorkItemType::ApprovalRework;
         task.business_object_type = "sales_order".into();
-        let mut view = super::super::WorkItemView::from_fields(task.into(), "queue".into()).unwrap();
-        view.business_object_label = "secret document".into();
-        view.counterparty_label = Some("secret customer".into());
-        view.list_summary = Some("secret amount".into());
-        view.summary_sections
-            .push(super::super::dto::WorkItemSummarySection::new("amount".into(), "100".into()));
+        let view = WorkItemView::from_fields(task.into(), "queue".into()).unwrap();
+
         let json = serde_json::to_value(view).unwrap();
         assert_eq!(json["business_object_id"], "account");
         assert_eq!(json["subject_version"], "version-7");

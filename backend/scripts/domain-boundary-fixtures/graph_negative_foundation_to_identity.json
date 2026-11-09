@@ -1,0 +1,17 @@
+{
+  "packages": [
+    {
+      "name": "erp-core",
+      "deps": [
+        {
+          "name": "erp-identity",
+          "kind": "normal"
+        }
+      ]
+    },
+    {
+      "name": "erp-identity",
+      "deps": []
+    }
+  ]
+}

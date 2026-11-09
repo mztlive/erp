@@ -10,6 +10,7 @@ use erp_finance::entity::payable::{
 };
 use erp_finance::repository::PurchasePaymentRequestSnapshotExt;
 use erp_identity::{AccessControlExt, Permission, RoleRepositoryExt};
+use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     FinanceResponsibilityOperation, SupplierPaymentTaskReason, SupplierPaymentTaskSpec, WorkItem,
@@ -52,7 +53,7 @@ pub async fn approve(
             executor,
         )
         .await?;
-    let task = new_approved_purchase_payment_request_task(
+    let mut task = new_approved_purchase_payment_request_task(
         WorkItemId::new(next_id()),
         SupplierPaymentTaskSpec {
             account_id: request.base.id.clone(),
@@ -68,6 +69,9 @@ pub async fn approve(
         &request.request_no,
     )?;
     request.work_item_id = Some(task.base.id.clone());
+    task.set_links(
+        work_item_links::capture(db, "purchase_payment_request", &request.base.id, executor).await?,
+    )?;
     db.work_items().create(&task, executor).await?;
     db.purchase_payment_requests().update(&mut request, executor).await?;
     let audit = actor.clone().resource_log(
@@ -443,7 +447,7 @@ async fn create_reopened_task(
             executor,
         )
         .await?;
-    let task = new_approved_purchase_payment_request_task(
+    let mut task = new_approved_purchase_payment_request_task(
         WorkItemId::new(next_id()),
         SupplierPaymentTaskSpec {
             account_id: request.base.id.clone(),
@@ -459,6 +463,9 @@ async fn create_reopened_task(
         &request.request_no,
     )?;
     request.work_item_id = Some(task.base.id.clone());
+    task.set_links(
+        work_item_links::capture(db, "purchase_payment_request", &request.base.id, executor).await?,
+    )?;
     db.work_items().create(&task, executor).await?;
     db.purchase_payment_requests().update(request, executor).await?;
     Ok(())

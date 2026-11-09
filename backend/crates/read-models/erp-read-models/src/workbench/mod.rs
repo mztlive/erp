@@ -1,6 +1,5 @@
 //! 工作台读模型：已授权的任务列表、详情、统计和简报。
 
-mod access;
 mod material_transfer;
 pub use material_transfer::authorize_material_transfer;
 mod approval_list;
@@ -24,27 +23,18 @@ mod invoice_review;
 mod operational_brief;
 mod party_names;
 mod payment_request;
+use erp_workflow::dto::work_item::presentation;
 pub use invoice_review::materials::invoice_sales_reference;
 pub(crate) use invoice_review::materials::{InvoiceSalesBasis, optional_sales_basis};
 pub use invoice_review::{InvoiceApprovalReview, invoice_approval_review};
-mod presentation;
 mod purchase_review_brief;
 mod query;
 mod sales_order_brief;
 mod search;
-mod stats;
-pub use search::{SearchOption, SearchOptions, WorkItemSearchParams, WorkspaceFilters};
+pub use search::{SearchOption, SearchOptions, WorkspaceFilters};
 mod supplier_portal_brief;
 
-pub(crate) use dto::{
-    ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily,
-    WorkItemFamilyCountsView, WorkItemScope,
-};
-pub use dto::{
-    WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
-    work_item_destination,
-};
-use erp_workflow::WorkItemExt;
+use erp_workflow::entity::work_item::WorkItemDueFilter;
 pub(crate) use facts::{
     ObjectKind, WorkbenchObjectFact, WorkbenchObjectFactMap, WorkbenchSubjectDisplay, object_ids,
 };
@@ -54,8 +44,6 @@ pub use fulfillment_queue::{
     FulfillmentQueuePageView,
 };
 pub use query::WorkbenchReadService;
-
-pub(crate) type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
 mod approval_snapshot;
 pub use approval_snapshot::capture_approval_display;

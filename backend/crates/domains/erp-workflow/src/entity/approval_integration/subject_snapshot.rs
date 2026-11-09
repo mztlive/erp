@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ApprovalMaterialFile;
 use crate::entity::document_registry::DocumentType;
+use crate::entity::work_item::WorkItemLink;
 
 const DOCUMENT_NO_MAX_LEN: usize = 128;
 const ORG_ID_MAX_LEN: usize = 128;
@@ -76,6 +77,9 @@ pub struct ApprovalSubjectSnapshot {
     pub business_object_id: String,
     /// 冻结提交版本。
     pub subject_version: u32,
+    /// 本次提交冻结的全部上级单据引用；后续任务继承，禁止从当前草稿重建。
+    #[serde(default)]
+    pub links: Vec<WorkItemLink>,
     /// 有界业务字段。
     pub payload: ApprovalSubjectSnapshotPayload,
     /// 旧快照没有该字段；缺失时不得从当前草稿补成历史内容。
@@ -128,6 +132,7 @@ impl ApprovalSubjectSnapshot {
             )?,
             subject_version,
             payload,
+            links: Vec::new(),
             display: None,
             material_files: Vec::new(),
             resubmission_reason: None,

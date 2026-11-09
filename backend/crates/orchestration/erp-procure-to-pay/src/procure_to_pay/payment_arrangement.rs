@@ -40,6 +40,7 @@ pub async fn sync_payment_arrangement(
     }
     if let Some(mut task) = facts.task.take() {
         let previous = task.clone();
+        task = task.with_link("sales_order", facts.order.sales_order_id.to_string())?;
         task.update_impact_summary(Some(summary))?;
         if let Some(revision) = &facts.order.stable.current_revision_id {
             task.subject_version = revision.clone();
@@ -100,5 +101,6 @@ fn arrangement_task(facts: &PaymentArrangementFacts, summary: String) -> Result<
         },
         format!("purchase_payment_arrangement:{}", order.base.id),
     )
+    .and_then(|task| task.with_link("sales_order", order.sales_order_id.to_string()))
     .map_err(Error::from)
 }

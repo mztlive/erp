@@ -13,6 +13,7 @@ import {
 import { FilterSelect } from "@/components/business/filter-select"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { OptionCombobox } from "@/components/business/option-combobox"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { DatePicker } from "@/components/ui/date-picker"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import {
@@ -36,7 +37,7 @@ const MORE_KEYS: WorkspaceChoiceKey[] = [
 ]
 
 /** 所有候选匹配由远端执行；查询失败有独立反馈，不伪装为空候选。 */
-export function WorkspaceSearchChoice({
+function RemoteSearchChoice({
     name,
     value,
     onChange,
@@ -51,12 +52,17 @@ export function WorkspaceSearchChoice({
     view: WorkspaceViewFilter
     label?: string
 }) {
-    const remote = useWorkspaceFilterOptions(view)
+    const remote = useWorkspaceFilterOptions(view, undefined, name)
     const labels = useRef(new Map<string, WorkspaceSearchOption>())
     const initial = options[name] ?? []
     for (const option of [...initial, ...(remote.data?.[name] ?? [])])
         labels.current.set(option.value, option)
-    const choices = remote.search.trim() ? (remote.data?.[name] ?? []) : initial
+    const choices =
+        remote.search.trim() ||
+        (view !== "started" &&
+            ["sales_orders", "purchase_orders"].includes(name))
+            ? (remote.data?.[name] ?? initial)
+            : initial
     // 保留已选项的显示名称；不改变服务端返回候选的匹配结果。
     const selected = value
         .filter((id) => !choices.some((item) => item.value === id))
@@ -97,6 +103,26 @@ export function WorkspaceSearchChoice({
             )}
         </div>
     )
+}
+
+/** 人员目录负责选择与回显，任务查询只传 ID 数组。 */
+export function WorkspaceSearchChoice(
+    props: React.ComponentProps<typeof RemoteSearchChoice>,
+) {
+    if (props.name === "handlers" && props.view !== "started") {
+        return (
+            <PersonDirectoryFilter
+                id="workspace-filter-handlers"
+                category="business"
+                value={props.value.join(",")}
+                onChange={(value) =>
+                    props.onChange(value ? value.split(",") : [])
+                }
+                label="处理人"
+            />
+        )
+    }
+    return <RemoteSearchChoice {...props} />
 }
 
 /** 一层范围导航下的统一查询：事项类型多选、组合条件和可移除标签。 */
@@ -223,8 +249,16 @@ export function WorkspaceSearchPanel({
                             {(field) => (
                                 <ListSearchField
                                     id="workspace-queue-toolbar-search-input"
-                                    aria-label="搜索单号、来源单号、往来方或商品"
-                                    placeholder="单号、来源单号、往来方、商品"
+                                    aria-label={
+                                        state.view === "started"
+                                            ? "搜索单号、来源单号、往来方或商品"
+                                            : "搜索任务编号或关联编号"
+                                    }
+                                    placeholder={
+                                        state.view === "started"
+                                            ? "单号、来源单号、往来方、商品"
+                                            : "任务编号、关联编号"
+                                    }
                                     value={field.state.value}
                                     onChange={field.handleChange}
                                 />
@@ -263,7 +297,8 @@ export function WorkspaceSearchPanel({
                                         }
                                     />
                                 )}
-                            {choice("counterparties")}
+                            {state.view === "started" &&
+                                choice("counterparties")}
                             {state.view !== "started" &&
                                 state.view !== "history" && (
                                     <form.Field name="filters">

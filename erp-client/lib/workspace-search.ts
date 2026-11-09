@@ -3,8 +3,11 @@ export type WorkspaceFilters = {
     due?: "today" | "overdue"
     item_types?: string[]
     counterparties?: string[]
+    /** 当前处理人的稳定 ID，姓名由人员目录选择器解析。 */
     handlers?: string[]
+    /** 来源销售单 ID，与采购来源条件取交集。 */
     sales_orders?: string[]
+    /** 来源采购单 ID。 */
     purchase_orders?: string[]
     warehouses?: string[]
     business_types?: string[]

@@ -11,6 +11,8 @@ mod close;
 mod finance_responsibility;
 pub mod order_access;
 mod query_support;
+pub mod read;
+pub use read::WorkItemReadService;
 mod reassign;
 mod reassign_apply;
 mod supplier_portal;
@@ -148,6 +150,7 @@ mod tests {
 
     fn w13_delta_row() -> crate::repository::WorkItemRow {
         crate::repository::WorkItemRow {
+            links: Vec::new(),
             id: "wi-w13-delta".to_string(),
             work_item_type: WorkItemType::CardFundsDeltaReview,
             approval_node_execution_id: None,

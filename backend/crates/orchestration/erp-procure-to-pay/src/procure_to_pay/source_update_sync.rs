@@ -210,6 +210,7 @@ impl SourceUpdateSync<'_> {
             },
             format!("purchase_source_update:{}", purchase.base.id),
         )
+        .and_then(|task| task.with_link("sales_order", purchase.sales_order_id.to_string()))
         .map_err(Error::Logic)
     }
 }

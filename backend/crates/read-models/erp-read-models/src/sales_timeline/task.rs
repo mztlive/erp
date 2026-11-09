@@ -1,6 +1,6 @@
 use application_core::AuditActor;
 use erp_workflow::service::approval::execution::ApprovalRuntimeService;
-use erp_workflow::{BpmExt, DocumentType, WorkflowAuthorizationPort};
+use erp_workflow::{BpmExt, DocumentType, WorkItemReadService, WorkflowAuthorizationPort};
 use persistence_core::{Executor, Transactional};
 
 use super::repository::TimelineRepository;
@@ -11,7 +11,6 @@ use super::{
     TimelineSalesSource,
 };
 use crate::sales_center::access::SalesAccess;
-use crate::workbench::WorkbenchReadService;
 use crate::{Error, Result};
 
 impl SalesTimelineReadService {
@@ -68,7 +67,7 @@ impl SalesTimelineReadService {
     /// 任务失效、责任越界、参数无效或数据库故障时拒绝。
     pub async fn task(
         &self,
-        workbench: WorkbenchReadService,
+        workbench: WorkItemReadService,
         actor: &AuditActor,
         id: &str,
         query: TimelineQuery,

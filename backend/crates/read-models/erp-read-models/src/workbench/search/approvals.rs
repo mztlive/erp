@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_workflow::service::approval::execution::runtime_service::RuntimeInstanceListQuery;
+use erp_workflow::service::work_item::read::context::AuthorizedPageCollector;
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 
 use super::super::brief::BriefSection;
-use super::super::query::AuthorizedPageCollector;
 use super::super::{ApprovalListItem, ApprovalListPage, WorkbenchReadService};
 use super::sources::SubjectKey;
 use super::{SearchDocument, SearchOptions, WorkspaceFilters, approval_label, collect_options};
@@ -170,7 +170,7 @@ fn approval_document(item: &ApprovalListItem) -> SearchDocument {
                 object_id: section.object_id.clone(),
             })
             .collect::<Vec<_>>();
-        doc.sections(&sections);
+        super::append_sections(&mut doc, &sections);
     }
     doc
 }

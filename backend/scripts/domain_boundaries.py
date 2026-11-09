@@ -324,6 +324,11 @@ def graph_from_metadata(metadata: Mapping[str, Any]) -> Graph:
     return graph
 
 
+def forbidden_domain_dependency(source: str, target: str | None) -> bool:
+    """Business domains may consume identity; identity must remain below them."""
+    return source in BUSINESS_DOMAINS and target in BUSINESS_DOMAINS and source != target and target != "erp-identity"
+
+
 def forbidden_graph_errors(graph: Graph) -> list[str]:
     """Return forbidden-edge errors for an instantiated package graph."""
     errors: list[str] = layer_dependency_errors(graph.edges)
@@ -349,7 +354,7 @@ def forbidden_graph_errors(graph: Graph) -> list[str]:
             errors.append(f"OCR 技术客户端不得依赖业务或应用组合层: {label}")
         if src in FOUNDATION | BUSINESS_DOMAINS and dst in OLD_BUSINESS:
             errors.append(f"新领域/基础 crate 不得依赖旧三层: {label}")
-        if src in BUSINESS_DOMAINS and dst in BUSINESS_DOMAINS and src != dst:
+        if forbidden_domain_dependency(src, dst):
             errors.append(f"普通领域 crate 之间禁止直接依赖: {label}")
         if src in FOUNDATION and dst in BUSINESS_DOMAINS | OLD_BUSINESS | COMPOSITION:
             errors.append(f"基础 crate 不得依赖业务/组合层: {label}")
@@ -516,6 +521,9 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
         "graph_negative_domain_to_ocr.json",
         "graph_negative_domain_to_ai.json",
         "graph_negative_domain_to_domain.json",
+        "graph_negative_identity_to_domain.json",
+        "graph_negative_foundation_to_identity.json",
+        "graph_negative_platform_to_identity.json",
         "graph_negative_foundation_to_business.json",
         "graph_negative_bpm_io.json",
         "graph_negative_services_to_processes.json",
@@ -526,6 +534,13 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
     ):
         graph = graph_from_packages(json.loads(read_text(fixture_dir / name)))
         require_hit(name, forbidden_graph_errors(graph))
+
+    if forbidden_domain_dependency("erp-workflow", "erp-identity"):
+        result.errors.append("领域到 identity 的源码依赖应允许")
+    if not forbidden_domain_dependency("erp-identity", "erp-workflow"):
+        result.errors.append("identity 反向源码依赖必须拒绝")
+    if not forbidden_domain_dependency("erp-sales", "erp-procurement"):
+        result.errors.append("其他领域之间源码依赖必须拒绝")
 
     entity_pos = read_text(fixture_dir / "entity_positive.rs")
     require_empty("entity_positive", scan_entity_source("entity_positive.rs", entity_pos, money_exception=False))
@@ -775,7 +790,7 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
                 package = ident_map.get(root)
                 if name not in COMPOSITION and package and package in OLD_BUSINESS:
                     result.errors.append(f"新 crate 源码 use 旧三层 {used}: {rel}")
-                if name in BUSINESS_DOMAINS and package in BUSINESS_DOMAINS and package != name:
+                if forbidden_domain_dependency(name, package):
                     result.errors.append(f"领域源码直接 use 其他领域 {used}: {rel}")
             if "/entity/" in f"/{rel}/" or path.parent.name == "entity" or rel.endswith("/entity.rs"):
                 money_exception = name == "erp-core" and path.name == "money.rs"

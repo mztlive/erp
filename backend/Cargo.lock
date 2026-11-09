@@ -2897,6 +2897,7 @@ dependencies = [
  "entity-core",
  "entity-macros",
  "erp-core",
+ "erp-identity",
  "futures-util",
  "hex",
  "id-generator",

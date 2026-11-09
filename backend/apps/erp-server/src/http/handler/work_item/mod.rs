@@ -3,23 +3,24 @@
 //! 已删除 start-processing / release-to-team / claim。通用写接口拒绝审批任务。
 
 use std::result::Result as StdResult;
-use std::sync::Arc;
 
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use erp_read_models::workbench::{SearchOptions, WorkItemSearchParams};
 use erp_read_models::{
-    Error as ReadModelError, FulfillmentQueueListParams, FulfillmentQueuePageView, WorkItemListParams,
-    WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView, WorkbenchReadService,
+    Error as ReadModelError, FulfillmentQueueListParams, FulfillmentQueuePageView, WorkbenchReadService,
 };
 use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::service::work_item::read::{SearchOptions, WorkItemSearchParams};
 use erp_workflow::service::work_item::{
     AbandonApprovalReworkRequest, CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemCommandView,
     WorkItemConflictKind, WorkItemMutationOutcome, WorkItemReassignCandidateView,
 };
-use erp_workflow::{Error as WorkflowError, ErrorCode};
+use erp_workflow::{
+    Error as WorkflowError, ErrorCode, WorkItemListParams, WorkItemPageView, WorkItemReadService,
+    WorkItemStatsParams, WorkItemStatsView, WorkItemView,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -29,7 +30,7 @@ use crate::http::handler::approval_instance::error::ApprovalHttpError;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::errors::Error as ProcessError;
-use crate::wiring::workflow::{work_item_service, workflow_auth};
+use crate::wiring::workflow::work_item_service;
 
 pub mod finance_responsibility;
 
@@ -247,13 +248,10 @@ async fn work_item_action_response(
         },
         WorkItemMutationOutcome::Conflict(conflict) => {
             let current = match conflict.work_item_id() {
-                Some(id) => WorkbenchReadService::new(
-                    state.application().db(),
-                    Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
-                )
-                .work_item_action_view(id.to_string(), actor)
-                .await
-                .ok(),
+                Some(id) => WorkItemReadService::new(state.application().db(), state.application().rbac())
+                    .work_item_action_view(id.to_string(), actor)
+                    .await
+                    .ok(),
                 None => None,
             };
             Err(WorkItemActionError::Conflict(Box::new(HttpWorkItemConflict {
@@ -264,7 +262,7 @@ async fn work_item_action_response(
     }
 }
 
-/// HTTP 409 payload. Query view is assembled by read-models.
+/// HTTP 409 payload. Query view is assembled by workflow.
 #[derive(Debug, Clone, Serialize)]
 pub struct HttpWorkItemConflict {
     #[serde(skip)]
@@ -296,12 +294,9 @@ pub async fn work_item_list(
     Query(params): Query<WorkItemListParams>,
     Query(search): Query<WorkItemSearchQuery>,
 ) -> Result<WorkItemHttpPageView> {
-    let page = WorkbenchReadService::new(
-        state.application().db(),
-        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
-    )
-    .work_item_search(WorkItemSearchParams { base: params, filters: search.filters }, actor)
-    .await?;
+    let page = WorkItemReadService::new(state.application().db(), state.application().rbac())
+        .work_item_search(WorkItemSearchParams { base: params, filters: search.filters }, actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(wrap_page(page)))
 }
 
@@ -322,12 +317,13 @@ pub async fn fulfillment_queue_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<FulfillmentQueueListParams>,
 ) -> Result<FulfillmentQueuePageView> {
-    let page = WorkbenchReadService::new(
-        state.application().db(),
-        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
-    )
-    .fulfillment_queue_list(params, actor)
-    .await?;
+    let page = WorkbenchReadService::new(state.application().db())
+        .fulfillment_queue_list(
+            params,
+            actor,
+            WorkItemReadService::new(state.application().db(), state.application().rbac()),
+        )
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -348,12 +344,9 @@ pub async fn work_item_stats(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<WorkItemStatsParams>,
 ) -> Result<WorkItemStatsView> {
-    let stats = WorkbenchReadService::new(
-        state.application().db(),
-        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
-    )
-    .work_item_stats(params, actor)
-    .await?;
+    let stats = WorkItemReadService::new(state.application().db(), state.application().rbac())
+        .work_item_stats(params, actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(stats))
 }
 
@@ -374,12 +367,9 @@ pub async fn work_item_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<WorkItemHttpView> {
-    let view = WorkbenchReadService::new(
-        state.application().db(),
-        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
-    )
-    .work_item_detail(id, actor)
-    .await?;
+    let view = WorkItemReadService::new(state.application().db(), state.application().rbac())
+        .work_item_detail(id, actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(view.into()))
 }
 
@@ -503,7 +493,6 @@ mod tests {
     fn task_view(work_item_type: WorkItemType) -> WorkItemView {
         WorkItemView {
             search_matches: Vec::new(),
-            fulfillment_status: None,
             id: "task-id".to_string(),
             work_item_type,
             handler_key: "task-handler".to_string(),
@@ -529,14 +518,7 @@ mod tests {
             business_object_type: "invoice".to_string(),
             business_object_id: "invoice-id".to_string(),
             root_business_object_id: "invoice-id".to_string(),
-            business_object_label: "INV-001".to_string(),
-            counterparty_label: Some("客户".to_string()),
             next_action_hint: "处理".to_string(),
-            summary_sections: Vec::new(),
-            brief_lines: Vec::new(),
-            delivery_lines: Vec::new(),
-            brief_more_count: None,
-            list_summary: None,
             subject_version: "2".to_string(),
             task_version: "3".to_string(),
             allowed_actions: vec![WorkItemAllowedAction::View],

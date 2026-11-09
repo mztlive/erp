@@ -10,6 +10,7 @@ use erp_import::{
     LegacyImportConfirmationListParams, LegacyImportExt, PageView, SortDir,
 };
 use erp_workflow::WorkItemExt;
+use erp_workflow::dto::work_item::work_item_destination;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::work_item::{ProcessingState, WorkItemAllowedAction};
@@ -168,7 +169,7 @@ fn authorized_work_item_view(
     item: erp_workflow::service::work_item::AuthorizedWorkItem,
     confirmation_status: ConfirmationStatus,
 ) -> Result<ImportBusinessConfirmationWorkItemView> {
-    let (handler_key, destination_workspace_id) = erp_read_models::workbench::work_item_destination(
+    let (handler_key, destination_workspace_id) = work_item_destination(
         item.item.work_item_type,
         &item.item.business_object_type,
         &item.item.owner_role,

@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_workflow::WorkItemRow;
 use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
 use erp_workflow::ports::ObjectFactMap;
 pub(crate) use erp_workflow::ports::ObjectKind;
@@ -199,65 +198,6 @@ pub(super) fn object_policy(
 }
 
 impl WorkbenchReadService {
-    /// 无关键词扫描只装载授权、版本与订单来源；关键词保持原富显示检索语义。
-    ///
-    /// # 参数
-    /// `rows` 为本批候选；`with_display` 表示搜索依赖对象富显示；`executor` 为调用方执行器。
-    /// # 返回
-    /// 返回与原显示投影共享权威构造器的本批事实。
-    /// # 错误
-    /// 任一权威或显示事实读取失败时传播原错误。
-    pub(super) async fn candidate_object_facts(
-        &self,
-        rows: &[WorkItemRow],
-        with_display: bool,
-        executor: &mut dyn Executor,
-    ) -> Result<WorkbenchObjectFactMap> {
-        if with_display {
-            return self.object_facts_for_rows(rows, executor).await;
-        }
-        let keys = rows
-            .iter()
-            .filter_map(|row| {
-                object_policy(row.work_item_type, &row.business_object_type)
-                    .map(|policy| (policy.object_kind, row.business_object_id.clone()))
-            })
-            .collect();
-        Ok(self
-            .facts_reader()
-            .load(&keys, executor)
-            .await?
-            .into_iter()
-            .map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact)))
-            .collect())
-    }
-
-    /// 批量读取当前页任务的权威对象事实，避免按行 N+1。
-    ///
-    /// # 参数
-    /// * `rows` - 当前页工作项行。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
-    /// 返回这些行已注册对象的事实；未注册类型不进入映射。
-    ///
-    /// # 错误
-    /// 对象事实读取失败时返回错误。
-    pub(super) async fn object_facts_for_rows(
-        &self,
-        rows: &[erp_workflow::WorkItemRow],
-        executor: &mut dyn Executor,
-    ) -> Result<WorkbenchObjectFactMap> {
-        let keys = rows
-            .iter()
-            .filter_map(|row| {
-                object_policy(row.work_item_type, &row.business_object_type)
-                    .map(|policy| (policy.object_kind, row.business_object_id.clone()))
-            })
-            .collect::<HashSet<_>>();
-        self.load_object_facts(&keys, executor).await
-    }
-
     /// 按固定对象注册表分组查询；未注册类型不会进入本映射。
     ///
     /// # 参数

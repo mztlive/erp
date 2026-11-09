@@ -20,7 +20,8 @@
 | 查询客户自身资料和分配记录 | erp-customer 的 Service/Repository |
 | 查询客户关联的合同、销售和应收摘要 | 本 crate 的 customer_center |
 | 查询采购列表并补齐供应商、销售单、负责人信息 | 本 crate 的 purchase_center |
-| 查询工作台任务及关联单据摘要 | 本 crate 的 workbench |
+| 查询任务列表、详情、统计与人员显示名 | erp-workflow 的 WorkItemReadService |
+| 查询跨业务审批材料及履约业务队列 | 本 crate 的 workbench |
 | 执行订单提交、生效或财务过账 | 所属业务编排库协调相应领域 |
 
 本 crate 中已有查询直接读取当前 MongoDB 业务数据并组装结果，例如客户中心聚合与采购列表关联事实读取。采用 ReadModel 不要求另建数据库或复制一套业务数据。独立 crate 的用途是明确跨域查询的依赖边界；查询性能仍须依据具体实现验证。
@@ -46,7 +47,8 @@
 | [src/lib.rs](src/lib.rs) | 中心页与工作台公开模块 |
 | [src/catalog_supply/mod.rs](src/catalog_supply/mod.rs) | 商品、供给与实时可售资格的跨域聚合仓储 |
 | [src/inventory_center/mod.rs](src/inventory_center/mod.rs) | 库存调整详情、actor-aware 审批动作与精确实例投影 |
-| [src/workbench/mod.rs](src/workbench/mod.rs) | WorkbenchReadService 与工作项视图 |
+| [src/workbench/mod.rs](src/workbench/mod.rs) | 跨业务审批材料、展示与履约队列 |
+| [src/work_item_links/mod.rs](src/work_item_links/mod.rs) | 仅在业务写入事务捕获上级链路，任务读取不得调用 |
 | [src/customer_center/service.rs](src/customer_center/service.rs) | 客户最近合同、销售单及应收汇总 |
 | [src/customer_center/repository/related.rs](src/customer_center/repository/related.rs) | 客户合同与销售单摘要的聚合查询 |
 | [src/purchase_center/mod.rs](src/purchase_center/mod.rs) | 采购列表、中心页、创建依据与责任规则查询 |

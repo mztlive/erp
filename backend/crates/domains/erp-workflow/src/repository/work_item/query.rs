@@ -408,6 +408,7 @@ pub(super) fn work_item_projection() -> Document {
         "business_object_type": 1,
         "business_object_id": 1,
         "subject_version": 1,
+        "links": 1,
         "status": 1,
         "owner_role": 1,
         "owner_organization_id": 1,
@@ -463,6 +464,7 @@ mod tests {
         let projection = work_item_projection();
         assert_eq!(projection.get_i32("approval_node_execution_id").unwrap(), 1);
         let row = WorkItemRow {
+            links: Vec::new(),
             id: "wi-1".to_string(),
             work_item_type: WorkItemType::CardFundsDeltaReview,
             approval_node_execution_id: Some("exec-1".to_string()),

@@ -6,10 +6,11 @@
 use std::collections::HashMap;
 
 use erp_core::money::Amount;
-use erp_workflow::entity::work_item::WorkItemType;
+
+use crate::entity::work_item::WorkItemType;
 
 /// 处理人姓名尚未解析时的占位文案。
-pub(crate) const UNRESOLVED_OWNER_DISPLAY_NAME: &str = "处理人待确认";
+pub const UNRESOLVED_OWNER_DISPLAY_NAME: &str = "处理人待确认";
 
 /// 按原因码和任务类型生成「为什么需要处理」。
 ///
@@ -22,7 +23,7 @@ pub(crate) const UNRESOLVED_OWNER_DISPLAY_NAME: &str = "处理人待确认";
 ///
 /// # 错误
 /// 无。
-pub(crate) fn reason_label(reason_code: Option<&str>, work_item_type: WorkItemType) -> String {
+pub fn reason_label(reason_code: Option<&str>, work_item_type: WorkItemType) -> String {
     let Some(normalized) = reason_code.map(normalize_reason_code).filter(|code| !code.is_empty()) else {
         return default_reason_label(work_item_type).to_string();
     };
@@ -46,7 +47,7 @@ pub(crate) fn reason_label(reason_code: Option<&str>, work_item_type: WorkItemTy
 ///
 /// # 错误
 /// 无。
-pub(crate) fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkItemType) -> String {
+pub fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkItemType) -> String {
     if let Some(text) = stored.map(str::trim).filter(|text| !text.is_empty())
         && is_usable_impact(text, work_item_type)
     {
@@ -65,7 +66,7 @@ pub(crate) fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkIt
 ///
 /// # 错误
 /// 无。
-pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
+pub fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
         WorkItemType::SalesInquiryProcessing => "核对责任商品的供给、价格和交期，保存结果后统一发布反馈。",
         WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
@@ -119,7 +120,7 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
 ///
 /// # 错误
 /// 无。
-pub(crate) fn purchase_review_impact_summary(
+pub fn purchase_review_impact_summary(
     line_count: Option<usize>,
     gross_amount: Option<&Amount>,
     prepay_gate: bool,
@@ -153,7 +154,7 @@ pub(crate) fn purchase_review_impact_summary(
 ///
 /// # 错误
 /// 无。
-pub(crate) fn resolve_owner_display_name(owner_id: &str, names: &HashMap<String, String>) -> String {
+pub fn resolve_owner_display_name(owner_id: &str, names: &HashMap<String, String>) -> String {
     names
         .get(owner_id)
         .map(String::as_str)
@@ -298,7 +299,7 @@ fn is_user_facing_copy(text: &str) -> bool {
 ///
 /// # 错误
 /// 无。
-pub(crate) fn format_yuan(amount: &Amount) -> String {
+pub fn format_yuan(amount: &Amount) -> String {
     let raw = amount.to_decimal().normalize().to_string();
     let (int_part, frac) = raw.split_once('.').unwrap_or((raw.as_str(), ""));
     let grouped = group_int(int_part);

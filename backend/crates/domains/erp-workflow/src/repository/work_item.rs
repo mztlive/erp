@@ -6,7 +6,9 @@ use mongodb::bson::{Document, doc};
 use persistence_core::{Pagination, QueryFilter};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
+use crate::entity::work_item::{
+    AssignmentSource, WorkItemLink, WorkItemPriority, WorkItemStatus, WorkItemType,
+};
 
 mod approval;
 mod finance;
@@ -37,6 +39,9 @@ pub struct WorkItemRow {
     pub business_object_type: String,
     /// 业务对象 ID。
     pub business_object_id: String,
+    /// 与任务业务版本一致的关联链路；历史数据由迁移补齐。
+    #[serde(default)]
+    pub links: Vec<WorkItemLink>,
     /// 被处理的业务版本。
     pub subject_version: String,
     /// 生命周期状态。
@@ -88,6 +93,10 @@ pub struct WorkItemRow {
 /// 待办列表筛选条件。
 #[derive(Debug, Clone, Default)]
 pub struct WorkItemFilter {
+    /// 关联销售单 ID；同字段 OR，与其他范围 AND。
+    pub sales_order_ids: Vec<String>,
+    /// 关联采购单 ID；同字段 OR，与其他范围 AND。
+    pub purchase_order_ids: Vec<String>,
     /// 允许的任务类型集合；为空时不筛选。
     pub work_item_types: Vec<WorkItemType>,
     /// 允许的状态集合；为空时不筛选。
@@ -166,6 +175,7 @@ impl QueryFilter for WorkItemFilter {
             filter.insert("owner_user_id", owner_user_id);
         }
         let mut conjunctions = Vec::new();
+        conjunctions.extend(source_link_filters(&self.sales_order_ids, &self.purchase_order_ids));
         if let Some(ids) = &self.managed_owner_ids {
             conjunctions.push(doc! { "owner_user_id": { "$in": ids } });
         }
@@ -203,6 +213,14 @@ impl QueryFilter for WorkItemFilter {
         insert_due_range(&mut filter, self.due_from, self.due_before);
         filter
     }
+}
+
+/// 来源维度之间取交集；每个引用的类型和 ID 必须命中同一数组元素。
+fn source_link_filters(sales: &[String], purchases: &[String]) -> Vec<Document> {
+    [("sales_order", sales), ("purchase_order", purchases)].into_iter()
+        .filter(|(_, ids)| !ids.is_empty())
+        .map(|(kind, ids)| doc! { "links": { "$elemMatch": { "object_type": kind, "object_id": { "$in": ids } } } })
+        .collect()
 }
 
 impl Pagination for WorkItemFilter {
@@ -529,6 +547,8 @@ mod tests {
 
 #[cfg(test)]
 mod retired_review_tests {
+    use mongodb::bson::Bson;
+
     use super::*;
 
     /// 默认队列和显式类型筛选均不得重新暴露已退役任务。
@@ -546,5 +566,21 @@ mod retired_review_tests {
         }
         .to_doc();
         assert_eq!(mixed.get_str("work_item_type").unwrap(), "SALES_INVOICE_EXECUTION");
+    }
+    #[test]
+    fn source_references_match_type_and_id_together_without_expanding_owner_scope() {
+        let filter = WorkItemFilter {
+            owner_user_id: Some("reader".into()),
+            sales_order_ids: vec!["same".into(), "sale-2".into()],
+            purchase_order_ids: vec!["same".into()],
+            managed_owner_ids: Some(vec![]),
+            ..Default::default()
+        }
+        .to_doc();
+        assert_eq!(filter.get_str("owner_user_id").unwrap(), "reader");
+        let terms = filter.get_array("$and").unwrap();
+        assert!(terms.contains(&Bson::Document(doc! { "links": { "$elemMatch": { "object_type": "sales_order", "object_id": { "$in": ["same", "sale-2"] } } } })));
+        assert!(terms.contains(&Bson::Document(doc! { "links": { "$elemMatch": { "object_type": "purchase_order", "object_id": { "$in": ["same"] } } } })));
+        assert!(terms.contains(&Bson::Document(doc! { "owner_user_id": { "$in": [] } })));
     }
 }

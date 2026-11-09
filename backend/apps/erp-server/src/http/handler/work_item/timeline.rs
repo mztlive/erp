@@ -1,18 +1,16 @@
 //! 工作台动态仅沿当前任务资格读取。
-use std::sync::Arc;
 
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_read_models::WorkbenchReadService;
 use erp_read_models::sales_timeline::{TaskTimeline, TimelineQuery};
+use erp_workflow::WorkItemReadService;
 
 use crate::http::errors::Result;
 use crate::http::extractor::Query;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::sales_timeline_service;
-use crate::wiring::workflow::workflow_auth;
 
 /// 读取当前任务的办理动态及可查看的销售单入口。
 /// # 参数
@@ -27,10 +25,7 @@ pub async fn task_timeline(
     Path(id): Path<String>,
     Query(query): Query<TimelineQuery>,
 ) -> Result<TaskTimeline> {
-    let workbench = WorkbenchReadService::new(
-        state.application().db(),
-        Arc::new(workflow_auth(state.application().db(), state.application().rbac())),
-    );
+    let workbench = WorkItemReadService::new(state.application().db(), state.application().rbac());
     let view = sales_timeline_service(state.application().db(), state.application().rbac())
         .task(workbench, &actor, &id, query)
         .await?;

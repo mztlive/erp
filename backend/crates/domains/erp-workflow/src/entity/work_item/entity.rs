@@ -32,7 +32,7 @@ pub use types::{
 };
 pub use validation::{WorkItemData, WorkItemSubjectVersions};
 
-use super::FulfillmentResponsibilityKey;
+use super::{FulfillmentResponsibilityKey, WorkItemLink};
 
 /// 当前人工责任事实。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -48,6 +48,9 @@ pub struct WorkItem {
     pub business_object_type: String,
     /// 业务对象 ID。
     pub business_object_id: String,
+    /// 当前任务对应业务版本的直接对象及完整上级链路。
+    #[serde(default)]
+    pub(super) links: Vec<WorkItemLink>,
     /// 服务端冻结的可选责任维度；普通任务为空，存在时参与开放任务唯一性。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     responsibility_key: Option<String>,

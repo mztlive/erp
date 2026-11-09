@@ -1,0 +1,17 @@
+{
+  "packages": [
+    {
+      "name": "erp-identity",
+      "deps": [
+        {
+          "name": "erp-sales",
+          "kind": "normal"
+        }
+      ]
+    },
+    {
+      "name": "erp-sales",
+      "deps": []
+    }
+  ]
+}

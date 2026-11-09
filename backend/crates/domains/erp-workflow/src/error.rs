@@ -1,6 +1,7 @@
 //! 工作流域应用错误与冻结的审批 `ErrorCode`。
 
 use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
+use erp_identity::Error as IdentityError;
 use persistence_core::impl_repository_error;
 
 /// Workflow-domain result alias.
@@ -322,6 +323,34 @@ impl ErrorCode {
 impl std::fmt::Display for ErrorCode {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(self.as_str())
+    }
+}
+
+impl From<IdentityError> for Error {
+    /// 保留 identity 错误的分类与原始载荷。
+    /// # 参数
+    /// `error` 为身份服务错误。
+    /// # 返回
+    /// 返回语义一致的 workflow 错误。
+    /// # 错误
+    /// 转换不失败。
+    fn from(error: IdentityError) -> Self {
+        match error {
+            IdentityError::Internal(value) => Self::Internal(value),
+            IdentityError::NotFound(value) => Self::NotFound(value),
+            IdentityError::ValidationError(value) => Self::ValidationError(value),
+            IdentityError::InvalidInput(value) => Self::InvalidInput(value),
+            IdentityError::BusinessLogicError(value) => Self::BusinessLogicError(value),
+            IdentityError::ConflictError(value) => Self::ConflictError(value),
+            IdentityError::ReceiptDuplicate(value) => Self::ReceiptDuplicate(value),
+            IdentityError::TransientTransaction(value) => Self::TransientTransaction(value),
+            IdentityError::Forbidden(value) => Self::Forbidden(value),
+            IdentityError::Unauthenticated(value) => Self::Unauthenticated(value),
+            IdentityError::Logic(value) => Self::Logic(value),
+            IdentityError::OutcomeUnknown(value) => Self::OutcomeUnknown(value),
+            IdentityError::RepositoryError(value) => Self::RepositoryError(value),
+            IdentityError::Rbac(value) => Self::Rbac(value),
+        }
     }
 }
 

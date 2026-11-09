@@ -1,9 +1,8 @@
-use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
-
 use super::query::{DEFAULT_TIMEZONE, parse_priorities};
 use super::status::WORK_ITEM_TYPES;
 use super::view::{handler_route, role_label};
 use super::*;
+use crate::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 
 #[test]
 fn supplier_portal_review_has_dedicated_handler_and_registered_family() {
@@ -234,7 +233,8 @@ fn retired_funds_review_has_no_handler() {
 fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
-    use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemData};
+
+    use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemData};
 
     let mut item = WorkItem::new_with_responsibility_key(
         WorkItemId::new("rework-task"),
@@ -266,8 +266,7 @@ fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
         assert_eq!(view.business_object_id, "original-order");
         assert_eq!(view.approval_node_execution_id, None);
     }
-    let row: erp_workflow::WorkItemRow =
-        serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
+    let row: crate::WorkItemRow = serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
     let list = WorkItemView::from_fields(row.into(), "queue".into()).unwrap();
     assert!(list.approval_process_instance_id.is_none());
     assert!(serde_json::to_value(list).unwrap().get("approval_process_instance_id").is_none());

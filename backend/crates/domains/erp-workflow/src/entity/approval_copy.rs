@@ -262,6 +262,7 @@ mod tests {
         })
         .unwrap();
         let mut snapshot = ApprovalSubjectSnapshot {
+            links: Vec::new(),
             resubmission_reason: None,
             base: BaseModel::fake(),
             approval_process_instance_id: ApprovalProcessInstanceId::new("instance"),

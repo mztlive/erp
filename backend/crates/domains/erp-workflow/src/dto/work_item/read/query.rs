@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
-pub use erp_workflow::entity::work_item::WorkItemDueFilter;
-use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::status::{WORK_ITEM_TYPES, WorkItemFamily, WorkItemScope, WorkItemSort, family_of};
 use super::view::WorkItemView;
-use crate::errors::{Error, Result};
+pub use crate::entity::work_item::WorkItemDueFilter;
+use crate::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
+use crate::error::{Error, Result};
 
 pub(super) const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
 
@@ -62,7 +62,7 @@ pub struct WorkItemListParams {
 /// Service 使用的规范化队列查询。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkItemListQuery {
-    pub filters: super::super::WorkspaceFilters,
+    pub filters: crate::service::work_item::read::WorkspaceFilters,
     pub scope: WorkItemScope,
     pub work_item_types: Vec<WorkItemType>,
     pub statuses: Vec<WorkItemStatus>,
@@ -125,7 +125,7 @@ impl WorkItemListParams {
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkItemPageView {
     /// 完整授权候选的可搜索筛选项，不受分页影响。
-    pub filter_options: super::super::SearchOptions,
+    pub filter_options: crate::service::work_item::read::SearchOptions,
     /// 当前页任务。
     pub items: Vec<WorkItemView>,
     /// 授权范围内总数。
@@ -351,5 +351,68 @@ fn normalize_sort(sort: Option<WorkItemSort>) -> (&'static str, bool) {
     match sort.unwrap_or(WorkItemSort::PriorityDue) {
         WorkItemSort::PriorityDue | WorkItemSort::DueAsc => ("due_at", true),
         WorkItemSort::CreatedDesc => ("created_at", false),
+    }
+}
+
+impl WorkItemListQuery {
+    /// 统一结构化条件与旧 URL 条件；两种表达同时存在时取交集。
+    /// # 参数
+    /// 无；字段已经分别完成输入规范化。
+    /// # 返回
+    /// 查询和范围版本使用同一组 ID，空交集不扩大范围。
+    /// # 错误
+    /// 同一维度两种筛选相互矛盾时拒绝。
+    pub(crate) fn merge_filters(&mut self) -> Result<()> {
+        for ids in [&self.filters.handlers, &self.filters.sales_orders, &self.filters.purchase_orders] {
+            if ids.iter().any(|id| id.len() > 128) {
+                return Err(Error::ValidationError("筛选 ID 不能超过128字节".into()));
+            }
+        }
+        for (ids, selected) in [
+            (&mut self.handler_user_ids, &mut self.filters.handlers),
+            (&mut self.sales_order_ids, &mut self.filters.sales_orders),
+            (&mut self.purchase_order_ids, &mut self.filters.purchase_orders),
+        ] {
+            if ids.is_empty() {
+                *ids = selected.clone();
+            } else if !selected.is_empty() {
+                ids.retain(|id| selected.contains(id));
+                if ids.is_empty() {
+                    return Err(Error::ValidationError("同一字段的筛选条件没有交集".into()));
+                }
+            }
+            *selected = ids.clone();
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod id_filter_tests {
+    use super::*;
+    use crate::service::work_item::read::WorkspaceFilters;
+    #[test]
+    fn legacy_and_array_filters_share_canonical_ids_and_conflicts_fail_closed() {
+        let params: WorkItemListParams = serde_json::from_value(
+            serde_json::json!({"scope":"mine", "sales_order_ids":" b, a, b ", "handler_user_ids":"user"}),
+        )
+        .unwrap();
+        let mut query = params.normalized().unwrap();
+        query.filters =
+            WorkspaceFilters::parse(Some(r#"{"sales_orders":["b","c","b"],"handlers":["user"]}"#)).unwrap();
+        query.merge_filters().unwrap();
+        assert_eq!(query.sales_order_ids, ["b"]);
+        assert_eq!(query.filters.sales_orders, ["b"]);
+        query.filters.sales_orders = vec!["other".into()];
+        assert!(query.merge_filters().is_err());
+    }
+    #[test]
+    fn stats_and_list_compile_identical_source_and_handler_ids() {
+        let value = serde_json::json!({"scope":"mine", "sales_order_ids":"s1,s2", "purchase_order_ids":"p1", "handler_user_ids":"u1,u2"});
+        let list = serde_json::from_value::<WorkItemListParams>(value.clone()).unwrap().normalized().unwrap();
+        let stats = serde_json::from_value::<WorkItemStatsParams>(value).unwrap().normalized().unwrap();
+        assert_eq!(list.handler_user_ids, stats.handler_user_ids);
+        assert_eq!(list.sales_order_ids, stats.sales_order_ids);
+        assert_eq!(list.purchase_order_ids, stats.purchase_order_ids);
     }
 }

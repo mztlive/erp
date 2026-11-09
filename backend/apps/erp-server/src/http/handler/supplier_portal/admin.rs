@@ -12,6 +12,7 @@ use erp_read_models::supplier_portal::{
 use erp_supplier_catalog::supplier_portal::authorization::PortalReadAuthorization;
 use erp_supplier_catalog::supplier_portal::{PortalGrantInput, PortalReview};
 use erp_supply::portal::QuoteAccessGrant;
+use erp_workflow::WorkItemReadService;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, to_value};
@@ -23,7 +24,6 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::purchase_access;
-use crate::wiring::workflow::workflow_auth;
 
 /// 协议层账号开通允许字段；内部角色及组织不属于外部身份。
 #[derive(Deserialize)]
@@ -270,7 +270,7 @@ pub async fn impacts(
             state.application().db(),
             crate::wiring::catalog_services(state.application().db(), state.application().rbac()),
         )),
-        workflow_auth(state.application().db(), state.application().rbac()),
+        WorkItemReadService::new(state.application().db(), state.application().rbac()),
     );
     ok_value(service.offering_impacts(&actor, &id, &params).await?)
 }

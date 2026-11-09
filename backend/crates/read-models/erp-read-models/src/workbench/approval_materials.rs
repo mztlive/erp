@@ -22,7 +22,7 @@ use crate::sales_center::materials::{
     change_evidence, change_submission_contract, material_from_asset, require_contract_pdf,
     submission_contract, validate_materials,
 };
-use crate::{Error, Result};
+use crate::{Error, Result, work_item_links};
 
 mod payment_request;
 pub(super) mod related_sales;
@@ -43,6 +43,9 @@ pub async fn freeze_approval_materials(
     mut snapshot: ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalSubjectSnapshot> {
+    snapshot.links =
+        work_item_links::capture(db, snapshot.document_type.as_str(), &snapshot.business_object_id, executor)
+            .await?;
     let (mut materials, actor) = direct_materials(db, auth, &snapshot, executor).await?;
     if let Some(contract) = sales_contract_material(db, auth, &actor, &snapshot, executor).await? {
         materials.push(contract);

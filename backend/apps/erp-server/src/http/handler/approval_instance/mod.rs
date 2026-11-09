@@ -11,12 +11,11 @@ pub mod http;
 pub mod materials;
 pub mod progress;
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
+use erp_read_models::WorkbenchReadService;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::execution::{ApprovalRuntimeService, UpgradeBindingCommand};
 use erp_workflow::{ApprovalCancelBlockedCommand, ApprovalResumeCommand};
@@ -74,13 +73,7 @@ pub async fn instance_list(
     PreparedInstanceListQuery { view, query, page, filters }: PreparedInstanceListQuery,
 ) -> ApprovalResult<serde_json::Value> {
     let mut executor = persistence_core::NoTransaction;
-    let reader = erp_read_models::workbench::WorkbenchReadService::new(
-        state.application().db(),
-        Arc::new(crate::wiring::workflow::workflow_auth(
-            state.application().db(),
-            state.application().rbac(),
-        )),
-    );
+    let reader = WorkbenchReadService::new(state.application().db());
     let page = match page {
         Some(page) => {
             reader.approval_workspace_list(runtime_service(&state), actor, query, filters, page).await

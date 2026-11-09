@@ -12,6 +12,9 @@ pub use dto::approval::{
     ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand,
     ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
 };
+pub use dto::work_item::{
+    WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
+};
 pub use entity::approval_integration::{
     ApprovalNotificationOutbox, ApprovalSubjectSnapshot, SalesBusinessKind, document_type_from_subject_kind,
     document_type_of, process_kind_of, subject_ref_for,
@@ -39,4 +42,4 @@ pub use service::approval::definition::ApprovalDefinitionService;
 pub use service::approval::execution::{ApprovalNotificationOutboxPort, ApprovalRuntimeService};
 pub use service::approval::policy::ApprovalDomainAction;
 pub use service::document_registry::DocumentRegistryService;
-pub use service::work_item::WorkItemService;
+pub use service::work_item::{WorkItemReadService, WorkItemService};

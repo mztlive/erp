@@ -23,8 +23,7 @@ pub use fulfillment_queue::{
 pub use workbench::{
     FulfillmentQueueGateFilter, FulfillmentQueueGateState, FulfillmentQueueItemView,
     FulfillmentQueueListParams, FulfillmentQueueMetricView, FulfillmentQueueOperationType,
-    FulfillmentQueuePageView, WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView,
-    WorkItemView, WorkbenchReadService,
+    FulfillmentQueuePageView, WorkbenchReadService,
 };
 
 pub mod finance;
@@ -59,3 +58,5 @@ pub mod sales_money_progress;
 pub mod approval_subject;
 
 pub mod sales_attribution;
+
+pub mod work_item_links;

@@ -12,8 +12,9 @@ use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, Approv
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
+use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::PlannedWrites;
-use erp_workflow::{BpmExt, WorkItemExt, WorkflowAuthorizationPort};
+use erp_workflow::{ApprovalIntegrationExt, BpmExt, WorkItemExt, WorkflowAuthorizationPort};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -152,12 +153,17 @@ pub async fn persist_start_tasks(
     context: StartTaskContext<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Option<(String, u64)>> {
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&writes.instance.base.id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("审批任务缺少冻结业务快照".into()))?;
     let mut first_task = None;
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
         };
-        let item = WorkItem::new_document_approval(
+        let mut item = WorkItem::new_document_approval(
             WorkItemId::new(next_id()),
             DocumentApprovalWorkItemData {
                 approval_node_execution_id: execution_id.clone(),
@@ -172,6 +178,7 @@ pub async fn persist_start_tasks(
             },
             context.now,
         )?;
+        item.inherit_approval_links(&snapshot)?;
         if first_task.is_none() {
             first_task = Some((item.base.id.clone(), item.base.version));
         }

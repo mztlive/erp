@@ -67,7 +67,7 @@
 | [erp-integration](domains/erp-integration/README.md) | 记录外部系统入站消息、处理失败任务和对账差异，并管理处理决定及其证据。 |
 | [erp-import](domains/erp-import/README.md) | 保存历史业务数据导入的批次、逐行处理状态、业务确认记录和最终应用结果。 |
 | [erp-identity](domains/erp-identity/README.md) | 管理登录账号、组织与成员关系、角色权限和数据范围，提供后台身份认证与访问控制能力。 |
-| [erp-workflow](domains/erp-workflow/README.md) | 将通用流程引擎接入 ERP，管理业务审批、审批参与者、业务单据关联和人工待办任务。 |
+| [erp-workflow](domains/erp-workflow/README.md) | 将通用流程引擎接入 ERP，管理业务审批、审批参与者、业务单据关联及人工任务命令、查询和统计。 |
 | [erp-audit](domains/erp-audit/README.md) | 记录和查询“谁在什么时候对哪个业务对象执行了什么操作”，并提供通用审计执行与独立尝试记录；业务回执由拥有领域维护。 |
 | [erp-support](domains/erp-support/README.md) | 保存多个业务流程共用的业务支撑记录：外部编号映射、批量选择与后台任务、文件资产及附件关系。 |
 
@@ -130,7 +130,7 @@
 
 ## 依赖与接入要求
 
-1. 业务领域的 normal、build、dev 依赖均不得指向其他业务领域或组合层；需要外域事实时，声明窄 Port 或输入事实，由组合层接入实际提供方。
+1. 业务领域的 normal、build、dev 依赖允许指向 erp-identity 的公开身份与授权服务；其余领域之间及领域到组合层仍禁止直接依赖。erp-identity 禁止反向依赖业务领域、组合层或应用。基础库和通用技术组件不得依赖 identity。其余外域事实通过窄 Port 或输入事实接入。
 2. 编排库只依赖实际消费的领域、读模型和明确下层能力；编排之间仅允许 [crate-layers.json](../scripts/crate-layers.json) 登记的单向依赖。erp-read-models 允许读取多个领域，不得依赖编排库。共享基础 crate 不得持有业务实体或依赖业务领域。
 3. HTTP、CLI 等应用负责装配具体服务和适配器；CLI 不得依赖 erp-server。test-support 仅作为 dev-dependency 使用。
 4. bpm 只接收调用方提供的模型、人员资格、ID 和时间；ERP 政策与持久化由 erp-workflow 接入。

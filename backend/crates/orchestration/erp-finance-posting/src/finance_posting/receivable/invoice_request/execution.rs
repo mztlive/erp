@@ -8,6 +8,7 @@ use erp_finance::entity::receivable::SalesInvoiceRequest;
 use erp_finance::repository::prelude::*;
 use erp_identity::entity::resource_access::event::{GrantEventEvidence, GrantEventPayload};
 use erp_identity::service::resource_access::append_event;
+use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
     FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItem, WorkItemStatus,
@@ -54,7 +55,7 @@ pub async fn approve(
             executor,
         )
         .await?;
-    let task = new_approved_sales_invoice_task(
+    let mut task = new_approved_sales_invoice_task(
         WorkItemId::new(next_id()),
         SalesInvoiceTaskSpec {
             account_id: account.base.id.clone(),
@@ -69,6 +70,7 @@ pub async fn approve(
         &request.request_no,
     )?;
     request.work_item_id = Some(task.base.id.clone());
+    task.set_links(work_item_links::capture(db, "sales_invoice_request", &request.base.id, executor).await?)?;
     db.work_items().create(&task, executor).await?;
     db.sales_invoice_requests().update(&mut request, executor).await?;
     append_invoice_grant(db, &request, &task, approval_instance_id, executor).await?;
