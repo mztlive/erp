@@ -7,10 +7,27 @@ use erp_customer::repository::prelude::*;
 use erp_party::PartyExt;
 use persistence_core::NoTransaction;
 
-use super::SalesOrderReadService;
+use super::{SalesOrderReadService, SalesOrderView};
 use crate::Result;
 
 impl SalesOrderReadService {
+    /// 批量补齐当前页客户名称，不改变列表成员与顺序。
+    ///
+    /// # 参数
+    /// * `items` - 已完成授权分页的销售单视图
+    /// # 返回
+    /// 原地填写客户名称；缺失客户或主体资料时名称为空。
+    /// # 错误
+    /// 客户或主体仓储查询失败时返回错误。
+    pub(super) async fn fill_customer_names(&self, items: &mut [SalesOrderView]) -> Result<()> {
+        let ids = items.iter().map(|item| item.customer_id.clone()).collect::<Vec<_>>();
+        let names = self.customer_names_batch(&ids).await?;
+        for item in items {
+            item.customer_name = names.get(&item.customer_id).cloned();
+        }
+        Ok(())
+    }
+
     /// 只按已授权销售当前页引用的客户读取名称，不产生客户目录候选。
     ///
     /// # 参数

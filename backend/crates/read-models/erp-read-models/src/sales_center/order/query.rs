@@ -28,9 +28,6 @@ use super::{SalesOrderReadService, dto};
 use crate::Result;
 use crate::purchase_center::freight_follow_up::{FreightFollowUpView, freight_follow_ups};
 
-/// 销售单阶段责任快照：`(责任角色, 责任人账号, 责任人姓名, 时限)`。
-type StageOwnerSnapshot = HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>;
-
 impl SalesOrderReadService {
     /// 分页查询销售单列表。
     ///
@@ -72,40 +69,18 @@ impl SalesOrderReadService {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
 
-        let owners = self
-            .resolve_stage_owners_batch(
-                &page
-                    .items
-                    .iter()
-                    .map(|row| (row.id.clone(), row.business_type, row.review_status))
-                    .collect::<Vec<_>>(),
-            )
-            .await?;
-        let owner_names = self
-            .resolve_account_names_batch(
-                &page.items.iter().map(|row| row.sales_owner_user_id.clone()).collect::<Vec<_>>(),
-            )
-            .await?;
-
-        let customer_names = self
-            .customer_names_batch(&page.items.iter().map(|row| row.customer_id.clone()).collect::<Vec<_>>())
-            .await?;
         let revision_amounts = self.revision_amounts(&page.items).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| {
-                let customer_name = customer_names.get(&row.customer_id).cloned();
-                let mut view = map_sales_row(row, &owners, &owner_names, &revision_amounts);
-                view.customer_name = customer_name;
-                view
-            })
-            .collect();
+        let mut items =
+            page.items.into_iter().map(|row| map_sales_row(row, &revision_amounts)).collect::<Vec<_>>();
+        self.fill_stage_owners(&mut items).await?;
+        self.fill_owner_names(&mut items).await?;
+        self.fill_customer_names(&mut items).await?;
 
         let current_version = self.scope_fingerprint(params, search, actor).await?;
         if current_version != context.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
+
         Ok(super::SalesListView {
             scope_version: context.scope_version,
             policy_version: context.policy_version,
@@ -277,26 +252,18 @@ impl SalesOrderReadService {
         Ok(None)
     }
 
-    /// 批量解析本页销售单的当前阶段责任人和时限。
+    /// 批量补齐当前页的阶段责任人和时限，不改变列表顺序与成员。
     ///
-    /// # 参数
-    /// * `rows` - 本页销售单 `(id, 业务性质, 审核轨状态)` 集合
-    ///
-    /// # 返回
-    /// 返回按销售单 ID 索引的 `(责任角色, 责任人账号, 责任人姓名, 时限)`；
-    /// 非在途状态或无开放审批任务的销售单不进入结果。
-    ///
-    /// # 错误
-    /// 工作项或账号批量查询失败时返回仓储错误。
-    async fn resolve_stage_owners_batch(
-        &self,
-        rows: &[(String, BusinessType, ReviewStatus)],
-    ) -> Result<StageOwnerSnapshot> {
-        let business_objects = rows
+    /// 无开放审核任务的单据保持空阶段责任，仓储失败时返回错误。
+    async fn fill_stage_owners(&self, items: &mut [SalesOrderView]) -> Result<()> {
+        let business_objects = items
             .iter()
-            .filter(|(_, _, review_status)| review_status.has_active_review_task())
-            .map(|(id, business_type, _)| {
-                (super::document_type_of_sales_business(*business_type).as_str().to_string(), id.clone())
+            .filter(|item| item.review_status.has_active_review_task())
+            .map(|item| {
+                (
+                    super::document_type_of_sales_business(item.business_type).as_str().to_string(),
+                    item.id.clone(),
+                )
             })
             .collect::<Vec<_>>();
         let tasks = self
@@ -309,7 +276,7 @@ impl SalesOrderReadService {
                 &tasks.iter().filter_map(|task| task.owner_user_id.clone()).collect::<Vec<_>>(),
             )
             .await?;
-        Ok(tasks
+        let owners = tasks
             .into_iter()
             .map(|task| {
                 let owner_name =
@@ -324,7 +291,26 @@ impl SalesOrderReadService {
                     ),
                 )
             })
-            .collect())
+            .collect::<HashMap<_, _>>();
+        for item in items {
+            (
+                item.stage.owner_role,
+                item.stage.owner_user_id,
+                item.stage.owner_user_name,
+                item.stage.due_at,
+            ) = owners.get(&item.id).cloned().unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    /// 批量补齐当前页负责销售姓名；缺失账号保持空名称，查询失败时返回错误。
+    async fn fill_owner_names(&self, items: &mut [SalesOrderView]) -> Result<()> {
+        let ids = items.iter().map(|item| item.owner_user_id.clone()).collect::<Vec<_>>();
+        let names = self.resolve_account_names_batch(&ids).await?;
+        for item in items {
+            item.owner_user_name = names.get(&item.owner_user_id).cloned();
+        }
+        Ok(())
     }
 
     /// 批量读取列表当前正式版本的金额。
@@ -392,11 +378,9 @@ struct SalesRevisionAmounts {
     tax: Amount,
 }
 
-/// 映射销售列表行与阶段责任快照，纯内存组装不触库.
+/// 映射销售列表行与正式版本金额，名称和阶段责任由批量查询补齐。
 fn map_sales_row(
     row: SalesOrderRow,
-    owners: &StageOwnerSnapshot,
-    owner_names: &HashMap<String, String>,
     revision_amounts: &HashMap<String, SalesRevisionAmounts>,
 ) -> SalesOrderView {
     let (code, label, tone) = stage_code_label_tone(
@@ -405,10 +389,6 @@ fn map_sales_row(
         row.close_status,
         row.fulfillment_progress,
     );
-    let (owner_role, stage_owner_user_id, stage_owner_user_name, due_at) =
-        owners.get(&row.id).cloned().unwrap_or_default();
-    let owner_user_id = row.sales_owner_user_id.clone();
-    let owner_user_name = owner_names.get(&owner_user_id).cloned();
     let amounts =
         row.current_revision_id.as_deref().and_then(|revision_id| revision_amounts.get(revision_id)).copied();
     SalesOrderView {
@@ -430,8 +410,8 @@ fn map_sales_row(
         version: row.version,
         created_at: row.created_at,
         updated_at: row.updated_at,
-        owner_user_id,
-        owner_user_name,
+        owner_user_id: row.sales_owner_user_id,
+        owner_user_name: None,
         gross_amount: amounts.map_or_else(Amount::zero, |value| value.gross),
         net_amount: amounts.map_or_else(Amount::zero, |value| value.net),
         tax_amount: amounts.map_or_else(Amount::zero, |value| value.tax),
@@ -439,10 +419,10 @@ fn map_sales_row(
             code,
             label,
             tone,
-            owner_role,
-            owner_user_id: stage_owner_user_id,
-            owner_user_name: stage_owner_user_name,
-            due_at,
+            owner_role: None,
+            owner_user_id: None,
+            owner_user_name: None,
+            due_at: None,
         },
     }
 }
